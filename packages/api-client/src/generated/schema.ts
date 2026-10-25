@@ -952,6 +952,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/statuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목의 상태 목록(볼 수 있는 사람). */
+        get: operations["list_task_statuses"];
+        put?: never;
+        /** 상태 만들기(항목 소유 권한). 이름 중복은 409, 30개 상한은 400, 보관된 항목은 409. */
+        post: operations["create_task_status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/statuses/{status_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 상태 고치기(항목 소유 권한). 범주를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다. */
+        put: operations["update_task_status"];
+        post?: never;
+        /** 상태 지우기(항목 소유 권한). 업무가 있으면 `move_to`로 옮길 열이 필요하고(400), 마지막 상태는 지울 수 없다(409). */
+        delete: operations["delete_task_status"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/study": {
         parameters: {
             query?: never;
@@ -2889,6 +2925,11 @@ export interface components {
         DeleteWorkspace: {
             name: string;
         };
+        /** @description 삭제 결과: 옮긴 업무 수. */
+        DeletedTaskStatus: {
+            /** Format: int32 */
+            moved: number;
+        };
         /** @description 내가 소유한 지운 워크스페이스. */
         DeletedWorkspace: {
             /** Format: date-time */
@@ -3700,6 +3741,11 @@ export interface components {
             title: string;
             unit?: string;
         };
+        NewTaskStatus: {
+            category: components["schemas"]["StatusCategory"];
+            color?: string;
+            name: string;
+        };
         /** @description 알림. invite는 초대 ID만 있고 대상 제목·참조는 없다. */
         Notification: {
             /** @description 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다. */
@@ -4348,6 +4394,11 @@ export interface components {
             /** Format: uuid */
             stopped_entry_id?: string | null;
         };
+        /**
+         * @description 상태 범주. 완료 판정과 기본 열 선택은 범주로 한다.
+         * @enum {string}
+         */
+        StatusCategory: "todo" | "doing" | "done";
         /** @description 함께 하는 사람의 진행 집계(메모·개인 날짜는 없음). */
         StudyParticipant: {
             display_name: string;
@@ -4519,6 +4570,25 @@ export interface components {
             root_task_id: string;
             rule?: null | components["schemas"]["RecurrenceRule"];
             timezone: string;
+        };
+        /** @description 항목의 상태 한 줄. */
+        TaskStatus: {
+            category: components["schemas"]["StatusCategory"];
+            /** @description 색 토큰(빈 문자열이면 기본). */
+            color: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: double
+             * @description 열 순서(오름차순).
+             */
+            position: number;
+            /**
+             * Format: int32
+             * @description 이 열에 있는(지우지 않은) 업무 수.
+             */
+            task_count: number;
         };
         /** @description 업무의 예상 시간과 실제 시간. */
         TaskTime: {
@@ -4758,6 +4828,13 @@ export interface components {
             successor_shifts?: components["schemas"]["SuccessorShift"][];
             tags: string[];
             title: string;
+        };
+        UpdateTaskStatus: {
+            category?: null | components["schemas"]["StatusCategory"];
+            color?: string | null;
+            name?: string | null;
+            /** Format: double */
+            position?: number | null;
         };
         /**
          * @description 기존 보기 고치기. `base_version`이 지났으면 409(`conflict`)와 최신 보기. 같은 `request_id`의 재시도는 이미 반영한
@@ -7834,6 +7911,215 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncResult"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_task_statuses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStatus"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_task_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewTaskStatus"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStatus"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_task_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                status_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskStatus"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStatus"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_task_status: {
+        parameters: {
+            query?: {
+                /** @description 이 열의 업무를 옮길 같은 항목의 상태. 업무가 있으면 필수. */
+                move_to?: string | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+                status_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedTaskStatus"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {

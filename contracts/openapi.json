@@ -4295,6 +4295,324 @@
         }
       }
     },
+    "/api/items/{item_id}/statuses": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "항목의 상태 목록(볼 수 있는 사람).",
+        "operationId": "list_task_statuses",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskStatus"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상태 만들기(항목 소유 권한). 이름 중복은 409, 30개 상한은 400, 보관된 항목은 409.",
+        "operationId": "create_task_status",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTaskStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/statuses/{status_id}": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상태 고치기(항목 소유 권한). 범주를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다.",
+        "operationId": "update_task_status",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상태 지우기(항목 소유 권한). 업무가 있으면 `move_to`로 옮길 열이 필요하고(400), 마지막 상태는 지울 수 없다(409).",
+        "operationId": "delete_task_status",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "move_to",
+            "in": "query",
+            "description": "이 열의 업무를 옮길 같은 항목의 상태. 업무가 있으면 필수.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedTaskStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/study": {
       "get": {
         "tags": [
@@ -11683,6 +12001,19 @@
           }
         }
       },
+      "DeletedTaskStatus": {
+        "type": "object",
+        "description": "삭제 결과: 옮긴 업무 수.",
+        "required": [
+          "moved"
+        ],
+        "properties": {
+          "moved": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "DeletedWorkspace": {
         "type": "object",
         "description": "내가 소유한 지운 워크스페이스.",
@@ -14064,6 +14395,24 @@
           }
         }
       },
+      "NewTaskStatus": {
+        "type": "object",
+        "required": [
+          "name",
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StatusCategory"
+          },
+          "color": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "Notification": {
         "type": "object",
         "description": "알림. invite는 초대 ID만 있고 대상 제목·참조는 없다.",
@@ -15991,6 +16340,15 @@
         ],
         "description": "새 타이머와 자동으로 끝낸 이전 기록."
       },
+      "StatusCategory": {
+        "type": "string",
+        "description": "상태 범주. 완료 판정과 기본 열 선택은 범주로 한다.",
+        "enum": [
+          "todo",
+          "doing",
+          "done"
+        ]
+      },
       "StudyParticipant": {
         "type": "object",
         "description": "함께 하는 사람의 진행 집계(메모·개인 날짜는 없음).",
@@ -16481,6 +16839,44 @@
           },
           "timezone": {
             "type": "string"
+          }
+        }
+      },
+      "TaskStatus": {
+        "type": "object",
+        "description": "항목의 상태 한 줄.",
+        "required": [
+          "id",
+          "name",
+          "color",
+          "position",
+          "category",
+          "task_count"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StatusCategory"
+          },
+          "color": {
+            "type": "string",
+            "description": "색 토큰(빈 문자열이면 기본)."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number",
+            "format": "double",
+            "description": "열 순서(오름차순)."
+          },
+          "task_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "이 열에 있는(지우지 않은) 업무 수."
           }
         }
       },
@@ -17130,6 +17526,40 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "UpdateTaskStatus": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StatusCategory"
+              }
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           }
         }
       },
