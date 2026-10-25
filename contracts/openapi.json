@@ -5570,6 +5570,40 @@
         }
       }
     },
+    "/api/me/organizations": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다.",
+        "operationId": "list_my_organizations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/settings": {
       "put": {
         "tags": [
@@ -6440,6 +6474,58 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "조직 하나. 멤버가 아니면 404.",
+        "operationId": "get_organization",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "description": "조직 id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -10545,11 +10631,11 @@
       },
       "Access": {
         "type": "string",
-        "description": "문서에 대한 현재 사용자의 권한.",
+        "description": "볼 수 있는 대상에 대한 등급. 볼 수 없으면(`none`) `Option`의 `None`이다. 응답에서는 `access` 칸으로 나간다.",
         "enum": [
-          "owner",
+          "read",
           "write",
-          "read"
+          "owner"
         ]
       },
       "AcknowledgedPreview": {
@@ -14086,10 +14172,130 @@
           }
         }
       },
+      "OrgRole": {
+        "type": "string",
+        "description": "조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 \"관리자로 참여\" 뒤에만 본다.",
+        "enum": [
+          "admin",
+          "member"
+        ]
+      },
+      "Organization": {
+        "type": "object",
+        "description": "조직 상세(멤버에게). 설정 변경은 관리자만.",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "public_links_enabled",
+          "limits",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/OrganizationLimits"
+          },
+          "name": {
+            "type": "string"
+          },
+          "public_links_enabled": {
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
+      },
       "OrganizationId": {
         "type": "string",
         "format": "uuid",
         "description": "조직 내부 ID."
+      },
+      "OrganizationLimits": {
+        "type": "object",
+        "description": "조직 단계 한도·보존 설정(D-124). `null`은 미설정(서버 기본값 또는 워크스페이스 설정을 따름).",
+        "properties": {
+          "activity_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "audit_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "max_concurrent_uploads": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "max_file_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "max_storage_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "notification_rate_per_hour": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "열만 두고 아직 적용하지 않는다(사용자 결정 대기: 적용 대상·채널·초과 처리)."
+          }
+        }
+      },
+      "OrganizationSummary": {
+        "type": "object",
+        "description": "내가 속한 조직 한 줄.",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "public_links_enabled",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "public_links_enabled": {
+            "type": "boolean",
+            "description": "비로그인 공개 링크를 쓸 수 있는지(조직 관리자가 끌 수 있다, D-114)."
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
       },
       "Participant": {
         "type": "object",

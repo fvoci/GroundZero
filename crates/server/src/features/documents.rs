@@ -25,7 +25,7 @@ use crate::config::Limits;
 use crate::db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
-use crate::features::workspaces::{member_role, validate_title};
+use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::http::cache;
 use crate::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
@@ -33,38 +33,12 @@ use crate::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
 
-/// 문서에 대한 현재 사용자의 권한.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Access {
-    /// 개인 노트 소유자 또는 워크스페이스 관리자. 설정·공유·이동을 할 수 있다.
-    Owner,
-    Write,
-    Read,
-}
-
-impl Access {
-    pub(crate) fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "owner" => Some(Self::Owner),
-            "write" => Some(Self::Write),
-            "read" => Some(Self::Read),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn can_write(self) -> bool {
-        matches!(self, Self::Owner | Self::Write)
-    }
-}
+/// 문서에 대한 현재 사용자의 등급. 모든 대상의 등급 타입은 하나다(`crate::access::Grade`, D-113).
+pub use crate::access::Grade as Access;
 
 /// 현재 사용자의 권한. 볼 수 없으면 `None`.
 pub async fn access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    let raw: String = sqlx::query_scalar("SELECT app_access('document', $1)")
-        .bind(id)
-        .fetch_one(tx.conn())
-        .await?;
-    Ok(Access::parse(&raw))
+    crate::access::grade(tx, crate::access::Kind::Document, id).await
 }
 
 /// 공유·공개 링크 관리도 현재 문서 접근 등급을 따른다.
@@ -504,7 +478,7 @@ pub async fn list_wiki(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
         "SELECT {SUMMARY_COLUMNS} FROM documents
          WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY {TREE_ORDER}"
@@ -1542,7 +1516,7 @@ pub async fn templates(
 ) -> Result<Json<Vec<DocumentTemplate>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     if let Some(ws) = query.workspace_id {
-        member_role(&mut tx, ws).await?;
+        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     }
     let rows: Vec<(DocumentId, String, Option<String>, bool)> = sqlx::query_as(
         "SELECT id, title, app_document_reference(id), owner_user_id IS NOT NULL FROM documents
@@ -1675,14 +1649,6 @@ mod tests {
             validate_body(&three, &l).is_err(),
             "limit is 2 in this test"
         );
-    }
-
-    #[test]
-    fn access_parsing() {
-        assert_eq!(Access::parse("owner"), Some(Access::Owner));
-        assert!(Access::Write.can_write());
-        assert!(!Access::Read.can_write());
-        assert_eq!(Access::parse("other"), None);
     }
 
     #[test]

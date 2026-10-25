@@ -230,7 +230,7 @@ async fn search_scope(
     ws: Option<WorkspaceId>,
 ) -> Result<Vec<WorkspaceId>, AppError> {
     if let Some(ws) = ws {
-        crate::features::workspaces::member_role(tx, ws).await?;
+        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
         return Ok(vec![ws]);
     }
     let ids: Vec<WorkspaceId> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")

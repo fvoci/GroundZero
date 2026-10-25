@@ -1305,6 +1305,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다. */
+        get: operations["list_my_organizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/settings": {
         parameters: {
             query?: never;
@@ -1517,6 +1534,23 @@ export interface paths {
         put?: never;
         /** 항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다. */
         post: operations["create_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 조직 하나. 멤버가 아니면 404. */
+        get: operations["get_organization"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2504,10 +2538,10 @@ export interface components {
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
-         * @description 문서에 대한 현재 사용자의 권한.
+         * @description 볼 수 있는 대상에 대한 등급. 볼 수 없으면(`none`) `Option`의 `None`이다. 응답에서는 `access` 칸으로 나간다.
          * @enum {string}
          */
-        Access: "owner" | "write" | "read";
+        Access: "read" | "write" | "owner";
         /** @description 사용자가 확인한 접근 변화. */
         AcknowledgedPreview: {
             changes: components["schemas"]["MoveAccessChange"][];
@@ -3699,10 +3733,53 @@ export interface components {
             to_user: components["schemas"]["UserId"];
         };
         /**
+         * @description 조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 "관리자로 참여" 뒤에만 본다.
+         * @enum {string}
+         */
+        OrgRole: "admin" | "member";
+        /** @description 조직 상세(멤버에게). 설정 변경은 관리자만. */
+        Organization: {
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["OrganizationId"];
+            limits: components["schemas"]["OrganizationLimits"];
+            name: string;
+            public_links_enabled: boolean;
+            role: components["schemas"]["OrgRole"];
+        };
+        /**
          * Format: uuid
          * @description 조직 내부 ID.
          */
         OrganizationId: string;
+        /** @description 조직 단계 한도·보존 설정(D-124). `null`은 미설정(서버 기본값 또는 워크스페이스 설정을 따름). */
+        OrganizationLimits: {
+            /** Format: int32 */
+            activity_retention_days?: number | null;
+            /** Format: int32 */
+            audit_retention_days?: number | null;
+            /** Format: int32 */
+            max_concurrent_uploads?: number | null;
+            /** Format: int64 */
+            max_file_bytes?: number | null;
+            /** Format: int64 */
+            max_storage_bytes?: number | null;
+            /**
+             * Format: int32
+             * @description 열만 두고 아직 적용하지 않는다(사용자 결정 대기: 적용 대상·채널·초과 처리).
+             */
+            notification_rate_per_hour?: number | null;
+        };
+        /** @description 내가 속한 조직 한 줄. */
+        OrganizationSummary: {
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["OrganizationId"];
+            name: string;
+            /** @description 비로그인 공개 링크를 쓸 수 있는지(조직 관리자가 끌 수 있다, D-114). */
+            public_links_enabled: boolean;
+            role: components["schemas"]["OrgRole"];
+        };
         /** @description 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음). */
         Participant: {
             display_name: string;
@@ -8632,6 +8709,33 @@ export interface operations {
             };
         };
     };
+    list_my_organizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummary"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     set_my_settings: {
         parameters: {
             query?: never;
@@ -9233,6 +9337,44 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 조직 id */
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

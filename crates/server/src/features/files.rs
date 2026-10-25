@@ -664,13 +664,7 @@ pub async fn document_files(
     Path(doc): Path<DocumentId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: String = sqlx::query_scalar("SELECT app_access('document', $1)")
-        .bind(doc)
-        .fetch_one(tx.conn())
-        .await?;
-    if visible == "none" {
-        return Err(AppError::NotFound);
-    }
+    crate::access::require_visible(&mut tx, crate::access::Kind::Document, doc).await?;
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
         "{FILE_SELECT} WHERE f.document_id = $1 AND f.deleted_at IS NULL ORDER BY f.name, f.id"
     ))
@@ -691,13 +685,7 @@ pub async fn item_files(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: String = sqlx::query_scalar("SELECT app_access('item', $1)")
-        .bind(item)
-        .fetch_one(tx.conn())
-        .await?;
-    if visible == "none" {
-        return Err(AppError::NotFound);
-    }
+    crate::access::require_visible(&mut tx, crate::access::Kind::Item, item).await?;
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
         "{FILE_SELECT} WHERE f.item_id = $1 AND f.deleted_at IS NULL ORDER BY f.name, f.id"
     ))

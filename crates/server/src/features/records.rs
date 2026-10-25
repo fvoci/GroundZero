@@ -881,13 +881,7 @@ pub async fn list(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Record>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let access: String = sqlx::query_scalar("SELECT app_access('item', $1)")
-        .bind(item)
-        .fetch_one(tx.conn())
-        .await?;
-    if access == "none" {
-        return Err(AppError::NotFound);
-    }
+    crate::access::require_visible(&mut tx, crate::access::Kind::Item, item).await?;
     let rows: Vec<RecordRow> = sqlx::query_as(
         "SELECT r.id, r.kind, r.title, r.occurred_on, r.body, r.fields, r.created_by,
                 (SELECT u.display_name FROM users u WHERE u.id = r.created_by), r.updated_at, r.version,
@@ -920,43 +914,42 @@ pub async fn list(
             available,
         });
     }
-    Ok(Json(
-        rows.into_iter()
-            .map(
-                |(
+    rows.into_iter()
+        .map(
+            |(
+                id,
+                kind,
+                title,
+                occurred_on,
+                body,
+                fields,
+                created_by,
+                name,
+                updated_at,
+                version,
+                access,
+                mine,
+            )| {
+                let grade = crate::access::Grade::parse_present(&access)?;
+                Ok(Record {
                     id,
                     kind,
                     title,
                     occurred_on,
                     body,
                     fields,
+                    files: by_record.remove(&id).unwrap_or_default(),
                     created_by,
-                    name,
+                    created_by_name: name,
                     updated_at,
                     version,
-                    access,
-                    mine,
-                )| {
-                    Record {
-                        id,
-                        kind,
-                        title,
-                        occurred_on,
-                        body,
-                        fields,
-                        files: by_record.remove(&id).unwrap_or_default(),
-                        created_by,
-                        created_by_name: name,
-                        updated_at,
-                        version,
-                        can_edit: matches!(access.as_str(), "owner" | "write"),
-                        can_delete: matches!(access.as_str(), "owner" | "write")
-                            && (mine || access == "owner"),
-                    }
-                },
-            )
-            .collect(),
-    ))
+                    can_edit: grade.can_write(),
+                    can_delete: grade.can_write() && (mine || grade.is_owner()),
+                })
+            },
+        )
+        .collect::<Result<Vec<_>, AppError>>()
+        .map(Json)
 }
 
 /// 기록 만들기(항목에 쓸 수 있는 사람). 같은 요청 id면 같은 기록.

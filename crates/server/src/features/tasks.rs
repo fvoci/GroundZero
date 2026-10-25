@@ -555,8 +555,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 version,
                 move_version,
                 completed_at,
-                access: Access::parse(&access)
-                    .ok_or_else(|| AppError::Config(format!("unknown access {access}")))?,
+                access: Access::parse_present(&access)?,
                 updated_at,
             })
         })

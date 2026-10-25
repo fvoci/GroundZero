@@ -12,9 +12,8 @@ use uuid::Uuid;
 use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
-use crate::features::workspaces::member_role;
 use crate::http::AppState;
-use crate::ids::{Role, UserId, WorkspaceId};
+use crate::ids::{UserId, WorkspaceId};
 
 /// 한 번에 돌려주는 기록 수.
 const PAGE: i64 = 100;
@@ -106,9 +105,7 @@ pub async fn workspace(
     Query(query): Query<AuditQuery>,
 ) -> Result<Json<Vec<AuditEntry>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    if member_role(&mut tx, ws).await? != Role::Admin {
-        return Err(AppError::Forbidden);
-    }
+    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let entries = page(&mut tx, "a.workspace_id = $1", ws.0, query.before).await?;
     tx.commit().await?;
     Ok(Json(entries))

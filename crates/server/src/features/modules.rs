@@ -24,7 +24,7 @@ use crate::features::documents::{
     Access, CreateDocument, Document, DocumentSummary, SCHEMA_VERSION, SUMMARY_COLUMNS, SummaryRow,
     TREE_ORDER, initial_body, load_with_access, max_depth, to_document, to_summaries,
 };
-use crate::features::workspaces::{member_role, validate_title};
+use crate::features::workspaces::validate_title;
 
 time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;
@@ -292,8 +292,7 @@ fn to_item(
         version,
     ): ItemRow,
 ) -> Result<Item, AppError> {
-    let access = Access::parse(&access)
-        .ok_or_else(|| AppError::Config(format!("unknown item access: {access}")))?;
+    let access = Access::parse_present(&access)?;
     Ok(Item {
         id,
         module_id,
@@ -332,7 +331,7 @@ pub async fn list_modules(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Module>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<ModuleRow> = sqlx::query_as(&format!(
         "{MODULE_SELECT} WHERE m.workspace_id = $1 ORDER BY m.created_at, m.id"
     ))

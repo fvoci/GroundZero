@@ -16,7 +16,6 @@ use uuid::Uuid;
 use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
-use crate::features::workspaces::member_role;
 use crate::http::AppState;
 use crate::ids::{UserId, WorkspaceId};
 use crate::search::{SearchClient, day_number};
@@ -244,7 +243,7 @@ async fn scope_filter(
 ) -> Result<String, AppError> {
     let kind_filter = format!("kind IN {}", quote(kinds.iter().map(|k| (*k).to_owned())));
     if let Some(ws) = workspace {
-        member_role(tx, ws).await?;
+        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
         return Ok(format!("({kind_filter}) AND workspace_id = \"{}\"", ws.0));
     }
     let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
@@ -481,7 +480,7 @@ async fn fallback(
     wanted: &Filters,
 ) -> Result<Vec<SearchResult>, AppError> {
     if let Some(ws) = workspace {
-        member_role(tx, ws).await?;
+        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
     }
     let pattern = format!(
         "%{}%",

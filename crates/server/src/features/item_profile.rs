@@ -260,6 +260,7 @@ async fn load(tx: &mut UserTx, item: ItemId) -> Result<ItemProfile, AppError> {
         archived,
         version,
     ) = row.ok_or(AppError::NotFound)?;
+    let grade = crate::access::Grade::parse_present(&access)?;
     let members: Vec<(UserId, String)> = sqlx::query_as(
         "SELECT u.id, u.display_name FROM item_members im JOIN users u ON u.id = im.user_id
          WHERE im.item_id = $1 ORDER BY u.display_name, u.id",
@@ -301,8 +302,8 @@ async fn load(tx: &mut UserTx, item: ItemId) -> Result<ItemProfile, AppError> {
             .into_iter()
             .map(|(id, name)| GroupRef { id, name })
             .collect(),
-        can_edit: !archived && (access == "owner" || access == "write"),
-        can_manage_members: !archived && access == "owner",
+        can_edit: !archived && grade.can_write(),
+        can_manage_members: !archived && grade.is_owner(),
         version,
     })
 }

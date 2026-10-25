@@ -16,7 +16,6 @@ use uuid::Uuid;
 use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
-use crate::features::workspaces::member_role;
 use crate::http::AppState;
 use crate::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
 
@@ -236,7 +235,7 @@ pub async fn workspace_trash(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Trash>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let (retention_days, version_retention_days): (i32, Option<i32>) = sqlx::query_as(
         "SELECT trash_retention_days, version_retention_days FROM workspaces WHERE id = $1",
     )
@@ -326,7 +325,7 @@ pub async fn purge_expired(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let ids = needed_ids(
         tx.conn(),
         sqlx::query_scalar("SELECT app_purge_expired_ids($1)").bind(ws),

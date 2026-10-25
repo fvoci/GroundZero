@@ -384,7 +384,8 @@ pub async fn home(
                         title,
                         tasks_done,
                         tasks_total,
-                        can_write: matches!(access.as_str(), "owner" | "write"),
+                        can_write: crate::access::Grade::parse(&access)?
+                            .is_some_and(crate::access::Grade::can_write),
                     })
                 },
             )

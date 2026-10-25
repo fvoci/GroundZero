@@ -300,9 +300,7 @@ pub async fn list_invitations(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Invitation>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    if member_role(&mut tx, ws).await? != Role::Admin {
-        return Err(AppError::Forbidden);
-    }
+    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<(Uuid, String, String, OffsetDateTime)> = sqlx::query_as(
         "SELECT id, email, role, expires_at FROM invitations
          WHERE workspace_id = $1 AND closed_at IS NULL AND expires_at > now() ORDER BY created_at",
@@ -585,7 +583,7 @@ pub async fn list_groups(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Group>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<(Uuid, String, Vec<Uuid>)> = sqlx::query_as(
         "SELECT g.id, g.name, coalesce(array_agg(gm.user_id ORDER BY gm.user_id)
                                        FILTER (WHERE gm.user_id IS NOT NULL), '{}')
