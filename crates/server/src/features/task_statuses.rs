@@ -57,7 +57,7 @@ pub struct TaskStatus {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
     pub name: String,
-    /// 색 토큰(빈 문자열이면 기본).
+    /// 색 `#rrggbb`(소문자). 빈 문자열이면 기본.
     pub color: String,
     /// 열 순서(오름차순).
     pub position: f64,
@@ -119,14 +119,19 @@ async fn list_rows(tx: &mut UserTx, item: ItemId) -> Result<Vec<TaskStatus>, App
         .collect()
 }
 
+/// 색은 빈 문자열(기본) 또는 `#rrggbb`(표의 CHECK와 같은 범위). 대문자는 소문자로 맞춘다.
 fn validate_color(raw: &str) -> Result<String, AppError> {
-    let color = raw.trim();
-    if color.chars().count() > 32 || color.chars().any(char::is_control) {
+    let color = raw.trim().to_ascii_lowercase();
+    let valid = color.is_empty()
+        || color
+            .strip_prefix('#')
+            .is_some_and(|hex| hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()));
+    if !valid {
         return Err(AppError::BadRequest(
-            "color must be a short token without control characters".to_owned(),
+            "color must be empty or #rrggbb".to_owned(),
         ));
     }
-    Ok(color.to_owned())
+    Ok(color)
 }
 
 /// 항목의 상태 목록(볼 수 있는 사람).
@@ -204,7 +209,7 @@ pub async fn update(
     if !belongs {
         return Err(AppError::NotFound);
     }
-    sqlx::query("SELECT app_update_task_status($1, $2, $3, $4, $5, $6)")
+    sqlx::query("SELECT app_update_task_status($1, $2, $3, $4, $5::numeric, $6)")
         .bind(status)
         .bind(name)
         .bind(color)

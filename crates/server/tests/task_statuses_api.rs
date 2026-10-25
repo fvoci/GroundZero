@@ -88,7 +88,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     );
 
     // 만들기는 항목 소유 권한(관리자·만든 사람). 멤버는 403, 읽기 전용도 403.
-    let body = json!({ "name": "review", "color": "amber", "category": "doing" });
+    let body = json!({ "name": "review", "color": "#F59E0B", "category": "doing" });
     for user in [&member, &reader] {
         assert_eq!(
             send(&app, Method::POST, &path, Some(user), Some(body.clone()))
@@ -100,6 +100,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     let created = send(&app, Method::POST, &path, Some(&admin), Some(body.clone())).await;
     assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
     assert_eq!(created.json["name"], "review");
+    assert_eq!(created.json["color"], "#f59e0b");
     assert_eq!(created.json["task_count"], 0);
     let review = created.json["id"].as_str().unwrap().to_owned();
     // 같은 이름은 409, 모르는 범주는 400.
@@ -116,6 +117,19 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
             &path,
             Some(&admin),
             Some(json!({ "name": "x", "category": "later" }))
+        )
+        .await
+        .status,
+        StatusCode::BAD_REQUEST
+    );
+    // 색은 빈 문자열 또는 #rrggbb(표의 CHECK): 토큰 이름은 400.
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &path,
+            Some(&admin),
+            Some(json!({ "name": "x", "category": "todo", "color": "amber" }))
         )
         .await
         .status,

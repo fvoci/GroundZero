@@ -4985,7 +4985,7 @@ export interface components {
         /** @description 항목의 상태 한 줄. */
         TaskStatus: {
             category: components["schemas"]["StatusCategory"];
-            /** @description 색 토큰(빈 문자열이면 기본). */
+            /** @description 색 `#rrggbb`(소문자). 빈 문자열이면 기본. */
             color: string;
             /** Format: uuid */
             id: string;
