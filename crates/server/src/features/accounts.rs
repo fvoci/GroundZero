@@ -306,6 +306,21 @@ pub async fn start_session(
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
+    // 대기 중인 초대 알림(D-118)은 부가 기능이다. 세션은 이미 커밋됐으므로 여기서 실패해도 로그인은 성공이고, 알림은
+    // 초대마다 하나만 생기므로 다음 로그인 때 다시 만든다.
+    if let Err(err) = notify_pending_invitations(db, user).await {
+        tracing::warn!(
+            event = "login.pending_invitations_failed",
+            error_code = err.code(),
+            detail = crate::logging::safe_error(&err),
+            "pending invitation notifications were not created"
+        );
+    }
+    Ok((user, token))
+}
+
+/// 로그인한 사용자 앞으로 열린 초대가 있으면 `invite` 알림을 만든다(없으면 아무것도 하지 않는다).
+async fn notify_pending_invitations(db: &Db, user: UserId) -> Result<(), AppError> {
     let mut tx = db.begin_as(user).await?;
     let ids = needed_ids(
         tx.conn(),
@@ -317,7 +332,7 @@ pub async fn start_session(
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
-    Ok((user, token))
+    Ok(())
 }
 
 /// 운영자가 지정한 초기 관리자(D-51)가 로그인하면 첫 워크스페이스를 만들어 소유자로 둔다. 인스턴스에서 한 번만.

@@ -76,6 +76,9 @@ async fn expired_batch_failure_rolls_back_its_files_but_other_batch_commits() {
         .await;
     if purge.is_ok() {
         worker.commit().await.unwrap();
+    } else {
+        // 실패한 트랜잭션은 바로 닫는다. 열어 두면 문서 행 잠금이 남아 아래 트리거 제거(ACCESS EXCLUSIVE)가 멈춘다.
+        drop(worker);
     }
     let fired = one(
         &w.state,

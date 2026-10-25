@@ -197,10 +197,11 @@ pub async fn make_server_admin(user: &TestUser) {
     .unwrap();
 }
 
-/// 이 사용자가 속한 첫 조직. 없으면 그 사용자를 서버 관리자로 시드하고 그 사용자 문맥에서 `app_create_organization`으로
-/// 조직을 만들어 첫 조직 관리자로 둔다(D-111·D-51). 같은 사용자가 만드는 워크스페이스는 모두 이 조직에 들어간다.
+/// 이 사용자가 속한 첫 조직. 없으면 fixture로 조직을 만들어 그 사용자를 첫 조직 관리자로 둔다(D-111). 같은 사용자가 만드는
+/// 워크스페이스는 모두 이 조직에 들어간다. 앱의 조직 생성 함수는 서버 관리자만 부르므로 여기서는 표에 바로 넣는다: 시험
+/// 사용자를 서버 관리자로 올리면 권한 모양이 달라진다(서버 수준 감사 행이 보이는 등). 서버 관리자 경로는
+/// `make_server_admin` + `app_create_organization`으로 따로 시험한다.
 pub async fn organization_for(user: &TestUser) -> uuid::Uuid {
-    use sqlx::Connection;
     let mut conn = fixture_conn().await;
     let existing: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT o.id FROM fvoci.organizations o JOIN fvoci.organization_members m ON m.organization_id = o.id
@@ -213,23 +214,19 @@ pub async fn organization_for(user: &TestUser) -> uuid::Uuid {
     if let Some(id) = existing {
         return id;
     }
-    make_server_admin(user).await;
-    let mut tx = conn.begin().await.unwrap();
-    sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
-        .bind(user.id.0)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-    let ids: Vec<uuid::Uuid> = (0..3).map(|_| uuid::Uuid::now_v7()).collect();
-    let id: uuid::Uuid = sqlx::query_scalar("SELECT fvoci.app_create_organization($1, $2, $3, $4)")
-        .bind(uuid::Uuid::now_v7())
-        .bind(format!("조직 {}", user.id.0.simple()))
-        .bind(user.id.0)
-        .bind(ids)
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap();
-    tx.commit().await.unwrap();
+    let id = uuid::Uuid::now_v7();
+    sqlx::query(
+        "WITH o AS (
+           INSERT INTO fvoci.organizations (id, name, created_by, request_id) VALUES ($1, $2, $3, $4) RETURNING id)
+         INSERT INTO fvoci.organization_members (organization_id, user_id, role) SELECT id, $3, 'admin' FROM o",
+    )
+    .bind(id)
+    .bind(format!("조직 {}", user.id.0.simple()))
+    .bind(user.id.0)
+    .bind(uuid::Uuid::now_v7())
+    .execute(&mut conn)
+    .await
+    .unwrap();
     id
 }
 

@@ -326,7 +326,19 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
         .fetch_one(tx.conn())
         .await
         .unwrap();
-    assert_eq!(audit_before, audit_after);
+    // 어긋나면 무엇이 쓰였는지 보인다(읽기가 쓰지 않았음을 확인하는 시험이라 원인이 바로 보여야 한다).
+    let latest: Vec<(String, String, Option<uuid::Uuid>, Option<uuid::Uuid>, Option<uuid::Uuid>, Value)> =
+        sqlx::query_as(
+            "SELECT action, target_type, workspace_id, organization_id, owner_user_id, detail FROM audit_log
+             ORDER BY created_at DESC, id DESC LIMIT 4",
+        )
+        .fetch_all(tx.conn())
+        .await
+        .unwrap();
+    assert_eq!(
+        audit_before, audit_after,
+        "a calendar read must not add audit rows; latest rows: {latest:?}"
+    );
     drop(tx);
 
     // 멈추면 이미 만든 회차는 남고 예정도 사라진다.
