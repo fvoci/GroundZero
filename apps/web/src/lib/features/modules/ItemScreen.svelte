@@ -477,7 +477,8 @@
     {/if}
 
     {#if mod !== undefined}
-      <ItemTimePanel itemId={current.id} moduleKind={mod.kind} canTrack={!current.archived} />
+      <!-- 작업자 D: 항목은 내 합계만 보며 시작 설정은 없다(D-117). -->
+      <ItemTimePanel itemId={current.id} />
     {/if}
 
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />

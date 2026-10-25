@@ -3,6 +3,7 @@ import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
 import { api, ApiError, newRequestId } from '$lib/api/client';
 import { errorText } from '$lib/api/errors';
 import { m } from '$lib/paraglide/messages.js';
+import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 
 import { liveSeconds } from './format';
 
@@ -81,7 +82,7 @@ class TimerStore {
     }
   }
 
-  /** 시작. 이미 진행 중이면 409이므로 먼저 끝내야 한다(호출하는 쪽이 사용자에게 묻는다). */
+  /** D-117: 서버가 이전 기록 저장과 새 시작을 한 트랜잭션에서 처리한다. */
   async start(
     kind: TimeKind,
     target: { kind: TimeTargetKind; id: string } | null = null,
@@ -90,7 +91,11 @@ class TimerStore {
     const mine = this.#beginWrite();
     let entry: TimeEntryView;
     try {
-      entry = await api.startTimer(newRequestId(), kind, memo, target);
+      const started = await api.startTimer(newRequestId(), kind, memo, target);
+      entry = started;
+      notifyDone(
+        started.stopped_entry_id != null ? m.time_previous_saved() : m.time_timer_started(),
+      );
     } catch (e: unknown) {
       await this.#finishWrite(!TimerStore.#stale(e));
       throw e;

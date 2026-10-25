@@ -388,7 +388,8 @@
             <DeletedWorkspaces onchanged={() => void reloadWorkspaces()} />
           </div>
         {:else if route.name === 'time'}
-          <TimeScreen workspaces={signedIn.workspaces} />
+          <!-- 작업자 D: 공유 설정 제거(D-117)로 워크스페이스 목록을 넘기지 않는다. -->
+          <TimeScreen />
         {:else if route.name === 'shared'}
           <SharedScreen />
         {:else if route.name === 'standalone-document'}
