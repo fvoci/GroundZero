@@ -3,7 +3,7 @@
 //! 본문의 참조 노드는 종류와 내부 id만 가진다. 표시 이름은 여기서 권한을 확인해 만든다.
 //! 볼 수 없는 대상과 없는 대상은 같은 모양(`visible: false`)으로 돌려준다(존재 여부를 드러내지 않는다).
 //! 링크·언급 기록과 알림 생성은 저장 트랜잭션 안의 DB 함수 `app_record_document_references`가 한다
-//! (`migrations/202610230001_initial_state.sql`). 새 UUIDv7은 앱이 공급하며(D-88), 언급은 접근 권한을 주지 않는다.
+//! (`migrations/202610250001_initial_state.sql`). 새 UUIDv7은 앱이 공급하며(D-88), 언급은 접근 권한을 주지 않는다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -18,7 +18,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::access;
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, WorkspaceId};
+use crate::ids::{DocumentId, ItemId, OrganizationId, WorkspaceId};
 
 /// 종류별 후보 수 상한.
 const CANDIDATES_PER_KIND: i64 = 8;
@@ -124,9 +124,12 @@ pub struct Backlink {
     pub item_id: Option<ItemId>,
 }
 
-/// 알림. 지금 볼 수 있는 문서에 대한 것만 나온다.
+/// 알림. invite는 초대 ID만 있고 대상 제목·참조는 없다.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Notification {
+    pub organization_id: Option<OrganizationId>,
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub invitation_id: Option<Uuid>,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
     /// `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·
@@ -138,7 +141,7 @@ pub struct Notification {
     #[schema(value_type = Option<String>, format = Uuid)]
     pub task_id: Option<Uuid>,
     /// 대상 제목(문서 또는 업무).
-    pub document_title: String,
+    pub document_title: Option<String>,
     /// 대상 번호(문서 또는 업무).
     pub document_reference: Option<String>,
     pub workspace_id: Option<WorkspaceId>,
@@ -163,6 +166,7 @@ pub struct Notification {
 /// 읽음 표시 요청. `id`가 없으면 모두 읽음.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MarkRead {
+    pub organization_id: Option<OrganizationId>,
     #[schema(value_type = Option<String>, format = Uuid)]
     pub id: Option<Uuid>,
 }
@@ -229,7 +233,7 @@ async fn search_scope(
         crate::features::workspaces::member_role(tx, ws).await?;
         return Ok(vec![ws]);
     }
-    let ids: Vec<WorkspaceId> = sqlx::query_scalar("SELECT app_my_workspace_ids()")
+    let ids: Vec<WorkspaceId> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
         .fetch_all(tx.conn())
         .await?;
     Ok(ids)
@@ -241,7 +245,7 @@ async fn workspaces_named(tx: &mut UserTx, prefix: &str) -> Result<Vec<Workspace
     pattern.remove(0); // 앞쪽 %를 빼 접두어 일치로 만든다.
     let ids: Vec<WorkspaceId> = sqlx::query_scalar(
         "SELECT w.id FROM workspaces w
-         WHERE w.id IN (SELECT app_my_workspace_ids()) AND w.name ILIKE $1",
+         WHERE w.id IN (SELECT app_my_workspace_ids(NULL::uuid)) AND w.name ILIKE $1",
     )
     .bind(pattern)
     .fetch_all(tx.conn())
@@ -433,7 +437,7 @@ pub async fn resolve(
          FROM items i WHERE i.id = ANY($1)
          UNION ALL
          SELECT 'document', d.id, d.title, app_document_reference(d.id), d.workspace_id,
-                CASE WHEN app_item_access(d.item_id) IS NOT NULL THEN d.item_id END
+                CASE WHEN app_access('item', d.item_id) <> 'none' THEN d.item_id END
          FROM documents d WHERE d.id = ANY($2)
          UNION ALL
          SELECT 'user', u.id, u.display_name, NULL::text, NULL::uuid, NULL::uuid
@@ -492,7 +496,7 @@ async fn backlinks_to(
     // document_links와 documents 모두 RLS로 출발 문서를 볼 수 있는 것만 남는다.
     let rows: Vec<BacklinkRow> = sqlx::query_as(
         "SELECT d.id, app_document_reference(d.id), d.title, d.workspace_id,
-                CASE WHEN app_item_access(d.item_id) IS NOT NULL THEN d.item_id END
+                CASE WHEN app_access('item', d.item_id) <> 'none' THEN d.item_id END
          FROM document_links l JOIN documents d ON d.id = l.document_id
          WHERE l.target_kind = $1 AND l.target_id = $2
          ORDER BY d.updated_at DESC",
@@ -539,7 +543,7 @@ pub async fn task_backlinks(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<Backlink>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_task_access($1) IS NOT NULL")
+    let visible: bool = sqlx::query_scalar("SELECT app_access('task', $1) <> 'none'")
         .bind(id)
         .fetch_one(tx.conn())
         .await?;
@@ -561,7 +565,7 @@ pub async fn item_backlinks(
     Path(id): Path<ItemId>,
 ) -> Result<Json<Vec<Backlink>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_item_access($1) IS NOT NULL")
+    let visible: bool = sqlx::query_scalar("SELECT app_access('item', $1) <> 'none'")
         .bind(id)
         .fetch_one(tx.conn())
         .await?;
@@ -575,6 +579,8 @@ pub async fn item_backlinks(
 
 type NotificationRow = (
     Uuid,
+    Option<OrganizationId>,
+    Option<Uuid>,
     String,
     Option<DocumentId>,
     Option<Uuid>,
@@ -589,30 +595,45 @@ type NotificationRow = (
     Option<ItemId>,
 );
 
+/// 알림 범위와 페이지 커서.
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct NotificationQuery {
+    pub organization: Option<OrganizationId>,
+    pub limit: Option<i32>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[param(value_type = Option<String>, format = DateTime)]
+    pub before: Option<OffsetDateTime>,
+    pub before_id: Option<Uuid>,
+}
+
 /// 내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다.
-#[utoipa::path(get, path = "/api/me/notifications",
+#[utoipa::path(get, path = "/api/me/notifications", params(NotificationQuery),
     responses((status = 200, body = [Notification]), (status = 401, body = ErrorBody)), tag = "references")]
 pub async fn notifications(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
+    Query(query): Query<NotificationQuery>,
 ) -> Result<Json<Vec<Notification>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<NotificationRow> = sqlx::query_as(
-        "SELECT n.id, n.kind, n.document_id, n.task_id, n.comment_id, n.actor_name, n.detail, n.created_at, n.read_at,
+        "SELECT n.id, n.organization_id, n.invitation_id, n.kind, n.document_id, n.task_id, n.comment_id, n.actor_name, n.detail, n.created_at, n.read_at,
                 coalesce(d.title, t.title, i.title),
                 CASE WHEN d.id IS NOT NULL THEN app_document_reference(d.id)
                      WHEN t.id IS NOT NULL THEN app_task_reference(t.id)
                      ELSE app_item_reference(i.id) END,
                 coalesce(d.workspace_id, t.workspace_id, i.workspace_id),
-                CASE WHEN app_item_access(coalesce(d.item_id, t.item_id, i.id)) IS NOT NULL
+                CASE WHEN app_access('item', coalesce(d.item_id, t.item_id, i.id)) <> 'none'
                      THEN coalesce(d.item_id, t.item_id, i.id) END
-         FROM app_my_notifications($1) n
+         FROM app_my_notifications($1, $2, $3, $4) n
          LEFT JOIN documents d ON d.id = n.document_id
          LEFT JOIN tasks t ON t.id = n.task_id
          LEFT JOIN items i ON i.id = n.item_id
          ORDER BY n.created_at DESC, n.id DESC",
     )
-    .bind(NOTIFICATION_PAGE)
+    .bind(query.organization)
+    .bind(query.limit.unwrap_or(NOTIFICATION_PAGE).clamp(1, NOTIFICATION_PAGE))
+    .bind(query.before)
+    .bind(query.before_id)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
@@ -621,6 +642,8 @@ pub async fn notifications(
             .map(
                 |(
                     id,
+                    organization_id,
+                    invitation_id,
                     kind,
                     document_id,
                     task_id,
@@ -635,10 +658,12 @@ pub async fn notifications(
                     item_id,
                 )| Notification {
                     id,
+                    organization_id,
+                    invitation_id,
                     kind,
                     document_id,
                     task_id,
-                    document_title: title.unwrap_or_default(),
+                    document_title: title,
                     document_reference: reference,
                     workspace_id,
                     item_id,
@@ -673,8 +698,9 @@ pub async fn mark_read(
     Json(input): Json<MarkRead>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_mark_notifications_read($1)")
+    sqlx::query("SELECT app_mark_notifications_read($1, $2)")
         .bind(input.id)
+        .bind(input.organization_id)
         .execute(tx.conn())
         .await?;
     tx.commit().await?;

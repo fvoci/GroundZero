@@ -5,7 +5,7 @@
 //! O-19 미결): 규칙을 정할 때, 반복 업무를 고칠 때, 쓰기 권한이 있는 사람이 항목을 열 때의 동기화 요청.
 //! 읽기는 아직 없는 회차를 "예정"으로 계산해 보여 줄 뿐 만들지 않는다. 반복 일정은 달력에서 펼친다.
 //! `app_recurrence_dates`·`app_sync_task_series`의 최종 정의와 앱 공급 UUIDv7(D-88) 처리는
-//! `migrations/202610230001_initial_state.sql`에 있다.
+//! `migrations/202610250001_initial_state.sql`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -94,6 +94,8 @@ impl RecurrenceRule {
 /// 업무 반복 정하기. `rule`이 없으면 반복을 멈춘다(이미 만든 회차는 남는다).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SetTaskRecurrence {
+    /// 편집 시작 때 본 규칙. 반복이 없었으면 null.
+    pub base: Option<RecurrenceRule>,
     pub rule: Option<RecurrenceRule>,
     /// "오늘"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50).
     pub timezone: String,
@@ -104,30 +106,40 @@ pub struct SetTaskRecurrence {
 #[utoipa::path(put, path = "/api/tasks/{task_id}/recurrence", operation_id = "set_task_recurrence",
     params(("task_id" = String, Path, format = Uuid)), request_body = SetTaskRecurrence,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = crate::features::tasks::TaskConflict)), tag = "tasks")]
 pub async fn set_task(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetTaskRecurrence>,
-) -> Result<Json<TaskDetail>, AppError> {
+) -> Result<Response, AppError> {
     let rule = input
         .rule
         .as_ref()
         .map(RecurrenceRule::validated)
         .transpose()?;
+    let base = input
+        .base
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|e| AppError::Config(format!("encode the base rule: {e}")))?;
     let mut tx = state.db.begin_as(user).await?;
-    let series: Option<Uuid> = sqlx::query_scalar("SELECT app_set_task_recurrence($1, $2, $3, $4)")
-        .bind(id)
-        .bind(rule.as_ref())
-        .bind(input.timezone.trim())
-        .bind(new_ids(2))
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    let (series, outcome): (Option<Uuid>, String) = sqlx::query_as(
+        "SELECT series_id, outcome FROM app_set_task_recurrence($1, $2, $3, $4, $5)",
+    )
+    .bind(id)
+    .bind(rule.as_ref())
+    .bind(input.timezone.trim())
+    .bind(base.as_ref())
+    .bind(new_ids(2))
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     // 규칙은 이미 저장됐다. 회차 맞추기가 실패해도(잠금 충돌 등) 다음 쓰기 요청이나 항목 열기에서 이어 한다.
-    if let Some(series) = series
+    if outcome != "conflict"
+        && let Some(series) = series
         && let Err(e) = sync_series(&state, user, series).await
     {
         tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = crate::logging::safe_error(&e), %series, "recurrence sync after rule change failed");
@@ -135,7 +147,18 @@ pub async fn set_task(
     let mut tx = state.db.begin_as(user).await?;
     let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(detail))
+    Ok(if outcome == "conflict" {
+        (
+            StatusCode::CONFLICT,
+            Json(crate::features::tasks::TaskConflict {
+                error: "rule_conflict",
+                current: detail,
+            }),
+        )
+            .into_response()
+    } else {
+        Json(detail).into_response()
+    })
 }
 
 /// 한 반복의 회차를 만든다(별도 트랜잭션: 앞선 변경의 잠금과 섞이지 않게).

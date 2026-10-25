@@ -32,7 +32,7 @@ use tokio::sync::RwLock;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::config::{Config, OidcConfig};
-use crate::db::{Db, new_ids};
+use crate::db::{Db, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
 use crate::ids::UserId;
@@ -306,6 +306,17 @@ pub async fn start_session(
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
+    let mut tx = db.begin_as(user).await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_pending_invitations_count()"),
+    )
+    .await?;
+    sqlx::query("SELECT app_notify_pending_invitations($1)")
+        .bind(ids)
+        .execute(tx.conn())
+        .await?;
+    tx.commit().await?;
     Ok((user, token))
 }
 
@@ -330,10 +341,10 @@ pub async fn claim_initial_admin(
     }
     let mut tx = db.begin_anonymous().await?;
     let workspace: Option<Uuid> =
-        sqlx::query_scalar("SELECT app_system_claim_initial_workspace($1, $2, $3)")
+        sqlx::query_scalar("SELECT app_system_claim_initial_admin($1, $2, $3)")
             .bind(user)
             .bind(&config.initial_workspace)
-            .bind(new_ids(3))
+            .bind(new_ids(8))
             .fetch_one(tx.conn())
             .await?;
     tx.commit().await?;
