@@ -290,10 +290,11 @@ async fn zotero_refresh_rejects_a_concurrent_edit_without_overwriting_it() {
     let version = i32::try_from(record["version"].as_i64().unwrap()).unwrap();
     assert_eq!(record["fields"]["authors"], "Kim, M");
 
-    // 앱 역할에는 표 UPDATE 권한이 없어 FOR UPDATE만 시험 관리자 연결로 잡는다.
-    // 그 뒤 같은 연결을 실제 앱 역할·다른 사용자 문맥으로 낮춰 정상 변경 함수를 호출한다.
+    // 앱 역할에는 표 UPDATE 권한이 없어 FOR UPDATE는 표 소유 역할 연결로 잡는다(셀프호스트 Supabase의 시험 관리자는
+    // superuser가 아니라 item_records를 읽지 못한다). 변경 요청은 실제 앱 역할로 서버를 거친다.
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
-    let mut lock_conn = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let mut lock_conn = sqlx::PgConnection::connect(&owner_url).await.unwrap();
     let mut held = lock_conn.begin().await.unwrap();
     let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut *held)

@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 /// 모듈 키는 워크스페이스 안에서 유일해야 하므로 부를 때마다 다른 키를 준다.
 async fn item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> String {
     let module = send(
-        &app,
+        app,
         Method::POST,
         &format!("/api/workspaces/{ws}/modules"),
         Some(admin),
@@ -24,7 +24,7 @@ async fn item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> String {
     .await;
     assert_eq!(module.status, StatusCode::CREATED, "{:?}", module.json);
     let created = send(
-        &app,
+        app,
         Method::POST,
         &format!("/api/modules/{}/items", module.json["id"].as_str().unwrap()),
         Some(admin),
@@ -35,7 +35,7 @@ async fn item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> String {
     let id = created.json["id"].as_str().unwrap().to_owned();
     // 공개 항목: 멤버·읽기 전용이 본다.
     let opened = send(
-        &app,
+        app,
         Method::PUT,
         &format!("/api/items/{id}"),
         Some(admin),
