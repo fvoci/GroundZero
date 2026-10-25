@@ -268,7 +268,7 @@
         if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
       }}
     />
-    <p role="status">{status}</p>
+    <p role="status" hidden={status === ''}>{status}</p>
     <p aria-live="polite">
       {#if error !== undefined}
         <span class="text-destructive">{error}</span>

@@ -244,7 +244,13 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 
   it('confirms navigation and keeps the draft when continuing to edit', async () => {
     render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    const cleanUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(cleanUnload);
+    expect(cleanUnload.defaultPrevented).toBe(false);
     await setText('A');
+    const unsavedUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unsavedUnload);
+    expect(unsavedUnload.defaultPrevented).toBe(true);
     const before = router.path;
     router.navigate('/csv-away');
     await screen.findByRole('alertdialog');
