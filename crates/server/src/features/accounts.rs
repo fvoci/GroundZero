@@ -574,6 +574,30 @@ pub fn check_expected_user(user: UserId, raw: Option<&str>, name: &str) -> Resul
     }
 }
 
+/// 웹 입력 미리 검사에 쓰는 서버 설정. 글자 수는 Unicode 코드 포인트 기준이며 서버가 최종 검증한다.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct InputLimits {
+    /// 제목·이름 상한(`FVOCI_MAX_TITLE_CHARS`). 업무 CSV의 각 행에도 적용된다.
+    pub max_title_chars: usize,
+    /// 문서 본문 JSON 직렬화 크기 상한(바이트).
+    pub max_document_bytes: usize,
+    /// 문서 하나의 참조 노드 수 상한.
+    pub max_references_per_document: usize,
+    /// 문서 트리 최대 깊이(최상위 = 1).
+    pub max_document_depth: usize,
+}
+
+impl From<crate::config::Limits> for InputLimits {
+    fn from(limits: crate::config::Limits) -> Self {
+        Self {
+            max_title_chars: limits.max_title_chars,
+            max_document_bytes: limits.max_document_bytes,
+            max_references_per_document: limits.max_references_per_document,
+            max_document_depth: limits.max_document_depth,
+        }
+    }
+}
+
 /// 현재 사용자 정보.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Me {
@@ -590,6 +614,8 @@ pub struct Me {
     pub hour_cycle: String,
     /// 화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`.
     pub theme: String,
+    /// 서버 입력 상한. 강의 회차 제목의 고정 한도(300자)는 이 설정과 별개다.
+    pub limits: InputLimits,
 }
 
 /// 현재 로그인한 사용자.
@@ -629,6 +655,7 @@ pub async fn me(
         week_start,
         hour_cycle,
         theme,
+        limits: state.config.limits.into(),
     }))
 }
 
