@@ -298,9 +298,20 @@ async fn comments_threads_and_notifications_follow_access() {
         "start_date": null, "due_date": tomorrow.to_string(), "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    // 읽기 전용은 업무 댓글도 쓰지 못한다(D-20). 관리자의 댓글이 담당자(writer)에게 알림으로 간다.
+    assert_eq!(
+        comment(
+            &app,
+            &reader,
+            json!({ "task_id": task["id"], "body": "자료 첨부했어요" })
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     let (status, _) = comment(
         &app,
-        &reader,
+        &admin,
         json!({ "task_id": task["id"], "body": "자료 첨부했어요" }),
     )
     .await;

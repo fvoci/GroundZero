@@ -535,8 +535,11 @@ pub async fn create_wiki(
             .bind(ws)
             .fetch_one(tx.conn())
             .await?;
-        if !matches!(grade.as_str(), "owner" | "write") {
-            return Err(AppError::Forbidden);
+        // 볼 수 없는 워크스페이스는 404(존재를 드러내지 않음), 읽기만 되면 403(D-113).
+        match grade.as_str() {
+            "owner" | "write" => {}
+            "none" => return Err(AppError::NotFound),
+            _ => return Err(AppError::Forbidden),
         }
         let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
