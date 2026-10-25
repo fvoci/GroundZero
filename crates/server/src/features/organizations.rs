@@ -61,15 +61,21 @@ pub struct OrganizationSummary {
     pub created_at: OffsetDateTime,
 }
 
-/// 조직 단계 한도·보존 설정(D-124). `null`은 미설정(서버 기본값 또는 워크스페이스 설정을 따름).
+/// 조직·워크스페이스의 한도·보존 설정값(D-124). `null`은 해당 단계에서 미설정이라는 뜻이다.
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct OrganizationLimits {
+    #[schema(minimum = 1)]
     pub max_file_bytes: Option<i64>,
+    #[schema(minimum = 0)]
     pub max_storage_bytes: Option<i64>,
+    #[schema(minimum = 1)]
     pub max_concurrent_uploads: Option<i32>,
     /// 열만 두고 아직 적용하지 않는다(사용자 결정 대기: 적용 대상·채널·초과 처리).
+    #[schema(minimum = 1)]
     pub notification_rate_per_hour: Option<i32>,
+    #[schema(minimum = 1, maximum = 3650)]
     pub activity_retention_days: Option<i32>,
+    #[schema(minimum = 1, maximum = 3650)]
     pub audit_retention_days: Option<i32>,
 }
 
@@ -431,6 +437,7 @@ pub async fn invitations(
 /// 키 생략은 유지, 한도의 null은 미설정으로 되돌린다. 원본 JSON을 SQL에 전달한다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct OrganizationSettingsPatch {
+    #[schema(nullable = false)]
     pub name: Option<String>,
     pub public_links_enabled: Option<bool>,
     #[serde(flatten)]
