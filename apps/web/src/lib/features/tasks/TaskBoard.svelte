@@ -452,7 +452,8 @@
   /**
    * 키보드·메뉴로 옮기고 그 카드에 초점을 둔다. 카드는 저장 전에 새 열에 다시 그려지므로(앞 요소는 사라짐) 바로 새 자리로
    * 초점을 옮긴다: 저장이 늦거나 끝나지 않아도 초점이 문서 처음으로 빠지지 않게. 저장이 끝나면(실패면 원래 자리로 돌아와
-   * 다시 그려짐) 초점을 잃은 경우에만 다시 둔다. 기다리는 동안 다른 곳으로 옮긴 초점은 빼앗지 않는다.
+   * 다시 그려짐) 초점을 잃은 경우에만 다시 둔다. 기다리는 동안 다른 곳으로 옮긴 초점은 빼앗지 않는다. 화면을 떠난 뒤 온
+   * 응답도 초점을 건드리지 않는다(같은 항목을 다시 열어 새 보드가 있어도 그 카드로 초점을 가져가지 않게).
    */
   async function moveAndFocus(
     id: string,
@@ -462,6 +463,7 @@
     const sent = commitMove(id, plan, how);
     await focusCard(id);
     await sent;
+    if (!alive) return;
     const active = document.activeElement;
     if (active === null || active === document.body) await focusCard(id);
   }
