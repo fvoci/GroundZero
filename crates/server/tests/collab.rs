@@ -3779,7 +3779,7 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
     assert_eq!(history[0]["revision"], last);
     assert_eq!(history[0]["author_name"], "second-writer");
     assert_eq!(history[0]["edited_by_names"], json!(["first-editor"]));
-    // 고친 사람이 워크스페이스를 떠나 함께 속한 곳이 없으면 그 이름은 보이지 않는다(작성자 이름과 같은 규칙).
+    // D-111·D-114: 공간을 떠나도 같은 조직에서는 이름이 보이며 조직까지 떠나면 가린다.
     let removed = send(
         &app,
         Method::DELETE,
@@ -3789,6 +3789,32 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
     )
     .await;
     assert!(removed.status.is_success(), "{:?}", removed.json);
+    let seen = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{id}/revisions"),
+        Some(&second),
+        None,
+    )
+    .await;
+    assert_eq!(seen.json[0]["edited_by_names"], json!(["first-editor"]));
+    let organization = common::organization_of_workspace(&ws).await;
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let count: i32 = sqlx::query_scalar("SELECT app_remove_organization_member_ids($1, $2)")
+        .bind(organization)
+        .bind(first.id.0)
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    let ids: Vec<_> = (0..count).map(|_| uuid::Uuid::now_v7()).collect();
+    sqlx::query("SELECT app_remove_organization_member($1, $2, $3)")
+        .bind(organization)
+        .bind(first.id.0)
+        .bind(ids)
+        .execute(tx.conn())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
     for path in [
         format!("/api/documents/{id}/revisions"),
         format!("/api/documents/{id}/revisions/{last}"),
@@ -4054,9 +4080,27 @@ async fn revoke_while_a_move_waits(
     hold.rollback().await.unwrap();
     let reply = request.await.unwrap();
     let after_relayed = r.until(|c| c.text().contains("거둔 뒤 보낸 문단")).await;
+    if demote {
+        // D-114: 이름이 같아도 write→read로 바뀐 미리보기는 다시 확인해야 한다.
+        assert_eq!(reply.status, StatusCode::CONFLICT, "{:?}", reply.json);
+        let change = reply.json["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["user_id"] == json!(writer.id.0))
+            .unwrap();
+        assert_eq!(change["from_grade"], "read");
+        assert_eq!(change["to_grade"], serde_json::Value::Null);
+        assert_eq!(
+            get_doc(&app, &admin, &id).await["workspace_id"],
+            from.as_str()
+        );
+        let retried = move_to(&app, &admin, &id, &to).await;
+        assert_eq!(retried.status, StatusCode::OK, "{:?}", retried.json);
+    }
     let closed = match closed_early {
         Some(code) => Some(code),
-        None if reply.status == StatusCode::OK => e.closed().await,
+        None if demote || reply.status == StatusCode::OK => e.closed().await,
         None => None,
     };
     let doc = get_doc(&app, &admin, &id).await;
@@ -4074,13 +4118,18 @@ async fn revoke_while_a_move_waits(
 }
 
 /// W1b(사용자 요구 2b·2c, 방 안 이동, 재확인 간격 안): 이동이 잠금을 기다리는 동안 작성자를 독자로 바꾸고 재확인 간격(이
-/// 시험은 3600초) 안에 편집을 보낸다. 강등은 이동이 기다리는 동안 커밋되고 이동은 그대로 옮긴다. 강등 전에 확인받은 편집은
-/// 옮긴 문서에 남는다. 강등 뒤 보낸 편집은 다음 재확인 전이라 받아들여 옮긴 문서의 리비전에 들고 확인된다(연결은 4409):
+/// 시험은 3600초) 안에 편집을 보낸다. D-114에 따라 강등 뒤 이동은 409이고 새 미리보기를 확인해 재시도한다. 확인받은 편집은
+/// 옮긴 문서에 남는다. 강등 뒤 보낸 편집도 다음 재확인 전이라 받아들여 재시도한 이동의 리비전에 들고 확인된다(연결은 4409):
 /// 문서화된 권한 철회 지연(재확인 간격 안의 편집은 들어간다)과 같다. 간격이 지나면 대기 중에도 닫힌다(아래 시험).
 #[tokio::test]
 async fn an_edit_within_the_recheck_interval_after_a_demotion_during_a_move_is_kept() {
     let out = revoke_while_a_move_waits("3600", "기다리는 이동 중 강등", true).await;
-    assert_eq!(out.reply.status, StatusCode::OK, "{:?}", out.reply.json);
+    assert_eq!(
+        out.reply.status,
+        StatusCode::CONFLICT,
+        "{:?}",
+        out.reply.json
+    );
     let body = out.doc["body"].to_string();
     assert!(
         body.contains("체크포인트 전 문단"),
@@ -4159,7 +4208,22 @@ async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> 
         Some(4403),
         "the demoted editor's connection stayed open while the move waited"
     );
-    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    // D-114: 대기 중 등급 변화는 409이며 다시 확인한 이동만 완료한다.
+    assert_eq!(moved.status, StatusCode::CONFLICT, "{:?}", moved.json);
+    let change = moved.json["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["user_id"] == json!(writer.id.0))
+        .unwrap();
+    assert_eq!(change["from_grade"], "read");
+    assert_eq!(change["to_grade"], serde_json::Value::Null);
+    assert_eq!(
+        get_doc(&app, &admin, &id).await["workspace_id"],
+        from.as_str()
+    );
+    let retried = move_to(&app, &admin, &id, &to).await;
+    assert_eq!(retried.status, StatusCode::OK, "{:?}", retried.json);
     let saved = get_doc(&app, &admin, &id).await;
     assert_eq!(saved["workspace_id"], to.as_str());
     let body = saved["body"].to_string();
