@@ -34,6 +34,7 @@
   import { Input } from '$lib/ui/input';
   import { NativeSelect } from '$lib/ui/native-select';
   import { durationText } from '$lib/features/time/format';
+  import TaskTimeStart from '$lib/features/time/TaskTimeStart.svelte';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -1693,6 +1694,8 @@
                     <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
                     <span class="max-w-full min-w-0 font-medium break-words">{t.title}</span>
                   </button>
+                  <!-- 시간 기록 시작은 업무 카드 안에 둔다(D-117). -->
+                  <TaskTimeStart taskId={t.id} title={t.title} />
                   {#if canWrite}
                     <DropdownMenu.Root>
                       <DropdownMenu.Trigger>
@@ -1915,6 +1918,8 @@
                     open(t.id);
                   }}>{t.parent_id === null ? '' : '↳ '}{t.title}</button
                 >
+                <!-- 시간 기록 시작은 업무 행 안에 둔다(D-117). -->
+                <TaskTimeStart taskId={t.id} title={t.title} />
               </td>
               <td>{t.status}</td>
               <td>{t.assignees.map((a) => a.display_name).join(', ')}</td>
