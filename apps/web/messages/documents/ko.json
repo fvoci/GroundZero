@@ -1,5 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "documents_public_links_disabled": "조직이 공개 링크를 껐습니다.",
   "documents_not_found": "문서가 없거나 볼 권한이 없습니다.",
   "documents_load_failed": "문서를 불러오지 못했습니다.",
   "documents_loading": "불러오는 중…",

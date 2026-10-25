@@ -114,11 +114,12 @@
   }
 </script>
 
+<p role="status" class="empty:hidden">
+  {#if error === undefined && doc === undefined}{m.documents_loading()}{/if}
+</p>
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
-{:else if doc === undefined}
-  <p aria-live="polite">{m.documents_loading()}</p>
-{:else}
+{:else if doc !== undefined}
   {@const shownDoc = doc}
   <div class="flex flex-wrap items-center gap-2">
     <DocumentActions
@@ -142,7 +143,7 @@
         />
       {/snippet}
       {#snippet more()}
-        {#if shownDoc.can_export}
+        {#if shownDoc.can_export && (shownDoc.access === 'owner' || shownDoc.allow_copy)}
           <DropdownMenu.Item onSelect={() => (exportOpen = true)}
             >{m.documents_export()}</DropdownMenu.Item
           >
@@ -157,7 +158,7 @@
         {/if}
       {/snippet}
     </DocumentActions>
-    {#if doc.can_export}
+    {#if doc.can_export && (doc.access === 'owner' || doc.allow_copy)}
       <ExportDialog
         bind:open={exportOpen}
         returnFocus={moreButton}
@@ -252,8 +253,13 @@
     <Backlinks kind="document" id={doc.id} {workspaces} />
   {/key}
   <AttachmentsPanel
+    allowCopy={doc.access === 'owner' || doc.allow_copy}
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
   />
-  <CommentsPanel target={{ kind: 'document', id: doc.id }} />
+  <CommentsPanel
+    target={{ kind: 'document', id: doc.id }}
+    canWrite={doc.access !== 'read'}
+    itemId={doc.item_id}
+  />
 {/if}

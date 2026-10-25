@@ -73,6 +73,8 @@ const TEXT: [string, string][] = [
   ['muted-foreground', 'card'],
   ['muted-foreground', 'popover'],
   ['primary-foreground', 'primary'],
+  ['primary', 'background'],
+  ['primary', 'card'],
   ['secondary-foreground', 'secondary'],
   ['accent-foreground', 'accent'],
   ['destructive', 'background'],
@@ -89,6 +91,7 @@ const STATE: [string, string][] = [
   ['ring', 'background'],
   ['ring', 'muted'],
   ['ring', 'card'],
+  ['ring', 'popover'],
   ['sidebar-ring', 'sidebar'],
   ['primary', 'background'],
 ];

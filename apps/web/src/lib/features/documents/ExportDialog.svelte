@@ -10,6 +10,7 @@
   import { errorText } from '$lib/api/errors';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Label } from '$lib/ui/label';
@@ -96,6 +97,7 @@
   }
 
   async function run(): Promise<void> {
+    if (!doc.can_export || (doc.access !== 'owner' && !doc.allow_copy)) return;
     busy = true;
     error = undefined;
     notes = undefined;
@@ -121,6 +123,7 @@
           ...(lossy.length > 0 ? [m.documents_export_lossy({ blocks: lossy.join(', ') })] : []),
         ];
       }
+      notifyDone(format === 'pdf' ? m.documents_export_print_opened() : m.documents_exported());
     } catch (e: unknown) {
       error =
         e instanceof ApiError && e.status === 403
@@ -134,7 +137,7 @@
 
 <Dialog.Root bind:open>
   <Dialog.Content
-    class="sm:max-w-lg"
+    class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-lg"
     onCloseAutoFocus={(e: Event) => {
       if (returnFocus === null) return;
       e.preventDefault();
@@ -205,7 +208,6 @@
       {/if}
       <div role="status" class="flex flex-col gap-1 empty:hidden">
         {#if notes !== undefined}
-          <p>{format === 'pdf' ? m.documents_export_print_opened() : m.documents_exported()}</p>
           {#if notes.length > 0}
             <ul class="list-disc pl-5 text-muted-foreground">
               {#each notes as note, i (i)}

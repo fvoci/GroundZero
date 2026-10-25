@@ -1,8 +1,27 @@
 // 표시 설정과 날짜·시각 서식(D-81, D-50). 사용자가 저장한 값(계정)이 먼저이고, 아직 고르지 않은 칸은 브라우저
 // 언어·시간대와 그 언어의 로케일 관례로 제안한다. 브라우저 설정이 바뀌어도 저장한 값을 덮지 않는다. 표시만 바꾸며
 // 저장된 시각·날짜는 그대로다. 서식은 브라우저 Intl을 그대로 쓰는 작은 함수들이다(별도 날짜 라이브러리 없음).
-import { localTimeZone } from '$lib/features/events/time';
 import { me } from '$lib/me.svelte';
+
+/** 브라우저가 아는 IANA 시간대인지. 저장된 값 자체는 바꾸지 않는다. */
+export function isKnownZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 알 수 없는 시간대의 표시 대체. 일정은 UTC, 개인 설정은 브라우저 시간대를 넘긴다. */
+export function resolveTimeZone(timeZone: string, fallback = 'UTC'): string {
+  if (isKnownZone(timeZone)) return timeZone;
+  return isKnownZone(fallback) ? fallback : 'UTC';
+}
+
+export function localTimeZone(): string {
+  return resolveTimeZone(me.timeZone, Intl.DateTimeFormat().resolvedOptions().timeZone);
+}
 
 export type DisplayLocale = 'ko' | 'en';
 export type WeekStart = 'mon' | 'sun';
@@ -50,7 +69,7 @@ export function suggestedSettings(): DisplaySettings {
   const locale = browserLocale();
   return {
     locale,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timeZone: resolveTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone),
     weekStart: conventionalWeekStart(locale),
     hourCycle: conventionalHourCycle(locale),
   };
@@ -111,7 +130,7 @@ export function formatInstant(
 ): string {
   return new Intl.DateTimeFormat(localeTag(settings), {
     ...options,
-    timeZone,
+    timeZone: resolveTimeZone(timeZone),
     hourCycle: settings.hourCycle,
   }).format(new Date(iso));
 }

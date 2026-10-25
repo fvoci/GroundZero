@@ -4,6 +4,7 @@
 import type { DocNode } from '$lib/api/client';
 import { parseDocNode } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
+import { org } from '$lib/org.svelte';
 
 export interface Draft {
   baseRevision: number;
@@ -31,7 +32,7 @@ function tabId(): string {
 
 /** 이 사용자·문서의 초안 키 앞부분. 로그인 전이면 없다. */
 function base(documentId: string): string | undefined {
-  return me.userId === '' ? undefined : `fvoci:draft:${me.userId}:${documentId}`;
+  return me.userId === '' ? undefined : org.key(`draft:${me.userId}:${documentId}`);
 }
 
 /** 이 탭의 지금 편집의 초안 키. */
@@ -51,24 +52,17 @@ function offerPrefix(documentId: string): string | undefined {
   return b === undefined ? undefined : `${b}:offer:`;
 }
 
-/** 목록 하나로 두던 옛 키. 읽을 때 초안마다의 키로 옮긴다. */
-function legacyOffersKey(documentId: string): string | undefined {
-  const b = base(documentId);
-  return b === undefined ? undefined : `${b}:offers`;
-}
-
 /** 같은 밀리초에 더한 것끼리의 순서. */
 let pushed = 0;
 
 /**
- * 초안 하나를 줄 끝에 더한다(키가 더한 순서대로 정렬된다). 쓰기에 성공했는지. `at`을 주면 그 시각(밀리초)을
- * 순서로 쓴다(옛 목록에서 옮긴 것을 앞에 두기).
+ * 초안 하나를 줄 끝에 더한다(키가 더한 순서대로 정렬된다). 쓰기에 성공했는지.
  */
-function pushOffer(documentId: string, draft: Draft, at = Date.now()): boolean {
+function pushOffer(documentId: string, draft: Draft): boolean {
   const prefix = offerPrefix(documentId);
   if (prefix === undefined) return false;
   pushed += 1;
-  const order = `${String(at).padStart(15, '0')}.${String(pushed).padStart(9, '0')}`;
+  const order = `${String(Date.now()).padStart(15, '0')}.${String(pushed).padStart(9, '0')}`;
   return write(`${prefix}${order}.${crypto.randomUUID()}`, draft);
 }
 
@@ -76,20 +70,6 @@ function pushOffer(documentId: string, draft: Draft, at = Date.now()): boolean {
 function offerEntries(documentId: string): { key: string; draft: Draft }[] {
   const prefix = offerPrefix(documentId);
   if (prefix === undefined) return [];
-  const legacy = legacyOffersKey(documentId);
-  const old = read(legacy);
-  if (old !== undefined) {
-    const list: unknown[] = Array.isArray(old) ? old : [old];
-    const drafts = list.map(parseDraft).filter((d): d is Draft => d !== undefined);
-    // 옮긴 것은 바로 옛 목록에서 뺀다(중간에 실패해도 다음에 같은 것을 다시 옮기지 않게). 순서는 그 초안을 남긴 시각으로
-    // 매긴다: 옛 것이 그 뒤에 더한 것보다 앞이고, 새로고침 사이에 나눠 옮겨도 그 순서는 같다.
-    for (const [index, d] of drafts.entries()) {
-      const at = Date.parse(d.savedAt);
-      if (!pushOffer(documentId, d, Number.isFinite(at) ? at : index)) break;
-      const rest = drafts.slice(index + 1);
-      write(legacy, rest.length === 0 ? undefined : rest);
-    }
-  }
   const keys: string[] = [];
   try {
     for (let i = 0; i < window.localStorage.length; i += 1) {
@@ -152,7 +132,7 @@ function claimTab(): void {
 claimTab();
 
 /**
- * 닫힌 탭이 남긴 이 문서의 초안(과 탭 구분이 없던 키의 것)을 고르게 할 줄로 넘겨받는다. 살아 있는 탭의 것은 건드리지
+ * 닫힌 탭이 남긴 이 문서의 초안을 고르게 할 줄로 넘겨받는다. 살아 있는 탭의 것은 건드리지
  * 않는다. 탭이 살아 있는지 알 수 없는 브라우저(Web Locks 없음)에서는 아무것도 넘겨받지 않는다. 넘겨받은 수.
  */
 export async function adoptOrphans(documentId: string): Promise<number> {
@@ -173,7 +153,6 @@ export async function adoptOrphans(documentId: string): Promise<number> {
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const k = window.localStorage.key(i);
       if (k === null || k === mine) continue;
-      if (k === b) candidates.push(k);
       const tab = k.startsWith(`${b}:tab:`) ? k.slice(`${b}:tab:`.length) : undefined;
       if (tab !== undefined && !held.has(`fvoci:tab:${tab}`)) candidates.push(k);
     }
@@ -189,9 +168,6 @@ export async function adoptOrphans(documentId: string): Promise<number> {
   }
   return adopted;
 }
-
-/** 사용자 id가 없던 옛 키. 누구의 것인지 알 수 없어 제안하지 않고 지운다. */
-const legacyKey = (documentId: string): string => `fvoci:draft:${documentId}`;
 
 function parseDraft(value: unknown): Draft | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
@@ -244,11 +220,6 @@ function write(k: string | undefined, value: unknown): boolean {
 }
 
 export function loadDraft(documentId: string): Draft | undefined {
-  try {
-    window.localStorage.removeItem(legacyKey(documentId));
-  } catch {
-    // 위와 같다.
-  }
   return parseDraft(read(key(documentId)));
 }
 

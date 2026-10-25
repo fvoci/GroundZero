@@ -3,7 +3,13 @@ import { expect, screen } from 'storybook/test';
 import { toast } from 'svelte-sonner';
 
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
-import { auth, connection, notifyDone } from '$lib/features/feedback/feedback.svelte';
+import {
+  auth,
+  accountSafety,
+  connection,
+  notifyDone,
+  notifyError,
+} from '$lib/features/feedback/feedback.svelte';
 
 // 알림(D-82): 완료 토스트와 연결·로그인 배너(src/lib/features/feedback/FeedbackHost.svelte). 배너 상태는 제품의
 // 공유 상태(`connection`·`auth`)를 story 동안만 바꾸고 끝나면 되돌린다.
@@ -14,6 +20,7 @@ const meta = {
   beforeEach: () => () => {
     connection.lost = false;
     auth.expired = false;
+    accountSafety.switching = false;
     toast.dismiss();
   },
 } satisfies Meta<typeof FeedbackHost>;
@@ -36,7 +43,38 @@ export const ConnectionLost: Story = {
     connection.lost = true;
   },
   play: async () => {
-    await expect(await screen.findByTestId('connection-banner')).toHaveAttribute('role', 'status');
+    await expect((await screen.findByTestId('connection-banner')).parentElement).toHaveAttribute(
+      'role',
+      'status',
+    );
+  },
+};
+
+export const BrandLight: Story = {
+  ...ConnectionLost,
+  globals: { theme: 'light', viewport: { value: 'desktop' } },
+};
+export const BrandDark: Story = {
+  ...ConnectionLost,
+  globals: { theme: 'dark', viewport: { value: 'desktop' } },
+};
+export const BrandNarrowLargeText: Story = {
+  ...ConnectionLost,
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+
+export const AccountChanged: Story = {
+  beforeEach: () => {
+    accountSafety.switching = true;
+  },
+  globals: { viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+
+export const RepeatedError: Story = {
+  play: async () => {
+    notifyError('연결 실패', 'connection');
+    notifyError('다시 연결하지 못했습니다.', 'connection');
+    await screen.findByText('다시 연결하지 못했습니다.');
   },
 };
 

@@ -76,3 +76,16 @@ export const OpenAnother: Story = {
     await editAndAsk(canvasElement);
   },
 };
+
+export const BrandLight: Story = {
+  ...OpenAnother,
+  globals: { theme: 'light', viewport: { value: 'desktop' } },
+};
+export const BrandDark: Story = {
+  ...OpenAnother,
+  globals: { theme: 'dark', viewport: { value: 'desktop' } },
+};
+export const BrandNarrowLargeText: Story = {
+  ...OpenAnother,
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};

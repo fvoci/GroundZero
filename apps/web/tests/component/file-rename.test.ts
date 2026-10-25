@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
+import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
+  notifyDone: vi.fn(),
+}));
 
 // 첨부 이름 바꾸기(D-82, 감사 W36): 서버가 이름을 거절하면 입력한 이름이 남고 오류가 칸 옆에 보인다.
 // 성공한 뒤에만 입력 칸을 닫는다.
@@ -143,7 +149,7 @@ describe('file rename', () => {
 
     resolve({ ...file, name: 'report/final.pdf' });
     await vi.waitFor(() => {
-      expect(screen.getByText('이름을 바꿨습니다: report/final.pdf')).toBeTruthy();
+      expect(notifyDone).toHaveBeenCalledWith('이름을 바꿨습니다: report/final.pdf');
     });
     expect(screen.getByRole('textbox', { name: '새 이름' })).toHaveValue('report-v2.pdf');
   });

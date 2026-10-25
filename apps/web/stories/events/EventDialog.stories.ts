@@ -6,6 +6,8 @@ import { m } from '$lib/paraglide/messages.js';
 import { setUpScreen } from '../fixtures/screens';
 import { recurring } from '../time/fixtures';
 
+// 일정 대화상자(features/events/EventDialog.svelte). 기본은 반복 일정이고 저장이 반복 끝 위치 오류(#76)로 거절되는 상태다.
+// Light·Dark·NarrowLargeText는 반복 없는 회의 일정의 기본 모양(밝음·어두움·375px·200% 글꼴)이다.
 const meta = {
   globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
   title: 'Events/EventDialog',
@@ -22,6 +24,7 @@ const meta = {
 } satisfies Meta<typeof EventDialog>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
 export const UntilRejected: Story = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement.ownerDocument.body);
@@ -38,4 +41,42 @@ export const UntilRejected: Story = {
 export const NarrowDark200: Story = {
   ...UntilRejected,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
+};
+
+/** 반복 없는 회의 일정(작업자 C의 기본 모양 확인용). meta의 반복 일정 대신 이 일정을 돌려준다. */
+const plainMeeting = (): void => {
+  spyOn(api, 'event').mockResolvedValue({
+    id: 'event-example',
+    item_id: 'item-example',
+    workspace_id: 'ws-1',
+    kind: 'meeting',
+    title: '공유 정책 점검 회의',
+    description: '문서와 첨부의 접근 범위를 확인합니다.',
+    all_day: false,
+    start_date: null,
+    end_date: null,
+    starts_at: '2026-10-26T01:00:00Z',
+    ends_at: '2026-10-26T02:00:00Z',
+    timezone: 'Asia/Seoul',
+    recurrence: null,
+    excluded_dates: [],
+    version: 1,
+    access: 'write',
+  });
+};
+
+export const Light: Story = {
+  args: { eventId: 'event-example' },
+  beforeEach: plainMeeting,
+  globals: { theme: 'light', viewport: { value: 'desktop' } },
+};
+export const Dark: Story = {
+  args: { eventId: 'event-example' },
+  beforeEach: plainMeeting,
+  globals: { theme: 'dark', viewport: { value: 'desktop' } },
+};
+export const NarrowLargeText: Story = {
+  args: { eventId: 'event-example' },
+  beforeEach: plainMeeting,
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

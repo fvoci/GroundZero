@@ -8,6 +8,7 @@ import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
 import { me } from '$lib/me.svelte';
+import { org } from '$lib/org.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // CodeRabbit(#60 8e42036): 첫 동기화 전이라 편집기가 본문을 넘기지 않았을 때 제목만 고치고 계정이 바뀌어도(4412) 그
@@ -97,7 +98,7 @@ describe('a title edited before the first live sync', () => {
     ]);
     expect(reload).toHaveBeenCalledOnce();
     const kept = Object.keys(window.localStorage)
-      .filter((k) => k.startsWith('fvoci:draft:user-a:d1'))
+      .filter((k) => k.startsWith(org.key('draft:user-a:d1')))
       .map((k) => window.localStorage.getItem(k) ?? '');
     expect(kept.some((v) => v.includes('동기화 전에 고친 제목'))).toBe(true);
   });

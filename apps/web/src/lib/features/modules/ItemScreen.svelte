@@ -149,16 +149,10 @@
     };
   });
 
-  // 항목이나 그 모듈이 보관되면 읽기 전용이다(서버의 쓰기 검사와 같다). 항목의 archived는 항목 자신의 보관이므로,
-  // 모듈이 보관되면 하위 칸(정보·업무·일정)에는 읽기 접근으로 넘긴다(서버의 문서 접근도 보관되면 읽기로 낮춘다).
+  // 작업자 C: 접근 등급은 보관까지 반영한 서버 app_access 결과를 그대로 쓴다(D-113).
   const moduleArchived = $derived(mod?.archived === true);
-  const readAccess: ItemView['access'] = 'read';
-  const shownItem = $derived(
-    item !== undefined && moduleArchived ? { ...item, access: readAccess } : item,
-  );
-  const canEdit = $derived(
-    item !== undefined && !item.archived && !moduleArchived && item.access !== 'read',
-  );
+  const shownItem = $derived(item);
+  const canEdit = $derived(item !== undefined && item.access !== 'read');
   const isOwner = $derived(item?.access === 'owner');
 
   // 이 화면은 다른 항목으로 옮겨 가도 다시 만들어지지 않는다. 기다리는 사이 옮겨 갔으면 시작한 항목의 결과·오류를

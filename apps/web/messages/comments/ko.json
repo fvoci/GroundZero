@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "comments_heading": "댓글",
+  "comments_archived": "보관된 항목이라 쓸 수 없습니다.",
   "comments_load_failed": "댓글을 불러오지 못했습니다.",
   "comments_action_failed": "처리하지 못했습니다.",
   "comments_posted": "댓글을 달았습니다.",

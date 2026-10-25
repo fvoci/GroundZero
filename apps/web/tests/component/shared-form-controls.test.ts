@@ -92,7 +92,7 @@ describe('comment boxes use the shared Textarea', () => {
         can_resolve: false,
       },
     ]);
-    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' } } });
+    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' }, canWrite: true } });
     await screen.findByText('첫 댓글');
     expect(screen.getByRole('textbox', { name: /새 댓글/ })).toHaveAttribute(
       'data-slot',

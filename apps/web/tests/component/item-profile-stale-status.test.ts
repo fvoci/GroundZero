@@ -5,7 +5,13 @@ import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import { m } from '$lib/paraglide/messages.js';
+import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
+  notifyDone: vi.fn(),
+}));
 
 // 앞서 저장에 성공한 안내("항목 정보를 저장했습니다.")가 다음 저장의 409 알림 옆에 남으면, 입력이 저장된 것처럼 보여 보존한
 // 입력을 두고 떠나게 한다(실제 브라우저 확인 w-browser2 B에서 드러남). 저장을 보낼 때 앞선 안내를 지운다.
@@ -62,6 +68,7 @@ function serve(replies: [number, unknown][]): void {
 }
 
 beforeEach(async () => {
+  vi.mocked(notifyDone).mockClear();
   await setLocale('ko', { reload: false });
   Element.prototype.hasPointerCapture = (): boolean => false;
   Element.prototype.setPointerCapture = (): void => undefined;
@@ -86,7 +93,9 @@ describe('item profile status line', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByText('항목 정보를 저장했습니다.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(notifyDone).toHaveBeenCalledWith('항목 정보를 저장했습니다.');
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
@@ -215,7 +224,9 @@ describe('item profile status line', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByText('항목 정보를 저장했습니다.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(notifyDone).toHaveBeenCalledWith('항목 정보를 저장했습니다.');
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     const start = document.querySelector<HTMLInputElement>('#item-starts');
@@ -226,5 +237,30 @@ describe('item profile status line', () => {
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await screen.findByText(m.modules_period_invalid());
     expect(screen.queryByText('항목 정보를 저장했습니다.')).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('ignores the previous edit’s late error after cancel and a new edit', async () => {
+    vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    let fail: (e: Error) => void = () => undefined;
+    vi.spyOn(api, 'setItemProfile').mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
+    fail(new Error('late failure'));
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
   });
 });

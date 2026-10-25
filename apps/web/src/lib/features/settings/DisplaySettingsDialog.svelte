@@ -6,6 +6,7 @@
 
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { DisplayLocale, HourCycle, WeekStart } from '$lib/display';
   import {
     asHourCycle,
@@ -14,6 +15,7 @@
     conventionalHourCycle,
     conventionalWeekStart,
     formatClock,
+    resolveTimeZone,
     suggestedSettings,
   } from '$lib/display';
   import type { DocFont } from '$lib/doc-font';
@@ -80,7 +82,7 @@
   const sample = $derived(
     formatClock('2026-01-01T15:05:00Z', {
       locale,
-      timeZone: 'UTC',
+      timeZone: resolveTimeZone(zone, suggested.timeZone),
       weekStart,
       hourCycle,
     }),
@@ -95,6 +97,7 @@
     if (fontChanged && !themeChanged && !accountChanged) {
       // 서체만 바꿨으면 계정 설정을 쓰지 않고 새로 읽지도 않는다.
       open = false;
+      notifyDone(m.common_saved());
       return;
     }
     try {
@@ -111,6 +114,7 @@
       me.hourCycle = hourCycle;
       me.theme = theme;
       setTheme(theme);
+      notifyDone(m.common_saved());
       open = false;
       // 화면 밝기만 바꿨으면 바로 적용했으므로 새로 읽지 않는다. 그 밖에는 날짜 계산·서식을 새 설정으로 다시 하도록 새로 읽는다.
       if (themeChanged && !accountChanged) return;
@@ -122,14 +126,16 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-md">
+  <Dialog.Content
+    class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-md"
+  >
     <Dialog.Header>
       <Dialog.Title>{m.settings_title()}</Dialog.Title>
       <Dialog.Description>{m.settings_description()}</Dialog.Description>
     </Dialog.Header>
-    {#if unsaved}
-      <p class="text-sm text-muted-foreground" role="status">{m.settings_unsaved_hint()}</p>
-    {/if}
+    <p class="text-sm text-muted-foreground empty:hidden" role="status">
+      {#if unsaved}{m.settings_unsaved_hint()}{/if}
+    </p>
     <div class="flex flex-col gap-3 text-sm">
       <label class="flex flex-col gap-1">
         <span class="font-medium">{m.settings_language()}</span>

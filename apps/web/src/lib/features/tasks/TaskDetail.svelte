@@ -1365,7 +1365,12 @@
         />
 
         <TaskTimePanel taskId={current.id} />
-        <CommentsPanel target={{ kind: 'task', id: current.id }} />
+        <!-- 작업자 C: 댓글 입력은 서버 접근 등급으로 연다(D-113). -->
+        <CommentsPanel
+          target={{ kind: 'task', id: current.id }}
+          canWrite={current.access !== 'read'}
+          itemId={current.item_id}
+        />
 
         <Backlinks kind="task" id={current.id} {workspaces} />
       </div>

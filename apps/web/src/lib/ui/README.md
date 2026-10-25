@@ -31,3 +31,9 @@ pnpm dlx shadcn-svelte@1.7.0 add button input checkbox label dialog dropdown-men
 - 디자인 변경은 `src/styles/app.css`의 토큰(색·글자·간격·모서리·포커스)으로 한다.
 - 새 컴포넌트가 필요하면 같은 CLI로 추가하고 이 README의 명령에 덧붙인다. 같은 역할의 ui 디렉터리를 다른 곳에 만들지 않는다.
 - 앱 고유 컴포넌트는 `src/lib/features/<기능>/`에 둔다. 여기에는 두지 않는다.
+
+2026-10-26 웹 작업자 C 기록(D-82·D-109·D-122·D-125)
+
+- 밝은 primary는 `oklch(0.191 0.065 255.8)`, secondary는 두 테마 모두 `oklch(0.803 0.165 82)`다. 어두운 primary는 링크 글자와 단추 경계를 읽을 수 있도록 같은 색상각의 `oklch(0.82 0.065 255.8)`로 올리고 남색 전경을 쓴다. 입력 테두리와 장식 테두리는 기존 분리를 유지한다. `tests/theme-contrast.test.ts`가 글자 4.5:1, 입력 테두리·초점 3:1을 검사한다.
+- `features/common/leave-guard.svelte.ts`의 `createLeaveGuard({ dirty, busy?, identity? })`를 컴포넌트 초기화 때 만든다. `request(action)`으로 이탈을 요청하고 `DiscardChangesConfirm`의 `open`, `onkeep`, `ondiscard`에 `guard.open`, `guard.keep`, `guard.discard`를 연결한다. 세션 번호는 `identity`로 넘겨 뒤늦은 확인이 새 편집을 닫지 않게 한다. 경로·브라우저 이탈도 보호하는 화면은 `onMount(() => guard.attach({ beforeUnload? }))`를 쓴다. `beforeUnload`는 초안 보존 뒤에도 떠나기를 막아야 하면 true를 돌려준다. 저장 완료 이동은 `proceed(action)`을 쓴다. 업무 상세 적용은 작업자 A가 맡는다.
+- 완료는 `notifyDone`, 반복 오류 토스트는 `notifyError(message, key)`를 쓴다. 저장 오류는 화면에 남긴다. 배너를 닫아도 연결·세션의 실제 상태는 바꾸지 않는다.

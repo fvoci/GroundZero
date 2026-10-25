@@ -20,7 +20,7 @@ describe('comment retry', () => {
       .mockRejectedValueOnce(new NetworkError('lost'))
       .mockRejectedValueOnce(new NetworkError('lost'))
       .mockResolvedValue('c1');
-    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' } } });
+    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' }, canWrite: true } });
     const box = screen.getByLabelText(/새 댓글/);
     const submit = screen.getByRole('button', { name: '댓글 달기' });
 

@@ -1,7 +1,8 @@
 <script lang="ts">
-  // 댓글(D-27, D-20). 대상을 볼 수 있으면 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
+  // 댓글(D-27, D-20). 서버가 쓰기를 허용한 대상에만 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
   import type { CommentTarget, CommentView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
   import { RetryKey } from '$lib/api/retry-key';
   import { m } from '$lib/paraglide/messages.js';
@@ -13,15 +14,42 @@
 
   interface Props {
     target: CommentTarget;
+    /** 부모가 받은 서버 접근 등급으로만 정한다. 생략하면 입력을 열지 않는다. */
+    canWrite?: boolean;
+    archived?: boolean;
+    /** 문서·업무 응답에는 보관 칸이 없어, 안내용 부모 상태를 읽을 때 쓴다. */
+    itemId?: string | null;
   }
 
-  const { target }: Props = $props();
+  const { target, canWrite = false, archived, itemId }: Props = $props();
+  let parentArchived = $state(false);
+  const isArchived = $derived(archived ?? parentArchived);
+  const writable = $derived(canWrite && !isArchived);
+
+  $effect(() => {
+    const id = itemId;
+    parentArchived = false;
+    if (canWrite || archived !== undefined || id === undefined || id === null) return;
+    let cancelled = false;
+    const active = (): boolean => !cancelled;
+    void api
+      .item(id)
+      .then(async (item) => {
+        if (!active()) return;
+        parentArchived = item.archived;
+        const module = await api.module(item.module_id);
+        if (active()) parentArchived = item.archived || module.archived;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  });
 
   let comments = $state<CommentView[]>([]);
   // 이 대상의 목록을 한 번이라도 받았는지. 받기 전에는 "댓글이 없습니다" 대신 불러오는 중이라고 보인다.
   let loaded = $state(false);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let draft = $state('');
   let replyTo = $state<string | undefined>(undefined);
   let replyDraft = $state('');
@@ -46,7 +74,9 @@
       comments = [];
       loaded = false;
       error = undefined;
-      status = '';
+      draft = '';
+      replyDraft = '';
+      replyTo = undefined;
     }
     const mine = ++seq;
     api
@@ -68,11 +98,17 @@
     error = undefined;
     try {
       await action();
-      status = done;
+      notifyDone(done);
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
-      error = errorText(e, m.comments_action_failed());
+      error =
+        e instanceof ApiError &&
+        e.status === 409 &&
+        e.code === 'invalid_state' &&
+        /archived/i.test(e.message)
+          ? m.comments_archived()
+          : errorText(e, m.comments_action_failed());
       return false;
     } finally {
       busy = false;
@@ -80,6 +116,7 @@
   }
 
   async function post(): Promise<void> {
+    if (!writable) return;
     const body = draft.trim();
     if (body === '') return;
     const requestId = draftKey.for({ target: target.id, body });
@@ -90,6 +127,7 @@
   }
 
   async function reply(root: string): Promise<void> {
+    if (!writable) return;
     const body = replyDraft.trim();
     if (body === '') return;
     const requestId = replyKey.for({ target: target.id, root, body });
@@ -130,8 +168,9 @@
     {m.comments_heading()}
   </h2>
   <!-- 목록이 비었을 때의 불러오는 중·빈 목록 글도 이 알림 영역에서 바뀌어 화면 낭독기가 끝났음을 읽는다(리뷰). -->
-  <p aria-live="polite" class="text-sm">
-    {#if error !== undefined}<span class="text-destructive">{error}</span>{:else}{status}{/if}
+  <p role="status" aria-live="polite" class="text-sm">
+    {#if error !== undefined}<span class="text-destructive">{error}</span>{/if}
+    {#if isArchived}<span>{m.comments_archived()}</span>{/if}
     {#if comments.length === 0 && error === undefined}
       <span class="text-muted-foreground">{loaded ? m.comments_empty() : m.comments_loading()}</span
       >
@@ -155,6 +194,7 @@
         {:else}
           <CommentItem
             comment={t.root}
+            canWrite={writable}
             {busy}
             onedit={(body: string) =>
               run(() => api.editComment(t.root.id, body), m.comments_edited())}
@@ -164,6 +204,7 @@
             <div class="ml-4 border-l pl-3">
               <CommentItem
                 comment={r}
+                canWrite={writable}
                 {busy}
                 onedit={(body: string) =>
                   run(() => api.editComment(r.id, body), m.comments_edited())}
@@ -172,7 +213,7 @@
             </div>
           {/each}
           <div class="flex flex-wrap gap-1">
-            {#if replyTo !== t.root.id}
+            {#if writable && replyTo !== t.root.id}
               <Button
                 size="sm"
                 variant="outline"
@@ -183,7 +224,7 @@
                 }}>{m.comments_reply()}</Button
               >
             {/if}
-            {#if t.root.can_resolve}
+            {#if writable && t.root.can_resolve}
               <Button
                 size="sm"
                 variant="ghost"
@@ -195,7 +236,7 @@
               >
             {/if}
           </div>
-          {#if replyTo === t.root.id}
+          {#if writable && replyTo === t.root.id}
             <form
               class="ml-4 flex flex-col gap-2"
               onsubmit={(e: SubmitEvent) => {
@@ -226,25 +267,27 @@
       </li>
     {/each}
   </ul>
-  <form
-    class="flex flex-col gap-2"
-    onsubmit={(e: SubmitEvent) => {
-      e.preventDefault();
-      void post();
-    }}
-  >
-    <Textarea
-      aria-label={m.comments_new_label()}
-      class="min-h-20"
-      bind:value={draft}
-      maxlength={10000}
-      placeholder={m.comments_new_placeholder()}
-      onkeydown={(e: KeyboardEvent) => {
-        submitOnCtrlEnter(e, () => void post());
+  {#if writable}
+    <form
+      class="flex flex-col gap-2"
+      onsubmit={(e: SubmitEvent) => {
+        e.preventDefault();
+        void post();
       }}
-    />
-    <div>
-      <Button type="submit" disabled={busy || draft.trim() === ''}>{m.comments_post()}</Button>
-    </div>
-  </form>
+    >
+      <Textarea
+        aria-label={m.comments_new_label()}
+        class="min-h-20"
+        bind:value={draft}
+        maxlength={10000}
+        placeholder={m.comments_new_placeholder()}
+        onkeydown={(e: KeyboardEvent) => {
+          submitOnCtrlEnter(e, () => void post());
+        }}
+      />
+      <div>
+        <Button type="submit" disabled={busy || draft.trim() === ''}>{m.comments_post()}</Button>
+      </div>
+    </form>
+  {/if}
 </section>

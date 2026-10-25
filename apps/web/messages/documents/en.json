@@ -1,5 +1,6 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "documents_public_links_disabled": "Your organization has disabled public links.",
   "documents_not_found": "This document doesn't exist or you don't have access to it.",
   "documents_load_failed": "Couldn't load the document.",
   "documents_loading": "Loading…",

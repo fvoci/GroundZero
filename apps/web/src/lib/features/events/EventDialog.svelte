@@ -9,6 +9,7 @@
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
   import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -67,8 +68,12 @@
   // 일정 입력에 연 때와 다르게 고친 칸이 있는지, 그래서 닫기 전에 버릴지 묻는 중인지. 물은 차례(`asked`)가 지금 연
   // 차례와 같을 때만 버리고 닫는다. 계속 편집하면 물을 때 초점이 있던 칸(대화상자 밖이었으면 머리말)으로 돌아간다.
   let unsaved = $state(false);
-  let confirmClose = $state(false);
-  let asked = 0;
+  const leaveGuard = createLeaveGuard({
+    dirty: () => unsaved,
+    busy: () => busy,
+    identity: () => shown,
+  });
+  const confirmClose = $derived(leaveGuard.open);
   let keepFocus: HTMLElement | null = null;
   let content = $state<HTMLElement | null>(null);
   const zone = localTimeZone();
@@ -84,7 +89,7 @@
     clash = undefined;
     confirmDelete = false;
     unsaved = false;
-    confirmClose = false;
+    leaveGuard.keep();
     if (id === undefined) return;
     let cancelled = false;
     api
@@ -349,16 +354,8 @@
     if (unsaved) {
       const active = document.activeElement;
       keepFocus = active instanceof HTMLElement && content?.contains(active) ? active : heading;
-      asked = shown;
-      confirmClose = true;
-      return;
     }
-    onclose();
-  }
-
-  function discard(): void {
-    confirmClose = false;
-    if (asked === shown && !busy) onclose();
+    leaveGuard.request(onclose);
   }
 </script>
 
@@ -559,10 +556,8 @@
     {/if}
     <DiscardChangesConfirm
       open={confirmClose}
-      onkeep={() => {
-        confirmClose = false;
-      }}
-      ondiscard={discard}
+      onkeep={leaveGuard.keep}
+      ondiscard={leaveGuard.discard}
       returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : heading)}
     />
   </Dialog.Content>

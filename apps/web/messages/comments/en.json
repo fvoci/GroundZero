@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "comments_heading": "Comments",
+  "comments_archived": "You cannot write to an archived item.",
   "comments_load_failed": "Couldn't load comments.",
   "comments_action_failed": "Couldn't do that.",
   "comments_posted": "Comment added.",

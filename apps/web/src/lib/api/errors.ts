@@ -19,6 +19,8 @@ function reason(error: ApiError): string {
     case 'bad_request':
       return getLocale() === 'en' ? error.message : m.common_error_bad_request();
     case 'invalid_state':
+      // 작업자 C: 보관 상태의 409는 새로고침 안내로 숨기지 않는다(D-20·D-106).
+      if (/archived/i.test(error.message)) return m.comments_archived();
       return getLocale() === 'en' ? error.message : m.common_error_invalid_state();
     case 'account_changed':
       return m.common_error_account_changed();
