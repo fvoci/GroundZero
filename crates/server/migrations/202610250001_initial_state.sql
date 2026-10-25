@@ -1325,8 +1325,9 @@ ALTER FUNCTION fvoci.app_grade_under_item(p_item uuid, p_user uuid) OWNER TO fvo
 
 -- 문서 등급(D-08·D-20·D-40·D-49·D-114). 개인 노트는 소유자만 owner이고 공간 관리자에게도 비공개다. 공간 문서는 역할과
 -- 공개 범위, 항목 등급 중 낮은 쪽이다. 개별 공유는 공유 행의 조직에 받는 사람(개인 노트는 소유자도)이 아직 속해 있을 때만
--- 산다. 보관된 항목 아래의 문서는 read로 내려간다.
-CREATE FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) RETURNS text
+-- 살고, 역할이 개별 공유의 상한이다. 보관된 항목 아래의 문서는 read로 내려간다. 자리(워크스페이스·항목·소유자)를 인자로
+-- 받는 판은 이동 전후 비교(app_move_preview, D-114)가 쓴다.
+CREATE FUNCTION fvoci.app_grade_document_at(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid, p_user uuid) RETURNS text
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -1346,31 +1347,30 @@ CREATE FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) RETURNS text
       RETURN 'none';
     END IF;
     -- 워크스페이스를 지웠으면 그 안의 문서는 공유로도 볼 수 없다.
-    IF v_doc.workspace_id IS NOT NULL
-       AND EXISTS (SELECT 1 FROM workspaces WHERE id = v_doc.workspace_id AND deleted_at IS NOT NULL) THEN
+    IF p_workspace IS NOT NULL AND EXISTS (SELECT 1 FROM workspaces WHERE id = p_workspace AND deleted_at IS NOT NULL) THEN
       RETURN 'none';
     END IF;
     -- 항목이나 그 모듈이 휴지통에 있으면 그 안의 문서는 공유로도 볼 수 없다.
-    IF v_doc.item_id IS NOT NULL AND EXISTS (
+    IF p_item IS NOT NULL AND EXISTS (
       SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
-      WHERE i.id = v_doc.item_id AND (i.deleted_at IS NOT NULL OR m.deleted_at IS NOT NULL)
+      WHERE i.id = p_item AND (i.deleted_at IS NOT NULL OR m.deleted_at IS NOT NULL)
     ) THEN
       RETURN 'none';
     END IF;
 
-    IF v_doc.owner_user_id IS NOT NULL THEN
-      IF v_doc.owner_user_id = p_user THEN
+    IF p_owner IS NOT NULL THEN
+      IF p_owner = p_user THEN
         RETURN 'owner';
       END IF;
     ELSE
-      v_role := app_workspace_role(v_doc.workspace_id, p_user);
+      v_role := app_workspace_role(p_workspace, p_user);
       IF v_role = 'admin' THEN
         v_base := 'owner';
       ELSIF v_role IS NOT NULL AND (v_doc.visibility = 'workspace' OR v_doc.created_by = p_user) THEN
         v_base := CASE v_role WHEN 'member' THEN 'write' ELSE 'read' END;
       END IF;
-      IF v_doc.item_id IS NOT NULL AND v_base IS NOT NULL THEN
-        v_item := app_grade_item(v_doc.item_id, p_user, false);
+      IF p_item IS NOT NULL AND v_base IS NOT NULL THEN
+        v_item := app_grade_item(p_item, p_user, false);
         -- 낮은 쪽: owner > write > read > none.
         v_base := CASE
           WHEN v_item = 'none' THEN NULL
@@ -1385,16 +1385,20 @@ CREATE FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) RETURNS text
     FROM document_shares s
     JOIN organization_members om ON om.organization_id = s.organization_id AND om.user_id = p_user
     WHERE s.document_id = p_doc AND s.grantee_user_id = p_user
-      AND (v_doc.owner_user_id IS NULL OR EXISTS (
+      AND (p_owner IS NULL OR EXISTS (
             SELECT 1 FROM organization_members o2
-            WHERE o2.organization_id = s.organization_id AND o2.user_id = v_doc.owner_user_id));
+            WHERE o2.organization_id = s.organization_id AND o2.user_id = p_owner));
 
     v_access := CASE
       WHEN v_base = 'owner' THEN 'owner'
       WHEN v_base = 'write' OR v_share = 'write' THEN 'write'
       ELSE coalesce(v_base, v_share, 'none')
     END;
-    IF v_access IN ('owner', 'write') AND v_doc.item_id IS NOT NULL AND app_item_archived(v_doc.item_id) THEN
+    -- 역할이 개별 공유의 상한이다(D-20): 읽기 전용 멤버는 수정 공유를 받았어도 읽기까지다.
+    IF v_role = 'readonly' AND v_access = 'write' THEN
+      v_access := 'read';
+    END IF;
+    IF v_access IN ('owner', 'write') AND p_item IS NOT NULL AND app_item_archived(p_item) THEN
       RETURN 'read';
     END IF;
     RETURN v_access;
@@ -1402,7 +1406,1436 @@ CREATE FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) RETURNS text
   $$;
 
 
+ALTER FUNCTION fvoci.app_grade_document_at(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid, p_user uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT coalesce((SELECT app_grade_document_at(d.id, d.workspace_id, d.item_id, d.owner_user_id, p_user)
+                     FROM documents d WHERE d.id = p_doc), 'none')
+  $$;
+
+
 ALTER FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) OWNER TO fvoci_migrator;
+
+-- 대상이 속한 조직(개인 노트는 NULL). 참조·공유·이동의 조직 경계(D-114)에 쓴다.
+CREATE FUNCTION fvoci.app_target_organization(p_kind text, p_id uuid) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT w.organization_id FROM workspaces w
+    WHERE w.id = CASE p_kind
+      WHEN 'item' THEN (SELECT i.workspace_id FROM items i WHERE i.id = p_id)
+      WHEN 'document' THEN (SELECT d.workspace_id FROM documents d WHERE d.id = p_id)
+      WHEN 'task' THEN (SELECT t.workspace_id FROM tasks t WHERE t.id = p_id)
+      WHEN 'file' THEN (SELECT f.workspace_id FROM files f WHERE f.id = p_id)
+      WHEN 'workspace' THEN p_id
+    END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_target_organization(p_kind text, p_id uuid) OWNER TO fvoci_migrator;
+
+-- 공유·공개 링크·설정 관리는 지금 등급이 owner인 사람만 한다(D-113: 등급 하나). 보관된 항목의 문서는 read라 먼저 보관을
+-- 풀어야 한다(옛 "보관 중 관리자 예외"는 D-113의 추가 조건 목록에 없어 두지 않는다).
+CREATE FUNCTION fvoci.app_require_document_manager(p_doc uuid) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_access text := app_access('document', p_doc);
+  BEGIN
+    IF v_access = 'none' THEN
+      RAISE EXCEPTION 'document not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_access <> 'owner' THEN
+      RAISE EXCEPTION 'insufficient permission' USING ERRCODE = '42501';
+    END IF;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_require_document_manager(p_doc uuid) OWNER TO fvoci_migrator;
+
+-- 개별 공유(D-23·D-49·D-114). 받는 사람은 이메일이 검증된 사용자이자 같은 조직 멤버다. 공간 문서는 그 공간의 조직,
+-- 개인 노트는 둘이 함께 속한 조직(둘 이상이면 p_organization으로 고른다)을 공유 행에 적는다. 역할이 상한이다(D-20).
+CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_doc     documents%ROWTYPE;
+    v_email   text := lower(btrim(p_email));
+    v_grantee uuid;
+    v_org     uuid;
+    v_common  uuid[];
+    v_role    text;
+    v_id      uuid;
+  BEGIN
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc FOR UPDATE;
+    PERFORM app_require_document(p_doc, 'owner');
+    IF p_permission NOT IN ('read', 'write') THEN
+      RAISE EXCEPTION 'invalid permission' USING ERRCODE = '22023';
+    END IF;
+    IF position('@' in v_email) < 2 THEN
+      RAISE EXCEPTION 'invalid email' USING ERRCODE = '22023';
+    END IF;
+    SELECT u.id INTO v_grantee FROM users u WHERE u.email_verified AND lower(u.email) = v_email
+    ORDER BY u.created_at LIMIT 1;
+    IF v_grantee IS NULL THEN
+      RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
+    END IF;
+    IF v_grantee = app_user_id() THEN
+      RAISE EXCEPTION 'you already own this document' USING ERRCODE = '22023';
+    END IF;
+    IF v_doc.owner_user_id IS NOT NULL THEN
+      v_common := ARRAY(SELECT o1.organization_id FROM organization_members o1
+                        JOIN organization_members o2 ON o2.organization_id = o1.organization_id AND o2.user_id = v_grantee
+                        WHERE o1.user_id = v_doc.owner_user_id
+                          AND (p_organization IS NULL OR o1.organization_id = p_organization)
+                        ORDER BY o1.organization_id);
+      IF cardinality(v_common) = 0 THEN
+        RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
+      END IF;
+      IF cardinality(v_common) > 1 THEN
+        RAISE EXCEPTION 'choose the organization for this share' USING ERRCODE = '22023';
+      END IF;
+      v_org := v_common[1];
+    ELSE
+      SELECT organization_id INTO v_org FROM workspaces WHERE id = v_doc.workspace_id;
+      IF p_organization IS NOT NULL AND p_organization <> v_org THEN
+        RAISE EXCEPTION 'the document belongs to another organization' USING ERRCODE = '22023';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee) THEN
+        RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
+      END IF;
+      v_role := app_workspace_role(v_doc.workspace_id, v_grantee);
+      IF v_role = 'readonly' AND p_permission = 'write' THEN
+        RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
+      END IF;
+    END IF;
+    -- 조직 탈퇴(조직 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다.
+    PERFORM 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO document_shares (id, document_id, organization_id, grantee_user_id, permission, granted_by)
+    VALUES (app_id(p_ids, 1), p_doc, v_org, v_grantee, p_permission, app_user_id())
+    ON CONFLICT ON CONSTRAINT document_shares_target
+      DO UPDATE SET permission = EXCLUDED.permission, granted_by = EXCLUDED.granted_by,
+                    organization_id = EXCLUDED.organization_id
+    RETURNING id INTO v_id;
+    PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'share',
+                               jsonb_build_object('user', v_grantee, 'email', v_email, 'permission', p_permission,
+                                                  'organization', v_org));
+    RETURN v_id;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_unshare_document(p_share uuid, p_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_share document_shares%ROWTYPE;
+  BEGIN
+    SELECT * INTO v_share FROM document_shares WHERE id = p_share;
+    PERFORM 1 FROM documents WHERE id = v_share.document_id FOR UPDATE;
+    IF v_share.id IS NULL OR app_access('document', v_share.document_id) = 'none' THEN
+      RAISE EXCEPTION 'share not found' USING ERRCODE = 'P0002';
+    END IF;
+    PERFORM app_require_document_manager(v_share.document_id);
+    DELETE FROM document_shares WHERE id = p_share;
+    PERFORM app_audit_document(app_id(p_ids, 1), v_share.document_id, 'unshare',
+                               jsonb_build_object('user', v_share.grantee_user_id));
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_unshare_document(p_share uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_shared_with_me() RETURNS TABLE(id uuid, title text, permission text, shared_by text, updated_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT d.id, d.title, s.permission, granter.display_name, d.updated_at
+    FROM document_shares s
+    JOIN documents d ON d.id = s.document_id
+    JOIN users granter ON granter.id = s.granted_by
+    WHERE s.grantee_user_id = app_user_id() AND app_access('document', d.id) <> 'none'
+    ORDER BY d.updated_at DESC
+  $$;
+
+
+ALTER FUNCTION fvoci.app_shared_with_me() OWNER TO fvoci_migrator;
+
+-- 문서가 그 자리에 있을 때 볼 수 있는 사람과 등급. 후보는 소유자·공간 멤버·공유받은 사람이다.
+CREATE FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) RETURNS TABLE(user_id uuid, grade text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT c.id, g.grade
+    FROM (SELECT p_owner AS id WHERE p_owner IS NOT NULL
+          UNION SELECT m.user_id FROM workspace_members m WHERE p_workspace IS NOT NULL AND m.workspace_id = p_workspace
+          UNION SELECT s.grantee_user_id FROM document_shares s WHERE s.document_id = p_doc
+          UNION SELECT d.owner_user_id FROM documents d WHERE d.id = p_doc AND d.owner_user_id IS NOT NULL) c
+    CROSS JOIN LATERAL (SELECT app_grade_document_at(p_doc, p_workspace, p_item, p_owner, c.id) AS grade) g
+    WHERE g.grade <> 'none'
+  $$;
+
+
+ALTER FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) OWNER TO fvoci_migrator;
+
+-- 이동 전 확인(D-24·D-114): 사용자 id·등급 단위의 변화. 같은 조직 안의 이동이라 공개 링크·개별 공유는 그대로 유효하다.
+CREATE FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) RETURNS TABLE(change text, user_id uuid, display_name text, from_grade text, to_grade text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_doc documents%ROWTYPE := app_check_move(p_doc, p_target, p_item);
+  BEGIN
+    RETURN QUERY
+    WITH old_set AS (
+      SELECT a.user_id AS uid, a.grade FROM app_document_audience(p_doc, v_doc.workspace_id, v_doc.item_id, v_doc.owner_user_id) a
+    ), new_set AS (
+      SELECT a.user_id AS uid, a.grade FROM app_document_audience(p_doc, p_target, p_item, NULL) a
+    )
+    SELECT CASE WHEN o.uid IS NULL THEN 'gain' WHEN n.uid IS NULL THEN 'lose' ELSE 'change' END::text,
+           coalesce(o.uid, n.uid), u.display_name, o.grade, n.grade
+    FROM old_set o FULL JOIN new_set n ON n.uid = o.uid
+    JOIN users u ON u.id = coalesce(o.uid, n.uid)
+    WHERE o.grade IS DISTINCT FROM n.grade
+    ORDER BY 1, 3, 2;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) RETURNS fvoci.documents
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_doc documents%ROWTYPE;
+    v_item items%ROWTYPE;
+  BEGIN
+    PERFORM app_require_document(p_doc, 'owner');
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
+    IF p_target IS NULL THEN
+      RAISE EXCEPTION 'team documents stay in the workspace; make a copy instead' USING ERRCODE = '55000';
+    END IF;
+    IF v_doc.workspace_id IS NOT DISTINCT FROM p_target AND v_doc.item_id IS NOT DISTINCT FROM p_item THEN
+      RAISE EXCEPTION 'the document is already there' USING ERRCODE = '55000';
+    END IF;
+    IF app_access('workspace', p_target) = 'none' THEN
+      RAISE EXCEPTION 'target workspace not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF app_access('workspace', p_target) NOT IN ('owner', 'write') THEN
+      RAISE EXCEPTION 'write access to the target workspace is required' USING ERRCODE = '42501';
+    END IF;
+    -- 공간 간 이동은 같은 조직 안에서만 한다(D-24·D-114). 개인 노트는 소유자가 속한 어느 공간으로든 옮길 수 있다.
+    IF v_doc.workspace_id IS NOT NULL
+       AND app_target_organization('workspace', v_doc.workspace_id) IS DISTINCT FROM app_target_organization('workspace', p_target) THEN
+      RAISE EXCEPTION 'documents move within the organization' USING ERRCODE = '55000';
+    END IF;
+    IF p_item IS NOT NULL THEN
+      SELECT * INTO v_item FROM items WHERE id = p_item;
+      IF v_item.id IS NULL OR v_item.workspace_id <> p_target OR app_access('item', p_item) = 'none' THEN
+        RAISE EXCEPTION 'target item not found' USING ERRCODE = 'P0002';
+      END IF;
+      IF app_access('item', p_item) NOT IN ('owner', 'write') THEN
+        RAISE EXCEPTION 'write access to the target item is required' USING ERRCODE = '42501';
+      END IF;
+      IF app_item_archived(v_item.id) THEN
+        RAISE EXCEPTION 'the target item is archived' USING ERRCODE = '55000';
+      END IF;
+    END IF;
+    RETURN v_doc;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) OWNER TO fvoci_migrator;
+
+-- 복제(D-23·D-115). 소유 권한이 없으면 allow_copy가 켜진 문서만 복제한다. 템플릿에서 새 문서 만들기는 예외다.
+-- 공간 간 복제는 같은 조직 안에서만 한다(D-114). 새 id 4: 문서, 원본 감사, 사본 감사, 사본 활동(개인 노트 사본은 3).
+CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_user    uuid := app_user_id();
+    v_access  text := app_require_document(p_doc, 'read');
+    v_src     documents%ROWTYPE;
+    v_private boolean;
+    v_id      uuid;
+    v_number  bigint;
+  BEGIN
+    SELECT * INTO v_src FROM documents WHERE id = p_doc;
+    IF v_access <> 'owner' AND NOT v_src.allow_copy AND NOT v_src.is_template THEN
+      RAISE EXCEPTION 'copying is not allowed for this document' USING ERRCODE = '42501';
+    END IF;
+    -- 사본으로 볼 수 있는 사람이 조용히 늘지 않게: 비공개 문서, 개인 노트, 비공개 항목 아래 문서의 사본은 비공개.
+    v_private := v_src.visibility = 'private'
+      OR EXISTS (SELECT 1 FROM items i WHERE i.id = v_src.item_id AND i.visibility = 'private');
+
+    IF p_target_workspace IS NULL THEN
+      SELECT id INTO v_id FROM documents WHERE owner_user_id = v_user AND request_id = p_request_id;
+      IF v_id IS NOT NULL THEN RETURN v_id; END IF;
+      INSERT INTO documents (id, owner_user_id, placement, scope, number, title, schema_version, body,
+                             revision, created_by, updated_by, request_id, visibility)
+      VALUES (app_id(p_ids, 1), v_user, 'personal', 'NOTE', NULL, btrim(p_title), v_src.schema_version, v_src.body,
+              1, v_user, v_user, p_request_id, 'private')
+      RETURNING id INTO v_id;
+    ELSE
+      IF app_access('workspace', p_target_workspace) = 'none' THEN
+        RAISE EXCEPTION 'target workspace not found' USING ERRCODE = 'P0002';
+      END IF;
+      IF app_access('workspace', p_target_workspace) NOT IN ('owner', 'write') THEN
+        RAISE EXCEPTION 'write access to the target workspace is required' USING ERRCODE = '42501';
+      END IF;
+      IF v_src.workspace_id IS NOT NULL
+         AND app_target_organization('workspace', v_src.workspace_id) IS DISTINCT FROM app_target_organization('workspace', p_target_workspace) THEN
+        RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
+      END IF;
+      SELECT id INTO v_id FROM documents
+      WHERE workspace_id = p_target_workspace AND created_by = v_user AND request_id = p_request_id;
+      IF v_id IS NOT NULL THEN RETURN v_id; END IF;
+      v_id := app_id(p_ids, 1);
+      v_number := app_allocate_number(p_target_workspace, p_target_workspace, 'document', v_id);
+      INSERT INTO documents (id, workspace_id, placement, scope, number, title, schema_version, body,
+                             revision, created_by, updated_by, request_id, visibility)
+      VALUES (v_id, p_target_workspace, 'wiki', 'WIKI', v_number,
+              btrim(p_title), v_src.schema_version, v_src.body, 1, v_user, v_user, p_request_id,
+              CASE WHEN v_private THEN 'private' ELSE 'workspace' END);
+    END IF;
+
+    INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
+    VALUES (v_id, 1, btrim(p_title), v_src.schema_version, v_src.body, v_user, p_request_id);
+    PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'copy',
+      jsonb_build_object('target', CASE WHEN p_target_workspace IS NULL THEN 'personal' ELSE 'workspace' END));
+    PERFORM app_audit_document(app_id(p_ids, 3), v_id, 'create',
+      jsonb_build_object('copied', true, 'from', CASE WHEN v_src.owner_user_id IS NULL THEN 'workspace' ELSE 'personal' END));
+    IF p_target_workspace IS NOT NULL THEN
+      PERFORM app_activity(app_id(p_ids, 4), p_target_workspace, NULL, 'document', v_id, 'create',
+                           jsonb_build_object('title', btrim(p_title), 'copied_from', p_doc));
+    END IF;
+    RETURN v_id;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- D-115: allow_copy가 꺼진 문서는 소유 권한 외 누구도(수정 권한 포함) 내보내거나 첨부를 내려받지 못한다.
+CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_access text := app_access('document', p_doc);
+  BEGIN
+    IF v_access = 'none' THEN
+      RETURN false;
+    END IF;
+    IF v_access = 'owner' THEN
+      RETURN true;
+    END IF;
+    RETURN coalesce((SELECT allow_copy FROM documents WHERE id = p_doc AND deleted_at IS NULL), false);
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_document_can_export(p_doc uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_file_can_download(p_file uuid) RETURNS boolean
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_access text := app_access('file', p_file);
+    v_doc    uuid;
+  BEGIN
+    IF v_access = 'none' THEN
+      RETURN false;
+    END IF;
+    IF v_access = 'owner' THEN
+      RETURN true;
+    END IF;
+    SELECT document_id INTO v_doc FROM files WHERE id = p_file;
+    -- 항목 첨부에는 문서 플래그가 없다. 문서 첨부는 그 문서의 allow_copy를 따른다.
+    IF v_doc IS NULL THEN
+      RETURN true;
+    END IF;
+    RETURN coalesce((SELECT allow_copy FROM documents WHERE id = v_doc), false);
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_file_can_download(p_file uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_doc        documents%ROWTYPE;
+    v_visibility text;
+    v_allow_copy boolean;
+  BEGIN
+    -- 행을 먼저 잠그고 권한을 본다. 동시에 이동된 문서에 이전 소유 권한으로 설정을 바꾸지 못하게 한다.
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc FOR UPDATE;
+    PERFORM app_require_document_manager(p_doc);
+    -- 보내지 않은 칸은 잠근 뒤의 지금 값 그대로.
+    v_visibility := coalesce(p_visibility, v_doc.visibility);
+    v_allow_copy := coalesce(p_allow_copy, v_doc.allow_copy);
+    IF v_visibility NOT IN ('workspace', 'private') THEN
+      RAISE EXCEPTION 'invalid visibility' USING ERRCODE = '22023';
+    END IF;
+    IF v_doc.owner_user_id IS NOT NULL AND v_visibility <> 'private' THEN
+      RAISE EXCEPTION 'personal notes are always private' USING ERRCODE = '22023';
+    END IF;
+    UPDATE documents SET visibility = v_visibility, allow_copy = v_allow_copy WHERE id = p_doc;
+    IF v_doc.visibility IS DISTINCT FROM v_visibility THEN
+      PERFORM app_audit_document(app_id(p_ids, 1), p_doc, 'change_visibility',
+                                 jsonb_build_object('from', v_doc.visibility, 'to', v_visibility));
+    END IF;
+    IF v_doc.allow_copy IS DISTINCT FROM v_allow_copy THEN
+      PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'change_copy_policy',
+                                 jsonb_build_object('allow_copy', v_allow_copy));
+    END IF;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 비로그인 공개 링크(D-20·D-114): 유일한 조직 밖 출구. 조직 관리자가 끄면 새 링크를 만들 수 없고 기존 링크도 응답하지 않는다.
+CREATE FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_id uuid;
+    v_ws uuid;
+  BEGIN
+    PERFORM 1 FROM documents WHERE id = p_doc FOR UPDATE;
+    PERFORM app_require_document(p_doc, 'owner');
+    IF p_expires_at IS NOT NULL AND p_expires_at <= now() THEN
+      RAISE EXCEPTION 'expiry must be in the future' USING ERRCODE = '22023';
+    END IF;
+    SELECT workspace_id INTO v_ws FROM documents WHERE id = p_doc;
+    IF v_ws IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM workspaces w JOIN organizations o ON o.id = w.organization_id
+      WHERE w.id = v_ws AND o.public_links_enabled
+    ) THEN
+      RAISE EXCEPTION 'public links are turned off for this organization' USING ERRCODE = '55000';
+    END IF;
+    INSERT INTO public_links (id, document_id, token_hash, created_by, expires_at)
+    VALUES (app_id(p_ids, 1), p_doc, p_token_hash, app_user_id(), p_expires_at)
+    RETURNING id INTO v_id;
+    PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'create_public_link',
+                               jsonb_build_object('link', v_id, 'expires_at', p_expires_at));
+    RETURN v_id;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_doc uuid;
+  BEGIN
+    SELECT document_id INTO v_doc FROM public_links WHERE id = p_link AND revoked_at IS NULL;
+    IF v_doc IS NULL OR app_access('document', v_doc) = 'none' THEN
+      RAISE EXCEPTION 'link not found' USING ERRCODE = 'P0002';
+    END IF;
+    PERFORM 1 FROM documents WHERE id = v_doc FOR UPDATE;
+    PERFORM app_require_document_manager(v_doc);
+    UPDATE public_links SET revoked_at = now() WHERE id = p_link;
+    PERFORM app_audit_document(app_id(p_ids, 1), v_doc, 'revoke_public_link', jsonb_build_object('link', p_link));
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_public_document(p_token_hash bytea) RETURNS TABLE(title text, body jsonb, schema_version integer, updated_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT d.title, d.body, d.schema_version, d.updated_at
+    FROM public_links l JOIN documents d ON d.id = l.document_id
+    WHERE l.token_hash = p_token_hash
+      AND l.revoked_at IS NULL
+      AND (l.expires_at IS NULL OR l.expires_at > now())
+      AND d.deleted_at IS NULL
+      -- 항목이나 그 모듈이 휴지통에 있으면 열리지 않는다.
+      AND NOT EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
+                      WHERE i.id = d.item_id AND (i.deleted_at IS NOT NULL OR m.deleted_at IS NOT NULL))
+      AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = d.workspace_id AND w.deleted_at IS NOT NULL)
+      -- 조직이 공개 링크를 껐으면 기존 링크도 응답하지 않는다(D-114).
+      AND (d.workspace_id IS NULL OR EXISTS (
+            SELECT 1 FROM workspaces w JOIN organizations o ON o.id = w.organization_id
+            WHERE w.id = d.workspace_id AND o.public_links_enabled))
+  $$;
+
+
+ALTER FUNCTION fvoci.app_public_document(p_token_hash bytea) OWNER TO fvoci_migrator;
+
+-- 본문의 @참조와 언급(D-18·D-114). 연결은 작성자가 볼 수 있고 같은 조직 안에 있는 대상만 남긴다(개인 노트는 조직과 무관하므로
+-- 볼 수 있는 대상이면 된다). 언급 알림은 그 사람이 문서를 볼 수 있을 때만 간다.
+CREATE FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolean, p_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_user     uuid := app_user_id();
+    v_doc      documents%ROWTYPE;
+    v_org      uuid;
+    v_previous jsonb;
+    v_uid      uuid;
+    v_new      integer;
+    v_at       integer := 0;
+  BEGIN
+    PERFORM app_require_document(p_doc, 'write');
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
+    v_org := app_target_organization('document', p_doc);
+
+    DELETE FROM document_links WHERE document_id = p_doc;
+    INSERT INTO document_links (document_id, target_kind, target_id)
+    SELECT DISTINCT p_doc, r.kind, r.id FROM app_reference_nodes(v_doc.body) r
+    WHERE r.kind IN ('item', 'document', 'task') AND NOT (r.kind = 'document' AND r.id = p_doc)
+      AND app_access(r.kind, r.id) <> 'none'
+      AND (v_org IS NULL OR app_target_organization(r.kind, r.id) = v_org);
+
+    IF NOT p_notify THEN
+      RETURN;
+    END IF;
+    SELECT body INTO v_previous FROM document_revisions
+    WHERE document_id = p_doc AND revision = v_doc.revision - 1;
+    FOR v_uid IN
+      SELECT r.id FROM app_reference_nodes(v_doc.body) r JOIN users u ON u.id = r.id
+      WHERE r.kind = 'user' AND r.id <> v_user
+        AND NOT EXISTS (SELECT 1 FROM app_reference_nodes(coalesce(v_previous, '{}'::jsonb)) p
+                        WHERE p.kind = 'user' AND p.id = r.id)
+    LOOP
+      IF app_access_as('document', p_doc, v_uid) <> 'none' THEN
+        INSERT INTO document_mentions (document_id, user_id, mentioned_by)
+        VALUES (p_doc, v_uid, v_user)
+        ON CONFLICT DO NOTHING;
+        GET DIAGNOSTICS v_new = ROW_COUNT;
+        IF v_new > 0 THEN
+          v_at := v_at + 1;
+          INSERT INTO notifications (id, user_id, organization_id, kind, document_id, actor)
+          VALUES (app_id(p_ids, v_at), v_uid, v_org, 'mention', p_doc, v_user);
+        END IF;
+      END IF;
+    END LOOP;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 리비전 본문이 가리키는 첨부 버전을 고정한다(D-56). 같은 조직 밖의 첨부는 참조로 기록하지 않는다(D-114).
+CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_org uuid := app_target_organization('document', NEW.document_id);
+  BEGIN
+    -- 가리키는 버전 행을 참조를 넣기 전에 공유 잠금한다.
+    PERFORM 1 FROM file_versions v
+    JOIN (SELECT DISTINCT r.file_id, r.version FROM app_file_refs(NEW.body) r) r
+      ON r.file_id = v.file_id AND r.version = v.version
+    WHERE v_org IS NULL OR app_target_organization('file', v.file_id) = v_org
+    ORDER BY v.id
+    FOR KEY SHARE OF v;
+    INSERT INTO document_file_refs (document_id, revision, file_id, version)
+    SELECT NEW.document_id, NEW.revision, r.file_id, r.version FROM app_file_refs(NEW.body) r
+    WHERE v_org IS NULL OR app_target_organization('file', r.file_id) = v_org
+    ON CONFLICT DO NOTHING;
+    RETURN NULL;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_record_file_refs() OWNER TO fvoci_migrator;
+
+-- 알림(D-39·D-118). 알림 행은 대상의 조직을 함께 적어 현재 조직 범위로 보이게 한다(개인 노트는 NULL). 받는 사람이 대상을
+-- 볼 수 없으면 만들지 않는다. 기한 알림(due)은 항목 공유 잠금 아래에서 보관 여부를 다시 봐, 보관과 겹쳐도 보관 뒤에는
+-- 알림이 가지 않는다(#86).
+CREATE FUNCTION fvoci.app_notify(p_id uuid, p_user uuid, p_kind text, p_document uuid, p_task uuid, p_comment uuid, p_actor uuid, p_detail jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_item uuid;
+    v_org  uuid;
+  BEGIN
+    IF p_user IS NULL OR p_user = p_actor THEN
+      RETURN;
+    END IF;
+    IF (CASE WHEN p_document IS NOT NULL THEN app_access_as('document', p_document, p_user)
+             ELSE app_access_as('task', p_task, p_user) END) = 'none' THEN
+      RETURN;
+    END IF;
+    IF p_kind = 'due' THEN
+      SELECT item_id INTO v_item FROM tasks WHERE id = p_task;
+      PERFORM app_lock_item(v_item);
+      IF app_item_archived(v_item) THEN
+        RETURN;
+      END IF;
+    END IF;
+    v_org := CASE WHEN p_document IS NOT NULL THEN app_target_organization('document', p_document)
+                  ELSE app_target_organization('task', p_task) END;
+    INSERT INTO notifications (id, user_id, organization_id, kind, document_id, task_id, comment_id, actor, detail)
+    VALUES (p_id, p_user, v_org, p_kind, p_document, p_task, p_comment, p_actor, coalesce(p_detail, '{}'::jsonb))
+    ON CONFLICT DO NOTHING;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_notify(p_id uuid, p_user uuid, p_kind text, p_document uuid, p_task uuid, p_comment uuid, p_actor uuid, p_detail jsonb) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_notify_item(p_id uuid, p_user uuid, p_kind text, p_item uuid, p_record uuid, p_detail jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_count integer;
+  BEGIN
+    IF p_user IS NULL OR app_access_as('item', p_item, p_user) = 'none' THEN
+      RETURN false;
+    END IF;
+    INSERT INTO notifications (id, user_id, organization_id, kind, item_id, record_id, actor, detail)
+    VALUES (p_id, p_user, app_target_organization('item', p_item), p_kind, p_item, p_record, NULL, p_detail)
+    ON CONFLICT DO NOTHING;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count > 0;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_notify_item(p_id uuid, p_user uuid, p_kind text, p_item uuid, p_record uuid, p_detail jsonb) OWNER TO fvoci_migrator;
+
+-- 알림이 아직 보여도 되는지: 대상을 볼 수 있어야 한다(D-39). 초대 알림은 그 초대가 내게 온 것이면 결과(수락·거절·철회)까지 보인다.
+CREATE FUNCTION fvoci.app_notification_visible(p_document uuid, p_task uuid, p_item uuid, p_invitation uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT CASE
+      WHEN p_document IS NOT NULL THEN app_access('document', p_document) <> 'none'
+      WHEN p_task IS NOT NULL THEN app_access('task', p_task) <> 'none'
+      WHEN p_item IS NOT NULL THEN app_access('item', p_item) <> 'none'
+      WHEN p_invitation IS NOT NULL THEN EXISTS (
+        SELECT 1 FROM invitations i JOIN users me ON me.id = app_user_id()
+        WHERE i.id = p_invitation AND me.email_verified AND lower(me.email) = i.email)
+      ELSE false
+    END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_notification_visible(p_document uuid, p_task uuid, p_item uuid, p_invitation uuid) OWNER TO fvoci_migrator;
+
+-- 알림함 목록(D-118). 현재 조직 범위(p_organization; NULL이면 전체)이고 invite는 어느 조직 문맥에서나 보인다. 커서는
+-- (created_at, id) 내림차순 키셋이다.
+CREATE FUNCTION fvoci.app_my_notifications(p_organization uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) RETURNS TABLE(id uuid, organization_id uuid, kind text, document_id uuid, task_id uuid, item_id uuid, comment_id uuid, invitation_id uuid, actor_name text, detail jsonb, created_at timestamp with time zone, read_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    -- 행위자 이름은 같은 조직 사람이거나 그 개인 노트의 소유자일 때만 보인다(users RLS와 같은 기준).
+    SELECT n.id, n.organization_id, n.kind, n.document_id, n.task_id, n.item_id, n.comment_id, n.invitation_id,
+           CASE WHEN n.actor IS NOT NULL AND (app_shares_organization(n.actor)
+                     OR (SELECT owner_user_id FROM documents WHERE documents.id = n.document_id) = n.actor)
+                THEN u.display_name END,
+           CASE WHEN c.id IS NOT NULL AND c.deleted_at IS NULL
+                THEN n.detail || jsonb_build_object('excerpt', left(c.body, 140))
+                ELSE n.detail END,
+           n.created_at, n.read_at
+    FROM notifications n
+    LEFT JOIN users u ON u.id = n.actor
+    LEFT JOIN comments c ON c.id = n.comment_id
+    WHERE n.user_id = app_user_id()
+      AND (p_organization IS NULL OR n.kind = 'invite' OR n.organization_id = p_organization)
+      AND (p_before IS NULL OR (n.created_at, n.id) < (p_before, coalesce(p_before_id, '00000000-0000-0000-0000-000000000000'::uuid)))
+      AND app_notification_visible(n.document_id, n.task_id, n.item_id, n.invitation_id)
+    ORDER BY n.created_at DESC, n.id DESC
+    LIMIT greatest(1, least(coalesce(p_limit, 50), 200))
+  $$;
+
+
+ALTER FUNCTION fvoci.app_my_notifications(p_organization uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_notification_unread_count(p_organization uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT count(*)::integer FROM notifications n
+    WHERE n.user_id = app_user_id() AND n.read_at IS NULL
+      AND (p_organization IS NULL OR n.kind = 'invite' OR n.organization_id = p_organization)
+      AND app_notification_visible(n.document_id, n.task_id, n.item_id, n.invitation_id)
+  $$;
+
+
+ALTER FUNCTION fvoci.app_notification_unread_count(p_organization uuid) OWNER TO fvoci_migrator;
+
+-- 읽음 처리: p_id가 있으면 그 알림만, 없으면 현재 조직 범위(p_organization; NULL이면 전체)의 안 읽은 알림 전부.
+CREATE FUNCTION fvoci.app_mark_notifications_read(p_id uuid, p_organization uuid) RETURNS integer
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    WITH done AS (
+      UPDATE notifications SET read_at = now()
+      WHERE user_id = app_user_id() AND read_at IS NULL AND (p_id IS NULL OR id = p_id)
+        AND (p_id IS NOT NULL OR p_organization IS NULL OR kind = 'invite' OR organization_id = p_organization)
+      RETURNING 1)
+    SELECT count(*)::integer FROM done
+  $$;
+
+
+ALTER FUNCTION fvoci.app_mark_notifications_read(p_id uuid, p_organization uuid) OWNER TO fvoci_migrator;
+
+-- 로그인 때 내 이메일로 온 열린 초대 가운데 아직 알림이 없는 것의 수와 그 알림 만들기(D-118). 받는 사람이 초대 뒤에
+-- 가입했을 때 쓴다.
+CREATE FUNCTION fvoci.app_pending_invitations_count() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT count(*)::integer FROM invitations i JOIN users me ON me.id = app_user_id()
+    WHERE i.closed_at IS NULL AND i.expires_at > now() AND me.email_verified AND lower(me.email) = i.email
+      AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.invitation_id = i.id AND n.user_id = me.id)
+  $$;
+
+
+ALTER FUNCTION fvoci.app_pending_invitations_count() OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_inv  uuid;
+    v_at   integer := 0;
+    v_made integer := 0;
+  BEGIN
+    IF app_user_id() IS NULL THEN
+      RETURN 0;
+    END IF;
+    FOR v_inv IN
+      SELECT i.id FROM invitations i JOIN users me ON me.id = app_user_id()
+      WHERE i.closed_at IS NULL AND i.expires_at > now() AND me.email_verified AND lower(me.email) = i.email
+        AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.invitation_id = i.id AND n.user_id = me.id)
+      ORDER BY i.created_at, i.id
+    LOOP
+      v_at := v_at + 1;
+      IF app_notify_invitation(app_id(p_ids, v_at), v_inv) THEN
+        v_made := v_made + 1;
+      END IF;
+    END LOOP;
+    RETURN v_made;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 타이머 시작(D-32·D-117). 사용자당 모든 조직·공간에서 실행 중인 기록은 하나다. 기록 중에 다른 대상에서 시작하면 한
+-- 트랜잭션에서 진행 중 기록을 멈춰 저장하고 새 기록을 시작한다(stopped_entry_id). 새 대상을 볼 수 없으면 아무것도 바뀌지
+-- 않는다(기존 기록은 계속 간다). 같은 request_id의 재시도는 같은 기록을 돌려주고 다시 멈추지 않는다.
+CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) RETURNS TABLE(entry_id uuid, stopped_entry_id uuid)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_user    uuid := app_user_id();
+    v_id      uuid;
+    v_ws      uuid;
+    v_running time_entries%ROWTYPE;
+    v_stopped uuid;
+  BEGIN
+    IF v_user IS NULL THEN
+      RAISE EXCEPTION 'sign in required' USING ERRCODE = '42501';
+    END IF;
+    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
+    IF v_id IS NOT NULL THEN
+      RETURN QUERY SELECT v_id, NULL::uuid;
+      RETURN;
+    END IF;
+    -- 새 대상을 먼저 확인한다. 못 보는 대상이면 여기서 끝나고 진행 중 기록은 그대로다.
+    v_ws := app_time_target_workspace(p_target_kind, p_target);
+    -- 같은 사용자의 시작 요청을 줄 세운다(하나만 진행 중이라는 규칙을 고유 색인과 함께 지킨다).
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-timer:' || v_user::text, 0));
+    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
+    IF v_id IS NOT NULL THEN
+      RETURN QUERY SELECT v_id, NULL::uuid;
+      RETURN;
+    END IF;
+    SELECT * INTO v_running FROM time_entries
+    WHERE user_id = v_user AND ended_at IS NULL AND deleted_at IS NULL FOR UPDATE;
+    IF v_running.id IS NOT NULL THEN
+      -- 멈춤(app_timer_action 'stop')과 같은 계산: 일시정지 중이던 시간은 정지 시간에 더한다.
+      UPDATE time_entries SET
+        paused_seconds = paused_seconds
+          + CASE WHEN paused_at IS NULL THEN 0 ELSE floor(extract(epoch FROM now() - paused_at))::integer END,
+        paused_at = NULL, ended_at = now(), version = version + 1, updated_at = now()
+      WHERE id = v_running.id;
+      v_stopped := v_running.id;
+    END IF;
+    INSERT INTO time_entries (id, user_id, started_at, kind, memo, target_kind, target_id, workspace_id, request_id)
+    VALUES (app_id(p_ids, 1), v_user, now(), p_kind, coalesce(p_memo, ''), p_target_kind, p_target, v_ws,
+            p_request_id)
+    RETURNING id INTO v_id;
+    RETURN QUERY SELECT v_id, v_stopped;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 항목·업무의 내 소요 시간(D-117: 기록은 본인만 보고 선택 공유 집계는 없다).
+CREATE FUNCTION fvoci.app_item_time(p_item uuid) RETURNS TABLE(entry_kind text, mine_seconds bigint)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    IF app_access('item', p_item) = 'none' THEN
+      RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
+    END IF;
+    RETURN QUERY
+      WITH targets (target_kind, target_id) AS (
+        SELECT 'item'::text, p_item
+        UNION ALL SELECT 'task', t.id FROM tasks t WHERE t.item_id = p_item
+        UNION ALL SELECT 'document', d.id FROM documents d WHERE d.item_id = p_item
+        UNION ALL SELECT 'episode', c.id FROM course_episodes c WHERE c.item_id = p_item
+        UNION ALL SELECT 'study_unit', u.id FROM study_units u WHERE u.item_id = p_item
+      )
+      SELECT e.kind, coalesce(sum(app_entry_seconds(e)), 0)::bigint
+      FROM time_entries e
+      JOIN targets g ON g.target_kind = e.target_kind AND g.target_id = e.target_id
+      WHERE e.user_id = app_user_id() AND e.deleted_at IS NULL AND e.ended_at IS NOT NULL
+      GROUP BY e.kind
+      ORDER BY e.kind;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_item_time(p_item uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_task_time(p_task uuid) RETURNS bigint
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    IF app_access('task', p_task) = 'none' THEN
+      RAISE EXCEPTION 'task not found' USING ERRCODE = 'P0002';
+    END IF;
+    RETURN (SELECT coalesce(sum(app_entry_seconds(e)), 0)::bigint
+            FROM time_entries e
+            WHERE e.target_kind = 'task' AND e.target_id = p_task AND e.user_id = app_user_id()
+              AND e.deleted_at IS NULL AND e.ended_at IS NOT NULL);
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_task_time(p_task uuid) OWNER TO fvoci_migrator;
+
+-- 내 업무(D-120): 담당자가 나인 업무. 현재 조직(p_organization; NULL이면 전체) 안에서 워크스페이스별로 묶고 기한 없는 업무도
+-- 'none' 묶음으로 넣는다. 범주만 보며 완료는 'done' 묶음이다.
+CREATE FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) RETURNS TABLE(workspace_id uuid, workspace_name text, item_id uuid, task_id uuid, reference text, title text, status text, status_category text, priority text, start_date date, due_date date, bucket text, updated_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT w.id, w.name, t.item_id, t.id, app_task_reference(t.id), t.title, s.name, s.category, t.priority,
+           t.start_date, t.due_date,
+           CASE WHEN s.category = 'done' THEN 'done'
+                WHEN t.due_date IS NULL THEN 'none'
+                WHEN t.due_date < p_today THEN 'overdue'
+                WHEN t.due_date = p_today THEN 'today'
+                ELSE 'upcoming' END,
+           t.updated_at
+    FROM tasks t
+    JOIN task_statuses s ON s.id = t.status_id
+    JOIN workspaces w ON w.id = t.workspace_id
+    JOIN task_assignees a ON a.task_id = t.id AND a.user_id = app_user_id()
+    WHERE t.deleted_at IS NULL AND w.deleted_at IS NULL
+      AND (p_organization IS NULL OR w.organization_id = p_organization)
+      AND app_access('task', t.id) <> 'none'
+    ORDER BY w.created_at, w.id, (t.due_date IS NULL), t.due_date, t.number
+  $$;
+
+
+ALTER FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_my_task_counts(p_organization uuid, p_today date) RETURNS TABLE(overdue integer, today integer, upcoming integer, undated integer, done integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT count(*) FILTER (WHERE m.bucket = 'overdue')::integer,
+           count(*) FILTER (WHERE m.bucket = 'today')::integer,
+           count(*) FILTER (WHERE m.bucket = 'upcoming')::integer,
+           count(*) FILTER (WHERE m.bucket = 'none')::integer,
+           count(*) FILTER (WHERE m.bucket = 'done')::integer
+    FROM app_my_tasks(p_organization, p_today) m
+  $$;
+
+
+ALTER FUNCTION fvoci.app_my_task_counts(p_organization uuid, p_today date) OWNER TO fvoci_migrator;
+
+-- 활동 피드 읽기(D-119). 항목의 활동 탭은 그 항목 아래 모든 대상의 활동을, 다른 대상은 자기 활동을 본다. 열람은 app_access다.
+CREATE FUNCTION fvoci.app_target_activity(p_kind text, p_id uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) RETURNS TABLE(id uuid, kind text, actor_id uuid, actor_name text, target_kind text, target_id uuid, item_id uuid, detail jsonb, created_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    IF app_access(p_kind, p_id) = 'none' THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+    RETURN QUERY
+      SELECT a.id, a.kind, a.actor, CASE WHEN app_shares_organization(a.actor) THEN u.display_name END,
+             a.target_kind, a.target_id, a.item_id, a.detail, a.created_at
+      FROM activity a LEFT JOIN users u ON u.id = a.actor
+      WHERE ((p_kind = 'item' AND a.item_id = p_id) OR (a.target_kind = p_kind AND a.target_id = p_id))
+        AND app_access(a.target_kind, a.target_id) <> 'none'
+        AND (p_before IS NULL OR (a.created_at, a.id) < (p_before, coalesce(p_before_id, '00000000-0000-0000-0000-000000000000'::uuid)))
+      ORDER BY a.created_at DESC, a.id DESC
+      LIMIT greatest(1, least(coalesce(p_limit, 50), 200));
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_target_activity(p_kind text, p_id uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) OWNER TO fvoci_migrator;
+
+-- 홈의 최근 활동(D-19·D-119): 현재 조직(p_organization; NULL이면 전체)에서 내가 볼 수 있는 대상의 활동.
+CREATE FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) RETURNS TABLE(id uuid, kind text, actor_id uuid, actor_name text, workspace_id uuid, target_kind text, target_id uuid, item_id uuid, detail jsonb, created_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT a.id, a.kind, a.actor, CASE WHEN app_shares_organization(a.actor) THEN u.display_name END,
+           a.workspace_id, a.target_kind, a.target_id, a.item_id, a.detail, a.created_at
+    FROM activity a LEFT JOIN users u ON u.id = a.actor
+    WHERE a.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+      AND app_access(a.target_kind, a.target_id) <> 'none'
+    ORDER BY a.created_at DESC, a.id DESC
+    LIMIT greatest(1, least(coalesce(p_limit, 20), 100))
+  $$;
+
+
+ALTER FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) OWNER TO fvoci_migrator;
+
+-- 감사로그 만료 삭제(D-57·D-124). 행마다 보존 기간은 app_retention_days(공간·조직 설정, 서버 기본값 p_default_days)이고
+-- 그 값이 NULL이면(미설정 또는 두 단계가 다른 값으로 충돌) 지우지 않는다. 지운 행 수를 돌려준다.
+CREATE FUNCTION fvoci.app_system_purge_audit(p_default_days integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_count integer;
+  BEGIN
+    IF app_user_id() IS NOT NULL THEN
+      RETURN 0;
+    END IF;
+    DELETE FROM audit_log a
+    WHERE app_retention_days(a.workspace_id, a.organization_id, 'audit_retention_days', p_default_days) IS NOT NULL
+      AND a.created_at < now() - make_interval(days =>
+            app_retention_days(a.workspace_id, a.organization_id, 'audit_retention_days', p_default_days));
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_system_purge_audit(p_default_days integer) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_system_purge_activity(p_default_days integer) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_count integer;
+  BEGIN
+    IF app_user_id() IS NOT NULL THEN
+      RETURN 0;
+    END IF;
+    DELETE FROM activity a
+    WHERE app_retention_days(a.workspace_id, a.organization_id, 'activity_retention_days', p_default_days) IS NOT NULL
+      AND a.created_at < now() - make_interval(days =>
+            app_retention_days(a.workspace_id, a.organization_id, 'activity_retention_days', p_default_days));
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_system_purge_activity(p_default_days integer) OWNER TO fvoci_migrator;
+
+-- 상태 정의 관리(D-116). 항목 소유 권한이 정의를 만들고 고치고 지운다. 지울 때는 그 상태의 업무를 다른 상태로 옮긴다.
+CREATE FUNCTION fvoci.app_task_statuses(p_item uuid) RETURNS TABLE(id uuid, name text, color text, "position" numeric, category text, task_count integer)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    IF app_access('item', p_item) = 'none' THEN
+      RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
+    END IF;
+    RETURN QUERY
+      SELECT s.id, s.name, s.color, s.position, s.category,
+             (SELECT count(*)::integer FROM tasks t WHERE t.status_id = s.id AND t.deleted_at IS NULL)
+      FROM task_statuses s WHERE s.item_id = p_item
+      ORDER BY s.position, s.created_at, s.id;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_task_statuses(p_item uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_create_task_status(p_item uuid, p_name text, p_color text, p_category text, p_ids uuid[]) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_item items%ROWTYPE;
+    v_id   uuid;
+  BEGIN
+    SELECT * INTO v_item FROM items WHERE id = p_item FOR SHARE;
+    IF app_access('item', p_item) = 'none' THEN
+      RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF app_access('item', p_item) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
+    END IF;
+    IF app_item_archived(p_item) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF p_category NOT IN ('todo', 'doing', 'done') THEN
+      RAISE EXCEPTION 'invalid category' USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (SELECT 1 FROM task_statuses WHERE item_id = p_item AND name = btrim(coalesce(p_name, ''))) THEN
+      RAISE EXCEPTION 'a status with this name exists' USING ERRCODE = '55000';
+    END IF;
+    IF (SELECT count(*) FROM task_statuses WHERE item_id = p_item) >= 30 THEN
+      RAISE EXCEPTION 'too many statuses' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO task_statuses (id, item_id, name, color, position, category)
+    VALUES (app_id(p_ids, 1), p_item, btrim(p_name), coalesce(p_color, ''),
+            (SELECT coalesce(max(position), 0) + 1 FROM task_statuses WHERE item_id = p_item), p_category)
+    RETURNING id INTO v_id;
+    PERFORM app_audit(app_id(p_ids, 2), v_item.workspace_id, 'create_status', 'item', p_item,
+                      jsonb_build_object('status', v_id, 'name', btrim(p_name), 'category', p_category));
+    RETURN v_id;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_create_task_status(p_item uuid, p_name text, p_color text, p_category text, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 이름·색·순서·범주 바꾸기. 범주가 done으로 바뀌거나 done에서 벗어나면 그 상태의 업무 완료 시각을 맞춘다. 이름이 바뀌면 그
+-- 상태의 업무를 다시 색인한다(task_statuses_search 트리거).
+CREATE FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color text, p_category text, p_position numeric, p_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_status task_statuses%ROWTYPE;
+    v_item   items%ROWTYPE;
+    v_name   text;
+    v_cat    text;
+  BEGIN
+    SELECT * INTO v_status FROM task_statuses WHERE id = p_status;
+    IF v_status.id IS NULL OR app_access('item', v_status.item_id) = 'none' THEN
+      RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
+    END IF;
+    IF app_item_archived(v_status.item_id) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    PERFORM app_lock_lane(p_status);
+    SELECT * INTO v_item FROM items WHERE id = v_status.item_id FOR SHARE;
+    SELECT * INTO v_status FROM task_statuses WHERE id = p_status FOR UPDATE;
+    v_name := coalesce(btrim(p_name), v_status.name);
+    v_cat := coalesce(p_category, v_status.category);
+    IF v_cat NOT IN ('todo', 'doing', 'done') THEN
+      RAISE EXCEPTION 'invalid category' USING ERRCODE = '22023';
+    END IF;
+    IF v_name <> v_status.name AND EXISTS (SELECT 1 FROM task_statuses WHERE item_id = v_status.item_id AND name = v_name) THEN
+      RAISE EXCEPTION 'a status with this name exists' USING ERRCODE = '55000';
+    END IF;
+    UPDATE task_statuses SET name = v_name, color = coalesce(p_color, color), category = v_cat,
+                             position = coalesce(p_position, position), updated_at = now()
+    WHERE id = p_status;
+    IF v_cat <> v_status.category THEN
+      UPDATE tasks SET completed_at = CASE WHEN v_cat = 'done' THEN coalesce(completed_at, now()) END
+      WHERE status_id = p_status;
+    END IF;
+    PERFORM app_audit(app_id(p_ids, 1), v_item.workspace_id, 'update_status', 'item', v_status.item_id,
+                      jsonb_build_object('status', p_status, 'from', jsonb_build_object('name', v_status.name,
+                        'color', v_status.color, 'category', v_status.category, 'position', v_status.position),
+                        'to', jsonb_build_object('name', v_name, 'color', coalesce(p_color, v_status.color),
+                        'category', v_cat, 'position', coalesce(p_position, v_status.position))));
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color text, p_category text, p_position numeric, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 상태 지우기. 그 상태의 업무가 있으면 같은 항목의 p_move_to로 옮긴 뒤 지운다(D-116). 마지막 상태는 지울 수 없다.
+CREATE FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_ids uuid[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_status task_statuses%ROWTYPE;
+    v_to     task_statuses%ROWTYPE;
+    v_item   items%ROWTYPE;
+    v_lane   uuid;
+    v_moved  integer := 0;
+  BEGIN
+    SELECT * INTO v_status FROM task_statuses WHERE id = p_status;
+    IF v_status.id IS NULL OR app_access('item', v_status.item_id) = 'none' THEN
+      RAISE EXCEPTION 'status not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF app_access('item', v_status.item_id) <> 'owner' THEN
+      RAISE EXCEPTION 'only the item owner can define statuses' USING ERRCODE = '42501';
+    END IF;
+    IF app_item_archived(v_status.item_id) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF p_move_to IS NOT NULL THEN
+      SELECT * INTO v_to FROM task_statuses WHERE id = p_move_to;
+      IF v_to.id IS NULL OR v_to.item_id <> v_status.item_id OR v_to.id = p_status THEN
+        RAISE EXCEPTION 'move the tasks to another status of the same item' USING ERRCODE = '22023';
+      END IF;
+    END IF;
+    IF (SELECT count(*) FROM task_statuses WHERE item_id = v_status.item_id) <= 1 THEN
+      RAISE EXCEPTION 'an item needs at least one status' USING ERRCODE = '55000';
+    END IF;
+    -- 두 열을 id 순서로 잠근 뒤(이동·생성과 같은 순서) 항목을 공유 잠금한다.
+    FOR v_lane IN SELECT x FROM unnest(ARRAY[p_status, p_move_to]) x WHERE x IS NOT NULL ORDER BY x LOOP
+      PERFORM app_lock_lane(v_lane);
+    END LOOP;
+    SELECT * INTO v_item FROM items WHERE id = v_status.item_id FOR SHARE;
+    SELECT * INTO v_status FROM task_statuses WHERE id = p_status FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM tasks WHERE status_id = p_status) THEN
+      IF p_move_to IS NULL THEN
+        RAISE EXCEPTION 'choose a status for the tasks in this column' USING ERRCODE = '22023';
+      END IF;
+      PERFORM 1 FROM tasks WHERE status_id = p_status ORDER BY id FOR NO KEY UPDATE;
+      UPDATE tasks t SET
+        status_id = p_move_to,
+        position = r.pos + (SELECT coalesce(max(position), 0) FROM tasks WHERE status_id = p_move_to),
+        version = version + 1, updated_at = now(),
+        completed_at = CASE WHEN v_to.category = 'done' THEN coalesce(t.completed_at, now()) END
+      FROM (SELECT id, row_number() OVER (ORDER BY position, number) AS pos FROM tasks WHERE status_id = p_status) r
+      WHERE t.id = r.id;
+      GET DIAGNOSTICS v_moved = ROW_COUNT;
+    END IF;
+    DELETE FROM task_statuses WHERE id = p_status;
+    PERFORM app_audit(app_id(p_ids, 1), v_item.workspace_id, 'delete_status', 'item', v_status.item_id,
+                      jsonb_build_object('status', p_status, 'name', v_status.name, 'moved_to', p_move_to, 'moved', v_moved));
+    RETURN v_moved;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 상태 이름·범주가 바뀌면 그 상태의 업무를 다시 색인한다(D-101·D-102의 색인 일치).
+CREATE FUNCTION fvoci.app_search_enqueue_status_tasks() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    INSERT INTO search_queue (kind, target_id)
+    SELECT 'task', t.id FROM tasks t WHERE t.status_id = NEW.id
+    ON CONFLICT (kind, target_id) DO UPDATE SET queued_at = now(), attempts = 0;
+    RETURN NULL;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_search_enqueue_status_tasks() OWNER TO fvoci_migrator;
+
+-- 업무 반복 규칙(D-31·D-125). 일정 반복과 같은 기준 판 검사: 지금 규칙이 보낸 규칙과도, 편집을 시작할 때 본 규칙(p_base)과도
+-- 다르면 아무것도 바꾸지 않고 conflict를 돌려준다(409). 새 id 2: 계열, 감사.
+CREATE FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_base jsonb, p_ids uuid[]) RETURNS TABLE(series_id uuid, outcome text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_task    tasks%ROWTYPE;
+    v_series  task_series%ROWTYPE;
+    v_current jsonb;
+    v_anchor  date;
+    v_today   date;
+  BEGIN
+    PERFORM app_require_task_write(p_task);
+    IF p_rule IS NOT NULL THEN
+      PERFORM app_check_recurrence(p_rule);
+    END IF;
+    PERFORM app_check_timezone(p_timezone);
+    PERFORM app_lock_task_rows(ARRAY[p_task], NULL);
+    SELECT * INTO v_task FROM tasks WHERE id = p_task;
+    PERFORM app_lock_item(v_task.item_id);
+    PERFORM app_require_task_write(p_task);
+    v_today := (now() AT TIME ZONE p_timezone)::date;
+    IF v_task.series_id IS NOT NULL THEN
+      SELECT * INTO v_series FROM task_series WHERE id = v_task.series_id FOR UPDATE;
+      IF v_series.root_task_id <> p_task THEN
+        RAISE EXCEPTION 'change the recurrence on the first occurrence' USING ERRCODE = '22023';
+      END IF;
+    END IF;
+    v_current := v_series.rule;
+    IF jsonb_strip_nulls(coalesce(v_current, 'null'::jsonb)) IS DISTINCT FROM jsonb_strip_nulls(coalesce(p_rule, 'null'::jsonb))
+       AND jsonb_strip_nulls(coalesce(v_current, 'null'::jsonb)) IS DISTINCT FROM jsonb_strip_nulls(coalesce(p_base, 'null'::jsonb)) THEN
+      RETURN QUERY SELECT v_series.id, 'conflict'::text;
+      RETURN;
+    END IF;
+    IF v_series.id IS NOT NULL THEN
+      IF (p_rule ->> 'until')::date < v_series.anchor THEN
+        RAISE EXCEPTION 'until must not be before the first occurrence' USING ERRCODE = '22023';
+      END IF;
+      IF p_rule IS NOT NULL AND v_task.due_date IS NULL AND v_task.start_date IS NULL THEN
+        RAISE EXCEPTION 'a repeating task needs a date' USING ERRCODE = '22023';
+      END IF;
+      IF p_rule IS NOT NULL AND v_task.parent_id IS NOT NULL THEN
+        RAISE EXCEPTION 'only top-level tasks can repeat' USING ERRCODE = '22023';
+      END IF;
+      IF jsonb_strip_nulls(coalesce(v_current, 'null'::jsonb)) IS NOT DISTINCT FROM jsonb_strip_nulls(coalesce(p_rule, 'null'::jsonb))
+         AND v_series.timezone = p_timezone THEN
+        RETURN QUERY SELECT v_series.id, 'updated'::text;
+        RETURN;
+      END IF;
+      UPDATE task_series SET
+        rule = p_rule, timezone = p_timezone, updated_at = now(),
+        effective_from = CASE WHEN p_rule IS DISTINCT FROM v_series.rule
+                              THEN greatest(v_series.anchor, v_today) ELSE effective_from END
+      WHERE id = v_series.id;
+      PERFORM app_audit(app_id(p_ids, 2), v_task.workspace_id, 'set_recurrence', 'task', p_task,
+                        jsonb_build_object('from', v_series.rule, 'to', p_rule, 'timezone', p_timezone));
+      RETURN QUERY SELECT v_series.id, 'updated'::text;
+      RETURN;
+    END IF;
+    IF p_rule IS NULL THEN
+      RETURN QUERY SELECT NULL::uuid, 'updated'::text;
+      RETURN;
+    END IF;
+    IF v_task.parent_id IS NOT NULL THEN
+      RAISE EXCEPTION 'only top-level tasks can repeat' USING ERRCODE = '22023';
+    END IF;
+    v_anchor := coalesce(v_task.due_date, v_task.start_date);
+    IF v_anchor IS NULL THEN
+      RAISE EXCEPTION 'a repeating task needs a date' USING ERRCODE = '22023';
+    END IF;
+    IF (p_rule ->> 'until')::date < v_anchor THEN
+      RAISE EXCEPTION 'until must not be before the first occurrence' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO task_series (id, workspace_id, item_id, root_task_id, rule, timezone, anchor, effective_from,
+                             created_by)
+    VALUES (app_id(p_ids, 1), v_task.workspace_id, v_task.item_id, p_task, p_rule, p_timezone, v_anchor, v_anchor,
+            app_user_id())
+    RETURNING * INTO v_series;
+    UPDATE tasks SET series_id = v_series.id, occurrence_date = v_anchor WHERE id = p_task;
+    PERFORM app_audit(app_id(p_ids, 2), v_task.workspace_id, 'set_recurrence', 'task', p_task,
+                      jsonb_build_object('from', NULL, 'to', p_rule, 'timezone', p_timezone));
+    RETURN QUERY SELECT v_series.id, 'updated'::text;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_base jsonb, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 조직 전체 저장량(D-124): 조직 안 모든 워크스페이스의 파일 버전과 열린 업로드.
+CREATE FUNCTION fvoci.app_storage_used_organization(p_organization uuid, p_except uuid) RETURNS bigint
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT coalesce((SELECT sum(v.size) FROM file_versions v JOIN files f ON f.id = v.file_id
+                     JOIN workspaces w ON w.id = f.workspace_id WHERE w.organization_id = p_organization), 0)
+         + coalesce((SELECT sum(u.size) FROM uploads u JOIN workspaces w ON w.id = u.workspace_id
+                     WHERE w.organization_id = p_organization AND u.state IN ('uploading', 'completing')
+                       AND u.id IS DISTINCT FROM p_except), 0)
+  $$;
+
+
+ALTER FUNCTION fvoci.app_storage_used_organization(p_organization uuid, p_except uuid) OWNER TO fvoci_migrator;
+
+-- 업로드 시작(D-52·D-124). 파일 크기·저장량·동시 업로드 수는 워크스페이스·조직·서버 기본값 가운데 가장 작은 한도를 따르고
+-- 조직 저장량 상한도 함께 본다. 개인 영역은 서버 기본값만 쓴다.
+CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_user    uuid := app_user_id();
+    v_id      uuid;
+    v_file    files%ROWTYPE;
+    v_place   record;
+    v_kind    text := p_kind;
+    v_tgt     uuid := p_target;
+    v_name    text := btrim(coalesce(p_name, ''));
+    v_limit   bigint;
+    v_org     uuid;
+    v_org_max bigint;
+  BEGIN
+    IF v_user IS NULL THEN
+      RAISE EXCEPTION 'not signed in' USING ERRCODE = '42501';
+    END IF;
+    SELECT id INTO v_id FROM uploads WHERE user_id = v_user AND request_id = p_request;
+    IF v_id IS NOT NULL THEN
+      RETURN v_id;
+    END IF;
+    IF p_size < 1 THEN
+      RAISE EXCEPTION 'empty files cannot be uploaded' USING ERRCODE = '22023';
+    END IF;
+    IF p_file IS NOT NULL THEN
+      SELECT * INTO v_file FROM files WHERE id = p_file;
+      IF app_access('file', p_file) = 'none' THEN
+        RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
+      END IF;
+      v_kind := CASE WHEN v_file.document_id IS NOT NULL THEN 'document' ELSE 'item' END;
+      v_tgt := coalesce(v_file.document_id, v_file.item_id);
+      IF v_name = '' THEN
+        v_name := v_file.name;
+      END IF;
+    END IF;
+    SELECT * INTO v_place FROM app_file_place(v_kind, v_tgt);
+    v_limit := app_effective_limit(v_place.workspace_id, 'max_file_bytes', p_max_file);
+    IF p_size > v_limit THEN
+      RAISE EXCEPTION 'the file is larger than the limit (% bytes)', v_limit USING ERRCODE = '22023';
+    END IF;
+    IF length(v_name) NOT BETWEEN 1 AND 255 OR v_name ~ '[\x00-\x1f/\\]' THEN
+      RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023';
+    END IF;
+    -- 같은 영역의 업로드 시작을 줄 세워 저장량·동시성 확인이 겹치지 않게 한다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage:' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text, 0));
+    v_limit := app_effective_limit(v_place.workspace_id, 'max_storage_bytes', p_max_storage);
+    IF app_storage_used(v_place.workspace_id, v_place.owner_user_id, NULL) + p_size > v_limit THEN
+      RAISE EXCEPTION 'not enough storage left (limit % bytes)', v_limit USING ERRCODE = '55000';
+    END IF;
+    IF v_place.workspace_id IS NOT NULL THEN
+      SELECT w.organization_id, o.max_storage_bytes INTO v_org, v_org_max
+      FROM workspaces w JOIN organizations o ON o.id = w.organization_id WHERE w.id = v_place.workspace_id;
+      IF v_org_max IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage-org:' || v_org::text, 0));
+        IF app_storage_used_organization(v_org, NULL) + p_size > v_org_max THEN
+          RAISE EXCEPTION 'not enough storage left in the organization (limit % bytes)', v_org_max USING ERRCODE = '55000';
+        END IF;
+      END IF;
+      v_limit := app_effective_limit(v_place.workspace_id, 'max_concurrent_uploads', NULL);
+      IF v_limit IS NOT NULL AND (SELECT count(*) FROM uploads u
+                                  WHERE u.workspace_id = v_place.workspace_id
+                                    AND u.state IN ('uploading', 'completing')) >= v_limit THEN
+        RAISE EXCEPTION 'too many uploads in progress (limit %)', v_limit USING ERRCODE = '55000';
+      END IF;
+    END IF;
+    v_id := app_id(p_ids, 1);
+    INSERT INTO uploads (id, user_id, request_id, file_id, target_kind, target_id, workspace_id, owner_user_id,
+                         name, note, content_type, size, chunk_bytes, storage_key, expires_at)
+    VALUES (v_id, v_user, p_request, p_file,
+            CASE WHEN p_file IS NULL THEN v_kind END, CASE WHEN p_file IS NULL THEN v_tgt END,
+            v_place.workspace_id, v_place.owner_user_id, v_name, coalesce(p_note, ''),
+            coalesce(nullif(btrim(p_type), ''), 'application/octet-stream'), p_size, p_chunk,
+            'v1/' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text || '/' || v_id::text,
+            now() + make_interval(secs => p_ttl_secs))
+    ON CONFLICT (user_id, request_id) DO NOTHING;
+    -- 같은 요청이 동시에 오면 먼저 들어간 쪽을 돌려준다.
+    SELECT id INTO v_id FROM uploads WHERE user_id = v_user AND request_id = p_request;
+    RETURN v_id;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_finish_upload(p_upload uuid, p_sha256 text, p_max_storage bigint, p_ids uuid[]) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_up      uploads%ROWTYPE;
+    v_file    uuid;
+    v_version integer;
+    v_vid     uuid;
+    v_place   record;
+    v_limit   bigint;
+    v_org     uuid;
+    v_org_max bigint;
+  BEGIN
+    SELECT * INTO v_up FROM uploads WHERE id = p_upload AND user_id = app_user_id() FOR NO KEY UPDATE;
+    IF v_up.id IS NULL THEN
+      RAISE EXCEPTION 'upload not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_up.state = 'done' THEN
+      RETURN v_up.version_id;
+    END IF;
+    IF v_up.state <> 'completing' THEN
+      RAISE EXCEPTION 'the upload is no longer open' USING ERRCODE = '55000';
+    END IF;
+    IF v_up.file_id IS NOT NULL THEN
+      IF app_access('file', v_up.file_id) = 'none' THEN
+        RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
+      END IF;
+      SELECT * INTO v_place FROM app_file_place(
+        (SELECT CASE WHEN document_id IS NOT NULL THEN 'document' ELSE 'item' END FROM files WHERE id = v_up.file_id),
+        (SELECT coalesce(document_id, item_id) FROM files WHERE id = v_up.file_id));
+    ELSE
+      SELECT * INTO v_place FROM app_file_place(v_up.target_kind, v_up.target_id);
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage:' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text, 0));
+    v_limit := app_effective_limit(v_place.workspace_id, 'max_storage_bytes', p_max_storage);
+    IF app_storage_used(v_place.workspace_id, v_place.owner_user_id, p_upload) + v_up.size > v_limit THEN
+      RAISE EXCEPTION 'not enough storage left (limit % bytes)', v_limit USING ERRCODE = '55000';
+    END IF;
+    IF v_place.workspace_id IS NOT NULL THEN
+      SELECT w.organization_id, o.max_storage_bytes INTO v_org, v_org_max
+      FROM workspaces w JOIN organizations o ON o.id = w.organization_id WHERE w.id = v_place.workspace_id;
+      IF v_org_max IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage-org:' || v_org::text, 0));
+        IF app_storage_used_organization(v_org, p_upload) + v_up.size > v_org_max THEN
+          RAISE EXCEPTION 'not enough storage left in the organization (limit % bytes)', v_org_max USING ERRCODE = '55000';
+        END IF;
+      END IF;
+    END IF;
+    IF v_up.file_id IS NULL THEN
+      INSERT INTO files (id, workspace_id, owner_user_id, document_id, item_id, name, created_by)
+      VALUES (app_id(p_ids, 1), v_place.workspace_id, v_place.owner_user_id,
+              CASE WHEN v_up.target_kind = 'document' THEN v_up.target_id END,
+              CASE WHEN v_up.target_kind = 'item' THEN v_up.target_id END,
+              v_up.name, v_up.user_id)
+      RETURNING id INTO v_file;
+    ELSE
+      v_file := v_up.file_id;
+    END IF;
+    UPDATE files SET current_version = current_version + 1, updated_at = now()
+    WHERE id = v_file RETURNING current_version INTO v_version;
+    INSERT INTO file_versions (id, file_id, version, size, sha256, content_type, storage_key, note, uploaded_by)
+    VALUES (app_id(p_ids, 2), v_file, v_version, v_up.size, p_sha256, v_up.content_type, v_up.storage_key, v_up.note,
+            v_up.user_id)
+    RETURNING id INTO v_vid;
+    UPDATE uploads SET state = 'done', state_changed_at = now(), version_id = v_vid WHERE id = p_upload;
+    DELETE FROM upload_parts WHERE upload_id = p_upload;
+    INSERT INTO audit_log (id, workspace_id, owner_user_id, actor, action, target_type, target_id, detail)
+    VALUES (app_id(p_ids, 3), v_place.workspace_id, v_place.owner_user_id, v_up.user_id, 'upload', 'file', v_file,
+            jsonb_build_object('name', v_up.name, 'version', v_version, 'size', v_up.size));
+    RETURN v_vid;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_finish_upload(p_upload uuid, p_sha256 text, p_max_storage bigint, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_grade_file(p_file uuid, p_user uuid) RETURNS text
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -1794,10 +3227,12 @@ CREATE FUNCTION fvoci.app_remove_organization_member_ids(p_organization uuid, p_
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_user_id() IS NULL OR app_access('organization', p_organization) = 'none' THEN 0 ELSE
-      1 + coalesce((SELECT sum(1 + app_unseen_assignees_bound(NULL, m.workspace_id, p_user) * 2
-                               + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-                                  WHERE d.workspace_id = m.workspace_id AND s.grantee_user_id = p_user))
+    -- 본인 또는 조직 관리자만. 조직 전체의 받은 공유(공간 멤버십과 무관)마다 활동 1 + 공간마다 (감사 1 + 담당·리더 해제 2배) + 조직 로그 1.
+    SELECT CASE WHEN app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
+                     OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN 0 ELSE
+      1 + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+           WHERE s.organization_id = p_organization AND s.grantee_user_id = p_user AND d.workspace_id IS NOT NULL)::integer
+        + coalesce((SELECT sum(1 + app_unseen_assignees_bound(NULL, m.workspace_id, p_user) * 2)
                     FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
                     WHERE w.organization_id = p_organization AND m.user_id = p_user), 0)::integer
     END
@@ -1820,6 +3255,7 @@ CREATE FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user
     v_at     integer := 0;
     v_shares integer;
     v_email  text;
+    v_share  record;
   BEGIN
     IF v_self THEN
       IF app_access('organization', p_organization) = 'none' THEN
@@ -1842,23 +3278,35 @@ CREATE FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user
     IF EXISTS (SELECT 1 FROM workspaces WHERE organization_id = p_organization AND owner_id = p_user) THEN
       RAISE EXCEPTION 'transfer workspace ownership first' USING ERRCODE = '55000';
     END IF;
+    -- 조직 안 공간 문서에서 받은 개별 공유는 공간 멤버십과 무관하게 모두 거둔다(D-114). 문서 행을 잠근 뒤 지운다.
+    FOR v_share IN
+      SELECT s.id, s.document_id, d.workspace_id, d.item_id FROM document_shares s JOIN documents d ON d.id = s.document_id
+      WHERE s.organization_id = p_organization AND s.grantee_user_id = p_user AND d.workspace_id IS NOT NULL
+      ORDER BY s.document_id
+    LOOP
+      PERFORM 1 FROM documents WHERE id = v_share.document_id FOR UPDATE;
+      DELETE FROM document_shares WHERE id = v_share.id;
+      v_at := v_at + 1;
+      PERFORM app_activity(app_id(p_ids, v_at), v_share.workspace_id, v_share.item_id, 'document', v_share.document_id,
+                           'unshare', jsonb_build_object('user', p_user, 'reason', 'organization_left'));
+    END LOOP;
     FOR v_ws IN
       SELECT m.workspace_id FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
       WHERE w.organization_id = p_organization AND m.user_id = p_user
       ORDER BY m.workspace_id
     LOOP
-      v_need := 1 + app_unseen_assignees_bound(NULL, v_ws, p_user) * 2
-                + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-                   WHERE d.workspace_id = v_ws AND s.grantee_user_id = p_user);
+      v_need := 1 + app_unseen_assignees_bound(NULL, v_ws, p_user) * 2;
       PERFORM app_remove_member_internal(v_ws, p_user, 'organization_left',
                                          coalesce(p_ids[v_at + 1:v_at + v_need], '{}'::uuid[]));
       v_at := v_at + v_need;
     END LOOP;
-    -- 조직에 귀속된 개인 노트 공유: 받은 것과 내 노트를 준 것 모두.
+    -- 조직에 귀속된 개인 노트 공유: 받은 것과 내 노트를 준 것 모두. 조직 소속 문서의 언급 기록도 거둔다.
     DELETE FROM document_shares s USING documents d
     WHERE s.document_id = d.id AND s.organization_id = p_organization
       AND d.owner_user_id IS NOT NULL AND (s.grantee_user_id = p_user OR d.owner_user_id = p_user);
     GET DIAGNOSTICS v_shares = ROW_COUNT;
+    DELETE FROM document_mentions dm USING documents d JOIN workspaces w ON w.id = d.workspace_id
+    WHERE dm.document_id = d.id AND w.organization_id = p_organization AND dm.user_id = p_user;
     SELECT lower(email) INTO v_email FROM users WHERE id = p_user AND email_verified;
     UPDATE invitations SET closed_at = now(), close_reason = 'organization_left'
     WHERE organization_id = p_organization AND closed_at IS NULL AND email = v_email;
@@ -1884,6 +3332,7 @@ CREATE FUNCTION fvoci.app_invite_organization(p_organization uuid, p_email text,
     v_id    uuid;
   BEGIN
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
+    PERFORM app_require_organization_admin(p_organization);
     IF p_role NOT IN ('admin', 'member') THEN
       RAISE EXCEPTION 'invalid role' USING ERRCODE = '22023';
     END IF;
@@ -1971,6 +3420,7 @@ CREATE FUNCTION fvoci.app_set_organization_settings(p_organization uuid, p_patch
       END IF;
     END LOOP;
     SELECT * INTO v_old FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
+    PERFORM app_require_organization_admin(p_organization);
     UPDATE organizations SET
       name = CASE WHEN p_patch ? 'name' THEN btrim(p_patch ->> 'name') ELSE name END,
       public_links_enabled = CASE WHEN p_patch ? 'public_links_enabled'
@@ -2021,6 +3471,8 @@ CREATE FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, 
       END IF;
     END LOOP;
     SELECT * INTO v_old FROM workspaces WHERE id = p_workspace FOR NO KEY UPDATE;
+    PERFORM 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = v_user FOR SHARE;
+    PERFORM app_require_admin(p_workspace);
     UPDATE workspaces SET
       max_file_bytes = CASE WHEN p_patch ? 'max_file_bytes' THEN (p_patch ->> 'max_file_bytes')::bigint ELSE max_file_bytes END,
       max_storage_bytes = CASE WHEN p_patch ? 'max_storage_bytes' THEN (p_patch ->> 'max_storage_bytes')::bigint
@@ -2065,11 +3517,13 @@ CREATE FUNCTION fvoci.app_effective_limit(p_workspace uuid, p_name text, p_defau
          WHEN 'max_file_bytes' THEN w.max_file_bytes
          WHEN 'max_storage_bytes' THEN w.max_storage_bytes
          WHEN 'max_concurrent_uploads' THEN w.max_concurrent_uploads::bigint
+         WHEN 'notification_rate_per_hour' THEN w.notification_rate_per_hour::bigint
        END FROM workspaces w WHERE w.id = p_workspace),
       (SELECT CASE p_name
          WHEN 'max_file_bytes' THEN o.max_file_bytes
          WHEN 'max_storage_bytes' THEN o.max_storage_bytes
          WHEN 'max_concurrent_uploads' THEN o.max_concurrent_uploads::bigint
+         WHEN 'notification_rate_per_hour' THEN o.notification_rate_per_hour::bigint
        END FROM workspaces w JOIN organizations o ON o.id = w.organization_id WHERE w.id = p_workspace))
   $$;
 
@@ -2118,10 +3572,14 @@ CREATE FUNCTION fvoci.app_join_workspace_as_admin(p_workspace uuid, p_ids uuid[]
     v_ws   workspaces%ROWTYPE;
     v_old  text;
   BEGIN
-    SELECT * INTO v_ws FROM workspaces WHERE id = p_workspace AND deleted_at IS NULL FOR NO KEY UPDATE;
+    SELECT * INTO v_ws FROM workspaces WHERE id = p_workspace AND deleted_at IS NULL;
     IF v_ws.id IS NULL OR app_access('organization', v_ws.organization_id) = 'none' THEN
       RAISE EXCEPTION 'workspace not found' USING ERRCODE = 'P0002';
     END IF;
+    PERFORM app_require_organization_admin(v_ws.organization_id);
+    -- 조직 행 → 워크스페이스 행 → 멤버 행 순서로 잠그고 관리자인지 다시 본다(강등·탈퇴와 직렬화).
+    PERFORM 1 FROM organizations WHERE id = v_ws.organization_id FOR SHARE;
+    PERFORM 1 FROM workspaces WHERE id = p_workspace AND deleted_at IS NULL FOR NO KEY UPDATE;
     PERFORM app_require_organization_admin(v_ws.organization_id);
     SELECT role INTO v_old FROM workspace_members WHERE workspace_id = p_workspace AND user_id = v_user FOR UPDATE;
     IF v_old = 'admin' THEN
@@ -2189,6 +3647,11 @@ CREATE FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uui
     IF app_access('organization', p_organization) = 'none' THEN
       RAISE EXCEPTION 'organization not found' USING ERRCODE = 'P0002';
     END IF;
+    -- 조직 탈퇴·제거(조직 행 갱신 잠금)와 줄 세운 뒤 아직 조직 멤버인지 다시 본다.
+    PERFORM 1 FROM organizations WHERE id = p_organization FOR SHARE;
+    IF app_access('organization', p_organization) = 'none' THEN
+      RAISE EXCEPTION 'organization not found' USING ERRCODE = 'P0002';
+    END IF;
     INSERT INTO workspaces (id, organization_id, name, created_by, owner_id, request_id)
     VALUES (app_id(p_ids, 1), p_organization, btrim(p_name), v_user, v_user, p_request_id)
     ON CONFLICT ON CONSTRAINT workspaces_request DO NOTHING
@@ -2223,6 +3686,9 @@ CREATE FUNCTION fvoci.app_invite(p_workspace uuid, p_email text, p_role text, p_
     v_id    uuid;
   BEGIN
     PERFORM app_lock_live_workspace(p_workspace);
+    -- 잠금 뒤에 아직 관리자인지 다시 본다(동시 강등·내보내기).
+    PERFORM 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = v_user FOR SHARE;
+    PERFORM app_require_admin(p_workspace);
     SELECT organization_id INTO v_org FROM workspaces WHERE id = p_workspace;
     IF p_role NOT IN ('admin', 'member', 'readonly') THEN
       RAISE EXCEPTION 'invalid role' USING ERRCODE = '22023';
@@ -2390,7 +3856,12 @@ CREATE FUNCTION fvoci.app_remove_member_internal(p_workspace uuid, p_member uuid
   BEGIN
     -- 소유권 수락·제안과 같은 순서로 워크스페이스 행 → 멤버 행을 먼저 잠근다. 그 뒤에 소유자를 보고(수락이 끝난
     -- 뒤의 값), 항목·그룹 멤버를 지운다(동시에 넣는 쪽은 멤버 행 공유 잠금을 기다린다).
-    PERFORM app_lock_live_workspace(p_workspace);
+    -- 조직 탈퇴는 휴지통에 든 워크스페이스의 멤버십도 정리하므로 살아 있는지 묻지 않고 행만 잠근다.
+    IF p_action = 'organization_left' THEN
+      PERFORM 1 FROM workspaces WHERE id = p_workspace FOR NO KEY UPDATE;
+    ELSE
+      PERFORM app_lock_live_workspace(p_workspace);
+    END IF;
     PERFORM 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = p_member FOR UPDATE;
     IF p_member = (SELECT owner_id FROM workspaces WHERE id = p_workspace) THEN
       RAISE EXCEPTION 'the owner cannot leave or be removed; transfer ownership first' USING ERRCODE = '55000';
@@ -2652,8 +4123,19 @@ CREATE FUNCTION fvoci.app_add_comment(p_request uuid, p_document uuid, p_task uu
     IF app_comment_target_access(p_document, p_task) = 'none' THEN
       RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
     END IF;
-    IF app_comment_target_archived(p_document, p_task) THEN
-      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    -- 보관(항목 행 FOR UPDATE)과 직렬화한다(#86): 모듈·항목을 공유 잠금한 뒤 등급·보관을 다시 본다. 댓글은 쓰기라
+    -- 읽기 전용·읽기 공유는 쓸 수 없고(D-20), 보관되어 read로 내려간 대상은 409다.
+    PERFORM app_lock_item(coalesce((SELECT d.item_id FROM documents d WHERE d.id = p_document),
+                                   (SELECT t.item_id FROM tasks t WHERE t.id = p_task)));
+    v_access := app_comment_target_access(p_document, p_task);
+    IF v_access = 'none' THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_access NOT IN ('owner', 'write') THEN
+      IF app_comment_target_archived(p_document, p_task) THEN
+        RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+      END IF;
+      RAISE EXCEPTION 'write access is required to comment' USING ERRCODE = '42501';
     END IF;
     IF length(v_body) NOT BETWEEN 1 AND 10000 THEN
       RAISE EXCEPTION 'a comment needs 1 to 10000 characters' USING ERRCODE = '22023';
@@ -3215,47 +4697,6 @@ CREATE FUNCTION fvoci.app_check_assignee(p_workspace uuid, p_item uuid, p_user u
 
 ALTER FUNCTION fvoci.app_check_assignee(p_workspace uuid, p_item uuid, p_user uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) RETURNS fvoci.documents
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_doc documents%ROWTYPE;
-    v_item items%ROWTYPE;
-  BEGIN
-    PERFORM app_require_document(p_doc, 'owner');
-    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
-    IF p_target IS NULL THEN
-      RAISE EXCEPTION 'team documents stay in the workspace; make a copy instead' USING ERRCODE = '55000';
-    END IF;
-    IF v_doc.workspace_id IS NOT DISTINCT FROM p_target AND v_doc.item_id IS NOT DISTINCT FROM p_item THEN
-      RAISE EXCEPTION 'the document is already there' USING ERRCODE = '55000';
-    END IF;
-    IF app_access('workspace', p_target) = 'none' THEN
-      RAISE EXCEPTION 'target workspace not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF app_access('workspace', p_target) NOT IN ('owner', 'write') THEN
-      RAISE EXCEPTION 'write access to the target workspace is required' USING ERRCODE = '42501';
-    END IF;
-    IF p_item IS NOT NULL THEN
-      SELECT * INTO v_item FROM items WHERE id = p_item;
-      IF v_item.id IS NULL OR v_item.workspace_id <> p_target OR app_access('item', p_item) = 'none' THEN
-        RAISE EXCEPTION 'target item not found' USING ERRCODE = 'P0002';
-      END IF;
-      IF app_access('item', p_item) NOT IN ('owner', 'write') THEN
-        RAISE EXCEPTION 'write access to the target item is required' USING ERRCODE = '42501';
-      END IF;
-      IF app_item_archived(v_item.id) THEN
-        RAISE EXCEPTION 'the target item is archived' USING ERRCODE = '55000';
-      END IF;
-    END IF;
-    RETURN v_doc;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_check_recurrence(p_rule jsonb) RETURNS void
     LANGUAGE plpgsql IMMUTABLE
     SET search_path TO 'fvoci', 'pg_temp'
@@ -3476,66 +4917,6 @@ CREATE FUNCTION fvoci.app_comment_target_state(p_document uuid, p_task uuid) RET
 
 ALTER FUNCTION fvoci.app_comment_target_state(p_document uuid, p_task uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_user    uuid := app_user_id();
-    v_access  text := app_require_document(p_doc, 'read');
-    v_src     documents%ROWTYPE;
-    v_private boolean;
-    v_id      uuid;
-    v_number  bigint;
-  BEGIN
-    SELECT * INTO v_src FROM documents WHERE id = p_doc;
-    IF v_access <> 'owner' AND NOT v_src.allow_copy THEN
-      RAISE EXCEPTION 'copying is not allowed for this document' USING ERRCODE = '42501';
-    END IF;
-    -- 사본으로 볼 수 있는 사람이 조용히 늘지 않게: 비공개 문서, 개인 노트, 비공개 항목 아래 문서의 사본은 비공개.
-    v_private := v_src.visibility = 'private'
-      OR EXISTS (SELECT 1 FROM items i WHERE i.id = v_src.item_id AND i.visibility = 'private');
-
-    IF p_target_workspace IS NULL THEN
-      SELECT id INTO v_id FROM documents WHERE owner_user_id = v_user AND request_id = p_request_id;
-      IF v_id IS NOT NULL THEN RETURN v_id; END IF;
-      INSERT INTO documents (id, owner_user_id, placement, scope, number, title, schema_version, body,
-                             revision, created_by, updated_by, request_id, visibility)
-      VALUES (app_id(p_ids, 1), v_user, 'personal', 'NOTE', NULL, btrim(p_title), v_src.schema_version, v_src.body,
-              1, v_user, v_user, p_request_id, 'private')
-      RETURNING id INTO v_id;
-    ELSE
-      IF app_access('workspace', p_target_workspace) = 'none' THEN
-        RAISE EXCEPTION 'target workspace not found' USING ERRCODE = 'P0002';
-      END IF;
-      IF app_access('workspace', p_target_workspace) NOT IN ('owner', 'write') THEN
-        RAISE EXCEPTION 'write access to the target workspace is required' USING ERRCODE = '42501';
-      END IF;
-      SELECT id INTO v_id FROM documents
-      WHERE workspace_id = p_target_workspace AND created_by = v_user AND request_id = p_request_id;
-      IF v_id IS NOT NULL THEN RETURN v_id; END IF;
-      v_id := app_id(p_ids, 1);
-      v_number := app_allocate_number(p_target_workspace, p_target_workspace, 'document', v_id);
-      INSERT INTO documents (id, workspace_id, placement, scope, number, title, schema_version, body,
-                             revision, created_by, updated_by, request_id, visibility)
-      VALUES (v_id, p_target_workspace, 'wiki', 'WIKI', v_number,
-              btrim(p_title), v_src.schema_version, v_src.body, 1, v_user, v_user, p_request_id,
-              CASE WHEN v_private THEN 'private' ELSE 'workspace' END);
-    END IF;
-
-    INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
-    VALUES (v_id, 1, btrim(p_title), v_src.schema_version, v_src.body, v_user, p_request_id);
-    PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'copy',
-      jsonb_build_object('target', CASE WHEN p_target_workspace IS NULL THEN 'personal' ELSE 'workspace' END));
-    PERFORM app_audit_document(app_id(p_ids, 3), v_id, 'create',
-      jsonb_build_object('copied', true, 'from', CASE WHEN v_src.owner_user_id IS NULL THEN 'workspace' ELSE 'personal' END));
-    RETURN v_id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, p_title text, p_reset boolean, p_ids uuid[]) RETURNS TABLE(copied_item uuid, skipped_count integer)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -3611,7 +4992,8 @@ CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, 
               CASE WHEN p_reset THEN NULL ELSE v_row.start_date END,
               CASE WHEN p_reset THEN NULL ELSE v_row.due_date END,
               v_row.estimate_minutes, v_row.tags, v_row.position, v_row.milestone,
-              CASE WHEN p_reset OR v_row.category <> 'done' THEN NULL ELSE now() END,
+              CASE WHEN (CASE WHEN p_reset THEN (SELECT category FROM task_statuses WHERE id = v_todo)
+                              ELSE v_row.category END) = 'done' THEN now() END,
               v_user, v_user, app_id(p_ids, v_at + 2));
       v_at := v_at + 2;
       v_map := v_map || jsonb_build_object(v_row.id::text, v_id);
@@ -4020,30 +5402,6 @@ CREATE FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, 
 
 ALTER FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_id uuid;
-  BEGIN
-    PERFORM 1 FROM documents WHERE id = p_doc FOR UPDATE;
-    PERFORM app_require_document(p_doc, 'owner');
-    IF p_expires_at IS NOT NULL AND p_expires_at <= now() THEN
-      RAISE EXCEPTION 'expiry must be in the future' USING ERRCODE = '22023';
-    END IF;
-    INSERT INTO public_links (id, document_id, token_hash, created_by, expires_at)
-    VALUES (app_id(p_ids, 1), p_doc, p_token_hash, app_user_id(), p_expires_at)
-    RETURNING id INTO v_id;
-    PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'create_public_link',
-                               jsonb_build_object('link', v_id, 'expires_at', p_expires_at));
-    RETURN v_id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_create_record(p_request uuid, p_item uuid, p_kind text, p_title text, p_occurred date, p_body text, p_fields jsonb, p_files jsonb, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -4146,19 +5504,25 @@ CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title te
     IF p_estimate IS NOT NULL AND p_estimate < 0 THEN
       RAISE EXCEPTION 'estimate_minutes must not be negative' USING ERRCODE = '22023';
     END IF;
-    PERFORM app_lock_lane(v_status.id);
-    PERFORM app_check_task_parent(NULL, p_parent, p_item);
-    PERFORM app_lock_item(p_item);
-    IF app_item_archived(p_item) THEN
-      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
-    END IF;
-    -- 상태 지우기는 그 열을 잠근 뒤 지우므로 잠금 뒤에 아직 있는지 본다.
-    IF NOT EXISTS (SELECT 1 FROM task_statuses WHERE id = v_status.id) THEN
-      RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
-    END IF;
     SELECT * INTO v_item FROM items WHERE id = p_item;
     SELECT coalesce(array_agg(u ORDER BY u), '{}') INTO v_people
     FROM (SELECT DISTINCT u FROM unnest(coalesce(p_assignees, '{}')) AS u) s;
+    -- 담당자 후보의 멤버 행을 id 순으로 먼저 공유 잠금한다(멤버 행 → 열 → 항목 행: 내보내기·역할 변경과 같은 순서).
+    PERFORM 1 FROM workspace_members WHERE workspace_id = v_item.workspace_id AND user_id = ANY (v_people)
+    ORDER BY user_id FOR SHARE;
+    PERFORM app_lock_lane(v_status.id);
+    PERFORM app_check_task_parent(NULL, p_parent, p_item);
+    PERFORM app_lock_item(p_item);
+    -- 잠금 뒤의 상태로 다시 본다: 권한·휴지통·보관·상태 정의(상태 지우기는 그 열을 잠근 뒤 지운다).
+    IF app_access('item', p_item) NOT IN ('owner', 'write') THEN
+      RAISE EXCEPTION 'write access is required' USING ERRCODE = '42501';
+    END IF;
+    IF app_item_archived(p_item) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM task_statuses WHERE id = v_status.id) THEN
+      RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
+    END IF;
     FOREACH v_uid IN ARRAY v_people LOOP
       PERFORM app_check_assignee(v_item.workspace_id, p_item, v_uid);
     END LOOP;
@@ -4190,71 +5554,6 @@ CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title te
 
 
 ALTER FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_user  uuid := app_user_id();
-    v_id    uuid;
-    v_file  files%ROWTYPE;
-    v_place record;
-    v_kind  text := p_kind;
-    v_tgt   uuid := p_target;
-    v_name  text := btrim(coalesce(p_name, ''));
-  BEGIN
-    IF v_user IS NULL THEN
-      RAISE EXCEPTION 'not signed in' USING ERRCODE = '42501';
-    END IF;
-    SELECT id INTO v_id FROM uploads WHERE user_id = v_user AND request_id = p_request;
-    IF v_id IS NOT NULL THEN
-      RETURN v_id;
-    END IF;
-    IF p_size < 1 THEN
-      RAISE EXCEPTION 'empty files cannot be uploaded' USING ERRCODE = '22023';
-    END IF;
-    IF p_size > p_max_file THEN
-      RAISE EXCEPTION 'the file is larger than the limit (% bytes)', p_max_file USING ERRCODE = '22023';
-    END IF;
-    IF p_file IS NOT NULL THEN
-      SELECT * INTO v_file FROM files WHERE id = p_file;
-      IF app_access('file', p_file) = 'none' THEN
-        RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
-      END IF;
-      v_kind := CASE WHEN v_file.document_id IS NOT NULL THEN 'document' ELSE 'item' END;
-      v_tgt := coalesce(v_file.document_id, v_file.item_id);
-      IF v_name = '' THEN
-        v_name := v_file.name;
-      END IF;
-    END IF;
-    SELECT * INTO v_place FROM app_file_place(v_kind, v_tgt);
-    IF length(v_name) NOT BETWEEN 1 AND 255 OR v_name ~ '[\x00-\x1f/\\]' THEN
-      RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023';
-    END IF;
-    -- 같은 영역의 업로드 시작을 줄 세워 저장량 확인이 겹치지 않게 한다.
-    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage:' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text, 0));
-    IF app_storage_used(v_place.workspace_id, v_place.owner_user_id, NULL) + p_size > p_max_storage THEN
-      RAISE EXCEPTION 'not enough storage left (limit % bytes)', p_max_storage USING ERRCODE = '55000';
-    END IF;
-    v_id := app_id(p_ids, 1);
-    INSERT INTO uploads (id, user_id, request_id, file_id, target_kind, target_id, workspace_id, owner_user_id,
-                         name, note, content_type, size, chunk_bytes, storage_key, expires_at)
-    VALUES (v_id, v_user, p_request, p_file,
-            CASE WHEN p_file IS NULL THEN v_kind END, CASE WHEN p_file IS NULL THEN v_tgt END,
-            v_place.workspace_id, v_place.owner_user_id, v_name, coalesce(p_note, ''),
-            coalesce(nullif(btrim(p_type), ''), 'application/octet-stream'), p_size, p_chunk,
-            'v1/' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text || '/' || v_id::text,
-            now() + make_interval(secs => p_ttl_secs))
-    ON CONFLICT (user_id, request_id) DO NOTHING;
-    -- 같은 요청이 동시에 오면 먼저 들어간 쪽을 돌려준다.
-    SELECT id INTO v_id FROM uploads WHERE user_id = v_user AND request_id = p_request;
-    RETURN v_id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text, p_target uuid, p_name text, p_note text, p_type text, p_size bigint, p_chunk bigint, p_ttl_secs integer, p_max_file bigint, p_max_storage bigint, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_create_view(p_request uuid, p_item uuid, p_name text, p_config jsonb, p_ids uuid[]) RETURNS TABLE(view_id uuid, outcome text)
     LANGUAGE plpgsql SECURITY DEFINER
@@ -4559,7 +5858,7 @@ CREATE FUNCTION fvoci.app_delete_group_ids(p_group uuid) RETURNS integer
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     SELECT CASE WHEN app_access('workspace', g.workspace_id) = 'owner'
-                THEN 1 + app_unseen_assignees_bound(NULL, g.workspace_id, NULL) ELSE 0 END
+                THEN 1 + 2 * app_unseen_assignees_bound(NULL, g.workspace_id, NULL) ELSE 0 END
     FROM groups g WHERE g.id = p_group
   $$;
 
@@ -4655,45 +5954,6 @@ CREATE FUNCTION fvoci.app_delete_view(p_view uuid) RETURNS void
 
 
 ALTER FUNCTION fvoci.app_delete_view(p_view uuid) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_document_audience(p_workspace uuid, p_item uuid, p_owner uuid, p_creator uuid, p_visibility text, p_doc uuid) RETURNS TABLE(user_id uuid)
-    LANGUAGE sql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-    SELECT p_owner WHERE p_owner IS NOT NULL
-    UNION
-    SELECT m.user_id FROM workspace_members m
-    WHERE p_workspace IS NOT NULL AND m.workspace_id = p_workspace
-      AND (m.role = 'admin' OR p_visibility = 'workspace' OR m.user_id = p_creator)
-      AND (p_item IS NULL OR app_access_as('item', p_item, m.user_id) <> 'none')
-    UNION
-    SELECT u.id FROM document_shares s JOIN users u
-      ON u.email_verified AND lower(u.email) = s.grantee_email
-    WHERE s.document_id = p_doc
-  $$;
-
-
-ALTER FUNCTION fvoci.app_document_audience(p_workspace uuid, p_item uuid, p_owner uuid, p_creator uuid, p_visibility text, p_doc uuid) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_access text := app_access('document', p_doc);
-  BEGIN
-    IF v_access = 'none' THEN
-      RETURN false;
-    END IF;
-    IF v_access IN ('owner', 'write') THEN
-      RETURN true;
-    END IF;
-    RETURN coalesce((SELECT allow_copy FROM documents WHERE id = p_doc AND deleted_at IS NULL), false);
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_document_can_export(p_doc uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_document_depth(p_doc uuid) RETURNS integer
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -4802,6 +6062,10 @@ CREATE FUNCTION fvoci.app_drop_unseen_assignees(p_item uuid, p_workspace uuid, p
           v_at := v_at + 1;
           PERFORM app_audit(app_id(p_ids, v_at), v_row.workspace_id, 'unassign', 'task', v_row.task_id,
                             jsonb_build_object('user', v_row.user_id, 'reason', p_reason));
+          -- 공간 제거·역할 변경에 따른 담당 해제는 활동 피드에도 남긴다(D-114·D-119).
+          v_at := v_at + 1;
+          PERFORM app_activity(app_id(p_ids, v_at), v_row.workspace_id, v_row.item_id, 'task', v_row.task_id, 'unassign',
+                               jsonb_build_object('user', v_row.user_id, 'reason', p_reason));
         END IF;
       END IF;
     END LOOP;
@@ -4832,8 +6096,9 @@ CREATE FUNCTION fvoci.app_edit_comment(p_comment uuid, p_body text) RETURNS void
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_c    comments%ROWTYPE;
-    v_body text := btrim(coalesce(p_body, ''));
+    v_c      comments%ROWTYPE;
+    v_body   text := btrim(coalesce(p_body, ''));
+    v_access text;
   BEGIN
     SELECT * INTO v_c FROM comments WHERE id = p_comment FOR NO KEY UPDATE;
     IF v_c.id IS NULL OR v_c.deleted_at IS NOT NULL OR app_comment_target_access(v_c.document_id, v_c.task_id) = 'none' THEN
@@ -4842,8 +6107,15 @@ CREATE FUNCTION fvoci.app_edit_comment(p_comment uuid, p_body text) RETURNS void
     IF v_c.created_by <> app_user_id() THEN
       RAISE EXCEPTION 'only the author can edit a comment' USING ERRCODE = '42501';
     END IF;
-    IF app_comment_target_archived(v_c.document_id, v_c.task_id) THEN
-      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    -- 보관과 직렬화(#86): 항목을 공유 잠금한 뒤 등급·보관을 다시 본다. 본인 댓글이라도 쓰기 등급이 필요하다(D-20).
+    PERFORM app_lock_item(coalesce((SELECT d.item_id FROM documents d WHERE d.id = v_c.document_id),
+                                   (SELECT t.item_id FROM tasks t WHERE t.id = v_c.task_id)));
+    v_access := app_comment_target_access(v_c.document_id, v_c.task_id);
+    IF v_access NOT IN ('owner', 'write') THEN
+      IF app_comment_target_archived(v_c.document_id, v_c.task_id) THEN
+        RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+      END IF;
+      RAISE EXCEPTION 'write access is required to comment' USING ERRCODE = '42501';
     END IF;
     IF length(v_body) NOT BETWEEN 1 AND 10000 THEN
       RAISE EXCEPTION 'a comment needs 1 to 10000 characters' USING ERRCODE = '22023';
@@ -4979,31 +6251,6 @@ CREATE FUNCTION fvoci.app_file_archived(p_file uuid) RETURNS boolean
 
 ALTER FUNCTION fvoci.app_file_archived(p_file uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_file_can_download(p_file uuid) RETURNS boolean
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_access text := app_access('file', p_file);
-    v_doc    uuid;
-  BEGIN
-    IF v_access = 'none' THEN
-      RETURN false;
-    END IF;
-    IF v_access IN ('owner', 'write') THEN
-      RETURN true;
-    END IF;
-    SELECT document_id INTO v_doc FROM files WHERE id = p_file;
-    IF v_doc IS NULL THEN
-      RETURN true;
-    END IF;
-    RETURN coalesce((SELECT allow_copy FROM documents WHERE id = v_doc), false);
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_file_can_download(p_file uuid) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_file_place(p_kind text, p_id uuid, OUT workspace_id uuid, OUT owner_user_id uuid) RETURNS record
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -5049,69 +6296,6 @@ CREATE FUNCTION fvoci.app_file_refs(p_body jsonb) RETURNS TABLE(file_id uuid, ve
 
 
 ALTER FUNCTION fvoci.app_file_refs(p_body jsonb) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_finish_upload(p_upload uuid, p_sha256 text, p_max_storage bigint, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_up      uploads%ROWTYPE;
-    v_file    uuid;
-    v_version integer;
-    v_vid     uuid;
-    v_place   record;
-  BEGIN
-    SELECT * INTO v_up FROM uploads WHERE id = p_upload AND user_id = app_user_id() FOR NO KEY UPDATE;
-    IF v_up.id IS NULL THEN
-      RAISE EXCEPTION 'upload not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF v_up.state = 'done' THEN
-      RETURN v_up.version_id;
-    END IF;
-    IF v_up.state <> 'completing' THEN
-      RAISE EXCEPTION 'the upload is no longer open' USING ERRCODE = '55000';
-    END IF;
-    IF v_up.file_id IS NOT NULL THEN
-      IF app_access('file', v_up.file_id) = 'none' THEN
-        RAISE EXCEPTION 'file not found' USING ERRCODE = 'P0002';
-      END IF;
-      SELECT * INTO v_place FROM app_file_place(
-        (SELECT CASE WHEN document_id IS NOT NULL THEN 'document' ELSE 'item' END FROM files WHERE id = v_up.file_id),
-        (SELECT coalesce(document_id, item_id) FROM files WHERE id = v_up.file_id));
-    ELSE
-      SELECT * INTO v_place FROM app_file_place(v_up.target_kind, v_up.target_id);
-    END IF;
-    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage:' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text, 0));
-    IF app_storage_used(v_place.workspace_id, v_place.owner_user_id, p_upload) + v_up.size > p_max_storage THEN
-      RAISE EXCEPTION 'not enough storage left (limit % bytes)', p_max_storage USING ERRCODE = '55000';
-    END IF;
-    IF v_up.file_id IS NULL THEN
-      INSERT INTO files (id, workspace_id, owner_user_id, document_id, item_id, name, created_by)
-      VALUES (app_id(p_ids, 1), v_place.workspace_id, v_place.owner_user_id,
-              CASE WHEN v_up.target_kind = 'document' THEN v_up.target_id END,
-              CASE WHEN v_up.target_kind = 'item' THEN v_up.target_id END,
-              v_up.name, v_up.user_id)
-      RETURNING id INTO v_file;
-    ELSE
-      v_file := v_up.file_id;
-    END IF;
-    UPDATE files SET current_version = current_version + 1, updated_at = now()
-    WHERE id = v_file RETURNING current_version INTO v_version;
-    INSERT INTO file_versions (id, file_id, version, size, sha256, content_type, storage_key, note, uploaded_by)
-    VALUES (app_id(p_ids, 2), v_file, v_version, v_up.size, p_sha256, v_up.content_type, v_up.storage_key, v_up.note,
-            v_up.user_id)
-    RETURNING id INTO v_vid;
-    UPDATE uploads SET state = 'done', state_changed_at = now(), version_id = v_vid WHERE id = p_upload;
-    DELETE FROM upload_parts WHERE upload_id = p_upload;
-    INSERT INTO audit_log (id, workspace_id, owner_user_id, actor, action, target_type, target_id, detail)
-    VALUES (app_id(p_ids, 3), v_place.workspace_id, v_place.owner_user_id, v_up.user_id, 'upload', 'file', v_file,
-            jsonb_build_object('name', v_up.name, 'version', v_version, 'size', v_up.size));
-    RETURN v_vid;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_finish_upload(p_upload uuid, p_sha256 text, p_max_storage bigint, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_guard_pinned_version() RETURNS trigger
     LANGUAGE plpgsql
@@ -5242,45 +6426,6 @@ CREATE FUNCTION fvoci.app_item_reference(p_item uuid) RETURNS text
 
 ALTER FUNCTION fvoci.app_item_reference(p_item uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_item_time(p_item uuid) RETURNS TABLE(entry_kind text, mine_seconds bigint, shared_seconds bigint, shared_people integer)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_ws uuid;
-  BEGIN
-    IF app_access('item', p_item) = 'none' THEN
-      RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
-    END IF;
-    SELECT workspace_id INTO v_ws FROM items WHERE id = p_item;
-    RETURN QUERY
-      WITH targets (target_kind, target_id) AS (
-        SELECT 'item'::text, p_item
-        UNION ALL SELECT 'task', t.id FROM tasks t WHERE t.item_id = p_item
-        UNION ALL SELECT 'document', d.id FROM documents d WHERE d.item_id = p_item
-        UNION ALL SELECT 'episode', c.id FROM course_episodes c WHERE c.item_id = p_item
-        UNION ALL SELECT 'study_unit', u.id FROM study_units u WHERE u.item_id = p_item
-      )
-      SELECT
-        e.kind,
-        coalesce(sum(app_entry_seconds(e)) FILTER (WHERE e.user_id = app_user_id()), 0)::bigint,
-        coalesce(sum(app_entry_seconds(e)) FILTER (WHERE s.user_id IS NOT NULL), 0)::bigint,
-        count(DISTINCT e.user_id) FILTER (WHERE s.user_id IS NOT NULL)::integer
-      FROM time_entries e
-      JOIN targets g ON g.target_kind = e.target_kind AND g.target_id = e.target_id
-      LEFT JOIN time_sharing s ON s.user_id = e.user_id AND s.workspace_id = v_ws
-        AND EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = v_ws AND m.user_id = e.user_id)
-      WHERE e.deleted_at IS NULL AND e.ended_at IS NOT NULL
-        -- 남의 기록은 공유한 사람 것만 센다(종류 줄도 만들지 않는다).
-        AND (e.user_id = app_user_id() OR s.user_id IS NOT NULL)
-      GROUP BY e.kind
-      ORDER BY e.kind;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_item_time(p_item uuid) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_items_versions() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'fvoci', 'pg_temp'
@@ -5369,7 +6514,7 @@ CREATE FUNCTION fvoci.app_lock_lane(p_status uuid) RETURNS void
   $$;
 
 
-ALTER FUNCTION fvoci.app_lock_lane(p_item uuid, p_status text) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_lock_lane(p_status uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_lock_live_workspace(p_ws uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -5464,7 +6609,7 @@ CREATE FUNCTION fvoci.app_lock_task_rows(p_ids uuid[], p_extra_status uuid) RETU
   $$;
 
 
-ALTER FUNCTION fvoci.app_lock_task_rows(p_ids uuid[], p_extra_status text) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_lock_task_rows(p_ids uuid[], p_extra_status uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_lock_tree(p_workspace uuid, p_item uuid, p_owner uuid) RETURNS void
     LANGUAGE sql SECURITY DEFINER
@@ -5477,17 +6622,6 @@ CREATE FUNCTION fvoci.app_lock_tree(p_workspace uuid, p_item uuid, p_owner uuid)
 
 
 ALTER FUNCTION fvoci.app_lock_tree(p_workspace uuid, p_item uuid, p_owner uuid) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_mark_notifications_read(p_id uuid) RETURNS void
-    LANGUAGE sql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-    UPDATE notifications SET read_at = now()
-    WHERE user_id = app_user_id() AND read_at IS NULL AND (p_id IS NULL OR id = p_id)
-  $$;
-
-
-ALTER FUNCTION fvoci.app_mark_notifications_read(p_id uuid) OWNER TO fvoci_migrator;
 
 -- 멤버십 정책에서 같은 테이블을 RLS로 다시 읽으면 재귀하므로 소유자 권한으로 현재 사용자의 역할만 확인한다.
 -- 현재 사용자의 워크스페이스 역할(관리자·멤버·읽기 전용, 표시용). 권한 판정은 역할이 아니라 app_access('workspace', …)로 한다.
@@ -5623,33 +6757,6 @@ CREATE FUNCTION fvoci.app_move_keeps_number(p_doc uuid, p_target uuid, p_item uu
 
 ALTER FUNCTION fvoci.app_move_keeps_number(p_doc uuid, p_target uuid, p_item uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) RETURNS TABLE(change text, display_name text)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_doc documents%ROWTYPE := app_check_move(p_doc, p_target, p_item);
-  BEGIN
-    RETURN QUERY
-    WITH old_set AS (
-      SELECT a.user_id AS uid FROM app_document_audience(v_doc.workspace_id, v_doc.item_id, v_doc.owner_user_id,
-                                                         v_doc.created_by, v_doc.visibility, p_doc) a
-    ), new_set AS (
-      SELECT a.user_id AS uid FROM app_document_audience(p_target, p_item, NULL, v_doc.created_by,
-                                                         v_doc.visibility, p_doc) a
-    )
-    SELECT 'gain'::text, u.display_name FROM new_set n JOIN users u ON u.id = n.uid
-      WHERE n.uid NOT IN (SELECT o.uid FROM old_set o)
-    UNION ALL
-    SELECT 'lose'::text, u.display_name FROM old_set o JOIN users u ON u.id = o.uid
-      WHERE o.uid NOT IN (SELECT n.uid FROM new_set n)
-    ORDER BY 1, 2;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) OWNER TO fvoci_migrator;
-
 -- 칸반 이동(D-79·D-89). 열은 항목의 상태 정의 이름이다(D-116). 활동 피드에 kanban_move를 남긴다(D-119).
 CREATE FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -5714,32 +6821,7 @@ CREATE FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p
   $$;
 
 
-ALTER FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_my_notifications(p_limit integer) RETURNS TABLE(id uuid, kind text, document_id uuid, task_id uuid, item_id uuid, comment_id uuid, actor_name text, detail jsonb, created_at timestamp with time zone, read_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-    -- 행위자 이름은 워크스페이스를 함께 쓰거나 그 개인 노트의 소유자일 때만 보인다(users RLS와 같은 기준).
-    SELECT n.id, n.kind, n.document_id, n.task_id, n.item_id, n.comment_id,
-           CASE WHEN n.actor IS NOT NULL AND (app_shares_organization(n.actor)
-                     OR (SELECT owner_user_id FROM documents WHERE id = n.document_id) = n.actor)
-                THEN u.display_name END,
-           CASE WHEN c.id IS NOT NULL AND c.deleted_at IS NULL
-                THEN n.detail || jsonb_build_object('excerpt', left(c.body, 140))
-                ELSE n.detail END,
-           n.created_at, n.read_at
-    FROM notifications n
-    LEFT JOIN users u ON u.id = n.actor
-    LEFT JOIN comments c ON c.id = n.comment_id
-    WHERE n.user_id = app_user_id()
-      AND app_notification_target_access(n.document_id, n.task_id, n.item_id, n.invitation_id) <> 'none'
-    ORDER BY n.created_at DESC, n.id DESC
-    LIMIT p_limit
-  $$;
-
-
-ALTER FUNCTION fvoci.app_my_notifications(p_limit integer) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_my_upload(p_upload uuid) RETURNS fvoci.uploads
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -5772,7 +6854,7 @@ CREATE FUNCTION fvoci.app_my_workspace_ids(p_organization uuid) RETURNS SETOF uu
   $$;
 
 
-ALTER FUNCTION fvoci.app_my_workspace_ids() OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_my_workspace_ids(p_organization uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_normalize_key(p_key text) RETURNS text
     LANGUAGE plpgsql IMMUTABLE
@@ -5792,47 +6874,6 @@ CREATE FUNCTION fvoci.app_normalize_key(p_key text) RETURNS text
 
 
 ALTER FUNCTION fvoci.app_normalize_key(p_key text) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_notify(p_id uuid, p_user uuid, p_kind text, p_document uuid, p_task uuid, p_comment uuid, p_actor uuid, p_detail jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  BEGIN
-    IF p_user IS NULL OR p_user = p_actor THEN
-      RETURN;
-    END IF;
-    IF (CASE WHEN p_document IS NOT NULL THEN app_access_as('document', p_document, p_user) ELSE app_access_as('task', p_task, p_user) END) = 'none' THEN
-      RETURN;
-    END IF;
-    INSERT INTO notifications (id, user_id, kind, document_id, task_id, comment_id, actor, detail)
-    VALUES (p_id, p_user, p_kind, p_document, p_task, p_comment, p_actor, coalesce(p_detail, '{}'::jsonb))
-    ON CONFLICT DO NOTHING;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_notify(p_id uuid, p_user uuid, p_kind text, p_document uuid, p_task uuid, p_comment uuid, p_actor uuid, p_detail jsonb) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_notify_item(p_id uuid, p_user uuid, p_kind text, p_item uuid, p_record uuid, p_detail jsonb) RETURNS boolean
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_count integer;
-  BEGIN
-    IF p_user IS NULL OR app_access_as('item', p_item, p_user) = 'none' THEN
-      RETURN false;
-    END IF;
-    INSERT INTO notifications (id, user_id, kind, item_id, record_id, actor, detail)
-    VALUES (p_id, p_user, p_kind, p_item, p_record, NULL, p_detail)
-    ON CONFLICT DO NOTHING;
-    GET DIAGNOSTICS v_count = ROW_COUNT;
-    RETURN v_count > 0;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_notify_item(p_id uuid, p_user uuid, p_kind text, p_item uuid, p_record uuid, p_detail jsonb) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_place_document(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -5959,25 +7000,6 @@ CREATE FUNCTION fvoci.app_projected_occurrences(p_workspace uuid, p_item uuid, p
 
 
 ALTER FUNCTION fvoci.app_projected_occurrences(p_workspace uuid, p_item uuid, p_from date, p_to date) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_public_document(p_token_hash bytea) RETURNS TABLE(title text, body jsonb, schema_version integer, updated_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-    SELECT d.title, d.body, d.schema_version, d.updated_at
-    FROM public_links l JOIN documents d ON d.id = l.document_id
-    WHERE l.token_hash = p_token_hash
-      AND l.revoked_at IS NULL
-      AND (l.expires_at IS NULL OR l.expires_at > now())
-      AND d.deleted_at IS NULL
-      -- 항목이나 그 모듈이 휴지통에 있으면 열리지 않는다.
-      AND NOT EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
-                      WHERE i.id = d.item_id AND (i.deleted_at IS NOT NULL OR m.deleted_at IS NOT NULL))
-      AND NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = d.workspace_id AND w.deleted_at IS NOT NULL)
-  $$;
-
-
-ALTER FUNCTION fvoci.app_public_document(p_token_hash bytea) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_purge_batch(p_batch uuid, p_ids uuid[]) RETURNS void
     LANGUAGE sql SECURITY DEFINER
@@ -6208,7 +7230,8 @@ CREATE FUNCTION fvoci.app_purge_workspace_as(p_ws uuid, p_system boolean, p_ids 
     -- 새 내용이 이 워크스페이스를 가리키며 들어오지 못하게 행을 잠근다(외래 키 공유 잠금과 충돌).
     SELECT * INTO v_ws FROM workspaces WHERE id = p_ws FOR UPDATE;
     IF v_ws.id IS NULL OR v_ws.deleted_at IS NULL
-       OR (NOT p_system AND v_ws.owner_id IS DISTINCT FROM app_user_id()) THEN
+       OR (NOT p_system AND v_ws.owner_id IS DISTINCT FROM app_user_id()
+           AND app_access('organization', v_ws.organization_id) <> 'owner') THEN
       RAISE EXCEPTION 'deleted workspace not found' USING ERRCODE = 'P0002';
     END IF;
     IF p_system AND v_ws.deleted_at + make_interval(days => v_ws.trash_retention_days) > now() THEN
@@ -6231,16 +7254,21 @@ CREATE FUNCTION fvoci.app_purge_workspace_as(p_ws uuid, p_system boolean, p_ids 
     DELETE FROM groups WHERE workspace_id = p_ws;
     DELETE FROM invitations WHERE workspace_id = p_ws;
     DELETE FROM ownership_offers WHERE workspace_id = p_ws;
-    DELETE FROM time_sharing WHERE workspace_id = p_ws;
     -- 개인 시간 기록은 남는다(대상 이름만 사라진다).
     UPDATE time_entries SET workspace_id = NULL WHERE workspace_id = p_ws;
-    -- 감사 기록은 소유자 영역으로 옮겨 남긴다.
-    UPDATE audit_log SET workspace_id = NULL, owner_user_id = coalesce(owner_user_id, v_ws.owner_id)
+    -- 공간 감사 기록은 소유자 영역으로 옮겨 남기고(조직 로그는 그대로), 활동 피드는 워크스페이스와 함께 지운다(FK).
+    UPDATE audit_log SET workspace_id = NULL, organization_id = NULL,
+                         owner_user_id = coalesce(owner_user_id, v_ws.owner_id)
     WHERE workspace_id = p_ws;
     DELETE FROM workspace_members WHERE workspace_id = p_ws;
     DELETE FROM workspaces WHERE id = p_ws;
-    INSERT INTO audit_log (id, workspace_id, owner_user_id, actor, action, target_type, target_id, detail)
-    VALUES (app_id(p_ids, 1), NULL, v_ws.owner_id, CASE WHEN p_system THEN NULL ELSE app_user_id() END, 'purge',
+    INSERT INTO audit_log (id, workspace_id, organization_id, owner_user_id, actor, action, target_type, target_id, detail)
+    VALUES (app_id(p_ids, 1), NULL, NULL, v_ws.owner_id, CASE WHEN p_system THEN NULL ELSE app_user_id() END, 'purge',
+            'workspace', p_ws,
+            jsonb_build_object('name', v_ws.name, 'deleted_at', v_ws.deleted_at)
+              || CASE WHEN p_system THEN jsonb_build_object('system', true, 'reason', 'retention')
+                      ELSE '{}'::jsonb END),
+           (app_id(p_ids, 2), NULL, v_ws.organization_id, NULL, CASE WHEN p_system THEN NULL ELSE app_user_id() END, 'purge',
             'workspace', p_ws,
             jsonb_build_object('name', v_ws.name, 'deleted_at', v_ws.deleted_at)
               || CASE WHEN p_system THEN jsonb_build_object('system', true, 'reason', 'retention')
@@ -6265,56 +7293,6 @@ CREATE FUNCTION fvoci.app_queue_version_deletion() RETURNS trigger
 
 ALTER FUNCTION fvoci.app_queue_version_deletion() OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolean, p_ids uuid[]) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_user     uuid := app_user_id();
-    v_body     jsonb;
-    v_revision integer;
-    v_previous jsonb;
-    v_uid      uuid;
-    v_new      integer;
-    v_at       integer := 0;
-  BEGIN
-    PERFORM app_require_document(p_doc, 'write');
-    SELECT body, revision INTO v_body, v_revision FROM documents WHERE id = p_doc;
-
-    DELETE FROM document_links WHERE document_id = p_doc;
-    INSERT INTO document_links (document_id, target_kind, target_id)
-    SELECT p_doc, r.kind, r.id FROM app_reference_nodes(v_body) r
-    WHERE r.kind IN ('item', 'document', 'task') AND NOT (r.kind = 'document' AND r.id = p_doc);
-
-    IF NOT p_notify THEN
-      RETURN;
-    END IF;
-    SELECT body INTO v_previous FROM document_revisions
-    WHERE document_id = p_doc AND revision = v_revision - 1;
-    FOR v_uid IN
-      SELECT r.id FROM app_reference_nodes(v_body) r JOIN users u ON u.id = r.id
-      WHERE r.kind = 'user' AND r.id <> v_user
-        AND NOT EXISTS (SELECT 1 FROM app_reference_nodes(coalesce(v_previous, '{}'::jsonb)) p
-                        WHERE p.kind = 'user' AND p.id = r.id)
-    LOOP
-      IF app_access_as('document', p_doc, v_uid) <> 'none' THEN
-        INSERT INTO document_mentions (document_id, user_id, mentioned_by)
-        VALUES (p_doc, v_uid, v_user)
-        ON CONFLICT DO NOTHING;
-        GET DIAGNOSTICS v_new = ROW_COUNT;
-        IF v_new > 0 THEN
-          v_at := v_at + 1;
-          INSERT INTO notifications (id, user_id, kind, document_id, actor)
-          VALUES (app_id(p_ids, v_at), v_uid, 'mention', p_doc, v_user);
-        END IF;
-      END IF;
-    END LOOP;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_record_document_references_ids(p_doc uuid, p_notify boolean) RETURNS integer
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -6326,27 +7304,6 @@ CREATE FUNCTION fvoci.app_record_document_references_ids(p_doc uuid, p_notify bo
 
 
 ALTER FUNCTION fvoci.app_record_document_references_ids(p_doc uuid, p_notify boolean) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  BEGIN
-    -- 가리키는 버전 행을 참조를 넣기 전에 공유 잠금한다.
-    PERFORM 1 FROM file_versions v
-    JOIN (SELECT DISTINCT r.file_id, r.version FROM app_file_refs(NEW.body) r) r
-      ON r.file_id = v.file_id AND r.version = v.version
-    ORDER BY v.id
-    FOR KEY SHARE OF v;
-    INSERT INTO document_file_refs (document_id, revision, file_id, version)
-    SELECT NEW.document_id, NEW.revision, r.file_id, r.version FROM app_file_refs(NEW.body) r
-    ON CONFLICT DO NOTHING;
-    RETURN NULL;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_record_file_refs() OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_record_part(p_upload uuid, p_number integer, p_size bigint, p_sha256 text, p_etag text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -6590,7 +7547,7 @@ CREATE FUNCTION fvoci.app_renumber_lane(p_status uuid) RETURNS void
   $$;
 
 
-ALTER FUNCTION fvoci.app_renumber_lane(p_item uuid, p_status text) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_renumber_lane(p_status uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_require_admin(p_workspace uuid) RETURNS uuid
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -6650,25 +7607,6 @@ CREATE FUNCTION fvoci.app_require_document(p_doc uuid, p_need text) RETURNS text
 
 
 ALTER FUNCTION fvoci.app_require_document(p_doc uuid, p_need text) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_require_document_manager(p_doc uuid) RETURNS void
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_access text := app_access('document', p_doc);
-  BEGIN
-    IF v_access = 'none' THEN
-      RAISE EXCEPTION 'document not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF v_access <> 'owner' THEN
-      RAISE EXCEPTION 'insufficient permission' USING ERRCODE = '42501';
-    END IF;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_require_document_manager(p_doc uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_require_event_write(p_event uuid) RETURNS void
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -6767,11 +7705,15 @@ CREATE FUNCTION fvoci.app_resolve_comment(p_comment uuid, p_resolved boolean) RE
     IF v_c.parent_id IS NOT NULL THEN
       RAISE EXCEPTION 'resolve the first comment of the thread' USING ERRCODE = '22023';
     END IF;
-    IF v_c.created_by <> app_user_id() AND v_access NOT IN ('owner', 'write') THEN
+    -- 보관과 직렬화(#86): 항목을 공유 잠금한 뒤 등급·보관을 다시 본다. 스레드 해결은 쓰기라 쓰기 등급이 필요하다(D-20).
+    PERFORM app_lock_item(coalesce((SELECT d.item_id FROM documents d WHERE d.id = v_c.document_id),
+                                   (SELECT t.item_id FROM tasks t WHERE t.id = v_c.task_id)));
+    v_access := app_comment_target_access(v_c.document_id, v_c.task_id);
+    IF v_access NOT IN ('owner', 'write') THEN
+      IF app_comment_target_archived(v_c.document_id, v_c.task_id) THEN
+        RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+      END IF;
       RAISE EXCEPTION 'read-only access' USING ERRCODE = '42501';
-    END IF;
-    IF app_comment_target_archived(v_c.document_id, v_c.task_id) THEN
-      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     UPDATE comments SET resolved_at = CASE WHEN p_resolved THEN now() END,
                         resolved_by = CASE WHEN p_resolved THEN app_user_id() END
@@ -6826,6 +7768,9 @@ CREATE FUNCTION fvoci.app_restore_batch(p_batch uuid, p_ids uuid[]) RETURNS void
     ELSIF v_batch.root_kind = 'event' THEN
       SELECT item_id INTO v_item FROM events WHERE id = v_batch.root_id FOR NO KEY UPDATE;
     ELSIF v_batch.root_kind = 'file' THEN
+      -- 붙은 문서 행을 먼저 공유 잠금한다(#87): 공유 철회·공개 링크 철회·문서 휴지통 이동은 문서 행을 FOR UPDATE로 잡으므로
+      -- 복원은 그 뒤에 지금 권한·휴지통 상태를 본다. 문서 → 파일 순서는 지우기(트리 → 문서 행 → 항목)와 같은 방향이다.
+      PERFORM 1 FROM documents WHERE id = (SELECT document_id FROM files WHERE id = v_batch.root_id) FOR SHARE;
       -- 항목 문서에 붙은 파일은 그 항목의 권한·보관을 본다.
       SELECT coalesce(f.item_id, d.item_id), f.document_id INTO v_item, v_file_doc
       FROM files f LEFT JOIN documents d ON d.id = f.document_id
@@ -6840,6 +7785,11 @@ CREATE FUNCTION fvoci.app_restore_batch(p_batch uuid, p_ids uuid[]) RETURNS void
       IF EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
                  WHERE i.id = v_batch.root_id AND m.deleted_at IS NOT NULL) THEN
         RAISE EXCEPTION 'restore the module first' USING ERRCODE = '55000';
+      END IF;
+      -- 보관된 모듈 아래에서는 항목도 복구하지 못한다. 모듈 보관을 푼 뒤 복구한다(D-113·D-125).
+      IF EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
+                 WHERE i.id = v_batch.root_id AND m.archived_at IS NOT NULL) THEN
+        RAISE EXCEPTION 'the module is archived' USING ERRCODE = '55000';
       END IF;
     END IF;
     IF v_item IS NOT NULL THEN
@@ -6963,27 +7913,6 @@ CREATE FUNCTION fvoci.app_restore_document_revision(p_doc uuid, p_revision integ
 
 
 ALTER FUNCTION fvoci.app_restore_document_revision(p_doc uuid, p_revision integer, p_request_id uuid, p_base_revision integer, p_schema_version integer, p_ids uuid[]) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_doc uuid;
-  BEGIN
-    SELECT document_id INTO v_doc FROM public_links WHERE id = p_link AND revoked_at IS NULL;
-    IF v_doc IS NULL OR app_access('document', v_doc) = 'none' THEN
-      RAISE EXCEPTION 'link not found' USING ERRCODE = 'P0002';
-    END IF;
-    PERFORM 1 FROM documents WHERE id = v_doc FOR UPDATE;
-    PERFORM app_require_document_manager(v_doc);
-    UPDATE public_links SET revoked_at = now() WHERE id = p_link;
-    PERFORM app_audit_document(app_id(p_ids, 1), v_doc, 'revoke_public_link', jsonb_build_object('link', p_link));
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_revoke_public_link(p_link uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_search_enqueue() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
@@ -7125,7 +8054,8 @@ CREATE FUNCTION fvoci.app_set_course_details(p_item uuid, p_subject text, p_inst
 
 ALTER FUNCTION fvoci.app_set_course_details(p_item uuid, p_subject text, p_instructor text, p_platform text, p_url text, p_textbook text, p_starts date, p_expires date, p_target date, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text) RETURNS void
+-- 표시 설정(D-50·D-81·D-109). 화면 밝기(theme)는 system·light·dark만 받고 "고르지 않음"이 없다.
+CREATE FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -7147,18 +8077,23 @@ CREATE FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_wee
     IF p_hour_cycle IS NOT NULL AND p_hour_cycle NOT IN ('', 'h12', 'h23') THEN
       RAISE EXCEPTION 'unknown hour cycle' USING ERRCODE = '22023';
     END IF;
+    -- 다른 칸과 달리 "고르지 않음"(빈 값)이 없다. 기본이 시스템 설정 따르기다.
+    IF p_theme IS NOT NULL AND p_theme NOT IN ('system', 'light', 'dark') THEN
+      RAISE EXCEPTION 'unknown theme' USING ERRCODE = '22023';
+    END IF;
     INSERT INTO user_settings (user_id) VALUES (app_user_id()) ON CONFLICT (user_id) DO NOTHING;
     UPDATE user_settings SET
       time_zone = coalesce(v_zone, time_zone),
       locale = coalesce(p_locale, locale),
       week_start = coalesce(p_week_start, week_start),
-      hour_cycle = coalesce(p_hour_cycle, hour_cycle)
+      hour_cycle = coalesce(p_hour_cycle, hour_cycle),
+      theme = coalesce(p_theme, theme)
     WHERE user_id = app_user_id();
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -7186,47 +8121,6 @@ CREATE FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_befor
 
 
 ALTER FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_doc        documents%ROWTYPE;
-    v_visibility text;
-    v_allow_copy boolean;
-  BEGIN
-    -- 행을 먼저 잠그고 권한을 본다. 동시에 이동된 문서에 이전 소유 권한으로 설정을 바꾸지 못하게 한다.
-    SELECT * INTO v_doc FROM documents WHERE id = p_doc FOR UPDATE;
-    PERFORM app_require_document_manager(p_doc);
-    -- 보내지 않은 칸은 잠근 뒤의 지금 값 그대로.
-    v_visibility := coalesce(p_visibility, v_doc.visibility);
-    v_allow_copy := coalesce(p_allow_copy, v_doc.allow_copy);
-    IF v_visibility NOT IN ('workspace', 'private') THEN
-      RAISE EXCEPTION 'invalid visibility' USING ERRCODE = '22023';
-    END IF;
-    IF v_doc.owner_user_id IS NOT NULL AND v_visibility <> 'private' THEN
-      RAISE EXCEPTION 'personal notes are always private' USING ERRCODE = '22023';
-    END IF;
-    IF app_access('document', p_doc) <> 'owner'
-       AND ((v_visibility = 'workspace' AND v_doc.visibility <> 'workspace')
-            OR (v_allow_copy AND NOT v_doc.allow_copy)) THEN
-      RAISE EXCEPTION 'archived documents can only be restricted' USING ERRCODE = '55000';
-    END IF;
-    UPDATE documents SET visibility = v_visibility, allow_copy = v_allow_copy WHERE id = p_doc;
-    IF v_doc.visibility IS DISTINCT FROM v_visibility THEN
-      PERFORM app_audit_document(app_id(p_ids, 1), p_doc, 'change_visibility',
-                                 jsonb_build_object('from', v_doc.visibility, 'to', v_visibility));
-    END IF;
-    IF v_doc.allow_copy IS DISTINCT FROM v_allow_copy THEN
-      PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'change_copy_policy',
-                                 jsonb_build_object('allow_copy', v_allow_copy));
-    END IF;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_set_document_template(p_doc uuid, p_template boolean, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
@@ -7376,7 +8270,7 @@ CREATE FUNCTION fvoci.app_set_group_member_ids(p_group uuid, p_member uuid, p_pr
     AS $$
     SELECT CASE WHEN app_access('workspace', g.workspace_id) <> 'owner' THEN 0
                 WHEN p_present THEN 1
-                ELSE 1 + app_unseen_assignees_bound(NULL, g.workspace_id, p_member) END
+                ELSE 1 + 2 * app_unseen_assignees_bound(NULL, g.workspace_id, p_member) END
     FROM groups g WHERE g.id = p_group
   $$;
 
@@ -7457,7 +8351,7 @@ CREATE FUNCTION fvoci.app_set_item_members_ids(p_item uuid) RETURNS integer
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     SELECT CASE WHEN app_access('item', p_item) <> 'owner' THEN 0
-                ELSE 1 + app_unseen_assignees_bound(p_item, NULL, NULL) END
+                ELSE 1 + 2 * app_unseen_assignees_bound(p_item, NULL, NULL) END
   $$;
 
 
@@ -7621,7 +8515,7 @@ CREATE FUNCTION fvoci.app_set_member_role_ids(p_workspace uuid, p_member uuid) R
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     SELECT CASE WHEN app_access('workspace', p_workspace) = 'owner'
-                THEN 1 + app_unseen_assignees_bound(NULL, p_workspace, p_member) ELSE 0 END
+                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member) ELSE 0 END
   $$;
 
 
@@ -7913,77 +8807,6 @@ CREATE FUNCTION fvoci.app_set_task_parent(p_task uuid, p_parent uuid, p_ids uuid
 
 ALTER FUNCTION fvoci.app_set_task_parent(p_task uuid, p_parent uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_task   tasks%ROWTYPE;
-    v_series task_series%ROWTYPE;
-    v_anchor date;
-    v_today  date;
-  BEGIN
-    PERFORM app_require_task_write(p_task);
-    IF p_rule IS NOT NULL THEN
-      PERFORM app_check_recurrence(p_rule);
-    END IF;
-    PERFORM app_check_timezone(p_timezone);
-    PERFORM app_lock_task_rows(ARRAY[p_task], NULL);
-    SELECT * INTO v_task FROM tasks WHERE id = p_task;
-    PERFORM app_lock_item(v_task.item_id);
-    PERFORM app_require_task_write(p_task);
-    v_today := (now() AT TIME ZONE p_timezone)::date;
-    IF v_task.series_id IS NOT NULL THEN
-      SELECT * INTO v_series FROM task_series WHERE id = v_task.series_id FOR UPDATE;
-      IF v_series.root_task_id <> p_task THEN
-        RAISE EXCEPTION 'change the recurrence on the first occurrence' USING ERRCODE = '22023';
-      END IF;
-      IF (p_rule ->> 'until')::date < v_series.anchor THEN
-        RAISE EXCEPTION 'until must not be before the first occurrence' USING ERRCODE = '22023';
-      END IF;
-      IF p_rule IS NOT NULL AND v_task.due_date IS NULL AND v_task.start_date IS NULL THEN
-        RAISE EXCEPTION 'a repeating task needs a date' USING ERRCODE = '22023';
-      END IF;
-      IF p_rule IS NOT NULL AND v_task.parent_id IS NOT NULL THEN
-        RAISE EXCEPTION 'only top-level tasks can repeat' USING ERRCODE = '22023';
-      END IF;
-      UPDATE task_series SET
-        rule = p_rule, timezone = p_timezone, updated_at = now(),
-        effective_from = CASE WHEN p_rule IS DISTINCT FROM v_series.rule
-                              THEN greatest(v_series.anchor, v_today) ELSE effective_from END
-      WHERE id = v_series.id;
-      PERFORM app_audit(app_id(p_ids, 2), v_task.workspace_id, 'set_recurrence', 'task', p_task,
-                        jsonb_build_object('from', v_series.rule, 'to', p_rule, 'timezone', p_timezone));
-      RETURN v_series.id;
-    END IF;
-    IF p_rule IS NULL THEN
-      RETURN NULL;
-    END IF;
-    IF v_task.parent_id IS NOT NULL THEN
-      RAISE EXCEPTION 'only top-level tasks can repeat' USING ERRCODE = '22023';
-    END IF;
-    v_anchor := coalesce(v_task.due_date, v_task.start_date);
-    IF v_anchor IS NULL THEN
-      RAISE EXCEPTION 'a repeating task needs a date' USING ERRCODE = '22023';
-    END IF;
-    IF (p_rule ->> 'until')::date < v_anchor THEN
-      RAISE EXCEPTION 'until must not be before the first occurrence' USING ERRCODE = '22023';
-    END IF;
-    INSERT INTO task_series (id, workspace_id, item_id, root_task_id, rule, timezone, anchor, effective_from,
-                             created_by)
-    VALUES (app_id(p_ids, 1), v_task.workspace_id, v_task.item_id, p_task, p_rule, p_timezone, v_anchor, v_anchor,
-            app_user_id())
-    RETURNING * INTO v_series;
-    UPDATE tasks SET series_id = v_series.id, occurrence_date = v_anchor WHERE id = p_task;
-    PERFORM app_audit(app_id(p_ids, 2), v_task.workspace_id, 'set_recurrence', 'task', p_task,
-                      jsonb_build_object('from', NULL, 'to', p_rule, 'timezone', p_timezone));
-    RETURN v_series.id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_ids uuid[]) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_set_trash_retention(p_workspace uuid, p_days integer, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -8099,52 +8922,6 @@ CREATE FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boo
 
 ALTER FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_email text := lower(btrim(p_email));
-    v_id    uuid;
-  BEGIN
-    PERFORM 1 FROM documents WHERE id = p_doc FOR UPDATE;
-    PERFORM app_require_document(p_doc, 'owner');
-    IF p_permission NOT IN ('read', 'write') THEN
-      RAISE EXCEPTION 'invalid permission' USING ERRCODE = '22023';
-    END IF;
-    IF position('@' in v_email) < 2 THEN
-      RAISE EXCEPTION 'invalid email' USING ERRCODE = '22023';
-    END IF;
-    INSERT INTO document_shares (id, document_id, grantee_email, permission, granted_by)
-    VALUES (app_id(p_ids, 1), p_doc, v_email, p_permission, app_user_id())
-    ON CONFLICT ON CONSTRAINT document_shares_target
-      DO UPDATE SET permission = EXCLUDED.permission, granted_by = EXCLUDED.granted_by
-    RETURNING id INTO v_id;
-    PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'share',
-                               jsonb_build_object('email', v_email, 'permission', p_permission));
-    RETURN v_id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_ids uuid[]) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_shared_with_me() RETURNS TABLE(id uuid, title text, permission text, shared_by text, updated_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-    SELECT d.id, d.title, s.permission, granter.display_name, d.updated_at
-    FROM document_shares s
-    JOIN users me ON me.id = app_user_id() AND me.email_verified AND lower(me.email) = s.grantee_email
-    JOIN documents d ON d.id = s.document_id
-    JOIN users granter ON granter.id = s.granted_by
-    WHERE app_access('document', d.id) <> 'none'
-    ORDER BY d.updated_at DESC
-  $$;
-
-
-ALTER FUNCTION fvoci.app_shared_with_me() OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_shift_excluded_dates() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'fvoci', 'pg_temp'
@@ -8188,43 +8965,6 @@ CREATE FUNCTION fvoci.app_shift_target(p_from uuid, p_task uuid, p_include_from 
 
 
 ALTER FUNCTION fvoci.app_shift_target(p_from uuid, p_task uuid, p_include_from boolean) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_user uuid := app_user_id();
-    v_id   uuid;
-    v_ws   uuid;
-  BEGIN
-    IF v_user IS NULL THEN
-      RAISE EXCEPTION 'sign in required' USING ERRCODE = '42501';
-    END IF;
-    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
-    IF v_id IS NOT NULL THEN
-      RETURN v_id;
-    END IF;
-    v_ws := app_time_target_workspace(p_target_kind, p_target);
-    -- 같은 사용자의 시작 요청을 줄 세운다(하나만 진행 중이라는 규칙을 고유 색인과 함께 지킨다).
-    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-timer:' || v_user::text, 0));
-    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
-    IF v_id IS NOT NULL THEN
-      RETURN v_id;
-    END IF;
-    IF EXISTS (SELECT 1 FROM time_entries WHERE user_id = v_user AND ended_at IS NULL AND deleted_at IS NULL) THEN
-      RAISE EXCEPTION 'a timer is already running' USING ERRCODE = '55000';
-    END IF;
-    INSERT INTO time_entries (id, user_id, started_at, kind, memo, target_kind, target_id, workspace_id, request_id)
-    VALUES (app_id(p_ids, 1), v_user, now(), p_kind, coalesce(p_memo, ''), p_target_kind, p_target, v_ws,
-            p_request_id)
-    RETURNING id INTO v_id;
-    RETURN v_id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_storage_used(p_workspace uuid, p_owner uuid, p_except uuid) RETURNS bigint
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -8390,8 +9130,12 @@ CREATE FUNCTION fvoci.app_sync_task_series_as(p_series uuid, p_system boolean, p
     SELECT * INTO v_series FROM task_series WHERE id = p_series;
     -- 작업 프로세스는 만든 사람 이름으로 회차를 만들고 감사 기록에는 system으로 남긴다.
     v_user := coalesce(v_user, v_series.created_by);
+    -- 잠근 뒤의 상태로 다시 본다: 규칙·날짜·휴지통(루트 업무·항목·모듈·워크스페이스)·보관.
     IF v_series.rule IS NULL OR (v_root.due_date IS NULL AND v_root.start_date IS NULL)
-       OR v_root.deleted_at IS NOT NULL OR app_item_archived(v_root.item_id) THEN
+       OR v_root.deleted_at IS NOT NULL OR app_item_archived(v_root.item_id)
+       OR EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id JOIN workspaces w ON w.id = i.workspace_id
+                  WHERE i.id = v_root.item_id
+                    AND (i.deleted_at IS NOT NULL OR m.deleted_at IS NOT NULL OR w.deleted_at IS NOT NULL)) THEN
       RETURN 0;
     END IF;
     v_today := (now() AT TIME ZONE v_series.timezone)::date;
@@ -8413,13 +9157,14 @@ CREATE FUNCTION fvoci.app_sync_task_series_as(p_series uuid, p_system boolean, p
     LOOP
       v_id := app_id(p_ids, v_at + 1);
       INSERT INTO tasks (id, workspace_id, item_id, number, title, description, status_id, priority, start_date,
-                         due_date, estimate_minutes, tags, milestone, position, created_by, updated_by, request_id,
-                         series_id, occurrence_date)
+                         due_date, estimate_minutes, tags, milestone, position, completed_at, created_by, updated_by,
+                         request_id, series_id, occurrence_date)
       VALUES (v_id, v_root.workspace_id, v_root.item_id,
               app_allocate_number(v_root.workspace_id, v_module, 'task', v_id),
               v_root.title, v_root.description, v_todo, v_root.priority,
               v_root.start_date + (v_date - v_series.anchor), v_root.due_date + (v_date - v_series.anchor),
               v_root.estimate_minutes, v_root.tags, v_root.milestone, app_task_lane_end(v_todo),
+              CASE WHEN (SELECT category FROM task_statuses WHERE id = v_todo) = 'done' THEN now() END,
               v_user, v_user, app_id(p_ids, v_at + 2), p_series, v_date)
       ON CONFLICT (series_id, occurrence_date) DO NOTHING;
       v_at := v_at + 2;
@@ -8745,9 +9490,10 @@ CREATE FUNCTION fvoci.app_system_purge_expired(p_ids uuid[]) RETURNS integer
       WHERE deleted_at IS NOT NULL AND deleted_at + make_interval(days => trash_retention_days) <= now()
       ORDER BY deleted_at
     LOOP
-      v_at := v_at + 1;
+      -- 워크스페이스마다 새 id 둘(소유자 로그·조직 로그).
+      v_at := v_at + 2;
       BEGIN
-        IF app_purge_workspace_as(v_ws, true, ARRAY[app_id(p_ids, v_at)]) THEN
+        IF app_purge_workspace_as(v_ws, true, ARRAY[app_id(p_ids, v_at - 1), app_id(p_ids, v_at)]) THEN
           v_made := v_made + 1;
         END IF;
       EXCEPTION WHEN OTHERS THEN
@@ -8780,7 +9526,7 @@ CREATE FUNCTION fvoci.app_system_purge_expired_ids() RETURNS integer
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     SELECT CASE WHEN app_user_id() IS NOT NULL THEN 0 ELSE
-      (SELECT count(*) FROM workspaces
+      2 * (SELECT count(*) FROM workspaces
        WHERE deleted_at IS NOT NULL AND deleted_at + make_interval(days => trash_retention_days) <= now())::integer
       + (SELECT count(*) FROM trash_batches b
          WHERE b.restored_at IS NULL AND b.purged_at IS NULL AND app_trash_expires_at(b) <= now())::integer
@@ -8837,9 +9583,10 @@ CREATE FUNCTION fvoci.app_system_recurrence_due() RETURNS SETOF uuid
     SELECT s.id FROM task_series s
     JOIN tasks r ON r.id = s.root_task_id
     JOIN items i ON i.id = s.item_id
+    JOIN modules m ON m.id = i.module_id
     JOIN workspaces w ON w.id = s.workspace_id
     WHERE app_user_id() IS NULL AND s.rule IS NOT NULL AND r.deleted_at IS NULL AND i.deleted_at IS NULL
-      AND w.deleted_at IS NULL
+      AND m.deleted_at IS NULL AND w.deleted_at IS NULL
     ORDER BY s.item_id, s.id
   $$;
 
@@ -9177,7 +9924,7 @@ CREATE FUNCTION fvoci.app_task_lane_end(p_status uuid) RETURNS numeric
   $$;
 
 
-ALTER FUNCTION fvoci.app_task_lane_end(p_item uuid, p_status text) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_task_lane_end(p_status uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_task_reference(p_task uuid) RETURNS text
     LANGUAGE sql STABLE
@@ -9227,32 +9974,6 @@ CREATE FUNCTION fvoci.app_task_series_bound(p_series uuid) RETURNS integer
 
 
 ALTER FUNCTION fvoci.app_task_series_bound(p_series uuid) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_task_time(p_task uuid) RETURNS TABLE(mine_seconds bigint, shared_seconds bigint, shared_people integer)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_ws uuid;
-  BEGIN
-    IF app_access('task', p_task) = 'none' THEN
-      RAISE EXCEPTION 'task not found' USING ERRCODE = 'P0002';
-    END IF;
-    SELECT workspace_id INTO v_ws FROM tasks WHERE id = p_task;
-    RETURN QUERY
-      SELECT
-        coalesce(sum(app_entry_seconds(e)) FILTER (WHERE e.user_id = app_user_id() AND e.ended_at IS NOT NULL), 0)::bigint,
-        coalesce(sum(app_entry_seconds(e)) FILTER (WHERE s.user_id IS NOT NULL AND e.ended_at IS NOT NULL), 0)::bigint,
-        count(DISTINCT e.user_id) FILTER (WHERE s.user_id IS NOT NULL AND e.ended_at IS NOT NULL)::integer
-      FROM time_entries e
-      LEFT JOIN time_sharing s ON s.user_id = e.user_id AND s.workspace_id = v_ws
-        AND EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = v_ws AND m.user_id = e.user_id)
-      WHERE e.target_kind = 'task' AND e.target_id = p_task AND e.deleted_at IS NULL;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_task_time(p_task uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_tasks_move_version() RETURNS trigger
     LANGUAGE plpgsql
@@ -9675,28 +10396,6 @@ CREATE FUNCTION fvoci.app_unseen_assignees_bound(p_item uuid, p_workspace uuid, 
 
 ALTER FUNCTION fvoci.app_unseen_assignees_bound(p_item uuid, p_workspace uuid, p_user uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_unshare_document(p_share uuid, p_ids uuid[]) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_share document_shares%ROWTYPE;
-  BEGIN
-    SELECT * INTO v_share FROM document_shares WHERE id = p_share;
-    PERFORM 1 FROM documents WHERE id = v_share.document_id FOR UPDATE;
-    IF v_share.id IS NULL OR app_access('document', v_share.document_id) = 'none' THEN
-      RAISE EXCEPTION 'share not found' USING ERRCODE = 'P0002';
-    END IF;
-    PERFORM app_require_document_manager(v_share.document_id);
-    DELETE FROM document_shares WHERE id = p_share;
-    PERFORM app_audit_document(app_id(p_ids, 1), v_share.document_id, 'unshare',
-                               jsonb_build_object('email', v_share.grantee_email));
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_unshare_document(p_share uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
-
 CREATE FUNCTION fvoci.app_update_checklist_item(p_id uuid, p_text text, p_checked boolean) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -9855,7 +10554,7 @@ CREATE FUNCTION fvoci.app_update_item_ids(p_item uuid) RETURNS integer
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     SELECT CASE WHEN app_access('item', p_item) = 'none' THEN 0
-                ELSE 2 + app_unseen_assignees_bound(p_item, NULL, NULL) END
+                ELSE 2 + 2 * app_unseen_assignees_bound(p_item, NULL, NULL) END
   $$;
 
 
@@ -9999,6 +10698,10 @@ CREATE FUNCTION fvoci.app_update_task(p_task uuid, p_base_version integer, p_tit
     END IF;
     -- 상태는 항목의 상태 정의 이름이다(D-116).
     v_status := app_task_status_by_name((SELECT item_id FROM tasks WHERE id = p_task), p_status);
+    -- 담당자 후보의 멤버 행을 id 순으로 먼저 공유 잠금한다(멤버 행 → 열 → 항목 행: 내보내기·역할 변경과 같은 순서).
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = (SELECT workspace_id FROM tasks WHERE id = p_task) AND user_id = ANY (coalesce(p_assignees, '{}'))
+    ORDER BY user_id FOR SHARE;
     -- 이 업무와 옮길 후속 업무(같은 항목만, 다른 항목 id는 잠그지 않고 아래에서 거부)를 열 → 행 순으로 잠근다.
     SELECT array_agg(id) INTO v_lock FROM tasks
     WHERE id = ANY (coalesce(v_ids, '{}')) AND item_id = (SELECT item_id FROM tasks WHERE id = p_task);
@@ -10599,6 +11302,9 @@ ALTER TABLE ONLY fvoci.task_series
     ADD CONSTRAINT task_series_root_task_id_key UNIQUE (root_task_id);
 
 ALTER TABLE ONLY fvoci.task_statuses
+    ADD CONSTRAINT task_statuses_item UNIQUE (id, item_id);
+
+ALTER TABLE ONLY fvoci.task_statuses
     ADD CONSTRAINT task_statuses_item_name UNIQUE (item_id, name);
 
 ALTER TABLE ONLY fvoci.task_statuses
@@ -10797,7 +11503,7 @@ CREATE INDEX task_dependencies_successor ON fvoci.task_dependencies USING btree 
 
 CREATE INDEX task_series_item ON fvoci.task_series USING btree (item_id);
 
-CREATE INDEX task_statuses_item ON fvoci.task_statuses USING btree (item_id, "position");
+CREATE INDEX task_statuses_item_position ON fvoci.task_statuses USING btree (item_id, "position");
 
 CREATE INDEX tasks_due ON fvoci.tasks USING btree (due_date) WHERE (due_date IS NOT NULL);
 
@@ -10884,6 +11590,8 @@ CREATE TRIGGER task_assignees_search AFTER INSERT OR DELETE ON fvoci.task_assign
 CREATE TRIGGER tasks_move_version BEFORE UPDATE ON fvoci.tasks FOR EACH ROW EXECUTE FUNCTION fvoci.app_tasks_move_version();
 
 CREATE TRIGGER tasks_search AFTER INSERT OR DELETE OR UPDATE OF title, description, deleted_at, status_id, item_id, due_date, start_date ON fvoci.tasks FOR EACH ROW EXECUTE FUNCTION fvoci.app_search_enqueue('task');
+
+CREATE TRIGGER task_statuses_search AFTER UPDATE OF name, category ON fvoci.task_statuses FOR EACH ROW EXECUTE FUNCTION fvoci.app_search_enqueue_status_tasks();
 
 CREATE TRIGGER tasks_series_root_guard BEFORE UPDATE OF parent_id, start_date, due_date ON fvoci.tasks FOR EACH ROW EXECUTE FUNCTION fvoci.app_guard_series_root();
 
@@ -11261,6 +11969,8 @@ ALTER TABLE ONLY fvoci.tasks
     ADD CONSTRAINT tasks_series_id_fkey FOREIGN KEY (series_id) REFERENCES fvoci.task_series(id);
 ALTER TABLE ONLY fvoci.tasks
     ADD CONSTRAINT tasks_status_id_fkey FOREIGN KEY (status_id) REFERENCES fvoci.task_statuses(id);
+ALTER TABLE ONLY fvoci.tasks
+    ADD CONSTRAINT tasks_status_item FOREIGN KEY (status_id, item_id) REFERENCES fvoci.task_statuses(id, item_id);
 
 ALTER TABLE ONLY fvoci.tasks
     ADD CONSTRAINT tasks_trash_batch_id_fkey FOREIGN KEY (trash_batch_id) REFERENCES fvoci.trash_batches(id);
@@ -11333,28 +12043,36 @@ ALTER TABLE ONLY fvoci.workspaces
 
 -- RLS·정책. 앱은 소유자가 아니며 사용자 문맥이 없으면 사용자 데이터에 접근할 수 없다.
 -- 소유자 함수가 권한을 확인하고 변경하므로 FORCE ROW LEVEL SECURITY를 추가하지 않는다(D-08).
+-- 읽기 범위는 모두 app_access(kind, id) 하나에서 나온다(D-113). 조직 경계(D-111)는 그 안에 있다.
+
+ALTER TABLE fvoci.activity ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY activity_select ON fvoci.activity FOR SELECT USING ((fvoci.app_access(target_kind, target_id) <> 'none'::text));
 
 ALTER TABLE fvoci.audit_log ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY audit_log_insert ON fvoci.audit_log FOR INSERT WITH CHECK (((actor = fvoci.app_user_id()) AND ((workspace_id IS NULL) OR (fvoci.app_access('workspace', workspace_id) <> 'none'))));
+CREATE POLICY audit_log_insert ON fvoci.audit_log FOR INSERT WITH CHECK (((actor = fvoci.app_user_id()) AND ((workspace_id IS NULL) OR (fvoci.app_access('workspace'::text, workspace_id) <> 'none'::text))));
 
-CREATE POLICY audit_log_select ON fvoci.audit_log FOR SELECT USING (((fvoci.app_access('workspace', workspace_id) = 'owner'::text) OR (owner_user_id = fvoci.app_user_id())));
+-- 공간 로그는 공간 관리자, 조직 로그는 조직 관리자, 서버 로그는 서버 관리자, 개인 로그는 소유자가 본다(D-57·D-112).
+CREATE POLICY audit_log_select ON fvoci.audit_log FOR SELECT USING ((((workspace_id IS NOT NULL) AND (fvoci.app_access('workspace'::text, workspace_id) = 'owner'::text)) OR ((workspace_id IS NULL) AND (organization_id IS NOT NULL) AND (fvoci.app_access('organization'::text, organization_id) = 'owner'::text)) OR (owner_user_id = fvoci.app_user_id()) OR ((workspace_id IS NULL) AND (organization_id IS NULL) AND (owner_user_id IS NULL) AND fvoci.app_is_server_admin())));
 
 ALTER TABLE fvoci.checklist_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY checklist_items_select ON fvoci.checklist_items FOR SELECT USING ((fvoci.app_access('task', task_id) <> 'none'));
+CREATE POLICY checklist_items_select ON fvoci.checklist_items FOR SELECT USING ((fvoci.app_access('task'::text, task_id) <> 'none'::text));
 
 ALTER TABLE fvoci.comments ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY comments_select ON fvoci.comments FOR SELECT USING ((fvoci.app_comment_target_access(document_id, task_id) IS NOT NULL));
+CREATE POLICY comments_select ON fvoci.comments FOR SELECT USING ((fvoci.app_access('comment'::text, id) <> 'none'::text));
 
 ALTER TABLE fvoci.course_details ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY course_details_select ON fvoci.course_details FOR SELECT USING ((fvoci.app_access('item', item_id) <> 'none'));
+CREATE POLICY course_details_select ON fvoci.course_details FOR SELECT USING ((fvoci.app_access('item'::text, item_id) <> 'none'::text));
 
 ALTER TABLE fvoci.course_episodes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY course_episodes_select ON fvoci.course_episodes FOR SELECT USING ((fvoci.app_access('item', item_id) <> 'none'));
+CREATE POLICY course_episodes_select ON fvoci.course_episodes FOR SELECT USING ((fvoci.app_access('item'::text, item_id) <> 'none'::text));
+
+ALTER TABLE fvoci.document_collab_file_refs ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.document_collab_states ENABLE ROW LEVEL SECURITY;
 
@@ -11362,13 +12080,13 @@ ALTER TABLE fvoci.document_file_refs ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.document_links ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY document_links_select ON fvoci.document_links FOR SELECT USING ((fvoci.app_access('document', document_id) <> 'none'));
+CREATE POLICY document_links_select ON fvoci.document_links FOR SELECT USING ((fvoci.app_access('document'::text, document_id) <> 'none'::text));
 
 ALTER TABLE fvoci.document_mentions ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.document_revisions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY document_revisions_insert ON fvoci.document_revisions FOR INSERT WITH CHECK (((author = fvoci.app_user_id()) AND (fvoci.app_access('document', document_id) = ANY (ARRAY['owner'::text, 'write'::text]))));
+CREATE POLICY document_revisions_insert ON fvoci.document_revisions FOR INSERT WITH CHECK (((author = fvoci.app_user_id()) AND (fvoci.app_access('document'::text, document_id) = ANY (ARRAY['owner'::text, 'write'::text]))));
 
 CREATE POLICY document_revisions_select ON fvoci.document_revisions FOR SELECT USING ((EXISTS ( SELECT 1
    FROM fvoci.documents d
@@ -11376,29 +12094,30 @@ CREATE POLICY document_revisions_select ON fvoci.document_revisions FOR SELECT U
 
 ALTER TABLE fvoci.document_shares ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY document_shares_select ON fvoci.document_shares FOR SELECT USING ((fvoci.app_access('document', document_id) = 'owner'::text));
+CREATE POLICY document_shares_select ON fvoci.document_shares FOR SELECT USING ((fvoci.app_access('document'::text, document_id) = 'owner'::text));
 
 ALTER TABLE fvoci.documents ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY documents_select ON fvoci.documents FOR SELECT USING ((fvoci.app_access('document', id) <> 'none'));
+CREATE POLICY documents_select ON fvoci.documents FOR SELECT USING ((fvoci.app_access('document'::text, id) <> 'none'::text));
 
-CREATE POLICY documents_update ON fvoci.documents FOR UPDATE USING ((fvoci.app_access('document', id) = ANY (ARRAY['owner'::text, 'write'::text]))) WITH CHECK (((fvoci.app_access('document', id) = ANY (ARRAY['owner'::text, 'write'::text])) AND (updated_by = fvoci.app_user_id())));
+CREATE POLICY documents_update ON fvoci.documents FOR UPDATE USING ((fvoci.app_access('document'::text, id) = ANY (ARRAY['owner'::text, 'write'::text]))) WITH CHECK (((fvoci.app_access('document'::text, id) = ANY (ARRAY['owner'::text, 'write'::text])) AND (updated_by = fvoci.app_user_id())));
 
 ALTER TABLE fvoci.episode_progress ENABLE ROW LEVEL SECURITY;
 
+-- 개인 진도 원시 행은 본인만 읽는다(D-37·D-78). 공유되는 것은 app_course_participants의 집계뿐이다.
 CREATE POLICY episode_progress_select ON fvoci.episode_progress FOR SELECT USING ((user_id = fvoci.app_user_id()));
 
 ALTER TABLE fvoci.events ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY events_select ON fvoci.events FOR SELECT USING ((fvoci.app_access('event', id) <> 'none'));
+CREATE POLICY events_select ON fvoci.events FOR SELECT USING ((fvoci.app_access('event'::text, id) <> 'none'::text));
 
 ALTER TABLE fvoci.file_versions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY file_versions_select ON fvoci.file_versions FOR SELECT USING ((fvoci.app_access('file', file_id) <> 'none'));
+CREATE POLICY file_versions_select ON fvoci.file_versions FOR SELECT USING ((fvoci.app_access('file'::text, file_id) <> 'none'::text));
 
 ALTER TABLE fvoci.files ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY files_select ON fvoci.files FOR SELECT USING ((fvoci.app_access('file', id) <> 'none'));
+CREATE POLICY files_select ON fvoci.files FOR SELECT USING ((fvoci.app_access('file'::text, id) <> 'none'::text));
 
 ALTER TABLE fvoci.group_members ENABLE ROW LEVEL SECURITY;
 
@@ -11408,55 +12127,66 @@ CREATE POLICY group_members_select ON fvoci.group_members FOR SELECT USING ((EXI
 
 ALTER TABLE fvoci.groups ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY groups_select ON fvoci.groups FOR SELECT USING ((fvoci.app_access('workspace', workspace_id) <> 'none'));
+CREATE POLICY groups_select ON fvoci.groups FOR SELECT USING ((fvoci.app_access('workspace'::text, workspace_id) <> 'none'::text));
 
 ALTER TABLE fvoci.instance_state ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.invitations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY invitations_select ON fvoci.invitations FOR SELECT USING ((fvoci.app_access('workspace', workspace_id) = 'owner'::text));
+CREATE POLICY invitations_select ON fvoci.invitations FOR SELECT USING ((((workspace_id IS NOT NULL) AND (fvoci.app_access('workspace'::text, workspace_id) = 'owner'::text)) OR ((workspace_id IS NULL) AND (fvoci.app_access('organization'::text, organization_id) = 'owner'::text))));
 
 ALTER TABLE fvoci.item_members ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY item_members_select ON fvoci.item_members FOR SELECT USING ((fvoci.app_access('item', item_id) <> 'none'));
+CREATE POLICY item_members_select ON fvoci.item_members FOR SELECT USING ((fvoci.app_access('item'::text, item_id) <> 'none'::text));
 
 ALTER TABLE fvoci.item_records ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY item_records_select ON fvoci.item_records FOR SELECT USING ((fvoci.app_access('item', item_id) <> 'none'));
+CREATE POLICY item_records_select ON fvoci.item_records FOR SELECT USING ((fvoci.app_access('item'::text, item_id) <> 'none'::text));
 
 ALTER TABLE fvoci.items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY items_select ON fvoci.items FOR SELECT USING ((fvoci.app_access('item', id) <> 'none'));
+CREATE POLICY items_select ON fvoci.items FOR SELECT USING ((fvoci.app_access('item'::text, id) <> 'none'::text));
 
 ALTER TABLE fvoci.module_keys ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY module_keys_select ON fvoci.module_keys FOR SELECT USING ((fvoci.app_access('workspace', workspace_id) <> 'none'));
+CREATE POLICY module_keys_select ON fvoci.module_keys FOR SELECT USING ((fvoci.app_access('workspace'::text, workspace_id) <> 'none'::text));
 
 ALTER TABLE fvoci.modules ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY modules_select ON fvoci.modules FOR SELECT USING (((fvoci.app_access('workspace', workspace_id) <> 'none') AND (deleted_at IS NULL)));
+CREATE POLICY modules_select ON fvoci.modules FOR SELECT USING (((fvoci.app_access('workspace'::text, workspace_id) <> 'none'::text) AND (deleted_at IS NULL)));
 
 ALTER TABLE fvoci.notifications ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY notifications_select ON fvoci.notifications FOR SELECT USING (((user_id = fvoci.app_user_id()) AND (fvoci.app_notification_target_access(document_id, task_id, item_id) IS NOT NULL)));
+CREATE POLICY notifications_select ON fvoci.notifications FOR SELECT USING (((user_id = fvoci.app_user_id()) AND fvoci.app_notification_visible(document_id, task_id, item_id, invitation_id)));
 
 ALTER TABLE fvoci.numbered_targets ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY numbered_targets_select ON fvoci.numbered_targets FOR SELECT USING (
 CASE target_kind
-    WHEN 'item'::text THEN (fvoci.app_access('item', target_id) <> 'none')
-    WHEN 'document'::text THEN (fvoci.app_access('document', target_id) <> 'none')
-    WHEN 'task'::text THEN (fvoci.app_access('task', target_id) <> 'none')
+    WHEN 'item'::text THEN (fvoci.app_access('item'::text, target_id) <> 'none'::text)
+    WHEN 'document'::text THEN (fvoci.app_access('document'::text, target_id) <> 'none'::text)
+    WHEN 'task'::text THEN (fvoci.app_access('task'::text, target_id) <> 'none'::text)
     ELSE false
 END);
 
+ALTER TABLE fvoci.oidc_login_states ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE fvoci.organization_members ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY organization_members_select ON fvoci.organization_members FOR SELECT USING ((fvoci.app_access('organization'::text, organization_id) <> 'none'::text));
+
+ALTER TABLE fvoci.organizations ENABLE ROW LEVEL SECURITY;
+
+-- 조직 행은 그 조직의 멤버와 서버 관리자(메타데이터만, D-112)가 본다.
+CREATE POLICY organizations_select ON fvoci.organizations FOR SELECT USING (((fvoci.app_access('organization'::text, id) <> 'none'::text) OR fvoci.app_is_server_admin()));
+
 ALTER TABLE fvoci.ownership_offers ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY ownership_offers_select ON fvoci.ownership_offers FOR SELECT USING ((fvoci.app_access('workspace', workspace_id) <> 'none'));
+CREATE POLICY ownership_offers_select ON fvoci.ownership_offers FOR SELECT USING ((fvoci.app_access('workspace'::text, workspace_id) <> 'none'::text));
 
 ALTER TABLE fvoci.public_links ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY public_links_select ON fvoci.public_links FOR SELECT USING ((fvoci.app_access('document', document_id) = 'owner'::text));
+CREATE POLICY public_links_select ON fvoci.public_links FOR SELECT USING ((fvoci.app_access('document'::text, document_id) = 'owner'::text));
 
 ALTER TABLE fvoci.record_files ENABLE ROW LEVEL SECURITY;
 
@@ -11466,15 +12196,23 @@ CREATE POLICY record_files_select ON fvoci.record_files FOR SELECT USING ((EXIST
 
 ALTER TABLE fvoci.reference_counters ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY reference_counters_all ON fvoci.reference_counters USING ((fvoci.app_access('workspace', workspace_id) = ANY (ARRAY['owner'::text, 'write'::text]))) WITH CHECK ((fvoci.app_access('workspace', workspace_id) = ANY (ARRAY['owner'::text, 'write'::text])));
+CREATE POLICY reference_counters_all ON fvoci.reference_counters USING ((fvoci.app_access('workspace'::text, workspace_id) = ANY (ARRAY['owner'::text, 'write'::text]))) WITH CHECK ((fvoci.app_access('workspace'::text, workspace_id) = ANY (ARRAY['owner'::text, 'write'::text])));
 
 ALTER TABLE fvoci.saved_views ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY saved_views_select ON fvoci.saved_views FOR SELECT USING (((user_id = fvoci.app_user_id()) AND (fvoci.app_access('item', item_id) <> 'none')));
+CREATE POLICY saved_views_select ON fvoci.saved_views FOR SELECT USING (((user_id = fvoci.app_user_id()) AND (fvoci.app_access('item'::text, item_id) <> 'none'::text)));
+
+ALTER TABLE fvoci.scheduled_runs ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.search_queue ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY search_queue_none ON fvoci.search_queue FOR SELECT USING (false);
+
+ALTER TABLE fvoci.server_admins ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY server_admins_select ON fvoci.server_admins FOR SELECT USING (fvoci.app_is_server_admin());
+
+ALTER TABLE fvoci.sessions ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.storage_deletions ENABLE ROW LEVEL SECURITY;
 
@@ -11482,35 +12220,36 @@ CREATE POLICY storage_deletions_none ON fvoci.storage_deletions FOR SELECT USING
 
 ALTER TABLE fvoci.study_units ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY study_units_select ON fvoci.study_units FOR SELECT USING ((fvoci.app_access('item', item_id) <> 'none'));
+CREATE POLICY study_units_select ON fvoci.study_units FOR SELECT USING ((fvoci.app_access('item'::text, item_id) <> 'none'::text));
 
 ALTER TABLE fvoci.task_assignees ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY task_assignees_select ON fvoci.task_assignees FOR SELECT USING ((fvoci.app_access('task', task_id) <> 'none'));
+CREATE POLICY task_assignees_select ON fvoci.task_assignees FOR SELECT USING ((fvoci.app_access('task'::text, task_id) <> 'none'::text));
 
 ALTER TABLE fvoci.task_dependencies ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY task_dependencies_select ON fvoci.task_dependencies FOR SELECT USING (((fvoci.app_access('task', predecessor_id) <> 'none') AND (fvoci.app_access('task', successor_id) <> 'none')));
+CREATE POLICY task_dependencies_select ON fvoci.task_dependencies FOR SELECT USING (((fvoci.app_access('task'::text, predecessor_id) <> 'none'::text) AND (fvoci.app_access('task'::text, successor_id) <> 'none'::text)));
 
 ALTER TABLE fvoci.task_series ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY task_series_select ON fvoci.task_series FOR SELECT USING ((fvoci.app_access('task', root_task_id) <> 'none'));
+CREATE POLICY task_series_select ON fvoci.task_series FOR SELECT USING ((fvoci.app_access('task'::text, root_task_id) <> 'none'::text));
+
+ALTER TABLE fvoci.task_statuses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY task_statuses_select ON fvoci.task_statuses FOR SELECT USING ((fvoci.app_access('item'::text, item_id) <> 'none'::text));
 
 ALTER TABLE fvoci.tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY tasks_select ON fvoci.tasks FOR SELECT USING ((fvoci.app_access('task', id) <> 'none'));
+CREATE POLICY tasks_select ON fvoci.tasks FOR SELECT USING ((fvoci.app_access('task'::text, id) <> 'none'::text));
 
 ALTER TABLE fvoci.time_entries ENABLE ROW LEVEL SECURITY;
 
+-- 시간 기록은 본인만 본다(D-117).
 CREATE POLICY time_entries_select ON fvoci.time_entries FOR SELECT USING ((user_id = fvoci.app_user_id()));
 
 ALTER TABLE fvoci.time_entry_revisions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY time_entry_revisions_select ON fvoci.time_entry_revisions FOR SELECT USING ((user_id = fvoci.app_user_id()));
-
-ALTER TABLE fvoci.time_sharing ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY time_sharing_select ON fvoci.time_sharing FOR SELECT USING ((user_id = fvoci.app_user_id()));
 
 ALTER TABLE fvoci.trash_batches ENABLE ROW LEVEL SECURITY;
 
@@ -11540,17 +12279,19 @@ CREATE POLICY user_settings_select ON fvoci.user_settings FOR SELECT USING ((use
 
 ALTER TABLE fvoci.users ENABLE ROW LEVEL SECURITY;
 
+-- 사용자 행은 본인과 같은 조직 사람만 본다(D-114).
 CREATE POLICY users_select ON fvoci.users FOR SELECT USING (((id = fvoci.app_user_id()) OR fvoci.app_shares_organization(id)));
 
 ALTER TABLE fvoci.workspace_members ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY workspace_members_select ON fvoci.workspace_members FOR SELECT USING ((fvoci.app_access('workspace', workspace_id) <> 'none'));
+CREATE POLICY workspace_members_select ON fvoci.workspace_members FOR SELECT USING ((fvoci.app_access('workspace'::text, workspace_id) <> 'none'::text));
 
 ALTER TABLE fvoci.workspaces ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY workspaces_select ON fvoci.workspaces FOR SELECT USING ((fvoci.app_access('workspace', id) <> 'none'));
+-- 워크스페이스 행(이름 같은 메타데이터)은 멤버와 조직 관리자가 본다. 내용은 멤버만 본다(D-112).
+CREATE POLICY workspaces_select ON fvoci.workspaces FOR SELECT USING (((fvoci.app_access('workspace'::text, id) <> 'none'::text) OR (fvoci.app_access('organization'::text, organization_id) = 'owner'::text)));
 
-CREATE POLICY workspaces_update ON fvoci.workspaces FOR UPDATE USING ((fvoci.app_access('workspace', id) = 'owner'::text)) WITH CHECK ((fvoci.app_access('workspace', id) = 'owner'::text));
+CREATE POLICY workspaces_update ON fvoci.workspaces FOR UPDATE USING ((fvoci.app_access('workspace'::text, id) = 'owner'::text)) WITH CHECK ((fvoci.app_access('workspace'::text, id) = 'owner'::text));
 
 -- 실효 권한. PUBLIC 실행을 회수하고 각 앱 진입점·읽기 범위만 부여한다.
 -- 기본 권한은 bootstrap과 PostgreSQL 기본값을 유지한다. 일괄 권한 확대는 하지 않는다.
@@ -11770,7 +12511,6 @@ GRANT ALL ON FUNCTION fvoci.app_delete_view(p_view uuid) TO fvoci_app;
 
 
 
-REVOKE ALL ON FUNCTION fvoci.app_document_audience(p_workspace uuid, p_item uuid, p_owner uuid, p_creator uuid, p_visibility text, p_doc uuid) FROM PUBLIC;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_document_can_export(p_doc uuid) FROM PUBLIC;
@@ -11848,8 +12588,6 @@ GRANT ALL ON FUNCTION fvoci.app_item_assignable(p_item uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_item_reference(p_item uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_item_reference(p_item uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_item_time(p_item uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_item_time(p_item uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_items_versions() FROM PUBLIC;
 
@@ -11862,7 +12600,7 @@ REVOKE ALL ON FUNCTION fvoci.app_lock_dependencies(p_item uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION fvoci.app_lock_item(p_item uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_lock_item(p_item uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_lock_lane(p_item uuid, p_status text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_lock_lane(p_status uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_lock_live_workspace(p_ws uuid) FROM PUBLIC;
 
@@ -11871,12 +12609,10 @@ GRANT ALL ON FUNCTION fvoci.app_lock_move(p_doc uuid, p_target uuid, p_item uuid
 
 REVOKE ALL ON FUNCTION fvoci.app_lock_own_entry(p_entry uuid) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION fvoci.app_lock_task_rows(p_ids uuid[], p_extra_status text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_lock_task_rows(p_ids uuid[], p_extra_status uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_lock_tree(p_workspace uuid, p_item uuid, p_owner uuid) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION fvoci.app_mark_notifications_read(p_id uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_mark_notifications_read(p_id uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_member_role(ws uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_member_role(ws uuid) TO fvoci_app;
@@ -11890,22 +12626,18 @@ GRANT ALL ON FUNCTION fvoci.app_move_document_ids(p_doc uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_move_keeps_number(p_doc uuid, p_target uuid, p_item uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_move_keeps_number(p_doc uuid, p_target uuid, p_item uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_move_task(p_task uuid, p_status text, p_before uuid, p_base_move_version integer, p_ids uuid[]) TO fvoci_app;
 
 
 
-REVOKE ALL ON FUNCTION fvoci.app_my_notifications(p_limit integer) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_my_notifications(p_limit integer) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_my_upload(p_upload uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_my_upload(p_upload uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_my_workspace_ids() FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_my_workspace_ids() TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_my_workspace_ids(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_workspace_ids(p_organization uuid) TO fvoci_app;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_notify(p_id uuid, p_user uuid, p_kind text, p_document uuid, p_task uuid, p_comment uuid, p_actor uuid, p_detail jsonb) FROM PUBLIC;
@@ -11980,7 +12712,7 @@ GRANT ALL ON FUNCTION fvoci.app_remove_task_dependency(p_predecessor uuid, p_suc
 REVOKE ALL ON FUNCTION fvoci.app_rename_file(p_file uuid, p_name text, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_rename_file(p_file uuid, p_name text, p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_renumber_lane(p_item uuid, p_status text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_renumber_lane(p_status uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_require_admin(p_workspace uuid) FROM PUBLIC;
 
@@ -12033,8 +12765,8 @@ GRANT ALL ON FUNCTION fvoci.app_session_user(p_token_hash bytea) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_set_course_details(p_item uuid, p_subject text, p_instructor text, p_platform text, p_url text, p_textbook text, p_starts date, p_expires date, p_target date, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_course_details(p_item uuid, p_subject text, p_instructor text, p_platform text, p_url text, p_textbook text, p_starts date, p_expires date, p_target date, p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) TO fvoci_app;
@@ -12095,8 +12827,6 @@ GRANT ALL ON FUNCTION fvoci.app_set_task_dependency(p_predecessor uuid, p_succes
 REVOKE ALL ON FUNCTION fvoci.app_set_task_parent(p_task uuid, p_parent uuid, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_task_parent(p_task uuid, p_parent uuid, p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_ids uuid[]) TO fvoci_app;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_set_trash_retention(p_workspace uuid, p_days integer, p_ids uuid[]) FROM PUBLIC;
@@ -12111,8 +12841,6 @@ GRANT ALL ON FUNCTION fvoci.app_set_version_retention(p_workspace uuid, p_days i
 REVOKE ALL ON FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_shared_with_me() FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_shared_with_me() TO fvoci_app;
@@ -12122,8 +12850,6 @@ REVOKE ALL ON FUNCTION fvoci.app_shift_excluded_dates() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_shift_target(p_from uuid, p_task uuid, p_include_from boolean) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_storage_used(p_workspace uuid, p_owner uuid, p_except uuid) FROM PUBLIC;
 
@@ -12218,15 +12944,13 @@ GRANT ALL ON FUNCTION fvoci.app_take_login_state(p_secret_hash bytea, p_state te
 REVOKE ALL ON FUNCTION fvoci.app_task_checklist_counts(p_task uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_task_checklist_counts(p_task uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_task_lane_end(p_item uuid, p_status text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_task_lane_end(p_status uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_task_reference(p_task uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_task_reference(p_task uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_task_series_bound(p_series uuid) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION fvoci.app_task_time(p_task uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_task_time(p_task uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_tasks_move_version() FROM PUBLIC;
 
@@ -12393,8 +13117,6 @@ GRANT SELECT ON TABLE fvoci.tasks TO fvoci_app;
 
 GRANT SELECT ON TABLE fvoci.time_entry_revisions TO fvoci_app;
 
-GRANT SELECT ON TABLE fvoci.time_sharing TO fvoci_app;
-
 GRANT SELECT ON TABLE fvoci.unit_progress TO fvoci_app;
 
 GRANT SELECT ON TABLE fvoci.upload_parts TO fvoci_app;
@@ -12410,6 +13132,236 @@ GRANT SELECT ON TABLE fvoci.workspace_members TO fvoci_app;
 GRANT SELECT ON TABLE fvoci.workspaces TO fvoci_app;
 
 GRANT UPDATE(name) ON TABLE fvoci.workspaces TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_access(p_kind text, p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_access(p_kind text, p_id uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_access_as(p_kind text, p_id uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_workspace_role(p_workspace uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_organization(p_organization uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_workspace(p_workspace uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_module(p_module uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_item(p_item uuid, p_user uuid, p_ignore_trash boolean) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_under_item(p_item uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_document_at(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_target_organization(p_kind text, p_id uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_notification_visible(p_document uuid, p_task uuid, p_item uuid, p_invitation uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_notification_visible(p_document uuid, p_task uuid, p_item uuid, p_invitation uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_my_notifications(p_organization uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_notifications(p_organization uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_notification_unread_count(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_notification_unread_count(p_organization uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_mark_notifications_read(p_id uuid, p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_mark_notifications_read(p_id uuid, p_organization uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_pending_invitations_count() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_pending_invitations_count() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_item_time(p_item uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_item_time(p_item uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_task_time(p_task uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_task_time(p_task uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_my_task_counts(p_organization uuid, p_today date) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_task_counts(p_organization uuid, p_today date) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_target_activity(p_kind text, p_id uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_target_activity(p_kind text, p_id uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_system_purge_audit(p_default_days integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_purge_audit(p_default_days integer) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_system_purge_activity(p_default_days integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_purge_activity(p_default_days integer) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_task_statuses(p_item uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_task_statuses(p_item uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_create_task_status(p_item uuid, p_name text, p_color text, p_category text, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_create_task_status(p_item uuid, p_name text, p_color text, p_category text, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color text, p_category text, p_position numeric, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_update_task_status(p_status uuid, p_name text, p_color text, p_category text, p_position numeric, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_delete_task_status(p_status uuid, p_move_to uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_search_enqueue_status_tasks() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_base jsonb, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_task_recurrence(p_task uuid, p_rule jsonb, p_timezone text, p_base jsonb, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_storage_used_organization(p_organization uuid, p_except uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_file(p_file uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_grade_comment(p_comment uuid, p_user uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_is_server_admin() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_is_server_admin() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_require_server_admin() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_require_server_admin() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_require_organization_admin(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_require_organization_admin(p_organization uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_shares_organization(other uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_shares_organization(other uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_activity(p_id uuid, p_workspace uuid, p_item uuid, p_target_kind text, p_target uuid, p_kind text, p_detail jsonb) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_task_status(p_status uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_task_status_by_name(p_item uuid, p_name text) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_default_task_status(p_item uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_seed_task_statuses(p_item uuid, p_ids uuid[]) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_create_organization(p_request_id uuid, p_name text, p_first_admin uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_create_organization(p_request_id uuid, p_name text, p_first_admin uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_my_organizations() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_organizations() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_server_organizations() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_server_organizations() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_server_admins() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_server_admins() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_organization_members(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_organization_members(p_organization uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_organization_workspaces(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_organization_workspaces(p_organization uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid, p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid, p_user uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_remove_organization_member_ids(p_organization uuid, p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_remove_organization_member_ids(p_organization uuid, p_user uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_invite_organization(p_organization uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_invite_organization(p_organization uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_notify_invitation(p_id uuid, p_invitation uuid) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_set_organization_settings(p_organization uuid, p_patch jsonb, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_organization_settings(p_organization uuid, p_patch jsonb, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_effective_limit(p_workspace uuid, p_name text, p_default bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_effective_limit(p_workspace uuid, p_name text, p_default bigint) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_retention_days(p_workspace uuid, p_organization uuid, p_name text, p_default integer) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_join_workspace_as_admin(p_workspace uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_join_workspace_as_admin(p_workspace uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_system_claim_initial_admin(p_user uuid, p_name text, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_claim_initial_admin(p_user uuid, p_name text, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uuid, p_name text, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uuid, p_name text, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_invite(p_workspace uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_invite(p_workspace uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_my_invitations() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_invitations() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_respond_invitation(p_invitation uuid, p_accept boolean, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_respond_invitation(p_invitation uuid, p_accept boolean, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_revoke_invitation(p_invitation uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_revoke_invitation(p_invitation uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_remove_member_internal(p_workspace uuid, p_member uuid, p_action text, p_ids uuid[]) FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_remove_member_preview(p_workspace uuid, p_member uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_remove_member_preview(p_workspace uuid, p_member uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_remove_member_ids(p_workspace uuid, p_member uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_remove_member_ids(p_workspace uuid, p_member uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_leave_workspace_ids(p_workspace uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_leave_workspace_ids(p_workspace uuid) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_delete_workspace(p_ws uuid, p_name text, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_delete_workspace(p_ws uuid, p_name text, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_restore_workspace(p_ws uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_restore_workspace(p_ws uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_my_deleted_workspaces() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_my_deleted_workspaces() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_offer_ownership(p_workspace uuid, p_to uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_offer_ownership(p_workspace uuid, p_to uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_system_recurrence_due() FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_recurrence_due() TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_system_sync_task_series(p_series uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_sync_task_series(p_series uuid, p_ids uuid[]) TO fvoci_app;
+
+REVOKE ALL ON FUNCTION fvoci.app_system_sync_task_series_ids(p_series uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_sync_task_series_ids(p_series uuid) TO fvoci_app;
+
+GRANT SELECT ON TABLE fvoci.activity TO fvoci_app;
+
+GRANT SELECT ON TABLE fvoci.organization_members TO fvoci_app;
+
+GRANT SELECT ON TABLE fvoci.organizations TO fvoci_app;
+
+GRANT SELECT ON TABLE fvoci.server_admins TO fvoci_app;
+
+GRANT SELECT ON TABLE fvoci.task_statuses TO fvoci_app;
 
 -- SQLx는 본문 실행 뒤 같은 트랜잭션에서 스키마 없는 _sqlx_migrations 이름에 기록한다.
 -- bootstrap의 스키마를 다시 보이게 해 새 버전·체크섬도 이 원장에 남긴다.
