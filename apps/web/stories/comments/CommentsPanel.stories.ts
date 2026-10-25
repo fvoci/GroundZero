@@ -118,8 +118,15 @@ export const Archived: Story = {
   globals: { viewport: { value: 'narrow375' }, fontScale: '200' },
 };
 
-export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
-export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
+export const BrandLight: Story = {
+  ...Threads,
+  globals: { theme: 'light', viewport: { value: 'desktop' } },
+};
+export const BrandDark: Story = {
+  ...Threads,
+  globals: { theme: 'dark', viewport: { value: 'desktop' } },
+};
 export const BrandNarrowLargeText: Story = {
+  ...Threads,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

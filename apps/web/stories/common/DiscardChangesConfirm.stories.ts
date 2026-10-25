@@ -77,8 +77,15 @@ export const OpenAnother: Story = {
   },
 };
 
-export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
-export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
+export const BrandLight: Story = {
+  ...OpenAnother,
+  globals: { theme: 'light', viewport: { value: 'desktop' } },
+};
+export const BrandDark: Story = {
+  ...OpenAnother,
+  globals: { theme: 'dark', viewport: { value: 'desktop' } },
+};
 export const BrandNarrowLargeText: Story = {
+  ...OpenAnother,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };
