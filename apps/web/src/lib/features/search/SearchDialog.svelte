@@ -325,7 +325,7 @@
           value={taskStatus}
           maxlength={50}
           placeholder={m.search_status_name()}
-          oninput={(e) => {
+          oninput={(e: Event) => {
             if (e.currentTarget instanceof HTMLInputElement) {
               taskStatus = e.currentTarget.value;
               refilter();
