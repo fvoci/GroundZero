@@ -12,6 +12,7 @@ DO $seed$
 DECLARE
   v_admin uuid;
   v_user uuid;
+  v_org uuid;
   v_ws uuid;
   v_inv uuid;
   v_module uuid;
@@ -51,8 +52,16 @@ BEGIN
   END IF;
 
   PERFORM set_config('app.user_id', v_admin::text, true);
-  v_ws := app_create_workspace(pg_temp.take1(), '모듈 예제 (합성 데이터)', pg_temp.take(2));
-  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));
+  SELECT organization_id INTO STRICT v_org FROM organization_members
+    WHERE user_id = v_admin ORDER BY organization_id LIMIT 1;
+  IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_user) THEN
+    v_inv := app_invite_organization(v_org, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
+    PERFORM set_config('app.user_id', v_user::text, true);
+    PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
+    PERFORM set_config('app.user_id', v_admin::text, true);
+  END IF;
+  v_ws := app_create_workspace(pg_temp.take1(), v_org, '모듈 예제 (합성 데이터)', pg_temp.take(3));
+  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
   PERFORM set_config('app.user_id', v_user::text, true);
   PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
   PERFORM set_config('app.user_id', v_admin::text, true);
@@ -69,7 +78,7 @@ BEGIN
     v_module := app_create_module(v_ws, pg_temp.take1(), v_kind, v_row->>'name', v_row->>'key', pg_temp.take(2));
     PERFORM app_set_module_description(v_module, '개발 전용 합성 예제. 실제 고객·연구 자료가 아닙니다.');
     v_item := app_create_item(v_module, pg_temp.take1(), v_row->>'title', '수정·저장·새로고침 후 재조회하는 개발 예제',
-                              pg_temp.take(2));
+                              pg_temp.take(6));
     -- 새 항목의 기본 공개 범위는 private다. 두 번째 테스트 사용자를 명시적 항목 멤버로 추가한다.
     PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],
                                  pg_temp.take(app_set_item_members_ids(v_item)));
@@ -82,40 +91,40 @@ BEGIN
     END IF;
     v_items := v_items || jsonb_build_object(v_kind, v_item);
 
-    -- 업무는 모든 칸과 함께 한 번에 만든다(D-105). id: 업무·만들기 감사 + 담당자마다 1개.
+    -- 업무는 모든 칸과 함께 한 번에 만든다(D-105). id: 업무·감사·활동 + 담당자마다 감사·활동 2개.
     v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL,
       '모든 담당자가 같은 업무 상태를 공유합니다.', 'in_progress', 'medium', v_today, v_today + 2, 45,
-      ARRAY['개발예제'], ARRAY[v_admin, v_user], false, pg_temp.take(4));
+      ARRAY['개발예제'], ARRAY[v_admin, v_user], false, pg_temp.take(7));
     PERFORM app_add_checklist_items(v_task, jsonb_build_array(
       jsonb_build_object('request_id', pg_temp.take1(), 'text', '준비 자료 확인', 'checked', true),
       jsonb_build_object('request_id', pg_temp.take1(), 'text', '저장 후 다시 열기', 'checked', false)),
       pg_temp.take(2));
     v_doc := app_create_module_document(v_item, pg_temp.take1(), '공동 작업 노트', 1,
       '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"개발용 합성 문서입니다. 업무 완료와 개인 학습 진도는 별도로 저장됩니다."}]},{"type":"taskList","content":[{"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"문서 체크리스트: 내용을 검토한다"}]}]}]}]}',
-      NULL, 10, pg_temp.take(3));
+      NULL, 10, pg_temp.take(4));
     v_documents := v_documents || jsonb_build_object(v_kind, v_doc);
     PERFORM app_create_event(v_item, pg_temp.take1(), 'meeting', '예제 점검 모임', '공통 일정의 모듈별 표시 확인',
-      true, v_today + 1, v_today + 1, NULL, NULL, 'UTC', pg_temp.take(2));
+      true, v_today + 1, v_today + 1, NULL, NULL, 'UTC', pg_temp.take(3));
     v_time_kind := CASE v_kind WHEN 'study' THEN 'study' WHEN 'course' THEN 'lecture'
       WHEN 'hobby' THEN 'hobby' ELSE 'work' END;
     PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '90 minutes', now() - interval '60 minutes',
       0, v_time_kind, '개발 예제: 종료된 개인 시간 기록', 'task', v_task, pg_temp.take(1));
     IF v_kind = 'project' THEN
       v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, '', 'done', 'low',
-        v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
+        v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, '', 'todo', 'high',
-        NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, pg_temp.take(3));
+        NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_task, v_milestone, 'FS', 0, NULL, NULL, '[]'::jsonb, pg_temp.take(1));
       -- 관계 종류 예제(D-91): 대표 업무와 함께 시작(SS·1), 함께 끝(FF·0), 그 업무가 시작하기 전에 끝(SF·0).
       -- 날짜는 이미 관계를 채우므로 옮길 업무가 없다.
       v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, '', 'todo', 'medium',
-        v_today + 1, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
+        v_today + 1, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_task, v_together, 'SS', 1, NULL, NULL, '[]', pg_temp.take(1));
       v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, '', 'todo', 'low',
-        v_today + 1, v_today + 2, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
+        v_today + 1, v_today + 2, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_task, v_linked, 'FF', 0, NULL, NULL, '[]', pg_temp.take(1));
       v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, '', 'todo', 'low',
-        v_today - 1, v_today, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
+        v_today - 1, v_today, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_together, v_linked, 'SF', 0, NULL, NULL, '[]', pg_temp.take(1));
     END IF;
   END LOOP;
@@ -210,8 +219,8 @@ SELECT value FROM instance_state WHERE key = 'dev_module_seed_v1';
 -- 보강(v2): 같은 합성 워크스페이스에 칸반 카드 여럿(열 이동·순서 바꾸기 체험), 위키 트리 세 단계와 서로 가리키는
 -- 문서(백링크), 구분선 바로 아래 체크리스트가 있는 문서를 더한다. v1과 따로 자기 표시(dev_module_seed_v2)로 한 번만
 -- 실행하며 기존 행을 고치거나 지우지 않는다. 사용자가 예제 워크스페이스를 지웠으면 아무것도 만들지 않고 표시만
--- 남기며(다시 채우지 않음), 지웠거나 보관한 항목에는 업무를 더하지 않는다. 만들다 실패하면 이 블록만 되돌리고 알린 뒤
--- 개발 실행은 계속한다(다음 실행에 다시 시도).
+-- 남기며(다시 채우지 않음), 지웠거나 보관한 항목에는 업무를 더하지 않는다. 만들다 실패하면 이 블록을 되돌리고
+-- 원래 오류 코드로 실패시켜 ID 부족(FV001) 등 계약 오류가 개발 실행을 멈추게 한다.
 DO $seed2$
 DECLARE
   v_admin uuid;
@@ -271,7 +280,7 @@ BEGIN
         v_task := app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, '개발용 합성 업무입니다.',
           v_row->>'status', v_row->>'priority', NULL,
           CASE WHEN v_row ? 'due' THEN v_today + (v_row->>'due')::integer END,
-          NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(3));
+          NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
         v_added := v_added + 1;
       END LOOP;
     END LOOP;
@@ -290,7 +299,7 @@ BEGIN
         {"type":"bulletList","content":[
           {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"구분선 손잡이를 끌어 위치를 바꿔 볼 수 있습니다."}]}]}
         ]}
-      ]}'::jsonb, NULL, 10, pg_temp.take(3));
+      ]}'::jsonb, NULL, 10, pg_temp.take(4));
     v_install := app_create_wiki_document(v_ws, pg_temp.take1(), '설치', 1, jsonb_build_object(
       'type', 'doc', 'content', jsonb_build_array(
         jsonb_build_object('type', 'paragraph', 'content',
@@ -301,10 +310,10 @@ BEGIN
               jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'item', 'id', v_v1->'items'->>'project')))
             ELSE jsonb_build_array(jsonb_build_object('type', 'text', 'text', '설치 전에 예제 프로젝트 항목을 확인합니다.'))
           END))),
-      v_guide, 10, pg_temp.take(3));
+      v_guide, 10, pg_temp.take(4));
     v_backup := app_create_wiki_document(v_ws, pg_temp.take1(), '백업', 1,
       '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"합성 백업 절차. 실제 서버 정보가 아닙니다."}]}]}'::jsonb,
-      v_install, 10, pg_temp.take(3));
+      v_install, 10, pg_temp.take(4));
     v_log := app_create_wiki_document(v_ws, pg_temp.take1(), '점검 기록', 1, jsonb_build_object(
       'type', 'doc', 'content', jsonb_build_array(
         jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
@@ -312,7 +321,7 @@ BEGIN
           jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', v_install)),
           jsonb_build_object('type', 'text', 'text', ', '),
           jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', v_backup)))))),
-      NULL, 10, pg_temp.take(3));
+      NULL, 10, pg_temp.take(4));
     -- 저장할 때와 같은 함수로 참조를 기록해 대상 문서·항목의 "이곳을 가리키는 문서"에 보이게 한다(알림은 보내지 않음).
     PERFORM app_record_document_references(v_install, false,
       pg_temp.take(app_record_document_references_ids(v_install, false)));
@@ -325,8 +334,7 @@ BEGIN
       'wiki', jsonb_build_object('guide', v_guide, 'install', v_install, 'backup', v_backup, 'log', v_log),
       'seeded_on', v_today));
   EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'dev module examples v2 not added (%: %); the dev run continues and tries again next time',
-      SQLSTATE, SQLERRM;
+    RAISE EXCEPTION 'dev module examples v2 not added: %', SQLERRM USING ERRCODE = SQLSTATE;
   END;
 END
 $seed2$;
