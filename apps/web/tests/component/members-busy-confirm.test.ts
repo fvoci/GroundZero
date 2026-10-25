@@ -123,6 +123,9 @@ describe('members screen', () => {
 describe('received invitations', () => {
   it('answers an invitation once even when clicked twice', async () => {
     const inv: ReceivedInvitation = {
+      kind: 'workspace',
+      organization_id: 'org-1',
+      organization_name: '연구소',
       id: 'inv-1',
       workspace_id: 'ws-1',
       workspace_name: '연구실',

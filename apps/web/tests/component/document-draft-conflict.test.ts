@@ -61,6 +61,12 @@ beforeEach(async () => {
     time_zone: '',
     week_start: '',
     theme: 'system',
+    limits: {
+      max_title_chars: 200,
+      max_document_bytes: 2_000_000,
+      max_references_per_document: 500,
+      max_document_depth: 10,
+    },
   });
 });
 

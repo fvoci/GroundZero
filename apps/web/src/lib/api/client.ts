@@ -186,6 +186,17 @@ export function parseMe(value: Json): Me {
     week_start: typeof o.week_start === 'string' ? o.week_start : '',
     hour_cycle: typeof o.hour_cycle === 'string' ? o.hour_cycle : '',
     theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'system',
+    limits: parseInputLimits(rec(o.limits, 'me.limits')),
+  };
+}
+
+/** 서버 입력 한도(#79). 계약상 필수이며 네 칸 모두 정수다. */
+function parseInputLimits(o: Record<string, unknown>): Me['limits'] {
+  return {
+    max_title_chars: int(o, 'max_title_chars'),
+    max_document_bytes: int(o, 'max_document_bytes'),
+    max_references_per_document: int(o, 'max_references_per_document'),
+    max_document_depth: int(o, 'max_document_depth'),
   };
 }
 
@@ -410,12 +421,21 @@ export function parseInvitation(value: Json): Invitation {
   };
 }
 
+/** 초대 대상 종류. 조직 초대는 워크스페이스 칸이 null이다(D-112·D-118). */
+function invitationTarget(value: string): ReceivedInvitation['kind'] {
+  if (value === 'organization' || value === 'workspace') return value;
+  throw new TypeError(`unknown invitation kind ${value}`);
+}
+
 export function parseReceivedInvitation(value: Json): ReceivedInvitation {
   const o = rec(value, 'received invitation');
   return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    organization_name: str(o, 'organization_name'),
     id: str(o, 'id'),
-    workspace_id: str(o, 'workspace_id'),
-    workspace_name: str(o, 'workspace_name'),
+    workspace_id: optStr(o, 'workspace_id'),
+    workspace_name: optStr(o, 'workspace_name'),
     role: role(str(o, 'role')),
     invited_by: str(o, 'invited_by'),
     expires_at: str(o, 'expires_at'),
