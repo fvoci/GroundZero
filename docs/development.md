@@ -256,7 +256,13 @@ pnpm --filter @fvoci/web run build-storybook  # target/storybook-static
   같다. id·시각은 DB가 정하므로 story는 고정값을 쓰고, 사람은 개발 Keycloak 테스트 사용자 둘(이름은 `tests/synthetic-data.test.ts`가 대조)뿐이다.
 - 서버 데이터가 필요한 story는 `api`의 함수를 story의 `beforeEach`에서 바꿔 끼운다(`spyOn`). 같은 원점의
   `/api`·`/auth`·`/healthz`와 다른 원점 요청은 막고 콘솔 오류로 남긴다. 실제 OIDC·DB·운영 API에 연결하지 않는다.
+  바꿔 끼울 함수는 `stories/fixtures/screens.ts`의 `setUpScreen` 한곳에 더한다(업무 목록·옮기기·검색 등). mock은 서버 응답만
+  흉내 내고 자리·충돌·권한 판단은 제품 코드에 맡긴다(옮긴 자리는 화면과 같은 `applyMove`).
+- 화면이 "지금"을 읽으면(간트의 오늘 등) `fixClock()`(`stories/fixtures/clock.ts`)으로 합성 데이터의 기준일에 맞춘다. 화면
+  조각만 그리는 story는 앱 본문과 같은 `@container` 틀(`stories/fixtures/MainFrame.svelte`)에 넣어야 앱과 같은 열로 나뉜다.
 - `tests/component/stories.test.ts`가 모든 story를 jsdom에서 다시 그리고 play 함수(키보드·실패·입력 보존)를 실행한다.
+  Vitest 파일 모듈 캐시가 예전 story 목록을 쓰면 새 story가 빠지므로 디스크의 story 파일과 맞춰 보고 실패한다. 그때는
+  `pnpm --filter @fvoci/web exec vitest --clearCache` 뒤 다시 실행한다. 화면 타이머(칸반 "응답 지연" 3초 등)는 기다리지 않는다.
   jsdom은 배치·초점 가두기·애니메이션을 계산하지 않으므로 표시·줄바꿈·넘침·대화상자 초점 가두기는 Storybook을 실제
   브라우저(창이 보이는 상태)로 열어 확인한다. 자동 검사가 화면 낭독기·키보드 수동 검증을 대신하지 않는다.
 - 로그인·API·DB 저장·공동 편집 흐름은 Storybook 범위가 아니다. 실제 브라우저 회귀 시험은 #118에서 다룬다.
