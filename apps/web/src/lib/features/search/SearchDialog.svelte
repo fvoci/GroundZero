@@ -418,26 +418,27 @@
         />
         <Label for="search-mine">{m.search_mine()}</Label>
       </div>
-      <!-- 375px·200%에서는 날짜 칸 둘이 한 줄에 들지 않아 줄바꿈한다(대화상자 안쪽이 잘리지 않게, D-110). -->
-      <div class="flex flex-wrap items-end gap-2">
-        <div class="flex flex-col gap-1">
+      <!-- 좁은 화면(sm 미만)에서는 날짜 묶음이 한 줄을 차지하고 두 칸이 각각 한 줄씩 전체 폭을 쓴다(375px·200%에서 9rem 칸이
+           대화상자 안쪽을 넘었다, D-110). -->
+      <div class="flex flex-wrap items-end gap-2 max-sm:w-full">
+        <div class="flex min-w-0 flex-col gap-1 max-sm:basis-full">
           <Label for="search-from">{m.search_from()}</Label>
           <Input
             id="search-from"
             type="date"
-            class="w-36"
+            class="w-36 max-sm:w-full"
             bind:value={from}
             onchange={() => {
               refilter();
             }}
           />
         </div>
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1 max-sm:basis-full">
           <Label for="search-to">{m.search_to()}</Label>
           <Input
             id="search-to"
             type="date"
-            class="w-36"
+            class="w-36 max-sm:w-full"
             bind:value={to}
             onchange={() => {
               refilter();
