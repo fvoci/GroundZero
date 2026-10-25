@@ -229,11 +229,13 @@ async fn retention(table: &str, setting: &str, purge: &str) {
             &[w.ws],
         )
         .await;
-        // 오래된 행을 전역 worker가 볼 수 없게 같은 앱 트랜잭션에서 준비한다.
-        // 앱은 created_at 변경 권한이 없으므로 fixture 트랜잭션을 이 연결에 SET ROLE 후 사용한다.
+        // 오래된 행을 전역 worker가 볼 수 없게 같은 트랜잭션에서 준비하고 지운다. 표 소유 역할(마이그레이션 역할)을 쓴다:
+        // 셀프호스트 Supabase의 관리자(postgres)는 superuser가 아니라 표를 고칠 수 없고, 정리 함수는 사용자 문맥이 없는
+        // 시스템 호출(app_user_id() IS NULL)이면 되므로 소유 역할로 불러도 같다.
         use sqlx::Connection;
-        let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
-        let mut fixture = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+        let fixture_url =
+            std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via cargo xtask test");
+        let mut fixture = sqlx::PgConnection::connect(&fixture_url).await.unwrap();
         let mut tx = fixture.begin().await.unwrap();
         sqlx::query(&format!(
             "UPDATE fvoci.{table} SET created_at=now()-interval '40 days' WHERE workspace_id=$1"
@@ -242,10 +244,6 @@ async fn retention(table: &str, setting: &str, purge: &str) {
         .execute(&mut *tx)
         .await
         .unwrap();
-        sqlx::query("SET LOCAL ROLE fvoci_app")
-            .execute(&mut *tx)
-            .await
-            .unwrap();
         sqlx::query(&format!("SELECT fvoci.{purge}({default})"))
             .execute(&mut *tx)
             .await
