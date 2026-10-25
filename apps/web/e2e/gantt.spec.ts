@@ -19,7 +19,7 @@ test('gantt scrolls horizontally inside its own box', async ({ signIn }, testInf
   await api.createTask(item, `화면 설계와 검토 ${tag}`, { start_date: day(5), due_date: day(20) });
   await api.createTask(item, `배포와 회고 ${tag}`, { start_date: day(18), due_date: day(30) });
 
-  await page.goto(`/w/${ws}/i/${item}`);
+  await page.goto(`/w/${ws}/i/${item}/tasks/gantt`);
   const narrow = testInfo.project.name === 'narrow-375';
   await expectViewport(page, narrow);
   await page.getByRole('button', { name: '간트', exact: true }).click();

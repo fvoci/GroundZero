@@ -12,7 +12,7 @@ async function serverStatus(api: Api, task: string): Promise<string> {
 }
 
 async function openBoard(page: Page, ws: string, item: string): Promise<void> {
-  await page.goto(`/w/${ws}/i/${item}`);
+  await page.goto(`/w/${ws}/i/${item}/tasks/board`);
   await page.getByRole('button', { name: '칸반', exact: true }).click();
   await expect(page.getByTestId('task-board')).toBeVisible();
 }
