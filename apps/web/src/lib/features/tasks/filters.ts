@@ -1,6 +1,5 @@
 // 업무 검색·필터·정렬과 저장한 보기의 내용(D-31). 서버는 보기 내용을 해석하지 않고 저장만 한다.
 import type { TaskPriority, TaskStatus, TaskView } from '$lib/api/client';
-import { TASK_STATUSES } from '$lib/api/client';
 
 export const VIEWS = ['board', 'list', 'gantt', 'calendar'] as const;
 export type TaskViewMode = (typeof VIEWS)[number];
@@ -11,7 +10,7 @@ const PRIORITIES: readonly TaskPriority[] = ['none', 'low', 'medium', 'high', 'u
 export interface TaskFilter {
   /** 제목·설명·번호에 들어 있는 글자. */
   text: string;
-  status: TaskStatus | 'any';
+  status: TaskStatus;
   /** `any`·`me`·`none` 또는 사용자 id. */
   assignee: string;
   priority: TaskPriority | 'any';
@@ -124,7 +123,7 @@ export function readConfig(raw: Record<string, unknown>): ViewConfig {
     sort: pick(raw.sort, SORTS, 'position'),
     filter: {
       text: text(f.text),
-      status: pick(f.status, [...TASK_STATUSES, 'any'] as const, 'any'),
+      status: text(f.status) || 'any',
       assignee: text(f.assignee) === '' ? 'any' : text(f.assignee),
       priority: pick(f.priority, [...PRIORITIES, 'any'] as const, 'any'),
       tag: text(f.tag),
@@ -145,12 +144,20 @@ export function assigneesOf(tasks: readonly TaskView[]): [string, string][] {
   return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], 'ko'));
 }
 
-/** 날짜별 업무: 마감일(없으면 시작일) 한 칸. */
-export function tasksByDay(tasks: readonly TaskView[]): Map<string, TaskView[]> {
+/** 날짜별 업무: 기간은 보이는 날마다 연결하고, 단일 날짜는 점 하나. */
+export function tasksByDay(
+  tasks: readonly TaskView[],
+  days: readonly string[] = [],
+): Map<string, TaskView[]> {
   const map = new Map<string, TaskView[]>();
   for (const t of tasks) {
-    const day = t.due_date ?? t.start_date;
-    if (day !== null) map.set(day, [...(map.get(day) ?? []), t]);
+    const start = t.start_date;
+    const end = t.due_date;
+    const dates =
+      start !== null && end !== null && days.length > 0
+        ? days.filter((day) => day >= start && day <= end)
+        : [end ?? start].filter((day): day is string => day !== null);
+    for (const day of dates) map.set(day, [...(map.get(day) ?? []), t]);
   }
   return map;
 }

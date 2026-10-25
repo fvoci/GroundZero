@@ -30,6 +30,7 @@
     workspace?: { id: string; name: string } | undefined;
   } = $props();
 
+  // 작업자 A: 상태 이름 문자열 전환에 따른 표시 fallback; 검색 범주 전환은 담당 작업자 영역.
   const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'done'];
 
   let query = $state('');
@@ -40,7 +41,7 @@
 
   // 필터(D-39). 상태·내 담당을 고르면 업무만 나온다.
   let kind = $state<SearchKind | 'all'>('all');
-  let taskStatus = $state<TaskStatus | 'any'>('any');
+  let taskStatus = $state<TaskStatus>('any');
   let mine = $state(false);
   let from = $state('');
   let to = $state('');
@@ -294,7 +295,7 @@
           <Select.Content>
             <Select.Item value="any" label={m.search_all()}>{m.search_all()}</Select.Item>
             {#each TASK_STATUSES as s (s)}
-              <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+              <Select.Item value={s} label={STATUS_LABEL[s] ?? s}>{STATUS_LABEL[s]}</Select.Item>
             {/each}
           </Select.Content>
         </Select.Root>

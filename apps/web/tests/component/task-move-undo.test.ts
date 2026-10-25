@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import type { MockInstance } from 'vitest';
@@ -47,6 +48,7 @@ function task(id: string, title: string, status: TaskStatus = 'todo', version = 
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -126,10 +128,38 @@ describe('kanban undo', () => {
     expect(read).toHaveBeenCalledTimes(4);
     expect(move).toHaveBeenLastCalledWith('a', 'todo', 'b', 2);
     expect(laneOf('a')).toBe('todo');
-    expect(liveText()).toContain('API 연결: 되돌렸습니다(할 일).');
+    expect(liveText()).toContain('API 연결: 되돌렸습니다(todo).');
     expect(undoButton()).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(document.activeElement).toBe(card('a'));
+  });
+
+  it('#50 uses the successful neighbor move version before its reload finishes', async () => {
+    const a = task('a', 'API 연결');
+    const b = task('b', '문서 검토');
+    const c = task('c', '회의 준비');
+    const savedB = { ...b, move_version: 2 };
+    const savedC = { ...c, status: 'in_progress', move_version: 2 };
+    let finishOld: (tasks: TaskView[]) => void = () => undefined;
+    const oldRead = new Promise<TaskView[]>((resolve) => {
+      finishOld = resolve;
+    });
+    lists([a, b, c], oldRead, [savedB, savedC], [savedB, savedC], [c, savedB]);
+    const move = vi
+      .spyOn(api, 'moveTask')
+      .mockImplementation((id, status) =>
+        Promise.resolve({ ...(id === 'b' ? savedB : savedC), status, checklist: [] }),
+      );
+    await mount();
+    await fireEvent.keyDown(card('b'), { key: 'ArrowDown', altKey: true });
+    await flush();
+    await moveRight('c');
+    await flush();
+    finishOld([a, b, c]);
+    await flush();
+    await fireEvent.click(screen.getByRole('button', { name: '회의 준비 이동 되돌리기' }));
+    await flush();
+    expect(move).toHaveBeenLastCalledWith('c', 'todo', 'b', 2);
   });
 
   it('undo goes back before the card that was next on the server, not on the optimistic screen', async () => {

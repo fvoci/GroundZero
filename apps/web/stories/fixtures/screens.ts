@@ -34,6 +34,8 @@ export interface ScreenApi {
   notifications: typeof api.notifications;
   myInvitations: typeof api.myInvitations;
   currentTimer: typeof api.currentTimer;
+  // 작업자 A: 업무 보기는 서버 상태 정의를 함께 읽는다.
+  taskStatuses: typeof api.taskStatuses;
   tasks: typeof api.tasks;
   savedViews: typeof api.savedViews;
   syncRecurrences: typeof api.syncRecurrences;
@@ -76,6 +78,19 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
 }
 
 const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
+  taskStatuses: () =>
+    Promise.resolve([
+      { id: 'todo', name: 'todo', color: '', position: 0, category: 'todo', task_count: 4 },
+      {
+        id: 'in_progress',
+        name: 'in_progress',
+        color: '',
+        position: 1,
+        category: 'doing',
+        task_count: 2,
+      },
+      { id: 'done', name: 'done', color: '', position: 2, category: 'done', task_count: 1 },
+    ]),
   modules: () => Promise.resolve(MODULES),
   wikiDocuments: () => Promise.resolve(DOCS),
   module: (id) => {
@@ -127,6 +142,8 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
   spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
   spyOn(api, 'tasks').mockImplementation(stubs.tasks);
+  // 작업자 A: 실제 상태 정의 조회도 합성 응답으로 격리한다.
+  spyOn(api, 'taskStatuses').mockImplementation(stubs.taskStatuses);
   spyOn(api, 'savedViews').mockImplementation(stubs.savedViews);
   spyOn(api, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);
   spyOn(api, 'task').mockImplementation(stubs.task);

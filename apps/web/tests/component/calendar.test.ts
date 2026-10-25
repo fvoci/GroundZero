@@ -104,6 +104,7 @@ describe('month calendar', () => {
       reference: 'DEV-2',
       title: '보고서',
       status: 'todo',
+      status_category: 'todo',
       milestone: false,
       start_date: '2026-10-28',
       due_date: '2026-11-03',
@@ -147,8 +148,8 @@ describe('month calendar', () => {
       '2026-11-30',
       'Asia/Seoul',
     );
-    expect(map.get('2026-11-01')?.map((e) => e.label)).toEqual(['00:30 점검']);
-    expect(map.get('2026-11-02')?.map((e) => e.label)).toEqual(['종일 학회']);
+    expect(map.get('2026-11-01')?.map((e) => e.label)).toEqual(['00:30 점검', '마감 DEV-2 보고서']);
+    expect(map.get('2026-11-02')?.map((e) => e.label)).toEqual(['종일 학회', '마감 DEV-2 보고서']);
     expect(map.get('2026-11-03')?.map((e) => e.label)).toEqual(['종일 학회', '마감 DEV-2 보고서']);
     expect(map.has('2026-10-28')).toBe(false);
     expect(map.get('2026-11-04')?.map((e) => e.label)).toEqual(['예정 주간 보고']);

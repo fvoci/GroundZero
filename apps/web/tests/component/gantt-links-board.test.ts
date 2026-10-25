@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -55,6 +57,7 @@ function task(
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -100,7 +103,7 @@ function linkEnds(path: Element): [number, number] {
 describe('gantt dependency lines on the board', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
-    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'gantt' }));
+    window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
@@ -405,7 +408,7 @@ describe('gantt dependency lines on the board', () => {
 
   it('draws no line when the filter leaves only one end', async () => {
     window.sessionStorage.setItem(
-      'fvoci:board:i1',
+      org.key('board:i1'),
       JSON.stringify({ view: 'gantt', sort: 'position', filter: { text: '구현' } }),
     );
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);

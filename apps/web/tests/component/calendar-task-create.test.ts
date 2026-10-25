@@ -69,6 +69,7 @@ function created(version = 1, due: string | null = null): TaskDetailView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -127,57 +128,36 @@ describe('creating a task from a calendar day', () => {
     });
     expect(create.mock.calls[0]?.[0]).toBe('i1');
     expect(create.mock.calls[0]?.[2]).toBe('자료 준비');
-    expect(update.mock.calls[0]?.[1]).toBe(1);
-    expect(update.mock.calls[0]?.[2]).toMatchObject({ title: '자료 준비', due_date: '2026-10-23' });
+    expect(create.mock.calls[0]?.[4]).toEqual({ due_date: '2026-10-23' });
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it('when only the date fails, keeps the task and sets the date again without creating twice', async () => {
-    const create = vi.spyOn(api, 'createTask').mockResolvedValue(created());
-    const update = vi
-      .spyOn(api, 'updateTask')
+  it('retries the entire atomic creation with the same request id and preserves input', async () => {
+    const create = vi
+      .spyOn(api, 'createTask')
       .mockRejectedValueOnce(new NetworkError('offline'))
-      .mockResolvedValueOnce({ kind: 'updated', task: created(2, '2026-10-23') });
-    const read = vi.spyOn(api, 'task').mockResolvedValue(created());
+      .mockResolvedValueOnce(created(1, '2026-10-23'));
+    const update = vi.spyOn(api, 'updateTask');
     const oncreated = vi.fn();
     render(CalendarTaskDialog, {
       props: {
         workspaceId: 'ws-1',
         day: '2026-10-23',
-        item: { id: 'i1', title: '대표 항목' },
+        item: { id: 'i1', title: '항목' },
         onclose: () => undefined,
         oncreated,
       },
     });
     await fill('자료 준비');
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('업무는 만들었지만 마감일을 넣지 못했습니다');
-    expect(within(alert).getByRole('link', { name: '자료 준비 열기' })).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: '마감일 다시 넣기' }));
-    await waitFor(() => {
-      expect(oncreated).toHaveBeenCalled();
-    });
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(read).toHaveBeenCalledWith('t-new');
-    expect(update).toHaveBeenCalledTimes(2);
-  });
-
-  it('tells the caller a task was created when closed after the date failed', async () => {
-    vi.spyOn(api, 'createTask').mockResolvedValue(created());
-    vi.spyOn(api, 'updateTask').mockRejectedValue(new NetworkError('offline'));
-    const onclose = vi.fn<(made: boolean) => void>();
-    render(CalendarTaskDialog, {
-      props: {
-        workspaceId: 'ws-1',
-        day: '2026-10-23',
-        item: { id: 'i1', title: '대표 항목' },
-        onclose,
-        oncreated: () => undefined,
-      },
-    });
-    await fill('자료 준비');
     await screen.findByRole('alert');
-    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
-    expect(onclose).toHaveBeenCalledWith(true);
+    expect(screen.getByLabelText('업무 제목')).toHaveValue('자료 준비');
+    await fireEvent.click(screen.getByRole('button', { name: '업무 만들기' }));
+    await waitFor(() => {
+      expect(oncreated).toHaveBeenCalledTimes(1);
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0]).toEqual(create.mock.calls[1]);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('in the workspace calendar asks for the module and offers only items it can add tasks to', async () => {
@@ -218,7 +198,9 @@ describe('creating a task from a calendar day', () => {
     });
     await fireEvent.click(within(dialog).getByRole('button', { name: '업무 만들기' }));
     await waitFor(() => {
-      expect(create).toHaveBeenCalledWith('i1', expect.any(String), '자료 준비');
+      expect(create).toHaveBeenCalledWith('i1', expect.any(String), '자료 준비', null, {
+        due_date: '2026-10-23',
+      });
     });
   });
 

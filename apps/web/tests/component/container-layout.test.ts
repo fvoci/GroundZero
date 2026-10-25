@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -114,7 +116,7 @@ describe('content panels split by the content width', () => {
 // UI 감사: 업무 목록 보기의 여섯 칸 표가 좁은 화면에서 본문 밖으로 넘쳤다. 기록 표처럼 표만 가로로 스크롤한다.
 describe('task list table on narrow screens', () => {
   it('scrolls the table sideways instead of widening the page', async () => {
-    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'list' }));
+    window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'list' }));
     const item: ItemView = {
       id: 'i1',
       module_id: 'm1',

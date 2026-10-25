@@ -45,6 +45,10 @@
   }
 
   const { workspace, itemId, workspaces, taskId }: Props = $props();
+  // 작업자 A: 같은 항목 안 보기·상세 경로 변경도 업무 화면에 즉시 전달한다(D-121).
+  const taskRoute = $derived(
+    router.route.name === 'item' && router.route.itemId === itemId ? router.route : undefined,
+  );
   // 주소 객체가 바뀌어도(업무 대화상자 열고 닫기) 같은 항목이면 다시 불러오지 않는다.
   const currentItemId = $derived(itemId);
 
@@ -542,7 +546,8 @@
     <TaskBoard
       item={view}
       {workspaces}
-      openTaskId={taskId}
+      routeView={taskRoute?.view}
+      openTaskId={taskRoute === undefined ? taskId : taskRoute.taskId}
       tasksVersion={taskVersion}
       onstale={() => {
         // 권한·보관이 바뀌었을 수 있다. 입력 중인 칸은 두고, 항목 상태와 고치지 않은 칸은 새로 읽은 값으로 바꾼다

@@ -24,7 +24,7 @@ import type {
   TaskStatus,
   TaskView,
 } from '$lib/api/client';
-import { ITEM_STATUSES, MODULE_KINDS, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
+import { ITEM_STATUSES, MODULE_KINDS, TASK_PRIORITIES } from '$lib/api/client';
 
 import data from '../../../../deploy/postgres/dev-ui-data.json';
 
@@ -166,9 +166,7 @@ function asItemStatus(value: string): ItemStatus {
 }
 
 function asTaskStatus(value: string): TaskStatus {
-  const status = TASK_STATUSES.find((s) => s === value);
-  if (status === undefined) throw new TypeError(`unknown task status ${value}`);
-  return status;
+  return value;
 }
 
 function asTaskPriority(value: string): TaskPriority {
@@ -283,6 +281,7 @@ const homeTask = (t: (typeof TASK_ROWS)[number]): HomeTaskView => ({
   reference: t.reference,
   title: t.title,
   status: t.status,
+  status_category: t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing' : 'todo',
   due_date: t.due_date,
   bucket: bucketOf(t.due_date),
 });
@@ -389,6 +388,7 @@ export function calendarView(): CalendarView {
       reference: t.reference,
       title: t.title,
       status: t.status,
+      status_category: t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing' : 'todo',
       milestone: t.milestone,
       start_date: t.start_date,
       due_date: t.due_date,
@@ -428,6 +428,8 @@ export function taskViews(): TaskView[] {
       title: t.title,
       description: t.description,
       status: row.status,
+      status_category:
+        row.status === 'done' ? 'done' : row.status === 'in_progress' ? 'doing' : 'todo',
       priority: asTaskPriority(t.priority),
       start_date: row.start_date,
       due_date: row.due_date,

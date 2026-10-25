@@ -1,3 +1,6 @@
+import * as feedback from '$lib/features/feedback/feedback.svelte';
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -53,6 +56,7 @@ function task(
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -107,7 +111,7 @@ describe('gantt date edits', () => {
 describe('gantt reschedule', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
-    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'gantt' }));
+    window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
@@ -129,6 +133,7 @@ describe('gantt reschedule', () => {
   };
 
   it('Alt+Right moves the task a day and saves when no later task is affected', async () => {
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
     const preview = vi
@@ -142,6 +147,11 @@ describe('gantt reschedule', () => {
     await fireEvent.keyDown(rowButton(gantt, 'a'), { key: 'ArrowRight', altKey: true });
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+      );
     });
     expect(preview).toHaveBeenCalledWith('a', '2026-10-21', '2026-10-23');
     expect(update.mock.calls[0]?.[1]).toBe(1);

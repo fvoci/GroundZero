@@ -28,19 +28,31 @@ beforeEach(async () => {
 describe('task board (D-31)', () => {
   it('splits tasks into status lanes keeping server order', () => {
     const board = lanes(tasks);
-    expect(board.todo.map((t) => t.id)).toEqual(['a', 'b', 'x1']);
-    expect(board.in_progress.map((t) => t.id)).toEqual(['c']);
-    expect(board.done.map((t) => t.id)).toEqual(['a1']);
+    expect(board.todo?.map((t) => t.id)).toEqual(['a', 'b', 'x1']);
+    expect(board.in_progress?.map((t) => t.id)).toEqual(['c']);
+    expect(board.done?.map((t) => t.id)).toEqual(['a1']);
   });
 
   it('plans keyboard moves as (lane, next task)', () => {
-    expect(planBoardMove(tasks, 'a', 'up')).toBeUndefined();
-    expect(planBoardMove(tasks, 'b', 'up')).toEqual({ status: 'todo', beforeId: 'a' });
-    expect(planBoardMove(tasks, 'a', 'down')).toEqual({ status: 'todo', beforeId: 'x1' });
-    expect(planBoardMove(tasks, 'b', 'down')).toEqual({ status: 'todo', beforeId: null });
-    expect(planBoardMove(tasks, 'x1', 'down')).toBeUndefined();
-    expect(planBoardMove(tasks, 'a', 'left')).toBeUndefined();
-    expect(planBoardMove(tasks, 'c', 'right')).toEqual({ status: 'done', beforeId: null });
+    expect(planBoardMove(tasks, 'a', 'up', ['todo', 'in_progress', 'done'])).toBeUndefined();
+    expect(planBoardMove(tasks, 'b', 'up', ['todo', 'in_progress', 'done'])).toEqual({
+      status: 'todo',
+      beforeId: 'a',
+    });
+    expect(planBoardMove(tasks, 'a', 'down', ['todo', 'in_progress', 'done'])).toEqual({
+      status: 'todo',
+      beforeId: 'x1',
+    });
+    expect(planBoardMove(tasks, 'b', 'down', ['todo', 'in_progress', 'done'])).toEqual({
+      status: 'todo',
+      beforeId: null,
+    });
+    expect(planBoardMove(tasks, 'x1', 'down', ['todo', 'in_progress', 'done'])).toBeUndefined();
+    expect(planBoardMove(tasks, 'a', 'left', ['todo', 'in_progress', 'done'])).toBeUndefined();
+    expect(planBoardMove(tasks, 'c', 'right', ['todo', 'in_progress', 'done'])).toEqual({
+      status: 'done',
+      beforeId: null,
+    });
   });
 
   it('lists subtasks right after their parent and orphans last', () => {

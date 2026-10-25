@@ -165,7 +165,7 @@ function fieldText(unit: MergeUnit, input: TaskInput, names: ReadonlyMap<string,
     case 'description':
       return fullText(input[unit]);
     case 'status':
-      return STATUS_LABEL[input.status];
+      return input.status;
     case 'priority':
       return PRIORITY_LABEL[input.priority];
     case 'schedule': {

@@ -121,14 +121,18 @@ export function entriesByDay(
   }
   for (const task of tasks) {
     const day = task.due_date ?? task.start_date;
-    if (day === null || day < from || day > to) continue;
+    if (day === null) continue;
     const words = { reference: task.reference ?? '', title: task.title };
     const label = task.milestone
       ? m.events_entry_milestone(words)
       : task.due_date === null
         ? m.events_entry_task_start(words)
         : m.events_entry_task_due(words);
-    push(day, { kind: 'task', task, label });
+    const days =
+      task.start_date !== null && task.due_date !== null
+        ? eachDay(task.start_date, task.due_date, from, to)
+        : [day];
+    for (const date of days) push(date, { kind: 'task', task, label });
   }
   for (const d of dates) {
     if (d.date < from || d.date > to) continue;

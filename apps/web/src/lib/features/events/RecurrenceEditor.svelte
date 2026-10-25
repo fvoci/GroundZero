@@ -3,6 +3,7 @@
   // 없는 날(31일·2월 29일)은 건너뛴다. 저장하면 이미 만든 회차는 바뀌지 않는다.
   import type { Frequency, RecurrenceRule } from '$lib/api/client';
   import { ApiError, FREQUENCIES } from '$lib/api/client';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -64,6 +65,7 @@
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let saved = $state(false);
+  let conflicted = $state(false);
 
   /** 입력을 규칙으로. 틀린 값은 조용히 바꾸지 않고 오류 글로 돌려준다. */
   function build(): RecurrenceRule | null | string {
@@ -100,7 +102,10 @@
     try {
       await onsave(rule);
       saved = true;
+      conflicted = false;
+      notifyDone(m.common_saved());
     } catch (e: unknown) {
+      conflicted = e instanceof ApiError && e.code === 'rule_conflict';
       // 그사이 다른 사람이 규칙을 바꿨다(서버 409). 입력한 칸은 그대로 두고, 요약(서버 규칙)과 함께 알린다.
       error =
         e instanceof ApiError && e.code === 'rule_conflict'
@@ -208,9 +213,15 @@
           </div>
         </fieldset>
       {/if}
-      <Button type="submit" size="sm" disabled={busy}>{m.events_recurrence_save()}</Button>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={busy}
+        aria-label={conflicted ? m.tasks_rule_save_mine() : undefined}
+        >{conflicted ? m.tasks_save_mine() : m.events_recurrence_save()}</Button
+      >
       <!-- 저장 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
-      <span class="text-sm empty:sr-only" role="status">{saved ? m.common_saved() : ''}</span>
+      <span class="sr-only" role="status">{saved ? m.common_saved() : ''}</span>
     </form>
     {#if error !== undefined}
       <p role="alert" class="text-sm text-destructive">{error}</p>

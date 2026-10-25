@@ -1,6 +1,6 @@
 // 칸반 계산 (D-31). 열은 상태, 열 안의 순서는 서버 목록 순서(위치)를 따른다.
 import type { TaskStatus } from '$lib/api/client';
-import { ApiError, NetworkError, TASK_STATUSES } from '$lib/api/client';
+import { ApiError, NetworkError } from '$lib/api/client';
 import { m } from '$lib/paraglide/messages.js';
 
 export interface BoardTask {
@@ -15,9 +15,14 @@ export interface BoardMove {
 
 export type BoardAction = 'up' | 'down' | 'left' | 'right';
 
-export function lanes<T extends BoardTask>(tasks: readonly T[]): Record<TaskStatus, T[]> {
-  const out: Record<TaskStatus, T[]> = { todo: [], in_progress: [], done: [] };
-  for (const t of tasks) out[t.status].push(t);
+export function lanes<T extends BoardTask>(
+  tasks: readonly T[],
+  statuses: readonly string[] = [],
+): Record<string, T[]> {
+  const out: Record<string, T[]> = Object.fromEntries(
+    [...statuses, ...tasks.map((t) => t.status)].map((name) => [name, []]),
+  );
+  for (const t of tasks) (out[t.status] ??= []).push(t);
   return out;
 }
 
@@ -26,12 +31,13 @@ export function planBoardMove(
   tasks: readonly BoardTask[],
   id: string,
   action: BoardAction,
+  statuses: readonly string[],
 ): BoardMove | undefined {
   const task = tasks.find((t) => t.id === id);
   if (task === undefined) return undefined;
-  const lane = lanes(tasks)[task.status];
+  const lane = lanes(tasks)[task.status] ?? [];
   const index = lane.findIndex((t) => t.id === id);
-  const column = TASK_STATUSES.indexOf(task.status);
+  const column = statuses.indexOf(task.status);
   switch (action) {
     case 'up': {
       const previous = lane[index - 1];
@@ -41,11 +47,11 @@ export function planBoardMove(
       if (index >= lane.length - 1) return undefined;
       return { status: task.status, beforeId: lane[index + 2]?.id ?? null };
     case 'left': {
-      const status = TASK_STATUSES[column - 1];
+      const status = statuses[column - 1];
       return status === undefined ? undefined : { status, beforeId: null };
     }
     case 'right': {
-      const status = TASK_STATUSES[column + 1];
+      const status = statuses[column + 1];
       return status === undefined ? undefined : { status, beforeId: null };
     }
   }
@@ -108,7 +114,7 @@ export function planDrop(
   }
   if (slot.beforeId === id) return undefined;
   if (slot.status === task.status) {
-    const lane = lanes(tasks)[task.status];
+    const lane = lanes(tasks)[task.status] ?? [];
     const next = lane[lane.findIndex((t) => t.id === id) + 1];
     if ((next?.id ?? null) === slot.beforeId) return undefined;
   }

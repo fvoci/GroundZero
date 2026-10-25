@@ -31,14 +31,14 @@ export interface MoveOrigin {
 export function nextInLane(tasks: readonly BoardTask[], id: string): string | null | undefined {
   const task = tasks.find((t) => t.id === id);
   if (task === undefined) return undefined;
-  const lane = lanes(tasks)[task.status];
+  const lane = lanes(tasks)[task.status] ?? [];
   return lane[lane.findIndex((t) => t.id === id) + 1]?.id ?? null;
 }
 
 export function originOf(tasks: readonly SyncTask[], id: string): MoveOrigin | undefined {
   const task = tasks.find((t) => t.id === id);
   if (task === undefined) return undefined;
-  const lane = lanes(tasks)[task.status];
+  const lane = lanes(tasks)[task.status] ?? [];
   const at = lane.findIndex((t) => t.id === id);
   const prev = lane[at - 1];
   const next = lane[at + 1];
@@ -61,7 +61,7 @@ export function backTo(
   server: readonly SyncTask[],
   origin: MoveOrigin,
 ): { plan: BoardMove; exact: boolean } {
-  const lane = lanes(server)[origin.status];
+  const lane = lanes(server)[origin.status] ?? [];
   const still = (id: string | null, version: number | null): boolean =>
     id === null || lane.some((t) => t.id === id && t.move_version === version);
   if (still(origin.nextId, origin.nextVersion)) {

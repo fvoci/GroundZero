@@ -32,6 +32,7 @@ function task(id: string, title: string, bucket: HomeTaskView['bucket']): HomeTa
     reference: 'DEV-2',
     title,
     status: 'todo',
+    status_category: 'todo',
     due_date: '2026-10-21',
     bucket,
   };

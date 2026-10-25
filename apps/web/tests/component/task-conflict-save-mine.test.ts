@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ import type {
   TaskDetailView,
   TaskInput,
 } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { clashRows } from '$lib/features/tasks/labels';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
@@ -43,6 +44,7 @@ const v2: TaskDetailView = {
   series: null,
   occurrence_date: null,
   assignees: [],
+  status_category: 'todo',
   checklist_done: 0,
   checklist_total: 0,
   version: 2,
@@ -257,7 +259,7 @@ describe('saving my input after a task conflict', () => {
 
     await fireEvent.click(saveMineButton());
     // 서버가 판 3으로 검사해 다시 409로 답했다: 충돌 화면이 더 새 판을 보이고 입력은 그대로다.
-    expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: 진행 중/)).toBeTruthy();
+    expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: in_progress/)).toBeTruthy();
     expect(update).toHaveBeenNthCalledWith(
       2,
       't1',
@@ -609,7 +611,7 @@ describe('the overwrite question after a task conflict', () => {
       await waitFor(() => {
         expect(update).toHaveBeenCalledTimes(2);
       });
-      expect(await screen.findByText(/상태: 완료/)).toBeTruthy();
+      expect(await screen.findByText(/상태: done/)).toBeTruthy();
       await waitFor(() => {
         expect(document.activeElement?.id).toBe('task-save-mine');
       });
@@ -832,7 +834,7 @@ describe('the overwrite question after the second review', () => {
     if (save === null) throw new Error('task-save');
     save.focus();
     await fireEvent.click(save);
-    expect(await screen.findByText(/상태: 완료/)).toBeTruthy();
+    expect(await screen.findByText(/상태: done/)).toBeTruthy();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(document.activeElement?.id).toBe('task-save');
@@ -1045,4 +1047,47 @@ describe('long values in the overwrite question', () => {
     });
     expect(field('task-description').value).toBe('내 설명');
   });
+});
+it('preserves and hides task input after account_changed without another save', async () => {
+  await setLocale('ko', { reload: false });
+  mount();
+  const update = vi
+    .spyOn(api, 'updateTask')
+    .mockRejectedValue(new ApiError(409, 'account_changed', 'account_changed'));
+  await screen.findByLabelText('제목');
+  await type('task-title', '계정 A의 비공개 입력');
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await screen.findByText(/계정이 바뀌어 입력을 숨겼습니다/);
+  expect(field('task-title')).toHaveValue('계정 A의 비공개 입력');
+  expect(field('task-title')).not.toBeVisible();
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it('keeps recurrence input on 409, shows the latest rule and explicitly resaves once', async () => {
+  await setLocale('ko', { reload: false });
+  const base = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+  const latest = { ...base, interval: 3 };
+  const initial = {
+    ...v2,
+    due_date: '2026-10-26',
+    series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule: base },
+  };
+  mount(initial);
+  const save = vi
+    .spyOn(api, 'setTaskRecurrence')
+    .mockRejectedValueOnce(
+      new TaskRuleConflict({ ...initial, series: { ...initial.series, rule: latest } }),
+    )
+    .mockReturnValueOnce(new Promise(() => undefined));
+  await screen.findByLabelText('간격');
+  await fireEvent.input(screen.getByLabelText('간격'), { target: { value: '2' } });
+  await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+  await screen.findByText(/그사이 다른 사람이 반복 규칙/);
+  expect(screen.getByLabelText('간격')).toHaveValue('2');
+  expect(save).toHaveBeenCalledTimes(1);
+  await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
+  await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(save.mock.calls[1]?.[1]).toEqual({ ...base, interval: 2 });
+  expect(save.mock.calls[1]?.[3]).toEqual(latest);
 });
