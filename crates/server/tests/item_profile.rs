@@ -787,7 +787,7 @@ async fn group_changes_and_leaving_end_item_roles() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|row| row["user_id"] != json!(grouped.id.0) || row["to_grade"].is_string()),
+            .all(|row| row["user_id"] != json!(grouped.id.0) || row["to_grade"] == "write"),
         "{:?}",
         preview.json
     );

@@ -4119,7 +4119,8 @@ async fn revoke_while_a_move_waits(
 
 /// W1b(사용자 요구 2b·2c, 방 안 이동, 재확인 간격 안): 이동이 잠금을 기다리는 동안 작성자를 독자로 바꾸고 재확인 간격(이
 /// 시험은 3600초) 안에 편집을 보낸다. D-114에 따라 강등 뒤 이동은 409이고 새 미리보기를 확인해 재시도한다. 확인받은 편집은
-/// 옮긴 문서에 남는다. 강등 뒤 보낸 편집도 다음 재확인 전이라 받아들여 재시도한 이동의 리비전에 들고 확인된다(연결은 4409):
+/// 옮긴 문서에 남는다. 강등 뒤 보낸 편집도 다음 재확인 전이라 받아들여 재시도한 이동의 리비전에 들고 확인된다.
+/// 재시도 시작 시 권한을 다시 확인하므로 강등된 연결은 4403으로 닫힌다.
 /// 문서화된 권한 철회 지연(재확인 간격 안의 편집은 들어간다)과 같다. 간격이 지나면 대기 중에도 닫힌다(아래 시험).
 #[tokio::test]
 async fn an_edit_within_the_recheck_interval_after_a_demotion_during_a_move_is_kept() {
@@ -4142,7 +4143,7 @@ async fn an_edit_within_the_recheck_interval_after_a_demotion_during_a_move_is_k
     );
     // 재확인 간격 안: 강등 뒤 편집이 받아들여지고 리비전·확인까지 간다.
     assert!(out.after_relayed && body.contains("거둔 뒤 보낸 문단") && out.after_acked);
-    assert_eq!(out.closed, Some(4409));
+    assert_eq!(out.closed, Some(4403));
 }
 
 /// 재확인 간격 1초인 방에서 이동이 잠금을 기다리는 동안 작성자를 독자로 바꾼다. `later_lock`이면 이동이 첫 잠금(새 자리
