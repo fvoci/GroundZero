@@ -391,7 +391,7 @@ async fn zotero_refresh_rejects_a_concurrent_edit_without_overwriting_it() {
         .unwrap()
         .unwrap();
     assert_eq!(refreshed.status, StatusCode::CONFLICT, "{}", refreshed.json);
-    assert_eq!(refreshed.json["code"], "invalid_state");
+    assert_eq!(refreshed.json["error"], "invalid_state");
     assert_eq!(refreshed.json["message"], "the record changed; reload it");
     let after = send(&app, Method::GET, &records_uri, Some(&writer), None).await;
     assert_eq!(after.status, StatusCode::OK, "{}", after.json);

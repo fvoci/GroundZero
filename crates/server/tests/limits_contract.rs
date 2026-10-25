@@ -83,7 +83,7 @@ async fn task_csv_title_limit(max: usize) {
             accepted.push(title);
         } else {
             assert_eq!(row.status, StatusCode::BAD_REQUEST, "{}", row.json);
-            assert_eq!(row.json["code"], "bad_request");
+            assert_eq!(row.json["error"], "bad_request");
         }
     }
     let saved = send(&app, Method::GET, &uri, Some(&user), None).await;
