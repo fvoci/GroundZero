@@ -12,6 +12,7 @@
   } from '$lib/api/client';
   import { api, ITEM_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -36,7 +37,6 @@
   let profile = $state<ItemProfileView | undefined>(undefined);
   let people = $state<AssigneeView[]>([]);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let editing = $state(false);
   // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
   let editBase = 0;
@@ -101,6 +101,7 @@
   });
 
   async function startEdit(p: ItemProfileView): Promise<void> {
+    error = undefined;
     editSession += 1;
     editBase = p.version;
     editLeader = p.leader;
@@ -127,7 +128,6 @@
   /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
   async function submit(base: number): Promise<void> {
     // 앞선 저장의 안내가 이번 결과(날짜 오류·409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
-    status = '';
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
       error = m.modules_period_invalid();
       return;
@@ -164,13 +164,13 @@
       if (session === editSession) {
         conflict = undefined;
         editing = false;
-        status = m.modules_profile_saved();
+        notifyDone(m.modules_profile_saved());
       }
       // 다시 읽지 못하면 정보를 비우고 다시 읽기를 맡긴다. 옛 판이 남아 있으면 그 판으로 편집을 다시 열 수 있다.
       profile = fresh;
       if (fresh === undefined) reloadKey += 1;
     } catch (err: unknown) {
-      error = errorText(err, m.modules_save_failed());
+      if (session === editSession) error = errorText(err, m.modules_save_failed());
     }
   }
 
@@ -198,11 +198,10 @@
 
   async function saveMembers(): Promise<void> {
     error = undefined;
-    status = '';
     try {
       await api.setItemMembers(item.id, memberIds, groupIds);
       managing = false;
-      status = m.modules_people_saved({ label: labels.members });
+      notifyDone(m.modules_people_saved({ label: labels.members }));
       reloadKey += 1;
     } catch (err: unknown) {
       error = errorText(err, m.modules_save_failed());
@@ -221,7 +220,6 @@
     {/if}
   </div>
   {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-  <p aria-live="polite" class="text-sm">{status}</p>
   {#if profile === undefined}
     <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
   {:else if editing}
@@ -334,6 +332,7 @@
             editSession += 1;
             editing = false;
             conflict = undefined;
+            error = undefined;
           }}>{m.common_cancel()}</Button
         >
       </div>

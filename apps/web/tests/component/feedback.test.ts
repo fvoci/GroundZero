@@ -1,10 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import {
   connection,
   notifyDone,
+  notifyError,
+  auth,
   reportConnectionLost,
 } from '$lib/features/feedback/feedback.svelte';
 
@@ -42,12 +44,36 @@ describe('user feedback (D-82)', () => {
     render(FeedbackHost);
     reportConnectionLost();
     await vi.waitFor(() => {
-      expect(screen.getByTestId('connection-banner').getAttribute('role')).toBe('status');
+      expect(screen.getByTestId('connection-banner').parentElement).toHaveAttribute(
+        'role',
+        'status',
+      );
     });
     await vi.advanceTimersByTimeAsync(5_000);
     await vi.waitFor(() => {
       expect(screen.queryByTestId('connection-banner')).toBeNull();
     });
+  });
+
+  it('updates a repeated error and dismisses banners without changing connection or session state', async () => {
+    render(FeedbackHost);
+    notifyError('연결 오류', 'same-error');
+    notifyError('연결 오류 갱신', 'same-error');
+    await waitFor(() => {
+      expect(screen.getAllByText('연결 오류 갱신')).toHaveLength(1);
+    });
+    auth.expired = true;
+    connection.lost = true;
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: '닫기' })).toHaveLength(2);
+    });
+    for (const button of screen.getAllByRole('button', { name: '닫기' }))
+      await fireEvent.click(button);
+    expect(screen.queryByTestId('connection-banner')).toBeNull();
+    expect(screen.queryByTestId('session-banner')).toBeNull();
+    expect(connection.lost).toBe(true);
+    expect(auth.expired).toBe(true);
+    auth.expired = false;
   });
 });
 

@@ -7,6 +7,7 @@
 
   import type { SummaryView } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
@@ -36,7 +37,6 @@
   let focusId = $state<string | undefined>(undefined);
   let root: HTMLUListElement | undefined = $state();
   let busy = $state(false);
-  let status = $state('');
   let failure = $state<string | undefined>(undefined);
 
   const rows = $derived(visibleRows(docs, collapsed));
@@ -88,7 +88,7 @@
       if (action === 'indent' && move.parentId !== null) toggle(move.parentId, true);
       failure = undefined;
       await onmove(id, move);
-      status = actionLabel(action);
+      notifyDone(actionLabel(action));
       await focusRow(id);
     } catch (e: unknown) {
       // 트리는 서버가 받은 뒤에만 바뀌므로 그대로다. 부르는 쪽이 최신 목록을 다시 읽는다(권한 철회·동시 변경). 알림은
@@ -110,10 +110,11 @@
       await onmove(id, { parentId, beforeId: null });
       if (parentId !== null) toggle(parentId, true);
       const parent = parentId === null ? undefined : docs.find((d) => d.id === parentId);
-      status =
+      notifyDone(
         parent === undefined
           ? m.documents_tree_moved_root()
-          : m.documents_tree_moved_under({ title: parent.title });
+          : m.documents_tree_moved_under({ title: parent.title }),
+      );
       return undefined;
     } catch (e: unknown) {
       // 옮기기는 됐는데 목록만 다시 읽지 못했으면 창을 닫고(다시 옮기지 않게) 트리 아래에 알린다.
@@ -329,7 +330,6 @@
 {#if failure !== undefined}
   <p role="alert" class="text-sm text-destructive">{failure}</p>
 {/if}
-<p class="sr-only" aria-live="polite">{status}</p>
 <MoveDocumentDialog
   {docs}
   docId={moving}

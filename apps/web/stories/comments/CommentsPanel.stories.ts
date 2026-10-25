@@ -13,7 +13,7 @@ import { comment, THREAD } from '../fixtures/comments';
 const meta = {
   title: 'Comments/CommentsPanel',
   component: CommentsPanel,
-  args: { target: { kind: 'document', id: 'doc-0001' } },
+  args: { target: { kind: 'document', id: 'doc-0001' }, canWrite: true },
 } satisfies Meta<typeof CommentsPanel>;
 
 export default meta;
@@ -100,10 +100,26 @@ export const PostFailedThenRetry: Story = {
     await expect(box).toHaveValue('다시 보낼 댓글');
 
     await userEvent.click(canvas.getByRole('button', { name: '댓글 달기' }));
-    await canvas.findByText('댓글을 달았습니다.');
-    await expect(box).toHaveValue('');
+    await waitFor(() => expect(box).toHaveValue(''));
     await expect(sentIds).toHaveLength(2);
     await expect(sentIds[1]).toBe(sentIds[0]);
     await canvas.findByText('다시 보낼 댓글');
   },
+};
+
+export const ReadOnly: Story = {
+  ...Threads,
+  args: { canWrite: false },
+};
+
+export const Archived: Story = {
+  ...Threads,
+  args: { canWrite: false, archived: true },
+  globals: { viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+
+export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
+export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
+export const BrandNarrowLargeText: Story = {
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

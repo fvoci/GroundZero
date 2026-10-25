@@ -40,11 +40,12 @@ describe('surfaces outside the color tokens in the dark theme', () => {
     });
   });
 
-  it('gives the connection banner a dark variant', async () => {
+  it('uses theme tokens for the connection banner', async () => {
+    applyTheme('dark');
     vi.stubGlobal('fetch', () => new Promise(() => undefined));
     render(FeedbackHost);
     connection.lost = true;
     const banner = await screen.findByTestId('connection-banner');
-    expect(banner).toHaveClass('dark:bg-amber-950', 'dark:text-amber-200');
+    expect(banner).toHaveClass('bg-secondary', 'text-secondary-foreground');
   });
 });

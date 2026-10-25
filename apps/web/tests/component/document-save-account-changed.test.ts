@@ -8,6 +8,8 @@ import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { uploadFile } from '$lib/features/files/upload';
 import { auth, connection } from '$lib/features/feedback/feedback.svelte';
 import { me as currentUser } from '$lib/me.svelte';
+import { org } from '$lib/org.svelte';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // #60·이슈 #88(사용자 결정 2026-10-22): 보내기 전의 `/api/me` 확인만으로는 확인과 전송 사이에 다른 탭에서 계정을
@@ -85,7 +87,7 @@ function stubServer(): void {
 }
 
 const drafts = (user: string): string[] =>
-  Object.keys(window.localStorage).filter((k) => k.startsWith(`fvoci:draft:${user}:doc-1`));
+  Object.keys(window.localStorage).filter((k) => k.startsWith(org.key(`draft:${user}:doc-1`)));
 
 async function editTitle(): Promise<void> {
   const title = document.getElementById('doc-title');
@@ -109,6 +111,7 @@ describe('the server refuses a save sent after the account changed', () => {
     stubServer();
   });
   afterEach(() => {
+    accountSafety.switching = false;
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

@@ -3,24 +3,22 @@
   import { formatInstant } from '$lib/display';
   import type { CommentView } from '$lib/api/client';
   import { m } from '$lib/paraglide/messages.js';
+  import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { Button } from '$lib/ui/button';
   import { Textarea } from '$lib/ui/textarea';
 
   interface Props {
     comment: CommentView;
     busy: boolean;
+    canWrite?: boolean;
     onedit: (body: string) => Promise<boolean>;
     ondelete: () => void;
   }
 
-  const { comment, busy, onedit, ondelete }: Props = $props();
+  const { comment, busy, canWrite = true, onedit, ondelete }: Props = $props();
 
   let editing = $state<string | undefined>(undefined);
   let confirming = $state(false);
-
-  function focusOnMount(node: HTMLElement): void {
-    node.focus();
-  }
 </script>
 
 <div class="flex flex-col gap-1">
@@ -32,7 +30,7 @@
         : ''}</span
     >
   </div>
-  {#if editing !== undefined}
+  {#if canWrite && comment.can_edit && editing !== undefined}
     <form
       class="flex flex-col gap-2"
       onsubmit={async (e: SubmitEvent) => {
@@ -56,14 +54,20 @@
     </p>
   {/if}
   <div class="flex flex-wrap gap-1">
-    {#if comment.can_edit && editing === undefined}
+    {#if canWrite && comment.can_edit && editing === undefined}
       <Button size="sm" variant="ghost" onclick={() => (editing = comment.body)}
         >{m.comments_edit()}</Button
       >
     {/if}
     {#if comment.can_delete && !confirming}
-      <Button size="sm" variant="ghost" onclick={() => (confirming = true)}
-        >{m.comments_delete()}</Button
+      <Button
+        size="sm"
+        variant="ghost"
+        data-confirm={`comment-${comment.id}`}
+        onclick={() => {
+          confirming = true;
+          void focusConfirm(`comment-${comment.id}`);
+        }}>{m.comments_delete()}</Button
       >
     {:else if comment.can_delete}
       <span
@@ -72,18 +76,23 @@
         aria-label={m.comments_delete_confirm_label()}
       >
         {m.comments_delete_confirm()}
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-destructive hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        <Button
+          size="sm"
+          variant="destructive"
+          data-confirm-go={`comment-${comment.id}`}
           disabled={busy}
-          use:focusOnMount
           onclick={() => {
             confirming = false;
             ondelete();
-          }}>{m.comments_delete()}</button
+          }}>{m.comments_delete()}</Button
         >
-        <Button size="sm" variant="ghost" onclick={() => (confirming = false)}
-          >{m.common_cancel()}</Button
+        <Button
+          size="sm"
+          variant="ghost"
+          onclick={() => {
+            confirming = false;
+            void focusConfirmStart(`comment-${comment.id}`);
+          }}>{m.common_cancel()}</Button
         >
       </span>
     {/if}

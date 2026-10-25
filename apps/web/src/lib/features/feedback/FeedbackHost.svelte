@@ -8,9 +8,11 @@
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Toaster } from '$lib/ui/sonner';
+  import { Button } from '$lib/ui/button';
 
   import {
     auth,
+    accountSafety,
     connection,
     markAccountSwitch,
     onAccountSwitch,
@@ -29,6 +31,21 @@
   }: Props = $props();
 
   const mobile = new IsMobile();
+  // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.
+  $effect(() => {
+    document.documentElement.toggleAttribute('data-account-switching', accountSafety.switching);
+    return () => {
+      document.documentElement.removeAttribute('data-account-switching');
+    };
+  });
+  let sessionDismissed = $state(false);
+  let connectionDismissed = $state(false);
+  $effect(() => {
+    if (!auth.expired) sessionDismissed = false;
+  });
+  $effect(() => {
+    if (!connection.lost) connectionDismissed = false;
+  });
 
   $effect(() => watchConnection());
   // 화면(문서의 배경 저장 등)이 계정이 바뀐 것을 알면 아래 확인과 같게 다시 읽는다.
@@ -41,7 +58,7 @@
   $effect(() => {
     const recheck = (): void => {
       const signedIn = currentUser.userId;
-      if (signedIn === '') return;
+      if (signedIn === '' || accountSafety.switching) return;
       void api
         .me()
         .then((now) => {
@@ -64,29 +81,48 @@
   );
 </script>
 
-{#if auth.expired}
-  <div
-    role="status"
-    aria-live="polite"
-    class="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-    data-testid="session-banner"
-  >
-    <span>{m.common_session_expired()}</span>
-    <a class="font-medium underline" href={signInHref} target="_blank" rel="noopener noreferrer"
-      >{m.common_session_sign_in()}</a
+<div role="status" aria-live="polite" class="empty:hidden">
+  {#if accountSafety.switching}
+    <div
+      class="flex flex-wrap items-center gap-3 bg-background p-6"
+      data-testid="account-safe-state"
     >
-  </div>
-{/if}
-{#if connection.lost}
-  <div
-    role="status"
-    aria-live="polite"
-    class="sticky top-0 z-40 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-    data-testid="connection-banner"
-  >
-    {m.common_connection_lost()}
-  </div>
-{/if}
+      <span>{m.feedback_account_switching()}</span>
+      <Button class="h-auto max-w-full whitespace-normal" onclick={reload}
+        >{m.feedback_reload()}</Button
+      >
+    </div>
+  {/if}
+</div>
+<div role="status" aria-live="polite" class="empty:hidden">
+  {#if auth.expired && !sessionDismissed && !accountSafety.switching}
+    <div
+      class="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-secondary px-4 py-2 text-sm text-secondary-foreground"
+      data-testid="session-banner"
+    >
+      <span>{m.common_session_expired()}</span>
+      <a class="font-medium underline" href={signInHref} target="_blank" rel="noopener noreferrer"
+        >{m.common_session_sign_in()}</a
+      >
+      <Button variant="ghost" size="sm" onclick={() => (sessionDismissed = true)}
+        >{m.common_close()}</Button
+      >
+    </div>
+  {/if}
+</div>
+<div role="status" aria-live="polite" class="empty:hidden">
+  {#if connection.lost && !connectionDismissed && !accountSafety.switching}
+    <div
+      class="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b bg-secondary px-4 py-2 text-sm text-secondary-foreground"
+      data-testid="connection-banner"
+    >
+      {m.common_connection_lost()}
+      <Button variant="ghost" size="sm" onclick={() => (connectionDismissed = true)}
+        >{m.common_close()}</Button
+      >
+    </div>
+  {/if}
+</div>
 <Toaster
   position={mobile.current ? 'top-center' : 'bottom-right'}
   closeButton

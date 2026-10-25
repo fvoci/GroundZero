@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { UploadView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import { scopedKey } from '$lib/storage';
 import { formatBytes, missingParts, partRange, uploadFile } from '$lib/features/files/upload';
 
 describe('chunked upload helpers', () => {
@@ -25,6 +26,32 @@ describe('chunked upload helpers', () => {
 // 감사 1번: 이어 올리기는 이름·크기·수정 시각이 같은 파일을 같은 업로드로 본다. 그 사이 내용이 바뀌었으면 서버가
 // 이미 받은 조각도 지금 파일과 같은지 확인해야 한다(아니면 옛 조각과 새 조각이 섞인 파일이 만들어진다).
 describe('resuming an upload', () => {
+  it('never reuses another account’s resume request for the same file', async () => {
+    const create = vi
+      .spyOn(api, 'createUpload')
+      .mockRejectedValue(new ApiError(400, 'bad_request', 'stop'));
+    const file = new File(['same'], 'same.bin', { lastModified: 1 });
+    await expect(uploadFile(file, { expectedUser: 'u1', fileId: 'f1' })).rejects.toThrow('stop');
+    await expect(uploadFile(file, { expectedUser: 'u2', fileId: 'f1' })).rejects.toThrow('stop');
+    await expect(uploadFile(file, { expectedUser: 'u1', fileId: 'f1' })).rejects.toThrow('stop');
+    expect(create.mock.calls[0]?.[0].requestId).toBe(create.mock.calls[2]?.[0].requestId);
+    expect(create.mock.calls[1]?.[0].requestId).not.toBe(create.mock.calls[0]?.[0].requestId);
+    expect(localStorage.getItem(scopedKey('uploads', 'u1', undefined))).not.toBeNull();
+    expect(localStorage.getItem(scopedKey('uploads', 'u2', undefined))).not.toBeNull();
+    expect(localStorage.getItem('fvoci.uploads')).toBeNull();
+  });
+
+  it('does not poll or retry completion after account_changed', async () => {
+    vi.spyOn(api, 'createUpload').mockResolvedValue({ ...view([]), state: 'completing' });
+    vi.spyOn(api, 'completeUpload').mockRejectedValue(
+      new ApiError(409, 'account_changed', 'changed'),
+    );
+    const poll = vi.spyOn(api, 'upload');
+    await expect(
+      uploadFile(new File(['same'], 'same.bin'), { expectedUser: 'u1', fileId: 'f1' }),
+    ).rejects.toThrow('changed');
+    expect(poll).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();
@@ -100,7 +127,7 @@ describe('resuming an upload', () => {
   // 검토(2차) 6번: 그만둔 업로드의 조각 해시가 저장소에 계속 쌓이지 않는다(기한이 지난 업로드는 이어 올릴 수 없다).
   it('drops part hashes of uploads past their expiry', async () => {
     window.localStorage.setItem(
-      'fvoci.upload-parts',
+      scopedKey('upload-parts', 'u1', undefined),
       JSON.stringify({
         'abandoned-1': { expires: '2026-01-01T00:00:00Z', hashes: { '1': 'aa' } },
         'abandoned-2': { '1': 'bb' },
@@ -111,7 +138,7 @@ describe('resuming an upload', () => {
     // 마치기 직전(이 업로드의 해시는 아직 있을 때)의 저장 내용을 본다.
     let kept = '';
     vi.spyOn(api, 'completeUpload').mockImplementation(() => {
-      kept = window.localStorage.getItem('fvoci.upload-parts') ?? '';
+      kept = window.localStorage.getItem(scopedKey('upload-parts', 'u1', undefined)) ?? '';
       return Promise.resolve({ ...view([1, 2]), state: 'done' });
     });
     await uploadFile(new File(['AAAABBBB'], 'a.bin', { lastModified: 1 }), {

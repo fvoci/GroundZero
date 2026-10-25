@@ -22,6 +22,8 @@
   import { setLocale } from '$lib/paraglide/runtime.js';
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
+  // 작업자 C: 계정 전환 뒤 다시 읽기 전까지 기존 화면·입력을 숨기되 메모리는 보존한다(D-96).
+  import { accountSafety } from '$lib/features/feedback/feedback.svelte';
   import { connection } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
@@ -260,143 +262,146 @@
   <FeedbackHost />
 {/if}
 
-{#if route.name === 'public'}
-  <PublicView token={route.token} />
-{:else if session.state === 'loading'}
-  <p class="p-6" aria-live="polite">{m.app_loading()}</p>
-{:else if session.state === 'error'}
-  <div class="flex flex-col items-start gap-3 p-6">
-    <p class="text-destructive" role="alert">{session.message}</p>
-    <Button variant="outline" onclick={() => void retry()}>{m.common_retry()}</Button>
-  </div>
-{:else if session.state === 'anonymous'}
-  <LoginScreen oidcEnabled={session.oidcEnabled} returnTo={router.path} />
-{:else}
-  {@const signedIn = session}
-  <SearchDialog
-    bind:open={searchOpen}
-    memberOf={(ws: string) => signedIn.workspaces.some((w) => w.id === ws)}
-    workspace={currentWorkspace}
-  />
-  <DisplaySettingsDialog bind:open={displayOpen} />
-  <Sidebar.Provider open={sidebarOpen}>
-    <AppSidebar
-      workspaces={signedIn.workspaces}
-      current={currentWorkspace}
-      displayName={signedIn.me.display_name}
-      {unreadCount}
-      onsearch={() => {
-        searchOpen = true;
-      }}
-      ondisplay={() => {
-        displayOpen = true;
-      }}
-      onexport={() => {
-        window.location.assign('/api/me/export');
-      }}
-      onlogout={() => void logout()}
+<!-- 작업자 C: 계정 전환 안전 상태. 입력 보존을 위해 조건부 제거하지 않는다. -->
+<div style:display={accountSafety.switching ? 'none' : 'contents'} inert={accountSafety.switching}>
+  {#if route.name === 'public'}
+    <PublicView token={route.token} />
+  {:else if session.state === 'loading'}
+    <p class="p-6" aria-live="polite">{m.app_loading()}</p>
+  {:else if session.state === 'error'}
+    <div class="flex flex-col items-start gap-3 p-6">
+      <p class="text-destructive" role="alert">{session.message}</p>
+      <Button variant="outline" onclick={() => void retry()}>{m.common_retry()}</Button>
+    </div>
+  {:else if session.state === 'anonymous'}
+    <LoginScreen oidcEnabled={session.oidcEnabled} returnTo={router.path} />
+  {:else}
+    {@const signedIn = session}
+    <SearchDialog
+      bind:open={searchOpen}
+      memberOf={(ws: string) => signedIn.workspaces.some((w) => w.id === ws)}
+      workspace={currentWorkspace}
     />
+    <DisplaySettingsDialog bind:open={displayOpen} />
+    <Sidebar.Provider open={sidebarOpen}>
+      <AppSidebar
+        workspaces={signedIn.workspaces}
+        current={currentWorkspace}
+        displayName={signedIn.me.display_name}
+        {unreadCount}
+        onsearch={() => {
+          searchOpen = true;
+        }}
+        ondisplay={() => {
+          displayOpen = true;
+        }}
+        onexport={() => {
+          window.location.assign('/api/me/export');
+        }}
+        onlogout={() => void logout()}
+      />
 
-    <Sidebar.Inset class="min-w-0">
-      <header
-        class="sticky top-0 z-10 flex h-12 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-      >
-        <Sidebar.Trigger />
-        <span class="min-w-0 flex-1 truncate text-base font-semibold" title={headerTitle}
-          >{headerTitle}</span
+      <Sidebar.Inset class="min-w-0">
+        <header
+          class="sticky top-0 z-10 flex h-12 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80"
         >
-        <div class="flex shrink-0 items-center gap-2">
-          <TimerWidget />
-        </div>
-      </header>
-
-      <!-- 화면 안 여러 열 배치는 창 폭(md·lg)이 아니라 이 본문 폭(@container)을 본다. 사이드바가 차지한 폭과 사용자가 키운 루트
-           글꼴(컨테이너 쿼리의 rem은 루트 글꼴을 따른다)을 함께 반영한다. -->
-      <main
-        class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
-      >
-        {#if route.name === 'home'}
-          <HomeScreen
-            workspaces={signedIn.workspaces}
-            oncreated={(ws: Workspace) => {
-              if (
-                session.state === 'signed-in' &&
-                !session.workspaces.some((w) => w.id === ws.id)
-              ) {
-                session.workspaces = [...session.workspaces, ws];
-              }
-            }}
-            onjoined={reloadWorkspaces}
-          />
-        {:else if WORKSPACE_ROUTES.has(route.name)}
-          {#if currentWorkspace === undefined}
-            <p role="alert">{m.app_workspace_missing()}</p>
-          {:else if route.name === 'members'}
-            <MembersScreen
-              workspace={currentWorkspace}
-              meId={signedIn.me.id}
-              onchanged={() => void reloadWorkspaces()}
-            />
-          {:else if route.name === 'workspace'}
-            <WorkspaceScreen workspace={currentWorkspace} onrealtimechanged={realtimeChanged} />
-          {:else if route.name === 'trash'}
-            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
-            <TrashScreen workspace={currentWorkspace} />
-          {:else if route.name === 'audit'}
-            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
-            <AuditScreen workspace={currentWorkspace} />
-          {:else if route.name === 'calendar'}
-            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
-            <CalendarScreen workspace={currentWorkspace} />
-          {:else if route.name === 'module'}
-            <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
-            <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />
-          {:else if route.name === 'item'}
-            <ItemScreen
-              workspace={currentWorkspace}
-              itemId={route.itemId}
-              taskId={route.taskId}
-              workspaces={signedIn.workspaces}
-            />
-          {:else if route.name === 'item-document'}
-            <BackLink
-              path={itemPath(currentWorkspace.id, route.itemId)}
-              label={m.app_back_to_item()}
-            />
-            <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
-          {:else if route.name === 'document'}
-            <BackLink
-              path={workspacePath(currentWorkspace.id)}
-              label={m.app_wiki_of({ name: currentWorkspace.name })}
-            />
-            <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
-          {/if}
-        {:else if route.name === 'notes'}
-          <NotesScreen />
-        {:else if route.name === 'my-tasks'}
-          <MyTasksScreen />
-        {:else if route.name === 'notifications'}
-          <NotificationsScreen
-            workspaces={signedIn.workspaces}
-            onchanged={() => void refreshUnread(true)}
-          />
-        {:else if route.name === 'my-audit'}
-          <AuditScreen workspace={undefined} />
-        {:else if route.name === 'my-trash'}
-          <div class="flex flex-col gap-8">
-            <TrashScreen workspace={undefined} />
-            <DeletedWorkspaces onchanged={() => void reloadWorkspaces()} />
+          <Sidebar.Trigger />
+          <span class="min-w-0 flex-1 truncate text-base font-semibold" title={headerTitle}
+            >{headerTitle}</span
+          >
+          <div class="flex shrink-0 items-center gap-2">
+            <TimerWidget />
           </div>
-        {:else if route.name === 'time'}
-          <TimeScreen workspaces={signedIn.workspaces} />
-        {:else if route.name === 'shared'}
-          <SharedScreen />
-        {:else if route.name === 'standalone-document'}
-          <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
-        {:else}
-          <p role="alert">{m.app_not_found()}</p>
-        {/if}
-      </main>
-    </Sidebar.Inset>
-  </Sidebar.Provider>
-{/if}
+        </header>
+
+        <!-- 화면 안 여러 열 배치는 창 폭(md·lg)이 아니라 이 본문 폭(@container)을 본다. 사이드바가 차지한 폭과 사용자가 키운 루트
+           글꼴(컨테이너 쿼리의 rem은 루트 글꼴을 따른다)을 함께 반영한다. -->
+        <main
+          class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
+        >
+          {#if route.name === 'home'}
+            <HomeScreen
+              workspaces={signedIn.workspaces}
+              oncreated={(ws: Workspace) => {
+                if (
+                  session.state === 'signed-in' &&
+                  !session.workspaces.some((w) => w.id === ws.id)
+                ) {
+                  session.workspaces = [...session.workspaces, ws];
+                }
+              }}
+              onjoined={reloadWorkspaces}
+            />
+          {:else if WORKSPACE_ROUTES.has(route.name)}
+            {#if currentWorkspace === undefined}
+              <p role="alert">{m.app_workspace_missing()}</p>
+            {:else if route.name === 'members'}
+              <MembersScreen
+                workspace={currentWorkspace}
+                meId={signedIn.me.id}
+                onchanged={() => void reloadWorkspaces()}
+              />
+            {:else if route.name === 'workspace'}
+              <WorkspaceScreen workspace={currentWorkspace} onrealtimechanged={realtimeChanged} />
+            {:else if route.name === 'trash'}
+              <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+              <TrashScreen workspace={currentWorkspace} />
+            {:else if route.name === 'audit'}
+              <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+              <AuditScreen workspace={currentWorkspace} />
+            {:else if route.name === 'calendar'}
+              <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+              <CalendarScreen workspace={currentWorkspace} />
+            {:else if route.name === 'module'}
+              <BackLink path={workspacePath(currentWorkspace.id)} label={currentWorkspace.name} />
+              <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />
+            {:else if route.name === 'item'}
+              <ItemScreen
+                workspace={currentWorkspace}
+                itemId={route.itemId}
+                taskId={route.taskId}
+                workspaces={signedIn.workspaces}
+              />
+            {:else if route.name === 'item-document'}
+              <BackLink
+                path={itemPath(currentWorkspace.id, route.itemId)}
+                label={m.app_back_to_item()}
+              />
+              <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
+            {:else if route.name === 'document'}
+              <BackLink
+                path={workspacePath(currentWorkspace.id)}
+                label={m.app_wiki_of({ name: currentWorkspace.name })}
+              />
+              <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
+            {/if}
+          {:else if route.name === 'notes'}
+            <NotesScreen />
+          {:else if route.name === 'my-tasks'}
+            <MyTasksScreen />
+          {:else if route.name === 'notifications'}
+            <NotificationsScreen
+              workspaces={signedIn.workspaces}
+              onchanged={() => void refreshUnread(true)}
+            />
+          {:else if route.name === 'my-audit'}
+            <AuditScreen workspace={undefined} />
+          {:else if route.name === 'my-trash'}
+            <div class="flex flex-col gap-8">
+              <TrashScreen workspace={undefined} />
+              <DeletedWorkspaces onchanged={() => void reloadWorkspaces()} />
+            </div>
+          {:else if route.name === 'time'}
+            <TimeScreen workspaces={signedIn.workspaces} />
+          {:else if route.name === 'shared'}
+            <SharedScreen />
+          {:else if route.name === 'standalone-document'}
+            <DocumentScreen documentId={route.documentId} workspaces={signedIn.workspaces} />
+          {:else}
+            <p role="alert">{m.app_not_found()}</p>
+          {/if}
+        </main>
+      </Sidebar.Inset>
+    </Sidebar.Provider>
+  {/if}
+</div>

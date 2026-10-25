@@ -31,6 +31,7 @@ import type {
 
 import {
   auth,
+  accountSwitching,
   connection,
   reportConnectionLost,
   reportSessionExpired,
@@ -2158,6 +2159,9 @@ export function fileContentUrl(id: string, version?: number, inline = false): st
 
 /** 업로드 조각 보내기(날것 본문 + SHA-256 머리글). */
 async function putPart(upload: string, number: number, body: Blob, sha256: string): Promise<void> {
+  // 작업자 C: 일반 JSON 요청 밖 업로드 재시도도 계정 전환 시 멈춘다.
+  if (accountSwitching())
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   try {
     response = await fetch(`/api/uploads/${encodeURIComponent(upload)}/parts/${String(number)}`, {
@@ -2457,6 +2461,9 @@ async function request(
   body?: Json,
   extra: Record<string, string> = {},
 ): Promise<{ status: number; json: Json; etag: string | null }> {
+  // 작업자 C: 계정 변경 감지 뒤 자동 재시도·늦은 응답을 기존 화면에 적용하지 않는다(D-96).
+  if (accountSwitching())
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   const expiriesAtStart = sessionExpiries();
   try {
@@ -2473,6 +2480,9 @@ async function request(
     throw new NetworkError(error instanceof Error ? error.message : 'network error');
   }
   const text = await response.text();
+  // 작업자 C: 진행 중이던 요청도 계정 전환 안전 상태를 벗어나지 못한다.
+  if (accountSwitching())
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let json: Json = null;
   if (text !== '') {
     try {

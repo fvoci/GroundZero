@@ -1,0 +1,5 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "feedback_account_switching": "The signed-in account changed, so the previous screen is hidden. Input is kept for the previous account. Reload to continue.",
+  "feedback_reload": "Reload for the current account"
+}

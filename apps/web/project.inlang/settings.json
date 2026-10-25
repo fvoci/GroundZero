@@ -14,6 +14,7 @@
       "./messages/documents/{locale}.json",
       "./messages/events/{locale}.json",
       "./messages/files/{locale}.json",
+      "./messages/feedback/{locale}.json",
       "./messages/home/{locale}.json",
       "./messages/members/{locale}.json",
       "./messages/modules/{locale}.json",

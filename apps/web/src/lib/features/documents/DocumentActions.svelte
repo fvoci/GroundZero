@@ -17,8 +17,10 @@
   import { api } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
   import { m } from '$lib/paraglide/messages.js';
+  import { org } from '$lib/org.svelte';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -52,7 +54,11 @@
   // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
   const restrictOnly = $derived(!isOwner && doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
-  const writable = $derived(workspaces.filter((w) => w.role !== 'readonly'));
+  const publicLinksEnabled = $derived(org.current?.public_links_enabled === true);
+  // Workspace에 쓰기 플래그가 없어 역할 필터의 D-113 교체는 계약 보완 대기. 조직 밖 이동·복제는 제외한다(D-114).
+  const writable = $derived(
+    workspaces.filter((w) => w.organization_id === org.currentId && w.role !== 'readonly'),
+  );
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function fail(e: unknown): void {
@@ -94,6 +100,7 @@
     event.preventDefault();
     try {
       await api.share(doc.id, shareEmail, sharePermission);
+      notifyDone(m.common_saved());
       shareEmail = '';
       await loadShares();
     } catch (e: unknown) {
@@ -127,6 +134,7 @@
   async function removeShare(id: string): Promise<void> {
     try {
       await api.unshare(id);
+      notifyDone(m.common_saved());
       await loadShares();
     } catch (e: unknown) {
       fail(e);
@@ -179,6 +187,7 @@
     const mine = ++settingsSeq;
     try {
       const saved = await api.setSettings(doc.id, change);
+      notifyDone(m.common_saved());
       // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
       // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
       if (mine === settingsSeq) settingsChanged(saved);
@@ -197,6 +206,7 @@
     const mine = ++settingsSeq;
     try {
       await api.setDocumentTemplate(doc.id, on);
+      notifyDone(m.common_saved());
       if (mine === settingsSeq) settingsChanged({ ...doc, is_template: on });
       // 템플릿 응답에는 다른 설정이 없다. 창을 열 때 시작한 다시 읽기가 이 저장 때문에 버려졌을 수 있으므로, 서버의 지금
       // 값으로 한 번 더 맞춘다(리뷰: 그사이 다른 소유자가 바꾼 비공개·복제 금지가 창을 다시 열 때까지 옛 값으로 보였다).
@@ -222,11 +232,13 @@
   }
 
   async function createLink(): Promise<void> {
+    if (!publicLinksEnabled) return;
     try {
       const days = Number(linkExpiryDays);
       const expiresAt =
         days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString() : null;
       newLinkUrl = (await api.createPublicLink(doc.id, expiresAt)).url;
+      notifyDone(m.common_saved());
       await loadLinks();
     } catch (e: unknown) {
       fail(e);
@@ -236,6 +248,7 @@
   async function revokeLink(id: string): Promise<void> {
     try {
       await api.revokePublicLink(id);
+      notifyDone(m.common_saved());
       newLinkUrl = undefined;
       await loadLinks();
     } catch (e: unknown) {
@@ -260,6 +273,7 @@
       const requestId = copyKey.for({ doc: doc.id, target, title: copyTitle });
       const copied = await api.copyDocument(doc.id, requestId, target, copyTitle);
       copyKey.done(requestId);
+      notifyDone(m.common_saved());
       panel = undefined;
       router.navigate(pathFor(copied, memberOf));
     } catch (e: unknown) {
@@ -425,6 +439,7 @@
 >
   <!-- 복제·이동은 "더 보기" 메뉴의 항목(닫히며 사라짐)에서 열린다. 닫으면 브라우저에 맡기지 않고 "더 보기"로 초점을 돌린다. -->
   <Dialog.Content
+    class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto"
     onCloseAutoFocus={(e: Event) => {
       if (opened !== 'copy' && opened !== 'move') return;
       e.preventDefault();
@@ -489,7 +504,7 @@
         </p>
       {:else}
         <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
-          <div class="flex min-w-48 flex-1 flex-col gap-1">
+          <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
             <Label for="share-email">{m.documents_email()}</Label>
             <Input
               id="share-email"
@@ -566,7 +581,10 @@
           {m.documents_public_link_hint()}
         </p>
         <div role="status" class="empty:hidden">
-          {#if newLinkUrl !== undefined}
+          {#if !publicLinksEnabled}
+            <p>{m.documents_public_links_disabled()}</p>
+          {/if}
+          {#if newLinkUrl !== undefined && publicLinksEnabled}
             <div class="flex flex-col gap-1 rounded border px-2 py-2">
               <Label for="new-link-url">{m.documents_new_link()}</Label>
               <Input
@@ -627,8 +645,8 @@
             </li>
           {/each}
         </ul>
-        {#if isOwner}
-          <div class="flex items-center gap-2">
+        {#if isOwner && publicLinksEnabled}
+          <div class="flex flex-wrap items-center gap-2">
             <Select.Root
               type="single"
               value={linkExpiryDays}

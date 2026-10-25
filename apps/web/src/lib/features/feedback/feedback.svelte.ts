@@ -3,12 +3,18 @@
 // 보인다).
 // 문구는 부르는 쪽이 i18n 메시지로 넘긴다(D-81).
 import { toast } from 'svelte-sonner';
+import { flushSync } from 'svelte';
 
 /**
  * 완료 알림. 같은 `key`(없으면 문구)는 쌓지 않고 하나를 새로 고친다. 화면 낭독기는 토스트 영역(aria-live)으로 읽는다.
  */
 export function notifyDone(message: string, key: string = message): void {
   toast.success(message, { id: key });
+}
+
+/** 같은 실패는 한 토스트에서 갱신한다. 저장 오류는 호출 화면에 남긴다(D-82). */
+export function notifyError(message: string, key: string = message): void {
+  toast.error(message, { id: key });
 }
 
 /** 연결 상태(배너). 브라우저가 오프라인이거나 API가 응답하지 않으면 `lost`. */
@@ -81,16 +87,19 @@ export function watchConnection(): () => void {
 // 다른 계정으로 바뀌어 이 창을 처음부터 다시 읽는 중인지. 이때는 저장 안 한 편집 경고로 다시 읽기를 막지 않는다
 // (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 입력은 앞 계정의 초안(사용자별 키)으로
 // 이미 남아 있다.
-let switching = false;
+export const accountSafety = $state({ switching: false });
 
 /** 다른 계정으로 바뀌어 다시 읽기 직전에 부른다. */
 export function markAccountSwitch(): void {
-  switching = true;
+  // reload가 beforeunload에서 취소되어도 이전 계정의 화면을 숨긴 상태로 남긴다.
+  flushSync(() => {
+    accountSafety.switching = true;
+  });
 }
 
 /** 다른 계정으로 바뀌어 다시 읽는 중인지. */
 export function accountSwitching(): boolean {
-  return switching;
+  return accountSafety.switching;
 }
 
 // 계정이 바뀐 것을 안 곳(창 복귀 확인 밖, 예: 문서의 배경 저장)에서 이 창을 다시 읽는 방법. FeedbackHost가 정한다.
@@ -106,6 +115,7 @@ export function onAccountSwitch(reload: () => void): () => void {
 
 /** 다른 계정으로 바뀐 것을 알았을 때 부른다: 표시하고 이 창을 처음부터 다시 읽는다. */
 export function switchAccount(): void {
+  if (accountSwitching()) return;
   markAccountSwitch();
   if (reloadForSwitch !== undefined) reloadForSwitch();
   else window.location.reload();

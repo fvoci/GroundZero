@@ -23,6 +23,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -217,6 +218,7 @@
       status === 'saving' ||
       status === 'conflict' ||
       realtimeOn ||
+      accountSwitching() ||
       accountChanged
     )
       return;
@@ -428,8 +430,9 @@
       copyNoteKey.done(noteRequest);
       copySaveKey.done(saveRequest);
       dropDraft();
-      router.guard = undefined;
-      router.navigate(standalonePath(created.id));
+      leaveGuard.proceed(() => {
+        router.navigate(standalonePath(created.id));
+      });
     } catch (error: unknown) {
       message = errorText(error, m.documents_copy_failed());
     }
@@ -491,44 +494,29 @@
     }
   }
 
-  let pendingLeave = $state<(() => void) | undefined>(undefined);
-  let leaving = false;
-  function leave(): void {
-    const go = pendingLeave;
-    pendingLeave = undefined;
-    leaving = true;
-    go?.();
-    leaving = false;
-  }
+  const leaveGuard = createLeaveGuard({ dirty: isDirty });
 
   onMount(() => {
-    const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (!isDirty()) return;
-      // 다른 계정으로 바뀌어 다시 읽을 때는 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
-      // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
-      const kept =
-        accountSwitching() &&
-        storeDraft(server.id, {
-          baseRevision: server.revision,
-          title,
-          body,
-          savedAt: new Date().toISOString(),
-        });
-      if (!kept) event.preventDefault();
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    // 저장하지 않은 채 다른 화면으로 가려 하면 이동을 붙잡고 다른 화면과 같은 확인을 연다(브라우저 기본 확인창 대신). 떠나기로
-    // 하면 같은 이동을 다시 하고, 계속 편집하면 입력을 그대로 둔다.
-    router.guard = (proceed) => {
-      if (leaving || !isDirty()) return true;
-      pendingLeave = proceed;
-      return false;
-    };
+    const detach = leaveGuard.attach({
+      beforeUnload: () => {
+        if (!isDirty()) return false;
+        // 다른 계정으로 바뀌어 다시 읽을 때는 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
+        // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
+        const kept =
+          accountSwitching() &&
+          storeDraft(server.id, {
+            baseRevision: server.revision,
+            title,
+            body,
+            savedAt: new Date().toISOString(),
+          });
+        return !kept;
+      },
+    });
     return () => {
       destroyed = true;
       if (timer !== undefined) clearTimeout(timer);
-      window.removeEventListener('beforeunload', beforeUnload);
-      router.guard = undefined;
+      detach();
     };
   });
 </script>
@@ -655,18 +643,16 @@
     />
   {/key}
   <DiscardChangesConfirm
-    open={pendingLeave !== undefined}
+    open={leaveGuard.open}
     description={m.documents_leave_confirm()}
     confirmLabel={m.documents_leave_go()}
-    onkeep={() => {
-      pendingLeave = undefined;
-    }}
-    ondiscard={leave}
+    onkeep={leaveGuard.keep}
+    ondiscard={leaveGuard.discard}
   />
 </article>
 
 <Dialog.Root bind:open={confirmOverwrite}>
-  <Dialog.Content>
+  <Dialog.Content class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>{m.documents_overwrite_title()}</Dialog.Title>
       <Dialog.Description>

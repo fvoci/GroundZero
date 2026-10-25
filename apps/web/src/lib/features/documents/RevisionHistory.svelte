@@ -6,6 +6,7 @@
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
 
@@ -153,6 +154,7 @@
       latest = undefined;
       open = false;
       onrestored(result.document);
+      notifyDone(m.common_restored());
     } catch (e: unknown) {
       error = errorText(e, m.documents_restore_failed());
     } finally {
@@ -166,7 +168,9 @@
 <Button size="sm" variant="outline" onclick={openHistory}>{m.documents_history_button()}</Button>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-4xl">
+  <Dialog.Content
+    class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-4xl"
+  >
     <Dialog.Header>
       <Dialog.Title>{m.documents_history_title()}</Dialog.Title>
       <Dialog.Description>

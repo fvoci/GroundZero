@@ -8,6 +8,7 @@ import {
   displaySettings,
   formatDay,
   formatInstant,
+  resolveTimeZone,
   weekdays,
 } from '$lib/display';
 import { monthRange, startOfWeek } from '$lib/features/events/calendar';
@@ -32,6 +33,18 @@ afterEach(() => {
 });
 
 describe('display settings (D-81)', () => {
+  it('uses one fallback for unknown zones without changing the saved preference', () => {
+    me.timeZone = 'Unknown/Zone';
+    expect(resolveTimeZone(me.timeZone, 'Asia/Seoul')).toBe('Asia/Seoul');
+    expect(resolveTimeZone(me.timeZone, 'Also/Unknown')).toBe('UTC');
+    expect(formatInstant('2026-10-26T12:00:00Z', {}, ko, me.timeZone)).toBe(
+      formatInstant('2026-10-26T12:00:00Z', {}, ko, 'UTC'),
+    );
+    expect(me.timeZone).toBe('Unknown/Zone');
+    expect(wallTime('2026-10-26T12:00:00Z', me.timeZone)).toBe(
+      wallTime('2026-10-26T12:00:00Z', 'UTC'),
+    );
+  });
   it('suggests from the browser and keeps saved values first', () => {
     expect(browserLocale(['ko-KR', 'en-US'])).toBe('ko');
     expect(browserLocale(['en-GB'])).toBe('en');

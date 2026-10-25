@@ -55,10 +55,10 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.191 0.065 255.8);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.803 0.165 82);
+  --secondary-foreground: oklch(0.191 0.065 255.8);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.54 0 0);
   --accent: oklch(0.97 0 0);
@@ -67,7 +67,7 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --input-border: oklch(0.62 0 0);
-  --ring: oklch(0.45 0 0);
+  --ring: oklch(0.43 0.065 255.8);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -75,12 +75,12 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.191 0.065 255.8);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.64 0 0);
+  --sidebar-ring: oklch(0.43 0.065 255.8);
 
   /* fvoci 타이포그래피 토큰 (D-66). rem 기준: 브라우저 기본 글자 크기와 확대 설정을 따른다.
      CJK 본문은 줄 높이를 넉넉히 두고, 입력란·목록은 본문 크기 밑으로 내리지 않는다. */
@@ -111,10 +111,10 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.269 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.82 0.065 255.8);
+  --primary-foreground: oklch(0.191 0.065 255.8);
+  --secondary: oklch(0.803 0.165 82);
+  --secondary-foreground: oklch(0.191 0.065 255.8);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
   --accent: oklch(0.371 0 0);
@@ -123,7 +123,7 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --input-border: oklch(0.56 0 0);
-  --ring: oklch(0.75 0 0);
+  --ring: oklch(0.803 0.165 82);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -131,12 +131,12 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.82 0.065 255.8);
+  --sidebar-primary-foreground: oklch(0.191 0.065 255.8);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.803 0.165 82);
 }
 
 @theme inline {
@@ -194,6 +194,16 @@
 }
 
 @layer base {
+  /* D-96: 계정 변경 뒤 portal을 포함한 이전 화면을 숨기고 안전 상태만 노출한다. */
+  html[data-account-switching] body * {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  html[data-account-switching] [data-testid='account-safe-state'],
+  html[data-account-switching] [data-testid='account-safe-state'] * {
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
   /* 기본 입력 칸(날짜 선택·선택 상자 목록)·스크롤바가 화면 밝기를 따른다(theme.svelte.ts). */
   :root {
     color-scheme: light;
@@ -459,7 +469,7 @@
   left: -1px;
   padding: 0.1rem 0.3rem;
   border-radius: 0.2rem 0.2rem 0.2rem 0;
-  color: #fff;
+  color: oklch(1 0 0);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: normal;
