@@ -35,6 +35,7 @@
   import { me as currentUser } from '$lib/me.svelte';
   import MyTasksScreen from '$lib/features/home/MyTasksScreen.svelte';
   import AppSidebar from '$lib/features/nav/AppSidebar.svelte';
+  import { createLatest } from '$lib/latest';
   import { org } from '$lib/org.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import { asTheme, setTheme } from '$lib/theme.svelte';
@@ -126,6 +127,9 @@
     if (session.state !== 'signed-in') return;
     const organizationId = org.currentId;
     if (organizationId === undefined) {
+      // 선택이 풀리면 아직 안 온 이전 조직의 수가 뒤늦게 0을 덮지 않게 그 요청을 버리고, 다음 선택 때 바로 다시 센다.
+      unreadSeq += 1;
+      unreadAt = 0;
       unreadOrganization = undefined;
       unreadCount = 0;
       return;
@@ -171,25 +175,29 @@
 
   // 마지막으로 보낸 목록 요청의 차례와, 그 응답을 아직 기다리는지. 늦게 도착한 이전 응답이 그 뒤에 읽거나 고친 값(실시간
   // 공동 편집 설정 등)을 덮지 않게 마지막 요청의 응답만 넣는다.
-  let workspacesSeq = 0;
   let workspacesPending = false;
+  const workspacesReload = createLatest();
 
-  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스·조직 목록을 다시 읽는다. */
+  /**
+   * 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스·조직 목록을 다시 읽는다. 겹치면 마지막 응답만 적용하고, 먼저 부른
+   * 쪽도 그 뒤에 돌아간다(초대 수락 뒤 `org.select`가 새 조직이 든 목록을 봐야 한다).
+   */
   async function reloadWorkspaces(): Promise<void> {
-    const mine = ++workspacesSeq;
     workspacesPending = true;
-    try {
-      const [workspaces, organizations] = await Promise.all([
-        api.workspaces(),
-        api.myOrganizations(),
-      ]);
-      if (mine === workspacesSeq && session.state === 'signed-in') {
-        session.workspaces = workspaces;
-        org.load(session.me.id, organizations);
+    await workspacesReload.run(async (isCurrent) => {
+      try {
+        const [workspaces, organizations] = await Promise.all([
+          api.workspaces(),
+          api.myOrganizations(),
+        ]);
+        if (isCurrent() && session.state === 'signed-in') {
+          session.workspaces = workspaces;
+          org.load(session.me.id, organizations);
+        }
+      } finally {
+        if (isCurrent()) workspacesPending = false;
       }
-    } finally {
-      if (mine === workspacesSeq) workspacesPending = false;
-    }
+    });
   }
 
   /** 실시간 공동 편집을 켜거나 껐다. */

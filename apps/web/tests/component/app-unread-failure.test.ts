@@ -1,9 +1,11 @@
 import type { Me } from '@fvoci/api-client';
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, NetworkError } from '$lib/api/client';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
 import { invitationChanges } from '$lib/features/home/invitations.svelte';
 
@@ -94,5 +96,29 @@ describe('unread notification count', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /읽지 않은 알림 1개/ })).toBeInTheDocument();
     });
+  });
+});
+
+// 조직 선택이 풀린 뒤(조직에서 나가 목록이 비는 등) 이전 조직의 수가 뒤늦게 와도 배지에 들어가면 안 된다(CodeRabbit #141).
+describe('unread count after the organization selection is cleared', () => {
+  it('drops a late count from the previous organization', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    let release: ((count: number) => void) | undefined;
+    vi.spyOn(api, 'unreadCount').mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          release = resolve;
+        }),
+    );
+    render(App);
+    await waitFor(() => {
+      expect(release).toBeDefined();
+    });
+    org.load('user-a', []);
+    await tick();
+    release?.(5);
+    await tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole('link', { name: /읽지 않은 알림 5개/ })).toBeNull();
   });
 });

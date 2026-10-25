@@ -3,6 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 
 import { type Api, expect, str, test, unique } from './fixtures';
 
+// 열은 항목의 상태 정의 이름이다(D-116). 새 항목은 서버가 심는 기본 세 상태(todo·in_progress·done)로 시작한다.
 const lane = (page: Page, status: string) => page.locator(`section[aria-label="${status} 열"]`);
 const card = (scope: Page | Locator, title: string) =>
   scope.locator('[data-task-card]').filter({ hasText: title });
@@ -24,30 +25,30 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
   const title = `배포 점검표 정리 ${tag}`;
   const task = str(await api.createTask(item, title), 'id');
   await openBoard(page, ws, item);
-  await expect(card(lane(page, '할 일'), title)).toBeVisible();
+  await expect(card(lane(page, 'todo'), title)).toBeVisible();
 
   // 메뉴로 옮기기.
   await page.getByRole('button', { name: `${title} 옮기기` }).click();
-  await page.getByRole('menuitem', { name: '진행 중으로' }).click();
-  await expect(card(lane(page, '진행 중'), title)).toBeVisible();
+  await page.getByRole('menuitem', { name: 'in_progress(으)로 옮기기' }).click();
+  await expect(card(lane(page, 'in_progress'), title)).toBeVisible();
   await expect.poll(() => serverStatus(api, task)).toBe('in_progress');
 
   // 되돌리기.
   await page.getByRole('button', { name: `${title} 이동 되돌리기` }).click();
-  await expect(card(lane(page, '할 일'), title)).toBeVisible();
+  await expect(card(lane(page, 'todo'), title)).toBeVisible();
   await expect.poll(() => serverStatus(api, task)).toBe('todo');
 
   // 키보드로 옮기기: 카드에 초점을 둔 채 Alt+오른쪽.
   await card(page, title).focus();
   await page.keyboard.press('Alt+ArrowRight');
-  await expect(card(lane(page, '진행 중'), title)).toBeVisible();
+  await expect(card(lane(page, 'in_progress'), title)).toBeVisible();
   await expect.poll(() => serverStatus(api, task)).toBe('in_progress');
   await expect(card(page, title)).toBeFocused();
 
   // 새로 읽어도 서버의 자리 그대로다.
   await page.reload();
-  await expect(card(lane(page, '진행 중'), title)).toBeVisible();
-  await expect(card(lane(page, '할 일'), title)).toHaveCount(0);
+  await expect(card(lane(page, 'in_progress'), title)).toBeVisible();
+  await expect(card(lane(page, 'todo'), title)).toHaveCount(0);
 });
 
 test('keeps unsaved task input when closing is cancelled, and returns focus', async ({

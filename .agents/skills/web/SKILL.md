@@ -31,3 +31,11 @@ description: fvoci 웹(apps/web)을 바꿀 때 읽을 코드와 결정, UI·조�
 - `apps/web/e2e/fixtures.ts`가 테스트 OIDC 로그인과 API 준비를 맡는다. 조직을 `/api/me/organizations`에서 받고 공간 생성에 `organization_id`를 보낸다. 두 번째 사용자는 조직 초대 수락 뒤 공간에 초대한다. 개인 화면 조직은 UI 전환기로 고른다.
 - 증거 게시기 `e2e/publish.ts`의 `recordSensitive`·`id_token_hint` 탐지와 `SAFE_TO_UPLOAD`를 유지한다. 원시 trace·토큰은 게시하지 않는다. 안전한 증거 정제는 4단계에서 별도 설계한다.
 - 보고에는 실행 명령·대상 SHA·PASS/FAIL/NOT RUN·남은 제한을 적는다. 미구현 화면 실패를 skip이나 mock으로 통과시키지 않는다.
+
+## 통합 뒤 덧붙임 (코디네이터, 3단계 통합 0297baa5)
+
+- 업무 안 시간 기록(D-117): 행·카드는 `features/time/TaskTimeStart.svelte`(서버 조회 없이 타이머 저장소만 봄), 상세·회차·단위는 `TaskTimePanel`·각 패널. 상단 틀 `TimerWidget`은 기록 중 표시와 멈춤만.
+- 이탈 확인(D-97·D-125): 문서·일정은 `features/common/leave-guard.svelte.ts`의 `createLeaveGuard({ dirty, busy?, identity? })`를 `DiscardChangesConfirm`과 묶어 쓴다. 업무 대화상자(`tasks/TaskBoard.svelte`)는 같은 규칙을 자체 구현하고 있어 공용 모듈로 바꾸는 것이 후속이다.
+- 상태 정의(D-116): 업무 `status`는 항목별 이름 문자열, 집계·완료 판단은 `status_category`. 열·편집은 `tasks/StatusEditor.svelte`와 `api.taskStatuses*`.
+- 검색 `status` 필터는 서버 계약상 상태 이름이다(D-116 "범주만"과 어긋남 — 결정·계약 충돌로 기록됨). 서버가 범주 필터를 주기 전까지 이름 입력을 보낸다.
+- 테스트 모듈 캐시: 스토리 파일을 더한 뒤 `stories.test.ts`가 디스크와 다르다고 하면 `pnpm --filter @fvoci/web exec vitest --clearCache` 뒤 다시 돌린다.

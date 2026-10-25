@@ -251,7 +251,13 @@ export async function selectOrganization(
   await switcher.click();
   await page.getByRole('menuitem').filter({ hasText: organization.name }).click();
   await expect(switcher).toContainText(organization.name);
-  if (narrow) await page.keyboard.press('Escape');
+  if (narrow) {
+    // 서랍(dialog)이 닫히며 초점을 여닫기 단추로 되돌린다. 그 전에 다음 조작이 초점을 옮기면 되돌리기가 그것을 덮는다
+    // (375px 대표 경로의 Tab 왕복이 간헐적으로 실패했다).
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(page.getByRole('button', { name: '사이드바 열고 닫기' })).toBeFocused();
+  }
 }
 
 /** 실패 증거를 남길 브라우저 컨텍스트(이름은 증거 파일 이름에 쓴다). */
