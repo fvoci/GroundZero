@@ -90,7 +90,10 @@ async fn administrators_do_not_gain_content_access() {
         format!("/api/items/{}", w.item),
         format!("/api/tasks/{task}"),
         format!("/api/files/{file}"),
-        format!("/api/search?q=SQL&workspace_id={}", w.ws),
+        format!(
+            "/api/search?q=SQL&workspace_id={}&organization_id={}",
+            w.ws, w.org
+        ),
     ];
     let mut failures = Vec::new();
     for path in &paths {

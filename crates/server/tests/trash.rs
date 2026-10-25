@@ -413,9 +413,15 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        send(&app, Method::GET, "/api/me/shared", Some(&bob), None)
-            .await
-            .json,
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/me/shared?organization_id={organization}"),
+            Some(&bob),
+            None
+        )
+        .await
+        .json,
         json!([])
     );
 
@@ -800,9 +806,15 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     .await;
     assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
     assert_eq!(
-        send(&app, Method::GET, "/api/me/shared", Some(&carol), None)
-            .await
-            .json,
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/me/shared?organization_id={organization}"),
+            Some(&carol),
+            None
+        )
+        .await
+        .json,
         json!([])
     );
     assert_eq!(

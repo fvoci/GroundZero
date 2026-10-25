@@ -226,9 +226,15 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        send(&app, Method::GET, "/api/me/shared", Some(&outsider), None)
-            .await
-            .json,
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/me/shared?organization_id={organization}"),
+            Some(&outsider),
+            None
+        )
+        .await
+        .json,
         json!([])
     );
     assert_eq!(
@@ -264,7 +270,7 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
     let search = send(
         &app,
         Method::GET,
-        "/api/search?q=회의록",
+        &format!("/api/search?q=회의록&organization_id={organization}"),
         Some(&writer),
         None,
     )

@@ -721,7 +721,10 @@ async fn admin_join_is_explicit_scoped_and_audited_twice_server_has_no_content()
             format!("/api/items/{}", w.item),
             format!("/api/tasks/{task}"),
             format!("/api/files/{file}"),
-            format!("/api/search?q=SQL&workspace_id={}", w.ws),
+            format!(
+                "/api/search?q=SQL&workspace_id={}&organization_id={}",
+                w.ws, w.org
+            ),
         ] {
             expect(&app, Method::GET, &path, user, None, 404).await;
         }
