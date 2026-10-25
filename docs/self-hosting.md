@@ -2,7 +2,7 @@
 
 처음 한 대의 Mac에서 직접 써 보려면 [직접 써 보기](try-it.md)부터 본다.
 
-한 대의 서버에 Docker Compose로 fvoci를 설치하고 운영하는 방법이다. 구성 파일은 `deploy/compose.selfhost.yaml`이고 비밀 값은 운영자의 `.env`에만 둔다. 개발·테스트 환경은 [개발 지침](development.md)을 본다.
+한 대의 서버에 Docker Compose로 fvoci를 설치하고 운영하는 방법이다. 구성 파일은 `deploy/compose.selfhost.yaml`이고 비밀 값은 운영자의 `.env`에만 둔다. 개발·테스트 환경은 [README의 명령표](../README.md#명령)를 본다.
 
 이 문서의 Compose는 자체 PostgreSQL을 함께 띄운다. 기존 셀프호스트 Supabase의 PostgreSQL을 쓰려면
 [Supabase 연결 안내](self-hosting-supabase.md)를 따른다. 두 구성 모두 로그인은 OIDC(Keycloak 등)를 사용한다.
@@ -22,7 +22,7 @@
 | Supabase Cloud                      | 같은 제품 SQL의 설계·검증 대상. 기존 TLS·읽기 전용 연결만 확인했으며 버전 확인과 실제 제품 설치·앱·복구 결과는 별도 기록 |
 
 준비 당시 코드 SHA·명령·제외 경로는 [고정 SHA의 검증 기록](https://github.com/fvoci/GroundZero/blob/8ffd8c3b940924eca8cf7ec739a85494243c0479/preparation/sql-consolidation/verification/results.md)에 있다.
-현재 제품 SQL의 검증은 [통합 검증 재현](../crates/server/migrations/README.md#comparison)과 해당 변경 PR의 실행 SHA·결과를 확인한다.
+현재 제품 SQL의 검증은 해당 변경 PR의 실행 SHA·결과를 확인한다([제거 전 통합 검증 재현 안내](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/crates/server/migrations/README.md#comparison)는 역사 기록, D-127).
 검증한 메이저의 지원은 미래 메이저의 지원 보장이 아니며, Cloud의 서버 버전도 이름만으로 추정하지 않는다.
 
 모든 환경에서 같은 제품 SQL과 `db bootstrap` → `db migrate` → 서버 시작을 사용한다. 환경 차이는 초기 DB/역할

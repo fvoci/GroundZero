@@ -1,4 +1,4 @@
-# cargo-deny 설정. 라이선스 정책은 docs/decisions.md#d-60.
+# cargo-deny 설정. 라이선스 정책은 docs/decisions/delivery.md#d-60.
 # 허용 목록 밖의 크레이트는 보고해 승인을 받는다. 승인된 것만 크레이트·판 단위 예외(exceptions)로 둔다.
 
 [graph]

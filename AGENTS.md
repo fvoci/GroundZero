@@ -1,37 +1,28 @@
 # fvoci 공통 규칙
 
-짧고 도구 중립적인 진입점이다. 세부는 링크된 문서와 스킬에 있다.
+짧고 도구 중립적인 진입점이다. 세부는 결정 기록과 코드·시험에 있다.
 
 ## 기준 문서
 
-- [결정 기록](docs/decisions.md): 확정 결정 D, 제안 P, 열린 항목 O, 제외 X, 보류 H. 항목의 채택·대체·해소 표시를 함께 읽는다.
-- [개발 절차·품질 기준](docs/development.md): 현재 방법과 유지보수 계약.
-- [저장소 배치](docs/repo-structure.md): 경로별 책임.
+- [결정 기록 색인](docs/decisions.md): 접두어(D·P·O·H·X·C) 설명, 주제별 파일 표, 제안·열린 항목·제외·보류. 확정 결정 D는 `docs/decisions/<주제>.md`에 있고 각 파일 맨 위에 "현재 규칙 요약"이 있다. 변경하려는 영역의 파일 하나를 읽고 다른 조항은 번호(`#d-xx`)로 찾는다. 색인과 모든 주제 파일을 한 번에 읽지 않는다. 2026-10-25 오버홀 결정은 D-111~D-127이다.
+- 오버홀 전의 개발 지침·저장소 구조·SQL 계약·마이그레이션 안내·변경 종류별 스킬은 D-127에 따라 제거했다. 오버홀 동안 기준은 결정 기록과 현재 코드·시험이고, 새 계약 문서와 스킬은 오버홀 단계가 끝날 때 그 코드를 보고 쓴다. [제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은 역사 기록이다.
 
 ## 현재 기준과 실행 증거
 
 - 현재 사용자 요구사항, 승인된 결정과 현재 코드·테스트를 기준으로 삼는다. 결정과 코드가 충돌하면 어느 쪽도 조용히 우선하지 말고 충돌을 보고한다.
 - 과거 기록은 해당 SHA의 역사이며 현재 정책·검증 결과가 아니다. 관련 결함이나 SHA를 조사할 때만 열고 원시 증거를 현재 소스 트리에 복사하지 않는다.
-- 결과의 범위·PASS/FAIL/NOT RUN 구분과 보존 방법은 [검사와 예외](docs/development.md#4-검사와-예외)를 따른다. SQL 비교와 과거 증거 위치는 [마이그레이션 안내](crates/server/migrations/README.md#comparison)에 있다.
+- 작업 보고에는 실행 명령·대상 커밋·결과(PASS/FAIL/NOT RUN)·남은 제한을 적는다(D-42). 검사를 끄거나 건너뛰어 통과시키지 않는다.
 
 ## 빌드·검사 명령
 
 [명령표](README.md#명령)를 따른다. 공통 검사는 `cargo xtask check`, 격리 통합 시험은
-`cargo xtask test`다. OIDC·Supabase 조합과 CI의 라이선스 분리는 [개발 지침](docs/development.md)에 있다.
-개발 환경 실행·정리는 [실행 구성](docs/development.md#121-실행-구성)을 읽고 진행한다.
-
-## 변경 종류별 읽을 스킬
-
-- Rust 서버·API·DB·권한 변경: `.agents/skills/rust-api-db/SKILL.md`
-- Svelte·TypeScript·UI 변경: `.agents/skills/svelte-ui/SKILL.md`
-- 테스트·Docker·CI 변경: `.agents/skills/test-docker-ci/SKILL.md`
-
-관련 없는 스킬은 읽지 않는다.
+`cargo xtask test`다. API를 바꾸면 `cargo xtask openapi`와 `pnpm run generate:api`로 계약과 클라이언트를 함께 갱신한다.
+의존성을 추가·변경하면 `cargo xtask licenses`를 돌리고 허용 목록 밖의 결과는 예외를 넣지 말고 보고한다(D-60).
 
 ## 시크릿·권한·데이터 보호
 
 - 시크릿을 코드·이미지·Git·로그에 넣지 않는다. 테스트 자격 증명은 `deploy/` 안의 명백한 테스트 값만 쓴다.
-- 권한은 서버에서 검사한다. 읽기와 수정·복제·다운로드 권한을 구분한다. 개인 노트와 개인 시간 기록은 워크스페이스 관리자에게도 비공개다.
+- 권한은 서버에서 검사한다. 읽기와 수정·복제·다운로드 권한을 구분한다. 개인 노트와 개인 시간 기록은 워크스페이스·조직·서버 관리자에게도 비공개다.
 - 운영 서비스나 개인 개발 DB를 테스트에 쓰지 않는다.
 
 ## 개발 도구 사용
