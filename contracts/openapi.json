@@ -2775,7 +2775,7 @@
         "tags": [
           "members"
         ],
-        "summary": "내가 받은 열린 초대(검증된 이메일 기준).",
+        "summary": "내가 받은 열린 초대(검증된 이메일 기준). 1단계에서는 워크스페이스 초대만 반환한다.",
         "operationId": "my_invitations",
         "responses": {
           "200": {
@@ -5456,6 +5456,59 @@
         ],
         "summary": "내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다.",
         "operationId": "notifications",
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/OrganizationId"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -5815,7 +5868,7 @@
         "tags": [
           "time"
         ],
-        "summary": "타이머 시작. 이미 진행 중인 타이머가 있으면 409(사용자당 하나, 모든 워크스페이스 통틀어).",
+        "summary": "타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다.",
         "operationId": "start_timer",
         "requestBody": {
           "content": {
@@ -5833,7 +5886,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TimeEntry"
+                  "$ref": "#/components/schemas/StartedTimer"
                 }
               }
             }
@@ -5849,16 +5902,6 @@
             }
           },
           "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -6816,7 +6859,7 @@
           {
             "name": "status",
             "in": "query",
-            "description": "업무 상태(`todo`·`in_progress`·`done`). 주면 업무만 나온다.",
+            "description": "업무 상태 이름(1..50자). 주면 업무만 나온다.",
             "required": false,
             "schema": {
               "type": [
@@ -7912,7 +7955,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/TaskConflict"
                 }
               }
             }
@@ -9939,98 +9982,6 @@
         }
       }
     },
-    "/api/workspaces/{workspace_id}/time-sharing": {
-      "get": {
-        "tags": [
-          "time"
-        ],
-        "summary": "이 워크스페이스의 내 합계 공유 상태(멤버).",
-        "operationId": "get_time_sharing",
-        "parameters": [
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Sharing"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "time"
-        ],
-        "summary": "이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다.",
-        "operationId": "set_time_sharing",
-        "parameters": [
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetSharing"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Sharing"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/workspaces/{workspace_id}/trash": {
       "get": {
         "tags": [
@@ -10568,13 +10519,27 @@
     "schemas": {
       "Accepted": {
         "type": "object",
-        "description": "수락 결과.",
+        "description": "수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다.",
         "required": [
-          "workspace_id"
+          "target_kind",
+          "organization_id"
         ],
         "properties": {
+          "organization_id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/InvitationTarget"
+          },
           "workspace_id": {
-            "$ref": "#/components/schemas/WorkspaceId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
           }
         }
       },
@@ -10591,20 +10556,13 @@
         "type": "object",
         "description": "사용자가 확인한 접근 변화.",
         "required": [
-          "gains",
-          "loses"
+          "changes"
         ],
         "properties": {
-          "gains": {
+          "changes": {
             "type": "array",
             "items": {
-              "type": "string"
-            }
-          },
-          "loses": {
-            "type": "array",
-            "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/MoveAccessChange"
             }
           }
         }
@@ -10947,6 +10905,7 @@
           "item_id",
           "title",
           "status",
+          "status_category",
           "milestone"
         ],
         "properties": {
@@ -10979,7 +10938,10 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/TaskStatus"
+            "type": "string"
+          },
+          "status_category": {
+            "type": "string"
           },
           "title": {
             "type": "string"
@@ -11420,6 +11382,16 @@
           "email": {
             "type": "string"
           },
+          "organization_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationId"
+              }
+            ]
+          },
           "permission": {
             "type": "string",
             "description": "`read` 또는 `write`."
@@ -11483,7 +11455,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/TaskStatus"
+            "type": "string"
           },
           "tags": {
             "type": "array",
@@ -11571,12 +11543,16 @@
         "type": "object",
         "description": "워크스페이스 생성 요청.",
         "required": [
+          "organization_id",
           "request_id",
           "name"
         ],
         "properties": {
           "name": {
             "type": "string"
+          },
+          "organization_id": {
+            "$ref": "#/components/schemas/OrganizationId"
           },
           "request_id": {
             "type": "string",
@@ -12705,7 +12681,8 @@
           "item_id",
           "workspace_id",
           "title",
-          "status"
+          "status",
+          "status_category"
         ],
         "properties": {
           "bucket": {
@@ -12739,7 +12716,10 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/TaskStatus"
+            "type": "string"
+          },
+          "status_category": {
+            "type": "string"
           },
           "title": {
             "type": "string"
@@ -12774,6 +12754,14 @@
             "$ref": "#/components/schemas/Role"
           }
         }
+      },
+      "InvitationTarget": {
+        "type": "string",
+        "description": "초대 대상 종류.",
+        "enum": [
+          "organization",
+          "workspace"
+        ]
       },
       "Item": {
         "type": "object",
@@ -13093,9 +13081,7 @@
         "description": "항목의 시간 합계 한 종류.",
         "required": [
           "kind",
-          "mine_seconds",
-          "shared_seconds",
-          "shared_people"
+          "mine_seconds"
         ],
         "properties": {
           "kind": {
@@ -13105,15 +13091,6 @@
             "type": "integer",
             "format": "int64",
             "description": "내 끝난 기록의 합계(초)."
-          },
-          "shared_people": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "shared_seconds": {
-            "type": "integer",
-            "format": "int64",
-            "description": "이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함)."
           }
         }
       },
@@ -13192,6 +13169,16 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "organization_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationId"
+              }
+            ]
           }
         }
       },
@@ -13443,6 +13430,38 @@
           "hobby"
         ]
       },
+      "MoveAccessChange": {
+        "type": "object",
+        "description": "사용자별 접근 등급 변화. 새 접근이나 회수에서는 한쪽 등급이 없다.",
+        "required": [
+          "change",
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "change": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "from_grade": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "to_grade": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "MoveConflict": {
         "oneOf": [
           {
@@ -13521,8 +13540,7 @@
         "type": "object",
         "description": "이동 미리보기: 접근이 생기는 사람과 사라지는 사람.",
         "required": [
-          "gains",
-          "loses",
+          "changes",
           "reference_changes",
           "history_moves_with_document",
           "active_public_links",
@@ -13534,26 +13552,20 @@
             "format": "int64",
             "description": "이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다."
           },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoveAccessChange"
+            }
+          },
           "children_left_behind": {
             "type": "integer",
             "format": "int64",
             "description": "원래 자리에 남는 하위 문서 수(내가 볼 수 있는 것). 이동하는 문서의 원래 부모에 붙는다."
           },
-          "gains": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "history_moves_with_document": {
             "type": "boolean",
             "description": "이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다."
-          },
-          "loses": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           },
           "reference_changes": {
             "type": "boolean",
@@ -13611,7 +13623,7 @@
             "format": "uuid"
           },
           "status": {
-            "$ref": "#/components/schemas/TaskStatus"
+            "type": "string"
           }
         }
       },
@@ -13931,11 +13943,10 @@
       },
       "Notification": {
         "type": "object",
-        "description": "알림. 지금 볼 수 있는 문서에 대한 것만 나온다.",
+        "description": "알림. invite는 초대 ID만 있고 대상 제목·참조는 없다.",
         "required": [
           "id",
           "kind",
-          "document_title",
           "created_at",
           "read"
         ],
@@ -13978,7 +13989,10 @@
             "description": "대상 번호(문서 또는 업무)."
           },
           "document_title": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "대상 제목(문서 또는 업무)."
           },
           "due_date": {
@@ -13999,6 +14013,13 @@
             "type": "string",
             "format": "uuid"
           },
+          "invitation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "item_id": {
             "oneOf": [
               {
@@ -14012,6 +14033,16 @@
           "kind": {
             "type": "string",
             "description": "`mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·\n`expiry`(강좌 수강권 만료·목표 완료일)·`review`(복습일)·`deadline`(투고 제출·수정 마감, 산출물 마감)."
+          },
+          "organization_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationId"
+              }
+            ]
           },
           "read": {
             "type": "boolean"
@@ -14054,6 +14085,11 @@
             "$ref": "#/components/schemas/UserId"
           }
         }
+      },
+      "OrganizationId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "조직 내부 ID."
       },
       "Participant": {
         "type": "object",
@@ -14324,6 +14360,8 @@
         "type": "object",
         "description": "내가 받은 초대.",
         "required": [
+          "organization_id",
+          "organization_name",
           "id",
           "workspace_id",
           "workspace_name",
@@ -14341,6 +14379,12 @@
             "format": "uuid"
           },
           "invited_by": {
+            "type": "string"
+          },
+          "organization_id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "organization_name": {
             "type": "string"
           },
           "role": {
@@ -14898,8 +14942,8 @@
         "description": "워크스페이스 역할 (D-20).",
         "enum": [
           "admin",
-          "writer",
-          "reader"
+          "member",
+          "readonly"
         ]
       },
       "SaveConflict": {
@@ -15386,18 +15430,6 @@
           }
         }
       },
-      "SetSharing": {
-        "type": "object",
-        "description": "합계 공유 켜기·끄기.",
-        "required": [
-          "enabled"
-        ],
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          }
-        }
-      },
       "SetTaskParent": {
         "type": "object",
         "description": "상위 업무 바꾸기. 없으면 최상위.",
@@ -15418,6 +15450,17 @@
           "timezone"
         ],
         "properties": {
+          "base": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule",
+                "description": "편집 시작 때 본 규칙. 반복이 없었으면 null."
+              }
+            ]
+          },
           "rule": {
             "oneOf": [
               {
@@ -15498,17 +15541,31 @@
         "type": "object",
         "description": "공유 항목.",
         "required": [
+          "organization_id",
+          "grantee_user_id",
+          "display_name",
           "id",
-          "email",
           "permission"
         ],
         "properties": {
-          "email": {
+          "display_name": {
             "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grantee_user_id": {
+            "$ref": "#/components/schemas/UserId"
           },
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "organization_id": {
+            "$ref": "#/components/schemas/OrganizationId"
           },
           "permission": {
             "type": "string",
@@ -15544,22 +15601,6 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
-          }
-        }
-      },
-      "Sharing": {
-        "type": "object",
-        "description": "내 합계 공유 상태(워크스페이스별).",
-        "required": [
-          "workspace_id",
-          "enabled"
-        ],
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "workspace_id": {
-            "$ref": "#/components/schemas/WorkspaceId"
           }
         }
       },
@@ -15686,6 +15727,26 @@
             ]
           }
         }
+      },
+      "StartedTimer": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TimeEntry"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "stopped_entry_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "description": "새 타이머와 자동으로 끝낸 이전 기록."
       },
       "StudyParticipant": {
         "type": "object",
@@ -15923,6 +15984,7 @@
           "title",
           "description",
           "status",
+          "status_category",
           "priority",
           "tags",
           "milestone",
@@ -16046,7 +16108,10 @@
             "description": "`YYYY-MM-DD`. 시각 없는 날짜."
           },
           "status": {
-            "$ref": "#/components/schemas/TaskStatus"
+            "type": "string"
+          },
+          "status_category": {
+            "type": "string"
           },
           "tags": {
             "type": "array",
@@ -16176,22 +16241,11 @@
           }
         }
       },
-      "TaskStatus": {
-        "type": "string",
-        "description": "업무 상태. 완료 시각은 서버가 기록한다.",
-        "enum": [
-          "todo",
-          "in_progress",
-          "done"
-        ]
-      },
       "TaskTime": {
         "type": "object",
         "description": "업무의 예상 시간과 실제 시간.",
         "required": [
-          "mine_seconds",
-          "shared_seconds",
-          "shared_people"
+          "mine_seconds"
         ],
         "properties": {
           "estimate_minutes": {
@@ -16205,15 +16259,6 @@
             "type": "integer",
             "format": "int64",
             "description": "내 기록의 합계(초)."
-          },
-          "shared_people": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "shared_seconds": {
-            "type": "integer",
-            "format": "int64",
-            "description": "이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함)."
           }
         }
       },
@@ -16825,7 +16870,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/TaskStatus"
+            "type": "string"
           },
           "successor_shifts": {
             "type": "array",
@@ -17020,6 +17065,7 @@
         "description": "워크스페이스 요약.",
         "required": [
           "id",
+          "organization_id",
           "name",
           "role",
           "is_owner",
@@ -17035,6 +17081,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "organization_id": {
+            "$ref": "#/components/schemas/OrganizationId"
           },
           "realtime_enabled": {
             "type": "boolean",
