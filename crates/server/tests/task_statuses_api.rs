@@ -245,3 +245,38 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
         );
     }
 }
+
+/// D-116: 상태 없이 만든 업무는 항목의 기본 상태(첫 상태)로 들어간다. 기본 상태의 이름이 바뀌어도 같다(옛 기본값
+/// "todo"라는 이름을 서버가 끼워 넣지 않는다).
+#[tokio::test]
+async fn a_task_without_a_status_takes_the_item_default_even_after_renaming() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "기본 상태").await;
+    let it = item(&app, &admin, &ws, "DEF").await;
+    let path = format!("/api/items/{it}/statuses");
+    let list = send(&app, Method::GET, &path, Some(&admin), None).await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+    let todo = list.json[0]["id"].as_str().unwrap().to_owned();
+    let renamed = send(
+        &app,
+        Method::PUT,
+        &format!("{path}/{todo}"),
+        Some(&admin),
+        Some(json!({ "name": "할 일" })),
+    )
+    .await;
+    assert_eq!(renamed.status, StatusCode::OK, "{:?}", renamed.json);
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{it}/tasks"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "상태 없이" })),
+    )
+    .await;
+    assert_eq!(task.status, StatusCode::CREATED, "{:?}", task.json);
+    assert_eq!(task.json["status"], "할 일");
+    assert_eq!(task.json["status_category"], "todo");
+}

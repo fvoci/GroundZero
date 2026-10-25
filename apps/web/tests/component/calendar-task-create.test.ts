@@ -79,6 +79,7 @@ function created(version = 1, due: string | null = null): TaskDetailView {
   };
 }
 const module: Module = {
+  access: 'owner',
   id: 'm1',
   workspace_id: 'ws-1',
   kind: 'project',

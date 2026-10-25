@@ -49,6 +49,7 @@ describe('search author and title only', () => {
       ],
       my_role: 'admin',
       i_am_owner: true,
+      can_manage_members: true,
     });
     const search = vi.spyOn(api, 'search').mockResolvedValue([]);
     render(SearchDialog, {
@@ -96,8 +97,14 @@ describe('search author that is no longer in the member list', () => {
         ],
         my_role: 'admin',
         i_am_owner: true,
+        can_manage_members: true,
       })
-      .mockResolvedValue({ members: [], my_role: 'admin', i_am_owner: true });
+      .mockResolvedValue({
+        members: [],
+        my_role: 'admin',
+        i_am_owner: true,
+        can_manage_members: true,
+      });
     const search = vi.spyOn(api, 'search').mockResolvedValue([]);
     const view = render(SearchDialog, {
       props: { open: true, memberOf: () => true, workspace: { id: 'ws-1', name: '공간' } },

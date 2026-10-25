@@ -207,7 +207,7 @@ impl SearchClient {
                 .request(reqwest::Method::PATCH, &format!("/indexes/{INDEX}/settings"))
                 .json(&json!({
                     "searchableAttributes": ["title", "reference", "text"],
-                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id", "module_id", "status", "assignee_ids", "created_by", "at", "date"],
+                    "filterableAttributes": ["kind", "workspace_id", "owner_user_id", "id", "module_id", "status", "status_category", "assignee_ids", "created_by", "at", "date"],
                     "displayedAttributes": ["kind", "id", "title", "reference", "workspace_id", "item_id", "text"]
                 }))
                 .send()

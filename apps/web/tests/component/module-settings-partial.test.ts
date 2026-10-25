@@ -21,6 +21,7 @@ const workspace: Workspace = {
 };
 
 const before: Module = {
+  access: 'owner',
   id: 'A',
   workspace_id: 'ws-1',
   kind: 'project',

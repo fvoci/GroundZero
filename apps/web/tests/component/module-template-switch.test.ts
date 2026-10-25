@@ -22,6 +22,7 @@ const workspace: Workspace = {
 
 function module(id: string): Module {
   return {
+    access: 'owner',
     id,
     workspace_id: 'ws-1',
     kind: 'project',

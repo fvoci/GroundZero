@@ -8315,9 +8315,9 @@
             }
           },
           {
-            "name": "status",
+            "name": "status_category",
             "in": "query",
-            "description": "업무 상태 이름(1..50자). 주면 업무만 나온다.",
+            "description": "업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400.",
             "required": false,
             "schema": {
               "type": [
@@ -13377,7 +13377,11 @@
             ]
           },
           "status": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "항목의 상태 정의 이름(D-116). 비우면 항목의 기본 상태(첫 번째 상태)로 만든다."
           },
           "tags": {
             "type": "array",
@@ -14285,7 +14289,8 @@
           "tags",
           "person",
           "people",
-          "course"
+          "course",
+          "episode"
         ]
       },
       "FileDetail": {
@@ -15333,9 +15338,14 @@
         "required": [
           "members",
           "my_role",
-          "i_am_owner"
+          "i_am_owner",
+          "can_manage_members"
         ],
         "properties": {
+          "can_manage_members": {
+            "type": "boolean",
+            "description": "초대·역할 변경·내보내기를 할 수 있다(D-113, `app_access('workspace', id)` = owner). 웹은 역할이 아니라 이 칸을 본다."
+          },
           "i_am_owner": {
             "type": "boolean"
           },
@@ -15347,7 +15357,7 @@
           },
           "my_role": {
             "$ref": "#/components/schemas/Role",
-            "description": "현재 사용자의 역할."
+            "description": "현재 사용자의 역할(표시용)."
           },
           "pending_owner": {
             "oneOf": [
@@ -15374,9 +15384,14 @@
           "previous_keys",
           "archived",
           "icon",
-          "description"
+          "description",
+          "access"
         ],
         "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access",
+            "description": "현재 사용자의 접근 등급(D-113, `app_access('module', id)`): read·write·owner."
+          },
           "archived": {
             "type": "boolean",
             "description": "보관됨: 읽기 전용이며 번호·키는 그대로 남는다."
@@ -19679,9 +19694,14 @@
           "name",
           "role",
           "is_owner",
-          "realtime_enabled"
+          "realtime_enabled",
+          "access"
         ],
         "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access",
+            "description": "현재 사용자의 접근 등급(D-113, `app_access('workspace', id)`): read·write·owner. 웹의 쓰기·관리 표시는 역할이\n아니라 이 칸을 본다."
+          },
           "id": {
             "$ref": "#/components/schemas/WorkspaceId"
           },

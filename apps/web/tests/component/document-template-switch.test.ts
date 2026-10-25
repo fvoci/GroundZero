@@ -55,6 +55,7 @@ function item(id: string, ws: string): ItemView {
 
 function module(ws: string): Module {
   return {
+    access: 'owner',
     id: `m-${ws}`,
     workspace_id: ws,
     kind: 'project',

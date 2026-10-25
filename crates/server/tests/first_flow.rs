@@ -41,6 +41,8 @@ async fn workspace_create_is_idempotent_and_listed() {
     assert_eq!(first.status, StatusCode::CREATED);
     assert_eq!(first.json["name"], "연구실");
     assert_eq!(first.json["role"], "admin");
+    // 만든 사람은 관리자이고 접근 등급은 owner다(D-113).
+    assert_eq!(first.json["access"], "owner");
     let retry = send(
         &app,
         Method::POST,

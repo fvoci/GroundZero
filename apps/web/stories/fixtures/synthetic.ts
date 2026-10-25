@@ -170,6 +170,7 @@ export const MODULES: Module[] = MODULE_DATA.map((mod, i) => ({
   archived: false,
   icon: '',
   description: mod.description,
+  access: 'owner',
 }));
 
 function moduleAt(index: number): Module {

@@ -686,7 +686,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     // 업무를 고친 내용(상태·담당·기한)이 색인에 반영될 때까지 기다린다(제목만으로는 알 수 없다).
     let report = format!("{tok} 보고서");
     for filter in [
-        "status=done",
+        "status_category=done",
         "assignee=me",
         "from=2026-11-01&to=2026-11-30",
     ] {
@@ -700,20 +700,24 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         .await,
         [format!("{tok} 기획"), format!("{tok} 보고서")]
     );
-    // 상태는 항목별 정의의 이름이다(D-116): 모르는 이름은 400이 아니라 빈 결과다.
+    // 상태 필터는 범주만 본다(D-116): 세 낱말 밖은 400, 다른 범주는 빈 결과다(이름이 바뀐 상태도 범주로 찾는다).
     let r = send(
         &app,
         Method::GET,
         &format!(
-            "/api/search?q={tok}&status=late&organization_id={}",
+            "/api/search?q={tok}&status_category=late&organization_id={}",
             common::organization_for(&admin).await
         ),
         Some(&admin),
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    assert!(found(format!("{tok}&status=late")).await.is_empty());
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    assert!(
+        found(format!("{tok}&status_category=doing"))
+            .await
+            .is_empty()
+    );
     let r = send(
         &app,
         Method::GET,
@@ -765,7 +769,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
     let plain_app = common::app(&plain);
     assert_eq!(
-        titles(&search(&plain_app, &admin, &format!("{tok}&status=done")).await),
+        titles(&search(&plain_app, &admin, &format!("{tok}&status_category=done")).await),
         [format!("{tok} 보고서")]
     );
     assert_eq!(

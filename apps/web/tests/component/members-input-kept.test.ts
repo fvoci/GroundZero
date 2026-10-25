@@ -17,6 +17,7 @@ const workspace: Workspace = {
 };
 
 const view: MembersView = {
+  can_manage_members: true,
   members: [
     {
       user_id: 'u1',

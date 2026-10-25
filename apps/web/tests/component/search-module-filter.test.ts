@@ -10,6 +10,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 
 function module(id: string, name: string, archived = false): Module {
   return {
+    access: 'owner',
     id,
     workspace_id: 'ws-1',
     kind: 'project',
@@ -31,7 +32,12 @@ describe('search module filter', () => {
     Element.prototype.setPointerCapture = (): void => undefined;
     Element.prototype.releasePointerCapture = (): void => undefined;
     Element.prototype.scrollIntoView = (): void => undefined;
-    vi.spyOn(api, 'members').mockResolvedValue({ members: [], my_role: 'admin', i_am_owner: true });
+    vi.spyOn(api, 'members').mockResolvedValue({
+      members: [],
+      my_role: 'admin',
+      i_am_owner: true,
+      can_manage_members: true,
+    });
   });
   afterEach(() => {
     vi.restoreAllMocks();

@@ -30,6 +30,8 @@ const MAX_PAGES: usize = 5;
 const MAX_QUERY_CHARS: usize = 200;
 
 const KINDS: &[&str] = &["document", "task", "item", "event", "file", "record"];
+/// 업무 상태 범주(D-116). 검색 필터는 상태 이름이 아니라 범주만 본다.
+const STATUS_CATEGORIES: &[&str] = &["todo", "doing", "done"];
 
 /// 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -43,8 +45,8 @@ pub struct SearchQuery {
     /// 이 모듈 안의 것만.
     #[param(value_type = Option<String>, format = Uuid)]
     pub module_id: Option<Uuid>,
-    /// 업무 상태 이름(1..50자). 주면 업무만 나온다.
-    pub status: Option<String>,
+    /// 업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400.
+    pub status_category: Option<String>,
     /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
     pub assignee: Option<String>,
     /// 날짜 범위 시작(YYYY-MM-DD). 날짜만 있는 값(업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일)은 그 날짜로,
@@ -65,7 +67,7 @@ pub struct SearchQuery {
 struct Filters {
     organization: Option<OrganizationId>,
     module: Option<Uuid>,
-    status: Option<String>,
+    status_category: Option<&'static str>,
     assignee: Option<Uuid>,
     /// 날짜만 있는 값과 비교하는 범위(끝 포함).
     from: Option<time::Date>,
@@ -92,9 +94,17 @@ fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppErr
 }
 
 fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
-    let status = match query.status.as_deref().map(str::trim) {
+    let status_category = match query.status_category.as_deref().map(str::trim) {
         None | Some("") => None,
-        Some(s) => Some(crate::features::tasks::validate_status(s)?),
+        Some(raw) => Some(
+            STATUS_CATEGORIES
+                .iter()
+                .copied()
+                .find(|c| *c == raw)
+                .ok_or_else(|| {
+                    AppError::BadRequest("status_category must be todo, doing or done".to_owned())
+                })?,
+        ),
     };
     let person = |raw: Option<&str>, name: &str| -> Result<Option<Uuid>, AppError> {
         match raw.map(str::trim) {
@@ -110,7 +120,7 @@ fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
     Ok(Filters {
         organization: None,
         module: query.module_id,
-        status,
+        status_category,
         assignee,
         from: parse_day(query.from.as_deref(), "from")?,
         to: parse_day(query.to.as_deref(), "to")?,
@@ -163,12 +173,9 @@ fn meili_filters(f: &Filters) -> String {
     if let Some(m) = f.module {
         out.push_str(&format!(" AND module_id = \"{m}\""));
     }
-    if let Some(s) = &f.status {
-        // 사용자 정의 이름의 따옴표·역슬래시가 필터 식을 바꾸지 않게 문자열로 인코딩한다.
-        out.push_str(&format!(
-            " AND status = {}",
-            serde_json::Value::String(s.clone())
-        ));
+    if let Some(c) = f.status_category {
+        // 범주는 고정 낱말 셋 가운데 하나다(D-116). 상태 이름으로는 거르지 않는다.
+        out.push_str(&format!(" AND status_category = \"{c}\""));
     }
     if let Some(a) = f.assignee {
         out.push_str(&format!(" AND assignee_ids = \"{a}\""));
@@ -514,12 +521,12 @@ async fn fallback(
                 CASE WHEN r.item_id IS NOT NULL AND app_access('item', r.item_id) <> 'none' THEN r.item_id END
          FROM (
            SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
-                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
+                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status_category,
                   NULL::uuid[] AS assignees, d.updated_at AS at, NULL::date AS on_day, d.created_by
            FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL
            UNION ALL
            SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
-                  (SELECT module_id FROM items WHERE id = t.item_id), s.name,
+                  (SELECT module_id FROM items WHERE id = t.item_id), s.category,
                   ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), NULL,
                   coalesce(t.due_date, t.start_date), t.created_by
            FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
@@ -546,7 +553,7 @@ async fn fallback(
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
            AND ($4::uuid IS NULL OR r.module_id = $4)
-           AND ($5::text IS NULL OR r.status = $5)
+           AND ($5::text IS NULL OR r.status_category = $5)
            AND ($6::uuid IS NULL OR $6 = ANY (r.assignees))
            AND (($7::date IS NULL AND $8::date IS NULL)
                 OR (r.at >= coalesce($9::timestamptz, '-infinity') AND r.at < coalesce($10::timestamptz, 'infinity'))
@@ -562,7 +569,7 @@ async fn fallback(
     .bind(kinds)
     .bind(workspace)
     .bind(wanted.module)
-    .bind(wanted.status.as_deref())
+    .bind(wanted.status_category)
     .bind(wanted.assignee)
     .bind(wanted.from)
     .bind(wanted.to)
@@ -599,16 +606,31 @@ async fn fallback(
 mod tests {
     use super::*;
 
+    /// 검색 필터는 상태 이름이 아니라 범주만 본다(D-116): 세 낱말 가운데 하나만 받고 그대로 필터 식에 넣는다.
     #[test]
-    fn custom_status_is_a_quoted_filter_value() {
+    fn status_category_is_one_of_three_fixed_words() {
         let filter = Filters {
-            status: Some("검토 \\\" OR kind = \\\"file".into()),
+            status_category: Some("doing"),
             ..Filters::default()
         };
-        let expression = meili_filters(&filter);
-        let encoded = expression.strip_prefix(" AND status = ").unwrap();
-        let decoded: String = serde_json::from_str(encoded).unwrap();
-        assert_eq!(Some(decoded), filter.status);
+        assert_eq!(meili_filters(&filter), " AND status_category = \"doing\"");
+        let me = UserId(Uuid::from_u128(1));
+        let query = |raw: &str| -> SearchQuery {
+            serde_json::from_value(serde_json::json!({ "q": "x", "status_category": raw })).unwrap()
+        };
+        assert_eq!(
+            filters(&query(" done "), me).unwrap().status_category,
+            Some("done")
+        );
+        assert_eq!(filters(&query(""), me).unwrap().status_category, None);
+        assert!(matches!(
+            filters(&query("late"), me),
+            Err(AppError::BadRequest(_))
+        ));
+        assert!(matches!(
+            filters(&query("검토"), me),
+            Err(AppError::BadRequest(_))
+        ));
     }
 
     /// 날짜 범위는 그날 시작과 다음 날 시작을 시각으로 만든다. 다음 날이 없는 날(9999-12-31)이나 1년 전은 그 시각을

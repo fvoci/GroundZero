@@ -512,6 +512,8 @@ async fn archived_items_and_modules_are_read_only_but_visible() {
     );
     let (_, list) = get(&app, &writer, &format!("/api/workspaces/{ws}/modules")).await;
     assert_eq!(list[0]["archived"], true, "archived modules stay listed");
+    // 모듈의 접근 등급은 워크스페이스 등급이다(D-113). 보관은 `archived`로 따로 나가고 등급을 낮추지 않는다.
+    assert_eq!(list[0]["access"], "write");
 }
 
 #[tokio::test]
