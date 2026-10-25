@@ -2872,7 +2872,7 @@
         "tags": [
           "members"
         ],
-        "summary": "내가 받은 열린 초대(검증된 이메일 기준). 1단계에서는 워크스페이스 초대만 반환한다.",
+        "summary": "내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준).",
         "operationId": "my_invitations",
         "responses": {
           "200": {
@@ -6368,8 +6368,20 @@
         "tags": [
           "documents"
         ],
-        "summary": "나에게 공유된 문서(검증된 이메일 기준).",
+        "summary": "나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만.",
         "operationId": "shared_with_me",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "query",
+            "description": "현재 조직",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -6384,7 +6396,27 @@
               }
             }
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -7325,6 +7357,561 @@
         }
       }
     },
+    "/api/organizations/{organization_id}/invitations": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "조직 초대 목록은 전용 함수가 없으므로 접근 등급과 invitations_select RLS를 쓴다.\n철회는 기존 DELETE /api/invitations/{invitation_id}가 조직 초대도 처리한다.",
+        "operationId": "organization_invitations",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationInvitation"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "invite_organization",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteOrganization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationInvitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/members": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "organization_members",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationMember"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/members/{user_id}": {
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "set_organization_member",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOrganizationRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "remove_organization_member",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/members/{user_id}/removal-preview": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "organization_member_removal_preview",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationRemovalPreview"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/settings": {
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "set_organization_settings",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationSettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/workspaces": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "organization_workspaces",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationWorkspace"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "join_workspace_as_admin",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/public-links/{link_id}": {
       "delete": {
         "tags": [
@@ -7847,6 +8434,120 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/server/admins": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "server_admins",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerAdmin"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/server/organizations": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "server_organizations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerOrganization"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "create_organization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedOrganization"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
             "description": "",
             "content": {
               "application/json": {
@@ -10449,6 +11150,143 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/limits": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "관리자가 편집하는 설정값만 반환한다(실효 한도는 계산하지 않는다).",
+        "operationId": "workspace_limits",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLimits"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "set_workspace_limits",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationLimits"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLimits"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/members": {
       "get": {
         "tags": [
@@ -11499,15 +12337,15 @@
         "type": "object",
         "description": "수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다.",
         "required": [
-          "target_kind",
+          "kind",
           "organization_id"
         ],
         "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/InvitationTarget"
+          },
           "organization_id": {
             "$ref": "#/components/schemas/OrganizationId"
-          },
-          "target_kind": {
-            "$ref": "#/components/schemas/InvitationTarget"
           },
           "workspace_id": {
             "oneOf": [
@@ -12423,6 +13261,26 @@
           }
         }
       },
+      "CreateOrganization": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "name",
+          "first_admin_user_id"
+        ],
+        "properties": {
+          "first_admin_user_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "CreatePublicLink": {
         "type": "object",
         "description": "공개 링크 생성 요청.",
@@ -12624,6 +13482,17 @@
             "type": "string",
             "format": "uuid",
             "description": "클라이언트가 만든 요청 ID. 재시도 중복 방지."
+          }
+        }
+      },
+      "CreatedOrganization": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
           }
         }
       },
@@ -13873,6 +14742,21 @@
           "organization",
           "workspace"
         ]
+      },
+      "InviteOrganization": {
+        "type": "object",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
       },
       "Item": {
         "type": "object",
@@ -15416,44 +16300,76 @@
         "format": "uuid",
         "description": "조직 내부 ID."
       },
+      "OrganizationInvitation": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "role",
+          "expires_at"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
+      },
       "OrganizationLimits": {
         "type": "object",
-        "description": "조직 단계 한도·보존 설정(D-124). `null`은 미설정(서버 기본값 또는 워크스페이스 설정을 따름).",
+        "description": "조직·워크스페이스의 한도·보존 설정값(D-124). `null`은 해당 단계에서 미설정이라는 뜻이다.",
         "properties": {
           "activity_retention_days": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 1
           },
           "audit_retention_days": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 1
           },
           "max_concurrent_uploads": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int32"
+            "format": "int32",
+            "minimum": 1
           },
           "max_file_bytes": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "minimum": 1
           },
           "max_storage_bytes": {
             "type": [
               "integer",
               "null"
             ],
-            "format": "int64"
+            "format": "int64",
+            "minimum": 0
           },
           "notification_rate_per_hour": {
             "type": [
@@ -15461,9 +16377,85 @@
               "null"
             ],
             "format": "int32",
-            "description": "열만 두고 아직 적용하지 않는다(사용자 결정 대기: 적용 대상·채널·초과 처리)."
+            "description": "열만 두고 아직 적용하지 않는다(사용자 결정 대기: 적용 대상·채널·초과 처리).",
+            "minimum": 1
           }
         }
+      },
+      "OrganizationMember": {
+        "type": "object",
+        "description": "조직 멤버. 이메일은 SQL이 조직 관리자에게만 돌려준다.",
+        "required": [
+          "user_id",
+          "display_name",
+          "role",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "OrganizationRemovalPreview": {
+        "type": "object",
+        "required": [
+          "workspaces",
+          "shares",
+          "assignments"
+        ],
+        "properties": {
+          "assignments": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "shares": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workspaces": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "OrganizationSettingsPatch": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrganizationLimits"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "public_links_enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "키 생략은 유지, 한도의 null은 미설정으로 되돌린다. 원본 JSON을 SQL에 전달한다."
       },
       "OrganizationSummary": {
         "type": "object",
@@ -15492,6 +16484,56 @@
           },
           "role": {
             "$ref": "#/components/schemas/OrgRole"
+          }
+        }
+      },
+      "OrganizationWorkspace": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "owner_id",
+          "owner_name",
+          "member_count",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          },
+          "member_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "my_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "owner_name": {
+            "type": "string"
           }
         }
       },
@@ -15764,11 +16806,10 @@
         "type": "object",
         "description": "내가 받은 초대.",
         "required": [
+          "kind",
           "organization_id",
           "organization_name",
           "id",
-          "workspace_id",
-          "workspace_name",
           "role",
           "invited_by",
           "expires_at"
@@ -15785,6 +16826,9 @@
           "invited_by": {
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/InvitationTarget"
+          },
           "organization_id": {
             "$ref": "#/components/schemas/OrganizationId"
           },
@@ -15795,10 +16839,20 @@
             "$ref": "#/components/schemas/Role"
           },
           "workspace_id": {
-            "$ref": "#/components/schemas/WorkspaceId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
           },
           "workspace_name": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -16539,6 +17593,56 @@
           }
         }
       },
+      "ServerAdmin": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "ServerOrganization": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "member_count",
+          "workspace_count"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "member_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "workspace_count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "SetArchived": {
         "type": "object",
         "description": "보관 상태 변경 요청.",
@@ -16696,6 +17800,17 @@
         "properties": {
           "icon": {
             "type": "string"
+          }
+        }
+      },
+      "SetOrganizationRole": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
           }
         }
       },

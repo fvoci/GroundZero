@@ -636,7 +636,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 내가 받은 열린 초대(검증된 이메일 기준). 1단계에서는 워크스페이스 초대만 반환한다. */
+        /** 내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준). */
         get: operations["my_invitations"];
         put?: never;
         post?: never;
@@ -1449,7 +1449,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 나에게 공유된 문서(검증된 이메일 기준). */
+        /** 나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만. */
         get: operations["shared_with_me"];
         put?: never;
         post?: never;
@@ -1673,6 +1673,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/organizations/{organization_id}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 조직 초대 목록은 전용 함수가 없으므로 접근 등급과 invitations_select RLS를 쓴다.
+         *     철회는 기존 DELETE /api/invitations/{invitation_id}가 조직 초대도 처리한다.
+         */
+        get: operations["organization_invitations"];
+        put?: never;
+        post: operations["invite_organization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["organization_members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_organization_member"];
+        post?: never;
+        delete: operations["remove_organization_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/members/{user_id}/removal-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["organization_member_removal_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_organization_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["organization_workspaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["join_workspace_as_admin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public-links/{link_id}": {
         parameters: {
             query?: never;
@@ -1787,6 +1903,38 @@ export interface paths {
         get: operations["search"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["server_admins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["server_organizations"];
+        put?: never;
+        post: operations["create_organization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2374,6 +2522,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 관리자가 편집하는 설정값만 반환한다(실효 한도는 계산하지 않는다). */
+        get: operations["workspace_limits"];
+        put: operations["set_workspace_limits"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/members": {
         parameters: {
             query?: never;
@@ -2665,8 +2830,8 @@ export interface components {
     schemas: {
         /** @description 수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다. */
         Accepted: {
+            kind: components["schemas"]["InvitationTarget"];
             organization_id: components["schemas"]["OrganizationId"];
-            target_kind: components["schemas"]["InvitationTarget"];
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
@@ -2960,6 +3125,12 @@ export interface components {
             /** Format: uuid */
             request_id: string;
         };
+        CreateOrganization: {
+            first_admin_user_id: components["schemas"]["UserId"];
+            name: string;
+            /** Format: uuid */
+            request_id: string;
+        };
         /** @description 공개 링크 생성 요청. */
         CreatePublicLink: {
             /**
@@ -3036,6 +3207,9 @@ export interface components {
              * @description 클라이언트가 만든 요청 ID. 재시도 중복 방지.
              */
             request_id: string;
+        };
+        CreatedOrganization: {
+            id: components["schemas"]["OrganizationId"];
         };
         /** @description 만든 링크. `url`은 이때 한 번만 받을 수 있다. */
         CreatedPublicLink: {
@@ -3443,6 +3617,10 @@ export interface components {
          * @enum {string}
          */
         InvitationTarget: "organization" | "workspace";
+        InviteOrganization: {
+            email: string;
+            role: components["schemas"]["OrgRole"];
+        };
         /** @description 모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20). */
         Item: {
             access: components["schemas"]["Access"];
@@ -3981,7 +4159,15 @@ export interface components {
          * @description 조직 내부 ID.
          */
         OrganizationId: string;
-        /** @description 조직 단계 한도·보존 설정(D-124). `null`은 미설정(서버 기본값 또는 워크스페이스 설정을 따름). */
+        OrganizationInvitation: {
+            email: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["OrgRole"];
+        };
+        /** @description 조직·워크스페이스의 한도·보존 설정값(D-124). `null`은 해당 단계에서 미설정이라는 뜻이다. */
         OrganizationLimits: {
             /** Format: int32 */
             activity_retention_days?: number | null;
@@ -3999,6 +4185,28 @@ export interface components {
              */
             notification_rate_per_hour?: number | null;
         };
+        /** @description 조직 멤버. 이메일은 SQL이 조직 관리자에게만 돌려준다. */
+        OrganizationMember: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email?: string | null;
+            role: components["schemas"]["OrgRole"];
+            user_id: components["schemas"]["UserId"];
+        };
+        OrganizationRemovalPreview: {
+            /** Format: int32 */
+            assignments: number;
+            /** Format: int32 */
+            shares: number;
+            /** Format: int32 */
+            workspaces: number;
+        };
+        /** @description 키 생략은 유지, 한도의 null은 미설정으로 되돌린다. 원본 JSON을 SQL에 전달한다. */
+        OrganizationSettingsPatch: components["schemas"]["OrganizationLimits"] & {
+            name?: string;
+            public_links_enabled?: boolean | null;
+        };
         /** @description 내가 속한 조직 한 줄. */
         OrganizationSummary: {
             /** Format: date-time */
@@ -4008,6 +4216,19 @@ export interface components {
             /** @description 비로그인 공개 링크를 쓸 수 있는지(조직 관리자가 끌 수 있다, D-114). */
             public_links_enabled: boolean;
             role: components["schemas"]["OrgRole"];
+        };
+        OrganizationWorkspace: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deleted_at?: string | null;
+            id: components["schemas"]["WorkspaceId"];
+            /** Format: int32 */
+            member_count: number;
+            my_role?: null | components["schemas"]["Role"];
+            name: string;
+            owner_id: components["schemas"]["UserId"];
+            owner_name: string;
         };
         /** @description 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음). */
         Participant: {
@@ -4112,11 +4333,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             invited_by: string;
+            kind: components["schemas"]["InvitationTarget"];
             organization_id: components["schemas"]["OrganizationId"];
             organization_name: string;
             role: components["schemas"]["Role"];
-            workspace_id: components["schemas"]["WorkspaceId"];
-            workspace_name: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+            workspace_name?: string | null;
         };
         /** @description 항목 기록. */
         Record: {
@@ -4365,6 +4587,22 @@ export interface components {
             /** Format: uuid */
             workspace_id?: string | null;
         };
+        ServerAdmin: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            user_id: components["schemas"]["UserId"];
+        };
+        ServerOrganization: {
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["OrganizationId"];
+            /** Format: int32 */
+            member_count: number;
+            name: string;
+            /** Format: int32 */
+            workspace_count: number;
+        };
         /** @description 보관 상태 변경 요청. */
         SetArchived: {
             archived: boolean;
@@ -4414,6 +4652,9 @@ export interface components {
         /** @description 모듈 아이콘(관리자). */
         SetModuleIcon: {
             icon: string;
+        };
+        SetOrganizationRole: {
+            role: components["schemas"]["OrgRole"];
         };
         /** @description 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝. */
         SetParent: {
@@ -9487,7 +9728,10 @@ export interface operations {
     };
     shared_with_me: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description 현재 조직 */
+                organization_id: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9502,7 +9746,23 @@ export interface operations {
                     "application/json": components["schemas"]["SharedDocument"][];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10143,6 +10403,391 @@ export interface operations {
             };
         };
     };
+    organization_invitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitation"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    invite_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteOrganization"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitation"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMember"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_organization_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                user_id: components["schemas"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetOrganizationRole"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_organization_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                user_id: components["schemas"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_member_removal_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                user_id: components["schemas"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationRemovalPreview"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_organization_settings: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-fvoci-expected-user": components["schemas"]["UserId"];
+            };
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationSettingsPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_workspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationWorkspace"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    join_workspace_as_admin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     revoke_public_link: {
         parameters: {
             query?: never;
@@ -10444,6 +11089,99 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    server_admins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerAdmin"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    server_organizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOrganization"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganization"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedOrganization"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12190,6 +12928,102 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    workspace_limits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationLimits"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_workspace_limits: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-fvoci-expected-user": components["schemas"]["UserId"];
+            };
+            path: {
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationLimits"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationLimits"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
