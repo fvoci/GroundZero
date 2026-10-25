@@ -54,9 +54,18 @@ async fn restore(
 }
 
 async fn get(app: &Router, user: &TestUser, uri: &str) -> (StatusCode, Value) {
-    let mut r = send(app, Method::GET, uri, Some(user), None).await;
+    let scoped = if uri == "/api/me/notifications" {
+        format!(
+            "{uri}?organization_id={}",
+            common::organization_for(user).await
+        )
+    } else {
+        uri.to_owned()
+    };
+    let mut r = send(app, Method::GET, &scoped, Some(user), None).await;
     if uri == "/api/me/notifications" {
         // D-118: 초대 알림을 제외하고 복원으로 언급 알림이 늘지 않는지 검증한다.
+        r.json = r.json["notifications"].take();
         r.json
             .as_array_mut()
             .unwrap()

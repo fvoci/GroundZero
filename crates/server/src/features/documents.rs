@@ -623,16 +623,21 @@ pub struct SharedDocument {
 }
 
 /// 나에게 공유된 문서(검증된 이메일 기준).
-#[utoipa::path(get, path = "/api/me/shared",
-    responses((status = 200, body = [SharedDocument]), (status = 401, body = ErrorBody)), tag = "documents")]
+#[utoipa::path(get, path = "/api/me/shared", operation_id = "shared_with_me",
+    params(("organization_id" = crate::ids::OrganizationId, Query)),
+    responses((status = 200, body = [SharedDocument]), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn shared_with_me(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    crate::features::organizations::OrgScope { user, organization }: crate::features::organizations::OrgScope,
 ) -> Result<Json<Vec<SharedDocument>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<(DocumentId, String, String, String, OffsetDateTime)> = sqlx::query_as(
-        "SELECT id, title, permission, shared_by, updated_at FROM app_shared_with_me()",
+        "SELECT m.id, m.title, m.permission, m.shared_by, m.updated_at
+         FROM app_shared_with_me() m
+         JOIN document_shares s ON s.document_id = m.id AND s.grantee_user_id = app_user_id()
+         WHERE s.organization_id = $1 ORDER BY m.updated_at DESC, m.id",
     )
+    .bind(organization)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;

@@ -19,11 +19,13 @@ use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
+// personal scope (2단계 B)
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
     members, modules, organizations, public_links, records, recurrence, references, revisions,
     saved_views, schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
 };
+use crate::features::{activity, notifications};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -267,7 +269,6 @@ async fn api_not_found() -> AppError {
         documents::save,
         documents::my_notes,
         documents::create_note,
-        documents::shared_with_me,
         documents::set_settings,
         documents::list_shares,
         documents::create_share,
@@ -311,7 +312,18 @@ async fn api_not_found() -> AppError {
         time_tracking::summary,
         time_tracking::task_time,
         time_tracking::item_time,
+        // personal scope (2단계 B)
         home::home,
+        home::my_tasks,
+        documents::shared_with_me,
+        search_api::search,
+        notifications::notifications,
+        notifications::unread_count,
+        notifications::mark_read,
+        activity::recent,
+        activity::item,
+        activity::document,
+        activity::task,
         home::set_mark,
         home::get_mark,
         trash::trash_document,
@@ -326,7 +338,6 @@ async fn api_not_found() -> AppError {
         trash::purge_my_expired,
         trash::set_retention,
         trash::set_version_retention,
-        search_api::search,
         files::create_upload,
         files::get_upload,
         files::put_part,
@@ -404,8 +415,6 @@ async fn api_not_found() -> AppError {
         references::resolve,
         references::document_backlinks,
         references::item_backlinks,
-        references::notifications,
-        references::mark_read,
         public_links::list,
         public_links::create,
         public_links::revoke,
@@ -654,8 +663,18 @@ async fn api_not_found() -> AppError {
         references::ResolveReferences,
         references::ResolvedReference,
         references::Backlink,
-        references::Notification,
-        references::MarkRead,
+        // personal scope (2단계 B)
+        notifications::Notification,
+        notifications::NotificationPage,
+        notifications::MarkRead,
+        notifications::MarkedNotifications,
+        notifications::UnreadCount,
+        home::MyTask,
+        home::MyTaskCounts,
+        home::WorkspaceTasks,
+        home::MyTasks,
+        activity::Activity,
+        activity::ActivityPage,
         public_links::PublicLink,
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
@@ -818,7 +837,6 @@ pub fn router(state: AppState) -> Router {
             "/me/notes",
             get(documents::my_notes).post(documents::create_note),
         )
-        .route("/me/shared", get(documents::shared_with_me))
         .route(
             "/documents/{document_id}/settings",
             put(documents::set_settings),
@@ -908,7 +926,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/time-summary", get(time_tracking::summary))
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
         .route("/items/{item_id}/time", get(time_tracking::item_time))
-        .route("/me/home", get(home::home))
         .route(
             "/workspaces/{workspace_id}/trash",
             get(trash::workspace_trash),
@@ -926,7 +943,6 @@ pub fn router(state: AppState) -> Router {
             put(trash::set_version_retention),
         )
         .route("/me/trash", get(trash::my_trash))
-        .route("/search", get(search_api::search))
         .route("/uploads", post(files::create_upload))
         .route(
             "/uploads/{upload_id}",
@@ -988,6 +1004,21 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/revisions/{revision}/export",
             post(revisions::export),
         )
+        // personal scope (2단계 B)
+        .route("/me/home", get(home::home))
+        .route("/me/tasks", get(home::my_tasks))
+        .route("/me/shared", get(documents::shared_with_me))
+        .route("/search", get(search_api::search))
+        .route("/me/notifications", get(notifications::notifications))
+        .route(
+            "/me/notifications/unread-count",
+            get(notifications::unread_count),
+        )
+        .route("/me/notifications/read", post(notifications::mark_read))
+        .route("/me/activity", get(activity::recent))
+        .route("/items/{item_id}/activity", get(activity::item))
+        .route("/documents/{document_id}/activity", get(activity::document))
+        .route("/tasks/{task_id}/activity", get(activity::task))
         .route("/references/resolve", post(references::resolve))
         .route(
             "/documents/{document_id}/backlinks",
@@ -997,8 +1028,6 @@ pub fn router(state: AppState) -> Router {
             "/items/{item_id}/backlinks",
             get(references::item_backlinks),
         )
-        .route("/me/notifications", get(references::notifications))
-        .route("/me/notifications/read", post(references::mark_read))
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),

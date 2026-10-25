@@ -1,6 +1,6 @@
 //! 통합 검색 API (D-39). 문서·업무·항목·일정을 한 번에 찾는다. 볼 수 있는 것만 나온다.
 //!
-//! Meilisearch가 있으면 "내 워크스페이스 또는 내 개인 노트 또는 나에게 공유된 문서"로 먼저 좁혀 찾은 뒤
+//! Meilisearch가 있으면 "현재 조직의 내 워크스페이스 또는 내 개인 노트"로 먼저 좁혀 찾은 뒤
 //! PostgreSQL 접근 함수로 다시 거른다(비공개 항목·지운 것·권한이 바뀐 것 제외). 없으면 제목만 DB에서 찾는다.
 //! 색인은 백그라운드 작업이 반영하므로 바로 직전의 변경은 조금 늦게 보일 수 있다.
 
@@ -15,9 +15,9 @@ use uuid::Uuid;
 
 use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::organizations::OrgScope;
 use crate::http::AppState;
-use crate::ids::{UserId, WorkspaceId};
+use crate::ids::{OrganizationId, UserId, WorkspaceId};
 use crate::search::{SearchClient, day_number};
 
 /// 한 번에 돌려주는 결과 수.
@@ -63,6 +63,7 @@ pub struct SearchQuery {
 /// 검색 조건 중 필터.
 #[derive(Debug, Default)]
 struct Filters {
+    organization: Option<OrganizationId>,
     module: Option<Uuid>,
     status: Option<String>,
     assignee: Option<Uuid>,
@@ -107,6 +108,7 @@ fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
     let assignee = person(query.assignee.as_deref(), "assignee")?;
     let author = person(query.author.as_deref(), "author")?;
     Ok(Filters {
+        organization: None,
         module: query.module_id,
         status,
         assignee,
@@ -240,35 +242,22 @@ async fn scope_filter(
     tx: &mut UserTx,
     workspace: Option<WorkspaceId>,
     kinds: &[&str],
+    organization: OrganizationId,
 ) -> Result<String, AppError> {
     let kind_filter = format!("kind IN {}", quote(kinds.iter().map(|k| (*k).to_owned())));
     if let Some(ws) = workspace {
         crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
         return Ok(format!("({kind_filter}) AND workspace_id = \"{}\"", ws.0));
     }
-    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
+    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids($1)")
+        .bind(organization)
         .fetch_all(tx.conn())
         .await?;
-    // 내 워크스페이스 밖에서 볼 수 있는 문서(받은 공유).
-    let shared: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT d.id FROM documents d
-         WHERE (d.workspace_id IS NULL AND d.owner_user_id IS DISTINCT FROM app_user_id())
-            OR (d.workspace_id IS NOT NULL AND d.workspace_id NOT IN (SELECT app_my_workspace_ids(NULL::uuid)))
-         LIMIT 1000",
-    )
-    .fetch_all(tx.conn())
-    .await?;
     let mut scope = vec![format!("owner_user_id = \"{}\"", tx.user().0)];
     if !workspaces.is_empty() {
         scope.push(format!(
             "workspace_id IN {}",
             quote(workspaces.iter().map(Uuid::to_string))
-        ));
-    }
-    if !shared.is_empty() {
-        scope.push(format!(
-            "(kind = \"document\" AND id IN {})",
-            quote(shared.iter().map(Uuid::to_string))
         ));
     }
     Ok(format!("({kind_filter}) AND ({})", scope.join(" OR ")))
@@ -277,13 +266,26 @@ async fn scope_filter(
 async fn visible(
     tx: &mut UserTx,
     candidates: &[(String, Uuid)],
+    organization: Option<OrganizationId>,
 ) -> Result<HashSet<(String, Uuid)>, AppError> {
     let kinds: Vec<&str> = candidates.iter().map(|(k, _)| k.as_str()).collect();
     let ids: Vec<Uuid> = candidates.iter().map(|(_, id)| *id).collect();
     let rows: Vec<(String, Uuid)> =
-        sqlx::query_as("SELECT kind, id FROM app_search_visible($1, $2)")
+        sqlx::query_as("SELECT v.kind, v.id FROM app_search_visible($1, $2) v
+             LEFT JOIN documents d ON v.kind = 'document' AND d.id = v.id
+             LEFT JOIN tasks t ON v.kind = 'task' AND t.id = v.id
+             LEFT JOIN items i ON v.kind = 'item' AND i.id = v.id
+             LEFT JOIN events e ON v.kind = 'event' AND e.id = v.id
+             LEFT JOIN files f ON v.kind = 'file' AND f.id = v.id
+             LEFT JOIN documents fd ON fd.id = f.document_id
+             LEFT JOIN item_records r ON v.kind = 'record' AND r.id = v.id
+             WHERE coalesce(d.workspace_id,t.workspace_id,i.workspace_id,e.workspace_id,f.workspace_id,r.workspace_id)
+                       IN (SELECT app_my_workspace_ids($3))
+                OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())
+                OR (f.workspace_id IS NULL AND fd.owner_user_id = app_user_id())")
             .bind(&kinds)
             .bind(&ids)
+            .bind(organization)
             .fetch_all(tx.conn())
             .await?;
     Ok(rows.into_iter().collect())
@@ -335,12 +337,12 @@ fn parse_uuid(raw: Option<&str>) -> Option<Uuid> {
 }
 
 /// 통합 검색(로그인한 사람). 볼 수 있는 것만, 최대 20건.
-#[utoipa::path(get, path = "/api/search", operation_id = "search", params(SearchQuery),
+#[utoipa::path(get, path = "/api/search", operation_id = "search", params(SearchQuery, ("organization_id" = OrganizationId, Query)),
     responses((status = 200, body = [SearchResult]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "search")]
 pub async fn search(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    OrgScope { user, organization }: OrgScope,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<SearchResult>>, AppError> {
     let q = query.q.trim();
@@ -354,8 +356,22 @@ pub async fn search(
     }
     let kinds = parse_kinds(query.kinds.as_deref())?;
     let mut wanted = filters(&query, user)?;
+    wanted.organization = Some(organization);
     let mut tx = state.db.begin_as(user).await?;
     day_bounds(&mut tx, &mut wanted, query.tz.as_deref()).await?;
+    if let Some(workspace) = query.workspace_id {
+        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, workspace).await?;
+        let in_scope: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = $1 AND organization_id = $2)",
+        )
+        .bind(workspace)
+        .bind(organization)
+        .fetch_one(tx.conn())
+        .await?;
+        if !in_scope {
+            return Err(AppError::NotFound);
+        }
+    }
     let Some(client) = &state.search else {
         let results = fallback(&mut tx, q, query.workspace_id, &kinds, &wanted).await?;
         tx.commit().await?;
@@ -363,7 +379,7 @@ pub async fn search(
     };
     let filter = format!(
         "({}){}",
-        scope_filter(&mut tx, query.workspace_id, &kinds).await?,
+        scope_filter(&mut tx, query.workspace_id, &kinds, organization).await?,
         meili_filters(&wanted)
     );
     tx.commit().await?;
@@ -423,7 +439,7 @@ async fn indexed(
             .filter_map(|h| Some((h.kind.clone(), Uuid::parse_str(&h.id).ok()?)))
             .collect();
         let mut tx = state.db.begin_as(user).await?;
-        let allowed = visible(&mut tx, &candidates).await?;
+        let allowed = visible(&mut tx, &candidates, wanted.organization).await?;
         // 항목 id·모듈은 그 항목을 볼 수 있는 사람에게만 쓴다(감사 델타 SD4). 공유로만 문서·첨부를 보는 사람에게는 항목
         // id를 주지 않고, 모듈로 거를 때는 대체(DB) 경로처럼 그 결과를 내지 않는다.
         let item_ids: Vec<Uuid> = hits
@@ -536,6 +552,10 @@ async fn fallback(
                 OR (r.at >= coalesce($9::timestamptz, '-infinity') AND r.at < coalesce($10::timestamptz, 'infinity'))
                 OR (r.on_day >= coalesce($7::date, '-infinity') AND r.on_day <= coalesce($8::date, 'infinity')))
            AND ($11::uuid IS NULL OR r.created_by = $11)
+           AND (r.workspace_id IN (SELECT app_my_workspace_ids($12))
+                OR (r.workspace_id IS NULL AND (
+                    (r.kind = 'document' AND EXISTS (SELECT 1 FROM documents d WHERE d.id = r.id AND d.owner_user_id = app_user_id()))
+                    OR (r.kind = 'file' AND EXISTS (SELECT 1 FROM files f JOIN documents d ON d.id = f.document_id WHERE f.id = r.id AND d.owner_user_id = app_user_id())))))
          ORDER BY r.updated_at DESC LIMIT 60",
     )
     .bind(&pattern)
@@ -549,10 +569,11 @@ async fn fallback(
     .bind(wanted.start)
     .bind(wanted.end)
     .bind(wanted.author)
+    .bind(wanted.organization)
     .fetch_all(tx.conn())
     .await?;
     let candidates: Vec<(String, Uuid)> = rows.iter().map(|r| (r.0.clone(), r.1)).collect();
-    let allowed = visible(tx, &candidates).await?;
+    let allowed = visible(tx, &candidates, wanted.organization).await?;
     let mut results = Vec::new();
     for (kind, id, title, workspace_id, item_id) in rows {
         if results.len() == MAX_RESULTS || !allowed.contains(&(kind.clone(), id)) {

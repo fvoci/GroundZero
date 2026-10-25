@@ -157,6 +157,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["document_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/backlinks": {
         parameters: {
             query?: never;
@@ -703,6 +719,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["item_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/archived": {
         parameters: {
             query?: never;
@@ -1130,6 +1162,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_recent_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/audit": {
         parameters: {
             query?: never;
@@ -1222,7 +1270,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다. */
+        /** 홈(로그인한 사람). 현재 조직에서 볼 수 있는 것만 모은다. */
         get: operations["home"];
         put?: never;
         post?: never;
@@ -1279,7 +1327,7 @@ export interface paths {
             cookie?: never;
         };
         /** 내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다. */
-        get: operations["notifications"];
+        get: operations["list_my_notifications"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1298,7 +1346,23 @@ export interface paths {
         get?: never;
         put?: never;
         /** 알림 읽음 표시. 내 알림만 바뀐다. */
-        post: operations["mark_read"];
+        post: operations["mark_my_notifications_read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_notification_unread_count"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1351,6 +1415,22 @@ export interface paths {
         };
         /** 나에게 공유된 문서(검증된 이메일 기준). */
         get: operations["shared_with_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_tasks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1726,6 +1806,22 @@ export interface paths {
         post?: never;
         /** 업무 지우기(하위 업무까지, 쓰기 권한). */
         delete: operations["trash_task"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["task_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2545,6 +2641,34 @@ export interface components {
         /** @description 사용자가 확인한 접근 변화. */
         AcknowledgedPreview: {
             changes: components["schemas"]["MoveAccessChange"][];
+        };
+        Activity: {
+            /** Format: uuid */
+            actor_id?: string | null;
+            actor_name?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            detail: unknown;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            item_id?: string | null;
+            kind: string;
+            /** Format: uuid */
+            target_id: string;
+            target_kind: string;
+            /**
+             * Format: uuid
+             * @description 최근 활동에는 포함하고 대상별 활동에는 없다(SQL 반환 계약).
+             */
+            workspace_id?: string | null;
+        };
+        ActivityPage: {
+            activity: components["schemas"]["Activity"][];
+            /** Format: date-time */
+            next_before?: string | null;
+            /** Format: uuid */
+            next_before_id?: string | null;
         };
         /** @description 체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에). */
         AddChecklist: {
@@ -3421,7 +3545,6 @@ export interface components {
         MarkRead: {
             /** Format: uuid */
             id?: string | null;
-            organization_id?: null | components["schemas"]["OrganizationId"];
         };
         /** @description 한 대상의 표시 상태. */
         MarkState: {
@@ -3433,6 +3556,10 @@ export interface components {
          * @enum {string}
          */
         MarkTarget: "item" | "document" | "task";
+        MarkedNotifications: {
+            /** Format: int32 */
+            marked: number;
+        };
         /** @description 표시한 대상(지금 볼 수 있는 것만). */
         MarkedTarget: {
             /** Format: uuid */
@@ -3606,6 +3733,38 @@ export interface components {
             /** @description `mon`·`sun`, 빈 문자열이면 지운다. */
             week_start?: string | null;
         };
+        /** @description SQL bucket: overdue, today, upcoming, none(날짜 없음), done. */
+        MyTask: {
+            bucket: string;
+            due_date?: string | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            priority: string;
+            reference?: string | null;
+            start_date?: string | null;
+            status: string;
+            status_category: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MyTaskCounts: {
+            /** Format: int32 */
+            done: number;
+            /** Format: int32 */
+            overdue: number;
+            /** Format: int32 */
+            today: number;
+            /** Format: int32 */
+            undated: number;
+            /** Format: int32 */
+            upcoming: number;
+        };
+        MyTasks: {
+            counts: components["schemas"]["MyTaskCounts"];
+            workspaces: components["schemas"]["WorkspaceTasks"][];
+        };
         /** @description 내 진행. */
         MyUnitProgress: {
             /** Format: date */
@@ -3698,6 +3857,7 @@ export interface components {
             comment_id?: string | null;
             /** Format: date-time */
             created_at: string;
+            detail: unknown;
             document_id?: null | components["schemas"]["DocumentId"];
             /** @description 대상 번호(문서 또는 업무). */
             document_reference?: string | null;
@@ -3719,6 +3879,8 @@ export interface components {
             kind: string;
             organization_id?: null | components["schemas"]["OrganizationId"];
             read: boolean;
+            /** Format: date-time */
+            read_at?: string | null;
             /** @description 항목 알림의 대상 이름(기록 제목이나 강좌 이름). */
             subject?: string | null;
             /**
@@ -3727,6 +3889,14 @@ export interface components {
              */
             task_id?: string | null;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /** @description 목록 끝에서 두 커서가 null이면 더 읽을 페이지가 없다. */
+        NotificationPage: {
+            /** Format: date-time */
+            next_before?: string | null;
+            /** Format: uuid */
+            next_before_id?: string | null;
+            notifications: components["schemas"]["Notification"][];
         };
         /** @description 인계 제안 요청. */
         OfferOwnership: {
@@ -4650,6 +4820,10 @@ export interface components {
             /** Format: int32 */
             planned: number;
         };
+        UnreadCount: {
+            /** Format: int32 */
+            unread_count: number;
+        };
         /** @description Up Next 묶음마다의 전체 수. */
         UpNextCounts: {
             /** Format: int64 */
@@ -4834,6 +5008,11 @@ export interface components {
          * @description 워크스페이스 내부 ID.
          */
         WorkspaceId: string;
+        WorkspaceTasks: {
+            tasks: components["schemas"]["MyTask"][];
+            workspace_id: components["schemas"]["WorkspaceId"];
+            workspace_name: string;
+        };
         /** @description 컬렉션. */
         ZoteroCollection: {
             key: string;
@@ -5383,6 +5562,55 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    document_activity: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7041,6 +7269,55 @@ export interface operations {
             };
         };
     };
+    item_activity: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     archive_item: {
         parameters: {
             query?: never;
@@ -8347,6 +8624,52 @@ export interface operations {
             };
         };
     };
+    my_recent_activity: {
+        parameters: {
+            query: {
+                limit?: number | null;
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Activity"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     my_audit: {
         parameters: {
             query?: {
@@ -8480,7 +8803,8 @@ export interface operations {
     home: {
         parameters: {
             query: {
-                tz: string;
+                tz?: string | null;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;
@@ -8497,6 +8821,14 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8648,13 +8980,13 @@ export interface operations {
             };
         };
     };
-    notifications: {
+    list_my_notifications: {
         parameters: {
-            query?: {
-                organization?: null | components["schemas"]["OrganizationId"];
+            query: {
                 limit?: number | null;
                 before?: string | null;
                 before_id?: string | null;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;
@@ -8667,7 +8999,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Notification"][];
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             401: {
@@ -8678,11 +9018,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
-    mark_read: {
+    mark_my_notifications_read: {
         parameters: {
-            query?: never;
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8693,13 +9043,76 @@ export interface operations {
             };
         };
         responses: {
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MarkedNotifications"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_notification_unread_count: {
+        parameters: {
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCount"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8775,7 +9188,9 @@ export interface operations {
     };
     shared_with_me: {
         parameters: {
-            query?: never;
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8790,7 +9205,70 @@ export interface operations {
                     "application/json": components["schemas"]["SharedDocument"][];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_tasks: {
+        parameters: {
+            query: {
+                /** @description YYYY-MM-DD. 없으면 저장된 사용자 시간대의 오늘(미설정은 UTC). */
+                today?: string | null;
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTasks"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9660,6 +10138,7 @@ export interface operations {
                 author?: string | null;
                 /** @description `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다). */
                 title_only?: boolean | null;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;
@@ -9944,6 +10423,55 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    task_activity: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
