@@ -21,7 +21,7 @@ function day(offset: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** 실제 Tab 왕복 후 focus-visible과 그려진 고리를 확인한다. 색 대비·시각 위계 검증은 별도다. */
+/** 실제 Tab 왕복 후 focus-visible과 제품의 ring 그림자를 확인한다. 색 대비·시각 위계 검증은 별도다. */
 async function keyboardFocus(target: Locator): Promise<void> {
   const page = target.page();
   await target.focus();
@@ -30,15 +30,11 @@ async function keyboardFocus(target: Locator): Promise<void> {
   await page.keyboard.press('Shift+Tab');
   await expect(target).toBeFocused();
   expect(await target.evaluate((el) => el.matches(':focus-visible'))).toBe(true);
-  const ring = await target.evaluate((el) => {
-    const style = getComputedStyle(el);
-    return { shadow: style.boxShadow, outline: style.outlineStyle, width: style.outlineWidth };
-  });
-  expect(
-    (ring.shadow !== 'none' && ring.shadow !== resting) ||
-      (ring.outline !== 'none' && Number.parseFloat(ring.width) > 0),
-    'keyboard focus draws a ring or outline',
-  ).toBe(true);
+  // 투명 outline도 폭은 있을 수 있으므로 그것만으로 고리 PASS를 주지 않는다.
+  await expect
+    .poll(() => target.evaluate((el) => getComputedStyle(el).boxShadow))
+    .not.toBe(resting);
+  expect(await target.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none');
 }
 
 async function noOverflow(page: Page): Promise<void> {

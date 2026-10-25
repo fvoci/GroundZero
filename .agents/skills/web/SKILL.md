@@ -8,7 +8,7 @@ description: fvoci 웹(apps/web)을 바꿀 때 읽을 코드와 결정, UI·조�
 ## 먼저 읽기
 
 - `AGENTS.md`와 `docs/decisions/ui.md`의 현재 규칙 요약. 업무는 `tasks.md`, 홈·알림은 `notify-audit.md`, 접근은 `access.md`, 편집 보존은 `documents.md`, 시간은 `time.md`에서 해당 조항만 읽는다. 수락 경로 D-128은 `docs/decisions/product.md`에 있다.
-- 조직 문맥은 `apps/web/src/lib/org.svelte.ts`. 개인 화면은 `org.currentId`가 없으면 요청하지 않고 조직 선택 안내를 보인다. 첫 조직을 자동 선택하지 않는다. API 시험 준비의 단일 조직 확인은 UI 선택 정책이 아니다.
+- 조직 문맥은 `apps/web/src/lib/org.svelte.ts`. 개인 화면은 `org.currentId`가 없으면 요청하지 않고 조직 선택 안내를 보인다. 첫 조직을 자동 선택하지 않는다. 워크스페이스 경로의 조직을 `org.select`로 기억해 이어지는 개인 화면에 쓰는 것은 코디네이터 토대에서 맡는다. 새 문맥에서는 다시 워크스페이스에 들어가거나 전환기로 고른다. API 시험 준비의 단일 조직 확인은 UI 선택 정책이 아니다.
 - 경로는 `apps/web/src/lib/router.svelte.ts`: 업무 보기 `/w/:ws/i/:item/tasks/board|list|calendar|gantt`, 상세 `/tasks/board/t/:taskId`, 내 업무 `/tasks`, 알림 `/notifications/:id`. 보기 전환은 경로 함수와 `router.navigate`로 하고 popstate도 미저장 보호를 거친다.
 - 저장소는 `apps/web/src/lib/storage.ts`. 새 키는 `org.key(name)`으로 사용자·조직 범위를 넣는다(D-121).
 - 응답 계약은 `contracts/openapi.json`, 파서는 `apps/web/src/lib/api/client.ts`의 `str/int/bool/optStr/rec` 규칙. 없는 서버 계약을 임의 optional·any·가짜 응답으로 숨기지 않는다.
