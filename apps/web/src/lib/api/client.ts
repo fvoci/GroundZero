@@ -1268,10 +1268,14 @@ export function parseRevision(value: Json): RevisionView {
 
 // 작업자 A: 상태 이름은 항목 정의의 문자열, 완료 판단은 status_category만 사용한다.
 export type TaskStatus = string;
-// 작업자 A: 업무 폼은 account_changed에서 입력을 메모리에 보존하고 잠근다. 전역 새로고침 전에 오류를 전달한다.
+// 업무 요청의 409 account_changed: 다른 요청과 똑같이 앱 전체 계정 전환(안전 상태·다시 읽기)을 시작한다(D-96; 앞 계정의
+// 화면을 그대로 두면 다른 화면이 새 계정의 세션으로 요청을 보낸다). 업무 폼은 이 오류로 입력을 잠그되, 다시 읽은 뒤에는
+// 남지 않는다(업무 폼에는 초안 저장소가 없다). 다른 409(conflict 등)는 그대로 폼이 받는다.
 function failTask(status: number, json: Json): never {
-  if (status === 409 && isRecord(json) && json.error === 'account_changed')
-    throw new ApiError(409, 'account_changed', 'account_changed');
+  if (status === 409 && isRecord(json) && json.error === 'account_changed') {
+    switchAccount();
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
+  }
   fail(status, json);
 }
 

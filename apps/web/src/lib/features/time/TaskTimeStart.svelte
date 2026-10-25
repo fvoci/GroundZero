@@ -2,6 +2,9 @@
   // 업무 행·카드 안의 시간 기록 시작·멈춤(D-117). 목록마다 합계를 읽지 않으려고 서버 조회 없이 타이머 상태만 본다.
   // 합계와 상세 조작은 업무 상세의 TaskTimePanel이 맡는다. 다른 대상에서 시작하면 서버가 이전 기록을 저장하고 새로
   // 시작하며 timer 저장소가 "이전 기록 저장됨"을 알린다.
+  import PlayIcon from '@lucide/svelte/icons/play';
+  import SquareIcon from '@lucide/svelte/icons/square';
+
   import { errorText } from '$lib/api/errors';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -50,19 +53,23 @@
   }
 </script>
 
-<span class="inline-flex items-center gap-1">
+<!-- 행·카드 안이라 글자 대신 아이콘만 둔다(제목 칸을 밀어내지 않게). 이름은 aria-label과 title로 준다. -->
+<span class="inline-flex shrink-0 items-center gap-1">
   <Button
-    size="sm"
+    size="icon-sm"
     variant="ghost"
     disabled={busy}
     aria-pressed={runningHere}
     aria-label={`${runningHere ? m.time_stop_timer() : m.time_track_task()}: ${title}`}
+    title={runningHere ? m.time_stop_timer() : m.time_track_task()}
     onpointerdown={isolate}
     onclick={(e: MouseEvent) => {
       isolate(e);
       void toggle();
-    }}>{runningHere ? m.time_stop_timer() : m.time_track_task()}</Button
+    }}
   >
+    {#if runningHere}<SquareIcon aria-hidden="true" />{:else}<PlayIcon aria-hidden="true" />{/if}
+  </Button>
   {#if error !== undefined}
     <span role="alert" class="text-xs text-destructive">{error}</span>
   {/if}

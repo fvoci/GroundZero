@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskInput } from '$lib/api/client';
 import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 
 // 업무 고치기의 409는 세 갈래다(계약 `TaskConflict`·`ErrorBody`): 기준 버전이 지났으면 `conflict`, 승인한 후속 재배치가
 // 맞지 않으면 `shift_conflict`(둘 다 최신본 포함), 보관·다시 시도 등은 최신본 없는 일반 오류다. 칸반 이동은 읽은 이동
@@ -85,6 +86,7 @@ function failure(p: Promise<unknown>): Promise<unknown> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  accountSafety.switching = false;
 });
 
 describe('task update conflicts', () => {
@@ -153,11 +155,14 @@ it('sends the recurrence base and retains the latest rule on 409 without retry',
   expect(seen[0]?.body).toEqual({ rule: base, timezone: 'Asia/Seoul', base: null });
 });
 
-it('passes account_changed to the task form without reloading or retrying', async () => {
+// account_changed는 다시 보내지 않고 폼에 전달하되, 다른 요청과 똑같이 앱 전체 계정 전환(안전 상태)을 시작한다(D-96,
+// CodeRabbit #141 1e6de63c).
+it('passes account_changed to the task form without retrying, and starts the account switch', async () => {
   const seen = reply(409, { error: 'account_changed' });
   expect(await failure(api.updateTask('b', 3, input))).toMatchObject({
     status: 409,
     code: 'account_changed',
   });
   expect(seen).toHaveLength(1);
+  expect(accountSafety.switching).toBe(true);
 });

@@ -1355,8 +1355,11 @@
   </div>
 
   {#if item.access === 'owner'}
-    <Button variant="outline" onclick={() => (editingStatuses = !editingStatuses)}
-      >{m.tasks_status_edit()}</Button
+    <Button
+      variant="outline"
+      class="self-start"
+      aria-expanded={editingStatuses}
+      onclick={() => (editingStatuses = !editingStatuses)}>{m.tasks_status_edit()}</Button
     >
     {#if editingStatuses}
       <StatusEditor
