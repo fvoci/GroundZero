@@ -36,7 +36,7 @@
       : undefined,
   );
 
-  const isAdmin = $derived(workspace.role === 'admin');
+  const isAdmin = $derived(workspace.access === 'owner');
 
   let kind = $state<ModuleKind>('project');
   let name = $state('');

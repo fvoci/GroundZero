@@ -128,12 +128,16 @@ export interface SummaryLine {
   href?: string;
 }
 
-/** 표시용 줄. 고른 값은 이름으로, 사람은 표시 이름으로(모르면 "알 수 없는 사람"), 강좌는 제목으로. */
+/**
+ * 표시용 줄. 고른 값은 이름으로, 사람은 표시 이름으로(모르면 "알 수 없는 사람"), 강좌는 제목으로, 회차는 "번호. 제목"으로
+ * (지워졌거나 볼 수 없으면 그렇게 적는다).
+ */
 export function summary(
   def: RecordKindView,
   r: RecordView,
   names: ReadonlyMap<string, string>,
   courses: ReadonlyMap<string, string>,
+  episodes: ReadonlyMap<string, string> = new Map(),
 ): SummaryLine[] {
   const lines: SummaryLine[] = [];
   const person = (id: string): string => names.get(id) ?? m.records_unknown_person();
@@ -148,6 +152,8 @@ export function summary(
     else if (f.type === 'people' && Array.isArray(v)) text = v.map(person).join(', ');
     else if (f.type === 'course' && typeof v === 'string')
       text = courses.get(v) ?? m.records_hidden_course();
+    else if (f.type === 'episode' && typeof v === 'string')
+      text = episodes.get(v) ?? m.records_hidden_episode();
     else text = Array.isArray(v) ? v.join(', ') : String(v);
     const line: SummaryLine = { key: f.key, label: recordFieldLabel(def, f), text };
     if (f.type === 'url' && typeof v === 'string' && isWebUrl(v)) line.href = v;

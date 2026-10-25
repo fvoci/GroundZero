@@ -25,6 +25,12 @@
   let name = $state('');
   let color = $state('');
   let category = $state<StatusCategory>('todo');
+  // 범주는 고정값 셋이라 번역한다(D-116). 상태 이름은 사용자가 정한 그대로 보인다.
+  const categoryLabel: Record<StatusCategory, () => string> = {
+    todo: m.tasks_category_todo,
+    doing: m.tasks_category_doing,
+    done: m.tasks_category_done,
+  };
   let position = $state('');
   let moveTo = $state('');
   let removing = $state(false);
@@ -93,7 +99,9 @@
   {#each statuses as status (status.id)}
     <div class="flex flex-wrap items-center gap-2">
       <span class="font-medium">{status.name}</span>
-      <span class="text-sm text-muted-foreground">{status.category} · {status.position}</span>
+      <span class="text-sm text-muted-foreground"
+        >{categoryLabel[status.category]()} · {status.position}</span
+      >
       <Button
         size="sm"
         variant="outline"
@@ -157,9 +165,9 @@
           <label
             >{m.tasks_status_category()}
             <NativeSelect bind:value={category}>
-              <option value="todo">{m.tasks_status_todo()}</option>
-              <option value="doing">{m.tasks_status_in_progress()}</option>
-              <option value="done">{m.tasks_status_done()}</option>
+              <option value="todo">{categoryLabel.todo()}</option>
+              <option value="doing">{categoryLabel.doing()}</option>
+              <option value="done">{categoryLabel.done()}</option>
             </NativeSelect>
           </label>
           {#if selected !== undefined}<label

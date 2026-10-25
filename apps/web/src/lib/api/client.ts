@@ -818,7 +818,9 @@ export type RecordFieldType =
   | 'tags'
   | 'person'
   | 'people'
-  | 'course';
+  | 'course'
+  /** 이 강좌의 회차(D-123 강의 질문·복습). */
+  | 'episode';
 
 const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
   'text',
@@ -831,6 +833,7 @@ const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
   'person',
   'people',
   'course',
+  'episode',
 ];
 
 export interface ChoiceView {

@@ -66,8 +66,9 @@
     };
   });
 
-  const isAdmin = $derived(workspace.role === 'admin');
-  const canCreate = $derived(workspace.role !== 'readonly' && mod?.archived === false);
+  // 관리·쓰기 여부는 서버의 접근 등급(app_access)에서 온다(D-113). 보관은 등급과 별개로 쓰기를 막는다.
+  const isAdmin = $derived(workspace.access === 'owner');
+  const canCreate = $derived(workspace.access !== 'read' && mod?.archived === false);
 
   let editName = $state('');
   let editKey = $state('');

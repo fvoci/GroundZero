@@ -49,7 +49,8 @@
     templateId = '';
   });
 
-  const canWrite = $derived(workspace.role !== 'readonly');
+  // 쓰기·관리 여부는 역할이 아니라 서버의 접근 등급(app_access)에서 온다(D-113).
+  const canWrite = $derived(workspace.access !== 'read');
 
   // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
   let realtime = $state(false);
@@ -93,7 +94,7 @@
   <p class="text-sm text-muted-foreground">
     {m.workspaces_admin_notice()}
   </p>
-  {#if workspace.role === 'admin'}
+  {#if workspace.access === 'owner'}
     <div class="flex flex-col gap-1 text-sm">
       <label class="flex items-center gap-2">
         <input

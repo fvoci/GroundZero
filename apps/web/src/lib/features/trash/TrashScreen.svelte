@@ -39,7 +39,7 @@
   let versionDaysSeq = 0;
   let reloadKey = $state(0);
 
-  const isAdmin = $derived(workspace === undefined || workspace.role === 'admin');
+  const isAdmin = $derived(workspace === undefined || workspace.access === 'owner');
   const request = $derived({ ws: workspace?.id ?? null, key: reloadKey });
   let seq = 0;
 

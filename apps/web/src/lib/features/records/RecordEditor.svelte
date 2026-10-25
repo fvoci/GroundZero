@@ -18,6 +18,8 @@
     form?: RecordForm;
     people: { id: string; name: string }[];
     courses: { id: string; name: string }[];
+    /** 이 강좌(항목)의 회차(D-123 질문·복습). 강의 항목이 아니면 빈 목록. */
+    episodes?: { id: string; name: string }[];
     files: FileView[];
     submitLabel: string;
     onsubmit: () => void;
@@ -29,6 +31,7 @@
     form = $bindable(emptyForm()),
     people,
     courses,
+    episodes = [],
     files,
     submitLabel,
     onsubmit,
@@ -80,11 +83,14 @@
           bind:value={form.values[f.key]}
         />
       </div>
-    {:else if f.type === 'choice' || f.type === 'person' || f.type === 'course'}
+    {:else if f.type === 'choice' || f.type === 'person' || f.type === 'course' || f.type === 'episode'}
       {@const options =
         f.type === 'choice'
           ? f.choices.map((c) => ({ value: c.value, label: recordChoiceLabel(def, f, c) }))
-          : (f.type === 'person' ? people : courses).map((p) => ({ value: p.id, label: p.name }))}
+          : (f.type === 'person' ? people : f.type === 'course' ? courses : episodes).map((p) => ({
+              value: p.id,
+              label: p.name,
+            }))}
       <div class="flex flex-col gap-1">
         <Label for={id(f.key)}>{recordFieldLabel(def, f)}</Label>
         <NativeSelect id={id(f.key)} class="w-full" bind:value={form.values[f.key]}>

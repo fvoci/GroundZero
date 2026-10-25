@@ -261,5 +261,15 @@
   "records_kind_portfolio_date": "Completed on",
   "records_field_portfolio_retrospective": "Retrospective",
   "records_field_portfolio_next_goal": "Next goal",
-  "records_role_portfolio_result": "Photos and videos of the work"
+  "records_role_portfolio_result": "Photos and videos of the work",
+  "records_kind_question": "Question",
+  "records_kind_question_date": "Asked on",
+  "records_field_question_episode": "Episode",
+  "records_field_question_answer": "Answer",
+  "records_field_question_state": "Status",
+  "records_choice_question_state_open": "Open",
+  "records_choice_question_state_answered": "Answered",
+  "records_role_question_other": "Attachment",
+  "records_field_review_episode": "Episode",
+  "records_hidden_episode": "(episode not visible)"
 }

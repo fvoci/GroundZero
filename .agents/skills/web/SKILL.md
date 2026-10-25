@@ -39,3 +39,12 @@ description: fvoci 웹(apps/web)을 바꿀 때 읽을 코드와 결정, UI·조�
 - 상태 정의(D-116): 업무 `status`는 항목별 이름 문자열, 집계·완료 판단은 `status_category`. 열·편집은 `tasks/StatusEditor.svelte`와 `api.taskStatuses*`.
 - 검색 `status` 필터는 서버 계약상 상태 이름이다(D-116 "범주만"과 어긋남 — 결정·계약 충돌로 기록됨). 서버가 범주 필터를 주기 전까지 이름 입력을 보낸다.
 - 테스트 모듈 캐시: 스토리 파일을 더한 뒤 `stories.test.ts`가 디스크와 다르다고 하면 `pnpm --filter @fvoci/web exec vitest --clearCache` 뒤 다시 돌린다.
+
+## 보강(2026-10-26, 서버 계약 보완 뒤)
+
+- 권한 플래그(D-113): `Workspace.access`·`Module.access`(read|write|owner, 서버 `app_access`)와 `MembersView.can_manage_members`만 본다.
+  `role`은 표시용이다. 화면에서 역할 이름으로 쓰기·관리 여부를 다시 계산하지 않는다(`access-flags-d113.test.ts`).
+- 검색 상태 필터(D-116): `SearchFilters.statusCategory`(todo·doing·done) → `GET /api/search?status_category=`. 상태 이름으로는 거르지 않는다.
+- 강의 질문·복습(D-123): 기록 종류 `question`·`review`(module_kind course)와 칸 형식 `episode`. `RecordsPanel`이 `api.course(item)`의
+  회차를 "번호. 제목"으로 고르게 하고 `records.ts`의 `summary`가 같은 이름으로 보인다. 복습 알림은 서버가 보낸다(알림 kind `review`).
+- 업무 만들기에서 `status`를 비우면 서버가 항목의 기본 상태를 고른다(CSV 빈 칸도 같다). 웹은 상태 이름을 번역하거나 기본 이름을 끼워 넣지 않는다.

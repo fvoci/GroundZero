@@ -124,7 +124,9 @@ export const WORKSPACE: Workspace = {
 
 /** 같은 워크스페이스를 다른 역할로 본다(읽기 전용 등). */
 export function workspaceAs(role: Role): Workspace {
-  return { ...WORKSPACE, role, is_owner: false };
+  // 접근 등급은 서버가 역할에서 계산해 준다(D-113): admin→owner, member→write, readonly→read.
+  const access = role === 'admin' ? 'owner' : role === 'member' ? 'write' : 'read';
+  return { ...WORKSPACE, role, access, is_owner: false };
 }
 
 interface ModuleData {

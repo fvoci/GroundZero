@@ -457,7 +457,7 @@
         }}
       />
       <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} />
-      {#if workspace.role !== 'readonly'}
+      {#if workspace.access !== 'read'}
         <div class="flex flex-wrap items-start gap-2">
           <ItemCopy item={current} module={mod} />
           {#if canEdit}

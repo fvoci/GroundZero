@@ -209,7 +209,7 @@
       },
       { path: trashPath(shown.id), label: m.app_trash(), icon: Trash, active: inShown('trash') },
     ];
-    if (shown.role === 'admin')
+    if (shown.access === 'owner')
       links.push({
         path: auditPath(shown.id),
         label: m.app_audit(),

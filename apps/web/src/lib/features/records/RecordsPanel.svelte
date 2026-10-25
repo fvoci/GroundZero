@@ -32,6 +32,7 @@
   let files = $state<FileView[]>([]);
   let people = $state<{ id: string; name: string }[]>([]);
   let courses = $state<{ id: string; name: string }[]>([]);
+  let episodes = $state<{ id: string; name: string }[]>([]);
   let selected = $state<string | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   /** 기록 종류·기록 목록을 읽지 못했다(저장 오류와 따로). 처음부터 못 읽으면 종류가 없어도 이 안내는 보인다. */
@@ -58,6 +59,7 @@
   const current = $derived(defs.find((d) => d.kind === selected));
   const names = $derived(new Map(people.map((p) => [p.id, p.name])));
   const courseNames = $derived(new Map(courses.map((c) => [c.id, c.name])));
+  const episodeNames = $derived(new Map(episodes.map((e) => [e.id, e.name])));
   const shown = $derived(records.filter((r) => r.kind === selected));
 
   // 기록에 이을 첨부 파일 목록은 기록을 쓰거나 고칠 때만 받는다(첨부 패널과 같은 목록을 화면을 열 때마다 두 번 받지 않는다).
@@ -98,6 +100,15 @@
           );
           courseList = lists.flat().map((i) => ({ id: i.id, name: i.title }));
         }
+        // 회차 칸(D-123 강의 질문·복습)은 이 강좌의 회차 가운데 고른다. 번호와 제목으로 보인다.
+        let episodeList: { id: string; name: string }[] = [];
+        if (mine.some((d) => d.fields.some((f) => f.type === 'episode'))) {
+          const course = await api.course(id);
+          episodeList = course.episodes.map((e) => ({
+            id: e.id,
+            name: `${String(e.number)}. ${e.title}`,
+          }));
+        }
         if (cancelled) return;
         loadError = undefined;
         defs = mine;
@@ -109,6 +120,7 @@
         }
         people = members.members.map((x) => ({ id: x.user_id, name: x.display_name }));
         courses = courseList;
+        episodes = episodeList;
         if (selected === undefined || !mine.some((d) => d.kind === selected))
           selected = mine[0]?.kind;
       })
@@ -268,6 +280,7 @@
           bind:form
           {people}
           {courses}
+          {episodes}
           {files}
           submitLabel={m.records_add_kind({ label: kindLabel })}
           onsubmit={() => void save(def)}
@@ -310,7 +323,7 @@
             </thead>
             <tbody>
               {#each shown as r (r.id)}
-                {@const lines = summary(def, r, names, courseNames)}
+                {@const lines = summary(def, r, names, courseNames, episodeNames)}
                 <tr class="border-t align-top">
                   <td class="py-1 pr-2 font-medium">{r.title}</td>
                   {#if dateLabel !== null}<td class="pr-2"
@@ -350,7 +363,7 @@
                       <dt class="text-muted-foreground">{dateLabel}</dt>
                       <dd>{formatDay(latest.occurred_on)}</dd>
                     {/if}
-                    {#each summary(def, latest, names, courseNames) as line (line.key)}
+                    {#each summary(def, latest, names, courseNames, episodeNames) as line (line.key)}
                       <dt class="text-muted-foreground">{line.label}</dt>
                       <dd class="whitespace-pre-wrap">{line.text}</dd>
                     {/each}
@@ -387,6 +400,7 @@
                 bind:form
                 {people}
                 {courses}
+                {episodes}
                 {files}
                 submitLabel={m.common_save()}
                 onsubmit={() => void save(def)}
@@ -412,7 +426,7 @@
                 >
               </div>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-3">
-                {#each summary(def, r, names, courseNames) as line (line.key)}
+                {#each summary(def, r, names, courseNames, episodeNames) as line (line.key)}
                   <dt class="text-muted-foreground">{line.label}</dt>
                   <dd class="whitespace-pre-wrap">
                     {#if line.href !== undefined}

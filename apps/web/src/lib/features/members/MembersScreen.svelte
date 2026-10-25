@@ -60,7 +60,8 @@
     undefined,
   );
 
-  const isAdmin = $derived(view?.my_role === 'admin');
+  // 관리 가능 여부는 서버가 접근 등급으로 계산한 칸이다(D-113). 역할은 표시에만 쓴다.
+  const isAdmin = $derived(view?.can_manage_members === true);
 
   function nameOf(userId: string): string {
     return view?.members.find((member) => member.user_id === userId)?.display_name ?? userId;
@@ -75,7 +76,7 @@
       const v = await api.members(wsId);
       view = v;
       groups = await api.groups(wsId);
-      invitations = v.my_role === 'admin' ? await api.invitations(wsId) : [];
+      invitations = v.can_manage_members ? await api.invitations(wsId) : [];
       error = undefined;
       loadError = undefined;
     } catch (e: unknown) {
