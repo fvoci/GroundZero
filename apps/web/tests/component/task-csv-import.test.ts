@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TaskStatusDefinition } from '@fvoci/api-client';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
@@ -14,6 +15,10 @@ import { router } from '$lib/router.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { restoreImport } from '$lib/features/tasks/csv-import';
 import { TEST_ORGANIZATION } from './fixtures/organization';
+
+const statuses: TaskStatusDefinition[] = [
+  { id: 'review', name: '검토 대기', color: '', position: 0, category: 'doing', task_count: 0 },
+];
 
 function detail(id: string, title: string, version: number): TaskDetailView {
   return {
@@ -101,7 +106,7 @@ function fakeServer() {
             ? {}
             : {
                 description: fields.description,
-                status: fields.status,
+                status: fields.status ?? '검토 대기',
                 priority: fields.priority,
                 start_date: fields.start_date,
                 due_date: fields.due_date,
@@ -182,12 +187,12 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.lose('B');
     const onimported = vi.fn(() => Promise.resolve());
-    const first = render(TaskCsvImport, { itemId: 'i1', onimported });
+    const first = render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB');
     await pressImport(onimported, 1);
     const lostId = server.create.mock.calls[1]?.[1];
     first.unmount();
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('A\nB');
     await pressImport(onimported, 2);
     expect(server.titles()).toEqual(['A', 'B', 'B']);
@@ -206,7 +211,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
       );
     });
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB');
     await fireEvent.click(screen.getByRole('button', { name: '등록' }));
     const stored = restoreImport(org.key('csv-import:i1'));
@@ -232,7 +237,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
       );
     });
     const onimported = vi.fn(() => Promise.resolve());
-    const view = render(TaskCsvImport, { itemId: 'i1', onimported });
+    const view = render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB');
     await fireEvent.click(screen.getByRole('button', { name: '등록' }));
     view.unmount();
@@ -244,7 +249,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
   });
 
   it('confirms navigation and keeps the draft when continuing to edit', async () => {
-    render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
     const cleanUnload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(cleanUnload);
     expect(cleanUnload.defaultPrevented).toBe(false);
@@ -266,7 +271,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 
   it('keeps each account and organization in a separate session draft', async () => {
     org.load('csv-user-a', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
-    render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
     await setText('계정 A');
     org.load('csv-user-b', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
     await waitFor(() => {
@@ -292,8 +297,8 @@ describe('TaskCsvImport one request per row (D-105)', () => {
   it('sends every field of a row in its one create request', async () => {
     const server = fakeServer();
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
-    await setText('A,설명,진행 중,높음,2026-11-02,2026-11-09,30,나래;가람,회의;보고\nB');
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    await setText('A,설명,검토 대기,높음,2026-11-02,2026-11-09,30,나래;가람,회의;보고\nB');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '등록' })).toBeEnabled();
     });
@@ -301,7 +306,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(server.create).toHaveBeenCalledTimes(2);
     expect(server.create.mock.calls[0]?.[4]).toEqual({
       description: '설명',
-      status: 'in_progress',
+      status: '검토 대기',
       priority: 'high',
       start_date: '2026-11-02',
       due_date: '2026-11-09',
@@ -311,6 +316,8 @@ describe('TaskCsvImport one request per row (D-105)', () => {
       milestone: false,
     });
     expect(server.update).not.toHaveBeenCalled();
+    expect(server.create.mock.calls[1]?.[4]).not.toHaveProperty('status');
+    expect(server.tasks.get('t2')?.status).toBe('검토 대기');
     expect(server.made).toEqual(['t1', 't2']);
     expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
   });
@@ -321,8 +328,8 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.reject('B', tooManyTags());
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
-    await setText('A,,진행 중\nB\nC');
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    await setText('A,,검토 대기\nB\nC');
     await pressImport(onimported, 1);
     const message = screen.getByText(/1개 등록됨/);
     expect(message).toHaveTextContent(
@@ -345,7 +352,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.lose('B');
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB,설명\nC');
     await pressImport(onimported, 1);
     expect(screen.getByText(/1개 등록됨/)).toBeInTheDocument();
@@ -365,7 +372,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.reject('B', tooManyTags());
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB,,,,2026-10-01\nC');
     await pressImport(onimported, 1);
     const firstB = server.create.mock.calls.find((c) => c[2] === 'B')?.[1];
@@ -384,7 +391,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.lose('B');
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB,첫 내용\nC');
     await pressImport(onimported, 1);
     await setText('A\nB,고친 내용\nC');
@@ -407,7 +414,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.lose('A');
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A');
     await pressImport(onimported, 1);
     server.remove('t1');
@@ -429,7 +436,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.lose('A');
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB');
     await pressImport(onimported, 1);
     server.hide(true);
@@ -452,7 +459,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const server = fakeServer();
     server.lose('회의');
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('"  회의  ",설명');
     await pressImport(onimported, 1);
     expect(server.titles()).toEqual(['회의']);
@@ -482,7 +489,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     const server = fakeServer();
     server.reject('B', tooManyTags());
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('주간 회의,첫 주,,,2026-11-02\nB');
     await pressImport(onimported, 1);
     expect(screen.getByText(resumeHint)).toHaveTextContent(
@@ -501,7 +508,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     const server = fakeServer();
     server.reject('B', tooManyTags());
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('청소\nB');
     await pressImport(onimported, 1);
     const firstIds = server.create.mock.calls.map((c) => c[1]);
@@ -521,7 +528,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     server.lose('B');
     const release = server.holdNextCreate();
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB\nC');
     await fireEvent.click(screen.getByRole('button', { name: '등록' }));
     await waitFor(() => {
@@ -545,7 +552,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     const server = fakeServer();
     const release = server.holdNextCreate();
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('청소\n빨래');
     await fireEvent.click(screen.getByRole('button', { name: '등록' }));
     await waitFor(() => {
@@ -569,7 +576,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     const server = fakeServer();
     server.reject('B', tooManyTags());
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('주간 회의,첫 주,,,2026-11-02\nB');
     await pressImport(onimported, 1);
     await setText('주간 회의,둘째 주,,,2026-11-09\n주간 보고');
@@ -584,7 +591,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     const server = fakeServer();
     server.reject('B', tooManyTags());
     const onimported = vi.fn(() => Promise.resolve());
-    render(TaskCsvImport, { itemId: 'i1', onimported });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('청소\nB');
     await pressImport(onimported, 1);
     await setText('청소\n주간 보고');

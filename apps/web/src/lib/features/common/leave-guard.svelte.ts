@@ -5,6 +5,8 @@ interface LeaveOptions {
   busy?: () => boolean;
   /** 다른 편집 세션을 뒤늦은 확인으로 닫지 않는다. */
   identity?: () => unknown;
+  /** 확인을 열기 직전 초점 등 화면 문맥을 기억한다. */
+  onAsk?: () => void;
 }
 
 /** DiscardChangesConfirm의 open/onkeep/ondiscard와 연결한다(D-97·D-125). */
@@ -30,6 +32,7 @@ export function createLeaveGuard(options: LeaveOptions) {
       return;
     }
     asked = options.identity?.();
+    options.onAsk?.();
     pending = action;
   }
   function discard(): void {

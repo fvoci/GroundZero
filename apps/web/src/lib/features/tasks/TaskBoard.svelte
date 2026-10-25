@@ -37,6 +37,7 @@
   import TaskTimeStart from '$lib/features/time/TaskTimeStart.svelte';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay } from '$lib/display';
 
@@ -637,40 +638,40 @@
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
     // 다른 업무를 열었거나 닫혔으면 앞 업무에 대해 물은 것을 거둔다(새로 연 업무를 닫거나 그 입력을 버리지 않게).
-    confirmClose = false;
+    leave.keep();
   });
 
-  // 업무 상세에 기준과 다르게 고친 칸이 있는지, 그래서 닫기 전에 버릴지 묻는 중인지. 물은 업무(`askedFor`)가 지금 연
-  // 업무일 때만 버리고 닫는다. 계속 편집하면 물을 때 초점이 있던 곳(대화상자 밖이었으면 대화상자)으로 돌아간다.
+  // 계속 편집하면 물을 때 초점이 있던 곳(대화상자 밖이었으면 대화상자)으로 돌아간다.
   let detailUnsaved = $state(false);
   // 폼을 저장하는 동안은 닫지도 묻지도 않는다: 이미 보낸 저장은 서버에 남으므로 "버리고 닫기"가 거짓이 된다(일정 대화상자와 같음).
   let detailSaving = $state(false);
-  let confirmClose = $state(false);
-  let askedFor: string | undefined;
   // 상세 안의 단추(상위·하위·선행·후속·첫 회차)로 다른 업무를 열려다 물었으면 그 업무. 버리기를 고르면 닫지 않고 그것을
   // 연다. 물을 때마다 정한다(확인이 닫히는 동안 문구가 바뀌지 않게 지우지 않는다).
   let openNext = $state<string | undefined>(undefined);
   let keepFocus: HTMLElement | null = null;
   let dialogContent = $state<HTMLElement | null>(null);
 
-  /** 버릴지 묻는다. 계속 편집하면 지금 초점이 있던 곳(대화상자 밖이었으면 대화상자)으로 돌아간다. */
-  function ask(taskId: string, next: string | undefined): void {
-    const active = document.activeElement;
-    keepFocus =
-      active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
-    askedFor = taskId;
-    openNext = next;
-    confirmClose = true;
-  }
+  const leave = createLeaveGuard({
+    dirty: () => detailUnsaved && openTaskId !== undefined,
+    busy: () => detailSaving,
+    identity: () => openTaskId,
+    onAsk: () => {
+      const active = document.activeElement;
+      keepFocus =
+        active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
+      openNext = undefined;
+    },
+  });
+
+  $effect(() =>
+    leave.attach({
+      beforeUnload: () => openTaskId !== undefined && (detailUnsaved || detailSaving),
+    }),
+  );
 
   /** Esc·바깥 클릭·닫기 단추. 저장하지 않은 입력이 있으면 닫지 않고 버릴지 묻는다. */
   function requestClose(): void {
-    if (confirmClose || detailSaving) return;
-    if (detailUnsaved && openTaskId !== undefined) {
-      ask(openTaskId, undefined);
-      return;
-    }
-    close();
+    leave.request(close);
   }
 
   /**
@@ -678,44 +679,17 @@
    * 버릴지 묻고, 저장하는 동안은 옮기지 않는다(CodeRabbit #82).
    */
   function requestOpen(id: string): void {
-    if (confirmClose || detailSaving) return;
-    if (detailUnsaved && openTaskId !== undefined && id !== openTaskId) {
-      ask(openTaskId, id);
+    if (leave.open || detailSaving) return;
+    if (id === openTaskId) {
+      leave.proceed(() => {
+        open(id);
+      });
       return;
     }
-    open(id);
-  }
-
-  let pendingNavigation: (() => void) | undefined;
-  $effect(() => {
-    const previous = router.guard;
-    const guard = (proceed: () => void): boolean => {
-      if (detailSaving) return false;
-      if (detailUnsaved && openTaskId !== undefined) {
-        pendingNavigation = proceed;
-        ask(openTaskId, undefined);
-        return false;
-      }
-      return previous?.(proceed) ?? true;
-    };
-    router.guard = guard;
-    return () => {
-      if (router.guard === guard) router.guard = previous;
-    };
-  });
-
-  function discard(): void {
-    confirmClose = false;
-    if (askedFor === undefined || askedFor !== openTaskId || detailSaving) return;
-    detailUnsaved = false;
-    const proceed = pendingNavigation;
-    pendingNavigation = undefined;
-    if (proceed !== undefined) {
-      proceed();
-      return;
-    }
-    if (openNext === undefined) close();
-    else open(openNext);
+    leave.request(() => {
+      open(id);
+    });
+    openNext = id;
   }
 
   function close(): void {
@@ -1949,7 +1923,7 @@
         await reload();
       }}
     />
-    <TaskCsvImport itemId={item.id} onimported={reload} />
+    <TaskCsvImport itemId={item.id} statuses={definitions} onimported={reload} />
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>
 </section>
@@ -1966,8 +1940,8 @@
   <Dialog.Content
     bind:ref={dialogContent}
     class="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
-    escapeKeydownBehavior={confirmClose || detailSaving ? 'ignore' : 'close'}
-    interactOutsideBehavior={confirmClose || detailSaving ? 'ignore' : 'close'}
+    escapeKeydownBehavior={leave.open || detailSaving ? 'ignore' : 'close'}
+    interactOutsideBehavior={leave.open || detailSaving ? 'ignore' : 'close'}
     showCloseButton={!detailSaving}
     onCloseAutoFocus={(e: Event) => {
       const card =
@@ -2004,14 +1978,11 @@
       {/key}
     {/if}
     <DiscardChangesConfirm
-      open={confirmClose}
+      open={leave.open}
       description={openNext === undefined ? undefined : m.tasks_discard_open_description()}
       confirmLabel={openNext === undefined ? undefined : m.tasks_discard_open_confirm()}
-      onkeep={() => {
-        pendingNavigation = undefined;
-        confirmClose = false;
-      }}
-      ondiscard={discard}
+      onkeep={leave.keep}
+      ondiscard={leave.discard}
       returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : dialogContent)}
     />
   </Dialog.Content>

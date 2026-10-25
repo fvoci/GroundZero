@@ -1,5 +1,6 @@
 // 업무 일괄 등록용 CSV 읽기(D-39). 열: 제목, 설명, 상태, 우선순위, 시작일, 기한, 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿).
-// 첫 줄이 머리글(제목/title)이면 건너뛴다. 상태·우선순위는 한국어나 영어 값을 받는다.
+// 첫 줄이 머리글(제목/title)이면 건너뛴다. 상태는 항목의 정의된 이름, 우선순위는 한국어나 영어 값을 받는다.
+import type { TaskStatusDefinition } from '@fvoci/api-client';
 import type { AssigneeView, TaskPriority, TaskStatus } from '$lib/api/client';
 import { csvDate, csvRecords, isHeader } from '$lib/csv';
 import { m } from '$lib/paraglide/messages.js';
@@ -48,7 +49,7 @@ function taskDate(raw: string): { value: string | null } | { reason: string } {
 export interface TaskRow {
   title: string;
   description: string;
-  status: TaskStatus;
+  status?: TaskStatus;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -61,16 +62,6 @@ export interface TaskCsvResult {
   rows: TaskRow[];
   errors: { line: number; reason: string }[];
 }
-
-const STATUS: Record<string, TaskStatus> = {
-  '': 'todo',
-  '할 일': 'todo',
-  todo: 'todo',
-  '진행 중': 'in_progress',
-  in_progress: 'in_progress',
-  완료: 'done',
-  done: 'done',
-};
 
 const PRIORITY: Record<string, TaskPriority> = {
   '': 'none',
@@ -92,7 +83,11 @@ const list = (raw: string): string[] =>
     .map((s) => s.trim())
     .filter((s) => s !== '');
 
-export function parseTasksCsv(text: string, assignable: readonly AssigneeView[]): TaskCsvResult {
+export function parseTasksCsv(
+  text: string,
+  assignable: readonly AssigneeView[],
+  statuses: readonly TaskStatusDefinition[],
+): TaskCsvResult {
   const rows: TaskRow[] = [];
   const errors: { line: number; reason: string }[] = [];
   csvRecords(text).forEach((record, index) => {
@@ -128,8 +123,13 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
       fail(m.tasks_csv_description_control());
       return;
     }
-    const st = STATUS[status.toLowerCase()];
-    if (st === undefined) {
+    const name = status.trim();
+    const exact = statuses.find((definition) => definition.name === name);
+    const folded = statuses.filter(
+      (definition) => definition.name.toLowerCase() === name.toLowerCase(),
+    );
+    const st = exact?.name ?? (folded.length === 1 ? folded[0]?.name : undefined);
+    if (name !== '' && st === undefined) {
       fail(m.tasks_csv_unknown_status({ value: status }));
       return;
     }
@@ -193,7 +193,7 @@ export function parseTasksCsv(text: string, assignable: readonly AssigneeView[])
     rows.push({
       title,
       description,
-      status: st,
+      ...(name !== '' && st !== undefined ? { status: st } : {}),
       priority: pr,
       start_date: startDate.value,
       due_date: dueDate.value,
