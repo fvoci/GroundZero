@@ -17,6 +17,7 @@ DECLARE
   v_people jsonb;
   v_admin uuid;
   v_user uuid;
+  v_org uuid;
   v_ws uuid;
   v_inv uuid;
   v_docs jsonb := '{}'::jsonb;
@@ -48,8 +49,16 @@ BEGIN
 
   BEGIN
     PERFORM set_config('app.user_id', v_admin::text, true);
-    v_ws := app_create_workspace(pg_temp.take1(), v_data->>'workspace', pg_temp.take(2));
-    v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));
+    SELECT organization_id INTO STRICT v_org FROM organization_members
+      WHERE user_id = v_admin ORDER BY organization_id LIMIT 1;
+    IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_user) THEN
+      v_inv := app_invite_organization(v_org, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
+      PERFORM set_config('app.user_id', v_user::text, true);
+      PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
+      PERFORM set_config('app.user_id', v_admin::text, true);
+    END IF;
+    v_ws := app_create_workspace(pg_temp.take1(), v_org, v_data->>'workspace', pg_temp.take(3));
+    v_inv := app_invite(v_ws, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
     PERFORM set_config('app.user_id', v_user::text, true);
     PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
     PERFORM set_config('app.user_id', v_admin::text, true);
@@ -61,7 +70,7 @@ BEGIN
           CASE WHEN v_row->>'body' = '' THEN jsonb_build_object('type', 'paragraph')
           ELSE jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
             jsonb_build_object('type', 'text', 'text', v_row->>'body'))) END)),
-        (v_docs->>(v_row->>'parent'))::uuid, 10, pg_temp.take(3));
+        (v_docs->>(v_row->>'parent'))::uuid, 10, pg_temp.take(4));
       v_docs := v_docs || jsonb_build_object(v_row->>'key', v_doc);
     END LOOP;
 
@@ -90,18 +99,18 @@ BEGIN
                                   v_data->'module'->>'key', pg_temp.take(2));
     PERFORM app_set_module_description(v_module, v_data->'module'->>'description');
     v_item := app_create_item(v_module, pg_temp.take1(), v_data->'module'->>'item',
-                              v_data->'module'->>'item_description', pg_temp.take(2));
+                              v_data->'module'->>'item_description', pg_temp.take(6));
     PERFORM app_set_item_members(v_item, ARRAY[v_user], ARRAY[]::uuid[],
                                  pg_temp.take(app_set_item_members_ids(v_item)));
     FOR v_row IN SELECT * FROM jsonb_array_elements(v_data->'tasks') LOOP
       SELECT coalesce(array_agg((v_people->>a)::uuid), ARRAY[]::uuid[]) INTO v_assignees
         FROM jsonb_array_elements_text(v_row->'assignees') AS a;
-      -- id: 업무·만들기 감사 + 담당자마다 1개.
+      -- id: 업무·감사·활동 + 담당자마다 감사·활동 2개.
       PERFORM app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, v_row->>'description',
         v_row->>'status', v_row->>'priority', v_today + (v_row->>'start')::integer,
         v_today + (v_row->>'due')::integer, (v_row->>'estimate')::integer,
         ARRAY(SELECT jsonb_array_elements_text(v_row->'tags')), v_assignees,
-        (v_row->>'milestone')::boolean, pg_temp.take(2 + cardinality(v_assignees)));
+        (v_row->>'milestone')::boolean, pg_temp.take(3 + 2 * cardinality(v_assignees)));
       v_tasks := v_tasks + 1;
     END LOOP;
 
@@ -187,7 +196,7 @@ BEGIN
       -- 항목: 정보(상태·기간)는 처음 실행한 날 기준의 앞뒤 일수다. 새 항목은 비공개라 멤버로 연다.
       FOR v_row IN SELECT * FROM jsonb_array_elements(v_mod->'items') LOOP
         v_item := app_create_item(v_module, pg_temp.take1(), v_row->>'title', v_row->>'description',
-                                  pg_temp.take(2));
+                                  pg_temp.take(6));
         SELECT coalesce(array_agg((v_people->>p)::uuid), ARRAY[]::uuid[]) INTO v_members
           FROM jsonb_array_elements_text(v_row->'members') AS p;
         IF cardinality(v_members) > 0 THEN
