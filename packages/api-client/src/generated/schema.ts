@@ -9188,9 +9188,7 @@ export interface operations {
     };
     shared_with_me: {
         parameters: {
-            query: {
-                organization_id: components["schemas"]["OrganizationId"];
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -9205,23 +9203,7 @@ export interface operations {
                     "application/json": components["schemas"]["SharedDocument"][];
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };

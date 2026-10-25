@@ -131,6 +131,13 @@ async fn tasks_are_assigned_to_me_grouped_by_workspace_and_scoped_to_organizatio
 #[tokio::test]
 async fn home_shared_and_search_stay_in_current_organization() {
     let w = World::new().await;
+    // World의 기본 소유자는 이메일 없는 계정이다. 공유 수신은 검증된 이메일이 필요하다.
+    sqlx::query("UPDATE fvoci.users SET email=$2,email_verified=true WHERE id=$1")
+        .bind(w.owner.id)
+        .bind(common::unique_email("personal-scope-owner"))
+        .execute(&mut common::fixture_conn().await)
+        .await
+        .unwrap();
     let other = World::new().await;
     join(&other, &w.owner).await;
     let first = w.doc().await;

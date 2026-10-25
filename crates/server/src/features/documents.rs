@@ -624,20 +624,17 @@ pub struct SharedDocument {
 
 /// 나에게 공유된 문서(검증된 이메일 기준).
 #[utoipa::path(get, path = "/api/me/shared", operation_id = "shared_with_me",
-    params(("organization_id" = crate::ids::OrganizationId, Query)),
-    responses((status = 200, body = [SharedDocument]), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+    responses((status = 200, body = [SharedDocument]), (status = 401, body = ErrorBody)), tag = "documents")]
 pub async fn shared_with_me(
     State(state): State<AppState>,
-    crate::features::organizations::OrgScope { user, organization }: crate::features::organizations::OrgScope,
+    CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<SharedDocument>>, AppError> {
+    // 조직 필터는 SQL 계약 보완 뒤 적용한다. document_shares RLS는 owner만 허용하므로
+    // 수신자의 공유 행을 직접 조인하면 정상 공유가 누락된다. 기존 공유 목록 보장을 유지한다.
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<(DocumentId, String, String, String, OffsetDateTime)> = sqlx::query_as(
-        "SELECT m.id, m.title, m.permission, m.shared_by, m.updated_at
-         FROM app_shared_with_me() m
-         JOIN document_shares s ON s.document_id = m.id AND s.grantee_user_id = app_user_id()
-         WHERE s.organization_id = $1 ORDER BY m.updated_at DESC, m.id",
+        "SELECT id, title, permission, shared_by, updated_at FROM app_shared_with_me()",
     )
-    .bind(organization)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;

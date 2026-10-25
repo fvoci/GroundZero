@@ -6052,16 +6052,6 @@
         ],
         "summary": "나에게 공유된 문서(검증된 이메일 기준).",
         "operationId": "shared_with_me",
-        "parameters": [
-          {
-            "name": "organization_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/OrganizationId"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "",
@@ -6076,27 +6066,7 @@
               }
             }
           },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
           "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "404": {
             "description": "",
             "content": {
               "application/json": {
