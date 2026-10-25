@@ -344,12 +344,13 @@ pub async fn revoke_invitation(
 /// 내가 받은 초대.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ReceivedInvitation {
+    pub kind: InvitationTarget,
     pub organization_id: OrganizationId,
     pub organization_name: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
-    pub workspace_id: WorkspaceId,
-    pub workspace_name: String,
+    pub workspace_id: Option<WorkspaceId>,
+    pub workspace_name: Option<String>,
     pub role: Role,
     pub invited_by: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -357,8 +358,8 @@ pub struct ReceivedInvitation {
     pub expires_at: OffsetDateTime,
 }
 
-/// 내가 받은 열린 초대(검증된 이메일 기준). 1단계에서는 워크스페이스 초대만 반환한다.
-#[utoipa::path(get, path = "/api/invitations",
+/// 내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준).
+#[utoipa::path(get, path = "/api/invitations", operation_id = "my_invitations",
     responses((status = 200, body = [ReceivedInvitation]), (status = 401, body = ErrorBody)), tag = "members")]
 pub async fn my_invitations(
     State(state): State<AppState>,
@@ -369,17 +370,18 @@ pub async fn my_invitations(
         Uuid,
         OrganizationId,
         String,
-        WorkspaceId,
-        String,
+        Option<WorkspaceId>,
+        Option<String>,
         String,
         String,
         OffsetDateTime,
     );
     let rows: Vec<InvitationRow> = sqlx::query_as(
-        "SELECT id, organization_id, organization_name, workspace_id, workspace_name, role, invited_by_name, expires_at FROM app_my_invitations() WHERE workspace_id IS NOT NULL",
+        "SELECT id, organization_id, organization_name, workspace_id, workspace_name, role, invited_by_name, expires_at FROM app_my_invitations()",
     )
     .fetch_all(tx.conn())
-    .await?;
+    .await
+    .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     rows.into_iter()
         .map(
@@ -394,6 +396,11 @@ pub async fn my_invitations(
                 expires_at,
             )| {
                 Ok(ReceivedInvitation {
+                    kind: if workspace_id.is_some() {
+                        InvitationTarget::Workspace
+                    } else {
+                        InvitationTarget::Organization
+                    },
                     id,
                     organization_id,
                     organization_name,
@@ -436,7 +443,7 @@ async fn respond(
     }
     tx.commit().await?;
     Ok(Accepted {
-        target_kind: if workspace_id.is_some() {
+        kind: if workspace_id.is_some() {
             InvitationTarget::Workspace
         } else {
             InvitationTarget::Organization
@@ -457,13 +464,13 @@ pub enum InvitationTarget {
 /// 수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Accepted {
-    pub target_kind: InvitationTarget,
+    pub kind: InvitationTarget,
     pub organization_id: OrganizationId,
     pub workspace_id: Option<WorkspaceId>,
 }
 
 /// 초대 수락.
-#[utoipa::path(post, path = "/api/invitations/{invitation_id}/accept",
+#[utoipa::path(post, path = "/api/invitations/{invitation_id}/accept", operation_id = "accept_invitation",
     params(("invitation_id" = String, Path, format = Uuid)),
     responses((status = 200, body = Accepted), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
@@ -476,7 +483,7 @@ pub async fn accept_invitation(
 }
 
 /// 초대 거절.
-#[utoipa::path(post, path = "/api/invitations/{invitation_id}/decline",
+#[utoipa::path(post, path = "/api/invitations/{invitation_id}/decline", operation_id = "decline_invitation",
     params(("invitation_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn decline_invitation(

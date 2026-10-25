@@ -18,7 +18,9 @@ async fn item(app: &Router, admin: &TestUser, ws: &str) -> String {
         Method::POST,
         &format!("/api/workspaces/{ws}/modules"),
         Some(admin),
-        Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "STS" })),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "STS" }),
+        ),
     )
     .await;
     assert_eq!(module.status, StatusCode::CREATED, "{:?}", module.json);
