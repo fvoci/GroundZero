@@ -252,10 +252,12 @@ export async function selectOrganization(
   await page.getByRole('menuitem').filter({ hasText: organization.name }).click();
   await expect(switcher).toContainText(organization.name);
   if (narrow) {
-    // 서랍(dialog)이 닫히며 초점을 여닫기 단추로 되돌린다. 그 전에 다음 조작이 초점을 옮기면 되돌리기가 그것을 덮는다
-    // (375px 대표 경로의 Tab 왕복이 간헐적으로 실패했다).
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog')).toBeHidden();
+    // 서랍(dialog)은 닫기 단추로 닫는다(메뉴 항목을 고른 직후의 Escape는 서랍을 닫지 못해 열린 채 남았다). 닫히면 초점이
+    // 여닫기 단추로 되돌아오므로 그 뒤에 끝낸다. 그 전에 다음 조작이 초점을 옮기면 서랍의 초점 가둠·되돌리기가 그것을 덮는다
+    // (375px 대표 경로의 Tab 왕복 실패).
+    const drawer = page.getByRole('dialog', { name: '탐색 메뉴' });
+    await drawer.getByRole('button', { name: '메뉴 닫기' }).click();
+    await expect(drawer).toBeHidden();
     await expect(page.getByRole('button', { name: '사이드바 열고 닫기' })).toBeFocused();
   }
 }
