@@ -290,8 +290,10 @@ async fn zotero_refresh_rejects_a_concurrent_edit_without_overwriting_it() {
     let version = i32::try_from(record["version"].as_i64().unwrap()).unwrap();
     assert_eq!(record["fields"]["authors"], "Kim, M");
 
-    // 앱 역할에는 표 UPDATE 권한이 없어 FOR UPDATE는 표 소유 역할 연결로 잡는다(셀프호스트 Supabase의 시험 관리자는
-    // superuser가 아니라 item_records를 읽지 못한다). 변경 요청은 실제 앱 역할로 서버를 거친다.
+    // 앱 역할에는 표 UPDATE 권한이 없어 FOR UPDATE는 표 소유 역할 연결로 잡는다. 셀프호스트 Supabase의 시험 관리자는
+    // superuser가 아니라 item_records를 읽지 못하고 fvoci_app으로 SET ROLE도 못 하므로, 먼저 저장하는 "다른 사용자"의
+    // 변경은 같은 트랜잭션에서 app.user_id만 바꿔 정의자 함수 app_update_record로 한다(정의자 함수는 호출 역할과
+    // 무관하게 소유자로 실행되므로 앱 역할 호출과 같은 검사·결과다). 재가져오기 요청 자체는 실제 앱 역할로 서버를 거친다.
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let mut lock_conn = sqlx::PgConnection::connect(&owner_url).await.unwrap();
@@ -354,10 +356,6 @@ async fn zotero_refresh_rejects_a_concurrent_edit_without_overwriting_it() {
         "재가져오기가 app_update_record에서 잠금을 기다려야 한다"
     );
 
-    sqlx::query("SET LOCAL ROLE fvoci_app")
-        .execute(&mut *held)
-        .await
-        .unwrap();
     sqlx::query("SET LOCAL search_path TO fvoci, pg_temp")
         .execute(&mut *held)
         .await
@@ -367,11 +365,11 @@ async fn zotero_refresh_rejects_a_concurrent_edit_without_overwriting_it() {
         .execute(&mut *held)
         .await
         .unwrap();
-    let role: String = sqlx::query_scalar("SELECT current_user::text")
+    let acting: uuid::Uuid = sqlx::query_scalar("SELECT app_user_id()")
         .fetch_one(&mut *held)
         .await
         .unwrap();
-    assert_eq!(role, "fvoci_app");
+    assert_eq!(acting, writer.id.0, "the first save must act as the writer");
     let mut latest_fields = record["fields"].clone();
     latest_fields["summary"] = json!("다른 사용자의 최신 요약");
     let latest_version: i32 =
