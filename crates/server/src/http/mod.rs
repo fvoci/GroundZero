@@ -307,8 +307,6 @@ async fn api_not_found() -> AppError {
         time_tracking::delete,
         time_tracking::revisions,
         time_tracking::summary,
-        time_tracking::set_sharing,
-        time_tracking::get_sharing,
         time_tracking::task_time,
         time_tracking::item_time,
         home::home,
@@ -437,6 +435,7 @@ async fn api_not_found() -> AppError {
         members::Invitation,
         members::ReceivedInvitation,
         members::Accepted,
+        members::InvitationTarget,
         members::OfferOwnership,
         members::Group,
         members::CreateGroup,
@@ -468,11 +467,11 @@ async fn api_not_found() -> AppError {
         documents::MoveTarget,
         documents::MoveDocument,
         documents::MovePreview,
+        documents::MoveAccessChange,
         documents::MoveConflict,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        tasks::TaskStatus,
         tasks::TaskPriority,
         tasks::Assignee,
         tasks::ChecklistItem,
@@ -526,6 +525,7 @@ async fn api_not_found() -> AppError {
         time_tracking::Target,
         time_tracking::TimeEntry,
         time_tracking::StartTimer,
+        time_tracking::StartedTimer,
         time_tracking::TimerAction,
         time_tracking::TimerActionInput,
         time_tracking::EntryInput,
@@ -535,8 +535,6 @@ async fn api_not_found() -> AppError {
         time_tracking::TimeEntryRevision,
         time_tracking::SummaryGroup,
         time_tracking::TimeSummaryRow,
-        time_tracking::SetSharing,
-        time_tracking::Sharing,
         time_tracking::TaskTime,
         time_tracking::ItemTime,
         time_tracking::ItemTimeKind,
@@ -900,10 +898,6 @@ pub fn router(state: AppState) -> Router {
             get(time_tracking::revisions),
         )
         .route("/me/time-summary", get(time_tracking::summary))
-        .route(
-            "/workspaces/{workspace_id}/time-sharing",
-            get(time_tracking::get_sharing).put(time_tracking::set_sharing),
-        )
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
         .route("/items/{item_id}/time", get(time_tracking::item_time))
         .route("/me/home", get(home::home))

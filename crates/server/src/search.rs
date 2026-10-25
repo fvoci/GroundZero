@@ -70,6 +70,7 @@ pub struct IndexDoc {
     pub module_id: Option<String>,
     /// 필터용: 업무 상태.
     pub status: Option<String>,
+    pub status_category: Option<String>,
     /// 필터용: 업무 담당자.
     pub assignee_ids: Vec<String>,
     /// 필터용: 만든 사람.
@@ -303,6 +304,7 @@ struct PayloadRow {
     description: Option<String>,
     module_id: Option<Uuid>,
     status: Option<String>,
+    status_category: Option<String>,
     assignee_ids: Option<Vec<Uuid>>,
     created_by: Option<Uuid>,
     at: Option<OffsetDateTime>,
@@ -485,7 +487,7 @@ pub async fn drain(
     let mut tx = db.begin_anonymous().await?;
     let rows: Vec<PayloadRow> = sqlx::query_as(
         "SELECT kind, id, live, workspace_id, owner_user_id, item_id, title, reference, body, description,
-                module_id, status, assignee_ids, created_by, at, on_day, file_key, file_type, file_size
+                module_id, status, status_category, assignee_ids, created_by, at, on_day, file_key, file_type, file_size
          FROM app_system_search_payload($1, $2)",
     )
     .bind(&kinds)
@@ -519,6 +521,7 @@ pub async fn drain(
             text,
             module_id: row.module_id.map(|m| m.to_string()),
             status: row.status,
+            status_category: row.status_category,
             assignee_ids: row
                 .assignee_ids
                 .unwrap_or_default()

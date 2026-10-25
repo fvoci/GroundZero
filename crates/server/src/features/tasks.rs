@@ -1,6 +1,6 @@
 //! 업무·하위 업무·담당자·업무 체크리스트 (D-14, D-30, D-31, D-33, D-48, D-50, D-57).
 //!
-//! 업무는 모듈 항목 아래에 있고 모듈 번호열을 함께 쓴다. 권한은 항목을 따르며 DB 함수 `app_task_access`
+//! 업무는 모듈 항목 아래에 있고 모듈 번호열을 함께 쓴다. 권한은 항목을 따르며 DB 함수 `app_access`
 //! 하나로 판정한다(보관 아래 읽기 전용). 필드 고치기는 `base_version`으로 충돌을 막고, 칸반 이동과 체크리스트
 //! 체크는 버전 없이 따로 한다(같은 보드를 여럿이 써도 충돌하지 않게). 날짜는 시각이 없는 날짜로 저장한다(D-50).
 //! 앱 공급 UUIDv7(D-88)과 모든 칸을 한 번에 받는 만들기(D-105)의 SQL 정본은 `migrations/`에 있다.
@@ -33,33 +33,14 @@ const MAX_TAG_CHARS: usize = 50;
 /// 체크리스트 한 번에 덧붙일 수 있는 항목 수.
 const MAX_CHECKLIST_BATCH: usize = 200;
 
-/// 업무 상태. 완료 시각은 서버가 기록한다.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskStatus {
-    #[default]
-    Todo,
-    InProgress,
-    Done,
+/// 생성 시 기본 상태 이름. 사용자 정의 상태도 같은 문자열 계약을 쓴다.
+fn default_status() -> String {
+    "todo".into()
 }
 
-impl TaskStatus {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Todo => "todo",
-            Self::InProgress => "in_progress",
-            Self::Done => "done",
-        }
-    }
-
-    pub(crate) fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "todo" => Some(Self::Todo),
-            "in_progress" => Some(Self::InProgress),
-            "done" => Some(Self::Done),
-            _ => None,
-        }
-    }
+/// 상태 이름은 앞뒤 공백을 제거하고 1..50자로 제한한다.
+pub(crate) fn validate_status(raw: &str) -> Result<String, AppError> {
+    validate_title(raw, 50, "status")
 }
 
 /// 우선순위.
@@ -128,7 +109,8 @@ pub struct Task {
     pub reference: Option<String>,
     pub title: String,
     pub description: String,
-    pub status: TaskStatus,
+    pub status: String,
+    pub status_category: String,
     pub priority: TaskPriority,
     /// `YYYY-MM-DD`. 시각 없는 날짜.
     pub start_date: Option<String>,
@@ -195,8 +177,8 @@ pub struct CreateTask {
     pub parent_id: Option<Uuid>,
     #[serde(default)]
     pub description: String,
-    #[serde(default)]
-    pub status: TaskStatus,
+    #[serde(default = "default_status")]
+    pub status: String,
     #[serde(default)]
     pub priority: TaskPriority,
     #[serde(default)]
@@ -221,7 +203,7 @@ pub struct UpdateTask {
     pub base_version: i32,
     pub title: String,
     pub description: String,
-    pub status: TaskStatus,
+    pub status: String,
     pub priority: TaskPriority,
     pub start_date: Option<String>,
     pub due_date: Option<String>,
@@ -256,7 +238,7 @@ pub(crate) const DATE_YEARS: std::ops::RangeInclusive<i32> = 1900..=2200;
 /// 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MoveTask {
-    pub status: TaskStatus,
+    pub status: String,
     #[schema(value_type = Option<String>, format = Uuid)]
     pub before_id: Option<Uuid>,
     /// 이 이동 판(`move_version`)에서 읽은 업무만 옮긴다(D-89). 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고
@@ -413,6 +395,7 @@ struct TaskRow {
     title: String,
     description: String,
     status: String,
+    status_category: String,
     priority: String,
     start_date: Option<Date>,
     due_date: Option<Date>,
@@ -437,7 +420,7 @@ struct TaskRow {
 }
 
 const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, t.parent_id,
-        app_task_reference(t.id) AS reference, t.title, t.description, t.status, t.priority,
+        app_task_reference(t.id) AS reference, t.title, t.description, s.name AS status, s.category AS status_category, t.priority,
         t.start_date, t.due_date, t.estimate_minutes, t.tags, t.milestone,
         ARRAY(SELECT d.predecessor_id FROM task_dependencies d WHERE d.successor_id = t.id
               ORDER BY d.created_at, d.predecessor_id) AS predecessor_ids,
@@ -445,17 +428,17 @@ const TASK_SELECT: &str = "SELECT t.id, t.item_id, i.module_id, t.workspace_id, 
               ORDER BY d.created_at, d.predecessor_id) AS predecessor_kinds,
         ARRAY(SELECT d.lag_days FROM task_dependencies d WHERE d.successor_id = t.id
               ORDER BY d.created_at, d.predecessor_id) AS predecessor_lags,
-        s.id AS series_id, s.root_task_id AS series_root, s.rule AS series_rule, s.timezone AS series_timezone,
+        series.id AS series_id, series.root_task_id AS series_root, series.rule AS series_rule, series.timezone AS series_timezone,
         t.occurrence_date,
         c.done AS checklist_done, c.total AS checklist_total,
-        t.version, t.move_version, t.completed_at, app_task_access(t.id) AS access, t.updated_at
+        t.version, t.move_version, t.completed_at, app_access('task', t.id) AS access, t.updated_at
  FROM tasks t JOIN items i ON i.id = t.item_id
- LEFT JOIN task_series s ON s.id = t.series_id
+ JOIN task_statuses s ON s.id = t.status_id
+ LEFT JOIN task_series series ON series.id = t.series_id
  CROSS JOIN LATERAL app_task_checklist_counts(t.id) c";
 
 /// 업무 순서: 칸반 열(상태) 안의 위치·번호 순. 목록 보기의 상위·하위 묶음은 화면에서 만든다.
-const TASK_ORDER: &str =
-    "array_position(ARRAY['todo', 'in_progress', 'done'], t.status), t.position, t.number";
+const TASK_ORDER: &str = "s.position, t.position, t.number";
 
 async fn assignees_of(tx: &mut UserTx, ids: &[Uuid]) -> Result<Vec<(Uuid, Assignee)>, AppError> {
     // 담당자 이름은 같은 항목을 볼 수 있는 사람이므로 워크스페이스를 함께 쓰는 사람이다(users RLS).
@@ -496,6 +479,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 title,
                 description,
                 status,
+                status_category,
                 priority,
                 start_date,
                 due_date,
@@ -545,8 +529,8 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 reference,
                 title,
                 description,
-                status: TaskStatus::parse(&status)
-                    .ok_or_else(|| AppError::Config(format!("unknown task status {status}")))?,
+                status,
+                status_category,
                 priority: TaskPriority::parse(&priority)
                     .ok_or_else(|| AppError::Config(format!("unknown priority {priority}")))?,
                 start_date: format_date(start_date),
@@ -614,7 +598,7 @@ pub async fn list(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Task>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_item_access($1) IS NOT NULL")
+    let visible: bool = sqlx::query_scalar("SELECT app_access('item', $1) <> 'none'")
         .bind(item)
         .fetch_one(tx.conn())
         .await?;
@@ -709,7 +693,7 @@ pub async fn create(
         .bind(&fields.title)
         .bind(input.parent_id)
         .bind(&fields.description)
-        .bind(input.status.as_str())
+        .bind(validate_status(&input.status)?)
         .bind(input.priority.as_str())
         .bind(fields.start)
         .bind(fields.due)
@@ -717,8 +701,8 @@ pub async fn create(
         .bind(&fields.tags)
         .bind(&input.assignee_ids)
         .bind(input.milestone)
-        // 업무, 만들기 감사, 담당자마다 감사(같은 사람이 겹치면 남는 id는 쓰지 않는다).
-        .bind(new_ids(2 + input.assignee_ids.len()))
+        // 업무·감사·활동과 담당자마다 감사·알림의 상한.
+        .bind(new_ids(3 + 2 * input.assignee_ids.len()))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -787,7 +771,7 @@ pub async fn update(
     .bind(input.base_version)
     .bind(&title)
     .bind(&description)
-    .bind(input.status.as_str())
+    .bind(validate_status(&input.status)?)
     .bind(input.priority.as_str())
     .bind(start)
     .bind(due)
@@ -859,11 +843,12 @@ pub async fn move_task(
     Json(input): Json<MoveTask>,
 ) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let moved = sqlx::query("SELECT app_move_task($1, $2, $3, $4)")
+    let moved = sqlx::query("SELECT app_move_task($1, $2, $3, $4, $5)")
         .bind(id)
-        .bind(input.status.as_str())
+        .bind(validate_status(&input.status)?)
         .bind(input.before_id)
         .bind(input.base_move_version)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await;
     if let Err(err) = moved {
@@ -1029,9 +1014,11 @@ mod tests {
 
     #[test]
     fn status_and_priority_round_trip() {
-        for s in [TaskStatus::Todo, TaskStatus::InProgress, TaskStatus::Done] {
-            assert_eq!(TaskStatus::parse(s.as_str()), Some(s));
+        for s in ["todo", "in_progress", "done", "검토 중"] {
+            assert_eq!(validate_status(&format!(" {s} ")).unwrap(), s);
         }
+        assert!(validate_status(" ").is_err());
+        assert!(validate_status(&"가".repeat(51)).is_err());
         for p in [TaskPriority::None, TaskPriority::Urgent] {
             assert_eq!(TaskPriority::parse(p.as_str()), Some(p));
         }

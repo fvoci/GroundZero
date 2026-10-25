@@ -128,6 +128,10 @@ pub struct Config {
     pub role: RunRole,
     /// 백그라운드 작업 확인 간격. `FVOCI_WORKER_INTERVAL_SECS`, 기본 60, 5~3600.
     pub worker_interval: Duration,
+    /// 감사 기록 보존 일수. 미설정이면 서버 기본 보존 기간이 없다.
+    pub audit_retention_days: Option<i32>,
+    /// 활동 기록 보존 일수. 미설정이면 서버 기본 보존 기간이 없다.
+    pub activity_retention_days: Option<i32>,
     pub search: Option<SearchConfig>,
     /// 파일 저장소.
     pub storage: StorageConfig,
@@ -363,6 +367,14 @@ impl Config {
             limits,
             role,
             worker_interval: Duration::from_secs(worker_interval),
+            audit_retention_days: retention_days(
+                lookup("FVOCI_AUDIT_RETENTION_DAYS"),
+                "FVOCI_AUDIT_RETENTION_DAYS",
+            )?,
+            activity_retention_days: retention_days(
+                lookup("FVOCI_ACTIVITY_RETENTION_DAYS"),
+                "FVOCI_ACTIVITY_RETENTION_DAYS",
+            )?,
             search,
             storage,
             files,
@@ -410,6 +422,22 @@ impl DbCommandConfig {
     }
 }
 
+fn retention_days(raw: Option<String>, name: &str) -> Result<Option<i32>, AppError> {
+    raw.map(|value| {
+        let days = value
+            .trim()
+            .parse::<i32>()
+            .map_err(|_| AppError::Config(format!("{name} must be between 1 and 3650")))?;
+        if !(1..=3650).contains(&days) {
+            return Err(AppError::Config(format!(
+                "{name} must be between 1 and 3650"
+            )));
+        }
+        Ok(days)
+    })
+    .transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,6 +451,46 @@ mod tests {
                 .iter()
                 .find(|(key, _)| *key == k)
                 .map(|(_, v)| (*v).to_owned())
+        }
+    }
+
+    #[test]
+    fn retention_is_optional_and_bounded() {
+        let cfg = Config::from_lookup(with_db(&[])).unwrap();
+        assert_eq!(cfg.audit_retention_days, None);
+        assert_eq!(cfg.activity_retention_days, None);
+        for key in [
+            "FVOCI_AUDIT_RETENTION_DAYS",
+            "FVOCI_ACTIVITY_RETENTION_DAYS",
+        ] {
+            for value in ["1", "3650", " 30 "] {
+                let cfg = Config::from_lookup(|name| {
+                    if name == key {
+                        Some(value.into())
+                    } else {
+                        with_db(&[])(name)
+                    }
+                })
+                .unwrap();
+                let expected = Some(value.trim().parse::<i32>().unwrap());
+                if key == "FVOCI_AUDIT_RETENTION_DAYS" {
+                    assert_eq!(cfg.audit_retention_days, expected);
+                } else {
+                    assert_eq!(cfg.activity_retention_days, expected);
+                }
+            }
+            for value in ["0", "-1", "3651", "", "abc", "2147483648"] {
+                assert!(
+                    Config::from_lookup(|name| {
+                        if name == key {
+                            Some(value.into())
+                        } else {
+                            with_db(&[])(name)
+                        }
+                    })
+                    .is_err()
+                );
+            }
         }
     }
 

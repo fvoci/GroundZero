@@ -11,6 +11,7 @@
 use std::time::Duration;
 
 use tokio::sync::watch;
+use uuid::Uuid;
 
 use crate::db::{Db, needed_ids};
 use crate::error::AppError;
@@ -20,7 +21,7 @@ use crate::storage::Storage;
 /// 한 번 돈 결과(로그·테스트용).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TickReport {
-    /// 영구 삭제한 휴지통 묶음 수(만료분).
+    /// 지운 휴지통 묶음·이전 파일 버전·만료된 감사와 활동 기록의 합계.
     pub purged: i32,
     /// 만든 반복 업무 회차 수.
     pub occurrences: i32,
@@ -52,12 +53,16 @@ const PURGE_JOBS: &[Job] = &[
         ids: None,
         call: "SELECT app_system_purge_old_versions()",
     },
+    Job {
+        ids: None,
+        call: "SELECT app_system_purge_audit($1)",
+    },
+    Job {
+        ids: None,
+        call: "SELECT app_system_purge_activity($1)",
+    },
 ];
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
-const RECURRENCE_JOBS: &[Job] = &[Job {
-    ids: Some("SELECT app_system_recurrence_tick_ids()"),
-    call: "SELECT app_system_recurrence_tick($1)",
-}];
 /// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번). `current_date`는 트랜잭션 시작 시각 기준이라 개수와
 /// 실제 호출이 같은 날을 본다.
 const DUE: (&str, &str) = ("due_notify", "1 hour");
@@ -91,10 +96,10 @@ const SHORT_ID_ATTEMPTS: u32 = 3;
 /// 상한(`ids`)을 본 뒤 다른 트랜잭션이 대상을 늘리면 함수가 새 id 부족(FV001)으로 멈춘다(D-88). 그때는 트랜잭션을
 /// 통째로 되돌리고(이 묶음의 아무것도 남지 않음) 상한부터 다시 보고 새 id로 처음부터 다시 한다. 정해진 횟수만큼만
 /// 하고, 그래도 모자라면 오류로 끝낸다(다음 주기에 다시 한다). 실패한 트랜잭션 안에서 본 함수만 다시 부르지 않는다.
-async fn system_call(db: &Db, jobs: &[Job]) -> Result<i32, AppError> {
+async fn system_call(db: &Db, jobs: &[Job], retention: Retention) -> Result<i32, AppError> {
     let mut attempt = 1;
     loop {
-        match system_call_once(db, jobs).await {
+        match system_call_once(db, jobs, retention).await {
             Err(err) if is_new_ids_short(&err) && attempt < SHORT_ID_ATTEMPTS => {
                 tracing::warn!(
                     event = "job.new_ids_short",
@@ -110,7 +115,7 @@ async fn system_call(db: &Db, jobs: &[Job]) -> Result<i32, AppError> {
 
 /// 작업 함수 묶음을 바로 한 번 돌린다(새 id 부족이면 정해진 횟수만큼 처음부터 다시, 테스트·운영 점검용).
 pub async fn run_jobs(db: &Db, jobs: &[Job]) -> Result<i32, AppError> {
-    system_call(db, jobs).await
+    system_call(db, jobs, Retention::default()).await
 }
 
 /// 새 id 부족(FV001)인지. HTTP 경로는 같은 오류를 409로 돌려준다(`AppError::from_db_function`).
@@ -119,7 +124,7 @@ fn is_new_ids_short(err: &AppError) -> bool {
         if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("FV001"))
 }
 
-async fn system_call_once(db: &Db, jobs: &[Job]) -> Result<i32, AppError> {
+async fn system_call_once(db: &Db, jobs: &[Job], retention: Retention) -> Result<i32, AppError> {
     let mut tx = db.begin_anonymous().await?;
     let mut total = 0;
     for job in jobs {
@@ -131,11 +136,78 @@ async fn system_call_once(db: &Db, jobs: &[Job]) -> Result<i32, AppError> {
                     .fetch_one(tx.conn())
                     .await?
             }
-            None => sqlx::query_scalar(job.call).fetch_one(tx.conn()).await?,
+            None => match job.call {
+                "SELECT app_system_purge_audit($1)" => {
+                    sqlx::query_scalar(job.call)
+                        .bind(retention.audit_days)
+                        .fetch_one(tx.conn())
+                        .await?
+                }
+                "SELECT app_system_purge_activity($1)" => {
+                    sqlx::query_scalar(job.call)
+                        .bind(retention.activity_days)
+                        .fetch_one(tx.conn())
+                        .await?
+                }
+                _ => sqlx::query_scalar(job.call).fetch_one(tx.conn()).await?,
+            },
         };
         total += n;
     }
     tx.commit().await?;
+    Ok(total)
+}
+
+/// 서버 기본 보존 기간. None이면 조직·공간 설정만 따르고 서버 기본값으로는 지우지 않는다.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Retention {
+    pub audit_days: Option<i32>,
+    pub activity_days: Option<i32>,
+}
+
+async fn sync_series_once(db: &Db, series: Uuid) -> Result<i32, AppError> {
+    let mut tx = db.begin_anonymous().await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_system_sync_task_series_ids($1)").bind(series),
+    )
+    .await?;
+    let made = sqlx::query_scalar("SELECT app_system_sync_task_series($1, $2)")
+        .bind(series)
+        .bind(ids)
+        .fetch_one(tx.conn())
+        .await?;
+    tx.commit().await?;
+    Ok(made)
+}
+
+async fn recurrence(db: &Db) -> Result<i32, AppError> {
+    let mut tx = db.begin_anonymous().await?;
+    let series: Vec<Uuid> = sqlx::query_scalar("SELECT app_system_recurrence_due()")
+        .fetch_all(tx.conn())
+        .await?;
+    tx.commit().await?;
+    let mut total = 0;
+    for id in series {
+        for attempt in 1..=SHORT_ID_ATTEMPTS {
+            match sync_series_once(db, id).await {
+                Ok(made) => {
+                    total += made;
+                    break;
+                }
+                Err(err) if is_new_ids_short(&err) && attempt < SHORT_ID_ATTEMPTS => {
+                    tracing::warn!(event = "job.new_ids_short", series = %id, attempt,
+                        "retrying recurrence series with a fresh transaction");
+                }
+                Err(err) => {
+                    tracing::warn!(event = "recurrence.sync_failed", series = %id,
+                        error_code = err.code(), detail = crate::logging::safe_error(&err),
+                        "recurrence series failed; continuing with the next series");
+                    break;
+                }
+            }
+        }
+    }
     Ok(total)
 }
 
@@ -145,10 +217,20 @@ pub async fn run_all_now(
     search: Option<&SearchClient>,
     storage: Option<&Storage>,
 ) -> Result<TickReport, AppError> {
-    let purged = system_call(db, PURGE_JOBS).await?;
-    let occurrences = system_call(db, RECURRENCE_JOBS).await?;
+    run_all_now_with_retention(db, search, storage, Retention::default()).await
+}
+
+/// 서버 기본 보존 기간을 적용해 주기 작업을 바로 돌린다.
+pub async fn run_all_now_with_retention(
+    db: &Db,
+    search: Option<&SearchClient>,
+    storage: Option<&Storage>,
+    retention: Retention,
+) -> Result<TickReport, AppError> {
+    let purged = system_call(db, PURGE_JOBS, retention).await?;
+    let occurrences = recurrence(db).await?;
     // 기한 알림은 반복 회차를 만든 뒤에(오늘 만든 회차도 알린다).
-    let notified = system_call(db, DUE_JOBS).await?;
+    let notified = system_call(db, DUE_JOBS, Retention::default()).await?;
     Ok(TickReport {
         purged,
         notified,
@@ -193,6 +275,7 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
             ids: None,
             call: "SELECT app_system_expire_uploads()",
         }],
+        Retention::default(),
     )
     .await?;
     let mut done = 0;
@@ -282,7 +365,7 @@ async fn index(db: &Db, client: &SearchClient, storage: Option<&Storage>) -> Res
 
 async fn when_due(db: &Db, schedule: (&str, &str), jobs: &[Job]) -> Result<i32, AppError> {
     if claim(db, schedule).await? {
-        system_call(db, jobs).await
+        system_call(db, jobs, Retention::default()).await
     } else {
         Ok(0)
     }
@@ -294,6 +377,23 @@ pub async fn run_once(
     search: Option<&SearchClient>,
     storage: Option<&Storage>,
 ) -> TickReport {
+    run_once_with_retention(db, search, storage, Retention::default()).await
+}
+
+/// 서버 기본 보존 기간을 적용해 때가 된 주기 작업을 처리한다.
+pub async fn run_once_with_retention(
+    db: &Db,
+    search: Option<&SearchClient>,
+    storage: Option<&Storage>,
+    retention: Retention,
+) -> TickReport {
+    let purged = logged("trash_purge", async {
+        if !claim(db, PURGE).await? {
+            return Ok(0);
+        }
+        system_call(db, PURGE_JOBS, retention).await
+    })
+    .await;
     TickReport {
         cleaned: match storage {
             Some(storage) => logged("storage", clean_storage(db, storage)).await,
@@ -303,8 +403,15 @@ pub async fn run_once(
             Some(client) => logged("search", index(db, client, storage)).await,
             None => 0,
         },
-        purged: logged("trash_purge", when_due(db, PURGE, PURGE_JOBS)).await,
-        occurrences: logged("recurrence", when_due(db, RECURRENCE, RECURRENCE_JOBS)).await,
+        purged,
+        occurrences: logged("recurrence", async {
+            if claim(db, RECURRENCE).await? {
+                recurrence(db).await
+            } else {
+                Ok(0)
+            }
+        })
+        .await,
         notified: logged("due_notify", when_due(db, DUE, DUE_JOBS)).await,
     }
 }
@@ -318,12 +425,14 @@ pub fn spawn(
     storage: Storage,
     rooms: crate::collab::Rooms,
     interval: Duration,
+    retention: Retention,
     mut shutdown: watch::Receiver<bool>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             rooms.persist_all().await;
-            let report = run_once(&db, search.as_ref(), Some(&storage)).await;
+            let report =
+                run_once_with_retention(&db, search.as_ref(), Some(&storage), retention).await;
             if report != TickReport::default() {
                 tracing::info!(
                     event = "job.tick",

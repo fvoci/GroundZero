@@ -3,8 +3,8 @@
 //! 시간 기록은 사용자 소유이며 워크스페이스 관리자에게도 보이지 않는다(RLS: 본인만). 진행 중인 타이머는
 //! 사용자당 하나이고 서버 시각으로 재므로 앱을 닫아도 이어진다. 기록은 측정 뒤에 종류·대상을 정할 수 있고,
 //! 고치면 본인만 보는 수정 이력에 이전 값이 남는다. 집계는 보는 사람의 시간대 날짜로 하며 기록은 시작한 날에
-//! 센다. 공유는 사용자가 워크스페이스마다 고르며, 그 워크스페이스 업무에 연결된 시간의 합계만 보인다.
-//! DB 정의는 `migrations/202610230001_initial_state.sql`의 `app_start_timer`·`app_update_time_entry` 등에 있다.
+//! 센다. 시간 합계도 본인 기록만 돌려준다.
+//! DB 정의는 `migrations/202610250001_initial_state.sql`의 `app_start_timer`·`app_update_time_entry` 등에 있다.
 //! 새 UUIDv7은 앱이 공급한다(D-88).
 
 use axum::Json;
@@ -21,7 +21,6 @@ use crate::db::{UserTx, is_unique_violation, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::tasks::{format_date, parse_date, validate_text};
-use crate::features::workspaces::member_role;
 use crate::http::AppState;
 use crate::ids::WorkspaceId;
 
@@ -242,32 +241,45 @@ pub struct StartTimer {
     pub target: Option<TargetInput>,
 }
 
-/// 타이머 시작. 이미 진행 중인 타이머가 있으면 409(사용자당 하나, 모든 워크스페이스 통틀어).
+/// 새 타이머와 자동으로 끝낸 이전 기록.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StartedTimer {
+    #[serde(flatten)]
+    pub entry: TimeEntry,
+    #[schema(value_type = Option<String>, format = Uuid)]
+    pub stopped_entry_id: Option<Uuid>,
+}
+
+/// 타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다.
 #[utoipa::path(post, path = "/api/me/timer", operation_id = "start_timer", request_body = StartTimer,
-    responses((status = 201, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ErrorBody)), tag = "time")]
+    responses((status = 201, body = StartedTimer), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "time")]
 pub async fn start(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Json(input): Json<StartTimer>,
-) -> Result<(StatusCode, Json<TimeEntry>), AppError> {
+) -> Result<(StatusCode, Json<StartedTimer>), AppError> {
     let memo = validate_text(&input.memo, MAX_MEMO_CHARS, "memo")?;
     let (target_kind, target_id) = split_target(input.target);
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let id: Uuid = sqlx::query_scalar("SELECT app_start_timer($1, $2, $3, $4, $5, $6)")
-            .bind(input.request_id)
-            .bind(input.kind.as_str())
-            .bind(&memo)
-            .bind(target_kind)
-            .bind(target_id)
-            .bind(new_ids(1))
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+        let (id, stopped_entry_id): (Uuid, Option<Uuid>) = sqlx::query_as(
+            "SELECT entry_id, stopped_entry_id FROM app_start_timer($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(input.request_id)
+        .bind(input.kind.as_str())
+        .bind(&memo)
+        .bind(target_kind)
+        .bind(target_id)
+        .bind(new_ids(1))
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
         let entry = load(&mut tx, id).await?;
         tx.commit().await?;
-        Ok(entry)
+        Ok(StartedTimer {
+            entry,
+            stopped_entry_id,
+        })
     };
     match run().await {
         Ok(entry) => Ok((StatusCode::CREATED, Json(entry))),
@@ -735,75 +747,12 @@ pub async fn summary(
         .map(Json)
 }
 
-/// 합계 공유 켜기·끄기.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SetSharing {
-    pub enabled: bool,
-}
-
-/// 내 합계 공유 상태(워크스페이스별).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Sharing {
-    pub workspace_id: WorkspaceId,
-    pub enabled: bool,
-}
-
-/// 이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다.
-#[utoipa::path(put, path = "/api/workspaces/{workspace_id}/time-sharing", operation_id = "set_time_sharing",
-    params(("workspace_id" = String, Path, format = Uuid)), request_body = SetSharing,
-    responses((status = 200, body = Sharing), (status = 404, body = ErrorBody)), tag = "time")]
-pub async fn set_sharing(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(ws): Path<WorkspaceId>,
-    Json(input): Json<SetSharing>,
-) -> Result<Json<Sharing>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_time_sharing($1, $2)")
-        .bind(ws)
-        .bind(input.enabled)
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
-    Ok(Json(Sharing {
-        workspace_id: ws,
-        enabled: input.enabled,
-    }))
-}
-
-/// 이 워크스페이스의 내 합계 공유 상태(멤버).
-#[utoipa::path(get, path = "/api/workspaces/{workspace_id}/time-sharing", operation_id = "get_time_sharing",
-    params(("workspace_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = Sharing), (status = 404, body = ErrorBody)), tag = "time")]
-pub async fn get_sharing(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(ws): Path<WorkspaceId>,
-) -> Result<Json<Sharing>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
-    let enabled: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM time_sharing WHERE workspace_id = $1)")
-            .bind(ws)
-            .fetch_one(tx.conn())
-            .await?;
-    tx.commit().await?;
-    Ok(Json(Sharing {
-        workspace_id: ws,
-        enabled,
-    }))
-}
-
 /// 업무의 예상 시간과 실제 시간.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TaskTime {
     pub estimate_minutes: Option<i32>,
     /// 내 기록의 합계(초).
     pub mine_seconds: i64,
-    /// 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
-    pub shared_seconds: i64,
-    pub shared_people: i32,
 }
 
 /// 업무의 예상·실제 시간(업무를 볼 수 있는 사람). 기록 하나하나는 돌려주지 않는다.
@@ -816,12 +765,11 @@ pub async fn task_time(
     Path(id): Path<Uuid>,
 ) -> Result<Json<TaskTime>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let (mine_seconds, shared_seconds, shared_people): (i64, i64, i32) =
-        sqlx::query_as("SELECT * FROM app_task_time($1)")
-            .bind(id)
-            .fetch_one(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+    let mine_seconds: i64 = sqlx::query_scalar("SELECT app_task_time($1)")
+        .bind(id)
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
     let estimate_minutes: Option<i32> =
         sqlx::query_scalar("SELECT estimate_minutes FROM tasks WHERE id = $1")
             .bind(id)
@@ -831,8 +779,6 @@ pub async fn task_time(
     Ok(Json(TaskTime {
         estimate_minutes,
         mine_seconds,
-        shared_seconds,
-        shared_people,
     }))
 }
 
@@ -842,9 +788,6 @@ pub struct ItemTimeKind {
     pub kind: TimeKind,
     /// 내 끝난 기록의 합계(초).
     pub mine_seconds: i64,
-    /// 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
-    pub shared_seconds: i64,
-    pub shared_people: i32,
 }
 
 /// 항목의 시간 합계(D-78): 항목 자체와 그 아래 업무·문서·강의 회차·스터디 단위의 기록을 종류별로 모은다.
@@ -866,11 +809,12 @@ pub async fn item_time(
     Path(id): Path<Uuid>,
 ) -> Result<Json<ItemTime>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<(String, i64, i64, i32)> = sqlx::query_as("SELECT * FROM app_item_time($1)")
-        .bind(id)
-        .fetch_all(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    let rows: Vec<(String, i64)> =
+        sqlx::query_as("SELECT entry_kind, mine_seconds FROM app_item_time($1)")
+            .bind(id)
+            .fetch_all(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
     let estimate_minutes: i64 = sqlx::query_scalar(
         "SELECT coalesce(sum(estimate_minutes), 0)::bigint FROM tasks
          WHERE item_id = $1 AND deleted_at IS NULL",
@@ -881,13 +825,8 @@ pub async fn item_time(
     tx.commit().await?;
     let kinds = rows
         .into_iter()
-        .filter_map(|(kind, mine_seconds, shared_seconds, shared_people)| {
-            TimeKind::parse(&kind).map(|kind| ItemTimeKind {
-                kind,
-                mine_seconds,
-                shared_seconds,
-                shared_people,
-            })
+        .filter_map(|(kind, mine_seconds)| {
+            TimeKind::parse(&kind).map(|kind| ItemTimeKind { kind, mine_seconds })
         })
         .collect();
     Ok(Json(ItemTime {

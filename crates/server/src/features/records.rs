@@ -881,23 +881,21 @@ pub async fn list(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Record>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let state_row: Option<(String, bool)> = sqlx::query_as(
-        "SELECT app_item_access(i.id), i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL
-         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
-    )
-    .bind(item)
-    .fetch_optional(tx.conn())
-    .await?;
-    let (access, archived) = state_row.ok_or(AppError::NotFound)?;
+    let access: String = sqlx::query_scalar("SELECT app_access('item', $1)")
+        .bind(item)
+        .fetch_one(tx.conn())
+        .await?;
+    if access == "none" {
+        return Err(AppError::NotFound);
+    }
     let rows: Vec<RecordRow> = sqlx::query_as(
         "SELECT r.id, r.kind, r.title, r.occurred_on, r.body, r.fields, r.created_by,
                 (SELECT u.display_name FROM users u WHERE u.id = r.created_by), r.updated_at, r.version,
-                $2::text, r.created_by = app_user_id()
+                app_access('record', r.id), r.created_by = app_user_id()
          FROM item_records r WHERE r.item_id = $1
          ORDER BY r.kind, r.occurred_on DESC NULLS LAST, r.created_at DESC",
     )
     .bind(item)
-    .bind(&access)
     .fetch_all(tx.conn())
     .await?;
     let ids: Vec<Uuid> = rows.iter().map(|r| r.0).collect();
@@ -922,7 +920,6 @@ pub async fn list(
             available,
         });
     }
-    let writable = !archived && (access == "owner" || access == "write");
     Ok(Json(
         rows.into_iter()
             .map(
@@ -952,8 +949,9 @@ pub async fn list(
                         created_by_name: name,
                         updated_at,
                         version,
-                        can_edit: writable,
-                        can_delete: writable && (mine || access == "owner"),
+                        can_edit: matches!(access.as_str(), "owner" | "write"),
+                        can_delete: matches!(access.as_str(), "owner" | "write")
+                            && (mine || access == "owner"),
                     }
                 },
             )

@@ -1,6 +1,6 @@
 //! 홈 (D-19): Up Next(기한 초과·오늘·다가오는 업무), 최근 문서·최근 작업, 진행 중인 항목과 의미에 맞는 진행률,
 //! 고정·즐겨찾기. 모두 볼 수 있는 것만(RLS) 나온다. 주간 달력은 달력 API, 실행 중인 스톱워치는 타이머 API,
-//! 알림은 알림 API를 그대로 쓴다. 고정·즐겨찾기는 `migrations/202610230001_initial_state.sql`의 `app_set_mark`가 처리한다.
+//! 알림은 알림 API를 그대로 쓴다. 고정·즐겨찾기는 `migrations/202610250001_initial_state.sql`의 `app_set_mark`가 처리한다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
-use crate::features::tasks::{TaskStatus, format_date};
+use crate::features::tasks::format_date;
 use crate::http::AppState;
 use crate::ids::{ItemId, WorkspaceId};
 
@@ -34,7 +34,8 @@ pub struct HomeTask {
     pub workspace_id: WorkspaceId,
     pub reference: Option<String>,
     pub title: String,
-    pub status: TaskStatus,
+    pub status: String,
+    pub status_category: String,
     pub due_date: Option<String>,
     /// Up Next에서만.
     pub bucket: Option<DueBucket>,
@@ -140,11 +141,11 @@ pub const UP_NEXT_PER_BUCKET: i64 = 50;
 
 /// Up Next 후보: 내 업무(내가 담당이거나, 담당자가 없고 내가 만든 것) 중 이번 주($1 + 7)까지 마감인 미완료.
 /// 보관된 항목·모듈의 업무는 뺀다.
-const UP_NEXT_MINE: &str = "SELECT t.id, t.item_id, t.workspace_id, t.title, t.status, t.due_date, t.number
-     FROM tasks t JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
-     WHERE t.status <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
+const UP_NEXT_MINE: &str = "SELECT t.id, t.item_id, t.workspace_id, t.title, s.name AS status, s.category AS status_category, t.due_date, t.number
+     FROM tasks t JOIN task_statuses s ON s.id = t.status_id JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
+     WHERE s.category <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
        AND i.archived_at IS NULL AND m.archived_at IS NULL
-       AND t.workspace_id IN (SELECT app_my_workspace_ids())
+       AND t.workspace_id IN (SELECT app_my_workspace_ids(NULL::uuid))
        AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
             OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
                 AND t.created_by = app_user_id()))";
@@ -178,11 +179,12 @@ type TaskRow = (
     Option<String>,
     String,
     String,
+    String,
     Option<Date>,
 );
 
 fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
-    let (id, item_id, workspace_id, reference, title, status, due) = row;
+    let (id, item_id, workspace_id, reference, title, status, status_category, due) = row;
     let bucket = match (today, due) {
         (Some(today), Some(due)) if due < today => Some(DueBucket::Overdue),
         (Some(today), Some(due)) if due == today => Some(DueBucket::Today),
@@ -195,8 +197,8 @@ fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
         workspace_id,
         reference,
         title,
-        status: TaskStatus::parse(&status)
-            .ok_or_else(|| AppError::Config(format!("unknown task status {status}")))?,
+        status,
+        status_category,
         due_date: format_date(due),
         bucket,
     })
@@ -277,7 +279,7 @@ pub async fn home(
                     ORDER BY due_date, number, id) AS rn
            FROM mine
          )
-         SELECT id, item_id, workspace_id, app_task_reference(id), title, status, due_date
+         SELECT id, item_id, workspace_id, app_task_reference(id), title, status, status_category, due_date
          FROM ranked WHERE rn <= $2 ORDER BY due_date, number, id"
     ))
     .bind(today)
@@ -294,8 +296,8 @@ pub async fn home(
     .fetch_one(tx.conn())
     .await?;
     let recent_tasks: Vec<TaskRow> = sqlx::query_as(
-        "SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, t.status, t.due_date
-         FROM tasks t WHERE t.updated_by = app_user_id() ORDER BY t.updated_at DESC, t.id LIMIT 8",
+        "SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, s.name AS status, s.category AS status_category, t.due_date
+         FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.updated_by = app_user_id() ORDER BY t.updated_at DESC, t.id LIMIT 8",
     )
     .fetch_all(tx.conn())
     .await?;
@@ -325,14 +327,14 @@ pub async fn home(
     );
     let active_items: Vec<ItemRow> = sqlx::query_as(
         "SELECT i.id, i.workspace_id, m.kind, app_item_reference(i.id), i.title, c.done, c.total,
-                app_item_access(i.id)
+                app_access('item', i.id)
          FROM items i JOIN modules m ON m.id = i.module_id
          CROSS JOIN LATERAL (
-           SELECT count(*) FILTER (WHERE t.status = 'done') AS done, count(*) AS total, max(t.updated_at) AS active
-           FROM tasks t WHERE t.item_id = i.id
+           SELECT count(*) FILTER (WHERE s.category = 'done') AS done, count(*) AS total, max(t.updated_at) AS active
+           FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.item_id = i.id
          ) c
          WHERE i.archived_at IS NULL AND m.archived_at IS NULL
-           AND i.workspace_id IN (SELECT app_my_workspace_ids())
+           AND i.workspace_id IN (SELECT app_my_workspace_ids(NULL::uuid))
          ORDER BY greatest(i.updated_at, c.active) DESC, i.id
          LIMIT 8",
     )
@@ -382,7 +384,7 @@ pub async fn home(
                         title,
                         tasks_done,
                         tasks_total,
-                        can_write: access != "read",
+                        can_write: matches!(access.as_str(), "owner" | "write"),
                     })
                 },
             )
