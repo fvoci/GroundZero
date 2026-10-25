@@ -444,6 +444,13 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
     )
     .await;
     let alice_with_email = login_with_email(&state, "alice-src", &alice_email, true).await;
+    // 워크스페이스 초대는 그 조직의 멤버만 수락한다(D-114).
+    common::join_organization(
+        common::organization_of_workspace(&dst).await,
+        &alice_with_email,
+        "member",
+    )
+    .await;
     send(
         &app,
         Method::POST,
@@ -504,6 +511,7 @@ async fn personal_note_moves_into_a_workspace_as_private() {
     let ws = create_workspace(&app, &boss, "팀").await;
     let alice_email = unique_email("alice2");
     let alice2 = login_with_email(&state, "alice2", &alice_email, true).await;
+    common::join_organization(common::organization_of_workspace(&ws).await, &alice2, "member").await;
     let inv = send(
         &app,
         Method::POST,

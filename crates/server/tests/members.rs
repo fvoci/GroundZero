@@ -50,6 +50,7 @@ async fn add_member(
 ) -> TestUser {
     let email = unique_email(label);
     let user = login_with_email(state, label, &email, true).await;
+    common::join_organization(common::organization_of_workspace(ws).await, &user, "member").await;
     let inv = invite(app, admin, ws, &email, role).await;
     assert_eq!(
         accept(app, &user, inv["id"].as_str().unwrap()).await,

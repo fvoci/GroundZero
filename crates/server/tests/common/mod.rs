@@ -207,9 +207,9 @@ pub async fn organization_for(user: &TestUser) -> uuid::Uuid {
          WHERE m.user_id = $1 ORDER BY o.created_at, o.id LIMIT 1",
     )
     .bind(user.id.0)
-    .fetch_one(&mut conn)
+    .fetch_optional(&mut conn)
     .await
-    .ok();
+    .unwrap();
     if let Some(id) = existing {
         return id;
     }

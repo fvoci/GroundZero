@@ -169,9 +169,10 @@ async fn only_the_owner_deletes_and_everyone_loses_access_until_restored() {
         .next()
         .unwrap()
         .to_owned();
-    // 열린 초대.
+    // 열린 초대. 받는 사람은 조직 멤버여야 수락할 수 있다(D-114).
     let invitee_email = unique_email("invitee");
     let invitee = login_with_email(&state, "invitee", &invitee_email, true).await;
+    common::join_organization(common::organization_of_workspace(&ws).await, &invitee, "member").await;
     let inv = send(
         &app,
         Method::POST,
