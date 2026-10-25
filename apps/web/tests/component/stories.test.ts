@@ -85,3 +85,27 @@ it('applies the theme global to the page like the app does', async () => {
   await Story.run();
   expect(document.documentElement).not.toHaveClass('dark');
 });
+
+// 도구 막대의 "글자 크기"는 문자열('200')로 오지만, 주소(`?globals=fontScale:200`)에서는 Storybook이 숫자(200)로 읽는다.
+// 둘 다 같은 배율로 적용되고, 지원하지 않는 값은 기본 100%로 돌아간다(임의 값을 CSS에 넣지 않는다).
+it('applies the font scale global whether it arrives as the toolbar string or the URL number', async () => {
+  const badge = Object.entries(modules).find(([path]) => path.endsWith('ui/Badge.stories.ts'))?.[1];
+  if (badge === undefined) throw new Error('no Badge stories');
+  const Story = Object.values(composeStories(badge))[0];
+  if (Story === undefined) throw new Error('no Badge story');
+  const root = document.documentElement;
+  try {
+    await Story.run({ globals: { fontScale: 200 } });
+    expect(root.style.fontSize).toBe('200%');
+    await Story.run({ globals: { fontScale: '150' } });
+    expect(root.style.fontSize).toBe('150%');
+    await Story.run({ globals: { fontScale: 300 } });
+    expect(root.style.fontSize).toBe('100%');
+    await Story.run({ globals: { fontScale: '200%' } });
+    expect(root.style.fontSize).toBe('100%');
+    await Story.run();
+    expect(root.style.fontSize).toBe('100%');
+  } finally {
+    root.style.fontSize = '';
+  }
+});
