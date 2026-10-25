@@ -1,9 +1,9 @@
 # fvoci
 
-통합 작업·지식·학습 관리 앱. 제품 원칙과 제안의 상태는 [결정 기록](docs/decisions.md),
-현재 개발·검사 방법과 유지보수 계약은 [개발 지침](docs/development.md), 경로별 책임은
-[저장소 구조](docs/repo-structure.md)를 읽는다. 과거 실행·감사 기록은 개발 지침의 보존 링크에서
-필요한 SHA만 확인하며, 현재 정책이나 검증 완료로 해석하지 않는다.
+통합 작업·지식·학습 관리 앱. 제품 원칙과 제안의 상태, 공통 규칙은 [결정 기록](docs/decisions.md)과
+[AGENTS.md](AGENTS.md)를 읽는다. 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
+[제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은
+역사 기록이다. 과거 실행·감사 기록은 필요한 SHA만 확인하며, 현재 정책이나 검증 완료로 해석하지 않는다.
 
 설치는 [셀프호스트 안내](docs/self-hosting.md)를 따른다. 기본 Compose가 DB 준비·마이그레이션·앱 시작을 순서대로 처리한다.
 기존 셀프호스트 Supabase의 DB를 쓰려면 [Supabase 연결 안내](docs/self-hosting-supabase.md)를 따른다. 로그인은 두 구성 모두 OIDC다.
@@ -28,7 +28,7 @@
 | DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                                    |
 | 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`                         |
 | 이 체크아웃의 Compose 자원 정리                                                    | `cargo xtask down`                                                                        |
-| UI 컴포넌트 상태 보기([Storybook](docs/development.md#storybook)) / 정적 빌드      | `pnpm --filter @fvoci/web run storybook` / `pnpm --filter @fvoci/web run build-storybook` |
+| UI 컴포넌트 상태 보기(Storybook, D-108) / 정적 빌드                                | `pnpm --filter @fvoci/web run storybook` / `pnpm --filter @fvoci/web run build-storybook` |
 | OpenAPI 계약 재생성                                                                | `cargo xtask openapi` 후 `pnpm run generate:api`                                          |
 | 라이선스 검사만                                                                    | `cargo xtask licenses`                                                                    |
 | HWP·HWPX 미리보기 WASM 빌드·고지 갱신                                              | `cargo xtask rhwp`                                                                        |
@@ -38,4 +38,4 @@
 `cargo xtask down`은 이 체크아웃의 개발·시험 컨테이너와 DB·검색·Keycloak 볼륨을 지운다.
 `target/dev-files` 첨부는 남는다. 기존 데이터를 지우기 전에 보존 범위와 사용자 승인을 확인한다.
 
-SQL을 변경할 때는 [통합 기준 SQL과 마이그레이션 규칙](crates/server/migrations/README.md)을 먼저 본다.
+SQL을 변경할 때는 결정 기록의 D-88·D-107·D-126을 먼저 본다. 제품 SQL 정본은 `crates/server/migrations/` 하나다.

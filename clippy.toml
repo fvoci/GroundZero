@@ -1,4 +1,4 @@
-# 테스트 코드에서만 unwrap/expect/panic 허용 (docs/development.md#4-검사와-예외: 필요한 범위만 예외)
+# 테스트 코드에서만 unwrap/expect/panic 허용 (D-09: 필요한 범위만 예외)
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true

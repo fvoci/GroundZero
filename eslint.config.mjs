@@ -1,4 +1,4 @@
-// 타입 정보를 사용하는 ESLint 설정. .ts와 .svelte 모두 검사한다 (docs/development.md#2-typescriptsvelte).
+// 타입 정보를 사용하는 ESLint 설정. .ts와 .svelte 모두 검사한다 (D-09, docs/decisions.md#d-09).
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import svelte from 'eslint-plugin-svelte';
@@ -50,7 +50,7 @@ export default tseslint.config(
   },
   {
     // shadcn-svelte 레지스트리에서 가져온 코드(apps/web/src/lib/ui/README.md). 외부 코드이므로 업데이트 비교를 위해
-    // 수정하지 않고, 실제로 걸리는 규칙만 끈다. 자체 코드에는 적용되지 않는다 (docs/development.md#4-검사와-예외).
+    // 수정하지 않고, 실제로 걸리는 규칙만 끈다. 자체 코드에는 적용되지 않는다 (D-09: 필요한 범위만 예외).
     files: ['apps/web/src/lib/ui/**', 'apps/web/src/lib/hooks/**', 'apps/web/src/lib/utils.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-argument': 'off',
