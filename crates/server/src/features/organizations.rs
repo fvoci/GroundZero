@@ -57,6 +57,7 @@ pub struct OrganizationSummary {
     pub role: OrgRole,
     /// 비로그인 공개 링크를 쓸 수 있는지(조직 관리자가 끌 수 있다, D-114).
     pub public_links_enabled: bool,
+    #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
 }
@@ -87,6 +88,7 @@ pub struct Organization {
     pub role: OrgRole,
     pub public_links_enabled: bool,
     pub limits: OrganizationLimits,
+    #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
 }

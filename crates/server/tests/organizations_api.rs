@@ -905,3 +905,62 @@ async fn server_creates_idempotent_organization_without_granting_itself_membersh
     }
     assert_eq!(one(&state,&first,"SELECT count(*)::integer AS n FROM fvoci.organization_members WHERE organization_id=$1", &[Uuid::parse_str(id).unwrap()]).await["n"], 1);
 }
+
+/// 리뷰 후속(04be7645): `time`에 serde-human-readable이 없어 `#[serde(with = rfc3339)]`가 빠진 시각은 배열로 직렬화된다.
+/// 조직 목록·상세의 `created_at`이 계약대로 RFC3339 문자열인지, 빈 `tz=`가 저장된 시간대로 처리되는지 고정한다.
+#[tokio::test]
+async fn organization_timestamps_are_rfc3339_and_empty_tz_means_default() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let rfc3339 = |v: &Value, what: &str| {
+        let s = v
+            .as_str()
+            .unwrap_or_else(|| panic!("{what} must be a string: {v}"));
+        time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|e| panic!("{what} must be RFC3339: {s} ({e})"));
+    };
+    let mine = expect(
+        &app,
+        Method::GET,
+        "/api/me/organizations",
+        &w.owner,
+        None,
+        200,
+    )
+    .await;
+    let row = mine
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"] == json!(w.org))
+        .expect("the owner's organization is listed");
+    rfc3339(&row["created_at"], "organizations[].created_at");
+    let detail = expect(
+        &app,
+        Method::GET,
+        &format!("/api/organizations/{}", w.org),
+        &w.owner,
+        None,
+        200,
+    )
+    .await;
+    rfc3339(&detail["created_at"], "organization.created_at");
+    expect(
+        &app,
+        Method::GET,
+        &format!("/api/me/home?tz=&organization_id={}", w.org),
+        &w.owner,
+        None,
+        200,
+    )
+    .await;
+    expect(
+        &app,
+        Method::GET,
+        &format!("/api/me/home?tz=invalid&organization_id={}", w.org),
+        &w.owner,
+        None,
+        400,
+    )
+    .await;
+}

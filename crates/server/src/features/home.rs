@@ -369,8 +369,9 @@ pub async fn home(
     Query(query): Query<HomeQuery>,
 ) -> Result<Json<Home>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let tz = match query.tz {
-        Some(tz) => tz.trim().to_owned(),
+    // 빈 `tz=`는 없는 것과 같다(검색과 같은 규칙): 저장된 시간대, 없으면 UTC.
+    let tz = match query.tz.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        Some(tz) => tz.to_owned(),
         None => sqlx::query_scalar(
             "SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')",
         ).fetch_one(tx.conn()).await?,
