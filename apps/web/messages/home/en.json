@@ -41,5 +41,8 @@
   "home_mark_failed": "Couldn't update.",
   "home_marks_group": "Show on home",
   "home_pin": "Pin to home",
-  "home_favorite": "Favorite"
+  "home_favorite": "Favorite",
+  "home_my_tasks_undated": "No date",
+  "home_my_tasks_done": "Done",
+  "home_my_tasks_empty": "No tasks are assigned to you."
 }

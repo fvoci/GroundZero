@@ -13,6 +13,7 @@ afterEach(() => {
 
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '공간',
   role: 'admin',
   is_owner: true,
@@ -58,7 +59,7 @@ describe('home layout at narrow widths', () => {
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const week = document.querySelector('[aria-labelledby="week-heading"]');

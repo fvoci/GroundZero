@@ -41,5 +41,8 @@
   "home_mark_failed": "바꾸지 못했습니다.",
   "home_marks_group": "홈에 표시",
   "home_pin": "홈에 고정",
-  "home_favorite": "즐겨찾기"
+  "home_favorite": "즐겨찾기",
+  "home_my_tasks_undated": "날짜 없음",
+  "home_my_tasks_done": "완료",
+  "home_my_tasks_empty": "담당한 업무가 없습니다."
 }

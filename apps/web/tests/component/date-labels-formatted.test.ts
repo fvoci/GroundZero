@@ -56,6 +56,8 @@ describe('dates inside localized text', () => {
     const n: NotificationView = {
       id: 'n1',
       kind: 'due',
+      organization_id: null,
+      invitation_id: null,
       document_id: null,
       task_id: 't1',
       document_title: 'Report',
@@ -170,8 +172,9 @@ describe('dates inside localized text', () => {
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
     const workspace: Workspace = {
       id: 'ws-1',
+      organization_id: 'org-1',
       name: 'Space',
-      role: 'writer',
+      role: 'member',
       is_owner: false,
       realtime_enabled: false,
     };

@@ -19,6 +19,7 @@
   import type { CalendarEntry } from '$lib/features/events/calendar';
   import { entriesByDay, startOfWeek } from '$lib/features/events/calendar';
   import { displaySettings, formatDay, weekdays } from '$lib/display';
+  import { org } from '$lib/org.svelte';
   import { notificationText } from '$lib/features/references/notification-text';
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { clockText } from '$lib/features/time/format';
@@ -57,13 +58,20 @@
 
   // 빠른 추가 뒤(reloadKey)나 워크스페이스가 바뀌면 다시 불러온다. 늦게 온 이전 응답과 화면이 사라진 뒤의 응답은 버린다.
   let loadSeq = 0;
-  const request = $derived({ list: workspaces, key: reloadKey });
+  const request = $derived({ list: workspaces, key: reloadKey, organizationId: org.currentId });
   $effect(() => {
-    const { list } = request;
+    const { list, organizationId } = request;
     const mine = ++loadSeq;
+    if (organizationId === undefined) {
+      // 홈은 현재 조직의 요약이다(D-19·D-120). 조직을 고르기 전에는 묻지 않는다.
+      home = undefined;
+      error = m.app_organization_required();
+      retrying = false;
+      return;
+    }
     void (async () => {
       try {
-        const h = await api.home(zone);
+        const h = await api.home(organizationId, zone);
         if (mine !== loadSeq) return;
         const from = startOfWeek(h.today, settings.weekStart);
         const to = fromDayNumber(dayNumber(from) + 6);
@@ -85,11 +93,11 @@
           // 업무·일정 밖 날짜(D-80)도 달력과 같이 보인다.
           calendars.flatMap((c) => c.dates),
         );
-        const notes = await api.notifications();
+        const notes = await api.notifications(organizationId, undefined, 20);
         if (mine !== loadSeq) return;
         home = h;
         week = merged;
-        notifications = notes.filter((x) => !x.read).slice(0, 5);
+        notifications = notes.notifications.filter((x) => !x.read).slice(0, 5);
         error = undefined;
         retrying = false;
       } catch (e: unknown) {

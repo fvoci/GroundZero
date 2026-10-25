@@ -145,7 +145,7 @@ describe('gantt dependency lines on the board', () => {
     // 줄을 눌러 열 수 있다(연결선이 가로막지 않음).
     await fireEvent.click(q(gantt, '[data-task-card="b"]'));
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith('/w/ws-1/i/i1/t/b');
+      expect(navigate).toHaveBeenCalledWith('/w/ws-1/i/i1/tasks/board/t/b');
     });
   });
 

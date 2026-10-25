@@ -12,6 +12,8 @@
   import Download from '@lucide/svelte/icons/download';
   import FolderKanban from '@lucide/svelte/icons/folder-kanban';
   import House from '@lucide/svelte/icons/house';
+  import Building2 from '@lucide/svelte/icons/building-2';
+  import ListChecks from '@lucide/svelte/icons/list-checks';
   import LogOut from '@lucide/svelte/icons/log-out';
   import NotebookPen from '@lucide/svelte/icons/notebook-pen';
   import Plus from '@lucide/svelte/icons/plus';
@@ -28,7 +30,9 @@
   import { buildLabel } from '$lib/features/health/build';
   import { kindLabel } from '$lib/features/modules/kinds';
   import WorkspaceBadge from '$lib/features/workspaces/WorkspaceBadge.svelte';
+  import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
+  import { readLocal, writeLocal } from '$lib/storage';
   import {
     auditPath,
     calendarPath,
@@ -87,26 +91,30 @@
     });
   }
 
-  // 마지막으로 연 워크스페이스(이 브라우저에만 두는 편의 기억). 지금 목록에 있을 때만 쓴다.
-  const LAST_KEY = 'fvoci.lastWorkspace';
-  function readLast(): string | null {
-    try {
-      return window.localStorage.getItem(LAST_KEY);
-    } catch {
-      return null;
-    }
-  }
-  let lastId = $state(readLast());
+  // 현재 조직의 워크스페이스만 전환기에 보인다(D-111). 조직을 고르지 않았으면 모두 보인다(각 조직의 워크스페이스로
+  // 들어가면 그 조직이 현재 조직이 된다).
+  const inOrganization = $derived(
+    org.currentId === undefined
+      ? workspaces
+      : workspaces.filter((w) => w.organization_id === org.currentId),
+  );
+
+  // 마지막으로 연 워크스페이스(이 브라우저에만 두는 편의 기억). 키에 사용자·조직을 넣고(D-121) 지금 목록에 있을 때만 쓴다.
+  const LAST = 'lastWorkspace';
+  // 조직이 바뀌면 그 조직에서 마지막으로 연 워크스페이스를 되살리고, 워크스페이스를 열면 그것으로 바꾼다.
+  let lastId = $derived<string | null>(readLocal(org.key(LAST)));
   $effect(() => {
     if (current === undefined) return;
     lastId = current.id;
-    try {
-      window.localStorage.setItem(LAST_KEY, current.id);
-    } catch {
-      // 저장소를 못 쓰면 기억하지 않는다.
-    }
+    writeLocal(org.key(LAST), current.id);
   });
-  const shown = $derived(current ?? workspaces.find((w) => w.id === lastId));
+  const shown = $derived(current ?? inOrganization.find((w) => w.id === lastId));
+
+  /** 조직을 바꾼다. 다른 조직의 워크스페이스를 보고 있었으면 홈으로 간다(화면은 현재 조직 범위다). */
+  function chooseOrganization(id: string): void {
+    org.select(id);
+    if (current !== undefined && current.organization_id !== id) router.navigate('/');
+  }
 
   // 화면을 옮길 때 오래된 목록이면 다시 받는다(다른 화면에서 바뀐 제목·이동 반영).
   $effect(() => {
@@ -159,6 +167,12 @@
 
   const personal = $derived<NavItem[]>([
     { path: '/', label: m.app_nav_home(), icon: House, active: route.name === 'home' },
+    {
+      path: '/tasks',
+      label: m.app_nav_my_tasks(),
+      icon: ListChecks,
+      active: route.name === 'my-tasks',
+    },
     {
       path: '/notifications',
       label: m.app_nav_notifications(),
@@ -254,6 +268,70 @@
 
     <Sidebar.Separator />
 
+    <!-- 조직 › 워크스페이스 전환기(D-111·D-121). 조직은 사용자가 고르고 서버는 기본 조직을 정하지 않는다. -->
+    <Sidebar.Group>
+      <Sidebar.GroupLabel>{m.app_nav_organization()}</Sidebar.GroupLabel>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          <Sidebar.MenuItem>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <Sidebar.MenuButton
+                    {...props}
+                    size="lg"
+                    tooltipContent={org.current?.name ?? m.app_nav_organization_choose()}
+                    aria-label={`${m.app_nav_organization_switch()}: ${org.current?.name ?? m.app_nav_organization_choose()}`}
+                    data-testid="organization-switcher"
+                    class="border border-sidebar-border bg-sidebar"
+                  >
+                    <Building2 aria-hidden="true" />
+                    {#if org.current !== undefined}
+                      <span class="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden"
+                        >{org.current.name}</span
+                      >
+                    {:else}
+                      <span class="min-w-0 flex-1 truncate text-muted-foreground"
+                        >{m.app_nav_organization_choose()}</span
+                      >
+                    {/if}
+                    <ChevronsUpDown class="ml-auto" aria-hidden="true" />
+                  </Sidebar.MenuButton>
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content
+                align="start"
+                class="w-(--bits-dropdown-menu-anchor-width) min-w-56 max-w-[calc(100vw-2rem)]"
+              >
+                <DropdownMenu.Label>{m.app_nav_organization_switch()}</DropdownMenu.Label>
+                {#if org.organizations.length === 0}
+                  <p class="px-2 py-1.5 text-sm text-muted-foreground">
+                    {m.app_nav_organization_none()}
+                  </p>
+                {/if}
+                {#each org.organizations as o (o.id)}
+                  <DropdownMenu.Item
+                    onSelect={() => {
+                      chooseOrganization(o.id);
+                    }}
+                    aria-current={o.id === org.currentId ? 'true' : undefined}
+                    class={o.id === org.currentId ? 'font-medium' : ''}
+                  >
+                    <span class="min-w-0 flex-1 truncate">{o.name}</span>
+                    <span class="text-xs text-muted-foreground"
+                      >{o.role === 'admin'
+                        ? m.app_nav_organization_role_admin()
+                        : m.app_nav_organization_role_member()}</span
+                    >
+                  </DropdownMenu.Item>
+                {/each}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          </Sidebar.MenuItem>
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
+
     <Sidebar.Group>
       <Sidebar.GroupLabel>{m.app_nav_workspaces()}</Sidebar.GroupLabel>
       <Sidebar.GroupContent class="flex flex-col gap-1">
@@ -289,7 +367,7 @@
                 class="w-(--bits-dropdown-menu-anchor-width) min-w-56 max-w-[calc(100vw-2rem)]"
               >
                 <DropdownMenu.Label>{m.app_nav_workspace_switch()}</DropdownMenu.Label>
-                {#each workspaces as ws (ws.id)}
+                {#each inOrganization as ws (ws.id)}
                   <DropdownMenu.Item
                     onSelect={() => {
                       router.navigate(workspacePath(ws.id));
@@ -297,7 +375,7 @@
                     aria-current={ws.id === shown?.id ? 'true' : undefined}
                     class={ws.id === shown?.id ? 'font-medium' : ''}
                   >
-                    <WorkspaceBadge workspace={ws} all={workspaces} />
+                    <WorkspaceBadge workspace={ws} all={inOrganization} />
                   </DropdownMenu.Item>
                 {/each}
                 <DropdownMenu.Separator />

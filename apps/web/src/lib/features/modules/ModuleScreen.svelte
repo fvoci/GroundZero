@@ -67,7 +67,7 @@
   });
 
   const isAdmin = $derived(workspace.role === 'admin');
-  const canCreate = $derived(workspace.role !== 'reader' && mod?.archived === false);
+  const canCreate = $derived(workspace.role !== 'readonly' && mod?.archived === false);
 
   let editName = $state('');
   let editKey = $state('');

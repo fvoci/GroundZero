@@ -15,6 +15,19 @@ import type {
   Role,
   Workspace,
 } from '@fvoci/api-client';
+import type {
+  Accepted,
+  Activity,
+  ActivityPage,
+  MyTask,
+  MyTaskCounts,
+  Organization,
+  OrganizationLimits,
+  OrganizationSummary,
+  OrgRole,
+  StatusCategory,
+  TaskStatusDefinition,
+} from '@fvoci/api-client';
 
 import {
   auth,
@@ -153,7 +166,7 @@ function rec(value: unknown, what: string): Record<string, unknown> {
 }
 
 function role(value: string): Role {
-  if (value === 'admin' || value === 'writer' || value === 'reader') return value;
+  if (value === 'admin' || value === 'member' || value === 'readonly') return value;
   throw new TypeError(`unknown role ${value}`);
 }
 
@@ -204,11 +217,193 @@ export function parseWorkspace(value: Json): Workspace {
   const o = rec(value, 'workspace');
   return {
     id: str(o, 'id'),
+    organization_id: str(o, 'organization_id'),
     name: str(o, 'name'),
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
     realtime_enabled: bool(o, 'realtime_enabled'),
   };
+}
+
+// --- 조직 (D-111·D-112·D-124) --------------------------------------------
+
+function orgRole(value: string): OrgRole {
+  if (value === 'admin' || value === 'member') return value;
+  throw new TypeError(`unknown organization role ${value}`);
+}
+
+export function parseOrganizationSummary(value: Json): OrganizationSummary {
+  const o = rec(value, 'organization');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    role: orgRole(str(o, 'role')),
+    public_links_enabled: bool(o, 'public_links_enabled'),
+    created_at: str(o, 'created_at'),
+  };
+}
+
+export function parseOrganizationLimits(value: Json): OrganizationLimits {
+  const o = rec(value, 'organization limits');
+  return {
+    max_file_bytes: optInt(o, 'max_file_bytes'),
+    max_storage_bytes: optInt(o, 'max_storage_bytes'),
+    max_concurrent_uploads: optInt(o, 'max_concurrent_uploads'),
+    notification_rate_per_hour: optInt(o, 'notification_rate_per_hour'),
+    activity_retention_days: optInt(o, 'activity_retention_days'),
+    audit_retention_days: optInt(o, 'audit_retention_days'),
+  };
+}
+
+export function parseOrganization(value: Json): Organization {
+  const o = rec(value, 'organization');
+  return {
+    ...parseOrganizationSummary(value),
+    limits: parseOrganizationLimits(o.limits),
+  };
+}
+
+/** 초대 수락 결과. 조직 초대는 워크스페이스가 없다(D-112·D-118). */
+export function parseAccepted(value: Json): Accepted {
+  const o = rec(value, 'accepted');
+  return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    workspace_id: optStr(o, 'workspace_id'),
+  };
+}
+
+// --- 항목별 업무 상태 정의 (D-116) ----------------------------------------
+
+export function statusCategory(value: string): StatusCategory {
+  if (value === 'todo' || value === 'doing' || value === 'done') return value;
+  throw new TypeError(`unknown status category ${value}`);
+}
+
+export function parseTaskStatusDefinition(value: Json): TaskStatusDefinition {
+  const o = rec(value, 'task status');
+  const position = o.position;
+  if (typeof position !== 'number' || !Number.isFinite(position))
+    throw new TypeError('expected number at position');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    color: str(o, 'color'),
+    position,
+    category: statusCategory(str(o, 'category')),
+    task_count: int(o, 'task_count'),
+  };
+}
+
+// --- 내 업무 (D-120) ---------------------------------------------------
+
+export type MyTaskBucket = 'overdue' | 'today' | 'upcoming' | 'none' | 'done';
+
+export interface MyTaskView extends Omit<MyTask, 'bucket' | 'status_category'> {
+  bucket: MyTaskBucket;
+  status_category: StatusCategory;
+}
+
+export interface MyTasksView {
+  counts: MyTaskCounts;
+  workspaces: { workspace_id: string; workspace_name: string; tasks: MyTaskView[] }[];
+}
+
+function myTaskBucket(value: string): MyTaskBucket {
+  if (
+    value === 'overdue' ||
+    value === 'today' ||
+    value === 'upcoming' ||
+    value === 'none' ||
+    value === 'done'
+  )
+    return value;
+  throw new TypeError(`unknown bucket ${value}`);
+}
+
+function parseMyTask(value: Json): MyTaskView {
+  const o = rec(value, 'my task');
+  return {
+    id: str(o, 'id'),
+    item_id: str(o, 'item_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    status: str(o, 'status'),
+    status_category: statusCategory(str(o, 'status_category')),
+    priority: str(o, 'priority'),
+    start_date: optStr(o, 'start_date'),
+    due_date: optStr(o, 'due_date'),
+    bucket: myTaskBucket(str(o, 'bucket')),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+export function parseMyTasks(value: Json): MyTasksView {
+  const o = rec(value, 'my tasks');
+  const c = rec(o.counts, 'my task counts');
+  return {
+    counts: {
+      overdue: int(c, 'overdue'),
+      today: int(c, 'today'),
+      upcoming: int(c, 'upcoming'),
+      undated: int(c, 'undated'),
+      done: int(c, 'done'),
+    },
+    workspaces: parseList(o.workspaces, (v) => {
+      const w = rec(v, 'workspace tasks');
+      return {
+        workspace_id: str(w, 'workspace_id'),
+        workspace_name: str(w, 'workspace_name'),
+        tasks: parseList(w.tasks, parseMyTask),
+      };
+    }),
+  };
+}
+
+// --- 활동 (D-119, 감사와 분리) ---------------------------------------------
+
+export function parseActivity(value: Json): Activity {
+  const o = rec(value, 'activity');
+  const detail: unknown = o.detail;
+  return {
+    id: str(o, 'id'),
+    kind: str(o, 'kind'),
+    actor_id: optStr(o, 'actor_id'),
+    actor_name: optStr(o, 'actor_name'),
+    workspace_id: optStr(o, 'workspace_id'),
+    target_kind: str(o, 'target_kind'),
+    target_id: str(o, 'target_id'),
+    item_id: optStr(o, 'item_id'),
+    detail: isRecord(detail) ? detail : {},
+    created_at: str(o, 'created_at'),
+  };
+}
+
+export function parseActivityPage(value: Json): ActivityPage {
+  const o = rec(value, 'activity page');
+  return {
+    activity: parseList(o.activity, parseActivity),
+    next_before: optStr(o, 'next_before'),
+    next_before_id: optStr(o, 'next_before_id'),
+  };
+}
+
+/** 커서 조회(D-118·D-119): `before`와 `before_id`는 함께 보낸다. */
+export interface PageCursor {
+  before: string;
+  before_id: string;
+}
+
+function cursorParams(
+  params: URLSearchParams,
+  cursor: PageCursor | undefined,
+  limit?: number,
+): void {
+  if (cursor !== undefined) {
+    params.set('before', cursor.before);
+    params.set('before_id', cursor.before_id);
+  }
+  if (limit !== undefined) params.set('limit', String(limit));
 }
 
 export function parseSummary(value: Json): SummaryView {
@@ -901,8 +1096,12 @@ export interface BacklinkView {
 
 export interface NotificationView {
   id: string;
-  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감) */
+  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감)·invite(초대, D-118) */
   kind: string;
+  /** 알림이 속한 조직. 초대는 어느 조직 문맥에서나 보이므로 현재 조직과 다를 수 있다(D-118). */
+  organization_id: string | null;
+  /** `invite`면 수락·거절할 초대 id. */
+  invitation_id: string | null;
   document_id: string | null;
   task_id: string | null;
   /** 대상(문서 또는 업무) 제목. */
@@ -957,14 +1156,33 @@ export function parseBacklink(value: Json): BacklinkView {
   };
 }
 
+export interface NotificationPageView {
+  notifications: NotificationView[];
+  /** 둘 다 null이면 더 읽을 페이지가 없다(D-118). */
+  next: PageCursor | null;
+}
+
+export function parseNotificationPage(value: Json): NotificationPageView {
+  const o = rec(value, 'notification page');
+  const before = optStr(o, 'next_before');
+  const beforeId = optStr(o, 'next_before_id');
+  return {
+    notifications: parseList(o.notifications, parseNotification),
+    next: before !== null && beforeId !== null ? { before, before_id: beforeId } : null,
+  };
+}
+
 export function parseNotification(value: Json): NotificationView {
   const o = rec(value, 'notification');
   return {
     id: str(o, 'id'),
     kind: str(o, 'kind'),
+    organization_id: optStr(o, 'organization_id'),
+    invitation_id: optStr(o, 'invitation_id'),
     document_id: optStr(o, 'document_id'),
     task_id: optStr(o, 'task_id'),
-    document_title: str(o, 'document_title'),
+    // 초대 알림은 대상 제목이 없다(D-118).
+    document_title: optStr(o, 'document_title') ?? '',
     document_reference: optStr(o, 'document_reference'),
     workspace_id: optStr(o, 'workspace_id'),
     item_id: optStr(o, 'item_id'),
@@ -2350,9 +2568,19 @@ export const api = {
   async logout(): Promise<string> {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
   },
+  /** 내가 속한 조직(전환기 목록, D-111). 서버는 기본 조직을 정하지 않는다. */
+  myOrganizations: () =>
+    expectOk('GET', '/api/me/organizations', (v) => parseList(v, parseOrganizationSummary)),
+  organization: (id: string) =>
+    expectOk('GET', `/api/organizations/${encodeURIComponent(id)}`, parseOrganization),
   workspaces: () => expectOk('GET', '/api/workspaces', (v) => parseList(v, parseWorkspace)),
-  createWorkspace: (requestId: string, name: string) =>
-    expectOk('POST', '/api/workspaces', parseWorkspace, { request_id: requestId, name }),
+  /** 조직 안 워크스페이스는 조직 멤버 누구나 만든다(D-112). */
+  createWorkspace: (requestId: string, organizationId: string, name: string) =>
+    expectOk('POST', '/api/workspaces', parseWorkspace, {
+      request_id: requestId,
+      organization_id: organizationId,
+      name,
+    }),
   wikiDocuments: (workspaceId: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`, (v) =>
       parseList(v, parseSummary),
@@ -2611,10 +2839,9 @@ export const api = {
     expectOk('DELETE', `/api/invitations/${encodeURIComponent(id)}`, none),
   myInvitations: () =>
     expectOk('GET', '/api/invitations', (v) => parseList(v, parseReceivedInvitation)),
+  /** 수락 결과의 `kind`로 조직 초대(워크스페이스 없음)와 워크스페이스 초대를 가른다(D-118). */
   acceptInvitation: (id: string) =>
-    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, (v) =>
-      str(rec(v, 'accepted'), 'workspace_id'),
-    ),
+    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, parseAccepted),
   declineInvitation: (id: string) =>
     expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/decline`, none),
   offerOwnership: (ws: string, toUser: string) =>
@@ -2656,7 +2883,11 @@ export const api = {
     if (status < 200 || status >= 300) fail(status, json);
     return parseDocument(json);
   },
-  sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
+  /** 공유받은 문서는 현재 조직에서 받은 것만(D-111). */
+  sharedWithMe: (organizationId: string) =>
+    expectOk('GET', `/api/me/shared?organization_id=${encodeURIComponent(organizationId)}`, (v) =>
+      parseList(v, parseSharedView),
+    ),
   /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
   setSettings: (
     id: string,
@@ -2684,6 +2915,39 @@ export const api = {
       target_workspace_id: target.workspaceId,
       target_item_id: target.itemId,
     }),
+  /** 항목의 상태 정의(D-116). 칸반 열·상태 편집의 정본. */
+  taskStatuses: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/statuses`, (v) =>
+      parseList(v, parseTaskStatusDefinition),
+    ),
+  createTaskStatus: (itemId: string, name: string, color: string, category: StatusCategory) =>
+    expectOk(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/statuses`,
+      parseTaskStatusDefinition,
+      { name, color, category },
+    ),
+  /** 바꾸는 칸만 보낸다. `category`를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다. */
+  updateTaskStatus: (
+    itemId: string,
+    statusId: string,
+    patch: { name?: string; color?: string; category?: StatusCategory; position?: number },
+  ) =>
+    expectOk(
+      'PUT',
+      `/api/items/${encodeURIComponent(itemId)}/statuses/${encodeURIComponent(statusId)}`,
+      parseTaskStatusDefinition,
+      patch,
+    ),
+  /** 업무가 있는 열은 `moveTo`(같은 항목의 다른 상태)가 필요하다. 옮긴 업무 수를 돌려준다. */
+  deleteTaskStatus: (itemId: string, statusId: string, moveTo: string | null) =>
+    expectOk(
+      'DELETE',
+      `/api/items/${encodeURIComponent(itemId)}/statuses/${encodeURIComponent(statusId)}${
+        moveTo === null ? '' : `?move_to=${encodeURIComponent(moveTo)}`
+      }`,
+      (v) => int(rec(v, 'deleted status'), 'moved'),
+    ),
   tasks: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
       parseList(v, parseTask),
@@ -3097,7 +3361,41 @@ export const api = {
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
       days,
     }),
-  home: (tz: string) => expectOk('GET', `/api/me/home?tz=${encodeURIComponent(tz)}`, parseHome),
+  /** 홈은 현재 조직의 요약이다(D-19·D-120). */
+  home: (organizationId: string, tz: string) =>
+    expectOk(
+      'GET',
+      `/api/me/home?organization_id=${encodeURIComponent(organizationId)}&tz=${encodeURIComponent(tz)}`,
+      parseHome,
+    ),
+  /** 내 업무: 담당=나, 날짜 없음 포함, 워크스페이스별 묶음(D-120). `today`는 사용자 시간대의 오늘(YYYY-MM-DD). */
+  myTasks: (organizationId: string, today: string) =>
+    expectOk(
+      'GET',
+      `/api/me/tasks?organization_id=${encodeURIComponent(organizationId)}&today=${encodeURIComponent(today)}`,
+      parseMyTasks,
+    ),
+  /** 현재 조직의 최근 활동(D-119). */
+  recentActivity: (organizationId: string, limit?: number) => {
+    const params = new URLSearchParams({ organization_id: organizationId });
+    if (limit !== undefined) params.set('limit', String(limit));
+    return expectOk('GET', `/api/me/activity?${params.toString()}`, (v) =>
+      parseList(v, parseActivity),
+    );
+  },
+  /** 항목·문서·업무의 활동(대상을 볼 수 있으면, D-119). */
+  targetActivity: (
+    kind: 'item' | 'document' | 'task',
+    id: string,
+    cursor?: PageCursor,
+    limit?: number,
+  ) => {
+    const params = new URLSearchParams();
+    cursorParams(params, cursor, limit);
+    const base = `/api/${kind === 'item' ? 'items' : kind === 'document' ? 'documents' : 'tasks'}/${encodeURIComponent(id)}/activity`;
+    const query = params.toString();
+    return expectOk('GET', query === '' ? base : `${base}?${query}`, parseActivityPage);
+  },
   mark: (kind: MarkTarget, id: string) =>
     expectOk('GET', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState),
   setMark: (kind: MarkTarget, id: string, mark: MarkKind, on: boolean) =>
@@ -3277,8 +3575,14 @@ export const api = {
     return { kind: 'restored', document: withEtag(parseDocument(json), etag) };
   },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
-  search: (q: string, workspaceId: string | null, filters: SearchFilters = {}) => {
-    const params = new URLSearchParams({ q });
+  /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
+  search: (
+    organizationId: string,
+    q: string,
+    workspaceId: string | null,
+    filters: SearchFilters = {},
+  ) => {
+    const params = new URLSearchParams({ organization_id: organizationId, q });
     if (workspaceId !== null) params.set('workspace_id', workspaceId);
     if (filters.kind !== undefined) params.set('kinds', filters.kind);
     if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
@@ -3310,11 +3614,27 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
     ),
-  notifications: () =>
-    expectOk('GET', '/api/me/notifications', (v) => parseList(v, parseNotification)),
-  /** id가 null이면 모두 읽음. */
-  markNotificationsRead: (id: string | null) =>
-    expectOk('POST', '/api/me/notifications/read', none, { id }),
+  /** 알림함은 현재 조직 범위이며 초대는 어느 조직 문맥에서나 보인다. 목록은 커서로 더 본다(D-118). */
+  notifications: (organizationId: string, cursor?: PageCursor, limit?: number) => {
+    const params = new URLSearchParams({ organization_id: organizationId });
+    cursorParams(params, cursor, limit);
+    return expectOk('GET', `/api/me/notifications?${params.toString()}`, parseNotificationPage);
+  },
+  /** 안 읽은 수는 서버가 센다(D-118). */
+  unreadCount: (organizationId: string) =>
+    expectOk(
+      'GET',
+      `/api/me/notifications/unread-count?organization_id=${encodeURIComponent(organizationId)}`,
+      (v) => int(rec(v, 'unread count'), 'unread_count'),
+    ),
+  /** id가 null이면 현재 조직의 모두 읽음(초대 포함). 읽음 처리한 수를 돌려준다. */
+  markNotificationsRead: (organizationId: string, id: string | null) =>
+    expectOk(
+      'POST',
+      `/api/me/notifications/read?organization_id=${encodeURIComponent(organizationId)}`,
+      (v) => int(rec(v, 'marked notifications'), 'marked'),
+      { id },
+    ),
   modules: (ws: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/modules`, (v) =>
       parseList(v, parseModule),

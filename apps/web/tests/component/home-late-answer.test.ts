@@ -15,6 +15,7 @@ afterEach(() => {
 
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '공간',
   role: 'admin',
   is_owner: true,
@@ -43,7 +44,9 @@ describe('home answer after unmount', () => {
         }),
     );
     const calendar = vi.spyOn(api, 'calendar');
-    const notifications = vi.spyOn(api, 'notifications');
+    const notifications = vi
+      .spyOn(api, 'notifications')
+      .mockResolvedValue({ notifications: [], next: null });
     const { unmount } = render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     unmount();

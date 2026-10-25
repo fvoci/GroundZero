@@ -7,6 +7,8 @@ import { api } from '$lib/api/client';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 
+import { TEST_ORGANIZATION } from './fixtures/organization';
+
 import App from '../../src/app/App.svelte';
 
 const WS = '11111111-1111-4111-8111-111111111111';
@@ -30,7 +32,14 @@ const me: Me = {
 };
 
 function workspace(id: string, name: string, realtime: boolean): Workspace {
-  return { id, name, role: 'admin', is_owner: true, realtime_enabled: realtime };
+  return {
+    id,
+    organization_id: 'org-1',
+    name,
+    role: 'admin',
+    is_owner: true,
+    realtime_enabled: realtime,
+  };
 }
 
 function checkbox(): HTMLInputElement {
@@ -58,7 +67,9 @@ beforeEach(async () => {
     ),
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
-  vi.spyOn(api, 'notifications').mockResolvedValue([]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
+  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
   vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);
   vi.spyOn(api, 'modules').mockResolvedValue([]);

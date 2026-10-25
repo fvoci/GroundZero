@@ -93,7 +93,14 @@ describe('backlinks point at the reference', () => {
 
   it('links to the source document with the target in the address', async () => {
     const workspaces: Workspace[] = [
-      { id: 'ws-1', name: '공간', role: 'writer', is_owner: false, realtime_enabled: false },
+      {
+        id: 'ws-1',
+        name: '공간',
+        organization_id: 'org-1',
+        role: 'member',
+        is_owner: false,
+        realtime_enabled: false,
+      },
     ];
     vi.spyOn(api, 'itemBacklinks').mockResolvedValue([
       { id: 'log', reference: null, title: '점검 기록', workspace_id: 'ws-1', item_id: null },

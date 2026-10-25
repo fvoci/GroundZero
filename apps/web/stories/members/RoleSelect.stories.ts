@@ -9,7 +9,7 @@ import { pressEscape } from '../fixtures/keys';
 const meta = {
   title: 'Members/RoleSelect',
   component: RoleSelect,
-  args: { value: 'writer', label: '김연구의 역할', onchange: fn() },
+  args: { value: 'member', label: '김연구의 역할', onchange: fn() },
 } satisfies Meta<typeof RoleSelect>;
 
 export default meta;
@@ -21,7 +21,7 @@ export const Disabled: Story = {
   args: { disabled: true },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getByRole('button', { name: '김연구의 역할: 작성자' }),
+      within(canvasElement).getByRole('button', { name: '김연구의 역할: 멤버' }),
     ).toBeDisabled();
   },
 };
@@ -29,7 +29,7 @@ export const Disabled: Story = {
 /** 키보드: Tab으로 닿고 Enter로 열어 아래 화살표·Enter로 고른다. Escape는 고르지 않고 닫는다. */
 export const KeyboardChoose: Story = {
   play: async ({ canvasElement, args }) => {
-    const trigger = within(canvasElement).getByRole('button', { name: '김연구의 역할: 작성자' });
+    const trigger = within(canvasElement).getByRole('button', { name: '김연구의 역할: 멤버' });
     await userEvent.tab();
     await expect(trigger).toHaveFocus();
     await userEvent.keyboard('{Enter}');
@@ -41,9 +41,9 @@ export const KeyboardChoose: Story = {
     await expect(trigger).toHaveFocus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(trigger).toHaveAttribute('aria-activedescendant'));
-    // 지금 값(작성자)에서 시작해 한 칸 아래(독자)를 고른다.
+    // 지금 값(멤버)에서 시작해 한 칸 아래(읽기 전용)를 고른다.
     await userEvent.keyboard('{ArrowDown}{Enter}');
-    await expect(args.onchange).toHaveBeenCalledWith('reader');
+    await expect(args.onchange).toHaveBeenCalledWith('readonly');
     await waitFor(() => expect(trigger).toHaveFocus());
   },
 };

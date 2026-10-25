@@ -15,6 +15,7 @@ afterEach(() => {
 
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '공간',
   role: 'admin',
   is_owner: true,
@@ -59,7 +60,7 @@ describe('home up next counts', () => {
     };
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const headings = await screen.findAllByRole('heading', { level: 3 });

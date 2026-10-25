@@ -155,7 +155,7 @@ describe('session expired mid-use', () => {
     );
     render(FeedbackHost);
     const older = api.workspaces();
-    await expect(api.notifications()).rejects.toThrow();
+    await expect(api.notifications('org-1')).rejects.toThrow();
     await vi.waitFor(() => {
       expect(signInLink()).not.toBeNull();
     });

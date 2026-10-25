@@ -29,7 +29,9 @@
   import HomeScreen from '$lib/features/workspaces/HomeScreen.svelte';
   import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
   import { me as currentUser } from '$lib/me.svelte';
+  import MyTasksScreen from '$lib/features/home/MyTasksScreen.svelte';
   import AppSidebar from '$lib/features/nav/AppSidebar.svelte';
+  import { org } from '$lib/org.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
@@ -69,7 +71,13 @@
       // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
       await setLocale(displaySettings().locale, { reload: false });
       document.documentElement.lang = displaySettings().locale;
-      session = { state: 'signed-in', me, workspaces: await api.workspaces() };
+      // 조직 목록(D-111)은 전환기와 개인 화면의 범위다. 서버는 기본 조직을 정하지 않으므로 선택은 org 문맥이 든다.
+      const [workspaces, organizations] = await Promise.all([
+        api.workspaces(),
+        api.myOrganizations(),
+      ]);
+      org.load(me.id, organizations);
+      session = { state: 'signed-in', me, workspaces };
     } catch (e: unknown) {
       // 브라우저·서버의 원문 대신 번역된 문구(D-81). 서버에 닿지 않은 경우는 다시 시도하면 된다고 알린다.
       const network =
@@ -94,20 +102,29 @@
     if (session.state === 'error' && session.network && !connection.lost) void retry();
   });
 
-  // 읽지 않은 알림 수(알림은 접근 권한을 따라 서버가 거른다). 화면을 옮길 때 다시 세되 30초 안에는
-  // 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오면 다시 센다.
+  // 읽지 않은 알림 수는 서버가 현재 조직 범위로 센다(D-118; 초대는 어느 조직에서나 포함). 화면을 옮길 때 다시 세되
+  // 30초 안에는 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오거나 조직을 바꾸면 다시 센다.
   const UNREAD_FRESH_MS = 30_000;
   let unreadCount = $state(0);
   let unreadAt = 0;
   let unreadSeq = 0;
+  /** 마지막으로 센 조직. 조직이 바뀌었을 때만 바로 다시 센다(처음 그릴 때 두 번 묻지 않게). */
+  let unreadOrganization: string | undefined;
   async function refreshUnread(force = false): Promise<void> {
     if (session.state !== 'signed-in') return;
+    const organizationId = org.currentId;
+    if (organizationId === undefined) {
+      unreadOrganization = undefined;
+      unreadCount = 0;
+      return;
+    }
     if (!force && Date.now() - unreadAt < UNREAD_FRESH_MS) return;
     unreadAt = Date.now();
+    unreadOrganization = organizationId;
     // 늦게 도착한 이전 응답(읽음 처리 전 수)이 새 수를 덮지 않게 한다.
     const mine = ++unreadSeq;
     try {
-      const count = (await api.notifications()).filter((n) => !n.read).length;
+      const count = await api.unreadCount(organizationId);
       if (mine === unreadSeq) unreadCount = count;
     } catch {
       // 읽지 못했으면 0("알림 없음")으로 보이지 않게 앞의 수를 둔다. 다음 이동·창 초점 때 바로 다시 묻는다.
@@ -116,6 +133,16 @@
   }
   $effect(() => {
     if (session.state === 'signed-in' && router.path !== '') void refreshUnread();
+  });
+  $effect(() => {
+    // 조직을 바꾸면 그 조직의 수로 바로 다시 센다.
+    const organizationId = org.currentId;
+    if (
+      session.state === 'signed-in' &&
+      organizationId !== undefined &&
+      organizationId !== unreadOrganization
+    )
+      void refreshUnread(true);
   });
   $effect(() => {
     const onFocus = (): void => {
@@ -135,13 +162,19 @@
   let workspacesSeq = 0;
   let workspacesPending = false;
 
-  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스 목록을 다시 읽는다. */
+  /** 멤버십이 바뀐 뒤(초대 수락·탈퇴·인계) 워크스페이스·조직 목록을 다시 읽는다. */
   async function reloadWorkspaces(): Promise<void> {
     const mine = ++workspacesSeq;
     workspacesPending = true;
     try {
-      const workspaces = await api.workspaces();
-      if (mine === workspacesSeq && session.state === 'signed-in') session.workspaces = workspaces;
+      const [workspaces, organizations] = await Promise.all([
+        api.workspaces(),
+        api.myOrganizations(),
+      ]);
+      if (mine === workspacesSeq && session.state === 'signed-in') {
+        session.workspaces = workspaces;
+        org.load(session.me.id, organizations);
+      }
     } finally {
       if (mine === workspacesSeq) workspacesPending = false;
     }
@@ -162,6 +195,7 @@
 
   async function logout(): Promise<void> {
     const redirect = await api.logout();
+    org.reset();
     window.location.assign(redirect);
   }
 
@@ -196,6 +230,8 @@
         return m.app_nav_shared();
       case 'notifications':
         return m.app_nav_notifications();
+      case 'my-tasks':
+        return m.app_nav_my_tasks();
       case 'time':
         return m.app_nav_time();
       case 'my-trash':
@@ -212,6 +248,10 @@
     if (!('workspaceId' in route)) return undefined;
     const id = route.workspaceId;
     return session.workspaces.find((w) => w.id === id);
+  });
+  // 지금 보는 워크스페이스의 조직이 현재 조직이다(D-111). 개인 화면에서는 기억한 선택을 쓴다.
+  $effect(() => {
+    org.routeOrganizationId = currentWorkspace?.organization_id;
   });
 </script>
 
@@ -333,6 +373,8 @@
           {/if}
         {:else if route.name === 'notes'}
           <NotesScreen />
+        {:else if route.name === 'my-tasks'}
+          <MyTasksScreen />
         {:else if route.name === 'notifications'}
           <NotificationsScreen
             workspaces={signedIn.workspaces}

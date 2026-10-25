@@ -2,10 +2,11 @@ import type { Me } from '@fvoci/api-client';
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { NotificationView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 import App from '../../src/app/App.svelte';
 
@@ -27,26 +28,6 @@ const me: Me = {
   },
 };
 
-function unread(id: string): NotificationView {
-  return {
-    id,
-    kind: 'mention',
-    document_id: null,
-    task_id: null,
-    document_title: '문서',
-    document_reference: null,
-    workspace_id: null,
-    item_id: null,
-    comment_id: null,
-    excerpt: null,
-    due_date: null,
-    subject: null,
-    actor_name: null,
-    created_at: '2026-10-21T00:00:00Z',
-    read: false,
-  };
-}
-
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -65,6 +46,8 @@ beforeEach(async () => {
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
   vi.spyOn(api, 'workspaces').mockResolvedValue([]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
+  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
   vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'deletedWorkspaces').mockResolvedValue([]);
 });
@@ -80,18 +63,19 @@ describe('unread notification count', () => {
   it('keeps the last count when reading it again fails, and retries on the next focus', async () => {
     let now = 1_000_000;
     vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const notifications = vi
-      .spyOn(api, 'notifications')
-      .mockResolvedValueOnce([unread('n1'), unread('n2')])
+    // 안 읽은 수는 서버가 현재 조직 범위로 센다(D-118).
+    const unreadCount = vi
+      .spyOn(api, 'unreadCount')
+      .mockResolvedValueOnce(2)
       .mockRejectedValueOnce(new NetworkError('offline'))
-      .mockResolvedValue([unread('n1')]);
+      .mockResolvedValue(1);
     render(App);
     const link = await screen.findByRole('link', { name: /읽지 않은 알림 2개/ });
 
     now += 60_000;
     window.dispatchEvent(new Event('focus'));
     await waitFor(() => {
-      expect(notifications).toHaveBeenCalledTimes(2);
+      expect(unreadCount).toHaveBeenCalledTimes(2);
     });
     expect(link).toHaveAccessibleName(/읽지 않은 알림 2개/);
 

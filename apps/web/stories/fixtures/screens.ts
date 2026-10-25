@@ -6,6 +6,7 @@ import type { TaskView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import { applyMove } from '$lib/features/tasks/board';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
+import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
 
 import {
@@ -16,6 +17,7 @@ import {
   membersView,
   MODULES,
   notificationsView,
+  ORGANIZATION,
   TASK_ITEM,
   taskViews,
   WORKSPACE,
@@ -40,6 +42,8 @@ export interface ScreenApi {
   members: typeof api.members;
   assignable: typeof api.assignable;
   search: typeof api.search;
+  myOrganizations: typeof api.myOrganizations;
+  unreadCount: typeof api.unreadCount;
 }
 
 /** 응답이 오지 않는 요청(불러오는 중). */
@@ -86,7 +90,7 @@ const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
   },
   home: () => Promise.resolve(homeView()),
   calendar: () => Promise.resolve(calendarView()),
-  notifications: () => Promise.resolve(notificationsView()),
+  notifications: () => Promise.resolve({ notifications: notificationsView(), next: null }),
   myInvitations: () => Promise.resolve([]),
   currentTimer: () => Promise.resolve(null),
   savedViews: () => Promise.resolve([]),
@@ -97,6 +101,8 @@ const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
       membersView().members.map((p) => ({ user_id: p.user_id, display_name: p.display_name })),
     ),
   search: () => Promise.resolve([]),
+  myOrganizations: () => Promise.resolve([ORGANIZATION]),
+  unreadCount: () => Promise.resolve(notificationsView().filter((n) => !n.read).length),
 };
 
 /** 계정 메뉴가 묻는 빌드 정보(/healthz). 개발 빌드로 답한다. */
@@ -128,6 +134,11 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'members').mockImplementation(stubs.members);
   spyOn(api, 'assignable').mockImplementation(stubs.assignable);
   spyOn(api, 'search').mockImplementation(stubs.search);
+  spyOn(api, 'myOrganizations').mockImplementation(stubs.myOrganizations);
+  spyOn(api, 'unreadCount').mockImplementation(stubs.unreadCount);
+
+  // 개인 화면은 현재 조직 범위다(D-111). story는 합성 조직 하나를 고른 상태로 시작한다.
+  org.load('story-user', [ORGANIZATION], ORGANIZATION.id);
 
   // 사이드바 목록은 앱 전체가 같이 쓰는 저장소다. 같은 워크스페이스라도 앞 story의 목록·오류를 이어 받지 않게 비운다.
   workspaceNav.workspaceId = undefined;
@@ -136,7 +147,8 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   workspaceNav.currentItem = undefined;
   // 마지막으로 연 워크스페이스(사이드바가 브라우저에 남기는 편의 기억)를 정해 두어 보는 브라우저마다 다르지 않게 한다.
   try {
-    window.localStorage.setItem('fvoci.lastWorkspace', WORKSPACE.id);
+    // 마지막으로 연 워크스페이스 기억은 사용자·조직별 키다(D-121).
+    window.localStorage.setItem(org.key('lastWorkspace'), WORKSPACE.id);
   } catch {
     // 저장소를 못 쓰면 사이드바도 기억하지 않는다.
   }

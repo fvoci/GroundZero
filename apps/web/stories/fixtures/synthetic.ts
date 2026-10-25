@@ -1,7 +1,14 @@
 // 개발 seed와 같은 합성 데이터(deploy/postgres/dev-ui-data.json)를 화면 타입으로 옮긴다. 내용(제목·본문·트리·
 // 스레드·상태)은 `cargo xtask dev`의 "UI 상태 예제" 워크스페이스와 같다. id·시각은 DB가 정하므로 여기서는 고정값을 쓴다
 // (시각은 기준 시각에서 몇 분씩 뒤, 표시 시간대는 preview.ts가 Asia/Seoul로 고정).
-import type { MembersView, Module, ModuleKind, Role, Workspace } from '@fvoci/api-client';
+import type {
+  MembersView,
+  Module,
+  ModuleKind,
+  OrganizationSummary,
+  Role,
+  Workspace,
+} from '@fvoci/api-client';
 
 import type {
   CalendarView,
@@ -96,8 +103,18 @@ function day(offset: number | null): string | null {
   return d.toISOString().slice(0, 10);
 }
 
+/** 합성 조직(D-111). 워크스페이스·개인 화면이 이 조직 범위다. */
+export const ORGANIZATION: OrganizationSummary = {
+  id: fixedId(0, 1),
+  name: '가상 연구소',
+  role: 'admin',
+  public_links_enabled: true,
+  created_at: '2026-10-01T00:00:00Z',
+};
+
 export const WORKSPACE: Workspace = {
   id: fixedId(1, 1),
+  organization_id: fixedId(0, 1),
   name: data.workspace,
   role: 'admin',
   is_owner: true,
@@ -469,7 +486,7 @@ export function membersView(): MembersView {
   return {
     members: [
       { ...person('owner'), email: null, role: 'admin', is_owner: true },
-      { ...person('writer'), email: null, role: 'writer', is_owner: false },
+      { ...person('writer'), email: null, role: 'member', is_owner: false },
     ],
     my_role: 'admin',
     i_am_owner: true,
@@ -494,6 +511,8 @@ export function notificationsView(): NotificationView[] {
       list.push({
         id: `n-${String(t + 1)}-${String(r + 1)}`,
         kind: row.kind,
+        organization_id: null,
+        invitation_id: null,
         document_id: seminar?.id ?? null,
         task_id: null,
         document_title: seminar?.title ?? '',
@@ -517,6 +536,8 @@ export function notificationsView(): NotificationView[] {
     list.push({
       id: 'n-due',
       kind: 'due',
+      organization_id: null,
+      invitation_id: null,
       document_id: null,
       task_id: overdue.id,
       document_title: overdue.title,

@@ -32,11 +32,11 @@ describe('search author and title only', () => {
           new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }),
         ),
       );
-    await api.search('회의', 'ws-1', { author: 'me', titleOnly: true });
+    await api.search('org-1', '회의', 'ws-1', { author: 'me', titleOnly: true });
     const url = urlOf(fetchSpy.mock.calls[0]?.[0]);
     expect(url).toContain('author=me');
     expect(url).toContain('title_only=true');
-    await api.search('회의', null, {});
+    await api.search('org-1', '회의', null, {});
     const plain = urlOf(fetchSpy.mock.calls[1]?.[0]);
     expect(plain).not.toContain('author=');
     expect(plain).not.toContain('title_only');
@@ -61,10 +61,10 @@ describe('search author and title only', () => {
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
     await fireEvent.click(screen.getByRole('checkbox', { name: '제목만' }));
     await waitFor(() => {
-      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
+      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[3];
       expect(last?.titleOnly).toBe(true);
     });
-    expect(search.mock.calls.at(-1)?.[2]).not.toHaveProperty('author');
+    expect(search.mock.calls.at(-1)?.[3]).not.toHaveProperty('author');
   });
 });
 
@@ -90,7 +90,7 @@ describe('search author that is no longer in the member list', () => {
             user_id: 'u-2',
             display_name: '가상 멤버',
             email: null,
-            role: 'writer',
+            role: 'member',
             is_owner: false,
           },
         ],
@@ -114,7 +114,7 @@ describe('search author that is no longer in the member list', () => {
     await fireEvent.click(option);
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
     await waitFor(() => {
-      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
+      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[3];
       expect(last?.author).toBe('u-2');
     });
     await view.rerender({
@@ -126,7 +126,7 @@ describe('search author that is no longer in the member list', () => {
       expect(members).toHaveBeenCalledWith('ws-2');
     });
     await waitFor(() => {
-      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
+      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[3];
       expect(last?.author).toBeUndefined();
     });
     expect(trigger.textContent.trim()).toBe('누구나');
@@ -138,7 +138,7 @@ describe('search author that is no longer in the member list', () => {
     vi.spyOn(api, 'modules').mockResolvedValue([]);
     const roster: Awaited<ReturnType<typeof api.members>> = {
       members: [
-        { user_id: 'u-1', display_name: '가상 멤버', email: null, role: 'writer', is_owner: false },
+        { user_id: 'u-1', display_name: '가상 멤버', email: null, role: 'member', is_owner: false },
       ],
       my_role: 'admin',
       i_am_owner: true,
@@ -165,7 +165,7 @@ describe('search author that is no longer in the member list', () => {
     await fireEvent.click(option);
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
     await waitFor(() => {
-      expect(search.mock.calls.at(-1)?.[2]?.author).toBe('u-1');
+      expect(search.mock.calls.at(-1)?.[3]?.author).toBe('u-1');
     });
     expect(trigger().textContent.trim()).toBe('가상 멤버');
     await dialog.rerender({
@@ -193,14 +193,14 @@ describe('search author that is no longer in the member list', () => {
     // 목록이 오기 전에 찾아도 버튼이 말하는 대로 그 사람으로 좁힌다.
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의록' } });
     await waitFor(() => {
-      expect(search.mock.calls.at(-1)?.[0]).toBe('회의록');
+      expect(search.mock.calls.at(-1)?.[1]).toBe('회의록');
     });
-    expect(search.mock.calls.at(-1)?.[2]?.author).toBe('u-1');
+    expect(search.mock.calls.at(-1)?.[3]?.author).toBe('u-1');
     expect(trigger().textContent.trim()).toBe('가상 멤버');
     giveMembers(roster);
     await waitFor(() => {
       expect(trigger().textContent.trim()).toBe('가상 멤버');
     });
-    expect(search.mock.calls.at(-1)?.[2]?.author).toBe('u-1');
+    expect(search.mock.calls.at(-1)?.[3]?.author).toBe('u-1');
   });
 });

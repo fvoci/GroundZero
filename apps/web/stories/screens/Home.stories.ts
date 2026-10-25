@@ -60,7 +60,7 @@ export const EmptyNewUser: Story = {
     setUpScreen('/', {
       home: () => Promise.resolve(emptyHomeView()),
       calendar: () => Promise.resolve(emptyCalendarView()),
-      notifications: () => Promise.resolve([]),
+      notifications: () => Promise.resolve({ notifications: [], next: null }),
     }),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

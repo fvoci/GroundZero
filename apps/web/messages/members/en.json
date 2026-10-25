@@ -1,8 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "members_role_admin": "Admin",
-  "members_role_writer": "Writer",
-  "members_role_reader": "Reader",
+  "members_role_member": "Member",
+  "members_role_readonly": "Read-only",
   "members_heading": "{workspace} · Members",
   "members_load_failed": "Couldn't load members.",
   "members_request_failed": "Couldn't complete the request.",

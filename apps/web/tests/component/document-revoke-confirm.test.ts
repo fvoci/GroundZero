@@ -10,7 +10,14 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 공유 철회와 공개 링크 철회는 한 번에 실행됐다(UI 감사). 같은 화면의 다른 지우기처럼 한 번 더 묻고, 그만두면 처음 누른
 // 단추로 초점을 돌려준다.
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '공간', role: 'admin', is_owner: true, realtime_enabled: false },
+  {
+    id: 'ws-1',
+    name: '공간',
+    organization_id: 'org-1',
+    role: 'admin',
+    is_owner: true,
+    realtime_enabled: false,
+  },
 ];
 
 const doc: DocumentView = {

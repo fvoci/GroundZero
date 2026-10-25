@@ -1,8 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "members_role_admin": "관리자",
-  "members_role_writer": "작성자",
-  "members_role_reader": "독자",
+  "members_role_member": "멤버",
+  "members_role_readonly": "읽기 전용",
   "members_heading": "{workspace} · 멤버",
   "members_load_failed": "멤버 정보를 불러오지 못했습니다.",
   "members_request_failed": "요청을 처리하지 못했습니다.",

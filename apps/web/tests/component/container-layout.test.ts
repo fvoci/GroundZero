@@ -29,6 +29,7 @@ describe('multi-column layouts follow the content width', () => {
   it('splits the home dashboard by the container, not the window', async () => {
     const workspace: Workspace = {
       id: 'ws-1',
+      organization_id: 'org-1',
       name: '공간',
       role: 'admin',
       is_owner: true,
@@ -53,7 +54,7 @@ describe('multi-column layouts follow the content width', () => {
       dates: [],
       items: [],
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const grid = document.querySelector('[aria-labelledby="up-next-heading"]')?.parentElement;

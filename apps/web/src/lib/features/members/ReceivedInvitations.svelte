@@ -4,6 +4,7 @@
 
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -35,9 +36,15 @@
     error = undefined;
     try {
       if (accept) {
-        const ws = await api.acceptInvitation(inv.id);
+        // 조직 초대는 워크스페이스가 없다(D-112·D-118): 목록을 다시 읽은 뒤 그 조직을 현재 조직으로 고른다.
+        const accepted = await api.acceptInvitation(inv.id);
         await onaccepted();
-        router.navigate(workspacePath(ws));
+        if (accepted.kind === 'workspace' && typeof accepted.workspace_id === 'string') {
+          router.navigate(workspacePath(accepted.workspace_id));
+        } else {
+          org.select(accepted.organization_id);
+          router.navigate('/');
+        }
       } else {
         await api.declineInvitation(inv.id);
         await load();
@@ -60,7 +67,9 @@
     <ul class="flex flex-col gap-2" data-testid="received-invitations">
       {#each items as inv (inv.id)}
         <li class="flex flex-wrap items-center gap-2 rounded border px-3 py-2">
-          <span class="font-medium">{inv.workspace_name}</span>
+          <span class="font-medium"
+            >{inv.kind === 'workspace' ? (inv.workspace_name ?? '') : inv.organization_name}</span
+          >
           <span class="text-sm text-muted-foreground">{inv.invited_by} · {roleLabel(inv.role)}</span
           >
           <span class="ml-auto flex gap-2">

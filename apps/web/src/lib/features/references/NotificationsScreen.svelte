@@ -7,6 +7,7 @@
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { notificationText } from '$lib/features/references/notification-text';
+  import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, itemTaskPath, pathFor, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -22,23 +23,33 @@
   let items = $state<NotificationView[] | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
 
+  // 알림함은 현재 조직 범위다(D-118). 조직을 바꾸면 다시 읽는다.
   async function load(): Promise<void> {
+    const organizationId = org.currentId;
+    if (organizationId === undefined) {
+      items = undefined;
+      error = m.app_organization_required();
+      return;
+    }
     try {
-      items = await api.notifications();
+      items = (await api.notifications(organizationId)).notifications;
       error = undefined;
     } catch (e: unknown) {
       error = errorText(e, m.references_notifications_load_failed());
     }
   }
 
-  void load();
+  $effect(() => {
+    if (org.currentId !== undefined || items === undefined) void load();
+  });
 
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
   const unread = $derived(items?.filter((n) => !n.read).length ?? 0);
 
   async function open(n: NotificationView): Promise<void> {
-    if (!n.read) {
-      await api.markNotificationsRead(n.id).catch(() => undefined);
+    const organizationId = org.currentId;
+    if (!n.read && organizationId !== undefined) {
+      await api.markNotificationsRead(organizationId, n.id).catch(() => undefined);
       onchanged();
     }
     if (n.task_id !== null) {
@@ -61,12 +72,13 @@
   let marking = $state(false);
 
   async function readAll(): Promise<void> {
-    if (marking) return;
+    const organizationId = org.currentId;
+    if (marking || organizationId === undefined) return;
     marking = true;
     readError = undefined;
     try {
       try {
-        await api.markNotificationsRead(null);
+        await api.markNotificationsRead(organizationId, null);
       } catch (e: unknown) {
         readError = errorText(e, m.references_notifications_read_failed());
         return;

@@ -52,7 +52,7 @@
   // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
   const restrictOnly = $derived(!isOwner && doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
-  const writable = $derived(workspaces.filter((w) => w.role !== 'reader'));
+  const writable = $derived(workspaces.filter((w) => w.role !== 'readonly'));
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function fail(e: unknown): void {

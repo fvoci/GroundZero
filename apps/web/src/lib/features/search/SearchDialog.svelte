@@ -7,6 +7,7 @@
   import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { displaySettings } from '$lib/display';
+  import { org } from '$lib/org.svelte';
   import { STATUS_LABEL } from '$lib/features/tasks/labels';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
@@ -159,7 +160,10 @@
 
   async function run(q: string, ticket: number): Promise<void> {
     try {
-      const found = await api.search(q, null, filters());
+      // 검색은 현재 조직 범위다(D-111). 조직을 고르기 전에는 찾지 않는다.
+      const organizationId = org.currentId;
+      if (organizationId === undefined) throw new Error('no organization');
+      const found = await api.search(organizationId, q, null, filters());
       if (ticket !== seq) return;
       results = found;
       status = 'done';

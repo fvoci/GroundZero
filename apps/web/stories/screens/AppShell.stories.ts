@@ -90,7 +90,7 @@ export const NewWorkspace: Story = {
       wikiDocuments: () => Promise.resolve([]),
       home: () => Promise.resolve(emptyHomeView()),
       calendar: () => Promise.resolve(emptyCalendarView()),
-      notifications: () => Promise.resolve([]),
+      notifications: () => Promise.resolve({ notifications: [], next: null }),
     }),
   args: { unreadCount: 0 },
   play: async ({ canvasElement }) => {

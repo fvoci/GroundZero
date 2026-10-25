@@ -1,8 +1,13 @@
 // 최소 경로 라우터. SvelteKit을 쓰지 않으므로(D-66) history API로 경로만 관리한다.
 // 서버는 알 수 없는 경로에 index.html을 돌려 새로고침을 지원한다.
 
+/** 항목의 업무 보기(D-121). 하위 경로 `/tasks/<view>`로 고르고, 없으면 저장한 보기 › 세션 순으로 정한다. */
+export type TaskViewName = 'board' | 'list' | 'calendar' | 'gantt';
+export const TASK_VIEWS: readonly TaskViewName[] = ['board', 'list', 'calendar', 'gantt'];
+
 export type Route =
   | { name: 'home' }
+  | { name: 'my-tasks' }
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
   | { name: 'members'; workspaceId: string }
@@ -12,11 +17,15 @@ export type Route =
   | { name: 'audit'; workspaceId: string }
   | { name: 'my-audit' }
   | { name: 'module'; workspaceId: string; moduleId: string }
-  | { name: 'item'; workspaceId: string; itemId: string; taskId?: string }
+  /**
+   * 항목 화면. `view`는 주소의 하위 경로(`/tasks/board` 등)가 가리키는 업무 보기이고 없으면 화면이 저장한 보기·세션으로
+   * 정한다. 업무 상세는 보드 보기 아래 `/tasks/board/t/:taskId`다.
+   */
+  | { name: 'item'; workspaceId: string; itemId: string; view?: TaskViewName; taskId?: string }
   | { name: 'item-document'; workspaceId: string; itemId: string; documentId: string }
   | { name: 'notes' }
   | { name: 'shared' }
-  | { name: 'notifications' }
+  | { name: 'notifications'; notificationId?: string }
   | { name: 'time' }
   | { name: 'standalone-document'; documentId: string }
   | { name: 'public'; token: string }
@@ -34,13 +43,21 @@ const AUDIT = new RegExp(`^/w/(${UUID})/audit/?$`);
 const STANDALONE = new RegExp(`^/d/(${UUID})/?$`);
 const MODULE = new RegExp(`^/w/(${UUID})/m/(${UUID})/?$`);
 const ITEM = new RegExp(`^/w/(${UUID})/i/(${UUID})/?$`);
-const ITEM_TASK = new RegExp(`^/w/(${UUID})/i/(${UUID})/t/(${UUID})/?$`);
+const ITEM_VIEW = new RegExp(`^/w/(${UUID})/i/(${UUID})/tasks/(board|list|calendar|gantt)/?$`);
+const ITEM_TASK = new RegExp(`^/w/(${UUID})/i/(${UUID})/tasks/board/t/(${UUID})/?$`);
 const ITEM_DOCUMENT = new RegExp(`^/w/(${UUID})/i/(${UUID})/d/(${UUID})/?$`);
+const NOTIFICATION = new RegExp(`^/notifications/(${UUID})/?$`);
+
+function taskView(raw: string): TaskViewName {
+  if (raw === 'board' || raw === 'list' || raw === 'calendar' || raw === 'gantt') return raw;
+  throw new TypeError(`unknown task view ${raw}`);
+}
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
   const pub = PUBLIC.exec(pathname);
   if (pub?.[1] !== undefined) return { name: 'public', token: pub[1] };
+  if (pathname === '/tasks' || pathname === '/tasks/') return { name: 'my-tasks' };
   if (pathname === '/notes' || pathname === '/notes/') return { name: 'notes' };
   if (pathname === '/shared' || pathname === '/shared/') return { name: 'shared' };
   if (pathname === '/time' || pathname === '/time/') return { name: 'time' };
@@ -48,6 +65,10 @@ export function parseRoute(pathname: string): Route {
   if (pathname === '/audit' || pathname === '/audit/') return { name: 'my-audit' };
   if (pathname === '/notifications' || pathname === '/notifications/')
     return { name: 'notifications' };
+  const notification = NOTIFICATION.exec(pathname);
+  if (notification?.[1] !== undefined) {
+    return { name: 'notifications', notificationId: notification[1] };
+  }
   const standalone = STANDALONE.exec(pathname);
   if (standalone?.[1] !== undefined) {
     return { name: 'standalone-document', documentId: standalone[1] };
@@ -60,9 +81,24 @@ export function parseRoute(pathname: string): Route {
   if (item?.[1] !== undefined && item[2] !== undefined) {
     return { name: 'item', workspaceId: item[1], itemId: item[2] };
   }
+  const itemView = ITEM_VIEW.exec(pathname);
+  if (itemView?.[1] !== undefined && itemView[2] !== undefined && itemView[3] !== undefined) {
+    return {
+      name: 'item',
+      workspaceId: itemView[1],
+      itemId: itemView[2],
+      view: taskView(itemView[3]),
+    };
+  }
   const itemTask = ITEM_TASK.exec(pathname);
   if (itemTask?.[1] !== undefined && itemTask[2] !== undefined && itemTask[3] !== undefined) {
-    return { name: 'item', workspaceId: itemTask[1], itemId: itemTask[2], taskId: itemTask[3] };
+    return {
+      name: 'item',
+      workspaceId: itemTask[1],
+      itemId: itemTask[2],
+      view: 'board',
+      taskId: itemTask[3],
+    };
   }
   const itemDoc = ITEM_DOCUMENT.exec(pathname);
   if (itemDoc?.[1] !== undefined && itemDoc[2] !== undefined && itemDoc[3] !== undefined) {
@@ -127,8 +163,22 @@ export function itemPath(workspaceId: string, itemId: string): string {
   return `/w/${workspaceId}/i/${itemId}`;
 }
 
+/** 항목의 업무 보기 경로(D-121): `/w/:ws/i/:item/tasks/board|list|calendar|gantt`. */
+export function itemViewPath(workspaceId: string, itemId: string, view: TaskViewName): string {
+  return `/w/${workspaceId}/i/${itemId}/tasks/${view}`;
+}
+
+/** 업무 상세는 보드 보기 아래 `/tasks/board/t/:taskId`다(D-121). */
 export function itemTaskPath(workspaceId: string, itemId: string, taskId: string): string {
-  return `/w/${workspaceId}/i/${itemId}/t/${taskId}`;
+  return `/w/${workspaceId}/i/${itemId}/tasks/board/t/${taskId}`;
+}
+
+export function myTasksPath(): string {
+  return '/tasks';
+}
+
+export function notificationPath(notificationId: string): string {
+  return `/notifications/${notificationId}`;
 }
 
 export function itemDocumentPath(workspaceId: string, itemId: string, documentId: string): string {
@@ -157,11 +207,29 @@ class Router {
    * 같은 이동을 다시 한다(그때는 가드가 true를 돌려줘야 한다).
    */
   guard: ((proceed: () => void) => boolean) | undefined = undefined;
+  /** 가드가 막은 뒤로 가기를 떠나기로 확정했을 때 한 번 건너뛸 popstate(아래 참고). */
+  private skipGuardOnce = false;
 
   constructor() {
+    // 뒤로·앞으로 가기도 미저장 편집 보호를 거친다(D-121). 브라우저는 주소를 먼저 바꾸므로, 가드가 막으면 같은 기록을
+    // 다시 쌓아 원래 주소로 되돌리고 화면은 그대로 둔다. 확인 대화상자에서 떠나기로 하면 `proceed`가 다시 뒤로 간다.
     window.addEventListener('popstate', () => {
-      this.path = window.location.pathname;
-      this.hash = window.location.hash;
+      const next = window.location.pathname;
+      const nextHash = window.location.hash;
+      if (next !== this.path && this.guard !== undefined && !this.skipGuardOnce) {
+        const guard = this.guard;
+        const allowed = guard(() => {
+          this.skipGuardOnce = true;
+          window.history.back();
+        });
+        if (!allowed) {
+          window.history.pushState(null, '', this.path + this.hash);
+          return;
+        }
+      }
+      this.skipGuardOnce = false;
+      this.path = next;
+      this.hash = nextHash;
     });
   }
 

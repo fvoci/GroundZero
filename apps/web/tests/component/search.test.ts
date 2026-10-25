@@ -27,7 +27,7 @@ describe('search result paths', () => {
     expect(searchResultPath(result({}), member)).toBe(`/w/${W}/wiki/${X}`);
     expect(searchResultPath(result({ item_id: I }), member)).toBe(`/w/${W}/i/${I}/d/${X}`);
     expect(searchResultPath(result({ kind: 'task', item_id: I }), member)).toBe(
-      `/w/${W}/i/${I}/t/${X}`,
+      `/w/${W}/i/${I}/tasks/board/t/${X}`,
     );
     expect(searchResultPath(result({ kind: 'item' }), member)).toBe(`/w/${W}/i/${X}`);
     expect(searchResultPath(result({ kind: 'event', item_id: I }), member)).toBe(`/w/${W}/i/${I}`);
