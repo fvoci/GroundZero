@@ -63,7 +63,10 @@ ignore = [
   # crypto-bigint 0.5.5 (openidconnect 4.0.1 → p256·p384 → elliptic-curve 0.13.8 경유). 비밀 정수 연산의 타이밍 누출 권고다.
   # fvoci는 OIDC 제공자의 공개키로 ES256·ES384 ID 토큰 서명을 검증만 하며 입력(공개키·서명 대상·서명)이 모두 공개값이다. EC 개인키 연산은 없다.
   # 수정판은 crypto-bigint 0.7.6 이상뿐이고 최신 openidconnect 4.0.1이 elliptic-curve 0.13에 묶여 호환 갱신이 안 된다.
-  # 사용자 승인 2026-10-24의 한시적 예외다. 첫 재검토 2026-10-31(날짜가 지나도 자동으로 풀리지 않는다), 수정판 출시나 암호 사용 경로 변경 시 즉시 재평가한다.
+  # 사용자 승인 2026-10-24의 한시적 예외다. 다음 재검토 2026-11-30(날짜가 지나도 자동으로 풀리지 않는다), 수정판 출시나 암호 사용 경로 변경 시 즉시 재평가한다.
+  # 2026-10-25 재확인: openidconnect 최신 4.0.1(p256 0.13.2·p384 0.13.1 고정), elliptic-curve 0.13.8(최신 0.14.2), crypto-bigint 0.5.5(최신 0.7.8),
+  # 상위 PR ramosbugs/openidconnect-rs#244 미병합. `cargo update --dry-run -p openidconnect`·`-p crypto-bigint` 모두 Locking 0 packages,
+  # `cargo info openidconnect`·`cargo info elliptic-curve`·`cargo tree --locked -i crypto-bigint --target all`로 확인.
   # 수정판을 쓸 수 있게 되면 의존성을 올리고 이 항목을 지운다. 추적: https://github.com/fvoci/GroundZero/issues/115
   { id = "RUSTSEC-2026-0387", reason = "temporary exception: ECDSA public-key ID token signature verification only, no secret EC scalars in fvoci; remove when openidconnect moves off elliptic-curve 0.13 (issue #115)" },
   # smallstr 0.3.1 (yrs 0.28.0 경유, 실시간 공동 편집 D-70). 취약점이 아닌 유지 중단 알림(informational = "unmaintained",
