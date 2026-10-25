@@ -120,7 +120,7 @@
         size="sm"
         variant="outline"
         disabled={busy}
-        onclick={(e) => {
+        onclick={(e: MouseEvent) => {
           e.stopPropagation();
           void stopHere();
         }}>{m.time_stop_timer()}</Button
@@ -130,7 +130,7 @@
         size="sm"
         variant="outline"
         disabled={busy}
-        onclick={(e) => {
+        onclick={(e: MouseEvent) => {
           e.stopPropagation();
           void startHere();
         }}>{m.time_track_task()}</Button

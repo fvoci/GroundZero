@@ -232,7 +232,6 @@
   onbeforeunload={(e: BeforeUnloadEvent) => {
     if (busy || text.trim() !== '') {
       e.preventDefault();
-      e.returnValue = '';
     }
   }}
 />
