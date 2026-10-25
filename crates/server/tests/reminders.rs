@@ -48,9 +48,18 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
 
 /// 내 알림. 초대 알림(`invite`, D-118)은 add_member의 가입 흐름이 남긴 것이라 기한 알림 시험의 대상이 아니므로 뺀다.
 async fn notes(app: &Router, user: &TestUser) -> Vec<Value> {
-    send(app, Method::GET, "/api/me/notifications", Some(user), None)
-        .await
-        .json
+    send(
+        app,
+        Method::GET,
+        &format!(
+            "/api/me/notifications?organization_id={}",
+            common::organization_for(user).await
+        ),
+        Some(user),
+        None,
+    )
+    .await
+    .json["notifications"]
         .as_array()
         .unwrap()
         .iter()

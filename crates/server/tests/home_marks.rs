@@ -16,7 +16,17 @@ use uuid::Uuid;
 
 async fn check_home(state: &AppState, user: &TestUser) -> Value {
     let app = common::app(state);
-    let home = send(&app, Method::GET, "/api/me/home?tz=UTC", Some(user), None).await;
+    let home = send(
+        &app,
+        Method::GET,
+        &format!(
+            "/api/me/home?tz=UTC&organization_id={}",
+            common::organization_for(user).await
+        ),
+        Some(user),
+        None,
+    )
+    .await;
     assert_eq!(home.status, StatusCode::OK, "{:?}", home.json);
     home.json
 }
@@ -224,7 +234,10 @@ async fn home_marks_keep_both_categories_order_and_current_visibility() {
         send(
             &app,
             Method::GET,
-            "/api/me/home?tz=invalid",
+            &format!(
+                "/api/me/home?tz=invalid&organization_id={}",
+                common::organization_for(&owner).await
+            ),
             Some(&owner),
             None
         )

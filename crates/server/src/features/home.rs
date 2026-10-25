@@ -12,9 +12,10 @@ use uuid::Uuid;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
+use crate::features::organizations::OrgScope;
 use crate::features::tasks::format_date;
 use crate::http::AppState;
-use crate::ids::{ItemId, WorkspaceId};
+use crate::ids::{ItemId, OrganizationId, WorkspaceId};
 
 /// Up Next 구분.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -139,13 +140,116 @@ pub struct UpNextCounts {
 /// Up Next가 묶음마다 보이는 최대 수. 묶음마다 따로 세어, 밀린 업무가 많아도 오늘·다가오는 일이 빠지지 않는다.
 pub const UP_NEXT_PER_BUCKET: i64 = 50;
 
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct MyTasksQuery {
+    /// YYYY-MM-DD. 없으면 저장된 사용자 시간대의 오늘(미설정은 UTC).
+    pub today: Option<String>,
+}
+
+/// SQL bucket: overdue, today, upcoming, none(날짜 없음), done.
+#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+pub struct MyTask {
+    pub id: Uuid,
+    pub item_id: ItemId,
+    pub reference: Option<String>,
+    pub title: String,
+    pub status: String,
+    pub status_category: String,
+    pub priority: String,
+    pub start_date: Option<String>,
+    pub due_date: Option<String>,
+    pub bucket: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub updated_at: OffsetDateTime,
+}
+
+#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+pub struct MyTaskCounts {
+    pub overdue: i32,
+    pub today: i32,
+    pub upcoming: i32,
+    pub undated: i32,
+    pub done: i32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WorkspaceTasks {
+    pub workspace_id: WorkspaceId,
+    pub workspace_name: String,
+    pub tasks: Vec<MyTask>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MyTasks {
+    pub counts: MyTaskCounts,
+    pub workspaces: Vec<WorkspaceTasks>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MyTaskRow {
+    workspace_id: WorkspaceId,
+    workspace_name: String,
+    #[sqlx(flatten)]
+    task: MyTask,
+}
+
+#[utoipa::path(get, path = "/api/me/tasks", operation_id = "my_tasks",
+    params(MyTasksQuery, ("organization_id" = OrganizationId, Query)),
+    responses((status = 200, body = MyTasks), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "home")]
+pub async fn my_tasks(
+    State(state): State<AppState>,
+    OrgScope { user, organization }: OrgScope,
+    Query(query): Query<MyTasksQuery>,
+) -> Result<Json<MyTasks>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let today = match query.today {
+        Some(raw) => Date::parse(&raw, time::macros::format_description!("[year]-[month]-[day]"))
+            .map_err(|_| AppError::BadRequest("today must be YYYY-MM-DD".to_owned()))?,
+        None => sqlx::query_scalar(
+            "SELECT (now() AT TIME ZONE coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC'))::date",
+        ).fetch_one(tx.conn()).await?,
+    };
+    let rows: Vec<MyTaskRow> = sqlx::query_as(
+        "SELECT workspace_id, workspace_name, task_id AS id, item_id, reference, title, status,
+                status_category, priority, start_date::text, due_date::text, bucket, updated_at
+         FROM app_my_tasks($1, $2)",
+    )
+    .bind(organization)
+    .bind(today)
+    .fetch_all(tx.conn())
+    .await?;
+    let counts = sqlx::query_as("SELECT * FROM app_my_task_counts($1, $2)")
+        .bind(organization)
+        .bind(today)
+        .fetch_one(tx.conn())
+        .await?;
+    tx.commit().await?;
+    let mut workspaces: Vec<WorkspaceTasks> = Vec::new();
+    for row in rows {
+        if let Some(group) = workspaces
+            .last_mut()
+            .filter(|g| g.workspace_id == row.workspace_id)
+        {
+            group.tasks.push(row.task);
+        } else {
+            workspaces.push(WorkspaceTasks {
+                workspace_id: row.workspace_id,
+                workspace_name: row.workspace_name,
+                tasks: vec![row.task],
+            });
+        }
+    }
+    Ok(Json(MyTasks { counts, workspaces }))
+}
+
 /// Up Next 후보: 내 업무(내가 담당이거나, 담당자가 없고 내가 만든 것) 중 이번 주($1 + 7)까지 마감인 미완료.
 /// 보관된 항목·모듈의 업무는 뺀다.
 const UP_NEXT_MINE: &str = "SELECT t.id, t.item_id, t.workspace_id, t.title, s.name AS status, s.category AS status_category, t.due_date, t.number
      FROM tasks t JOIN task_statuses s ON s.id = t.status_id JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
      WHERE s.category <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
        AND i.archived_at IS NULL AND m.archived_at IS NULL
-       AND t.workspace_id IN (SELECT app_my_workspace_ids(NULL::uuid))
+       AND t.workspace_id IN (SELECT app_my_workspace_ids($2))
        AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
             OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
                 AND t.created_by = app_user_id()))";
@@ -169,7 +273,7 @@ pub struct Home {
 /// 보는 사람 시간대.
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct HomeQuery {
-    pub tz: String,
+    pub tz: Option<String>,
 }
 
 type TaskRow = (
@@ -206,6 +310,7 @@ fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
 
 async fn marks(
     tx: &mut crate::db::UserTx,
+    organization: OrganizationId,
 ) -> Result<(Vec<MarkedTarget>, Vec<MarkedTarget>), AppError> {
     type MarkRow = (
         String,
@@ -223,8 +328,12 @@ async fn marks(
              LEFT JOIN tasks t ON m.target_kind = 'task' AND t.id = m.target_id
              LEFT JOIN documents d ON m.target_kind = 'document' AND d.id = m.target_id
              LEFT JOIN items i ON m.target_kind = 'item' AND i.id = m.target_id
-             WHERE m.mark IN ('pin', 'favorite') ORDER BY m.created_at, m.target_id",
+             WHERE m.mark IN ('pin', 'favorite')
+               AND (coalesce(t.workspace_id, d.workspace_id, i.workspace_id) IN (SELECT app_my_workspace_ids($1))
+                    OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id()))
+             ORDER BY m.created_at, m.target_id",
     )
+    .bind(organization)
     .fetch_all(tx.conn())
     .await?;
     let mut pins = Vec::new();
@@ -251,23 +360,28 @@ async fn marks(
     Ok((pins, favorites))
 }
 
-/// 홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다.
-#[utoipa::path(get, path = "/api/me/home", operation_id = "home", params(HomeQuery),
-    responses((status = 200, body = Home), (status = 400, body = ErrorBody)), tag = "home")]
+/// 홈(로그인한 사람). 현재 조직에서 볼 수 있는 것만 모은다.
+#[utoipa::path(get, path = "/api/me/home", operation_id = "home", params(HomeQuery, ("organization_id" = OrganizationId, Query)),
+    responses((status = 200, body = Home), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "home")]
 pub async fn home(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    OrgScope { user, organization }: OrgScope,
     Query(query): Query<HomeQuery>,
 ) -> Result<Json<Home>, AppError> {
-    let tz = query.tz.trim();
     let mut tx = state.db.begin_as(user).await?;
+    let tz = match query.tz {
+        Some(tz) => tz.trim().to_owned(),
+        None => sqlx::query_scalar(
+            "SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')",
+        ).fetch_one(tx.conn()).await?,
+    };
     sqlx::query("SELECT app_check_timezone($1)")
-        .bind(tz)
+        .bind(&tz)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
     let today: Date = sqlx::query_scalar("SELECT (now() AT TIME ZONE $1)::date")
-        .bind(tz)
+        .bind(&tz)
         .fetch_one(tx.conn())
         .await?;
     // 묶음마다 따로 자른다. 한 번에 50개로 자르면 밀린 업무가 많을 때 오늘·다가오는 일이 빠졌다(감사 W23).
@@ -280,9 +394,10 @@ pub async fn home(
            FROM mine
          )
          SELECT id, item_id, workspace_id, app_task_reference(id), title, status, status_category, due_date
-         FROM ranked WHERE rn <= $2 ORDER BY due_date, number, id"
+         FROM ranked WHERE rn <= $3 ORDER BY due_date, number, id"
     ))
     .bind(today)
+    .bind(organization)
     .bind(UP_NEXT_PER_BUCKET)
     .fetch_all(tx.conn())
     .await?;
@@ -293,12 +408,14 @@ pub async fn home(
          FROM mine"
     ))
     .bind(today)
+    .bind(organization)
     .fetch_one(tx.conn())
     .await?;
     let recent_tasks: Vec<TaskRow> = sqlx::query_as(
         "SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, s.name AS status, s.category AS status_category, t.due_date
-         FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.updated_by = app_user_id() ORDER BY t.updated_at DESC, t.id LIMIT 8",
+         FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.updated_by = app_user_id() AND t.workspace_id IN (SELECT app_my_workspace_ids($1)) ORDER BY t.updated_at DESC, t.id LIMIT 8",
     )
+    .bind(organization)
     .fetch_all(tx.conn())
     .await?;
     type DocRow = (
@@ -311,8 +428,9 @@ pub async fn home(
     );
     let recent_documents: Vec<DocRow> = sqlx::query_as(
         "SELECT d.id, d.title, app_document_reference(d.id), d.workspace_id, d.item_id, d.updated_at
-         FROM documents d WHERE d.updated_by = app_user_id() ORDER BY d.updated_at DESC, d.id LIMIT 8",
+         FROM documents d WHERE d.updated_by = app_user_id() AND (d.workspace_id IN (SELECT app_my_workspace_ids($1)) OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())) ORDER BY d.updated_at DESC, d.id LIMIT 8",
     )
+    .bind(organization)
     .fetch_all(tx.conn())
     .await?;
     type ItemRow = (
@@ -334,13 +452,14 @@ pub async fn home(
            FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.item_id = i.id
          ) c
          WHERE i.archived_at IS NULL AND m.archived_at IS NULL
-           AND i.workspace_id IN (SELECT app_my_workspace_ids(NULL::uuid))
+           AND i.workspace_id IN (SELECT app_my_workspace_ids($1))
          ORDER BY greatest(i.updated_at, c.active) DESC, i.id
          LIMIT 8",
     )
+    .bind(organization)
     .fetch_all(tx.conn())
     .await?;
-    let (pins, favorites) = marks(&mut tx).await?;
+    let (pins, favorites) = marks(&mut tx, organization).await?;
     tx.commit().await?;
     Ok(Json(Home {
         today: format_date(Some(today)).unwrap_or_default(),

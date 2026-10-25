@@ -43,9 +43,18 @@ async fn save_body(app: &Router, user: &TestUser, doc: &Value, body: Value) -> (
 }
 
 async fn get(app: &Router, user: &TestUser, uri: &str) -> (StatusCode, Value) {
-    let mut r = send(app, Method::GET, uri, Some(user), None).await;
+    let scoped = if uri == "/api/me/notifications" {
+        format!(
+            "{uri}?organization_id={}",
+            common::organization_for(user).await
+        )
+    } else {
+        uri.to_owned()
+    };
+    let mut r = send(app, Method::GET, &scoped, Some(user), None).await;
     if uri == "/api/me/notifications" {
         // D-118: 수락한 초대 알림은 남으므로 이 시험의 언급 알림과 분리한다.
+        r.json = r.json["notifications"].take();
         r.json
             .as_array_mut()
             .unwrap()
@@ -272,12 +281,16 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
     let r = send(
         &app,
         Method::POST,
-        "/api/me/notifications/read",
+        &format!(
+            "/api/me/notifications/read?organization_id={}",
+            common::organization_for(&outsider).await
+        ),
         Some(&outsider),
         Some(json!({ "id": id })),
     )
     .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.json["marked"], 0);
     assert_eq!(
         get(&app, &member, "/api/me/notifications").await.1[0]["read"],
         false
@@ -285,7 +298,10 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
     send(
         &app,
         Method::POST,
-        "/api/me/notifications/read",
+        &format!(
+            "/api/me/notifications/read?organization_id={}",
+            common::organization_for(&member).await
+        ),
         Some(&member),
         Some(json!({ "id": id })),
     )

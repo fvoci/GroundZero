@@ -238,7 +238,17 @@ async fn share_permissions_and_revocation_take_effect_immediately() {
         doc_body("밥이 고침")
     );
 
-    let mine = send(&app, Method::GET, "/api/me/shared", Some(&bob), None).await;
+    let mine = send(
+        &app,
+        Method::GET,
+        &format!(
+            "/api/me/shared?organization_id={}",
+            common::organization_for(&bob).await
+        ),
+        Some(&bob),
+        None,
+    )
+    .await;
     assert_eq!(mine.json[0]["shared_by"], "alice");
     assert_eq!(mine.json[0]["permission"], "write");
 
@@ -254,12 +264,21 @@ async fn share_permissions_and_revocation_take_effect_immediately() {
     assert_eq!(r.status, StatusCode::NO_CONTENT);
     assert_eq!(get(&app, &bob, &note).await.0, StatusCode::NOT_FOUND);
     assert!(
-        send(&app, Method::GET, "/api/me/shared", Some(&bob), None)
-            .await
-            .json
-            .as_array()
-            .unwrap()
-            .is_empty()
+        send(
+            &app,
+            Method::GET,
+            &format!(
+                "/api/me/shared?organization_id={}",
+                common::organization_for(&bob).await
+            ),
+            Some(&bob),
+            None
+        )
+        .await
+        .json
+        .as_array()
+        .unwrap()
+        .is_empty()
     );
 
     // 같은 이메일이라도 제공자가 검증하지 않은 계정은 공유 대상이 아니다.
