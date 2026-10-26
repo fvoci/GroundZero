@@ -13,35 +13,6 @@ impl CommittedMove {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn completed_moves_distinguish_in_progress_future_and_previous_xid_epochs() {
-        let epoch = 1_u64 << 32;
-        let snapshot = Snapshot {
-            upper: epoch + 20,
-            in_progress: vec![epoch + 10, epoch + 14],
-        };
-        for (xid, visible) in [
-            (epoch - 1, true),
-            (epoch + 9, true),
-            (epoch + 10, false),
-            (epoch + 13, true),
-            (epoch + 14, false),
-            (epoch + 20, false),
-            (epoch + 21, false),
-        ] {
-            assert_eq!(
-                snapshot.sees(CommittedMove::new(xid)),
-                visible,
-                "top-level xid8={xid}"
-            );
-        }
-    }
-}
-
 /// pg_snapshot의 xid8 상한과 진행 중 top-level 트랜잭션 목록.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Snapshot {
@@ -76,10 +47,47 @@ impl Snapshot {
     }
 
     #[cfg(test)]
-    pub(super) fn fixture(visible: bool) -> Self {
+    pub(super) fn source() -> Self {
         Self {
-            upper: if visible { 101 } else { 100 },
+            upper: 100,
             in_progress: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn destination() -> Self {
+        Self {
+            upper: 101,
+            in_progress: Vec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn completed_moves_distinguish_in_progress_future_and_previous_xid_epochs() {
+        let epoch = 1_u64 << 32;
+        let snapshot = Snapshot {
+            upper: epoch + 20,
+            in_progress: vec![epoch + 10, epoch + 14],
+        };
+        for (xid, visible) in [
+            (epoch - 1, true),
+            (epoch + 9, true),
+            (epoch + 10, false),
+            (epoch + 13, true),
+            (epoch + 14, false),
+            (epoch + 20, false),
+            (epoch + 21, false),
+        ] {
+            assert_eq!(
+                snapshot.sees(CommittedMove::new(xid)),
+                visible,
+                "top-level xid8={xid}"
+            );
         }
     }
 }

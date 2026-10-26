@@ -215,7 +215,7 @@ impl Lease {
 
     #[cfg(test)]
     fn confirm_at(&self, started: Instant, can_write: bool, now: Instant) {
-        self.confirm_snapshot_at(started, can_write, Arc::new(Snapshot::fixture(false)), now);
+        self.confirm_snapshot_at(started, can_write, Arc::new(Snapshot::source()), now);
     }
 
     fn confirm_snapshot_at(
@@ -461,7 +461,11 @@ mod tests {
             let permit = lease.write_permit().unwrap();
             lease.close_observed(
                 reason,
-                Some(Arc::new(Snapshot::fixture(closed_after_commit))),
+                Some(Arc::new(if closed_after_commit {
+                    Snapshot::destination()
+                } else {
+                    Snapshot::source()
+                })),
             );
             assert_eq!(
                 permit
@@ -497,7 +501,11 @@ mod tests {
             lease.confirm_snapshot_at(
                 checked,
                 true,
-                Arc::new(Snapshot::fixture(!check_before_commit)),
+                Arc::new(if check_before_commit {
+                    Snapshot::source()
+                } else {
+                    Snapshot::destination()
+                }),
                 checked,
             );
             let now = start + Duration::from_millis(1100);
@@ -541,7 +549,7 @@ mod tests {
             let permit = permit.freeze_move(committed).unwrap();
             lease.close_observed(
                 CloseReason::AccessLost,
-                Some(Arc::new(Snapshot::fixture(true))),
+                Some(Arc::new(Snapshot::destination())),
             );
             let result = permit.check_session(std::future::ready(outcome)).await;
             assert_eq!(
@@ -562,7 +570,7 @@ mod tests {
         let permit = permit.freeze_move(committed).unwrap();
         lease.close_observed(
             CloseReason::RealtimeOff,
-            Some(Arc::new(Snapshot::fixture(true))),
+            Some(Arc::new(Snapshot::destination())),
         );
         assert_eq!(
             permit.check_session(std::future::pending()).await,
@@ -591,7 +599,7 @@ mod tests {
                 lease.confirm_snapshot_at(
                     destination,
                     true,
-                    Arc::new(Snapshot::fixture(true)),
+                    Arc::new(Snapshot::destination()),
                     destination,
                 );
             }
@@ -621,19 +629,19 @@ mod tests {
             lease.confirm_snapshot_at(
                 destination,
                 true,
-                Arc::new(Snapshot::fixture(true)),
+                Arc::new(Snapshot::destination()),
                 start + Duration::from_millis(600),
             );
             if destination_closes {
                 lease.close_observed(
                     CloseReason::AccessLost,
-                    Some(Arc::new(Snapshot::fixture(true))),
+                    Some(Arc::new(Snapshot::destination())),
                 );
             }
             lease.confirm_snapshot_at(
                 start + Duration::from_millis(300),
                 true,
-                Arc::new(Snapshot::fixture(false)),
+                Arc::new(Snapshot::source()),
                 start + Duration::from_millis(700),
             );
             let now = start + Duration::from_millis(1100);
@@ -658,7 +666,7 @@ mod tests {
         let start = Instant::now();
         let lease = Lease::new(true, start, Duration::from_secs(1));
         lease.confirm_at(start, true, start);
-        lease.confirm_snapshot_at(start, true, Arc::new(Snapshot::fixture(true)), start);
+        lease.confirm_snapshot_at(start, true, Arc::new(Snapshot::destination()), start);
         let destination_input = lease.write_permit().unwrap();
         assert!(
             destination_input
