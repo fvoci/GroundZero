@@ -654,6 +654,48 @@ async fn settings_validate_patch_preserve_null_and_require_expected_user() {
 }
 
 #[tokio::test]
+async fn settings_reject_unknown_nested_fields_without_applying_known_changes() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let org = format!("/api/organizations/{}", w.org);
+    let settings = format!("{org}/settings");
+    let limits = format!("/api/workspaces/{}/limits", w.ws);
+
+    for (read_path, write_path) in [(&org, &settings), (&limits, &limits)] {
+        expect(
+            &app,
+            Method::PUT,
+            write_path,
+            &w.owner,
+            Some(json!({"max_file_bytes":100,"max_concurrent_uploads":2})),
+            200,
+        )
+        .await;
+        let before = expect(&app, Method::GET, read_path, &w.owner, None, 200).await;
+
+        let rejected = expect(
+            &app,
+            Method::PUT,
+            write_path,
+            &w.owner,
+            Some(json!({
+                "max_file_bytes":null,
+                "max_concurrent_uploads":3,
+                "unknown":{"nested":[null, {"max_file_bytes":1}]}
+            })),
+            400,
+        )
+        .await;
+        assert_eq!(rejected["error"], "bad_request", "{write_path}");
+        assert_eq!(
+            expect(&app, Method::GET, read_path, &w.owner, None, 200).await,
+            before,
+            "{write_path}: rejecting an unknown field must preserve all settings"
+        );
+    }
+}
+
+#[tokio::test]
 async fn public_link_switch_hides_existing_links_and_blocks_creation() {
     let w = World::new().await;
     let app = common::app(&w.state);
