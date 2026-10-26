@@ -742,15 +742,32 @@
         </Select.Root>
       </div>
       {#if preview !== undefined}
+        {@const gains = preview.changes
+          .filter((c) => c.change === 'gain')
+          .map((c) => c.display_name)}
+        {@const loses = preview.changes
+          .filter((c) => c.change === 'lose')
+          .map((c) => c.display_name)}
+        {@const regraded = preview.changes.filter((c) => c.change === 'change')}
         <div class="grid gap-2 text-sm md:grid-cols-2" data-testid="move-preview">
           <div>
             <h3 class="font-semibold">{m.documents_move_gains()}</h3>
-            <p>{preview.gains.length === 0 ? m.documents_none() : preview.gains.join(', ')}</p>
+            <p>{gains.length === 0 ? m.documents_none() : gains.join(', ')}</p>
           </div>
           <div>
             <h3 class="font-semibold">{m.documents_move_loses()}</h3>
-            <p>{preview.loses.length === 0 ? m.documents_none() : preview.loses.join(', ')}</p>
+            <p>{loses.length === 0 ? m.documents_none() : loses.join(', ')}</p>
           </div>
+          {#if regraded.length > 0}
+            <div class="md:col-span-2">
+              <h3 class="font-semibold">{m.documents_move_changes()}</h3>
+              <p>
+                {regraded
+                  .map((c) => `${c.display_name} (${c.from_grade ?? '—'} → ${c.to_grade ?? '—'})`)
+                  .join(', ')}
+              </p>
+            </div>
+          {/if}
         </div>
         {#if preview.history_moves_with_document}
           <p class="text-sm text-muted-foreground">

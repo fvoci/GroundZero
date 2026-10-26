@@ -478,9 +478,18 @@ export interface ShareView {
   permission: 'read' | 'write';
 }
 
+/** 이동 전후의 사용자별 접근 등급 변화(D-114). `gain`이면 from_grade가, `lose`면 to_grade가 null이다. */
+export interface MoveAccessChangeView {
+  /** `gain`·`lose`·`change`(서버 `app_move_preview`). */
+  change: string;
+  user_id: string;
+  display_name: string;
+  from_grade: string | null;
+  to_grade: string | null;
+}
+
 export interface MovePreviewView {
-  gains: string[];
-  loses: string[];
+  changes: MoveAccessChangeView[];
   /** 이전 리비전 기록도 함께 옮겨진다. */
   history_moves_with_document: boolean;
   /** 대상에서 번호가 새로 매겨지는지(같은 모듈 안 이동이면 유지). */
@@ -526,11 +535,21 @@ export function parseShareView(value: Json): ShareView {
   return { id: str(o, 'id'), email: str(o, 'email'), permission: permission(str(o, 'permission')) };
 }
 
+function parseMoveAccessChange(value: Json): MoveAccessChangeView {
+  const o = rec(value, 'move access change');
+  return {
+    change: str(o, 'change'),
+    user_id: str(o, 'user_id'),
+    display_name: str(o, 'display_name'),
+    from_grade: optStr(o, 'from_grade'),
+    to_grade: optStr(o, 'to_grade'),
+  };
+}
+
 export function parseMovePreview(value: Json): MovePreviewView {
   const o = rec(value, 'move preview');
   return {
-    gains: strings(o.gains),
-    loses: strings(o.loses),
+    changes: parseList(o.changes, parseMoveAccessChange),
     history_moves_with_document: bool(o, 'history_moves_with_document'),
     reference_changes: bool(o, 'reference_changes'),
     active_public_links: int(o, 'active_public_links'),
@@ -1856,7 +1875,7 @@ export interface TaskTimeView {
   mine_seconds: number;
 }
 
-/** 항목의 시간 합계(D-78). 기록이 있는 종류만. */
+/** 항목의 시간 합계(D-78). 기록이 있는 종류만. 시간 공유(D-117 제거)는 없다. */
 export interface ItemTimeView {
   estimate_minutes: number;
   kinds: { kind: TimeKind; mine_seconds: number }[];
@@ -3815,10 +3834,10 @@ export const api = {
       {
         target_workspace_id: target.workspaceId,
         target_item_id: target.itemId,
-        acknowledged: { gains: acknowledged.gains, loses: acknowledged.loses },
+        acknowledged: { changes: acknowledged.changes },
       },
     );
-    if (status === 409 && isRecord(json) && 'gains' in json) {
+    if (status === 409 && isRecord(json) && 'changes' in json) {
       return { kind: 'changed', preview: parseMovePreview(json) };
     }
     if (status !== 200) fail(status, json);
