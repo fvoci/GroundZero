@@ -36,3 +36,4 @@ it.each(['ko', 'en'] as const)(
     expect(start).toHaveValue('2026-10-28');
   },
 );
+import './fixtures/event-user';
