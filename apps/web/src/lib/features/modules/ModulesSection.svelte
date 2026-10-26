@@ -1,6 +1,11 @@
 <script lang="ts">
   // 워크스페이스의 모듈 목록과 모듈 만들기(관리자). 같은 유형을 여러 개 둘 수 있다 (D-15).
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, retry } from './draft-values';
 
   import { api, ApiError, MODULE_KINDS, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -44,9 +49,45 @@
   let busy = $state(false);
   let formError = $state<string | undefined>(undefined);
   let pending: { requestId: string; signature: string } | undefined;
+  const draft = createFormDraft({
+    name: () => `module-new:${workspace.id}`,
+    snapshot: () => ({ name, key, kind, pending: pending ?? null }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        typeof raw.name !== 'string' ||
+        typeof raw.key !== 'string' ||
+        typeof raw.kind !== 'string' ||
+        !retry(raw.pending)
+      )
+        return undefined;
+      const parsedKind = asKind(raw.kind);
+      return parsedKind === undefined
+        ? undefined
+        : { name: raw.name, key: raw.key, kind: parsedKind, pending: raw.pending };
+    },
+    restore: (value) => {
+      name = value.name;
+      key = value.key;
+      kind = value.kind;
+      pending = value.pending ?? undefined;
+    },
+    reset: () => {
+      name = '';
+      key = '';
+      kind = 'project';
+      pending = undefined;
+      busy = false;
+      formError = undefined;
+    },
+    dirty: () => name !== '' || key !== '' || kind !== 'project',
+    busy: () => busy,
+  });
+  onMount(draft.attach);
 
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (busy || !draft.active || draft.blocked) return;
     const trimmed = name.trim();
     const normalized = normalizeKey(key);
     if (trimmed === '') {
@@ -60,6 +101,11 @@
     const signature = `${kind}|${trimmed}|${normalized}`;
     if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
     busy = true;
+    const attempt = draft.capture();
+    if (attempt === undefined) {
+      busy = false;
+      return;
+    }
     formError = undefined;
     try {
       const created = await api.createModule(workspace.id, {
@@ -68,20 +114,35 @@
         name: trimmed,
         key: normalized,
       });
-      pending = undefined;
-      name = '';
-      key = '';
+      if (!draft.complete(attempt)) return;
       workspaceNav.refreshModules();
       router.navigate(modulePath(workspace.id, created.id));
     } catch (e: unknown) {
+      if (!draft.isCurrent(attempt)) return;
       if (e instanceof NetworkError) formError = m.modules_create_network();
       else if (e instanceof ApiError && e.status === 409) formError = m.modules_key_taken_new();
       else formError = errorText(e, m.modules_create_failed());
     } finally {
-      busy = false;
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 </script>
+
+{#each draft.offers as entry (entry.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      draft.restore(entry);
+    }}
+    ondiscard={() => {
+      draft.discard(entry);
+    }}
+  />
+{/each}
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>
 
 <section class="flex flex-col gap-3" aria-labelledby="modules-heading">
   <h2 id="modules-heading" class="text-lg font-semibold">{m.modules_heading()}</h2>

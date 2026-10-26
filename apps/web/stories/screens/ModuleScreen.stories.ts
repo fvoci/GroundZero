@@ -1,9 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
-import { expect, within } from 'storybook/test';
+import { expect, within, userEvent, screen } from 'storybook/test';
 
 import { ApiError, NetworkError } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
-import { modulePath } from '$lib/router.svelte';
+import { modulePath, router, workspacePath } from '$lib/router.svelte';
+import { me } from '$lib/me.svelte';
+import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
+import { m } from '$lib/paraglide/messages.js';
 
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { never, setUpScreen } from '../fixtures/screens';
@@ -24,7 +27,15 @@ const meta = {
   component: ModuleScreen,
   args: { workspace: WORKSPACE, moduleId: PROJECT_MODULE.id },
   decorators: [() => ({ Component: MainFrame })],
-  beforeEach: () => setUpScreen(modulePath(WORKSPACE.id, PROJECT_MODULE.id)),
+  beforeEach: () => {
+    const previousUser = me.userId;
+    me.userId = 'story-module-user';
+    const cleanup = setUpScreen(modulePath(WORKSPACE.id, PROJECT_MODULE.id));
+    return () => {
+      me.userId = previousUser;
+      cleanup();
+    };
+  },
 } satisfies Meta<typeof ModuleScreen>;
 
 export default meta;
@@ -99,4 +110,36 @@ export const LoadFailed: Story = {
     const alert = await within(canvasElement).findByRole('alert');
     await expect(alert).toHaveTextContent('모듈을 불러오지 못했습니다.');
   },
+};
+
+/** Settings-only edits use the same departure confirmation as the other editors. */
+export const UnsavedSettings: Story = {
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
+  beforeEach: () => {
+    const cleanup = setUpScreen(modulePath(WORKSPACE.id, PROJECT_MODULE.id));
+    const previousUser = me.userId;
+    me.userId = 'story-module-draft';
+    const key = formDraftTabKey(`module-settings:${PROJECT_MODULE.id}`);
+    writeFormDraftAt(key, undefined);
+    return () => {
+      writeFormDraftAt(key, undefined);
+      me.userId = previousUser;
+      cleanup();
+    };
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByLabelText('설명'), ' 보존할 설정 입력');
+    router.navigate(workspacePath(WORKSPACE.id));
+    await expect(await screen.findByRole('alertdialog')).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
+    await expect(canvas.getByLabelText('설명')).toHaveValue(
+      `${PROJECT_MODULE.description} 보존할 설정 입력`,
+    );
+  },
+};
+
+export const UnsavedSettingsDarkNarrow200: Story = {
+  ...UnsavedSettings,
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

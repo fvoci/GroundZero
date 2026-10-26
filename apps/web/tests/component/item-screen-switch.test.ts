@@ -328,3 +328,4 @@ describe('item screen results after leaving and coming back to the same item', (
     expect(screen.getByText('셋째 문서')).toBeInTheDocument();
   });
 });
+import './fixtures/authenticated';

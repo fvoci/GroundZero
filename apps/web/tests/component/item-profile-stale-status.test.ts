@@ -7,6 +7,7 @@ import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
@@ -238,6 +239,7 @@ describe('item profile status line', () => {
     await screen.findByText(m.modules_period_invalid());
     expect(screen.queryByText('항목 정보를 저장했습니다.')).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
     expect(screen.queryByRole('alert')).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
     expect(screen.queryByRole('alert')).toBeNull();
@@ -264,3 +266,34 @@ describe('item profile status line', () => {
     });
   });
 });
+it('restores all profile text and the original base only for the original account', async () => {
+  vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
+  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  const save = vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
+  const view = render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
+  await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+  const goal = document.querySelector<HTMLTextAreaElement>('#item-goal');
+  if (goal === null) throw new Error('goal');
+  await fireEvent.input(goal, { target: { value: '긴 목표\n다음 줄' } });
+  view.unmount();
+  me.userId = 'other-account';
+  const other = render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
+  await screen.findByRole('button', { name: '고치기' });
+  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  other.unmount();
+  me.userId = 'user-a';
+  vi.mocked(api.itemProfile).mockResolvedValue({ ...profile, version: 9 });
+  render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(document.querySelector('#item-goal')).toHaveValue('긴 목표\n다음 줄');
+  expect(save).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(save).toHaveBeenCalledWith(
+      item.id,
+      1,
+      expect.objectContaining({ goal: '긴 목표\n다음 줄' }),
+    );
+  });
+});
+import './fixtures/authenticated';

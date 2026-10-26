@@ -95,3 +95,4 @@ describe('create from template after the picked template leaves the list', () =>
     expect(await screen.findByRole('alert')).toHaveTextContent('템플릿과 새 항목 제목을 고르세요.');
   });
 });
+import './fixtures/authenticated';

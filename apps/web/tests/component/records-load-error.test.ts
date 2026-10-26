@@ -131,3 +131,4 @@ describe('records panel loading', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+import './fixtures/authenticated';

@@ -4,6 +4,12 @@
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object } from './draft-values';
 
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
@@ -74,7 +80,58 @@
   // 마지막으로 서버 값으로 채운 입력란 값. 입력란이 이 값과 같으면 아직 고치지 않은 것이다. `version`은 저장할 때 보낼
   // 기준 판(D-104)이다: 입력 중에 다시 읽은 항목의 판으로 옮기면 그사이 다른 사람이 고친 것을 덮으므로, 입력란을
   // 서버 값으로 채울 때(또는 내 저장의 응답)만 옮긴다.
-  let filled = { title: '', description: '', shared: false, version: 0 };
+  let filled = $state({ title: '', description: '', shared: false, version: 0 });
+  const infoDraft = createFormDraft({
+    name: () => `item-info:${itemId}`,
+    snapshot: () => ({ title, description, shared, filled }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        typeof raw.title !== 'string' ||
+        typeof raw.description !== 'string' ||
+        typeof raw.shared !== 'boolean' ||
+        !object(raw.filled)
+      )
+        return undefined;
+      const base = raw.filled;
+      if (
+        typeof base.title !== 'string' ||
+        typeof base.description !== 'string' ||
+        typeof base.shared !== 'boolean' ||
+        typeof base.version !== 'number'
+      )
+        return undefined;
+      return {
+        title: raw.title,
+        description: raw.description,
+        shared: raw.shared,
+        filled: {
+          title: base.title,
+          description: base.description,
+          shared: base.shared,
+          version: base.version,
+        },
+      };
+    },
+    restore: (value) => {
+      title = value.title;
+      description = value.description;
+      shared = value.shared;
+      filled = value.filled;
+    },
+    reset: () => {
+      title = item?.title ?? '';
+      description = item?.description ?? '';
+      shared = item?.visibility === 'workspace';
+      filled = { title, description, shared, version: item?.version ?? 0 };
+      saving = false;
+    },
+    dirty: () =>
+      item !== undefined &&
+      (title !== filled.title || description !== filled.description || shared !== filled.shared),
+    busy: () => saving,
+  });
+  onMount(infoDraft.attach);
   // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
   let conflict = $state<ItemView | undefined>(undefined);
 
@@ -184,6 +241,8 @@
    */
   async function submit(baseVersion: number): Promise<void> {
     if (item === undefined || saving) return;
+    const attempt = infoDraft.capture();
+    if (attempt === undefined) return;
     if (title.trim() === '') {
       formError = m.modules_title_required();
       return;
@@ -206,20 +265,25 @@
       });
       if (result.kind === 'conflict') {
         // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다(D-104).
-        if (stillOn(id, mine)) conflict = result.current;
+        if (stillOn(id, mine) && infoDraft.isOwner(attempt)) conflict = result.current;
         return;
       }
       forgetReferences();
-      if (!stillOn(id, mine)) return;
+      if (!stillOn(id, mine) || !infoDraft.isOwner(attempt)) return;
+      if (infoDraft.isCurrent(attempt)) {
+        item = result.item;
+        infoDraft.complete(attempt);
+      }
       conflict = undefined;
       refresh(result.item, sent, true);
       // 더 고친 칸이 남아 있으면 "저장했습니다."를 보이지 않는다(그 입력은 아직 저장되지 않았다).
       saved =
         title === filled.title && description === filled.description && shared === filled.shared;
     } catch (e: unknown) {
-      if (stillOn(id, mine)) formError = errorText(e, m.modules_save_failed());
+      if (stillOn(id, mine) && infoDraft.isOwner(attempt))
+        formError = errorText(e, m.modules_save_failed());
     } finally {
-      saving = false;
+      if (infoDraft.isOwner(attempt)) saving = false;
     }
   }
 
@@ -292,6 +356,22 @@
     target.focus({ preventScroll: true });
   }
 </script>
+
+{#each item === undefined ? [] : infoDraft.offers as entry (entry.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      infoDraft.restore(entry);
+    }}
+    ondiscard={() => {
+      infoDraft.discard(entry);
+    }}
+  />
+{/each}
+<DiscardChangesConfirm
+  open={infoDraft.leave.open}
+  onkeep={infoDraft.leave.keep}
+  ondiscard={infoDraft.discardAndLeave}
+/>
 
 <nav aria-label={m.modules_breadcrumb()} class="-mb-6 min-w-0 text-sm text-muted-foreground">
   <ol class="flex min-w-0 items-center gap-1">
@@ -530,10 +610,12 @@
         />
         <CreateForm
           id="new-item-document"
+          draftName={`item-document-new:${current.id}`}
+          bind:draftContext={docTemplate}
           label={m.modules_new_document_title()}
           placeholder={m.modules_new_document_placeholder()}
           submitLabel={m.modules_create_document()}
-          create={async (requestId: string, docTitle: string) => {
+          create={async (requestId: string, docTitle: string, context: CreateFormContext) => {
             const doc = await api.createItemDocument(
               current.id,
               requestId,
@@ -541,7 +623,8 @@
               null,
               docTemplate === '' ? null : docTemplate,
             );
-            router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
+            if (context.saved())
+              router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
           }}
         />
       {/if}

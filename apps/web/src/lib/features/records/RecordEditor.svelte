@@ -137,20 +137,20 @@
             : recordFieldLabel(def, f)}</Label
         >
         {#if f.type === 'number'}
-          <!-- 숫자 칸을 bind:value로 묶으면 숫자(비우면 null)가 들어와 글자로 든 폼과 섞인다. 입력 글자를 그대로 든다.
-               수로 읽지 못한 글자("1e")도 빈 글자로 오므로 badInput으로 일부러 비운 칸과 구분한다. -->
+          <!-- text preserves incomplete numeric input (for example "1e") across draft restoration. -->
           <Input
             id={id(f.key)}
-            type="number"
-            min={0}
-            step="any"
+            type="text"
+            inputmode="decimal"
             value={form.values[f.key] ?? ''}
             aria-invalid={form.unreadable[f.key] === true ? true : undefined}
             oninput={(e: Event) => {
               const target = e.currentTarget;
               if (!(target instanceof HTMLInputElement)) return;
               form.values[f.key] = target.value;
-              form.unreadable[f.key] = target.validity.badInput;
+              const value = target.value.trim();
+              form.unreadable[f.key] =
+                value !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0);
             }}
           />
         {:else}

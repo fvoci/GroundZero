@@ -184,3 +184,4 @@ describe('course records when the episode list cannot be loaded', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+import './fixtures/authenticated';

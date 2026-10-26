@@ -370,3 +370,4 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
     expect(api.task).toHaveBeenCalledWith(entry.id);
   });
 });
+import './fixtures/authenticated';

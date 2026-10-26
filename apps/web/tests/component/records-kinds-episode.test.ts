@@ -50,3 +50,4 @@ describe('record kinds with an episode field', () => {
     expect(parsed[0]?.fields[0]?.type).toBe('episode');
   });
 });
+import './fixtures/authenticated';

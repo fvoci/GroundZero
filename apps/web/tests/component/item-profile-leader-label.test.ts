@@ -176,3 +176,4 @@ describe('item member badges', () => {
     expect(group.closest('li')).toHaveClass('min-w-0', 'max-w-full');
   });
 });
+import './fixtures/authenticated';

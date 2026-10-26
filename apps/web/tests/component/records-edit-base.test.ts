@@ -240,3 +240,4 @@ describe('record edit base version', () => {
     expect(document.getElementById('record-risk-title')).toBeNull();
   });
 });
+import './fixtures/authenticated';
