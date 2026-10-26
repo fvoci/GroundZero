@@ -8,6 +8,7 @@ import { formDraftTabKey } from '$lib/features/common/form-draft';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+import { markAccountSwitch } from '$lib/features/feedback/feedback.svelte';
 
 const create = vi.fn<(id: string, name: string) => Promise<void>>();
 const props = {
@@ -148,6 +149,75 @@ it('leaves drafts in other tabs alone when saving', async () => {
   await waitFor(() => expect(input()).toHaveValue(''));
   expect(localStorage.getItem(key)).toBeNull();
   expect(localStorage.getItem(other)).toContain('other tab');
+});
+
+it('allows a new input to save while preserving an older offered draft', async () => {
+  mount();
+  await fireEvent.input(input(), { target: { value: 'offered' } });
+  cleanup();
+  mount();
+  await screen.findByTestId('form-draft-offer');
+  await fireEvent.input(input(), { target: { value: 'new input' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledOnce();
+  });
+  expect(input()).toHaveValue('');
+  expect(keys()).toHaveLength(1);
+  expect(localStorage.getItem(keys()[0] ?? '')).toContain('offered');
+});
+
+it('fences account switching before me changes and lets the reload proceed', async () => {
+  mount();
+  await fireEvent.input(input(), { target: { value: 'original account input' } });
+  markAccountSwitch();
+  expect(me.userId).toBe('user-a');
+  await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  expect(create).not.toHaveBeenCalled();
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(false);
+  expect(
+    keys().some(
+      (key) =>
+        key.includes('user-a') && localStorage.getItem(key)?.includes('original account input'),
+    ),
+  ).toBe(true);
+  flushSync(() => {
+    me.userId = 'user-b';
+  });
+  expect(input()).toHaveValue('');
+  expect(keys().some((key) => key.includes('user-b'))).toBe(false);
+});
+
+it('does not clear the original draft on a late success after account switching begins', async () => {
+  let finish: (() => void) | undefined;
+  create.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  mount();
+  await fireEvent.input(input(), { target: { value: 'keep original' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  markAccountSwitch();
+  finish?.();
+  await waitFor(() => {
+    expect(keys().some((key) => localStorage.getItem(key)?.includes('keep original'))).toBe(true);
+  });
+  expect(input()).toHaveValue('keep original');
+});
+
+it('never copies same-tick input into the newly selected account key', async () => {
+  mount();
+  const typing = fireEvent.input(input(), { target: { value: 'belongs to A' } });
+  flushSync(() => {
+    me.userId = 'user-b';
+  });
+  await typing;
+  expect(input()).toHaveValue('');
+  expect(keys().some((key) => key.includes('user-b'))).toBe(false);
 });
 
 it('preserves newly typed input as another offer when restoring an older draft', async () => {
