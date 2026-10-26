@@ -1,11 +1,13 @@
 <script lang="ts">
   // 내 시간 (D-117): 본인 기록과 날짜·종류별 합계, 수동 기록.
   // 기록은 본인만 본다(워크스페이스 관리자에게도 보이지 않는다). 날짜는 보는 사람 시간대, 기록은 시작한 날에 센다.
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/api/client';
-  import { api, TIME_KINDS } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, newRequestId, TIME_KINDS } from '$lib/api/client';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import { me } from '$lib/me.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { errorText } from '$lib/api/errors';
   import { displaySettings, formatClock, weekdays } from '$lib/display';
   import { startOfWeek } from '$lib/features/events/calendar';
@@ -52,9 +54,19 @@
   });
 
   const request = $derived({ from: weekStart, to: weekEnd, key: reloadKey });
+  let listOwner: string | undefined;
   $effect(() => {
     const { from, to } = request;
+    const userId = me.userId;
     if (org.currentId === undefined) return;
+    if (listOwner !== userId) {
+      entries = [];
+      daily = [];
+      monthly = [];
+      loaded = false;
+      editing = undefined;
+      listOwner = userId;
+    }
     const monthFrom = `${today.slice(0, 7)}-01`;
     let cancelled = false;
     Promise.all([
@@ -63,7 +75,7 @@
       api.timeSummary(monthFrom, today, zone, 'month'),
     ])
       .then(([e, d, mo]) => {
-        if (cancelled) return;
+        if (cancelled || userId !== me.userId) return;
         entries = e;
         daily = d;
         monthly = mo;
@@ -97,16 +109,107 @@
     kind: 'work',
     memo: '',
   });
+  let cleanManual = $state<Manual>({ ...manual });
   // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
-  const manualKey = new RetryKey();
+  let pending = $state<{ id: string; signature: string } | null>(null);
+  let manualBusy = $state(false);
   let manualError = $state<string | undefined>(undefined);
   /** 그 시간대에 없는 시각을 넣은 칸(칸 옆에 알린다, D-82). */
   let manualMissing = $state<'start' | 'end' | undefined>(undefined);
   let manualStatus = $state('');
 
+  interface ManualDraft {
+    form: Manual;
+    zone: string;
+    pending: { id: string; signature: string } | null;
+  }
+  let manualZone = $state(zone);
+  let manualOwner = me.userId;
+  function resetManual(): void {
+    if (manualOwner !== me.userId) {
+      cleanManual = { day: today, start: '09:00', end: '10:00', kind: 'work', memo: '' };
+      manualOwner = me.userId;
+    }
+    Object.assign(manual, cleanManual);
+    pending = null;
+    manualZone = zone;
+    manualError = undefined;
+    manualMissing = undefined;
+    manualStatus = '';
+    manualBusy = false;
+  }
+  const manualDraft = createFormDraft<ManualDraft>({
+    name: () => (org.currentId === undefined ? undefined : `time-manual:${org.currentId}`),
+    snapshot: () => ({ form: { ...manual }, zone: manualZone, pending }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('form' in value) ||
+        !('zone' in value) ||
+        typeof value.zone !== 'string' ||
+        !('pending' in value)
+      )
+        return undefined;
+      const f = value.form;
+      if (
+        typeof f !== 'object' ||
+        f === null ||
+        !('day' in f) ||
+        typeof f.day !== 'string' ||
+        !('start' in f) ||
+        typeof f.start !== 'string' ||
+        !('end' in f) ||
+        typeof f.end !== 'string' ||
+        !('memo' in f) ||
+        typeof f.memo !== 'string' ||
+        !('kind' in f)
+      )
+        return undefined;
+      const kind = TIME_KINDS.find((k) => k === f.kind);
+      if (kind === undefined) return undefined;
+      const p = value.pending;
+      let retry: ManualDraft['pending'] = null;
+      if (p !== null) {
+        if (
+          typeof p !== 'object' ||
+          !('id' in p) ||
+          typeof p.id !== 'string' ||
+          !('signature' in p) ||
+          typeof p.signature !== 'string'
+        )
+          return undefined;
+        retry = { id: p.id, signature: p.signature };
+      }
+      return {
+        form: { day: f.day, start: f.start, end: f.end, memo: f.memo, kind },
+        zone: value.zone,
+        pending: retry,
+      };
+    },
+    restore: (value) => {
+      Object.assign(manual, value.form);
+      manualZone = value.zone;
+      pending = value.pending;
+    },
+    reset: resetManual,
+    dirty: () =>
+      pending !== null ||
+      manualZone !== zone ||
+      manual.day !== cleanManual.day ||
+      manual.start !== cleanManual.start ||
+      manual.end !== cleanManual.end ||
+      manual.kind !== cleanManual.kind ||
+      manual.memo !== cleanManual.memo,
+    busy: () => manualBusy,
+  });
+  onMount(manualDraft.attach);
+
   async function addManual(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (manualBusy || !manualDraft.active || manualDraft.blocked) return;
     manualError = undefined;
+    let attempt: ReturnType<typeof manualDraft.capture>;
     try {
       // 그 시간대에 없는 시각(여름시간 시작일의 건너뛴 시각, D-81)은 조용히 옮겨 저장하지 않는다. 변환 전에 본다(없는
       // 시각을 변환하면 틈만큼 뒤로 밀려 엉뚱한 길이가 된다). 끝은 실제로 쓰일 날의 시각만 본다: 입력한 끝이 시작보다
@@ -114,19 +217,19 @@
       // 끝을 본다. 두 값 모두 type="time"의 0을 채운 `HH:mm`이라 문자열 비교가 시각 순서와 같다.
       manualMissing = undefined;
       const startWall = `${manual.day}T${manual.start}`;
-      if (isMissingLocalTime(startWall, zone)) {
+      if (isMissingLocalTime(startWall, manualZone)) {
         manualMissing = 'start';
         return;
       }
       const endDay =
         manual.end <= manual.start ? fromDayNumber(dayNumber(manual.day) + 1) : manual.day;
       const endWall = `${endDay}T${manual.end}`;
-      if (isMissingLocalTime(endWall, zone)) {
+      if (isMissingLocalTime(endWall, manualZone)) {
         manualMissing = 'end';
         return;
       }
-      const started = instantOf(startWall, zone);
-      const ended = instantOf(endWall, zone);
+      const started = instantOf(startWall, manualZone);
+      const ended = instantOf(endWall, manualZone);
       const entry = {
         started_at: started,
         ended_at: ended,
@@ -135,15 +238,27 @@
         memo: manual.memo,
         target: null,
       };
-      const requestId = manualKey.for(entry);
+      const signature = JSON.stringify(entry);
+      if (pending?.signature !== signature) pending = { id: newRequestId(), signature };
+      const requestId = pending.id;
+      attempt = manualDraft.capture();
+      if (attempt === undefined) return;
+      manualBusy = true;
       await api.addTimeEntry(requestId, entry);
-      manualKey.done(requestId);
-      manual.memo = '';
+      if (!manualDraft.isOwner(attempt)) return;
+      // Keep any input typed while the request was in flight.
+      if (manualDraft.isCurrent(attempt)) {
+        cleanManual = { ...manual, memo: '' };
+        manualDraft.complete(attempt);
+      }
       manualStatus = m.time_manual_added();
       notifyDone(manualStatus);
       reloadKey += 1;
     } catch (e: unknown) {
-      manualError = errorText(e, m.time_manual_failed());
+      if (attempt === undefined || manualDraft.isCurrent(attempt))
+        manualError = errorText(e, m.time_manual_failed());
+    } finally {
+      if (attempt !== undefined && manualDraft.isOwner(attempt)) manualBusy = false;
     }
   }
 
@@ -291,6 +406,25 @@
 
     <section class="flex flex-col gap-2" aria-labelledby="time-manual-heading">
       <h2 id="time-manual-heading" class="text-lg font-semibold">{m.time_manual_heading()}</h2>
+      <p class="text-sm text-muted-foreground">{m.settings_time_zone()}: {manualZone}</p>
+      {#each manualDraft.offers as offer (offer.key)}
+        <div class="flex flex-wrap items-center gap-2" data-testid="time-manual-draft-offer">
+          <p>{m.common_draft_available()}</p>
+          <Button
+            size="sm"
+            onclick={() => {
+              manualDraft.restore(offer);
+            }}>{m.common_draft_restore()}</Button
+          >
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => {
+              manualDraft.discard(offer);
+            }}>{m.common_draft_discard()}</Button
+          >
+        </div>
+      {/each}
       <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addManual(e)}>
         <div class="flex flex-col gap-1">
           <Label for="time-manual-day">{m.time_date()}</Label>
@@ -316,7 +450,7 @@
           />
           {#if manualMissing === 'start'}
             <p id="time-manual-start-error" class="text-xs text-destructive" role="alert">
-              {m.events_missing_time({ zone })}
+              {m.events_missing_time({ zone: manualZone })}
             </p>
           {/if}
         </div>
@@ -333,7 +467,7 @@
           />
           {#if manualMissing === 'end'}
             <p id="time-manual-end-error" class="text-xs text-destructive" role="alert">
-              {m.events_missing_time({ zone })}
+              {m.events_missing_time({ zone: manualZone })}
             </p>
           {/if}
         </div>
@@ -361,7 +495,9 @@
           <Label for="time-manual-memo">{m.time_memo()}</Label>
           <Input id="time-manual-memo" bind:value={manual.memo} maxlength={2000} />
         </div>
-        <Button type="submit">{m.time_add_entry()}</Button>
+        <Button type="submit" disabled={manualBusy || !manualDraft.active || manualDraft.blocked}
+          >{m.time_add_entry()}</Button
+        >
       </form>
       {#if manualError !== undefined}
         <p role="alert" class="text-sm text-destructive">{manualError}</p>
@@ -380,3 +516,9 @@
     }}
   />
 {/if}
+
+<DiscardChangesConfirm
+  open={manualDraft.leave.open}
+  onkeep={manualDraft.leave.keep}
+  ondiscard={manualDraft.discardAndLeave}
+/>
