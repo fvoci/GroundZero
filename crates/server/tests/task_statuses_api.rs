@@ -76,7 +76,7 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
     assert_eq!(
         names(&list.json),
-        [("todo", "todo"), ("in_progress", "doing"), ("done", "done")]
+        [("할 일", "todo"), ("진행 중", "doing"), ("완료", "done")]
             .map(|(n, c)| (n.to_owned(), c.to_owned()))
     );
     assert_eq!(
