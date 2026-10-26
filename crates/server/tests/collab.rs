@@ -3238,7 +3238,6 @@ async fn move_commit_reply_race(destination_writable: bool) {
     proxied.collab = fvoci_server::collab::Rooms::default();
     let app = common::app(&proxied);
     let addr = proxy.serve(app.clone()).await;
-    let initial_check_bound = tokio::time::Instant::now();
     let mut editor = connect(addr, Some(&writer), &id, true).await.unwrap();
     editor.paragraph("응답 지연 전 확인 편집").await;
     assert!(editor.until(acked).await);
@@ -3249,6 +3248,8 @@ async fn move_commit_reply_race(destination_writable: bool) {
         .await
         .unwrap();
     let (hold, holder) = hold_tree(&owner, &to).await;
+    // 이동 명령은 DB 잠금 전에 source 권한을 강제로 다시 확인한다. 그 확인보다 앞선 하한이다.
+    let source_check_bound = tokio::time::Instant::now();
     let moving = tokio::spawn({
         let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
         async move { move_to(&app, &admin, &id, &to).await }
@@ -3295,6 +3296,7 @@ async fn move_commit_reply_race(destination_writable: bool) {
         .await
         .unwrap()
         .unwrap();
+    let move_elapsed = source_check_bound.elapsed();
     let closed = if destination_writable {
         editor.closed().await
     } else {
@@ -3307,9 +3309,9 @@ async fn move_commit_reply_race(destination_writable: bool) {
     state.db.close().await;
     if !destination_writable {
         assert!(
-            initial_check_bound.elapsed() < Duration::from_secs(1),
+            move_elapsed < Duration::from_secs(1),
             "denied move must finish within the original source grant TTL: {:?}",
-            initial_check_bound.elapsed()
+            move_elapsed
         );
     }
     assert!(held_response, "the COMMIT response was not held");
