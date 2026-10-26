@@ -18,6 +18,273 @@ use serde_json::{Value, json};
 
 const HEADER: &str = "x-fvoci-expected-user";
 
+/// HTTP 응답의 필터와 무관하게 업무 쓰기의 부수 효과까지 직접 비교한다.
+async fn task_snapshot(workspace: &str) -> Value {
+    let mut conn = common::fixture_conn().await;
+    sqlx::query_scalar(
+        "SELECT jsonb_object_agg(kind, rows) FROM (
+           SELECT 'tasks' AS kind, jsonb_agg(to_jsonb(t) ORDER BY t.id) AS rows
+             FROM fvoci.tasks t WHERE workspace_id = $1::uuid
+           UNION ALL SELECT 'checklist', jsonb_agg(to_jsonb(c) ORDER BY c.id)
+             FROM fvoci.checklist_items c JOIN fvoci.tasks t ON t.id = c.task_id WHERE t.workspace_id = $1::uuid
+           UNION ALL SELECT 'dependencies', jsonb_agg(to_jsonb(d) ORDER BY d.predecessor_id, d.successor_id)
+             FROM fvoci.task_dependencies d JOIN fvoci.tasks t ON t.id = d.successor_id WHERE t.workspace_id = $1::uuid
+           UNION ALL SELECT 'assignees', jsonb_agg(to_jsonb(a) ORDER BY a.task_id, a.user_id)
+             FROM fvoci.task_assignees a JOIN fvoci.tasks t ON t.id = a.task_id WHERE t.workspace_id = $1::uuid
+           UNION ALL SELECT 'series', jsonb_agg(to_jsonb(s) ORDER BY s.id)
+             FROM fvoci.task_series s WHERE workspace_id = $1::uuid
+           UNION ALL SELECT 'statuses', jsonb_agg(to_jsonb(s) ORDER BY s.id)
+             FROM fvoci.task_statuses s JOIN fvoci.items i ON i.id = s.item_id WHERE i.workspace_id = $1::uuid
+           UNION ALL SELECT 'audit', jsonb_agg(to_jsonb(a) ORDER BY a.id)
+             FROM fvoci.audit_log a WHERE workspace_id = $1::uuid
+           UNION ALL SELECT 'activity', jsonb_agg(to_jsonb(a) ORDER BY a.id)
+             FROM fvoci.activity a WHERE workspace_id = $1::uuid
+           UNION ALL SELECT 'trash', jsonb_agg(to_jsonb(t) ORDER BY t.id)
+             FROM fvoci.trash_batches t WHERE workspace_id = $1::uuid
+         ) snapshots",
+    )
+    .bind(workspace)
+    .fetch_one(&mut conn)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn every_task_write_requires_the_user_who_started_it() {
+    let state = common::state();
+    let app = common::app(&state);
+    let alice = login(&state, "alice").await;
+    let bob = login(&state, "bob").await;
+    let alice_id = alice.id.0.to_string();
+    let bob_id = bob.id.0.to_string();
+
+    for action in [
+        "create",
+        "update",
+        "move",
+        "parent",
+        "add_checklist",
+        "update_checklist",
+        "delete_checklist",
+        "add_predecessor",
+        "remove_predecessor",
+        "recurrence",
+        "sync",
+        "trash",
+        "create_status",
+        "update_status",
+        "delete_status",
+    ] {
+        let ws = create_workspace(&app, &alice, action).await;
+        let module = send(&app, Method::POST, &format!("/api/workspaces/{ws}/modules"), Some(&alice),
+            Some(json!({"request_id": new_request_id(), "kind": "project", "name": action, "key": "TASK"}))).await;
+        assert_eq!(module.status, StatusCode::CREATED, "{:?}", module.json);
+        let item = send(
+            &app,
+            Method::POST,
+            &format!("/api/modules/{}/items", module.json["id"].as_str().unwrap()),
+            Some(&alice),
+            Some(json!({"request_id": new_request_id(), "title": action})),
+        )
+        .await;
+        assert_eq!(item.status, StatusCode::CREATED, "{:?}", item.json);
+        let item_id = item.json["id"].as_str().unwrap();
+        let statuses_uri = format!("/api/items/{item_id}/statuses");
+        let statuses = send(&app, Method::GET, &statuses_uri, Some(&alice), None).await;
+        assert_eq!(statuses.status, StatusCode::OK, "{:?}", statuses.json);
+        let statuses = statuses.json.as_array().unwrap();
+        let todo = statuses.iter().find(|s| s["category"] == "todo").unwrap()["id"]
+            .as_str()
+            .unwrap();
+        let doing = statuses.iter().find(|s| s["category"] == "doing").unwrap()["id"]
+            .as_str()
+            .unwrap();
+        let create_uri = format!("/api/items/{item_id}/tasks");
+        let mut tasks = Vec::new();
+        for title in ["task", "related"] {
+            let task = send(&app, Method::POST, &create_uri, Some(&alice),
+                Some(json!({"request_id": new_request_id(), "title": title, "due_date": "2026-01-01"}))).await;
+            assert_eq!(task.status, StatusCode::CREATED, "{:?}", task.json);
+            tasks.push(task.json);
+        }
+        let task = &tasks[0];
+        let id = task["id"].as_str().unwrap();
+        let related = tasks[1]["id"].as_str().unwrap();
+        let uri = format!("/api/tasks/{id}");
+        let checklist = send(
+            &app,
+            Method::POST,
+            &format!("{uri}/checklist"),
+            Some(&alice),
+            Some(json!({"items": [{"request_id": new_request_id(), "text": "original"}]})),
+        )
+        .await;
+        assert_eq!(checklist.status, StatusCode::OK, "{:?}", checklist.json);
+        let checklist_id = checklist.json["checklist"][0]["id"].as_str().unwrap();
+        let link_uri = format!("{uri}/predecessors/{related}");
+        if action == "remove_predecessor" {
+            let linked = send(
+                &app,
+                Method::PUT,
+                &link_uri,
+                Some(&alice),
+                Some(json!({"kind": "FS", "lag_days": 0, "base": null})),
+            )
+            .await;
+            assert_eq!(linked.status, StatusCode::OK, "{:?}", linked.json);
+        }
+        let rule = json!({"freq": "daily", "interval": 1, "weekdays": [], "count": 2});
+        if action == "sync" {
+            let repeated = send(
+                &app,
+                Method::PUT,
+                &format!("{uri}/recurrence"),
+                Some(&alice),
+                Some(json!({"rule": rule, "base": null, "timezone": "Asia/Seoul"})),
+            )
+            .await;
+            assert_eq!(repeated.status, StatusCode::OK, "{:?}", repeated.json);
+            let mut conn = common::fixture_conn().await;
+            sqlx::query("DELETE FROM fvoci.checklist_items WHERE task_id IN (SELECT id FROM fvoci.tasks WHERE workspace_id = $1::uuid AND id <> $2::uuid AND series_id IS NOT NULL)")
+                .bind(&ws).bind(id).execute(&mut conn).await.unwrap();
+            sqlx::query("DELETE FROM fvoci.tasks WHERE workspace_id = $1::uuid AND id <> $2::uuid AND series_id IS NOT NULL")
+                .bind(&ws).bind(id).execute(&mut conn).await.unwrap();
+        }
+        let (method, path, body, success) = match action {
+            "create" => (
+                Method::POST,
+                create_uri,
+                json!({"request_id": new_request_id(), "title": "created"}),
+                StatusCode::CREATED,
+            ),
+            "update" => (
+                Method::PUT,
+                uri.clone(),
+                json!({"base_version": task["version"], "title": "changed", "description": "changed",
+                "status": "할 일", "priority": "high", "start_date": null, "due_date": "2026-01-01", "estimate_minutes": null,
+                "tags": [], "assignee_ids": [], "milestone": false}),
+                StatusCode::OK,
+            ),
+            "move" => (
+                Method::PUT,
+                format!("{uri}/position"),
+                json!({"status": "진행 중", "base_move_version": task["move_version"], "before_id": null}),
+                StatusCode::OK,
+            ),
+            "parent" => (
+                Method::PUT,
+                format!("{uri}/parent"),
+                json!({"parent_id": related}),
+                StatusCode::OK,
+            ),
+            "add_checklist" => (
+                Method::POST,
+                format!("{uri}/checklist"),
+                json!({"items": [{"request_id": new_request_id(), "text": "added"}]}),
+                StatusCode::OK,
+            ),
+            "update_checklist" => (
+                Method::PUT,
+                format!("/api/checklist-items/{checklist_id}"),
+                json!({"text": "changed", "checked": true}),
+                StatusCode::NO_CONTENT,
+            ),
+            "delete_checklist" => (
+                Method::DELETE,
+                format!("/api/checklist-items/{checklist_id}"),
+                Value::Null,
+                StatusCode::NO_CONTENT,
+            ),
+            "add_predecessor" => (
+                Method::PUT,
+                link_uri.clone(),
+                json!({"kind": "FS", "lag_days": 0, "base": null}),
+                StatusCode::OK,
+            ),
+            "remove_predecessor" => (Method::DELETE, link_uri, Value::Null, StatusCode::OK),
+            "recurrence" => (
+                Method::PUT,
+                format!("{uri}/recurrence"),
+                json!({"rule": rule, "base": null, "timezone": "Asia/Seoul"}),
+                StatusCode::OK,
+            ),
+            "sync" => (
+                Method::POST,
+                format!("/api/items/{item_id}/recurrences/sync"),
+                Value::Null,
+                StatusCode::OK,
+            ),
+            "trash" => (Method::DELETE, uri.clone(), Value::Null, StatusCode::OK),
+            "create_status" => (
+                Method::POST,
+                statuses_uri.clone(),
+                json!({"name": "review", "category": "doing"}),
+                StatusCode::CREATED,
+            ),
+            "update_status" => (
+                Method::PUT,
+                format!("{statuses_uri}/{todo}"),
+                json!({"name": "finished", "category": "done"}),
+                StatusCode::OK,
+            ),
+            "delete_status" => (
+                Method::DELETE,
+                format!("{statuses_uri}/{todo}?move_to={doing}"),
+                Value::Null,
+                StatusCode::OK,
+            ),
+            _ => unreachable!("unknown test action: {action}"),
+        };
+        let before = task_snapshot(&ws).await;
+        for (expected, status) in [
+            (vec![], StatusCode::BAD_REQUEST),
+            (vec![bob_id.as_str()], StatusCode::CONFLICT),
+        ] {
+            let (actual, json) =
+                raw(&app, method.clone(), &path, Some(&alice), &expected, &body).await;
+            assert_eq!(actual, status, "{action}: {json:?}");
+            assert_eq!(
+                json["error"],
+                if expected.is_empty() {
+                    "bad_request"
+                } else {
+                    "account_changed"
+                },
+                "{action}: {json:?}"
+            );
+            assert!(json.get("current").is_none(), "{action}: {json:?}");
+            assert_eq!(
+                task_snapshot(&ws).await,
+                before,
+                "{action} must not mutate the database on rejection"
+            );
+        }
+        // 본문 역직렬화보다 먼저 검사하므로, 잘못된 본문도 앞 계정의 요청을 삼키지 않는다.
+        if body != Value::Null {
+            let (status, json) = raw(
+                &app,
+                method.clone(),
+                &path,
+                Some(&alice),
+                &[&bob_id],
+                &Value::Null,
+            )
+            .await;
+            assert_eq!(status, StatusCode::CONFLICT, "{action}: {json:?}");
+            assert_eq!(json["error"], "account_changed", "{action}: {json:?}");
+            assert_eq!(task_snapshot(&ws).await, before, "{action}: invalid body");
+        }
+        // 일치하는 머리로 같은 본문을 보내면 성공하고 실제 상태가 바뀐다.
+        let (status, json) = raw(&app, method, &path, Some(&alice), &[&alice_id], &body).await;
+        assert_eq!(status, success, "{action}: {json:?}");
+        assert_ne!(
+            task_snapshot(&ws).await,
+            before,
+            "{action} must exercise a real write"
+        );
+    }
+}
+
 /// 머리를 그대로(자동으로 붙이지 않고) 정해 보낸다.
 async fn raw(
     app: &Router,

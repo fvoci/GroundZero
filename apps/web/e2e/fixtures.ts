@@ -76,6 +76,8 @@ export function recordSensitive(values: readonly string[]): void {
 
 /** 로그인한 사용자의 쿠키로 서버를 직접 부르는 도구(합성 데이터 준비와 서버 상태 확인). */
 export class Api {
+  private expectedUser: Promise<string> | undefined;
+
   constructor(
     private readonly request: APIRequestContext,
     private readonly origin: string,
@@ -90,10 +92,11 @@ export class Api {
 
   /** 상태를 바꾸는 요청. 서버의 Origin 검사(CSRF)를 브라우저처럼 통과하게 원점을 붙인다. */
   async send(method: 'POST' | 'PUT', url: string, data: unknown): Promise<unknown> {
+    this.expectedUser ??= this.get('/api/me').then((me) => str(me, 'id'));
     const res = await this.request.fetch(url, {
       method,
       data,
-      headers: { origin: this.origin },
+      headers: { origin: this.origin, 'x-fvoci-expected-user': await this.expectedUser },
     });
     expect(res.ok(), `${method} ${url} -> ${String(res.status())}`).toBe(true);
     if (res.status() === 204) return undefined;

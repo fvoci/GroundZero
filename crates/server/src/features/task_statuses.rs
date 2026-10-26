@@ -13,7 +13,8 @@ use uuid::Uuid;
 
 use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::accounts::{CurrentUser, ExpectedUser};
+use crate::features::tasks::EXPECTED_TASK_USER_DOC;
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::ids::ItemId;
@@ -152,12 +153,13 @@ pub async fn list(
 
 /// 상태 만들기(항목 소유 권한). 이름 중복은 409, 30개 상한은 400, 보관된 항목은 409.
 #[utoipa::path(post, path = "/api/items/{item_id}/statuses", operation_id = "create_task_status",
-    params(("item_id" = String, Path, format = Uuid)), request_body = NewTaskStatus,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = NewTaskStatus,
     responses((status = 201, body = TaskStatus), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경")), tag = "tasks")]
 pub async fn create(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
     Json(input): Json<NewTaskStatus>,
 ) -> Result<(StatusCode, Json<TaskStatus>), AppError> {
@@ -184,13 +186,14 @@ pub async fn create(
 
 /// 상태 고치기(항목 소유 권한). 범주를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다.
 #[utoipa::path(put, path = "/api/items/{item_id}/statuses/{status_id}", operation_id = "update_task_status",
-    params(("item_id" = String, Path, format = Uuid), ("status_id" = String, Path, format = Uuid)),
+    params(("item_id" = String, Path, format = Uuid), ("status_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
     request_body = UpdateTaskStatus,
     responses((status = 200, body = TaskStatus), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경")), tag = "tasks")]
 pub async fn update(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path((item, status)): Path<(ItemId, Uuid)>,
     Json(input): Json<UpdateTaskStatus>,
 ) -> Result<Json<TaskStatus>, AppError> {
@@ -230,12 +233,13 @@ pub async fn update(
 
 /// 상태 지우기(항목 소유 권한). 업무가 있으면 `move_to`로 옮길 열이 필요하고(400), 마지막 상태는 지울 수 없다(409).
 #[utoipa::path(delete, path = "/api/items/{item_id}/statuses/{status_id}", operation_id = "delete_task_status",
-    params(("item_id" = String, Path, format = Uuid), ("status_id" = String, Path, format = Uuid), DeleteStatusQuery),
+    params(("item_id" = String, Path, format = Uuid), ("status_id" = String, Path, format = Uuid), DeleteStatusQuery,
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
     responses((status = 200, body = DeletedTaskStatus), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 마지막 상태 삭제·보관·동시 변경")), tag = "tasks")]
 pub async fn delete(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path((item, status)): Path<(ItemId, Uuid)>,
     Query(query): Query<DeleteStatusQuery>,
 ) -> Result<Json<DeletedTaskStatus>, AppError> {
