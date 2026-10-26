@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
 import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
+import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 보존 기간 입력 오류는 그 칸 옆에 보인다(D-82, 감사 W37). 화면 위 공용 알림이 아니라 칸에 묶인 설명으로.
@@ -26,6 +27,8 @@ function describedText(input: HTMLElement): string | undefined {
 describe('trash retention field errors', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    localStorage.clear();
     vi.spyOn(api, 'trash').mockResolvedValue({
       retention_days: 30,
       version_retention_days: null,
@@ -33,6 +36,7 @@ describe('trash retention field errors', () => {
     });
   });
   afterEach(() => {
+    me.userId = '';
     vi.restoreAllMocks();
   });
 
@@ -104,6 +108,12 @@ describe('trash retention field errors', () => {
     await fireEvent.input(input, { target: { value: '40' } });
     await fireEvent.submit(form);
     await fireEvent.input(input, { target: { value: '45' } });
+    // 성공 뒤 재조회도 저장된 값을 돌려준다. 입력·오류 단언은 그대로 유지한다.
+    vi.mocked(api.trash).mockResolvedValue({
+      retention_days: label === '보존 기간(일)' ? 45 : 30,
+      version_retention_days: label === '보존 기간(일)' ? null : 45,
+      entries: [],
+    });
     await fireEvent.submit(form);
     await new Promise((r) => setTimeout(r, 0));
 
