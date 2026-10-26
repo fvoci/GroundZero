@@ -104,6 +104,16 @@ async function editLagTo(lag: string): Promise<void> {
 }
 
 describe('task detail dependency kinds', () => {
+  it('shows a subtask custom status name instead of its category label', async () => {
+    await setLocale('ko', { reload: false });
+    mount(build, [
+      { ...review, parent_id: build.id, status: 'in_progress', status_name: '검수 대기' },
+    ]);
+    const section = (await screen.findByRole('heading', { name: '하위 업무' })).closest('section');
+    if (section === null) throw new Error('section');
+    expect(within(section).getByText('검수 대기')).toBeInTheDocument();
+  });
+
   it('describes predecessors and followers with their type and lag', async () => {
     await setLocale('ko', { reload: false });
     mount();
