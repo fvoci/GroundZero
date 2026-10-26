@@ -83,7 +83,7 @@ it.each(['event', 'recurrence'] as const)(
   'cannot load server fields while an %s save is pending',
   async (kind) => {
     vi.spyOn(api, 'event').mockResolvedValue(event);
-    const latest = { ...event, version: 4, description: 'Server description' };
+    const latest = { ...event, version: 4, title: 'Server title' };
     const update = vi
       .spyOn(api, 'updateEvent')
       .mockResolvedValueOnce({ kind: 'conflict', current: latest });
