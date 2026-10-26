@@ -22,9 +22,9 @@ async fn default_statuses_and_owner_only_customization() {
     assert_eq!(
         statuses,
         vec![
-            serde_json::json!({"name":"todo","category":"todo"}),
-            serde_json::json!({"name":"in_progress","category":"doing"}),
-            serde_json::json!({"name":"done","category":"done"})
+            serde_json::json!({"name":"할 일","category":"todo"}),
+            serde_json::json!({"name":"진행 중","category":"doing"}),
+            serde_json::json!({"name":"완료","category":"done"})
         ]
     );
     let member = w.member("member").await;
@@ -46,7 +46,7 @@ async fn default_statuses_and_owner_only_customization() {
     let task = made(
         &w.state,
         &w.owner,
-        &CREATE_TASK.replace("'todo'", "'review'"),
+        &CREATE_TASK.replace("'할 일'", "'review'"),
         &[w.item, Uuid::now_v7()],
     )
     .await;
@@ -193,7 +193,7 @@ async fn task_mutators_reject_unknown_names_and_accept_custom_names() {
     denied(
         &w.state,
         &w.owner,
-        &CREATE_TASK.replace("'todo'", "'missing'"),
+        &CREATE_TASK.replace("'할 일'", "'missing'"),
         &[w.item, Uuid::now_v7()],
         "22023",
     )
@@ -201,7 +201,7 @@ async fn task_mutators_reject_unknown_names_and_accept_custom_names() {
     denied(
         &w.state,
         &w.owner,
-        &UPDATE_TASK.replace("'todo'", "'missing'"),
+        &UPDATE_TASK.replace("'할 일'", "'missing'"),
         &[task],
         "22023",
     )
@@ -224,14 +224,14 @@ async fn task_mutators_reject_unknown_names_and_accept_custom_names() {
     rows(
         &w.state,
         &w.owner,
-        &UPDATE_TASK.replace("'todo'", "'review'"),
+        &UPDATE_TASK.replace("'할 일'", "'review'"),
         &[task],
     )
     .await;
     rows(
         &w.state,
         &w.owner,
-        "SELECT fvoci.app_move_task($1,'todo',NULL,NULL,@ids)",
+        "SELECT fvoci.app_move_task($1,'할 일',NULL,NULL,@ids)",
         &[task],
     )
     .await;
@@ -267,7 +267,7 @@ async fn copies_preserve_status_definitions_and_reset_tasks_and_recurrences() {
     let task = made(
         &w.state,
         &w.owner,
-        &CREATE_TASK.replace("'todo'", "'review'"),
+        &CREATE_TASK.replace("'할 일'", "'review'"),
         &[w.item, Uuid::now_v7()],
     )
     .await;
@@ -285,7 +285,7 @@ async fn copies_preserve_status_definitions_and_reset_tasks_and_recurrences() {
             rows(&w.state, &w.owner, defs, &[copied]).await,
             rows(&w.state, &w.owner, defs, &[w.item]).await
         );
-        assert_eq!(one(&w.state,&w.owner,"SELECT s.name FROM fvoci.tasks t JOIN fvoci.task_statuses s ON s.id=t.status_id WHERE t.item_id=$1",&[copied]).await["name"],if reset {"todo"} else {"review"});
+        assert_eq!(one(&w.state,&w.owner,"SELECT s.name FROM fvoci.tasks t JOIN fvoci.task_statuses s ON s.id=t.status_id WHERE t.item_id=$1",&[copied]).await["name"],if reset {"할 일"} else {"review"});
     }
     fixture(
         "UPDATE fvoci.tasks SET due_date=current_date WHERE id=$1",
@@ -303,5 +303,5 @@ async fn copies_preserve_status_definitions_and_reset_tasks_and_recurrences() {
     .unwrap();
     let generated = rows(&w.state,&w.owner,"SELECT s.name FROM fvoci.tasks t JOIN fvoci.task_statuses s ON s.id=t.status_id WHERE t.series_id=$1 AND t.id<>$2",&[series,task]).await;
     assert!(!generated.is_empty());
-    assert!(generated.iter().all(|r| r["name"] == "todo"));
+    assert!(generated.iter().all(|r| r["name"] == "할 일"));
 }

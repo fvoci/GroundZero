@@ -125,9 +125,9 @@ describe('kanban move (D-89)', () => {
       ['PUT', '/api/tasks/b/position'],
       ['PUT', '/api/tasks/b/position'],
     ]);
-    expect(seen[0]?.body).toStrictEqual({ status: 'done', before_id: null });
+    expect(seen[0]?.body).toStrictEqual({ status: '완료', before_id: null });
     expect(seen[1]?.body).toStrictEqual({
-      status: 'in_progress',
+      status: '진행 중',
       before_id: 'a',
       base_move_version: 0,
     });

@@ -72,7 +72,7 @@ async fn organization_creation_membership_and_last_admin_guards() {
 }
 
 #[tokio::test]
-async fn organization_invitation_must_precede_workspace_acceptance() {
+async fn workspace_invitation_acceptance_joins_the_organization() {
     let w = World::new().await;
     let email = common::unique_email("invite");
     let invitee = common::login_with_email(&w.state, "invitee", &email, true).await;
@@ -93,14 +93,45 @@ async fn organization_invitation_must_precede_workspace_acceptance() {
             .await
             .unwrap();
     tx.commit().await.unwrap();
-    denied(
+    // 개정 2026-10-26(⑬, D-112): 조직 밖 사람이 워크스페이스 초대를 수락하면 조직 멤버로 먼저 가입하고 감사로그에 남는다.
+    rows(
         &w.state,
         &invitee,
         "SELECT fvoci.app_respond_invitation($1,true,@ids)",
         &[ws_invite],
-        "55000",
     )
     .await;
+    assert_eq!(
+        one(
+            &w.state,
+            &invitee,
+            "SELECT role FROM fvoci.app_my_organizations() WHERE id=$1",
+            &[w.org]
+        )
+        .await["role"],
+        "member"
+    );
+    let joined = rows(
+        &w.state,
+        &w.owner,
+        "SELECT detail FROM fvoci.audit_log WHERE organization_id=$1 AND actor=$2 AND action='join' AND target_type='organization_member'",
+        &[w.org, invitee.id.0],
+    )
+    .await;
+    assert_eq!(joined.len(), 1, "{joined:?}");
+    assert_eq!(joined[0]["detail"]["via"], "workspace_invitation");
+    assert_eq!(joined[0]["detail"]["role"], "member");
+    assert_eq!(
+        one(
+            &w.state,
+            &invitee,
+            "SELECT fvoci.app_access('workspace',$1) AS grade",
+            &[w.ws]
+        )
+        .await["grade"],
+        "write"
+    );
+    // 이미 멤버가 된 뒤의 조직 초대 수락은 역할을 바꾸지 않는다.
     rows(
         &w.state,
         &invitee,
@@ -118,23 +149,6 @@ async fn organization_invitation_must_precede_workspace_acceptance() {
         .await["role"],
         "member"
     );
-    rows(
-        &w.state,
-        &invitee,
-        "SELECT fvoci.app_respond_invitation($1,true,@ids)",
-        &[ws_invite],
-    )
-    .await;
-    assert_eq!(
-        one(
-            &w.state,
-            &invitee,
-            "SELECT fvoci.app_access('workspace',$1) AS grade",
-            &[w.ws]
-        )
-        .await["grade"],
-        "write"
-    );
 }
 
 #[tokio::test]
@@ -151,7 +165,7 @@ async fn organization_removal_matches_preview_and_revokes_all_received_rights() 
     let note = w.note().await;
     let team_share = w.share(doc, &member, "read").await;
     let note_share = w.share(note, &member, "write").await;
-    let task = made(&w.state,&w.owner,"SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[w.item,Uuid::now_v7(),member.id.0]).await;
+    let task = made(&w.state,&w.owner,"SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[w.item,Uuid::now_v7(),member.id.0]).await;
     assert_eq!(
         one(
             &w.state,
@@ -287,17 +301,19 @@ async fn public_link_switch_unknown_settings_effective_limits_and_retention() {
         .await["n"],
         20
     );
-    for (org, ws, expected) in [
-        ("null", "null", Some(30)),
-        ("7", "null", Some(7)),
-        ("null", "8", Some(8)),
-        ("9", "9", Some(9)),
-        ("7", "8", None),
+    for (org, ws, days) in [
+        ("null", "null", 30),
+        ("7", "null", 7),
+        ("null", "8", 8),
+        ("9", "9", 9),
+        ("9", "7", 7),
+        ("7", "8", 7),
     ] {
-        rows(&w.state,&w.owner,&format!("SELECT fvoci.app_set_organization_settings($1,'{{\"activity_retention_days\":{org}}}',@ids)"),&[w.org]).await;
+        // 공간 값을 정한 뒤 조직 상한을 낮추더라도 실효값은 둘 중 최솟값이다.
+        rows(&w.state,&w.owner,"SELECT fvoci.app_set_organization_settings($1,'{\"activity_retention_days\":null}',@ids)",&[w.org]).await;
         rows(&w.state,&w.owner,&format!("SELECT fvoci.app_set_workspace_limits($1,'{{\"activity_retention_days\":{ws}}}',@ids)"),&[w.ws]).await;
+        rows(&w.state,&w.owner,&format!("SELECT fvoci.app_set_organization_settings($1,'{{\"activity_retention_days\":{org}}}',@ids)"),&[w.org]).await;
         // app_retention_days는 비공개 함수다. 공개 worker를 통해 경계 양쪽의 행으로 반환값을 검증한다.
-        let days = expected.unwrap_or(3651);
         let young = Uuid::now_v7();
         let old = Uuid::now_v7();
         for (id, age) in [(young, days - 1), (old, days + 1)] {
@@ -314,9 +330,63 @@ async fn public_link_switch_unknown_settings_effective_limits_and_retention() {
         )
         .await;
         assert!(retained.iter().any(|r| r["id"] == young.to_string()));
-        assert_eq!(
-            retained.iter().any(|r| r["id"] == old.to_string()),
-            expected.is_none()
-        );
+        assert!(!retained.iter().any(|r| r["id"] == old.to_string()));
     }
+    denied(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_set_workspace_limits($1,'{\"activity_retention_days\":8}',@ids)",
+        &[w.ws],
+        "22023",
+    )
+    .await;
+}
+
+/// 개정 2026-10-26(⑩, D-121): 마지막으로 고른 조직은 계정 설정에 남는다. 멤버인 조직만 받고 NULL은 지운다.
+#[tokio::test]
+async fn last_organization_is_remembered_for_members_only() {
+    let w = World::new().await;
+    let other = World::new().await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_set_last_organization($1)",
+        &[w.org],
+    )
+    .await;
+    assert_eq!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT last_organization_id::text AS org FROM fvoci.user_settings WHERE user_id=fvoci.app_user_id()",
+            &[]
+        )
+        .await["org"],
+        w.org.to_string()
+    );
+    denied(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_set_last_organization($1)",
+        &[other.org],
+        "22023",
+    )
+    .await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_set_last_organization(NULL)",
+        &[],
+    )
+    .await;
+    assert!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT last_organization_id::text AS org FROM fvoci.user_settings WHERE user_id=fvoci.app_user_id()",
+            &[]
+        )
+        .await["org"]
+            .is_null()
+    );
 }

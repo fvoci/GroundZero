@@ -15,11 +15,11 @@ async fn assigned_only_buckets_organization_order_and_lost_access() {
     let member = w.member("member").await;
     let unassigned = task(&w.state, &member, w.item).await;
     let cases = [
-        ("NULL", "todo", "none"),
-        ("'2026-10-24'", "todo", "overdue"),
-        ("'2026-10-25'", "todo", "today"),
-        ("'2026-10-26'", "todo", "upcoming"),
-        ("'2026-10-24'", "done", "done"),
+        ("NULL", "할 일", "none"),
+        ("'2026-10-24'", "할 일", "overdue"),
+        ("'2026-10-25'", "할 일", "today"),
+        ("'2026-10-26'", "할 일", "upcoming"),
+        ("'2026-10-24'", "완료", "done"),
     ];
     let mut expected = Vec::new();
     for (due, status, bucket) in cases {
@@ -50,7 +50,7 @@ async fn assigned_only_buckets_organization_order_and_lost_access() {
         &[module2, Uuid::now_v7()],
     )
     .await;
-    let second = made(&w.state,&member,"SELECT fvoci.app_create_task($1,$2,'second',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[item2,Uuid::now_v7(),member.id.0]).await;
+    let second = made(&w.state,&member,"SELECT fvoci.app_create_task($1,$2,'second',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[item2,Uuid::now_v7(),member.id.0]).await;
     let list = rows(
         &w.state,
         &member,
@@ -91,7 +91,7 @@ async fn assigned_only_buckets_organization_order_and_lost_access() {
         &[other.ws, member.id.0],
     )
     .await;
-    let foreign = made(&w.state,&other.owner,"SELECT fvoci.app_create_task($1,$2,'other org',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[other.item,Uuid::now_v7(),member.id.0]).await;
+    let foreign = made(&w.state,&other.owner,"SELECT fvoci.app_create_task($1,$2,'other org',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[other.item,Uuid::now_v7(),member.id.0]).await;
     assert_eq!(
         rows(
             &w.state,

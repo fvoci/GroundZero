@@ -14,7 +14,6 @@
     TaskDetailView,
     TaskInput,
     TaskPriority,
-    TaskStatus,
     TaskView,
     PlanBlockedView,
     UndatedTaskView,
@@ -26,6 +25,7 @@
     MAX_LAG_DAYS,
     TASK_PRIORITIES,
     TASK_STATUSES,
+    toServerStatus,
   } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
@@ -871,8 +871,7 @@
             value={f.status}
             disabled={locked}
             onValueChange={(v: string) => {
-              const s = TASK_STATUSES.find((x) => x === v);
-              if (s !== undefined) f.status = s satisfies TaskStatus;
+              if (TASK_STATUSES.some((s) => toServerStatus(s) === v)) f.status = v;
             }}
           >
             <Select.Trigger aria-labelledby="task-status-label"
@@ -880,7 +879,9 @@
             >
             <Select.Content>
               {#each TASK_STATUSES as s (s)}
-                <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+                <Select.Item value={toServerStatus(s)} label={STATUS_LABEL[s]}
+                  >{STATUS_LABEL[s]}</Select.Item
+                >
               {/each}
             </Select.Content>
           </Select.Root>

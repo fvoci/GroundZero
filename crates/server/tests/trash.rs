@@ -540,7 +540,7 @@ async fn purged_repeating_occurrences_are_not_recreated() {
             .unwrap()
     };
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
-         Some(json!({ "base_version": t["version"], "title": "점검", "description": "", "status": "todo", "priority": "none",
+         Some(json!({ "base_version": t["version"], "title": "점검", "description": "", "status": "할 일", "priority": "none",
                       "start_date": null, "due_date": yesterday, "estimate_minutes": null, "tags": [], "assignee_ids": [],
                       "milestone": false }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -1378,7 +1378,7 @@ async fn trashed_items_keep_assignees_who_did_not_lose_access() {
     let task = new_task(&app, &admin, item_id, "담당 업무", None).await;
     let task_id = task["id"].as_str().unwrap();
     let assigned = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "담당 업무", "description": "", "status": "todo", "priority": "none",
+        "base_version": task["version"], "title": "담당 업무", "description": "", "status": "할 일", "priority": "none",
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [keep.id.0, gone.id.0] }))).await;
     assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);

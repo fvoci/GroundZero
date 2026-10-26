@@ -234,7 +234,7 @@ async fn the_calendar_shows_visible_tasks_and_events_by_the_viewers_days() {
     .await
     .json;
     let r = send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
-                 Some(json!({ "base_version": t["version"], "title": "보고서", "description": "", "status": "todo",
+                 Some(json!({ "base_version": t["version"], "title": "보고서", "description": "", "status": "할 일",
                               "priority": "none", "start_date": "2026-10-28", "due_date": "2026-11-03",
                               "estimate_minutes": null, "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);

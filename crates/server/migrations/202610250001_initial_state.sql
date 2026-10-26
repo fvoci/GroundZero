@@ -913,6 +913,16 @@ CREATE TABLE fvoci.time_entries (
 
 ALTER TABLE fvoci.time_entries OWNER TO fvoci_migrator;
 
+-- 시작·수동 기록·이어가기의 요청을 같은 사용자별 키로 기억한다. 이어가기도 최초 기록을 재시도 결과로 돌려준다.
+-- 내부 멱등 대장이며 앱 역할의 직접 접근은 허용하지 않는다.
+CREATE TABLE fvoci.time_entry_requests (
+    user_id uuid NOT NULL,
+    request_id uuid NOT NULL,
+    entry_id uuid NOT NULL
+);
+
+ALTER TABLE fvoci.time_entry_requests OWNER TO fvoci_migrator;
+
 CREATE TABLE fvoci.time_entry_revisions (
     id uuid NOT NULL,
     entry_id uuid NOT NULL,
@@ -1038,6 +1048,7 @@ CREATE TABLE fvoci.user_settings (
     week_start text DEFAULT ''::text NOT NULL,
     hour_cycle text DEFAULT ''::text NOT NULL,
     theme text DEFAULT 'system'::text NOT NULL,
+    last_organization_id uuid,
     CONSTRAINT user_settings_hour_cycle_check CHECK ((hour_cycle = ANY (ARRAY[''::text, 'h12'::text, 'h23'::text]))),
     CONSTRAINT user_settings_locale_check CHECK ((locale = ANY (ARRAY[''::text, 'ko'::text, 'en'::text]))),
     CONSTRAINT user_settings_theme_check CHECK ((theme = ANY (ARRAY['system'::text, 'light'::text, 'dark'::text]))),
@@ -1441,15 +1452,43 @@ CREATE FUNCTION fvoci.app_target_organization(p_kind text, p_id uuid) RETURNS uu
 
 ALTER FUNCTION fvoci.app_target_organization(p_kind text, p_id uuid) OWNER TO fvoci_migrator;
 
--- 공유·공개 링크·설정 관리는 지금 등급이 owner인 사람만 한다(D-113: 등급 하나). 보관된 항목의 문서는 read라 먼저 보관을
--- 풀어야 한다(옛 "보관 중 관리자 예외"는 D-113의 추가 조건 목록에 없어 두지 않는다).
+-- 공유·공개 링크·설정 관리는 지금 등급이 owner인 사람만 한다(D-113: 등급 하나). 보관된 항목의 문서는 read로 낮아지지만
+-- 워크스페이스 관리자는 보관 중에도 관리할 수 있다(개정 2026-10-26 ⑯, "보관 중 관리자 예외" 복원; 등급 위에 얹는 추가 조건).
+CREATE FUNCTION fvoci.app_document_can_manage(p_doc uuid) RETURNS boolean
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_access text := app_access('document', p_doc);
+    v_doc    documents%ROWTYPE;
+  BEGIN
+    -- 문서 관리(공유·링크·설정)는 owner 등급 하나다(D-113·D-115). 404/보관 409/403의 구분은 app_require_document와 같다.
+    IF v_access = 'owner' THEN
+      RETURN true;
+    END IF;
+    -- 개정 2026-10-26(⑯, D-113·D-106): 보관된 항목의 문서는 등급이 read로 낮아지지만, 워크스페이스 관리자(보관 전 owner 등급)는
+    -- 보관 해제 없이 공유·공개 링크·설정을 바꿀 수 있다. 내용 편집·댓글·상태 변경은 보관 중 409 그대로(app_require_document).
+    IF v_access <> 'none' THEN
+      SELECT * INTO v_doc FROM documents WHERE id = p_doc;
+      IF v_doc.item_id IS NOT NULL AND app_item_archived(v_doc.item_id)
+         AND app_workspace_role(v_doc.workspace_id, app_user_id()) = 'admin' THEN
+        RETURN true;
+      END IF;
+    END IF;
+    RETURN false;
+  END
+  $$;
+
+ALTER FUNCTION fvoci.app_document_can_manage(p_doc uuid) OWNER TO fvoci_migrator;
+
 CREATE FUNCTION fvoci.app_require_document_manager(p_doc uuid) RETURNS void
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   BEGIN
-    -- 문서 관리(공유·링크·설정)는 owner 등급 하나다(D-113·D-115). 404/보관 409/403의 구분은 app_require_document와 같다.
-    PERFORM app_require_document(p_doc, 'owner');
+    IF NOT app_document_can_manage(p_doc) THEN
+      PERFORM app_require_document(p_doc, 'owner');
+    END IF;
   END
   $$;
 
@@ -1472,7 +1511,7 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
     v_id      uuid;
   BEGIN
     SELECT * INTO v_doc FROM documents WHERE id = p_doc FOR UPDATE;
-    PERFORM app_require_document(p_doc, 'owner');
+    PERFORM app_require_document_manager(p_doc);
     IF p_permission NOT IN ('read', 'write') THEN
       RAISE EXCEPTION 'invalid permission' USING ERRCODE = '22023';
     END IF;
@@ -1825,7 +1864,7 @@ CREATE FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_e
     v_ws uuid;
   BEGIN
     PERFORM 1 FROM documents WHERE id = p_doc FOR UPDATE;
-    PERFORM app_require_document(p_doc, 'owner');
+    PERFORM app_require_document_manager(p_doc);
     IF p_expires_at IS NOT NULL AND p_expires_at <= now() THEN
       RAISE EXCEPTION 'expiry must be in the future' USING ERRCODE = '22023';
     END IF;
@@ -2160,10 +2199,10 @@ CREATE FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) RETURNS integ
 
 ALTER FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- 타이머 시작(D-32·D-117). 사용자당 모든 조직·공간에서 실행 중인 기록은 하나다. 기록 중에 다른 대상에서 시작하면 한
+-- 타이머 시작(D-32·D-117, 개정 2026-10-26 ⑰). 사용자당 모든 조직·공간에서 실행 중인 기록은 하나다. 기록 중에 다른 대상에서 시작하면 한
 -- 트랜잭션에서 진행 중 기록을 멈춰 저장하고 새 기록을 시작한다(stopped_entry_id). 새 대상을 볼 수 없으면 아무것도 바뀌지
 -- 않는다(기존 기록은 계속 간다). 같은 request_id의 재시도는 같은 기록을 돌려주고 다시 멈추지 않는다.
-CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) RETURNS TABLE(entry_id uuid, stopped_entry_id uuid)
+CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[], p_mode text DEFAULT NULL::text) RETURNS TABLE(entry_id uuid, stopped_entry_id uuid)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -2175,10 +2214,14 @@ CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo tex
     v_stopped uuid;
     v_now     timestamp with time zone;
   BEGIN
+    IF p_mode IS NOT NULL AND p_mode NOT IN ('continue', 'new') THEN
+      RAISE EXCEPTION 'mode must be continue or new' USING ERRCODE = '22023';
+    END IF;
     IF v_user IS NULL THEN
       RAISE EXCEPTION 'sign in required' USING ERRCODE = '42501';
     END IF;
-    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
+    SELECT r.entry_id INTO v_id FROM time_entry_requests r
+    WHERE r.user_id = v_user AND r.request_id = p_request_id;
     IF v_id IS NOT NULL THEN
       RETURN QUERY SELECT v_id, NULL::uuid;
       RETURN;
@@ -2190,13 +2233,28 @@ CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo tex
     -- 전환 시각은 잠금을 얻은 뒤의 실제 시각이다(now()는 트랜잭션 시작 시각이라, 먼저 시작했지만 잠금을 늦게 얻은 요청이
     -- 뒤에 만들어진 기록의 시작보다 이른 시각으로 멈추려다 time_entries_order에 걸린다).
     v_now := clock_timestamp();
-    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
+    SELECT r.entry_id INTO v_id FROM time_entry_requests r
+    WHERE r.user_id = v_user AND r.request_id = p_request_id;
     IF v_id IS NOT NULL THEN
       RETURN QUERY SELECT v_id, NULL::uuid;
       RETURN;
     END IF;
     SELECT * INTO v_running FROM time_entries
     WHERE user_id = v_user AND ended_at IS NULL AND deleted_at IS NULL FOR UPDATE;
+    -- 개정 2026-10-26(⑰, D-117): 같은 대상으로 기록 중에 다시 시작하면 웹이 "이어가기 / 새 기록"을 묻는다. 플래그 없이는
+    -- 55000(→409)으로 거절하고, continue는 기존 기록을 그대로 돌려주며(새 기록 없음), new는 아래처럼 멈춰 저장하고 새로 시작한다.
+    -- 다른 대상이면 전처럼 자동으로 전환한다.
+    IF v_running.id IS NOT NULL AND v_running.target_kind = p_target_kind
+       AND v_running.target_id IS NOT DISTINCT FROM p_target THEN
+      IF p_mode = 'continue' THEN
+        INSERT INTO time_entry_requests (user_id, request_id, entry_id)
+        VALUES (v_user, p_request_id, v_running.id);
+        RETURN QUERY SELECT v_running.id, NULL::uuid;
+        RETURN;
+      ELSIF p_mode IS DISTINCT FROM 'new' THEN
+        RAISE EXCEPTION 'a timer for this target is already running' USING ERRCODE = '55000';
+      END IF;
+    END IF;
     IF v_running.id IS NOT NULL THEN
       -- 멈춤(app_timer_action 'stop')과 같은 계산: 일시정지 중이던 시간은 정지 시간에 더한다.
       UPDATE time_entries SET
@@ -2210,12 +2268,14 @@ CREATE FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo tex
     VALUES (app_id(p_ids, 1), v_user, v_now, p_kind, coalesce(p_memo, ''), p_target_kind, p_target, v_ws,
             p_request_id)
     RETURNING id INTO v_id;
+    INSERT INTO time_entry_requests (user_id, request_id, entry_id)
+    VALUES (v_user, p_request_id, v_id);
     RETURN QUERY SELECT v_id, v_stopped;
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[], p_mode text) OWNER TO fvoci_migrator;
 
 -- 항목·업무의 내 소요 시간(D-117: 기록은 본인만 보고 선택 공유 집계는 없다).
 CREATE FUNCTION fvoci.app_item_time(p_item uuid) RETURNS TABLE(entry_kind text, mine_seconds bigint)
@@ -3077,9 +3137,9 @@ CREATE FUNCTION fvoci.app_seed_task_statuses(p_item uuid, p_ids uuid[]) RETURNS 
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     INSERT INTO task_statuses (id, item_id, name, color, position, category)
-    VALUES (app_id(p_ids, 1), p_item, 'todo', '', 1, 'todo'),
-           (app_id(p_ids, 2), p_item, 'in_progress', '', 2, 'doing'),
-           (app_id(p_ids, 3), p_item, 'done', '', 3, 'done')
+    VALUES (app_id(p_ids, 1), p_item, '할 일', '', 1, 'todo'),
+           (app_id(p_ids, 2), p_item, '진행 중', '', 2, 'doing'),
+           (app_id(p_ids, 3), p_item, '완료', '', 3, 'done')
   $$;
 
 
@@ -3525,6 +3585,17 @@ CREATE FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, 
       END IF;
     END LOOP;
     SELECT * INTO v_old FROM workspaces WHERE id = p_workspace FOR NO KEY UPDATE;
+    -- 개정 2026-10-26(⑥, D-124): 보존 기간은 조직 값 이하로만 설정할 수 있다(초과는 22023 → 400). 조직 값이 없으면 제한 없음.
+    IF p_patch ? 'activity_retention_days' AND (p_patch ->> 'activity_retention_days') IS NOT NULL
+       AND (p_patch ->> 'activity_retention_days')::integer >
+           (SELECT o.activity_retention_days FROM organizations o WHERE o.id = v_old.organization_id) THEN
+      RAISE EXCEPTION 'activity_retention_days must not exceed the organization value' USING ERRCODE = '22023';
+    END IF;
+    IF p_patch ? 'audit_retention_days' AND (p_patch ->> 'audit_retention_days') IS NOT NULL
+       AND (p_patch ->> 'audit_retention_days')::integer >
+           (SELECT o.audit_retention_days FROM organizations o WHERE o.id = v_old.organization_id) THEN
+      RAISE EXCEPTION 'audit_retention_days must not exceed the organization value' USING ERRCODE = '22023';
+    END IF;
     PERFORM 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = v_user FOR SHARE;
     PERFORM app_require_admin(p_workspace);
     UPDATE workspaces SET
@@ -3584,8 +3655,8 @@ CREATE FUNCTION fvoci.app_effective_limit(p_workspace uuid, p_name text, p_defau
 
 ALTER FUNCTION fvoci.app_effective_limit(p_workspace uuid, p_name text, p_default bigint) OWNER TO fvoci_migrator;
 
--- 보존 기간(D-57·D-119·D-124). 워크스페이스와 조직 둘 다 설정됐고 값이 다르면 어느 쪽을 따를지 아직 결정되지 않았으므로
--- NULL(만료 삭제 안 함)을 돌려준다(사용자 결정 대기). 같으면 그 값, 한쪽만 있으면 그 값, 둘 다 없으면 서버 기본값이다.
+-- 보존 기간(D-57·D-119·D-124, 개정 2026-10-26 ⑥). 조직 값이 상한이다: 워크스페이스는 조직 값 이하로만 설정할 수 있고
+-- (app_set_workspace_limits), 실효값은 두 값의 최솟값이다. 한쪽만 있으면 그 값, 둘 다 없으면 서버 기본값(활동 365일·감사 730일).
 CREATE FUNCTION fvoci.app_retention_days(p_workspace uuid, p_organization uuid, p_name text, p_default integer) RETURNS integer
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -3606,8 +3677,9 @@ CREATE FUNCTION fvoci.app_retention_days(p_workspace uuid, p_organization uuid, 
       SELECT CASE p_name WHEN 'activity_retention_days' THEN o.activity_retention_days ELSE o.audit_retention_days END
       INTO v_org FROM organizations o WHERE o.id = p_organization;
     END IF;
-    IF v_ws IS NOT NULL AND v_org IS NOT NULL AND v_ws <> v_org THEN
-      RETURN NULL;
+    -- 개정 2026-10-26(⑥, D-124): 조직 값이 상한이다. 둘 다 있으면 실효값은 최솟값, 한쪽만 있으면 그 값, 둘 다 없으면 서버 기본값.
+    IF v_ws IS NOT NULL AND v_org IS NOT NULL THEN
+      RETURN least(v_ws, v_org);
     END IF;
     RETURN coalesce(v_ws, v_org, p_default);
   END
@@ -3830,9 +3902,15 @@ CREATE FUNCTION fvoci.app_respond_invitation(p_invitation uuid, p_accept boolean
         VALUES (app_id(p_ids, 1), NULL, v_inv.organization_id, v_user, 'join', 'organization_member', v_user,
                 jsonb_build_object('role', v_inv.role));
       ELSE
-        IF NOT EXISTS (SELECT 1 FROM organization_members
-                       WHERE organization_id = v_inv.organization_id AND user_id = v_user) THEN
-          RAISE EXCEPTION 'join the organization before accepting a workspace invitation' USING ERRCODE = '55000';
+        -- 개정 2026-10-26(⑬, D-112·D-114): 조직 밖 사람이 워크스페이스 초대를 수락하면 그 조직의 멤버로 먼저 가입하고
+        -- 감사로그에 남긴다(조직 멤버 가입 경로 하나 추가). 이미 멤버면 역할은 그대로다.
+        INSERT INTO organization_members (organization_id, user_id, role)
+        VALUES (v_inv.organization_id, v_user, 'member')
+        ON CONFLICT (organization_id, user_id) DO NOTHING;
+        IF FOUND THEN
+          INSERT INTO audit_log (id, workspace_id, organization_id, actor, action, target_type, target_id, detail)
+          VALUES (app_id(p_ids, 2), NULL, v_inv.organization_id, v_user, 'join', 'organization_member', v_user,
+                  jsonb_build_object('role', 'member', 'via', 'workspace_invitation', 'workspace_id', v_inv.workspace_id));
         END IF;
         INSERT INTO workspace_members (workspace_id, user_id, role)
         VALUES (v_inv.workspace_id, v_user, v_inv.role)
@@ -4379,7 +4457,10 @@ CREATE FUNCTION fvoci.app_add_time_entry(p_request_id uuid, p_started timestamp 
     IF v_user IS NULL THEN
       RAISE EXCEPTION 'sign in required' USING ERRCODE = '42501';
     END IF;
-    SELECT id INTO v_id FROM time_entries WHERE user_id = v_user AND request_id = p_request_id;
+    -- 타이머 시작·이어가기와 요청 키를 공유한다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-timer:' || v_user::text, 0));
+    SELECT r.entry_id INTO v_id FROM time_entry_requests r
+    WHERE r.user_id = v_user AND r.request_id = p_request_id;
     IF v_id IS NOT NULL THEN
       RETURN v_id;
     END IF;
@@ -4392,6 +4473,8 @@ CREATE FUNCTION fvoci.app_add_time_entry(p_request_id uuid, p_started timestamp 
     VALUES (app_id(p_ids, 1), v_user, p_started, p_ended, p_paused, p_kind, coalesce(p_memo, ''), p_target_kind,
             p_target, v_ws, p_request_id)
     RETURNING id INTO v_id;
+    INSERT INTO time_entry_requests (user_id, request_id, entry_id)
+    VALUES (v_user, p_request_id, v_id);
     RETURN v_id;
   END
   $$;
@@ -7053,6 +7136,9 @@ CREATE FUNCTION fvoci.app_plan_units(p_item uuid, p_entries jsonb) RETURNS integ
     v_count integer := 0;
   BEGIN
     PERFORM app_study_access(p_item);
+    IF app_access('item', p_item) = 'read' THEN
+      RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
+    END IF;
     IF jsonb_typeof(p_entries) <> 'array' OR jsonb_array_length(p_entries) > 1000 THEN
       RAISE EXCEPTION 'give at most 1000 entries' USING ERRCODE = '22023';
     END IF;
@@ -8232,6 +8318,29 @@ CREATE FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_wee
 
 ALTER FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) OWNER TO fvoci_migrator;
 
+-- 개정 2026-10-26(⑩, D-121·D-111): 마지막으로 고른 조직을 계정에 남겨 기기 간 이어진다. 멤버인 조직만 받고 NULL은 지운다.
+-- 조직이 지워지면 FK가 NULL로 돌린다. 멤버에서 빠진 조직이 남아 있으면 화면이 무시한다.
+CREATE FUNCTION fvoci.app_set_last_organization(p_organization uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    IF app_user_id() IS NULL THEN
+      RAISE EXCEPTION 'sign in first' USING ERRCODE = '42501';
+    END IF;
+    IF p_organization IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = app_user_id()
+    ) THEN
+      RAISE EXCEPTION 'not a member of the organization' USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO user_settings (user_id) VALUES (app_user_id()) ON CONFLICT (user_id) DO NOTHING;
+    UPDATE user_settings SET last_organization_id = p_organization WHERE user_id = app_user_id();
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_set_last_organization(p_organization uuid) OWNER TO fvoci_migrator;
+
 CREATE FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -8293,6 +8402,10 @@ CREATE FUNCTION fvoci.app_set_episode_progress(p_episode uuid, p_status text, p_
   BEGIN
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'episode not found' USING ERRCODE = 'P0002';
+    END IF;
+    -- 개정 2026-10-26(⑧, D-20): 읽기 전용은 본인 진도도 남기지 못한다.
+    IF app_access('item', v_item) = 'read' THEN
+      RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
     END IF;
     IF p_status NOT IN ('not_started', 'in_progress', 'done') THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
@@ -8980,6 +9093,10 @@ CREATE FUNCTION fvoci.app_set_unit_progress(p_unit uuid, p_status text, p_done i
   BEGIN
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'unit not found' USING ERRCODE = 'P0002';
+    END IF;
+    -- 개정 2026-10-26(⑧, D-20): 읽기 전용은 본인 진도도 남기지 못한다.
+    IF app_access('item', v_item) = 'read' THEN
+      RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
     END IF;
     IF p_status NOT IN ('not_started', 'in_progress', 'done') THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
@@ -11463,6 +11580,9 @@ ALTER TABLE ONLY fvoci.time_entries
 ALTER TABLE ONLY fvoci.time_entries
     ADD CONSTRAINT time_entries_request UNIQUE (user_id, request_id);
 
+ALTER TABLE ONLY fvoci.time_entry_requests
+    ADD CONSTRAINT time_entry_requests_pkey PRIMARY KEY (user_id, request_id);
+
 ALTER TABLE ONLY fvoci.time_entry_revisions
     ADD CONSTRAINT time_entry_revisions_pkey PRIMARY KEY (id);
 
@@ -12125,6 +12245,12 @@ ALTER TABLE ONLY fvoci.time_entries
 ALTER TABLE ONLY fvoci.time_entries
     ADD CONSTRAINT time_entries_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES fvoci.workspaces(id);
 
+ALTER TABLE ONLY fvoci.time_entry_requests
+    ADD CONSTRAINT time_entry_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES fvoci.users(id);
+
+ALTER TABLE ONLY fvoci.time_entry_requests
+    ADD CONSTRAINT time_entry_requests_entry_id_fkey FOREIGN KEY (entry_id) REFERENCES fvoci.time_entries(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY fvoci.time_entry_revisions
     ADD CONSTRAINT time_entry_revisions_entry_id_fkey FOREIGN KEY (entry_id) REFERENCES fvoci.time_entries(id);
 
@@ -12161,6 +12287,10 @@ ALTER TABLE ONLY fvoci.user_marks
 
 ALTER TABLE ONLY fvoci.user_settings
     ADD CONSTRAINT user_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES fvoci.users(id);
+
+
+ALTER TABLE ONLY fvoci.user_settings
+    ADD CONSTRAINT user_settings_last_organization_id_fkey FOREIGN KEY (last_organization_id) REFERENCES fvoci.organizations(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY fvoci.workspace_members
     ADD CONSTRAINT workspace_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES fvoci.users(id);
@@ -12232,7 +12362,7 @@ CREATE POLICY document_revisions_select ON fvoci.document_revisions FOR SELECT U
 
 ALTER TABLE fvoci.document_shares ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY document_shares_select ON fvoci.document_shares FOR SELECT USING ((fvoci.app_access('document'::text, document_id) = 'owner'::text));
+CREATE POLICY document_shares_select ON fvoci.document_shares FOR SELECT USING (fvoci.app_document_can_manage(document_id));
 
 ALTER TABLE fvoci.documents ENABLE ROW LEVEL SECURITY;
 
@@ -12324,7 +12454,7 @@ CREATE POLICY ownership_offers_select ON fvoci.ownership_offers FOR SELECT USING
 
 ALTER TABLE fvoci.public_links ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY public_links_select ON fvoci.public_links FOR SELECT USING ((fvoci.app_access('document'::text, document_id) = 'owner'::text));
+CREATE POLICY public_links_select ON fvoci.public_links FOR SELECT USING (fvoci.app_document_can_manage(document_id));
 
 ALTER TABLE fvoci.record_files ENABLE ROW LEVEL SECURITY;
 
@@ -12384,6 +12514,8 @@ ALTER TABLE fvoci.time_entries ENABLE ROW LEVEL SECURITY;
 
 -- 시간 기록은 본인만 본다(D-117).
 CREATE POLICY time_entries_select ON fvoci.time_entries FOR SELECT USING ((user_id = fvoci.app_user_id()));
+
+ALTER TABLE fvoci.time_entry_requests ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE fvoci.time_entry_revisions ENABLE ROW LEVEL SECURITY;
 
@@ -12654,6 +12786,9 @@ GRANT ALL ON FUNCTION fvoci.app_delete_view(p_view uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_document_can_export(p_doc uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_document_can_export(p_doc uuid) TO fvoci_app;
 
+REVOKE ALL ON FUNCTION fvoci.app_document_can_manage(p_doc uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_document_can_manage(p_doc uuid) TO fvoci_app;
+
 REVOKE ALL ON FUNCTION fvoci.app_document_depth(p_doc uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_document_height(p_doc uuid) FROM PUBLIC;
@@ -12676,6 +12811,8 @@ REVOKE ALL ON FUNCTION fvoci.app_end_session(p_token_hash bytea) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_end_session(p_token_hash bytea) TO fvoci_app;
 
 GRANT SELECT ON TABLE fvoci.time_entries TO fvoci_app;
+
+REVOKE ALL ON TABLE fvoci.time_entry_requests FROM PUBLIC, fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_entry_seconds(e fvoci.time_entries) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_entry_seconds(e fvoci.time_entries) TO fvoci_app;
@@ -12907,6 +13044,8 @@ GRANT ALL ON FUNCTION fvoci.app_set_course_details(p_item uuid, p_subject text, 
 
 REVOKE ALL ON FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_display_settings(p_zone text, p_locale text, p_week_start text, p_hour_cycle text, p_theme text) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_set_last_organization(p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_last_organization(p_organization uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) TO fvoci_app;
@@ -13322,8 +13461,8 @@ GRANT ALL ON FUNCTION fvoci.app_pending_invitations_count() TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[], p_mode text) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_start_timer(p_request_id uuid, p_kind text, p_memo text, p_target_kind text, p_target uuid, p_ids uuid[], p_mode text) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_item_time(p_item uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_item_time(p_item uuid) TO fvoci_app;

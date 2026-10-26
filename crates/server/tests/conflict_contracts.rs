@@ -23,7 +23,7 @@ async fn move_and_edit_conflicts_leave_the_entire_task_unchanged() {
     denied(
         &w.state,
         &w.owner,
-        "SELECT fvoci.app_move_task($1,'done',NULL,-1,@ids)",
+        "SELECT fvoci.app_move_task($1,'완료',NULL,-1,@ids)",
         &[task],
         "FV003",
     )

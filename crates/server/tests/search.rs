@@ -638,7 +638,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let report = new_task(format!("{tok} 보고서")).await;
     new_task(format!("{tok} 기획")).await;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", report["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "done",
+        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "완료",
         "priority": "none", "start_date": null, "due_date": "2026-11-05", "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [admin.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -674,7 +674,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     // 업무를 고친 내용(상태·담당·기한)이 색인에 반영될 때까지 기다린다(제목만으로는 알 수 없다).
     let report = format!("{tok} 보고서");
     for filter in [
-        "status=done",
+        "status=%EC%99%84%EB%A3%8C",
         "assignee=me",
         "from=2026-11-01&to=2026-11-30",
     ] {
@@ -747,7 +747,14 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
     let plain_app = common::app(&plain);
     assert_eq!(
-        titles(&search(&plain_app, &admin, &format!("{tok}&status=done")).await),
+        titles(
+            &search(
+                &plain_app,
+                &admin,
+                &format!("{tok}&status=%EC%99%84%EB%A3%8C")
+            )
+            .await
+        ),
         [format!("{tok} 보고서")]
     );
     assert_eq!(
@@ -1784,7 +1791,7 @@ async fn date_only_values_keep_their_day_and_timed_events_follow_the_viewer() {
     .await
     .json;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": due, "description": "", "status": "todo",
+        "base_version": task["version"], "title": due, "description": "", "status": "할 일",
         "priority": "none", "start_date": null, "due_date": "2026-10-21", "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);

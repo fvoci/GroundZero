@@ -95,7 +95,7 @@ async fn concurrent_starts_leave_one_running_and_paused_time_is_saved() {
     )
     .await;
     fixture("UPDATE fvoci.time_entries SET started_at=now()-interval '2 minutes',paused_at=now()-interval '1 minute',paused_seconds=7 WHERE id=$1",&[old]).await;
-    let next = one(&w.state, &w.owner, START, &[Uuid::now_v7(), task]).await;
+    let next = one(&w.state, &w.owner, START_NEW, &[Uuid::now_v7(), task]).await;
     assert_eq!(next["stopped_entry_id"], old.to_string());
     let saved = one(
         &w.state,
@@ -166,4 +166,79 @@ async fn time_rows_and_aggregates_are_personal_even_for_admins() {
             seconds
         );
     }
+}
+
+const START_CONTINUE: &str =
+    "SELECT * FROM fvoci.app_start_timer($1,'work','','task',$2,@ids,'continue')";
+const START_NEW: &str = "SELECT * FROM fvoci.app_start_timer($1,'work','','task',$2,@ids,'new')";
+
+/// 개정 2026-10-26(⑰, D-117): 같은 대상으로 기록 중에 다시 시작하면 플래그가 필요하다. 없으면 55000(→409), continue는 기존
+/// 기록을 그대로 돌려주고, new는 기존 기록을 멈춰 저장하고 새로 시작한다. 다른 대상은 전처럼 자동 전환한다.
+#[tokio::test]
+async fn restarting_the_same_target_needs_an_explicit_mode() {
+    let w = World::new().await;
+    let a = w.task().await;
+    let b = w.task().await;
+    let first = one(&w.state, &w.owner, START, &[Uuid::now_v7(), a]).await;
+    let running = first["entry_id"].as_str().unwrap().to_owned();
+    denied(&w.state, &w.owner, START, &[Uuid::now_v7(), a], "55000").await;
+    denied(
+        &w.state,
+        &w.owner,
+        "SELECT * FROM fvoci.app_start_timer($1,'work','','task',$2,@ids,'later')",
+        &[Uuid::now_v7(), a],
+        "22023",
+    )
+    .await;
+    let kept = one(&w.state, &w.owner, START_CONTINUE, &[Uuid::now_v7(), a]).await;
+    assert_eq!(kept["entry_id"], running);
+    assert!(kept["stopped_entry_id"].is_null());
+    let fresh = one(&w.state, &w.owner, START_NEW, &[Uuid::now_v7(), a]).await;
+    assert_ne!(fresh["entry_id"], running);
+    assert_eq!(fresh["stopped_entry_id"], running);
+    // 다른 대상은 플래그 없이 전환한다.
+    let other = one(&w.state, &w.owner, START, &[Uuid::now_v7(), b]).await;
+    assert_eq!(other["stopped_entry_id"], fresh["entry_id"]);
+    let open = rows(
+        &w.state,
+        &w.owner,
+        "SELECT id FROM fvoci.time_entries WHERE user_id=fvoci.app_user_id() AND ended_at IS NULL",
+        &[],
+    )
+    .await;
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0]["id"], other["entry_id"]);
+}
+
+#[tokio::test]
+async fn retrying_continue_after_switching_targets_does_not_restart_the_old_target() {
+    let w = World::new().await;
+    let a = w.task().await;
+    let b = w.task().await;
+    let first = one(&w.state, &w.owner, START, &[Uuid::now_v7(), a]).await;
+    let request = Uuid::now_v7();
+    let continued = one(&w.state, &w.owner, START_CONTINUE, &[request, a]).await;
+    assert_eq!(continued["entry_id"], first["entry_id"]);
+    let next = one(&w.state, &w.owner, START, &[Uuid::now_v7(), b]).await;
+    let retried = one(&w.state, &w.owner, START_CONTINUE, &[request, a]).await;
+    assert_eq!(
+        retried["entry_id"], first["entry_id"],
+        "재시도는 원래 기록을 가리킨다"
+    );
+    assert!(
+        retried["stopped_entry_id"].is_null(),
+        "재시도는 진행 중 기록을 멈추지 않는다"
+    );
+    let running = rows(
+        &w.state,
+        &w.owner,
+        "SELECT id FROM fvoci.time_entries WHERE user_id=fvoci.app_user_id() AND ended_at IS NULL",
+        &[],
+    )
+    .await;
+    assert_eq!(running.len(), 1, "진행 중 기록은 하나다");
+    assert_eq!(
+        running[0]["id"], next["entry_id"],
+        "다른 대상의 기록은 그대로다"
+    );
 }

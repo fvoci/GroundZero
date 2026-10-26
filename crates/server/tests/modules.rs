@@ -590,9 +590,9 @@ async fn documents_move_between_wiki_and_items() {
     );
 }
 
-/// D-113: 보관 중에는 관리자도 설정·공유·링크를 바꾸지 못하며 해제 뒤 철회한다.
+/// 개정 2026-10-26 ⑯: 보관 중에도 관리자는 설정·공유·링크를 바꾸고 철회할 수 있다.
 #[tokio::test]
-async fn archived_documents_require_unarchiving_before_owner_changes() {
+async fn archived_documents_allow_manager_settings_shares_and_links() {
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -643,6 +643,7 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         .await
         .1;
     assert_eq!(archived["access"], "read");
+    // 응답의 관리 플래그와 관리 목록 API는 2단계에서 새 SQL 판단에 연결한다.
     assert_eq!(archived["can_manage"], false);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
@@ -651,7 +652,7 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         "read"
     );
 
-    // D-113: 노출을 줄이는 변경에도 보관 중 관리자 예외는 없다.
+    // 관리 예외는 노출을 늘리거나 줄이는 설정 모두에 적용한다.
     let settings = format!("/api/documents/{doc_id}/settings");
     let widen = send(
         &app,
@@ -661,7 +662,7 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         Some(json!({ "visibility": "workspace", "allow_copy": true })),
     )
     .await;
-    assert_eq!(widen.status, StatusCode::CONFLICT);
+    assert_eq!(widen.status, StatusCode::OK, "{:?}", widen.json);
     let narrow = send(
         &app,
         Method::PUT,
@@ -670,7 +671,7 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         Some(json!({ "visibility": "private", "allow_copy": false })),
     )
     .await;
-    assert_eq!(narrow.status, StatusCode::CONFLICT, "{:?}", narrow.json);
+    assert_eq!(narrow.status, StatusCode::OK, "{:?}", narrow.json);
     let share_id = share.json["id"].as_str().unwrap();
     let r = send(
         &app,
@@ -680,12 +681,12 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::CONFLICT);
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await
             .0,
-        StatusCode::OK
+        StatusCode::NOT_FOUND
     );
     let link_id = link.json["id"].as_str().unwrap();
     let r = send(
@@ -696,8 +697,8 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::CONFLICT);
-    // 새 공유·새 링크는 보관 중에 만들 수 없다.
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+    // 새 공유·새 링크도 보관 중에 만들 수 있다.
     let share = send(
         &app,
         Method::POST,
@@ -706,7 +707,18 @@ async fn archived_documents_require_unarchiving_before_owner_changes() {
         Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
-    assert_eq!(share.status, StatusCode::CONFLICT);
+    assert_eq!(share.status, StatusCode::CREATED, "{:?}", share.json);
+    let share_id = share.json["id"].as_str().unwrap();
+    let link = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/public-links"),
+        Some(&admin),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(link.status, StatusCode::CREATED, "{:?}", link.json);
+    let link_id = link.json["id"].as_str().unwrap();
     let unarchived = send(
         &app,
         Method::PUT,

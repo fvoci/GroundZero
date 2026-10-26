@@ -2821,7 +2821,8 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             start_date?: string | null;
-            status?: string;
+            /** @description 상태 이름(항목이 정의한 문자열). 비우면 항목의 기본 상태(todo 범주 첫 상태)다(개정 2026-10-26 ⑪: 기본 이름은 서버가 정하지 않는다). */
+            status?: string | null;
             tags?: string[];
             title: string;
         };
