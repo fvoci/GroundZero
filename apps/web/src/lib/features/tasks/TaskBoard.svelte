@@ -692,7 +692,9 @@
       // 입력을 잃지 않게 한다 — 문서 편집기(DocumentEditor)와 같은 규칙. 전환이 아니면 전처럼 경고한다.
       beforeUnload: () => {
         if (openTaskId === undefined) return false;
-        if (accountSwitching()) return detailUnsaved && !detailDraftKept;
+        // 편집 가능 여부(canEdit)와 무관하게 "고친 입력이 있는데 초안을 남기지 못했는지"만 본다(TaskDetail이 알린다; 고친 칸이
+        // 없거나 폼이 사라지면 true). 저장이 409 account_changed로 끝나 폼이 잠긴 뒤에도 입력은 지켜야 한다.
+        if (accountSwitching()) return !detailDraftKept;
         return detailUnsaved || detailSaving;
       },
     }),
@@ -1510,7 +1512,7 @@
     </div>
   {/each}
 
-  {#if item.access === 'owner'}
+  {#if item.access === 'owner' && !locked}
     <Button
       variant="outline"
       class="self-start"

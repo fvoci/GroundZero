@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';
@@ -142,6 +142,59 @@ describe('task board unload warning while the account is switching', () => {
     await waitFor(() => {
       expect(draftKeys()).toHaveLength(1);
     });
+    accountSafety.switching = true;
+    expect(unloadPrevented()).toBe(false);
+  });
+
+  it('still warns while switching after a save answered account_changed, when the draft was not stored', async () => {
+    const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded (test)', 'QuotaExceededError');
+    });
+    const description = await mountWithOpenTask();
+    await fireEvent.input(description, { target: { value: '남기지 못한 설명' } });
+    await waitFor(() => {
+      expect(quota).toHaveBeenCalled();
+    });
+    // 저장이 409 account_changed로 끝나면 폼은 잠기지만(canEdit=false) 고친 입력은 그대로 있다.
+    vi.spyOn(api, 'updateTask').mockRejectedValue(
+      new ApiError(409, 'account_changed', '계정이 바뀌었습니다'),
+    );
+    const save = document.getElementById('task-save');
+    if (save === null) throw new Error('task-save');
+    await fireEvent.click(save);
+    await screen.findByText(/계정이 바뀌어 입력을 숨겼습니다/);
+    accountSafety.switching = true;
+    expect(unloadPrevented()).toBe(true);
+  });
+
+  it('does not carry a failed-draft state over to the next task form', async () => {
+    const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded (test)', 'QuotaExceededError');
+    });
+    vi.spyOn(api, 'tasks').mockResolvedValue([
+      detail,
+      { ...detail, id: 't-2', title: '다음 업무' },
+    ]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    const task = vi.spyOn(api, 'task').mockResolvedValue(detail);
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    const { rerender } = render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });
+    const description = await screen.findByLabelText('설명', { exact: true });
+    await fireEvent.input(description, { target: { value: '남기지 못한 설명' } });
+    await waitFor(() => {
+      expect(quota).toHaveBeenCalled();
+    });
+    accountSafety.switching = true;
+    expect(unloadPrevented()).toBe(true);
+    accountSafety.switching = false;
+
+    // 다른 업무를 열면 폼이 새로 만들어진다. 깨끗한 새 폼은 전환 중 경고하지 않는다.
+    task.mockResolvedValue({ ...detail, id: 't-2', title: '다음 업무' });
+    await rerender({ item, workspaces: [], openTaskId: 't-2' });
+    await screen.findByDisplayValue('다음 업무');
     accountSafety.switching = true;
     expect(unloadPrevented()).toBe(false);
   });

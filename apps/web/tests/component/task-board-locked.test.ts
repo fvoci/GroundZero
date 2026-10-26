@@ -45,11 +45,13 @@ describe('task board of an item in an archived module', () => {
     await mount(true);
     expect(screen.queryAllByRole('button', { name: /^업무 추가$/ })).toHaveLength(0);
     expect(screen.queryByLabelText('새 업무 제목', { exact: true })).toBeNull();
+    expect(screen.queryByRole('button', { name: '상태 편집' })).toBeNull();
   });
 
   it('offers them when not locked', async () => {
     await mount(false);
     expect(screen.getAllByRole('button', { name: /^업무 추가$/ }).length).toBeGreaterThan(0);
     expect(screen.getByLabelText('새 업무 제목', { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '상태 편집' })).toBeInTheDocument();
   });
 });
