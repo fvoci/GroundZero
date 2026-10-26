@@ -281,6 +281,8 @@ async fn api_not_found() -> AppError {
         organizations::set_workspace_limits,
         organizations::workspaces,
         organizations::join_as_admin,
+        organizations::restore_workspace,
+        organizations::offer_workspace_ownership,
         organizations::server_organizations,
         organizations::create,
         organizations::server_admins,
@@ -559,6 +561,7 @@ async fn api_not_found() -> AppError {
         time_tracking::Target,
         time_tracking::TimeEntry,
         time_tracking::StartTimer,
+        time_tracking::TimerStartMode,
         time_tracking::StartedTimer,
         time_tracking::TimerAction,
         time_tracking::TimerActionInput,
@@ -812,6 +815,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin",
             post(organizations::join_as_admin),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces/{workspace_id}/restore",
+            post(organizations::restore_workspace),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer",
+            post(organizations::offer_workspace_ownership),
         )
         .route(
             "/server/organizations",
@@ -1273,6 +1284,39 @@ mod tests {
                     "duplicate operationId {id} at {path}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn organization_selection_and_timer_modes_are_typed_contracts() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let schemas = &doc["components"]["schemas"];
+        let selection = &schemas["MySettings"]["properties"]["last_organization_id"];
+        assert_eq!(selection["format"], "uuid");
+        assert!(
+            selection["type"]
+                .as_array()
+                .is_some_and(|types| types.contains(&serde_json::json!("null")))
+        );
+        assert!(
+            !schemas["MySettings"]["required"]
+                .as_array()
+                .is_some_and(|fields| fields.contains(&serde_json::json!("last_organization_id")))
+        );
+        assert_eq!(
+            schemas["TimerStartMode"]["enum"],
+            serde_json::json!(["continue", "new"])
+        );
+        assert_eq!(
+            doc["paths"]["/api/me/timer"]["post"]["responses"]["409"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/ErrorBody"
+        );
+        for action in ["restore", "ownership-offer"] {
+            let path = format!(
+                "/api/organizations/{{organization_id}}/workspaces/{{workspace_id}}/{action}"
+            );
+            assert!(doc["paths"][path]["post"]["responses"]["204"].is_object());
         }
     }
 
