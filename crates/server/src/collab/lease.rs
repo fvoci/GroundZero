@@ -9,11 +9,23 @@ use tokio::time::Instant;
 use super::room::{CloseReason, PeerAccess};
 
 #[derive(Debug, Clone, Copy)]
+struct Closed {
+    reason: CloseReason,
+    at: Instant,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Check {
+    started: Instant,
+    finished: Instant,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct State {
-    checked_at: Option<Instant>,
+    check: Option<Check>,
     deadline: Instant,
     can_write: bool,
-    closed: Option<CloseReason>,
+    closed: Option<Closed>,
 }
 
 /// 소켓과 방이 함께 보는 연결별 권한 유효 기간. 닫힌 연결은 다시 유효해지지 않는다.
@@ -23,10 +35,56 @@ pub(crate) struct Lease {
     period: Duration,
 }
 
+/// 수신 당시의 쓰기 근거. 이동 커밋 전 큐 편집의 대리 저장에만 쓰며 연결을 다시 열거나 기한을 연장하지 않는다.
+#[derive(Debug, Clone)]
+pub(crate) struct WritePermit {
+    access: Lease,
+    deadline: Instant,
+}
+
+impl WritePermit {
+    pub(crate) fn move_deadline(&self, committed: std::time::Instant) -> Option<Instant> {
+        self.move_deadline_at(Instant::from_std(committed), Instant::now())
+    }
+
+    fn move_deadline_at(&self, committed: Instant, now: Instant) -> Option<Instant> {
+        let state = self.access.current_at(now);
+        if state.closed.is_some_and(|closed| {
+            closed.at <= committed
+                || !matches!(
+                    closed.reason,
+                    CloseReason::AccessLost | CloseReason::RealtimeOff
+                )
+        }) {
+            return None;
+        }
+        // 커밋 전에 끝난 유효한 재확인만 기존 근거를 갱신할 수 있다. 새 위치의 권한으로 옛 입력을 승인하지 않는다.
+        let deadline = if state.check.is_some_and(|check| check.finished <= committed) {
+            self.deadline.max(state.deadline)
+        } else {
+            self.deadline
+        };
+        (now < deadline).then_some(deadline)
+    }
+
+    pub(crate) async fn check_session(
+        &self,
+        committed: std::time::Instant,
+        check: impl Future<Output = Option<bool>>,
+    ) -> Result<(), CloseReason> {
+        let deadline = self.move_deadline(committed).ok_or(CloseReason::Busy)?;
+        match tokio::time::timeout_at(deadline, check).await {
+            Ok(Some(true)) if self.move_deadline(committed).is_some() => Ok(()),
+            Ok(Some(false)) => Err(CloseReason::AccessLost),
+            _ => Err(CloseReason::Busy),
+        }
+    }
+}
+
 impl Lease {
     pub(crate) fn new(can_write: bool, started: Instant, period: Duration) -> Self {
         let (state, _) = watch::channel(State {
-            checked_at: None,
+            check: None,
             deadline: started + period,
             can_write,
             closed: None,
@@ -37,7 +95,10 @@ impl Lease {
     fn current_at(&self, now: Instant) -> State {
         self.state.send_if_modified(|state| {
             if state.closed.is_none() && now >= state.deadline {
-                state.closed = Some(CloseReason::Busy);
+                state.closed = Some(Closed {
+                    reason: CloseReason::Busy,
+                    at: state.deadline,
+                });
                 true
             } else {
                 false
@@ -48,19 +109,33 @@ impl Lease {
 
     pub(crate) fn permission(&self) -> Option<bool> {
         let state = self.current_at(Instant::now());
-        (state.closed.is_none() && state.checked_at.is_some()).then_some(state.can_write)
+        (state.closed.is_none() && state.check.is_some()).then_some(state.can_write)
+    }
+
+    pub(crate) fn write_permit(&self) -> Option<WritePermit> {
+        let state = self.current_at(Instant::now());
+        (state.closed.is_none() && state.check.is_some() && state.can_write).then(|| WritePermit {
+            access: self.clone(),
+            deadline: state.deadline,
+        })
     }
 
     pub(crate) fn reason(&self) -> Option<CloseReason> {
-        self.current_at(Instant::now()).closed
+        self.current_at(Instant::now())
+            .closed
+            .map(|closed| closed.reason)
     }
 
     pub(crate) fn close(&self, reason: CloseReason) {
+        self.close_at(reason, Instant::now());
+    }
+
+    fn close_at(&self, reason: CloseReason, at: Instant) {
         self.state.send_if_modified(|state| {
             if state.closed.is_some() {
                 return false;
             }
-            state.closed = Some(reason);
+            state.closed = Some(Closed { reason, at });
             true
         });
     }
@@ -76,11 +151,20 @@ impl Lease {
                 return false;
             }
             if now >= state.deadline || now >= started + self.period {
-                state.closed = Some(CloseReason::Busy);
+                state.closed = Some(Closed {
+                    reason: CloseReason::Busy,
+                    at: state.deadline.min(started + self.period),
+                });
             } else if state.can_write && !can_write {
-                state.closed = Some(CloseReason::AccessLost);
-            } else if state.checked_at.is_none_or(|last| started >= last) {
-                state.checked_at = Some(started);
+                state.closed = Some(Closed {
+                    reason: CloseReason::AccessLost,
+                    at: now,
+                });
+            } else if state.check.is_none_or(|last| started >= last.started) {
+                state.check = Some(Check {
+                    started,
+                    finished: now,
+                });
                 state.deadline = started + self.period;
                 state.can_write = can_write;
             } else {
@@ -94,7 +178,7 @@ impl Lease {
         let mut changes = self.state.subscribe();
         loop {
             let state = self.current_at(Instant::now());
-            if state.closed.is_some() || state.checked_at.is_some() {
+            if state.closed.is_some() || state.check.is_some() {
                 return;
             }
             tokio::select! {
@@ -109,7 +193,7 @@ impl Lease {
         loop {
             let state = self.current_at(Instant::now());
             if let Some(reason) = state.closed {
-                return reason;
+                return reason.reason;
             }
             tokio::select! {
                 _ = tokio::time::sleep_until(state.deadline) => {},
@@ -121,8 +205,8 @@ impl Lease {
     /// 첫 검사는 즉시, 다음 검사는 유효 기간 중간에 시작해 DB 응답을 기다릴 시간을 남긴다.
     pub(crate) async fn next_check(&self) {
         let state = self.current_at(Instant::now());
-        if let Some(checked_at) = state.checked_at {
-            tokio::time::sleep_until(checked_at + self.period / 2).await;
+        if let Some(check) = state.check {
+            tokio::time::sleep_until(check.started + self.period / 2).await;
         }
     }
 
@@ -177,14 +261,20 @@ mod tests {
         lease.confirm_at(start, true, start + period / 4);
         let check = start + period / 2;
         lease.confirm_at(check, true, start + period * 3 / 4);
-        assert_eq!(lease.current_at(start + period).closed, None);
+        assert!(lease.current_at(start + period).closed.is_none());
         assert_eq!(
-            lease.current_at(check + period).closed,
+            lease
+                .current_at(check + period)
+                .closed
+                .map(|closed| closed.reason),
             Some(CloseReason::Busy)
         );
         lease.confirm_at(check + period, true, check + period);
         assert_eq!(
-            lease.current_at(check + period).closed,
+            lease
+                .current_at(check + period)
+                .closed
+                .map(|closed| closed.reason),
             Some(CloseReason::Busy)
         );
     }
@@ -245,5 +335,120 @@ mod tests {
         };
         tokio::join!(blocked, denied);
         assert_eq!(slow.reason(), Some(CloseReason::Busy));
+    }
+
+    #[test]
+    fn move_permits_distinguish_new_place_denial_from_old_revocation_and_unknown() {
+        let start = Instant::now();
+        let commit = start + Duration::from_millis(400);
+        for (reason, closed_after_commit, allowed) in [
+            (CloseReason::AccessLost, true, true),
+            (CloseReason::RealtimeOff, true, true),
+            (CloseReason::AccessLost, false, false),
+            (CloseReason::RealtimeOff, false, false),
+            (CloseReason::Busy, true, false),
+            (CloseReason::Invalid, true, false),
+        ] {
+            let lease = Lease::new(true, start, Duration::from_secs(1));
+            lease.confirm_at(start, true, start);
+            let permit = lease.write_permit().unwrap();
+            let ended = start + Duration::from_millis(if closed_after_commit { 500 } else { 300 });
+            lease.close_at(reason, ended);
+            assert_eq!(
+                permit
+                    .move_deadline_at(commit, start + Duration::from_millis(600))
+                    .is_some(),
+                allowed,
+                "reason={reason:?}, closed_after_commit={closed_after_commit}"
+            );
+            assert_eq!(
+                lease.permission(),
+                None,
+                "a move permit must never revive the connection"
+            );
+            assert!(
+                permit
+                    .move_deadline_at(commit, start + Duration::from_secs(1))
+                    .is_none(),
+                "the source deadline still applies: {reason:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_source_rechecks_can_refresh_a_queued_move_permit() {
+        let start = Instant::now();
+        let commit = start + Duration::from_millis(400);
+        for check_before_commit in [true, false] {
+            let lease = Lease::new(true, start, Duration::from_secs(1));
+            lease.confirm_at(start, true, start);
+            let permit = lease.write_permit().unwrap();
+            let checked =
+                start + Duration::from_millis(if check_before_commit { 300 } else { 500 });
+            lease.confirm_at(checked, true, checked);
+            let now = start + Duration::from_millis(1100);
+            assert_eq!(
+                permit.move_deadline_at(commit, now).is_some(),
+                check_before_commit
+            );
+        }
+        let reader = Lease::new(false, start, Duration::from_secs(1));
+        reader.confirm_at(start, false, start);
+        assert!(reader.write_permit().is_none());
+    }
+
+    #[test]
+    fn a_check_started_before_commit_but_finished_after_it_cannot_refresh_source_proof() {
+        let start = Instant::now();
+        let lease = Lease::new(true, start, Duration::from_secs(1));
+        lease.confirm_at(start, true, start);
+        let permit = lease.write_permit().unwrap();
+        let commit = start + Duration::from_millis(400);
+        lease.confirm_at(
+            start + Duration::from_millis(300),
+            true,
+            start + Duration::from_millis(500),
+        );
+        assert!(
+            permit
+                .move_deadline_at(commit, start + Duration::from_millis(1100))
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn delegated_session_failure_and_delay_are_not_accepted() {
+        for outcome in [None, Some(false)] {
+            let start = Instant::now();
+            let lease = Lease::new(true, start, Duration::from_secs(1));
+            lease.confirm(start, true);
+            let permit = lease.write_permit().unwrap();
+            let committed = std::time::Instant::now();
+            lease.close(CloseReason::AccessLost);
+            let result = permit
+                .check_session(committed, std::future::ready(outcome))
+                .await;
+            assert_eq!(
+                result,
+                Err(if outcome.is_none() {
+                    CloseReason::Busy
+                } else {
+                    CloseReason::AccessLost
+                })
+            );
+            assert_eq!(lease.permission(), None);
+        }
+        let start = Instant::now();
+        let lease = Lease::new(true, start, Duration::from_secs(1));
+        lease.confirm(start, true);
+        let permit = lease.write_permit().unwrap();
+        let committed = std::time::Instant::now();
+        lease.close(CloseReason::RealtimeOff);
+        assert_eq!(
+            permit
+                .check_session(committed, std::future::pending())
+                .await,
+            Err(CloseReason::Busy)
+        );
     }
 }

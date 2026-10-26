@@ -32,7 +32,7 @@ use yrs::updates::encoder::Encode;
 use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
-use super::lease::Lease;
+use super::lease::{Lease, WritePermit};
 use crate::config::Limits;
 use crate::db::Db;
 use crate::error::AppError;
@@ -161,6 +161,7 @@ enum Command {
         data: Vec<u8>,
         /// 웹소켓에서 받은 때. 문서를 옮긴 커밋 뒤에 받은 것은 넣지 않는다(새 자리에서 권한을 잃은 사람의 쓰기).
         received: Instant,
+        permit: Option<WritePermit>,
     },
     Leave {
         conn: u64,
@@ -260,6 +261,7 @@ impl Drop for ClosingGuard {
 pub struct Membership {
     conn: u64,
     tx: mpsc::Sender<Command>,
+    access: Lease,
 }
 
 impl Membership {
@@ -270,11 +272,14 @@ impl Membership {
 
     /// 받은 메시지를 방에 넘긴다(받은 때와 함께). 방이 닫혔으면 거짓.
     pub async fn send(&self, data: Vec<u8>) -> bool {
+        let permit = self.access.write_permit();
+        let received = Instant::now();
         self.tx
             .send(Command::Incoming {
                 conn: self.conn,
                 data,
-                received: Instant::now(),
+                received,
+                permit,
             })
             .await
             .is_ok()
@@ -392,6 +397,7 @@ impl Rooms {
                     return Ok(Membership {
                         conn,
                         tx: handle.tx.clone(),
+                        access: peer.access.clone(),
                     });
                 }
                 Ok(Err(err)) => return Err(err),
@@ -727,6 +733,41 @@ struct Pending {
     conn: u64,
     user: UserId,
     update: Vec<u8>,
+    authorization: EditAuthorization,
+}
+
+#[derive(Debug, Clone)]
+enum EditAuthorization {
+    Current,
+    BeforeMove {
+        permit: WritePermit,
+        committed: Instant,
+    },
+}
+
+impl EditAuthorization {
+    fn allows(&self, access: &Lease) -> bool {
+        match self {
+            Self::Current => access.permission() == Some(true),
+            Self::BeforeMove { permit, committed } => permit.move_deadline(*committed).is_some(),
+        }
+    }
+
+    async fn check_session(&self, db: &Db, peer: &Peer) -> Result<(), CloseReason> {
+        match self {
+            Self::BeforeMove { permit, committed } => {
+                permit
+                    .check_session(*committed, session_alive(db, peer))
+                    .await
+            }
+            Self::Current => match peer.access.until_closed(session_alive(db, peer)).await {
+                Ok(Some(true)) => Ok(()),
+                Ok(Some(false)) => Err(CloseReason::AccessLost),
+                Ok(None) => Err(CloseReason::Busy),
+                Err(reason) => Err(reason),
+            },
+        }
+    }
 }
 
 /// `app_collab_load`의 한 줄: 문서 리비전, 제목, 본문, 저장된 상태와 그 편집자(상태를 쓸 수 없으면 둘 다 없음).
@@ -1070,7 +1111,8 @@ impl Room {
             tokio::select! {
                 reply = &mut moving => return reply,
                 _ = every.tick() => {
-                    let _off = self.recheck_peers().await;
+                    // 커밋 직후 새 위치 확인과 경합해도, 큐의 대리 저장 근거를 확인하기 전 peer를 버리지 않는다.
+                    self.refresh_peers().await;
                 }
             }
         }
@@ -1108,9 +1150,19 @@ impl Room {
                     conn,
                     data,
                     received,
+                    permit,
                 }) => {
-                    if received <= committed_at {
-                        self.incoming(conn, &data);
+                    if received <= committed_at
+                        && let Some(permit) = permit
+                    {
+                        self.incoming_with_authorization(
+                            conn,
+                            &data,
+                            EditAuthorization::BeforeMove {
+                                permit,
+                                committed: committed_at,
+                            },
+                        );
                     }
                 }
                 // 나가기 전에 보낸 편집은 아래에서 넣은 뒤에 나간다(평소의 나가기와 같다).
@@ -1143,15 +1195,10 @@ impl Room {
             let Some(peer) = self.conns.get(&conn).map(|c| c.peer.clone()) else {
                 continue;
             };
-            match peer
-                .access
-                .until_closed(session_alive(&self.db, &peer))
-                .await
+            if let Some(pending) = self.pending.iter().find(|pending| pending.conn == conn)
+                && let Err(reason) = pending.authorization.check_session(&self.db, &peer).await
             {
-                Ok(Some(true)) => {}
-                Ok(Some(false)) => self.close(conn, CloseReason::AccessLost),
-                Ok(None) => self.close(conn, CloseReason::Busy),
-                Err(reason) => self.close(conn, reason),
+                self.close(conn, reason);
             }
         }
     }
@@ -1269,10 +1316,28 @@ impl Room {
     }
 
     fn incoming(&mut self, conn: u64, data: &[u8]) {
+        self.incoming_with_authorization(conn, data, EditAuthorization::Current);
+    }
+
+    fn incoming_with_authorization(
+        &mut self,
+        conn: u64,
+        data: &[u8],
+        authorization: EditAuthorization,
+    ) {
         let Some(connection) = self.conns.get(&conn) else {
             return;
         };
-        let Some(can_write) = connection.peer.access.permission() else {
+        let permission = match &authorization {
+            EditAuthorization::Current => connection.peer.access.permission(),
+            EditAuthorization::BeforeMove { .. } => authorization
+                .allows(&connection.peer.access)
+                .then_some(true),
+        };
+        let Some(can_write) = permission else {
+            if matches!(authorization, EditAuthorization::BeforeMove { .. }) {
+                return;
+            }
             let reason = connection.peer.access.reason().unwrap_or(CloseReason::Busy);
             self.close(conn, reason);
             return;
@@ -1315,7 +1380,12 @@ impl Room {
                         tracing::debug!(event = "collab.read_only_change", document = %self.doc_id.0, "ignored a change from a read-only connection");
                         continue;
                     }
-                    self.pending.push(Pending { conn, user, update });
+                    self.pending.push(Pending {
+                        conn,
+                        user,
+                        update,
+                        authorization: authorization.clone(),
+                    });
                 }
                 Message::Awareness(update) => self.awareness_update(conn, update),
                 Message::AwarenessQuery => {
@@ -1375,29 +1445,28 @@ impl Room {
         }
         let pending = std::mem::take(&mut self.pending);
         let mut order: Vec<u64> = Vec::new();
-        let mut by_conn: HashMap<u64, (UserId, Vec<Vec<u8>>)> = HashMap::new();
+        let mut by_conn: HashMap<u64, Vec<Pending>> = HashMap::new();
         for item in pending {
             if !order.contains(&item.conn) {
                 order.push(item.conn);
             }
-            by_conn
-                .entry(item.conn)
-                .or_insert_with(|| (item.user, Vec::new()))
-                .1
-                .push(item.update);
+            by_conn.entry(item.conn).or_default().push(item);
         }
         for conn in order {
-            let Some((user, updates)) = by_conn.remove(&conn) else {
+            let Some(edits) = by_conn.remove(&conn) else {
                 continue;
             };
-            if !self
-                .conns
-                .get(&conn)
-                .is_some_and(|c| c.peer.access.permission() == Some(true))
-            {
+            let Some(first) = edits.first() else { continue };
+            let user = first.user;
+            if !self.conns.get(&conn).is_some_and(|c| {
+                edits
+                    .iter()
+                    .all(|edit| edit.authorization.allows(&c.peer.access))
+            }) {
                 continue;
             }
-            let Ok(merged) = yrs::merge_updates_v1(&updates) else {
+            let Ok(merged) = yrs::merge_updates_v1(edits.iter().map(|edit| edit.update.as_slice()))
+            else {
                 self.close(conn, CloseReason::Invalid);
                 continue;
             };
@@ -1434,12 +1503,26 @@ impl Room {
                     continue;
                 }
             }
+            // 새 위치 거부와 달리 검사 중 세션이 끝났거나 DB로 확인하지 못하면 대리 저장도 받지 않는다.
+            if matches!(first.authorization, EditAuthorization::BeforeMove { .. }) {
+                let Some(peer) = self
+                    .conns
+                    .get(&conn)
+                    .map(|connection| connection.peer.clone())
+                else {
+                    continue;
+                };
+                if let Err(reason) = first.authorization.check_session(&self.db, &peer).await {
+                    self.close(conn, reason);
+                    continue;
+                }
+            }
             // 본문 검사 동안 기한이 지나거나 권한이 철회됐을 수 있다.
-            if !self
-                .conns
-                .get(&conn)
-                .is_some_and(|c| c.peer.access.permission() == Some(true))
-            {
+            if !self.conns.get(&conn).is_some_and(|c| {
+                edits
+                    .iter()
+                    .all(|edit| edit.authorization.allows(&c.peer.access))
+            }) {
                 continue;
             }
             let Some(doc) = &self.doc else {
@@ -1779,6 +1862,11 @@ impl Room {
 
     /// 이동 직전 등 명시적인 재확인도 유지한다. peer별로 병렬 확인하며 기존 기한보다 오래 기다리지 않는다.
     async fn recheck_peers(&mut self) -> bool {
+        self.refresh_peers().await;
+        self.remove_closed_peers()
+    }
+
+    async fn refresh_peers(&self) {
         let peers: Vec<(u64, Peer)> = self
             .conns
             .iter()
@@ -1799,7 +1887,6 @@ impl Room {
             }
         });
         futures_util::future::join_all(checks).await;
-        self.remove_closed_peers()
     }
 
     /// 주기 처리는 독립 감시의 결과만 소비하고 DB 검사를 중복해서 시작하지 않는다.

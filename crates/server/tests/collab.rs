@@ -3108,6 +3108,15 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
 /// 커밋 전 큐 편집의 본문 검사를 잠시 멈춘 사이 새 자리의 재확인이 먼저 연결을 닫는 순서를 강제한다.
 #[test]
 fn a_post_commit_access_check_does_not_discard_the_movers_pending_edits() {
+    post_commit_validation_race(false);
+}
+
+#[test]
+fn a_session_ending_during_post_commit_validation_still_discards_the_pending_edit() {
+    post_commit_validation_race(true);
+}
+
+fn post_commit_validation_race(logout_during_validation: bool) {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .max_blocking_threads(1)
@@ -3145,6 +3154,10 @@ fn a_post_commit_access_check_does_not_discard_the_movers_pending_edits() {
             let closed = tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await;
             let waited_for_validation = !moving.is_finished();
             let acknowledged_before_release = acked(&editor);
+            if logout_during_validation {
+                let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
+                assert!(logout.status.is_success(), "{:?}", logout.json);
+            }
             // assertion 실패 전에도 blocking worker를 해제해 런타임 종료를 막지 않는다.
             release.send(()).unwrap();
             blocker.await.unwrap();
@@ -3174,14 +3187,17 @@ fn a_post_commit_access_check_does_not_discard_the_movers_pending_edits() {
             assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
             assert_eq!(saved["workspace_id"], to);
             assert!(saved["body"].to_string().contains("체크포인트 전 문단"));
-            assert!(
+            assert_eq!(
                 saved["body"]
                     .to_string()
                     .contains("이동자가 대리 저장할 커밋 전 편집"),
-                "the post-commit check discarded the mover's pending edit: {saved}"
+                !logout_during_validation,
+                "logout_during_validation={logout_during_validation}: {saved}"
             );
-            assert_eq!(author, admin.id.0);
-            assert_eq!(edited_by, Some(vec![writer.id.0]));
+            if !logout_during_validation {
+                assert_eq!(author, admin.id.0);
+                assert_eq!(edited_by, Some(vec![writer.id.0]));
+            }
         });
 }
 
