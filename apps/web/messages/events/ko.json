@@ -1,5 +1,5 @@
 {
-  "events_until_before_start": "일정 시작일이 반복 끝 날짜보다 뒤입니다. 반복 끝을 시작일 이후로 바꾸거나 일정 시작일을 앞당겨 주세요.",
+  "events_until_before_start": "일정 시작일이 반복 끝 날짜보다 뒤입니다. 반복 끝을 시작일 당일 또는 그 이후로 바꾸거나 일정 시작일을 앞당겨 주세요.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "events_load_failed": "달력을 불러오지 못했습니다.",
   "events_calendar_embedded": "달력 · {title}",
@@ -25,6 +25,7 @@
   "events_entry_projected_milestone": "예정 ◆ {title}",
   "events_entry_task_start": "시작 {reference} {title}",
   "events_entry_task_due": "마감 {reference} {title}",
+  "events_entry_task_continued": "기간 중 {reference} {title}",
   "events_entry_milestone": "◆ {reference} {title}",
   "events_date_episode": "수강",
   "events_date_study_unit": "공부",

@@ -97,7 +97,7 @@ describe('month calendar', () => {
     expect(shiftMonth('2026-01', -1)).toBe('2025-12');
   });
 
-  it('places events on every day they cover and tasks on their due day', () => {
+  it('places events and tasks on every covered day within the requested range', () => {
     const task: CalendarTaskView = {
       id: 't',
       item_id: 'i',
@@ -148,13 +148,66 @@ describe('month calendar', () => {
       '2026-11-30',
       'Asia/Seoul',
     );
-    expect(map.get('2026-11-01')?.map((e) => e.label)).toEqual(['00:30 점검', '마감 DEV-2 보고서']);
-    expect(map.get('2026-11-02')?.map((e) => e.label)).toEqual(['종일 학회', '마감 DEV-2 보고서']);
+    expect(map.get('2026-11-01')?.map((e) => e.label)).toEqual([
+      '00:30 점검',
+      '기간 중 DEV-2 보고서',
+    ]);
+    expect(map.get('2026-11-02')?.map((e) => e.label)).toEqual([
+      '종일 학회',
+      '기간 중 DEV-2 보고서',
+    ]);
     expect(map.get('2026-11-03')?.map((e) => e.label)).toEqual(['종일 학회', '마감 DEV-2 보고서']);
     expect(map.has('2026-10-28')).toBe(false);
     expect(map.get('2026-11-04')?.map((e) => e.label)).toEqual(['예정 주간 보고']);
     expect(map.get('2026-11-05')?.map((e) => e.label)).toEqual(['23:00 야간 회의']);
     expect(map.has('2026-11-06')).toBe(false);
+  });
+});
+
+describe('task calendar date boundaries (D-121)', () => {
+  const task = (over: Partial<CalendarTaskView>): CalendarTaskView => ({
+    id: 't',
+    item_id: 'i',
+    reference: 'DEV-2',
+    title: '보고서',
+    status: '검토',
+    status_category: 'doing',
+    milestone: false,
+    start_date: null,
+    due_date: null,
+    ...over,
+  });
+  const entries = (tasks: CalendarTaskView[], from = '2026-11-01', to = '2026-11-30') =>
+    entriesByDay(tasks, [], [], [], from, to, 'Asia/Seoul');
+
+  it.each(['start_date', 'due_date'] as const)(
+    'clips a single %s to the inclusive requested range',
+    (field) => {
+      const map = entries(
+        ['2026-10-31', '2026-11-01', '2026-11-30', '2026-12-01'].map((day) =>
+          task({ id: day, [field]: day }),
+        ),
+      );
+      expect([...map.keys()]).toEqual(['2026-11-01', '2026-11-30']);
+    },
+  );
+
+  it('labels a period by its start, intermediate dates and due date', () => {
+    const map = entries([task({ start_date: '2026-11-10', due_date: '2026-11-12' })]);
+    expect([...map.values()].map((list) => list.map((entry) => entry.label))).toEqual([
+      ['시작 DEV-2 보고서'],
+      ['기간 중 DEV-2 보고서'],
+      ['마감 DEV-2 보고서'],
+    ]);
+  });
+
+  it('preserves a same-day deadline and milestone labels', () => {
+    const map = entries([
+      task({ start_date: '2026-11-10', due_date: '2026-11-10' }),
+      task({ id: 'milestone', milestone: true, due_date: '2026-11-11' }),
+    ]);
+    expect(map.get('2026-11-10')?.map((entry) => entry.label)).toEqual(['마감 DEV-2 보고서']);
+    expect(map.get('2026-11-11')?.map((entry) => entry.label)).toEqual(['◆ DEV-2 보고서']);
   });
 });
 

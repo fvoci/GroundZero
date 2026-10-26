@@ -13,7 +13,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function task(id: string, title: string, status: TaskView['status'], due: string): TaskView {
+function task(
+  id: string,
+  title: string,
+  status: TaskView['status'],
+  statusCategory: TaskView['status_category'],
+  due: string,
+): TaskView {
   return {
     id,
     item_id: 'i1',
@@ -34,7 +40,7 @@ function task(id: string, title: string, status: TaskView['status'], due: string
     series: null,
     occurrence_date: null,
     assignees: [],
-    status_category: 'todo',
+    status_category: statusCategory,
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -51,12 +57,13 @@ describe('task calendar roles', () => {
     await setLocale('ko', { reload: false });
     const today = dayIn(new Date().toISOString(), me.timeZone === '' ? 'UTC' : me.timeZone);
     render(TaskCalendar, {
-      props: { tasks: [task('1', '발표 자료', 'done', today)], onopen: () => undefined },
+      props: { tasks: [task('1', '발표 자료', 'done', 'done', today)], onopen: () => undefined },
     });
 
     expect(screen.queryByRole('grid')).toBeNull();
     expect(screen.queryAllByRole('gridcell')).toHaveLength(0);
     expect(screen.getByRole('button', { name: /^발표 자료 · done$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^발표 자료 · done$/ })).toHaveClass('line-through');
   });
 });
 
