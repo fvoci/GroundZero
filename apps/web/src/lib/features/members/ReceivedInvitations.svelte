@@ -58,15 +58,16 @@
     }
   }
 
-  async function load(filter = invitationId): Promise<void> {
+  async function load(scope = request): Promise<void> {
     const ticket = ++sequence;
     try {
       const list = await api.myInvitations();
-      if (ticket !== sequence) return;
-      items = list.filter((i) => filter === undefined || i.id === filter);
+      if (ticket !== sequence || scope !== request) return;
+      items = list;
       loaded = true;
     } catch (e: unknown) {
-      if (ticket === sequence) error = errorText(e, m.members_invitations_load_failed());
+      if (ticket === sequence && scope === request)
+        error = errorText(e, m.members_invitations_load_failed());
     }
   }
 
@@ -97,8 +98,8 @@
   }
 
   $effect(() => {
-    const scope = request;
-    void load(scope.invitationId);
+    error = undefined;
+    void load(request);
     return () => {
       sequence += 1;
     };

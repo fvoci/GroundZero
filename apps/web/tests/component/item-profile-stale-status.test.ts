@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemProfileView, ItemView } from '$lib/api/client';
@@ -260,10 +260,10 @@ describe('item profile status line', () => {
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));
     await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
-    fail(new Error('late failure'));
-    await waitFor(() => {
-      expect(screen.queryByRole('alert')).toBeNull();
+    await act(() => {
+      fail(new Error('late failure'));
     });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 it('restores all profile text and the original base only for the original account', async () => {
