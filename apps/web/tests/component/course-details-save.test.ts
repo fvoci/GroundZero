@@ -1,12 +1,19 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
+import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
+beforeEach(() => {
+  me.userId = 'user-a';
+  localStorage.clear();
+});
 afterEach(() => {
+  me.userId = '';
   vi.restoreAllMocks();
 });
 
@@ -108,9 +115,8 @@ describe('course details save', () => {
     expect(instructor()?.value).toBe('최 강사');
   });
 
-  // 리뷰(#58 요약): 저장을 기다리는 사이 취소하고 다시 고치기를 열어 같은 값을 넣으면, 앞 저장의 응답이 값만 비교해
-  // 새로 연 폼을 닫았다. 연 차례가 다르면 닫지 않는다.
-  it('does not close a form opened again while the earlier save was pending', async () => {
+  // 저장 중 로컬 취소는 막는다. 외부 대상 전환이 일어나도 앞 응답이 새 폼을 닫으면 안 된다.
+  it('does not close another item form while the earlier save was pending', async () => {
     await setLocale('ko', { reload: false });
     mockCourse();
     let finish: () => void = () => undefined;
@@ -122,20 +128,21 @@ describe('course details save', () => {
           };
         }),
     );
-    render(CoursePanel, { props: { itemId: 'i1' } });
+    const view = render(CoursePanel, { props: { itemId: 'i1' } });
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     const first = instructor();
     if (first === null) throw new Error('course-instructor');
     await fireEvent.input(first, { target: { value: '박 강사' } });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));
-
+    expect(instructor()?.value).toBe('박 강사');
+    await view.rerender({ itemId: 'i2' });
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     const again = instructor();
     if (again === null) throw new Error('course-instructor');
     await fireEvent.input(again, { target: { value: '박 강사' } });
     finish();
-    expect(await screen.findByText('강좌 정보를 저장했습니다.')).toBeInTheDocument();
+    await tick();
     expect(instructor()?.value).toBe('박 강사');
   });
 });

@@ -1,7 +1,7 @@
 <script lang="ts">
   // 스터디 계획(D-36): 계획 단위(교육과정·챕터·단계, 쪽·문제·분 분량, 공통 계획일)와 내 진행, 계획 대비 진행·남은
   // 분량, 밀린 단위 재배치(내가 고른 시작일·하루 단위 수), 함께 하는 사람의 진행 집계.
-  import { tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
 
   import type {
     EpisodeStatus,
@@ -10,8 +10,12 @@
     StudyUnitKind,
     StudyUnitView,
   } from '$lib/api/client';
-  import { api, ApiError, STUDY_UNIT_KINDS } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, ApiError, newRequestId, STUDY_UNIT_KINDS } from '$lib/api/client';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { me } from '$lib/me.svelte';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
@@ -62,12 +66,12 @@
     }
   }
   let reloadKey = $state(0);
-  // 숫자 칸(type="number")은 숫자를 주고, 비우면 null을 준다. 상태도 그 모양으로 든다.
+  // 숫자도 원문을 보존하고 제출할 때 검증한다.
   interface UnitDraft {
     title: string;
     chapter: string;
     unit: StudyUnitKind;
-    amount: number | null;
+    amount: string;
     planned_on: string;
   }
 
@@ -75,16 +79,17 @@
     title: '',
     chapter: '',
     unit: 'pages',
-    amount: null,
+    amount: '',
     planned_on: '',
   });
   // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
-  const draftKey = new RetryKey();
+  let requestId = $state(newRequestId());
+  let requestPayload = $state('');
   let replanStart = $state(today);
   let replanPerDay = $state<number | null>(1);
   let openUnit = $state<string | undefined>(undefined);
-  let mine = $state<{ done_amount: number | null; planned_on: string; note: string }>({
-    done_amount: null,
+  let mine = $state<{ done_amount: string; planned_on: string; note: string }>({
+    done_amount: '',
     planned_on: '',
     note: '',
   });
@@ -109,27 +114,138 @@
     await tick();
     document.getElementById(`unit-delete-${id}`)?.focus();
   }
-  let shared = $state<UnitDraft & { number: number | null }>({
-    number: null,
+  let shared = $state<UnitDraft & { number: string }>({
+    number: '',
     title: '',
     chapter: '',
     unit: 'pages',
-    amount: null,
+    amount: '',
     planned_on: '',
   });
 
   /** 빈 칸은 0. 0 이상의 정수가 아니면 undefined. */
-  function wholeAmount(value: number | null): number | undefined {
-    const amount = value ?? 0;
+  function wholeAmount(value: string): number | undefined {
+    const amount = value.trim() === '' ? 0 : Number(value);
     return Number.isInteger(amount) && amount >= 0 ? amount : undefined;
   }
 
   const progress = $derived(plan === undefined ? undefined : studyProgress(plan.units, today));
+  let owner = $state(me.userId);
+  let loadedItem = '';
+  let sharedBase = $state('');
+  let mineBase = $state('');
+  let baseVersion = $state('');
+  let adding = $state(false);
+  let savingMine = $state(false);
+  function textFields<T extends Record<string, string>>(raw: unknown, shape: T): T | undefined {
+    const valid = (value: unknown): value is T =>
+      typeof value === 'object' &&
+      value !== null &&
+      Object.keys(shape).every(
+        (key) => key in value && typeof Reflect.get(value, key) === 'string',
+      ) &&
+      (!('unit' in shape) ||
+        ('unit' in value && STUDY_UNIT_KINDS.some((kind) => kind === value.unit)));
+    return valid(raw) ? raw : undefined;
+  }
+  function resetShared(): void {
+    const u = editingUnit;
+    shared = {
+      number: u === undefined ? '' : String(u.number),
+      title: u?.title ?? '',
+      chapter: u?.chapter ?? '',
+      unit: u?.unit ?? 'pages',
+      amount: u === undefined ? '' : String(u.amount),
+      planned_on: u?.planned_on ?? '',
+    };
+    sharedBase = JSON.stringify(shared);
+    baseVersion = String(u?.version ?? 0);
+  }
+  function resetMine(): void {
+    const u = plan?.units.find((entry) => entry.id === openUnit);
+    mine = {
+      done_amount: u === undefined ? '' : String(u.mine.done_amount),
+      planned_on: u?.mine.planned_on ?? '',
+      note: u?.mine.note ?? '',
+    };
+    mineBase = JSON.stringify(mine);
+  }
+  const newDraft = createFormDraft({
+    name: () => `study:${itemId}:new`,
+    snapshot: () => ({ ...draft, requestId, requestPayload }),
+    parse: (raw) => textFields(raw, { ...draft, requestId: '', requestPayload: '' }),
+    restore: (input) => {
+      const { requestId: id, requestPayload: payload, ...fields } = input;
+      draft = fields;
+      requestId = id;
+      requestPayload = payload;
+    },
+    reset: () => {
+      draft = { title: '', chapter: '', unit: 'pages', amount: '', planned_on: '' };
+      requestId = newRequestId();
+      requestPayload = '';
+    },
+    dirty: () =>
+      draft.title !== '' ||
+      draft.chapter !== '' ||
+      draft.amount !== '' ||
+      draft.planned_on !== '' ||
+      draft.unit !== 'pages',
+    busy: () => adding,
+  });
+  const unitDraft = createFormDraft({
+    name: () =>
+      editingUnit === undefined ? undefined : `study:${itemId}:unit:${editingUnit.id}:edit`,
+    snapshot: () => ({ ...shared, base: sharedBase, version: baseVersion }),
+    parse: (raw) => textFields(raw, { ...shared, base: '', version: '' }),
+    restore: ({ base, version, ...input }) => {
+      shared = input;
+      sharedBase = base;
+      baseVersion = version;
+    },
+    reset: resetShared,
+    dirty: () => editingUnit !== undefined && JSON.stringify(shared) !== sharedBase,
+    busy: () => savingUnit,
+  });
+  const mineDraft = createFormDraft({
+    name: () => (openUnit === undefined ? undefined : `study:${itemId}:unit:${openUnit}:mine`),
+    snapshot: () => ({ ...mine, base: mineBase }),
+    parse: (raw) => textFields(raw, { ...mine, base: '' }),
+    restore: ({ base, ...input }) => {
+      mine = input;
+      mineBase = base;
+    },
+    reset: resetMine,
+    dirty: () => openUnit !== undefined && JSON.stringify(mine) !== mineBase,
+    busy: () => savingMine,
+  });
+  const drafts = [newDraft, unitDraft, mineDraft];
+  onMount(() => {
+    const detach = drafts.map((draft) => draft.attach());
+    return () => {
+      detach.forEach((remove) => {
+        remove();
+      });
+    };
+  });
 
   $effect(() => {
     const id = itemId;
+    const userId = me.userId;
+    const switching = accountSwitching();
     if (reloadKey < 0) return;
+    untrack(() => {
+      if (owner !== userId || loadedItem !== id) {
+        owner = userId;
+        loadedItem = id;
+        plan = undefined;
+        participants = [];
+        editingUnit = undefined;
+        openUnit = undefined;
+      }
+    });
     let cancelled = false;
+    if (switching) return;
     Promise.all([api.studyPlan(id), api.studyParticipants(id, today)])
       .then(([p, list]) => {
         if (cancelled) return;
@@ -180,32 +296,45 @@
   }
 
   function openMine(u: StudyUnitView): void {
+    mineDraft.leave.request(() => {
+      selectMine(u);
+    });
+  }
+  function selectMine(u: StudyUnitView): void {
     if (openUnit === u.id) {
       openUnit = undefined;
       return;
     }
     openUnit = u.id;
     mine = {
-      done_amount: u.mine.done_amount,
+      done_amount: String(u.mine.done_amount),
       planned_on: u.mine.planned_on ?? '',
       note: u.mine.note,
     };
+    mineBase = JSON.stringify(mine);
   }
 
   function editUnit(u: StudyUnitView): void {
+    unitDraft.leave.request(() => {
+      selectEditUnit(u);
+    });
+  }
+  function selectEditUnit(u: StudyUnitView): void {
     if (editingUnit?.id === u.id) {
       editingUnit = undefined;
       return;
     }
     editingUnit = u;
     shared = {
-      number: u.number,
+      number: String(u.number),
       title: u.title,
       chapter: u.chapter,
       unit: u.unit,
-      amount: u.amount,
+      amount: String(u.amount),
       planned_on: u.planned_on ?? '',
     };
+    sharedBase = JSON.stringify(shared);
+    baseVersion = String(u.version);
   }
 
   /**
@@ -216,9 +345,9 @@
 
   async function saveUnit(base: StudyUnitView): Promise<void> {
     const amount = wholeAmount(shared.amount);
-    const number = shared.number;
+    const number = Number(shared.number);
     if (
-      number === null ||
+      shared.number.trim() === '' ||
       !Number.isInteger(number) ||
       number < 1 ||
       shared.title.trim() === '' ||
@@ -228,11 +357,13 @@
       return;
     }
     // 저장 중에 다시 누르면 같은 판으로 두 번 보내 두 번째가 내 첫 저장 때문에 409를 받는다(잘못된 "먼저 고쳤다" 안내).
-    if (savingUnit) return;
+    if (savingUnit || !plan?.can_write) return;
+    const attempt = unitDraft.capture();
+    if (attempt === undefined) return;
     savingUnit = true;
     error = undefined;
     try {
-      await api.updateStudyUnit(base.id, base.version, {
+      await api.updateStudyUnit(base.id, Number(baseVersion), {
         number,
         title: shared.title.trim(),
         chapter: shared.chapter.trim(),
@@ -240,11 +371,18 @@
         amount,
         planned_on: shared.planned_on === '' ? null : shared.planned_on,
       });
-      editingUnit = undefined;
+      if (!unitDraft.isOwner(attempt)) return;
+      if (unitDraft.complete(attempt)) editingUnit = undefined;
       status = m.study_unit_saved({ title: shared.title.trim() });
       reloadKey += 1;
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 409 && (await unitMovedOn(base))) return;
+      if (!unitDraft.isOwner(attempt)) return;
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (await unitMovedOn(base, () => unitDraft.isOwner(attempt)))
+      )
+        return;
       error = errorText(e, m.study_action_failed());
     } finally {
       savingUnit = false;
@@ -255,28 +393,30 @@
    * 409를 받은 뒤 지금 계획을 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 기준을 지금
    * 판으로 바꾸고 알린다(입력은 그대로). 단위가 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
    */
-  async function unitMovedOn(base: StudyUnitView): Promise<boolean> {
+  async function unitMovedOn(base: StudyUnitView, stillOwner: () => boolean): Promise<boolean> {
     let now: StudyPlanView;
     try {
       now = await api.studyPlan(itemId);
     } catch {
       return false;
     }
+    if (!stillOwner()) return true;
     plan = now;
     const latest = now.units.find((x) => x.id === base.id);
     if (latest === undefined) {
-      editingUnit = undefined;
       error = m.common_error_not_found();
       return true;
     }
     if (latest.version === base.version) return false;
     editingUnit = latest;
+    baseVersion = String(latest.version);
     error = m.study_unit_changed();
     return true;
   }
 
   async function addUnit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
+    if (adding || !plan?.can_write) return;
     const amount = wholeAmount(draft.amount);
     if (draft.title.trim() === '' || amount === undefined) {
       error = m.study_unit_invalid();
@@ -289,22 +429,79 @@
       amount,
       planned_on: draft.planned_on === '' ? null : draft.planned_on,
     };
-    const requestId = draftKey.for({ itemId, unit });
-    const ok = await run(
-      () => api.addStudyUnits(itemId, [{ request_id: requestId, ...unit }]),
-      m.study_unit_added(),
-    );
-    if (ok) {
-      draft = { title: '', chapter: '', unit: draft.unit, amount: null, planned_on: '' };
-      draftKey.done(requestId);
+    const payload = JSON.stringify(unit);
+    if (payload !== requestPayload) {
+      requestPayload = payload;
+      requestId = newRequestId();
+    }
+    const attempt = newDraft.capture();
+    if (attempt === undefined) return;
+    error = undefined;
+    adding = true;
+    try {
+      await api.addStudyUnits(itemId, [{ request_id: requestId, ...unit }]);
+      if (!newDraft.isOwner(attempt)) return;
+      newDraft.complete(attempt);
+      status = m.study_unit_added();
+      reloadKey += 1;
+    } catch (e: unknown) {
+      if (newDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
+    } finally {
+      adding = false;
+    }
+  }
+
+  async function saveMine(u: StudyUnitView): Promise<void> {
+    if (savingMine || !plan?.can_write) return;
+    const doneAmount = wholeAmount(mine.done_amount);
+    if (doneAmount === undefined) {
+      error = m.study_done_amount_invalid();
+      return;
+    }
+    const attempt = mineDraft.capture();
+    if (attempt === undefined) return;
+    const sent = { ...mine };
+    error = undefined;
+    savingMine = true;
+    try {
+      const fresh = await freshMine(u);
+      if (!mineDraft.isOwner(attempt)) return;
+      await api.setUnitProgress(u.id, {
+        status: fresh.status,
+        done_amount: doneAmount,
+        planned_on: sent.planned_on === '' ? null : sent.planned_on,
+        note: sent.note,
+        today,
+      });
+      if (!mineDraft.isOwner(attempt)) return;
+      if (mineDraft.isCurrent(attempt)) {
+        mineDraft.complete(attempt);
+        mine = sent;
+        mineBase = JSON.stringify(sent);
+        mineDraft.persist();
+      }
+      status = m.study_progress_saved({ title: u.title });
+      reloadKey += 1;
+    } catch (e: unknown) {
+      if (mineDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
+    } finally {
+      savingMine = false;
     }
   }
 </script>
 
+{#each drafts as draft (draft)}
+  <DiscardChangesConfirm
+    open={draft.active && draft.leave.open}
+    onkeep={draft.leave.keep}
+    ondiscard={draft.discardAndLeave}
+  />
+{/each}
+
 {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
 <p aria-live="polite" class="text-sm">{status}</p>
 
-{#if plan !== undefined && progress !== undefined}
+{#if plan !== undefined && progress !== undefined && owner === me.userId && !accountSwitching()}
   {@const p = progress}
   {@const current = plan}
   <section class="flex flex-col gap-3" aria-labelledby="study-heading">
@@ -482,6 +679,16 @@
           </div>
           {#if editingUnit?.id === u.id}
             {@const base = editingUnit}
+            {#each unitDraft.offers as offer (offer.key)}
+              <FormDraftOffer
+                onrestore={() => {
+                  unitDraft.restore(offer);
+                }}
+                ondiscard={() => {
+                  unitDraft.discard(offer);
+                }}
+              />
+            {/each}
             <form
               class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
               aria-label={m.study_unit_form({ title: u.title })}
@@ -493,12 +700,7 @@
             >
               <div class="flex flex-col gap-1">
                 <Label for={`unit-number-${u.id}`}>{m.study_number()}</Label>
-                <Input
-                  id={`unit-number-${u.id}`}
-                  type="number"
-                  min={1}
-                  bind:value={shared.number}
-                />
+                <Input id={`unit-number-${u.id}`} inputmode="numeric" bind:value={shared.number} />
               </div>
               <div class="flex flex-col gap-1 @xl:col-span-3">
                 <Label for={`unit-title-${u.id}`}>{m.study_new_title()}</Label>
@@ -510,12 +712,7 @@
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-amount-${u.id}`}>{m.study_amount()}</Label>
-                <Input
-                  id={`unit-amount-${u.id}`}
-                  type="number"
-                  min={0}
-                  bind:value={shared.amount}
-                />
+                <Input id={`unit-amount-${u.id}`} inputmode="numeric" bind:value={shared.amount} />
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-kind-${u.id}`}>{m.study_unit()}</Label>
@@ -537,45 +734,37 @@
                   size="sm"
                   variant="ghost"
                   onclick={() => {
-                    editingUnit = undefined;
+                    unitDraft.leave.request(() => {
+                      editingUnit = undefined;
+                    });
                   }}>{m.common_cancel()}</Button
                 >
               </div>
             </form>
           {/if}
           {#if openUnit === u.id}
+            {#each mineDraft.offers as offer (offer.key)}
+              <FormDraftOffer
+                onrestore={() => {
+                  mineDraft.restore(offer);
+                }}
+                ondiscard={() => {
+                  mineDraft.discard(offer);
+                }}
+              />
+            {/each}
             <form
               class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
               onsubmit={(e: SubmitEvent) => {
                 e.preventDefault();
-                const doneAmount = wholeAmount(mine.done_amount);
-                if (doneAmount === undefined) {
-                  error = m.study_done_amount_invalid();
-                  return;
-                }
-                void run(
-                  async () =>
-                    api.setUnitProgress(u.id, {
-                      status: (await freshMine(u)).status,
-                      done_amount: doneAmount,
-                      planned_on: mine.planned_on === '' ? null : mine.planned_on,
-                      note: mine.note,
-                      today,
-                    }),
-                  m.study_progress_saved({ title: u.title }),
-                );
+                void saveMine(u);
               }}
             >
               <div class="flex flex-col gap-1">
                 <Label for={`unit-done-${u.id}`}
                   >{m.study_done_amount({ unit: unitLabel(u.unit) })}</Label
                 >
-                <Input
-                  id={`unit-done-${u.id}`}
-                  type="number"
-                  min={0}
-                  bind:value={mine.done_amount}
-                />
+                <Input id={`unit-done-${u.id}`} inputmode="numeric" bind:value={mine.done_amount} />
               </div>
               <div class="flex flex-col gap-1">
                 <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
@@ -595,6 +784,16 @@
     </ol>
 
     {#if current.can_write}
+      {#each newDraft.offers as offer (offer.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            newDraft.restore(offer);
+          }}
+          ondiscard={() => {
+            newDraft.discard(offer);
+          }}
+        />
+      {/each}
       <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addUnit(e)} novalidate>
         <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
           <Label for="study-unit-title">{m.study_new_title()}</Label>
@@ -606,7 +805,7 @@
         </div>
         <div class="flex w-24 flex-col gap-1">
           <Label for="study-unit-amount">{m.study_amount()}</Label>
-          <Input id="study-unit-amount" type="number" min={0} bind:value={draft.amount} />
+          <Input id="study-unit-amount" inputmode="numeric" bind:value={draft.amount} />
         </div>
         <div class="flex flex-col gap-1">
           <Label for="study-unit-kind">{m.study_unit()}</Label>
