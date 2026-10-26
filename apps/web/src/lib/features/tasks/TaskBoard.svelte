@@ -735,11 +735,26 @@
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
 
   function open(id: string): void {
-    router.navigate(itemTaskPath(item.workspace_id, item.id, id));
+    const navigate = (): void => {
+      router.navigate(itemTaskPath(item.workspace_id, item.id, id));
+    };
+    // 같은 보드 위에 상세를 여는 동안 새 업무·보기 입력은 그대로 남는다. 상세 간 이동은 requestOpen의 확인을 거친다.
+    if (openTaskId === undefined) leave.proceed(navigate);
+    else navigate();
   }
 
   // 주소로 연 대화상자는 여는 단추를 모르므로, 닫으면 마지막으로 연 업무의 카드로 초점을 돌린다.
   let returnTo: string | undefined;
+  function restoreClosedTaskFocus(id: string): void {
+    const itemId = item.id;
+    // 폐기 확인과 상세가 함께 닫힐 때는 두 focus scope가 정리된 다음 카드로 돌린다.
+    void tick().then(() => {
+      requestAnimationFrame(() => {
+        if (!alive || item.id !== itemId || openTaskId !== undefined) return;
+        document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(id)}"]`)?.focus();
+      });
+    });
+  }
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
     // 다른 업무를 열었거나 닫혔으면 앞 업무에 대해 물은 것을 거둔다(새로 연 업무를 닫거나 그 입력을 버리지 않게).
@@ -2235,13 +2250,9 @@
     interactOutsideBehavior={leave.open || detailSaving ? 'ignore' : 'close'}
     showCloseButton={!detailSaving}
     onCloseAutoFocus={(e: Event) => {
-      const card =
-        returnTo === undefined
-          ? null
-          : document.querySelector<HTMLElement>(`[data-task-card="${CSS.escape(returnTo)}"]`);
-      if (card !== null) {
+      if (returnTo !== undefined) {
         e.preventDefault();
-        card.focus();
+        restoreClosedTaskFocus(returnTo);
       }
     }}
   >

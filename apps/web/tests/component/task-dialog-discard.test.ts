@@ -131,7 +131,7 @@ async function clickOutside(): Promise<void> {
 }
 
 /** 보드에서 업무 카드를 눌러 대화상자를 연다. 닫으면 연 기록으로 돌아간다(`history.back`). */
-async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
+async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: () => Promise<void>) {
   window.history.replaceState(null, '', '/w/ws-1/i/i1');
   vi.spyOn(api, 'tasks').mockResolvedValue(tasks);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
@@ -150,6 +150,7 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
   });
   const props = (openTaskId: string | undefined) => ({ item, workspaces: [], openTaskId });
   const view = render(TaskBoard, { props: props(undefined) });
+  await beforeOpen?.();
   await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
   await view.rerender(props('t1'));
   await screen.findByRole('dialog');
@@ -166,6 +167,32 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 }
 
 describe('closing the task dialog with unsaved input', () => {
+  it('opens details without discarding new task and view input that stays on the same board', async () => {
+    me.userId = 'user-a';
+    window.localStorage.clear();
+    try {
+      await openBoard([task('t1')], async () => {
+        await fireEvent.input(await screen.findByLabelText(m.tasks_new_title()), {
+          target: { value: 'Keep this new title' },
+        });
+        await fireEvent.click(screen.getByTestId('task-filter-toggle'));
+        await fireEvent.input(await screen.findByLabelText(m.tasks_view_name_aria()), {
+          target: { value: 'Keep this view name' },
+        });
+      });
+      expect(router.path).toBe(itemTaskPath('ws-1', 'i1', 't1'));
+      expect(confirmBox()).toBeNull();
+      expect(screen.getByLabelText(m.tasks_new_title())).toHaveValue('Keep this new title');
+      expect(screen.getByLabelText(m.tasks_view_name_aria())).toHaveValue('Keep this view name');
+      router.navigate('/tasks');
+      await findConfirm();
+      expect(router.path).toBe(itemTaskPath('ws-1', 'i1', 't1'));
+    } finally {
+      me.userId = '';
+      window.localStorage.clear();
+    }
+  });
+
   it('keeps the account-switch warning when recurrence storage fails beside a reserved task draft', async () => {
     me.userId = 'user-a';
     window.localStorage.clear();
@@ -445,7 +472,7 @@ describe('closing the task dialog with unsaved input', () => {
   });
 
   it('closes only after I choose to discard', async () => {
-    const { back } = await openBoard();
+    const { back, reopen } = await openBoard();
     const update = vi.spyOn(api, 'updateTask');
     await type('task-title', '새 제목');
     field('task-title').focus();
@@ -454,6 +481,10 @@ describe('closing the task dialog with unsaved input', () => {
     await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_confirm() }));
     expect(back).toHaveBeenCalledTimes(1);
     expect(update).not.toHaveBeenCalled();
+    await reopen(undefined);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(document.querySelector('[data-task-card="t1"]'));
+    });
   });
 
   // 단추가 아닌 곳(설명 칸, 칸 이름, 대화상자 바탕)을 누른 뒤의 Esc도 같다.
