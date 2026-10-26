@@ -59,11 +59,10 @@ beforeEach(async () => {
   me.userId = 'restore-account-a';
   // Calendar and other subordinate reads are outside these creation flows.
   vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
-  vi.spyOn(api, 'module').mockImplementation(async (id) => module(id));
-  vi.spyOn(api, 'items').mockImplementation(async (id) => [
-    template(`${id}-first`, id),
-    template(`${id}-chosen`, id),
-  ]);
+  vi.spyOn(api, 'module').mockImplementation((id) => Promise.resolve(module(id)));
+  vi.spyOn(api, 'items').mockImplementation((id) =>
+    Promise.resolve([template(`${id}-first`, id), template(`${id}-chosen`, id)]),
+  );
 });
 
 afterEach(() => {
@@ -122,7 +121,9 @@ it('restores a failed module item title only on request and retries its original
   expect(create).toHaveBeenCalledOnce();
   warnsBeforeUnload();
   await fireEvent.click(screen.getByRole('button', { name: m.modules_create_item() }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledTimes(2);
+  });
   expect(create.mock.calls[1]).toEqual(original);
   await screen.findByRole('alert');
 });
@@ -159,7 +160,7 @@ it('restores module template title, chosen source and pending request ID without
   await mount();
   await screen.findByTestId('form-draft-offer');
   expect(screen.getByLabelText(m.modules_template_item_title())).toHaveValue('');
-  expect(screen.getByLabelText(m.modules_template())).toHaveValue('');
+  expect(screen.getByLabelText(m.modules_template())).toHaveProperty('selectedIndex', -1);
   expect(copy).toHaveBeenCalledOnce();
   await fireEvent.click(screen.getByRole('button', { name: m.common_draft_restore() }));
   expect(screen.getByLabelText(m.modules_template_item_title())).toHaveValue(
@@ -169,7 +170,9 @@ it('restores module template title, chosen source and pending request ID without
   expect(copy).toHaveBeenCalledOnce();
   warnsBeforeUnload();
   await fireEvent.click(screen.getByRole('button', { name: m.modules_from_template() }));
-  await waitFor(() => expect(copy).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(copy).toHaveBeenCalledTimes(2);
+  });
   expect(copy.mock.calls[1]).toEqual(original);
   await screen.findByRole('alert');
 });

@@ -57,7 +57,7 @@ beforeEach(async () => {
   me.userId = 'restore-account-a';
   // Keep unrelated task/calendar/record reads pending; the screens and their draft forms are real.
   vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
-  vi.spyOn(api, 'item').mockImplementation(async (id) => item(id));
+  vi.spyOn(api, 'item').mockImplementation((id) => Promise.resolve(item(id)));
   vi.spyOn(api, 'module').mockResolvedValue(mod);
   vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
   vi.spyOn(api, 'documentTemplates').mockResolvedValue([
@@ -137,7 +137,9 @@ it('restores an item document title, template and failed request ID only for its
   expect(create).toHaveBeenCalledOnce();
   warnsBeforeUnload();
   await fireEvent.click(screen.getByRole('button', { name: m.modules_create_document() }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledTimes(2);
+  });
   expect(create.mock.calls[1]).toEqual(original);
   await screen.findByRole('alert');
 });
@@ -189,7 +191,9 @@ it('restores item information and its edit-start version before the first explic
   warnsBeforeUnload();
   const form = screen.getByRole('form', { name: m.modules_item_info() });
   await fireEvent.click(within(form).getByRole('button', { name: m.common_save() }));
-  await waitFor(() => expect(update).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(update).toHaveBeenCalledOnce();
+  });
   expect(update).toHaveBeenCalledWith('item-a', 3, {
     title: '복원할 제목',
     description: '복원할 설명\n둘째 줄',
