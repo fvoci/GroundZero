@@ -463,8 +463,9 @@
       </Dialog.Header>
       <ul class="flex flex-col gap-1" data-testid="share-list">
         {#each shares as s (s.id)}
+          {@const recipient = s.email ?? s.display_name}
           <li class="flex flex-wrap items-center gap-2 text-sm">
-            <span>{s.email}</span>
+            <span>{recipient}</span>
             <span class="text-muted-foreground"
               >{s.permission === 'write'
                 ? m.documents_permission_write()
@@ -473,7 +474,7 @@
             {#if asking?.kind === 'share' && asking.id === s.id}
               <span class="ml-auto flex flex-wrap items-center gap-1">
                 <span id="share-revoke-warning"
-                  >{m.documents_unshare_confirm({ email: s.email })}</span
+                  >{m.documents_unshare_confirm({ email: recipient })}</span
                 >
                 <Button
                   size="sm"
