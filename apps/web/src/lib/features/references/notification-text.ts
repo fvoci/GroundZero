@@ -9,6 +9,8 @@ export function notificationText(n: NotificationView): string {
   // 날짜는 표시 언어의 서식으로(D-81).
   const date = n.due_date === null ? '' : formatDay(n.due_date);
   switch (n.kind) {
+    case 'invite':
+      return m.references_notification_invite({ who, target: n.subject ?? target });
     case 'mention':
       return m.references_notification_mention({ who, target });
     case 'comment':

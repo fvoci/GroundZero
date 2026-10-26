@@ -3706,6 +3706,9 @@ CREATE FUNCTION fvoci.app_join_workspace_as_admin(p_workspace uuid, p_ids uuid[]
     -- 조직 행 → 워크스페이스 행 → 멤버 행 순서로 잠그고 관리자인지 다시 본다(강등·탈퇴와 직렬화).
     PERFORM 1 FROM organizations WHERE id = v_ws.organization_id FOR SHARE;
     PERFORM 1 FROM workspaces WHERE id = p_workspace AND deleted_at IS NULL FOR NO KEY UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'workspace not found' USING ERRCODE = 'P0002';
+    END IF;
     PERFORM app_require_organization_admin(v_ws.organization_id);
     SELECT role INTO v_old FROM workspace_members WHERE workspace_id = p_workspace AND user_id = v_user FOR UPDATE;
     IF v_old = 'admin' THEN

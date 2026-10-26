@@ -252,7 +252,7 @@ pub struct StartedTimer {
 
 /// 타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다.
 #[utoipa::path(post, path = "/api/me/timer", operation_id = "start_timer", request_body = StartTimer,
-    responses((status = 201, body = StartedTimer), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "time")]
+    responses((status = 201, body = StartedTimer), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "time")]
 pub async fn start(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
