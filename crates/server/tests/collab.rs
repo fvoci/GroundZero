@@ -3105,6 +3105,86 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
     owner.close().await;
 }
 
+/// 커밋 전 큐 편집의 본문 검사를 잠시 멈춘 사이 새 자리의 재확인이 먼저 연결을 닫는 순서를 강제한다.
+#[test]
+fn a_post_commit_access_check_does_not_discard_the_movers_pending_edits() {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(1)
+        .build()
+        .unwrap()
+        .block_on(async {
+            let (writer, (_state, app, _addr, admin, _from, to, id, mut editor, reader)) =
+                live_move_race_setup_rechecking("커밋 뒤 권한 확인 경합", "1").await;
+            assert!(
+                editor.until(acked).await,
+                "checkpoint edit was not acknowledged"
+            );
+            let owner_url =
+                std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+            let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+            let (hold, holder) = hold_tree(&owner, &to).await;
+            let moving = tokio::spawn({
+                let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+                async move { move_to(&app, &admin, &id, &to).await }
+            });
+            until_waiting_on_lock("app_lock_move", holder).await;
+
+            // 체크포인트 검사는 끝났다. 다음 spawn_blocking 본문 검사만 채널 barrier 뒤에서 기다린다.
+            let (started, entered) = tokio::sync::oneshot::channel();
+            let (release, barrier) = std::sync::mpsc::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                let _ignored = started.send(());
+                let _released = barrier.recv();
+            });
+            entered.await.unwrap();
+            editor.paragraph("이동자가 대리 저장할 커밋 전 편집").await;
+            editor.read_by_server().await;
+            hold.rollback().await.unwrap();
+
+            let closed = tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await;
+            let waited_for_validation = !moving.is_finished();
+            let acknowledged_before_release = acked(&editor);
+            // assertion 실패 전에도 blocking worker를 해제해 런타임 종료를 막지 않는다.
+            release.send(()).unwrap();
+            blocker.await.unwrap();
+            let moved = tokio::time::timeout(Duration::from_secs(10), moving)
+                .await
+                .unwrap()
+                .unwrap();
+            let saved = get_doc(&app, &admin, &id).await;
+            let (revision, author) = last_revision(&owner, &id).await;
+            let (_, edited_by) = revision_authors(&owner, &id, revision).await;
+            owner.close().await;
+            reader.close().await;
+
+            assert_eq!(
+                closed.ok().flatten(),
+                Some(4403),
+                "new-place access check must end the connection"
+            );
+            assert!(
+                waited_for_validation,
+                "the move passed the controlled validation barrier"
+            );
+            assert!(
+                !acknowledged_before_release,
+                "a blocked validation acknowledged the queued edit"
+            );
+            assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+            assert_eq!(saved["workspace_id"], to);
+            assert!(saved["body"].to_string().contains("체크포인트 전 문단"));
+            assert!(
+                saved["body"]
+                    .to_string()
+                    .contains("이동자가 대리 저장할 커밋 전 편집"),
+                "the post-commit check discarded the mover's pending edit: {saved}"
+            );
+            assert_eq!(author, admin.id.0);
+            assert_eq!(edited_by, Some(vec![writer.id.0]));
+        });
+}
+
 /// #71: 이동이 붙잡혀 있는 동안 대기열에서 기다린 편집은, 이동이 일어나지 않으면(확인한 미리보기가 달라 409) 평소처럼
 /// 받아 다른 연결에 보내고 저장을 확인한다. 연결은 그대로다.
 #[tokio::test]
