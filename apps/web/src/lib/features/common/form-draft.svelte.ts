@@ -2,6 +2,7 @@ import { untrack } from 'svelte';
 import { SvelteDate } from 'svelte/reactivity';
 
 import { me } from '$lib/me.svelte';
+import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
 
 import {
   formDraftTabKey,
@@ -43,14 +44,22 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
   let restoredKey: string | undefined;
 
-  function current(): boolean {
+  function owned(): boolean {
     return session?.userId === me.userId && session.name === options.name();
   }
 
+  function current(): boolean {
+    return owned() && !accountSwitching();
+  }
+
+  function blocked(): boolean {
+    return offers.some((entry) => entry.key === session?.key);
+  }
+
   function persist(): void {
-    if (!current() || session === undefined) return;
+    if (!owned() || session === undefined) return;
     // A failed move to a held key must never overwrite the offered input.
-    if (offers.some((entry) => entry.key === session?.key)) return;
+    if (blocked()) return;
     writeFormDraftAt(
       session.key,
       options.dirty()
@@ -110,6 +119,13 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     persist();
   });
 
+  $effect(() => {
+    if (accountSwitching()) {
+      untrack(persist);
+      leave.keep();
+    }
+  });
+
   function discard(entry: StoredFormDraft<Saved<T>>): void {
     if (!current() || !offers.includes(entry)) return;
     removeFormDraftAt(entry.key);
@@ -157,7 +173,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   }
 
   function capture(): FormDraftAttempt | undefined {
-    if (!current() || session === undefined || offers.length > 0) return undefined;
+    if (!current() || session === undefined || blocked()) return undefined;
     persist();
     return { userId: session.userId, session, snapshot: JSON.stringify(options.snapshot()) };
   }
@@ -206,6 +222,9 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     },
     get active() {
       return current();
+    },
+    get blocked() {
+      return blocked();
     },
     leave,
     persist,

@@ -133,7 +133,7 @@
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy || (draftName !== undefined && (!draft.active || draft.offers.length > 0))) return;
+    if (busy || (draftName !== undefined && (!draft.active || draft.blocked))) return;
     const trimmed = name.trim();
     if (trimmed === '') {
       error = m.workspaces_name_required({ label });
@@ -196,7 +196,7 @@
       bind:ref={input}
       {id}
       bind:value={name}
-      disabled={busy}
+      disabled={busy || (draftName !== undefined && !draft.active)}
       onkeydown={(e: KeyboardEvent) => {
         if (e.key === 'Escape' && oncancel !== undefined && !busy) {
           e.preventDefault();
@@ -219,7 +219,11 @@
       aria-describedby={error !== undefined ? `${id}-error` : undefined}
     />
   </div>
-  <Button type="submit" disabled={busy || draft.offers.length > 0}>{submitLabel}</Button>
+  <Button
+    type="submit"
+    disabled={busy || (draftName !== undefined && (!draft.active || draft.blocked))}
+    >{submitLabel}</Button
+  >
 </form>
 {#if error !== undefined}
   <p id={`${id}-error`} class="text-sm text-destructive" role="alert">{error}</p>
