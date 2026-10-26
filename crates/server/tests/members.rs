@@ -1136,3 +1136,83 @@ async fn only_the_owner_cancels_an_ownership_offer() {
         "{actions:?}"
     );
 }
+
+/// 2단계에서 가져온 조직 초대 경로(PR #139 "1단계로 가져온 2단계 구현"). 워크스페이스 초대는 조직 멤버만 받아들일 수
+/// 있으므로(D-114) 조직 초대가 먼저다: 받은 초대 목록에 `kind: organization`·workspace null로 보이고, 수락 응답도
+/// `kind: organization`이다. 조직 관리자가 아니면 만들 수 없다.
+#[tokio::test]
+async fn organization_invitation_over_http_admits_the_member_before_the_workspace_invitation() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "조직 초대").await;
+    let org = common::organization_of_workspace(&ws).await;
+    let email = unique_email("newcomer");
+    let newcomer = login_with_email(&state, "newcomer", &email, true).await;
+    let ws_inv = invite(&app, &owner, &ws, &email, "member").await;
+    let ws_inv_id = ws_inv["id"].as_str().unwrap();
+    assert_eq!(
+        accept(&app, &newcomer, ws_inv_id).await,
+        StatusCode::CONFLICT,
+        "a workspace invitation cannot be accepted before organization membership"
+    );
+
+    let org_path = format!("/api/organizations/{org}/invitations");
+    let input = json!({ "email": email, "role": "member" });
+    // 조직을 볼 수 없는 사람에게는 404(존재를 드러내지 않음), 관리자가 아닌 조직 멤버에게는 403 — 2단계 상태 행렬과 같다.
+    let stranger = login(&state, "stranger").await;
+    let r = send(
+        &app,
+        Method::POST,
+        &org_path,
+        Some(&stranger),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
+    let plain = login(&state, "plain member").await;
+    common::join_organization(org, &plain, "member").await;
+    let r = send(
+        &app,
+        Method::POST,
+        &org_path,
+        Some(&plain),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.json);
+    let r = send(&app, Method::POST, &org_path, Some(&owner), Some(input)).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    assert_eq!(r.json["role"], "member");
+    let org_inv_id = r.json["id"].as_str().unwrap().to_owned();
+
+    let mine = send(&app, Method::GET, "/api/invitations", Some(&newcomer), None).await;
+    let listed = mine.json.as_array().unwrap();
+    let org_row = listed
+        .iter()
+        .find(|v| v["id"] == org_inv_id.as_str())
+        .expect("organization invitation listed");
+    assert_eq!(org_row["kind"], "organization");
+    assert_eq!(org_row["organization_id"], json!(org));
+    assert!(org_row["workspace_id"].is_null() && org_row["workspace_name"].is_null());
+    let ws_row = listed
+        .iter()
+        .find(|v| v["id"] == ws_inv_id)
+        .expect("workspace invitation listed");
+    assert_eq!(ws_row["kind"], "workspace");
+    assert_eq!(ws_row["workspace_id"], ws.as_str());
+
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/invitations/{org_inv_id}/accept"),
+        Some(&newcomer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert_eq!(r.json["kind"], "organization");
+    assert_eq!(r.json["organization_id"], json!(org));
+    assert!(r.json["workspace_id"].is_null());
+    assert_eq!(accept(&app, &newcomer, ws_inv_id).await, StatusCode::OK);
+}
