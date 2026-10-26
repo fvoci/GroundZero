@@ -255,8 +255,8 @@ async fn readonly_status_definition_is_forbidden_and_archive_conflicts() {
     let app = common::app(&w.state);
     let path = format!("/api/items/{}/statuses", w.item);
     let mut failures = Vec::new();
-    // Worker B's status-definition API is absent at baseline d8670d0. Keep the required HTTP
-    // expectation visible as a failure until that route exists; never substitute a SQL call.
+    // Exercise the registered status-definition HTTP route before and after archival;
+    // the response must preserve the distinction between insufficient access and archived state.
     for archived in [false, true] {
         if archived {
             fixture(

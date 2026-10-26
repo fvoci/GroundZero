@@ -130,8 +130,8 @@ async fn required_expected_user_is_checked_before_every_write_and_audit() {
         );
         assert_ne!(snapshot(&w).await, before);
     }
-    // NOT RUN at baseline d8670d0: organization settings PUT and workspace limits PUT are not
-    // registered yet (worker A). No ignored/placeholder test substitutes for those routes.
+    // Organization settings and workspace limits PUT routes are covered by
+    // organizations_api::settings_validate_patch_preserve_null_and_require_expected_user.
 }
 
 #[tokio::test]
