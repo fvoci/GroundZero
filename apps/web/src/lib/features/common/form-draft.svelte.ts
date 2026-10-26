@@ -1,4 +1,4 @@
-import { untrack } from 'svelte';
+import { onDestroy, untrack } from 'svelte';
 import { SvelteDate } from 'svelte/reactivity';
 
 import { me } from '$lib/me.svelte';
@@ -44,13 +44,14 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
   let restoredKey: string | undefined;
   let kept = $state(false);
+  let disposed = false;
 
   function owned(): boolean {
     return session?.userId === me.userId && session.name === options.name();
   }
 
   function current(): boolean {
-    return owned() && !accountSwitching();
+    return !disposed && owned() && !accountSwitching();
   }
 
   function blocked(): boolean {
@@ -71,6 +72,10 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     );
     kept = !dirty || written;
   }
+
+  onDestroy(() => {
+    disposed = true;
+  });
 
   const leave = createLeaveGuard({
     dirty: () => current() && options.dirty(),
