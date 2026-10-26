@@ -3195,7 +3195,7 @@ async fn move_commit_reply_race(destination_writable: bool) {
     let state =
         fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
     let original = common::app(&state);
-    let admin = login(&state, "commit response admin").await;
+    let admin = login(&state, "commit-response-admin").await;
     let from = create_workspace(&original, &admin, "commit response source").await;
     let to = create_workspace(&original, &admin, "commit response destination").await;
     let (writer, _) = add_member(
@@ -3203,7 +3203,7 @@ async fn move_commit_reply_race(destination_writable: bool) {
         &state,
         &admin,
         &from,
-        "commit response writer",
+        "commit-response-writer",
         "member",
     )
     .await;
