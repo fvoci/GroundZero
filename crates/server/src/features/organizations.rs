@@ -479,7 +479,7 @@ pub async fn set_settings(
     Path(org): Path<OrganizationId>,
     Json(patch): Json<Value>,
 ) -> Result<Json<Organization>, AppError> {
-    let input: OrganizationSettingsPatch = serde_json::from_value(patch.clone())
+    let input = OrganizationSettingsPatch::deserialize(&patch)
         .map_err(|_| AppError::BadRequest("invalid organization settings".into()))?;
     if patch.get("name").is_some()
         && input
@@ -540,7 +540,7 @@ pub async fn set_workspace_limits(
     Path(ws): Path<WorkspaceId>,
     Json(patch): Json<Value>,
 ) -> Result<Json<OrganizationLimits>, AppError> {
-    let input: OrganizationLimits = serde_json::from_value(patch.clone())
+    let input = OrganizationLimits::deserialize(&patch)
         .map_err(|_| AppError::BadRequest("invalid workspace limits".into()))?;
     validate_limits(&input)?;
     let mut tx = state.db.begin_as(user).await?;
