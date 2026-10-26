@@ -1,16 +1,22 @@
 <script lang="ts">
   // 모듈 하나: 설명, 항목 목록과 항목 만들기, 관리자의 이름·키·아이콘·설명 변경과 보관·휴지통 (D-15, D-16, D-18, D-78).
   import type { Module, Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, strings, retry } from './draft-values';
 
   import type { ItemView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
+  import { me } from '$lib/me.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
@@ -81,10 +87,53 @@
    * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
    */
   let savingSettings = $state(false);
+  const settingsDraft = createFormDraft({
+    name: () => `module-settings:${moduleId}`,
+    snapshot: () => ({
+      name: editName,
+      key: editKey,
+      icon: editIcon,
+      description: editDescription,
+    }),
+    parse: (raw) => {
+      if (
+        !strings(raw) ||
+        raw.name === undefined ||
+        raw.key === undefined ||
+        raw.icon === undefined ||
+        raw.description === undefined
+      )
+        return undefined;
+      return { name: raw.name, key: raw.key, icon: raw.icon, description: raw.description };
+    },
+    restore: (value) => {
+      editName = value.name;
+      editKey = value.key;
+      editIcon = value.icon;
+      editDescription = value.description;
+    },
+    reset: () => {
+      editName = mod?.name ?? '';
+      editKey = mod?.key ?? '';
+      editIcon = mod?.icon ?? '';
+      editDescription = mod?.description ?? '';
+      savingSettings = false;
+    },
+    dirty: () =>
+      mod !== undefined &&
+      (editName !== mod.name ||
+        editKey !== mod.key ||
+        editIcon !== mod.icon ||
+        editDescription !== mod.description),
+    busy: () => savingSettings,
+  });
+  onMount(settingsDraft.attach);
 
   async function saveSettings(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (mod === undefined || savingSettings) return;
+    const attempt = settingsDraft.capture();
+    if (attempt === undefined) return;
     const key = normalizeKey(editKey);
     if (editName.trim() === '' || key === undefined) {
       settingsError = m.modules_settings_invalid();
@@ -100,7 +149,7 @@
       icon: editIcon.trim(),
       description: editDescription.trim(),
     };
-    const stillHere = (): boolean => moduleId === target.id;
+    const stillHere = (): boolean => moduleId === target.id && settingsDraft.isOwner(attempt);
     // 아이콘·설명·이름과 키는 따로 저장된다. 뒤 요청이 막혀도(키 409 등) 이미 저장된 앞 부분은 화면에 넣는다.
     let partial: Module | undefined;
     savingSettings = true;
@@ -108,10 +157,12 @@
       const before = target.key;
       if (edits.icon !== target.icon) {
         await api.setModuleIcon(target.id, edits.icon);
+        if (me.userId !== attempt.userId) return;
         partial = { ...target, icon: edits.icon };
       }
       if (edits.description !== target.description) {
         partial = await api.setModuleDescription(target.id, edits.description);
+        if (me.userId !== attempt.userId) return;
       }
       const saved = await api.updateModule(target.id, edits.name, key);
       partial = undefined;
@@ -119,11 +170,11 @@
       forgetReferences();
       if (!stillHere()) return;
       mod = saved;
-      editKey = saved.key;
+      const completed = settingsDraft.complete(attempt);
       const list = await api.items(saved.id);
       if (!stillHere()) return;
       items = list;
-      notifyDone(m.common_saved());
+      if (completed) notifyDone(m.common_saved());
       if (before !== saved.key) {
         settingsNote = m.modules_key_changed({ before, after: saved.key });
       }
@@ -138,7 +189,7 @@
           ? m.modules_key_taken()
           : errorText(e, m.modules_change_failed());
     } finally {
-      savingSettings = false;
+      if (settingsDraft.isOwner(attempt)) savingSettings = false;
     }
   }
 
@@ -147,10 +198,41 @@
   let templateId = $state('');
   let templateTitle = $state('');
   let templateError = $state<string | undefined>(undefined);
+  let templateBusy = $state(false);
   // 같은 템플릿·제목의 재시도는 같은 요청 id, 고치면 새 id.
-  const templateKey = new RetryKey();
+  let templatePending = $state<{ requestId: string; signature: string } | null>(null);
+  const templateDraft = createFormDraft({
+    name: () => `module-template:${moduleId}`,
+    snapshot: () => ({ title: templateTitle, source: templateId, pending: templatePending }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        typeof raw.title !== 'string' ||
+        typeof raw.source !== 'string' ||
+        !retry(raw.pending)
+      )
+        return undefined;
+      return { title: raw.title, source: raw.source, pending: raw.pending };
+    },
+    restore: (value) => {
+      templateTitle = value.title;
+      templateId = value.source;
+      templatePending = value.pending;
+    },
+    reset: () => {
+      templateTitle = '';
+      templateId = '';
+      templatePending = null;
+      templateError = undefined;
+      templateBusy = false;
+    },
+    dirty: () => templateTitle !== '' || templateId !== '',
+    busy: () => templateBusy,
+  });
+  onMount(templateDraft.attach);
 
   async function fromTemplate(moduleId: string): Promise<void> {
+    if (templateBusy || !templateDraft.active || templateDraft.blocked) return;
     // 지금 모듈의 템플릿 목록에 있는 것만 보낸다. 고르지 않았으면 첫 템플릿. 고른 템플릿이 다시 읽은 목록에서
     // 빠졌으면(보관·템플릿 해제) 선택 칸은 빈 칸으로 보이지만 값은 남는다. 고르지 않은 첫 템플릿으로 바꾸지 않고
     // 다시 고르게 한다.
@@ -161,14 +243,24 @@
       return;
     }
     templateError = undefined;
+    let attempt: ReturnType<typeof templateDraft.capture>;
     try {
       const title = templateTitle.trim();
-      const requestId = templateKey.for({ source, moduleId, title });
+      const signature = JSON.stringify({ source, moduleId, title });
+      if (templatePending?.signature !== signature)
+        templatePending = { requestId: newRequestId(), signature };
+      const requestId = templatePending.requestId;
+      attempt = templateDraft.capture();
+      if (attempt === undefined) return;
+      templateBusy = true;
       const copied = await api.copyItem(source, requestId, moduleId, title, true);
-      templateKey.done(requestId);
+      if (!templateDraft.complete(attempt)) return;
       router.navigate(itemPath(workspace.id, copied.item_id));
     } catch (e: unknown) {
+      if (attempt === undefined || !templateDraft.isCurrent(attempt)) return;
       templateError = errorText(e, m.modules_create_failed());
+    } finally {
+      if (attempt !== undefined && templateDraft.isOwner(attempt)) templateBusy = false;
     }
   }
 
@@ -182,6 +274,37 @@
     }
   }
 </script>
+
+{#each mod === undefined ? [] : settingsDraft.offers as entry (entry.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      settingsDraft.restore(entry);
+    }}
+    ondiscard={() => {
+      settingsDraft.discard(entry);
+    }}
+  />
+{/each}
+<DiscardChangesConfirm
+  open={settingsDraft.leave.open}
+  onkeep={settingsDraft.leave.keep}
+  ondiscard={settingsDraft.discardAndLeave}
+/>
+{#each mod === undefined ? [] : templateDraft.offers as entry (entry.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      templateDraft.restore(entry);
+    }}
+    ondiscard={() => {
+      templateDraft.discard(entry);
+    }}
+  />
+{/each}
+<DiscardChangesConfirm
+  open={templateDraft.leave.open}
+  onkeep={templateDraft.leave.keep}
+  ondiscard={templateDraft.discardAndLeave}
+/>
 
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
@@ -261,16 +384,17 @@
       <div class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3">
         <CreateForm
           id="new-item"
+          draftName={`module-item-new:${current.id}`}
           label={m.modules_new_item_title()}
           placeholder={m.modules_new_item_placeholder()}
           submitLabel={m.modules_create_item()}
-          create={async (requestId: string, title: string) => {
+          create={async (requestId: string, title: string, context: CreateFormContext) => {
             const created = await api.createItem(current.id, requestId, title);
-            router.navigate(itemPath(workspace.id, created.id));
+            if (context.saved()) router.navigate(itemPath(workspace.id, created.id));
           }}
         />
         <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
-        {#if templates.length > 0}
+        {#if templates.length > 0 || templateTitle !== '' || templateId !== ''}
           <form
             class="flex flex-wrap items-end gap-2"
             aria-label={m.modules_from_template()}

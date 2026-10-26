@@ -244,3 +244,4 @@ describe('item profile save on a stale version', () => {
     });
   });
 });
+import './fixtures/authenticated';

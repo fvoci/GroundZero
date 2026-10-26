@@ -2,6 +2,11 @@
   // 항목 정보(D-33·D-34·D-36·D-38): 상태·기간·리더·목표·범위와 종류별 정보, 비공개 항목의 멤버(사람·그룹).
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, strings } from './draft-values';
 
   import type {
     AssigneeView,
@@ -39,7 +44,7 @@
   let error = $state<string | undefined>(undefined);
   let editing = $state(false);
   // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
-  let editBase = 0;
+  let editBase = $state(0);
   // 편집을 열거나 취소할 때마다 오른다. 저장을 기다리는 동안 취소하고 다시 연 편집을 앞선 저장이 닫지 않게 한다.
   let editSession = 0;
   // 편집을 연 때의 리더. 고를 수 있는 사람 목록에 없어도 입력의 리더 이름을 보인다.
@@ -73,6 +78,74 @@
   let groupIds = $state<string[]>([]);
   let candidates = $state<{ id: string; name: string }[]>([]);
   let groupChoices = $state<{ id: string; name: string }[]>([]);
+  let baseline = $state('');
+  let busy = $state(false);
+  const draft = createFormDraft({
+    name: () => `item-profile:${item.id}:${kind}`,
+    snapshot: () => ({ form, base: editBase, baseline }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        !object(raw.form) ||
+        typeof raw.base !== 'number' ||
+        typeof raw.baseline !== 'string'
+      )
+        return undefined;
+      const value = raw.form;
+      const status = ITEM_STATUSES.find((candidate) => candidate === value.status);
+      if (
+        status === undefined ||
+        typeof value.leader !== 'string' ||
+        typeof value.goal !== 'string' ||
+        typeof value.scope !== 'string' ||
+        typeof value.starts_on !== 'string' ||
+        typeof value.ends_on !== 'string' ||
+        typeof value.keywords !== 'string' ||
+        !strings(value.values)
+      )
+        return undefined;
+      return {
+        form: {
+          status,
+          leader: value.leader,
+          goal: value.goal,
+          scope: value.scope,
+          starts_on: value.starts_on,
+          ends_on: value.ends_on,
+          keywords: value.keywords,
+          values: value.values,
+        },
+        base: raw.base,
+        baseline: raw.baseline,
+      };
+    },
+    restore: (value) => {
+      form = value.form;
+      editBase = value.base;
+      baseline = value.baseline;
+      editing = true;
+      editSession += 1;
+    },
+    reset: () => {
+      editing = false;
+      busy = false;
+      conflict = undefined;
+      editSession += 1;
+      form = {
+        status: 'active',
+        leader: '',
+        goal: '',
+        scope: '',
+        starts_on: '',
+        ends_on: '',
+        keywords: '',
+        values: {},
+      };
+      baseline = '';
+    },
+    dirty: () => editing && JSON.stringify(form) !== baseline,
+  });
+  onMount(draft.attach);
 
   // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
   const leaderLabel = $derived.by(() => {
@@ -116,6 +189,7 @@
       keywords: (p.details.keywords ?? []).join(', '),
       values: Object.fromEntries(fields.map((f) => [f.key, p.details[f.key] ?? ''])),
     };
+    baseline = JSON.stringify(form);
     editing = true;
     people = await api.assignable(item.id).catch(() => []);
   }
@@ -127,6 +201,9 @@
 
   /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
   async function submit(base: number): Promise<void> {
+    if (busy) return;
+    const attempt = draft.capture();
+    if (attempt === undefined) return;
     // 앞선 저장의 안내가 이번 결과(날짜 오류·409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
       error = m.modules_period_invalid();
@@ -134,6 +211,7 @@
     }
     error = undefined;
     const session = editSession;
+    busy = true;
     try {
       const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
@@ -144,6 +222,7 @@
         status: form.status,
         details: toDetails(kind, form.values, form.keywords),
       });
+      if (!draft.isCurrent(attempt)) return;
       if (result.kind === 'conflict') {
         // 기다리는 동안 취소했거나 편집을 새로 열었으면 그 화면을 바꾸지 않는다(이 저장은 아무것도 바꾸지 않았다).
         if (session !== editSession) return;
@@ -155,6 +234,7 @@
       // 저장은 새 판을 주지 않으므로(204) 다시 읽은 뒤에 편집을 닫는다. 먼저 닫으면 다시 읽기 전에 연 편집이 옛 판을
       // 기준으로 삼아 다음 저장이 거짓 409가 된다.
       const fresh = await api.itemProfile(item.id).catch(() => undefined);
+      if (!draft.isOwner(attempt)) return;
       onchanged();
       if (session !== editSession && editing) {
         // 기다리는 동안 취소하고 편집을 새로 열었다. 그 편집은 닫거나 바꾸지 않는다(그 편집의 판이 지났으면 저장이
@@ -162,6 +242,7 @@
         return;
       }
       if (session === editSession) {
+        if (!draft.complete(attempt)) return;
         conflict = undefined;
         editing = false;
         notifyDone(m.modules_profile_saved());
@@ -170,7 +251,10 @@
       profile = fresh;
       if (fresh === undefined) reloadKey += 1;
     } catch (err: unknown) {
-      if (session === editSession) error = errorText(err, m.modules_save_failed());
+      if (session === editSession && draft.isOwner(attempt))
+        error = errorText(err, m.modules_save_failed());
+    } finally {
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 
@@ -208,6 +292,22 @@
     }
   }
 </script>
+
+{#each draft.offers as entry (entry.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      draft.restore(entry);
+    }}
+    ondiscard={() => {
+      draft.discard(entry);
+    }}
+  />
+{/each}
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>
 
 <section class="flex flex-col gap-3" aria-labelledby="item-profile-heading">
   <div class="flex items-center gap-2">
@@ -329,10 +429,13 @@
           type="button"
           variant="ghost"
           onclick={() => {
-            editSession += 1;
-            editing = false;
-            conflict = undefined;
-            error = undefined;
+            draft.leave.request(() => {
+              editSession += 1;
+              editing = false;
+              busy = false;
+              conflict = undefined;
+              error = undefined;
+            });
           }}>{m.common_cancel()}</Button
         >
       </div>

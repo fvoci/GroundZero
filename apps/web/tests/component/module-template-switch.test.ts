@@ -141,3 +141,4 @@ describe('module item list', () => {
     expect(title).toHaveClass('min-w-0', '[overflow-wrap:anywhere]');
   });
 });
+import './fixtures/authenticated';

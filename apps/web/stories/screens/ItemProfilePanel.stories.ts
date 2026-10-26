@@ -4,6 +4,7 @@ import { api, ApiError } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { TASK_ITEM } from '../fixtures/synthetic';
+import { me } from '$lib/me.svelte';
 
 const meta = {
   title: 'Screens/ItemProfilePanel',
@@ -11,6 +12,8 @@ const meta = {
   args: { item: TASK_ITEM, kind: 'project', onchanged: () => undefined },
   decorators: [() => ({ Component: MainFrame })],
   beforeEach: () => {
+    const previousUser = me.userId;
+    me.userId = 'story-profile-user';
     spyOn(api, 'itemProfile').mockResolvedValue({
       leader: null,
       goal: '정확한 권한 표시',
@@ -27,6 +30,9 @@ const meta = {
     });
     spyOn(api, 'assignable').mockResolvedValue([]);
     spyOn(api, 'setItemProfile').mockRejectedValue(new ApiError(403, 'forbidden', 'forbidden'));
+    return () => {
+      me.userId = previousUser;
+    };
   },
 } satisfies Meta<typeof ItemProfilePanel>;
 export default meta;

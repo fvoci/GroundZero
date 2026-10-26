@@ -2,6 +2,7 @@
 import type { RecordFieldValue, RecordInput, RecordKindView, RecordView } from '$lib/api/client';
 import { m } from '$lib/paraglide/messages.js';
 import { isWebUrl } from '$lib/url';
+import { object, strings, stringArray } from '../modules/draft-values';
 
 import { recordChoiceLabel, recordFieldLabel } from './labels';
 
@@ -37,6 +38,51 @@ export function emptyForm(): RecordForm {
     people: {},
     files: [],
     unreadable: {},
+  };
+}
+
+/** Restore all editor values, including incomplete numbers and attachment references. */
+export function parseRecordForm(raw: unknown): RecordForm | undefined {
+  if (
+    !object(raw) ||
+    typeof raw.title !== 'string' ||
+    typeof raw.occurred_on !== 'string' ||
+    typeof raw.body !== 'string' ||
+    !strings(raw.values) ||
+    !object(raw.people) ||
+    !object(raw.unreadable) ||
+    !Array.isArray(raw.files)
+  )
+    return undefined;
+  const people: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(raw.people)) {
+    if (!stringArray(value)) return undefined;
+    people[key] = value;
+  }
+  const unreadable: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(raw.unreadable)) {
+    if (typeof value !== 'boolean') return undefined;
+    unreadable[key] = value;
+  }
+  const files: FileLinkForm[] = [];
+  for (const file of raw.files) {
+    if (
+      !object(file) ||
+      typeof file.file_id !== 'string' ||
+      typeof file.version !== 'string' ||
+      typeof file.role !== 'string'
+    )
+      return undefined;
+    files.push({ file_id: file.file_id, version: file.version, role: file.role });
+  }
+  return {
+    title: raw.title,
+    occurred_on: raw.occurred_on,
+    body: raw.body,
+    values: raw.values,
+    people,
+    unreadable,
+    files,
   };
 }
 

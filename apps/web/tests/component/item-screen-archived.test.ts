@@ -97,3 +97,4 @@ describe('archived item screen', () => {
     expect(document.getElementById('item-title')).not.toBeNull();
   });
 });
+import './fixtures/authenticated';

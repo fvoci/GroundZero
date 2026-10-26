@@ -143,3 +143,4 @@ describe('module settings partial save', () => {
     });
   });
 });
+import './fixtures/authenticated';

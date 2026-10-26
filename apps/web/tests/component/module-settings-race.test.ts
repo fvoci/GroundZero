@@ -89,3 +89,4 @@ describe('module settings save while switching modules', () => {
 function inputValue(element: HTMLElement): string {
   return element instanceof HTMLInputElement ? element.value : '';
 }
+import './fixtures/authenticated';

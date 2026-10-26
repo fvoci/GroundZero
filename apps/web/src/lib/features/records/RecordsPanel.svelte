@@ -2,11 +2,14 @@
   // 항목 기록(D-33 산출물·위험·문제·회고, D-34 문헌·연구 기록·데이터·변수·분석·투고, D-36 자료·모임·시험·복습,
   // D-38 재료·장비·장비 사용·활동·결과물). 종류와 칸은 서버의 정의대로 그린다. 권한은 항목을 따른다.
   import type { ModuleKind } from '@fvoci/api-client';
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, retry } from '../modules/draft-values';
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
-  import { api, ApiError, fileContentUrl } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
@@ -16,7 +19,7 @@
   import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
-  import { emptyForm, formOf, summary, toInput } from './records';
+  import { emptyForm, formOf, parseRecordForm, summary, toInput } from './records';
   import ZoteroImport from './ZoteroImport.svelte';
 
   interface Props {
@@ -47,7 +50,7 @@
    * 서버의 판 확인이 꺼져 다른 사람의 고침을 덮는다. 409 뒤에도 그대로 두고, 충돌 안내에서 서버 내용 불러오기를 골랐을
    * 때만 그 판으로 옮긴다(덮어쓰기는 그 저장 한 번만 보여 준 판을 보낸다).
    */
-  let editingVersion = 0;
+  let editingVersion = $state(0);
   /** 409 뒤 다시 읽은, 다른 사람이 먼저 고친 그 기록의 지금 내용. 고르기 전에는 입력과 기준 판을 그대로 둔다. */
   let conflict = $state<RecordView | undefined>(undefined);
   let confirming = $state<string | undefined>(undefined);
@@ -55,7 +58,44 @@
   let asTable = $state(false);
   let form = $state<RecordForm>(emptyForm());
   // 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id(처음 것이 돌아와 고친 내용이 사라지지 않게).
-  const createKey = new RetryKey();
+  let pending = $state<{ requestId: string; signature: string } | null>(null);
+  let baseline = $state(JSON.stringify(emptyForm()));
+  let busy = $state(false);
+  const draft = createFormDraft({
+    name: () =>
+      selected === undefined ? undefined : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
+    snapshot: () => ({ form, baseline, version: editingVersion, pending }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        typeof raw.baseline !== 'string' ||
+        typeof raw.version !== 'number' ||
+        !retry(raw.pending)
+      )
+        return undefined;
+      const parsed = parseRecordForm(raw.form);
+      return parsed === undefined
+        ? undefined
+        : { form: parsed, baseline: raw.baseline, version: raw.version, pending: raw.pending };
+    },
+    restore: (value) => {
+      form = value.form;
+      baseline = value.baseline;
+      editingVersion = value.version;
+      pending = value.pending;
+      creating = editingId === undefined;
+    },
+    reset: () => {
+      form = emptyForm();
+      baseline = JSON.stringify(form);
+      pending = null;
+      busy = false;
+      conflict = undefined;
+    },
+    dirty: () => (creating || editingId !== undefined) && JSON.stringify(form) !== baseline,
+    busy: () => busy,
+  });
+  onMount(draft.attach);
   let reloadKey = $state(0);
 
   const current = $derived(defs.find((d) => d.kind === selected));
@@ -141,18 +181,22 @@
     };
   });
 
-  function startNew(): void {
-    form = emptyForm();
-    createKey.done();
+  async function startNew(): Promise<void> {
     editingId = undefined;
+    await tick();
+    form = emptyForm();
+    baseline = JSON.stringify(form);
+    pending = null;
     conflict = undefined;
     creating = true;
   }
 
-  function startEdit(def: RecordKindView, r: RecordView): void {
-    form = formOf(def, r);
+  async function startEdit(def: RecordKindView, r: RecordView): Promise<void> {
     creating = false;
     editingId = r.id;
+    await tick();
+    form = formOf(def, r);
+    baseline = JSON.stringify(form);
     editingVersion = r.version;
     conflict = undefined;
   }
@@ -188,6 +232,7 @@
    * 다시 409로 알린다). 입력이 틀려 보내지 못하거나 실패하면 기준 판과 충돌 안내는 그대로 남는다.
    */
   async function save(def: RecordKindView, baseVersion = editingVersion): Promise<void> {
+    if (busy) return;
     if (form.title.trim() === '') {
       error = m.records_title_required();
       return;
@@ -200,24 +245,34 @@
     error = undefined;
     const base =
       !creating && editingId !== undefined ? { id: editingId, version: baseVersion } : undefined;
+    if (creating) {
+      const signature = JSON.stringify({ item: item.id, kind: def.kind, input: built.input });
+      if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
+    }
+    const attempt = draft.capture();
+    if (attempt === undefined) return;
+    busy = true;
     try {
-      if (creating) {
-        const requestId = createKey.for({ item: item.id, kind: def.kind, input: built.input });
+      if (creating && pending !== null) {
+        const requestId = pending.requestId;
         await api.createRecord(item.id, requestId, def.kind, built.input);
-        createKey.done(requestId);
         status = m.records_added({ label: recordKindLabel(def) });
       } else if (base !== undefined) {
         await api.updateRecord(base.id, base.version, built.input);
         status = m.records_updated({ label: recordKindLabel(def) });
       }
+      if (!draft.complete(attempt)) return;
       creating = false;
       editingId = undefined;
       conflict = undefined;
       reloadKey += 1;
     } catch (e: unknown) {
+      if (!draft.isCurrent(attempt)) return;
       const refused = e instanceof ApiError && e.status === 409;
       if (refused && base !== undefined && (await recordMovedOn(base.id, base.version))) return;
       error = refused ? m.records_conflict() : errorText(e, m.records_save_failed());
+    } finally {
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 
@@ -238,6 +293,22 @@
   };
 </script>
 
+{#each draft.offers as entry (entry.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      draft.restore(entry);
+    }}
+    ondiscard={() => {
+      draft.discard(entry);
+    }}
+  />
+{/each}
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>
+
 <!-- 종류를 처음부터 못 읽었으면(종류가 없는 정상 빈 상태와 달리) 제목과 함께 실패를 알리고 다시 읽을 수 있게 한다. -->
 {#if defs.length > 0 || loadError !== undefined}
   <section class="flex flex-col gap-3" aria-labelledby="records-heading">
@@ -249,10 +320,12 @@
           variant={selected === d.kind ? 'default' : 'outline'}
           aria-pressed={selected === d.kind}
           onclick={() => {
-            selected = d.kind;
-            creating = false;
-            editingId = undefined;
-            conflict = undefined;
+            draft.leave.request(() => {
+              selected = d.kind;
+              creating = false;
+              editingId = undefined;
+              conflict = undefined;
+            });
           }}>{recordKindLabel(d)} {count(d.kind)}</Button
         >
       {/each}
@@ -306,14 +379,20 @@
           submitLabel={m.records_add_kind({ label: kindLabel })}
           onsubmit={() => void save(def)}
           oncancel={() => {
-            creating = false;
-            editingId = undefined;
+            draft.leave.request(() => {
+              creating = false;
+              editingId = undefined;
+            });
           }}
         />
       {:else if canWrite}
         <div>
-          <Button size="sm" variant="outline" onclick={startNew}
-            >{m.records_new_kind({ label: kindLabel })}</Button
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => {
+              draft.leave.request(() => void startNew());
+            }}>{m.records_new_kind({ label: kindLabel })}</Button
           >
         </div>
       {/if}
@@ -404,7 +483,7 @@
                       size="sm"
                       variant="outline"
                       onclick={async () => {
-                        startEdit(def, latest);
+                        await startEdit(def, latest);
                         // 안내가 사라지며 누른 단추도 없어지므로 초점을 제목 칸으로 옮긴다(키보드 사용자가 자리를 잃지 않게).
                         await tick();
                         document.getElementById(`record-${def.kind}-title`)?.focus();
@@ -426,9 +505,11 @@
                 submitLabel={m.common_save()}
                 onsubmit={() => void save(def)}
                 oncancel={() => {
-                  creating = false;
-                  editingId = undefined;
-                  conflict = undefined;
+                  draft.leave.request(() => {
+                    creating = false;
+                    editingId = undefined;
+                    conflict = undefined;
+                  });
                 }}
               />
             {:else}
@@ -488,7 +569,7 @@
                     size="sm"
                     variant="ghost"
                     onclick={() => {
-                      startEdit(def, r);
+                      draft.leave.request(() => void startEdit(def, r));
                     }}>{m.records_edit()}</Button
                   >
                 {/if}
