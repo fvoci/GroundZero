@@ -48,7 +48,7 @@ describe('records panel loading', () => {
     vi.spyOn(api, 'itemRecords').mockResolvedValue([]);
     vi.spyOn(api, 'members').mockResolvedValue({
       members: [],
-      my_role: 'writer',
+      my_role: 'member',
       i_am_owner: false,
       pending_owner: null,
     });
@@ -93,7 +93,7 @@ describe('records panel loading', () => {
     ]);
     vi.spyOn(api, 'members').mockResolvedValue({
       members: [],
-      my_role: 'writer',
+      my_role: 'member',
       i_am_owner: false,
       pending_owner: null,
     });
@@ -116,7 +116,7 @@ describe('records panel loading', () => {
     vi.spyOn(api, 'itemRecords').mockResolvedValue([]);
     vi.spyOn(api, 'members').mockResolvedValue({
       members: [],
-      my_role: 'writer',
+      my_role: 'member',
       i_am_owner: false,
       pending_owner: null,
     });

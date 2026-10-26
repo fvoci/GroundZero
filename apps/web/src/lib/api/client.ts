@@ -1,6 +1,7 @@
 // API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
 // 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md#api-contract).
 import type {
+  Accepted,
   AuthInfo,
   Group,
   Health,
@@ -153,7 +154,7 @@ function rec(value: unknown, what: string): Record<string, unknown> {
 }
 
 function role(value: string): Role {
-  if (value === 'admin' || value === 'writer' || value === 'reader') return value;
+  if (value === 'admin' || value === 'member' || value === 'readonly') return value;
   throw new TypeError(`unknown role ${value}`);
 }
 
@@ -193,6 +194,7 @@ export function parseWorkspace(value: Json): Workspace {
   const o = rec(value, 'workspace');
   return {
     id: str(o, 'id'),
+    organization_id: str(o, 'organization_id'),
     name: str(o, 'name'),
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
@@ -410,15 +412,32 @@ export function parseInvitation(value: Json): Invitation {
   };
 }
 
+function invitationTarget(value: string): ReceivedInvitation['kind'] {
+  if (value === 'organization' || value === 'workspace') return value;
+  throw new TypeError(`unknown invitation kind ${value}`);
+}
+
 export function parseReceivedInvitation(value: Json): ReceivedInvitation {
   const o = rec(value, 'received invitation');
   return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    organization_name: str(o, 'organization_name'),
     id: str(o, 'id'),
-    workspace_id: str(o, 'workspace_id'),
-    workspace_name: str(o, 'workspace_name'),
+    workspace_id: optStr(o, 'workspace_id'),
+    workspace_name: optStr(o, 'workspace_name'),
     role: role(str(o, 'role')),
     invited_by: str(o, 'invited_by'),
     expires_at: str(o, 'expires_at'),
+  };
+}
+
+export function parseAccepted(value: Json): Accepted {
+  const o = rec(value, 'accepted');
+  return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    workspace_id: optStr(o, 'workspace_id'),
   };
 }
 
@@ -2592,9 +2611,7 @@ export const api = {
   myInvitations: () =>
     expectOk('GET', '/api/invitations', (v) => parseList(v, parseReceivedInvitation)),
   acceptInvitation: (id: string) =>
-    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, (v) =>
-      str(rec(v, 'accepted'), 'workspace_id'),
-    ),
+    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, parseAccepted),
   declineInvitation: (id: string) =>
     expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/decline`, none),
   offerOwnership: (ws: string, toUser: string) =>

@@ -2775,7 +2775,7 @@
         "tags": [
           "members"
         ],
-        "summary": "내가 받은 열린 초대(검증된 이메일 기준). 1단계에서는 워크스페이스 초대만 반환한다.",
+        "summary": "내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준).",
         "operationId": "my_invitations",
         "responses": {
           "200": {
@@ -6405,6 +6405,86 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/invitations": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "invite_organization",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteOrganization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationInvitation"
                 }
               }
             }
@@ -10521,15 +10601,15 @@
         "type": "object",
         "description": "수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다.",
         "required": [
-          "target_kind",
+          "kind",
           "organization_id"
         ],
         "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/InvitationTarget"
+          },
           "organization_id": {
             "$ref": "#/components/schemas/OrganizationId"
-          },
-          "target_kind": {
-            "$ref": "#/components/schemas/InvitationTarget"
           },
           "workspace_id": {
             "oneOf": [
@@ -12763,6 +12843,21 @@
           "workspace"
         ]
       },
+      "InviteOrganization": {
+        "type": "object",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
+      },
       "Item": {
         "type": "object",
         "description": "모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20).",
@@ -14086,10 +14181,43 @@
           }
         }
       },
+      "OrgRole": {
+        "type": "string",
+        "description": "조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 \"관리자로 참여\" 뒤에만 본다.",
+        "enum": [
+          "admin",
+          "member"
+        ]
+      },
       "OrganizationId": {
         "type": "string",
         "format": "uuid",
         "description": "조직 내부 ID."
+      },
+      "OrganizationInvitation": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "role",
+          "expires_at"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
       },
       "Participant": {
         "type": "object",
@@ -14360,11 +14488,10 @@
         "type": "object",
         "description": "내가 받은 초대.",
         "required": [
+          "kind",
           "organization_id",
           "organization_name",
           "id",
-          "workspace_id",
-          "workspace_name",
           "role",
           "invited_by",
           "expires_at"
@@ -14381,6 +14508,9 @@
           "invited_by": {
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/InvitationTarget"
+          },
           "organization_id": {
             "$ref": "#/components/schemas/OrganizationId"
           },
@@ -14391,10 +14521,20 @@
             "$ref": "#/components/schemas/Role"
           },
           "workspace_id": {
-            "$ref": "#/components/schemas/WorkspaceId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            ]
           },
           "workspace_name": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

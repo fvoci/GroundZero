@@ -32,14 +32,14 @@ describe('audit codes', () => {
   });
 
   it('shows role, visibility and status codes by name and hides user ids', () => {
-    expect(auditSubject({ from: 'reader', to: 'writer' }, 'change_role')).toBe('작성자');
+    expect(auditSubject({ from: 'readonly', to: 'member' }, 'change_role')).toBe('멤버');
     expect(auditSubject({ from: 'workspace', to: 'private' }, 'change_visibility')).toBe('비공개');
     expect(auditSubject({ from: 'active', to: 'on_hold' }, 'change_status')).toBe('보류');
     expect(auditSubject({ from: null, to: LEADER }, 'change_leader')).toBe('');
     expect(auditSubject({ enabled: true }, 'set_realtime')).toBe('켬');
     expect(auditSubject({ enabled: false }, 'set_realtime')).toBe('끔');
     // 모르는 코드는 원문 대신 비운다.
-    expect(auditSubject({ from: 'reader', to: 'owner' }, 'change_role')).toBe('');
+    expect(auditSubject({ from: 'readonly', to: 'owner' }, 'change_role')).toBe('');
     // 이름 바꾸기의 `to`는 새 제목이라 그대로 보인다.
     expect(auditSubject({ from: '초안', to: '회의록' }, 'rename')).toBe('회의록');
   });
@@ -47,6 +47,7 @@ describe('audit codes', () => {
   it('renders the audit list without raw codes or user ids', async () => {
     const workspace: Workspace = {
       id: 'ws-1',
+      organization_id: 'org-1',
       name: '연구실',
       role: 'admin',
       is_owner: true,
@@ -71,7 +72,7 @@ describe('audit codes', () => {
       entry('a1', 'archive', 'module', {}),
       entry('a2', 'mark_template', 'document', {}),
       entry('a3', 'set_realtime', 'workspace', { enabled: true }),
-      entry('a4', 'change_role', 'member', { from: 'reader', to: 'writer' }),
+      entry('a4', 'change_role', 'member', { from: 'readonly', to: 'member' }),
       entry('a5', 'change_status', 'item', { from: 'active', to: 'on_hold' }),
       entry('a6', 'change_leader', 'item', { from: null, to: LEADER }),
     ]);
@@ -81,11 +82,11 @@ describe('audit codes', () => {
       expect(list.querySelectorAll('li')).toHaveLength(6);
     });
     const text = list.textContent;
-    for (const raw of ['archive', 'mark_template', 'set_realtime', 'writer', 'on_hold', LEADER]) {
+    for (const raw of ['archive', 'mark_template', 'set_realtime', 'member', 'on_hold', LEADER]) {
       expect(text).not.toContain(raw);
     }
     expect(text).toContain('모듈 보관');
-    expect(text).toContain('작성자');
+    expect(text).toContain('멤버');
     expect(text).toContain('보류');
   });
 });

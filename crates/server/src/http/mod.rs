@@ -21,8 +21,8 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
-    members, modules, public_links, records, recurrence, references, revisions, saved_views,
-    schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
+    members, modules, organizations, public_links, records, recurrence, references, revisions,
+    saved_views, schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -257,6 +257,7 @@ async fn api_not_found() -> AppError {
         workspaces::delete,
         workspaces::set_realtime,
         workspaces::deleted,
+        organizations::invite,
         workspaces::restore,
         workspaces::purge,
         documents::list_wiki,
@@ -546,6 +547,9 @@ async fn api_not_found() -> AppError {
         home::MarkKind,
         home::MarkedTarget,
         home::Home,
+        organizations::OrgRole,
+        organizations::InviteOrganization,
+        organizations::OrganizationInvitation,
         home::UpNextCounts,
         home::SetMark,
         home::MarkState,
@@ -704,6 +708,10 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
+        .route(
+            "/organizations/{organization_id}/invitations",
+            post(organizations::invite),
+        )
         .route("/auth-info", get(accounts::auth_info))
         .route(
             "/workspaces",

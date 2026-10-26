@@ -9,6 +9,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 보존 기간 입력 오류는 그 칸 옆에 보인다(D-82, 감사 W37). 화면 위 공용 알림이 아니라 칸에 묶인 설명으로.
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
   is_owner: true,

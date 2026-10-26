@@ -10,6 +10,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 보인다. 성공했을 때만 비운다.
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
   is_owner: true,
@@ -66,7 +67,7 @@ describe('members screen keeps typed input on failure', () => {
 
     const input = await submitWith('이메일', 'kim@lab');
     await vi.waitFor(() => {
-      expect(invite).toHaveBeenCalledWith('ws-1', 'kim@lab', 'writer');
+      expect(invite).toHaveBeenCalledWith('ws-1', 'kim@lab', 'member');
     });
     await screen.findByText(/요청을 처리하지 못했습니다/);
     expect(input).toHaveValue('kim@lab');
@@ -88,7 +89,7 @@ describe('members screen keeps typed input on failure', () => {
     vi.spyOn(api, 'invite').mockResolvedValue({
       id: 'inv-1',
       email: 'kim@lab.example',
-      role: 'writer',
+      role: 'member',
       expires_at: '2026-10-28T00:00:00Z',
     });
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });

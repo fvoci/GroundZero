@@ -620,7 +620,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 내가 받은 열린 초대(검증된 이메일 기준). 1단계에서는 워크스페이스 초대만 반환한다. */
+        /** 내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준). */
         get: operations["my_invitations"];
         put?: never;
         post?: never;
@@ -1517,6 +1517,22 @@ export interface paths {
         put?: never;
         /** 항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다. */
         post: operations["create_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["invite_organization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2499,8 +2515,8 @@ export interface components {
     schemas: {
         /** @description 수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다. */
         Accepted: {
+            kind: components["schemas"]["InvitationTarget"];
             organization_id: components["schemas"]["OrganizationId"];
-            target_kind: components["schemas"]["InvitationTarget"];
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
@@ -3233,6 +3249,10 @@ export interface components {
          * @enum {string}
          */
         InvitationTarget: "organization" | "workspace";
+        InviteOrganization: {
+            email: string;
+            role: components["schemas"]["OrgRole"];
+        };
         /** @description 모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20). */
         Item: {
             access: components["schemas"]["Access"];
@@ -3699,10 +3719,23 @@ export interface components {
             to_user: components["schemas"]["UserId"];
         };
         /**
+         * @description 조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 "관리자로 참여" 뒤에만 본다.
+         * @enum {string}
+         */
+        OrgRole: "admin" | "member";
+        /**
          * Format: uuid
          * @description 조직 내부 ID.
          */
         OrganizationId: string;
+        OrganizationInvitation: {
+            email: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["OrgRole"];
+        };
         /** @description 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음). */
         Participant: {
             display_name: string;
@@ -3806,11 +3839,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             invited_by: string;
+            kind: components["schemas"]["InvitationTarget"];
             organization_id: components["schemas"]["OrganizationId"];
             organization_name: string;
             role: components["schemas"]["Role"];
-            workspace_id: components["schemas"]["WorkspaceId"];
-            workspace_name: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+            workspace_name?: string | null;
         };
         /** @description 항목 기록. */
         Record: {
@@ -9206,6 +9240,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Item"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    invite_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteOrganization"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitation"];
                 };
             };
             400: {

@@ -35,9 +35,12 @@
     error = undefined;
     try {
       if (accept) {
-        const ws = await api.acceptInvitation(inv.id);
+        // 조직 초대는 워크스페이스가 없다: 목록만 다시 읽는다(현재 조직 전환기는 3단계).
+        const accepted = await api.acceptInvitation(inv.id);
         await onaccepted();
-        router.navigate(workspacePath(ws));
+        const joined = accepted.workspace_id;
+        if (typeof joined === 'string') router.navigate(workspacePath(joined));
+        else await load();
       } else {
         await api.declineInvitation(inv.id);
         await load();
@@ -60,7 +63,7 @@
     <ul class="flex flex-col gap-2" data-testid="received-invitations">
       {#each items as inv (inv.id)}
         <li class="flex flex-wrap items-center gap-2 rounded border px-3 py-2">
-          <span class="font-medium">{inv.workspace_name}</span>
+          <span class="font-medium">{inv.workspace_name ?? inv.organization_name}</span>
           <span class="text-sm text-muted-foreground">{inv.invited_by} · {roleLabel(inv.role)}</span
           >
           <span class="ml-auto flex gap-2">
