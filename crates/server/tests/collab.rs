@@ -33,6 +33,8 @@ use yrs::{Doc, ReadTxn, Transact, Update};
 /// 자동 정리(`app_system_purge_old_versions`)는 DB 전체를 본다. 그것을 부르는 시험끼리는 차례로 돌아 서로의 정리 대상을
 /// 지우거나 세지 않게 한다.
 static GLOBAL_PURGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// 추가 이동 경합 fixture는 각자 풀·서버를 사용한다. 공유 시험 DB의 접속 한도를 동시에 소모하지 않는다.
+static POST_MOVE_FIXTURES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 async fn serve(app: Router) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -2859,11 +2861,46 @@ struct DbProxy {
     stalled: tokio::sync::mpsc::Receiver<()>,
     task: tokio::task::JoinHandle<()>,
     server: Option<tokio::task::JoinHandle<()>>,
+    commit_gate: Option<std::sync::Arc<CommitGate>>,
+}
+
+struct CommitGate {
+    used: std::sync::atomic::AtomicBool,
+    committed: tokio::sync::Notify,
+    release: tokio::sync::watch::Sender<bool>,
+    allowed_checks: std::sync::atomic::AtomicUsize,
 }
 
 impl DbProxy {
     async fn start() -> Self {
+        Self::start_with_gate(None).await
+    }
+
+    async fn holding_move_commit() -> Self {
+        let (release, _) = tokio::sync::watch::channel(false);
+        Self::start_with_gate(Some(std::sync::Arc::new(CommitGate {
+            release,
+            used: std::sync::atomic::AtomicBool::new(false),
+            committed: tokio::sync::Notify::new(),
+            allowed_checks: std::sync::atomic::AtomicUsize::new(0),
+        })))
+        .await
+    }
+
+    async fn start_with_gate(commit_gate: Option<std::sync::Arc<CommitGate>>) -> Self {
         let mut url = url::Url::parse(&std::env::var("DATABASE_URL").unwrap()).unwrap();
+        if commit_gate.is_some() {
+            // 이 시험 프록시는 평문 PG 메시지 경계만 읽고 payload를 기록하지 않는다.
+            let query: Vec<(String, String)> = url
+                .query_pairs()
+                .filter(|(key, _)| key != "sslmode")
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect();
+            url.set_query(None);
+            url.query_pairs_mut()
+                .extend_pairs(query)
+                .append_pair("sslmode", "disable");
+        }
         let target = (
             url.host_str().unwrap().to_owned(),
             url.port().unwrap_or(5432),
@@ -2874,6 +2911,7 @@ impl DbProxy {
             .unwrap();
         let (mode, receiver) = tokio::sync::watch::channel(ProxyMode::Running);
         let (stalled, received) = tokio::sync::mpsc::channel(32);
+        let gate = commit_gate.clone();
         let task = tokio::spawn(async move {
             let mut connections = tokio::task::JoinSet::new();
             loop {
@@ -2881,11 +2919,18 @@ impl DbProxy {
                 let mut changes = receiver.clone();
                 let target = target.clone();
                 let stalled = stalled.clone();
+                let gate = gate.clone();
                 connections.spawn(async move {
                     let mut outgoing = TcpStream::connect(target).await.unwrap();
                     if *changes.borrow() == ProxyMode::Running {
                         tokio::select! {
-                            _ = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing) => return,
+                            _ = async {
+                                if let Some(gate) = gate {
+                                    forward_move_commit(&mut incoming, &mut outgoing, &gate).await;
+                                } else {
+                                    let _closed = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await;
+                                }
+                            } => return,
                             _ = changes.changed() => {},
                         }
                     }
@@ -2907,6 +2952,7 @@ impl DbProxy {
             stalled: received,
             task,
             server: None,
+            commit_gate,
         }
     }
 
@@ -2930,6 +2976,147 @@ impl DbProxy {
     fn fail(&self) {
         self.mode.send(ProxyMode::Failed).unwrap();
     }
+}
+
+/// PG message framing: https://www.postgresql.org/docs/current/protocol-message-formats.html
+/// 실제 app_move_document 실행 연결의 COMMIT 응답만 한 번 멈춘다. ReadyForQuery는 그 뒤 순서를 따른다.
+async fn forward_move_commit(
+    incoming: &mut TcpStream,
+    outgoing: &mut TcpStream,
+    gate: &CommitGate,
+) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    let (mut client_read, mut client_write) = incoming.split();
+    let (mut db_read, mut db_write) = outgoing.split();
+    let moving = AtomicBool::new(false);
+    // Execute/CommandComplete 순서로 해당 권한 질의의 결과만 연결한다. 풀에서 재사용된 연결의
+    // 과거 질의나 다른 owner/write 열을 현재 권한 확인으로 세지 않는다.
+    let executions = std::sync::Mutex::new(std::collections::VecDeque::new());
+    let client = async {
+        let mut startup = [0_u8; 4];
+        if client_read.read_exact(&mut startup).await.is_err() {
+            return;
+        }
+        let length = usize::try_from(u32::from_be_bytes(startup)).unwrap();
+        assert!((8..=8192).contains(&length));
+        let mut body = vec![0; length - 4];
+        if client_read.read_exact(&mut body).await.is_err()
+            || db_write.write_all(&startup).await.is_err()
+            || db_write.write_all(&body).await.is_err()
+        {
+            return;
+        }
+        let mut statements = std::collections::HashMap::new();
+        let mut portals = std::collections::HashMap::new();
+        loop {
+            let mut header = [0_u8; 5];
+            if client_read.read_exact(&mut header).await.is_err() {
+                break;
+            }
+            let length =
+                usize::try_from(u32::from_be_bytes(header[1..].try_into().unwrap())).unwrap();
+            assert!((4..=4 * 1024 * 1024).contains(&length));
+            let mut body = vec![0; length - 4];
+            if client_read.read_exact(&mut body).await.is_err() {
+                break;
+            }
+            let fields: Vec<&[u8]> = body.split(|byte| *byte == 0).take(2).collect();
+            match header[0] {
+                b'P' => {
+                    let query = fields[1];
+                    let access = query
+                        .windows(b"app_collab_access(".len())
+                        .any(|s| s == b"app_collab_access(");
+                    let move_document = query
+                        .windows(b"FROM app_move_document(".len())
+                        .any(|s| s == b"FROM app_move_document(");
+                    statements.insert(fields[0].to_vec(), (access, move_document));
+                }
+                b'B' => {
+                    portals.insert(
+                        fields[0].to_vec(),
+                        statements.get(fields[1]).copied().unwrap_or_default(),
+                    );
+                }
+                b'E' => {
+                    let (access, move_document) =
+                        portals.get(fields[0]).copied().unwrap_or_default();
+                    if move_document {
+                        moving.store(true, Ordering::Release);
+                    }
+                    executions.lock().unwrap().push_back(access);
+                }
+                b'Q' => executions.lock().unwrap().push_back(false),
+                _ => {}
+            }
+            // 인증/세션 payload를 로그나 산출물에 남기지 않는다.
+            if db_write.write_all(&header).await.is_err()
+                || db_write.write_all(&body).await.is_err()
+            {
+                break;
+            }
+        }
+    };
+    let server = async {
+        let mut role_seen = false;
+        let mut permission_committed = false;
+        loop {
+            let mut header = [0_u8; 5];
+            if db_read.read_exact(&mut header).await.is_err() {
+                break;
+            }
+            let length =
+                usize::try_from(u32::from_be_bytes(header[1..].try_into().unwrap())).unwrap();
+            assert!(
+                (4..=4 * 1024 * 1024).contains(&length),
+                "invalid test PG message length"
+            );
+            let mut body = vec![0; length - 4];
+            if db_read.read_exact(&mut body).await.is_err() {
+                break;
+            }
+            if header[0] == b'C' && body == b"COMMIT\0" {
+                if moving.load(Ordering::Acquire) && !gate.used.swap(true, Ordering::AcqRel) {
+                    gate.committed.notify_one();
+                    let mut release = gate.release.subscribe();
+                    while !*release.borrow_and_update() {
+                        if release.changed().await.is_err() {
+                            break;
+                        }
+                    }
+                }
+                permission_committed |= role_seen;
+                role_seen = false;
+            }
+            if header[0] == b'D'
+                && gate.used.load(Ordering::Acquire)
+                && executions.lock().unwrap().front() == Some(&true)
+                && body.len() >= 6
+                && body[..2] == [0, 1]
+                && matches!(&body[6..], b"owner" | b"write")
+            {
+                role_seen = true;
+            }
+            if header[0] == b'C' {
+                executions.lock().unwrap().pop_front();
+            } else if header[0] == b'E' {
+                executions.lock().unwrap().clear();
+                role_seen = false;
+            }
+            if client_write.write_all(&header).await.is_err()
+                || client_write.write_all(&body).await.is_err()
+            {
+                break;
+            }
+            if header[0] == b'Z' && permission_committed {
+                gate.allowed_checks.fetch_add(1, Ordering::AcqRel);
+                permission_committed = false;
+            }
+        }
+    };
+    tokio::select! { _ = client => {}, _ = server => {} }
 }
 
 impl Drop for DbProxy {
@@ -2991,6 +3178,151 @@ async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure(
     }
     editor.close().await;
     reader.close().await;
+}
+
+#[tokio::test]
+async fn delayed_move_commit_reply_does_not_revoke_valid_source_edits() {
+    move_commit_reply_race(false).await;
+}
+
+#[tokio::test]
+async fn delayed_move_commit_reply_does_not_extend_source_or_admit_destination_input() {
+    move_commit_reply_race(true).await;
+}
+
+async fn move_commit_reply_race(destination_writable: bool) {
+    let _fixture = POST_MOVE_FIXTURES.lock().await;
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let original = common::app(&state);
+    let admin = login(&state, "commit response admin").await;
+    let from = create_workspace(&original, &admin, "commit response source").await;
+    let to = create_workspace(&original, &admin, "commit response destination").await;
+    let (writer, _) = add_member(
+        &original,
+        &state,
+        &admin,
+        &from,
+        "commit response writer",
+        "member",
+    )
+    .await;
+    let doc = common::create_doc(&original, &admin, &from, "commit response race").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    if destination_writable {
+        let mut fixture = common::fixture_conn().await;
+        sqlx::query("INSERT INTO fvoci.workspace_members (workspace_id, user_id, role) VALUES ($1::uuid, $2, 'member')")
+            .bind(&to).bind(writer.id.0).execute(&mut fixture).await.unwrap();
+        sqlx::Connection::close(fixture).await.unwrap();
+    }
+    for ws in std::iter::once(&from).chain(destination_writable.then_some(&to)) {
+        let on = send(
+            &original,
+            Method::PUT,
+            &format!("/api/workspaces/{ws}/realtime"),
+            Some(&admin),
+            Some(json!({"enabled":true})),
+        )
+        .await;
+        assert_eq!(on.status, StatusCode::NO_CONTENT, "{:?}", on.json);
+    }
+    let mut proxy = DbProxy::holding_move_commit().await;
+    let mut proxied = state.clone();
+    proxied.db =
+        fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(proxy.url.clone()))
+            .unwrap();
+    proxied.collab = fvoci_server::collab::Rooms::default();
+    let app = common::app(&proxied);
+    let addr = proxy.serve(app.clone()).await;
+    let initial_check_bound = tokio::time::Instant::now();
+    let mut editor = connect(addr, Some(&writer), &id, true).await.unwrap();
+    editor.paragraph("응답 지연 전 확인 편집").await;
+    assert!(editor.until(acked).await);
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").unwrap();
+    let owner = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&owner_url)
+        .await
+        .unwrap();
+    let (hold, holder) = hold_tree(&owner, &to).await;
+    let moving = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move { move_to(&app, &admin, &id, &to).await }
+    });
+    until_waiting_on_lock("app_lock_move", holder).await;
+    editor.paragraph("물리 커밋 전 보존 편집").await;
+    editor.read_by_server().await;
+    hold.rollback().await.unwrap();
+    let gate = proxy.commit_gate.as_ref().unwrap();
+    tokio::time::timeout(Duration::from_secs(10), gate.committed.notified())
+        .await
+        .unwrap();
+    let visible_workspace: String =
+        sqlx::query_scalar("SELECT workspace_id::text FROM fvoci.documents WHERE id=$1::uuid")
+            .bind(&id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(
+        visible_workspace, to,
+        "the database commit must already be visible"
+    );
+    let closed_early = if destination_writable {
+        // 모든 source 확인은 이 DB 커밋보다 앞선다. 그 최대 1초 TTL이 지난 뒤에도 destination 연결은 살아 있다.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        editor.read_by_server().await;
+        assert!(
+            gate.allowed_checks
+                .load(std::sync::atomic::Ordering::Acquire)
+                > 0
+        );
+        editor.paragraph("물리 커밋 이후 새 입력").await;
+        editor.read_by_server().await;
+        None
+    } else {
+        tokio::time::timeout(Duration::from_millis(1250), editor.closed())
+            .await
+            .ok()
+            .flatten()
+    };
+    let held_response = !moving.is_finished();
+    gate.release.send(true).unwrap();
+    let moved = tokio::time::timeout(Duration::from_secs(10), moving)
+        .await
+        .unwrap()
+        .unwrap();
+    let closed = if destination_writable {
+        editor.closed().await
+    } else {
+        closed_early
+    };
+    let acknowledged = acked(&editor);
+    let saved = get_doc(&original, &admin, &id).await;
+    owner.close().await;
+    proxied.db.close().await;
+    state.db.close().await;
+    if !destination_writable {
+        assert!(
+            initial_check_bound.elapsed() < Duration::from_secs(1),
+            "denied move must finish within the original source grant TTL: {:?}",
+            initial_check_bound.elapsed()
+        );
+    }
+    assert!(held_response, "the COMMIT response was not held");
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(closed, Some(if destination_writable { 4409 } else { 4403 }));
+    let body = saved["body"].to_string();
+    assert!(body.contains("응답 지연 전 확인 편집"));
+    assert_eq!(
+        body.contains("물리 커밋 전 보존 편집"),
+        !destination_writable,
+        "destination_writable={destination_writable}, acknowledged={acknowledged}: {saved}"
+    );
+    assert!(
+        !body.contains("물리 커밋 이후 새 입력"),
+        "post-commit input was preserved: {saved}"
+    );
+    assert!(!acknowledged, "the held or rejected edit was acknowledged");
 }
 
 /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
@@ -3135,7 +3467,8 @@ fn post_commit_validation_race(scenario: PostCommitCheck) {
         .build()
         .unwrap()
         .block_on(async {
-            let (writer, (_state, app, _addr, admin, _from, to, id, mut editor, reader)) =
+            let _fixture = POST_MOVE_FIXTURES.lock().await;
+            let (writer, (state, app, _addr, admin, _from, to, id, mut editor, reader)) =
                 live_move_race_setup_rechecking("커밋 뒤 권한 확인 경합", "1").await;
             if scenario == PostCommitCheck::Allowed {
                 let mut fixture = common::fixture_conn().await;
@@ -3152,7 +3485,7 @@ fn post_commit_validation_race(scenario: PostCommitCheck) {
             );
             let owner_url =
                 std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
-            let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+            let owner = sqlx::postgres::PgPoolOptions::new().max_connections(1).connect(&owner_url).await.unwrap();
             let (hold, holder) = hold_tree(&owner, &to).await;
             let moving = tokio::spawn({
                 let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
@@ -3199,6 +3532,7 @@ fn post_commit_validation_race(scenario: PostCommitCheck) {
             let (_, edited_by) = revision_authors(&owner, &id, revision).await;
             owner.close().await;
             reader.close().await;
+            state.db.close().await;
 
             assert_eq!(
                 closed,
