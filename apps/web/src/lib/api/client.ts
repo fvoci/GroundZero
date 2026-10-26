@@ -652,7 +652,8 @@ export type RecordFieldType =
   | 'tags'
   | 'person'
   | 'people'
-  | 'course';
+  | 'course'
+  | 'episode';
 
 const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
   'text',
@@ -665,6 +666,7 @@ const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
   'person',
   'people',
   'course',
+  'episode',
 ];
 
 export interface ChoiceView {
