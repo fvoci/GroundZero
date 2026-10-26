@@ -126,7 +126,7 @@ pub async fn list(
 /// 워크스페이스 생성. 생성자는 관리자가 된다.
 #[utoipa::path(post, path = "/api/workspaces", request_body = CreateWorkspace,
     responses((status = 201, body = Workspace), (status = 400, body = ErrorBody),
-              (status = 401, body = ErrorBody)), tag = "workspaces")]
+              (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "workspaces")]
 pub async fn create(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

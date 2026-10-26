@@ -7,7 +7,65 @@ mod common;
 mod sql_support;
 
 use sql_support::*;
+use sqlx::Connection;
 use uuid::Uuid;
+
+#[tokio::test]
+async fn admin_join_rechecks_workspace_after_concurrent_deletion()
+-> Result<(), Box<dyn std::error::Error>> {
+    let w = World::new().await;
+    let admin = common::login(&w.state, "organization admin").await;
+    common::join_organization(w.org, &admin, "admin").await;
+
+    let mut fixture = common::fixture_conn().await;
+    let mut deletion = fixture.begin().await?;
+    sqlx::query("UPDATE fvoci.workspaces SET deleted_at=clock_timestamp() WHERE id=$1")
+        .bind(w.ws)
+        .execute(&mut *deletion)
+        .await?;
+    let holder = pid(&mut deletion).await;
+    let mut join = w.state.db.begin_as(admin.id).await?;
+    let waiter = pid(join.conn()).await;
+    let ws = w.ws;
+    let pending = tokio::spawn(async move {
+        let result = sqlx::query("SELECT fvoci.app_join_workspace_as_admin($1,$2)")
+            .bind(ws)
+            .bind(ids())
+            .execute(join.conn())
+            .await;
+        if result.is_ok() {
+            join.commit().await?;
+        }
+        Ok::<_, fvoci_server::error::AppError>(result)
+    });
+    blocked(holder, waiter).await;
+    deletion.commit().await?;
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), pending).await???;
+
+    let memberships: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
+    )
+    .bind(w.ws)
+    .bind(admin.id.0)
+    .fetch_one(&mut fixture)
+    .await?;
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.audit_log WHERE actor=$1 AND action='admin_join'",
+    )
+    .bind(admin.id.0)
+    .fetch_one(&mut fixture)
+    .await?;
+    assert_eq!(
+        (memberships, audits),
+        (0, 0),
+        "deleted workspace must not gain a member or join audit records"
+    );
+    let error = result
+        .err()
+        .ok_or("admin join must reject a deleted workspace")?;
+    code(&error, "P0002");
+    Ok(())
+}
 
 #[tokio::test]
 async fn organization_creation_membership_and_last_admin_guards() {

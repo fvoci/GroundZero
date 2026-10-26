@@ -19,6 +19,7 @@
   "references_notifications_empty": "알림이 없습니다.",
   "references_notifications_unread": "읽지 않음",
   "references_notification_someone": "누군가",
+  "references_notification_invite": "{who}님이 초대했습니다. {target}",
   "references_notification_mention": "{who}님이 {target}에서 나를 언급했습니다",
   "references_notification_comment": "{who}님이 {target}에 댓글을 달았습니다",
   "references_notification_reply": "{who}님이 {target}의 댓글에 답했습니다",
