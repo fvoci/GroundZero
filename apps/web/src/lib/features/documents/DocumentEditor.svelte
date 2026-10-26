@@ -631,6 +631,7 @@
   <!-- 서버 버전·보관 초안으로 내용을 바꿀 때는 편집기를 새로 만든다(인스턴스는 마운트마다 하나). -->
   {#key editorVersion}
     <TiptapEditor
+      draftName={server.id}
       content={body}
       editable={server.can_edit}
       label={m.documents_body_label()}

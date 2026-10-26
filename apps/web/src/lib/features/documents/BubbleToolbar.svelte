@@ -2,7 +2,11 @@
   // 글자를 고르면 뜨는 작은 서식 도구 막대(BubbleMenu 요소 안에 그린다). 블록 유형 바꾸기, 굵게·기울임·취소선·
   // 코드, 링크 넣기·고치기·해제·열기. 막대 안 입력란·선택 상자로 초점이 와도 막대는 그대로 남는다.
   import type { Editor } from '@tiptap/core';
+  import { onMount } from 'svelte';
 
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Input } from '$lib/ui/input';
 
@@ -13,9 +17,10 @@
   interface Props {
     editor: Editor | undefined;
     version: number;
+    draftName?: string | undefined;
   }
 
-  const { editor, version }: Props = $props();
+  const { editor, version, draftName }: Props = $props();
 
   type Mark = 'bold' | 'italic' | 'strike' | 'code';
 
@@ -43,6 +48,28 @@
   let linkValue = $state('');
   let linkError = $state(false);
   let linkInput = $state<HTMLInputElement | null>(null);
+  let linkBaseline = $state('');
+  const linkDirty = $derived(linkValue !== linkBaseline);
+  function resetLink(): void {
+    linkEditing = false;
+    linkValue = '';
+    linkBaseline = '';
+    linkFor = undefined;
+    linkError = false;
+  }
+  const linkDraft = createFormDraft<string>({
+    name: () => (draftName === undefined ? undefined : `editor-link:${draftName}`),
+    snapshot: () => linkValue,
+    parse: (value) => (typeof value === 'string' ? value : undefined),
+    restore: (value) => {
+      startLink();
+      linkValue = value;
+      linkBaseline = '';
+    },
+    reset: resetLink,
+    dirty: () => linkDirty,
+  });
+  onMount(linkDraft.attach);
   // 링크 입력을 열면 주소 칸으로 초점을 옮긴다(조건부로 그려지는 칸에는 autofocus가 듣지 않는다).
   $effect(() => {
     if (linkEditing && linkInput !== null) {
@@ -86,26 +113,30 @@
       const { from, to } = editor.state.selection;
       linkFor = { from, to };
     }
-    linkValue = info?.href ?? '';
+    if (!linkDirty) {
+      linkValue = info?.href ?? '';
+      linkBaseline = linkValue;
+    }
     linkError = false;
     linkEditing = true;
   }
 
   function applyLink(): void {
+    if (editor?.isEditable !== true) return;
     const href = normalizeHref(linkValue);
     if (href === undefined) {
       linkError = true;
       return;
     }
-    editor?.chain().focus().extendMarkRange('link').setLink({ href }).run();
-    linkEditing = false;
-    linkFor = undefined;
+    if (editor.chain().focus().extendMarkRange('link').setLink({ href }).run()) resetLink();
   }
 
   function removeLink(): void {
-    editor?.chain().focus().extendMarkRange('link').unsetLink().run();
-    linkEditing = false;
-    linkFor = undefined;
+    if (editor?.isEditable !== true) return;
+    linkDraft.leave.request(() => {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      resetLink();
+    });
   }
 
   const MARKS = $derived<{ mark: Mark; label: string; short: string; cls: string }[]>([
@@ -118,6 +149,16 @@
 
 {#if info !== undefined}
   {@const current = info}
+  {#each linkDraft.offers as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        linkDraft.restore(offer);
+      }}
+      ondiscard={() => {
+        linkDraft.discard(offer);
+      }}
+    />
+  {/each}
   {#if linkEditing}
     <form
       class="flex items-center gap-1"
@@ -137,8 +178,10 @@
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'Escape') {
             e.preventDefault();
-            linkEditing = false;
-            editor?.commands.focus();
+            linkDraft.leave.request(() => {
+              resetLink();
+              editor?.commands.focus();
+            });
           }
         }}
       />
@@ -209,3 +252,9 @@
     </div>
   {/if}
 {/if}
+
+<DiscardChangesConfirm
+  open={linkDraft.leave.open}
+  onkeep={linkDraft.leave.keep}
+  ondiscard={linkDraft.discardAndLeave}
+/>

@@ -15,6 +15,9 @@
 
   import type { DocNode } from '$lib/api/client';
   import { parseDocNode } from '$lib/api/client';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { m } from '$lib/paraglide/messages.js';
@@ -52,9 +55,12 @@
       ((file: File) => Promise<{ href: string; name: string; image: boolean }>) | undefined;
     /** 실시간 공동 편집(D-70). 있으면 본문은 이 Yjs 문서가 맡고 `content`는 쓰지 않는다. */
     collab?: LiveSession | undefined;
+    /** Stable document identity for unapplied link and formula text. */
+    draftName?: string | undefined;
   }
 
-  const { content, editable, label, onchange, references, insertFile, collab }: Props = $props();
+  const { content, editable, label, onchange, references, insertFile, collab, draftName }: Props =
+    $props();
 
   type Command = 'bold' | 'italic' | 'heading' | 'bulletList' | 'taskList' | 'codeBlock';
   type Mode = 'rich' | 'markdown' | 'preview';
@@ -164,16 +170,52 @@
   >(undefined);
   let fileInput = $state<HTMLInputElement | undefined>();
   let fileStatus = $state('');
+  let mathBaseline = $state('');
+  interface MathDraft {
+    kind: 'inline' | 'block';
+    latex: string;
+  }
+  function resetMath(): void {
+    math = undefined;
+    mathBaseline = '';
+  }
+  const mathDraft = createFormDraft<MathDraft | null>({
+    name: () => (draftName === undefined ? undefined : `editor-math:${draftName}`),
+    snapshot: () => (math === undefined ? null : { kind: math.kind, latex: math.latex }),
+    parse: (value) => {
+      if (value === null) return null;
+      if (
+        typeof value !== 'object' ||
+        !('kind' in value) ||
+        (value.kind !== 'inline' && value.kind !== 'block') ||
+        !('latex' in value) ||
+        typeof value.latex !== 'string'
+      )
+        return undefined;
+      return { kind: value.kind, latex: value.latex };
+    },
+    restore: (value) => {
+      // A saved formula is text, never a stale position in a changed document.
+      math = value === null ? undefined : { ...value, pos: undefined };
+      mathBaseline = '';
+    },
+    reset: resetMath,
+    dirty: () => math !== undefined && math.latex !== mathBaseline,
+  });
+  onMount(mathDraft.attach);
 
   function openMath(kind: 'inline' | 'block', latex: string, pos: number | undefined): void {
     if (editor?.isEditable !== true) return;
-    math = { kind, latex, pos };
+    mathDraft.leave.request(() => {
+      math = { kind, latex, pos };
+      mathBaseline = latex;
+    });
   }
 
   function applyMath(): void {
     const e = editor;
     const m = math;
-    if (e === undefined || m === undefined) return;
+    if (e === undefined || !e.isEditable || m === undefined) return;
     const latex = m.latex.trim();
     const chain = e.chain().focus();
     if (latex === '') {
@@ -193,7 +235,7 @@
         : chain.updateBlockMath({ latex, pos: m.pos })
       ).run();
     }
-    math = undefined;
+    resetMath();
   }
 
   async function onFile(event: Event): Promise<void> {
@@ -582,6 +624,16 @@
       {/if}
     {/if}
   </div>
+  {#each mathDraft.offers as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        mathDraft.restore(offer);
+      }}
+      ondiscard={() => {
+        mathDraft.discard(offer);
+      }}
+    />
+  {/each}
   {#if math !== undefined}
     {@const current = math}
     <form
@@ -618,8 +670,13 @@
           ? m.documents_math_insert()
           : m.documents_math_replace()}</Button
       >
-      <Button type="button" size="sm" variant="ghost" onclick={() => (math = undefined)}
-        >{m.common_cancel()}</Button
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onclick={() => {
+          mathDraft.leave.request(resetMath);
+        }}>{m.common_cancel()}</Button
       >
       {#if current.pos !== undefined}
         <span class="w-full text-xs text-muted-foreground">{m.documents_math_clear_hint()}</span>
@@ -697,6 +754,12 @@
     aria-label={m.documents_bubble_label()}
     data-testid="bubble-toolbar"
   >
-    <BubbleToolbar editor={editorRef} {version} />
+    <BubbleToolbar editor={editorRef} {version} {draftName} />
   </div>
 {/if}
+
+<DiscardChangesConfirm
+  open={mathDraft.leave.open}
+  onkeep={mathDraft.leave.keep}
+  ondiscard={mathDraft.discardAndLeave}
+/>

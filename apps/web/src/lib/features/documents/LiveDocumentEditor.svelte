@@ -541,6 +541,7 @@
   {#if session !== undefined}
     {#key epoch}
       <TiptapEditor
+        draftName={start.id}
         content={start.body}
         editable={start.can_edit && stopped === undefined && !handedOff}
         label={m.documents_body_label()}
