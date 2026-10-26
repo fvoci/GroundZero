@@ -65,6 +65,7 @@
     LINK_KIND_MEANING,
     PRIORITY_LABEL,
     STATUS_LABEL,
+    statusLabel,
     assigneeLabels,
     clashRows,
     linkText,
@@ -875,7 +876,7 @@
             }}
           >
             <Select.Trigger aria-labelledby="task-status-label"
-              >{STATUS_LABEL[f.status]}</Select.Trigger
+              >{statusLabel(f.status)}</Select.Trigger
             >
             <Select.Content>
               {#each TASK_STATUSES as s (s)}
