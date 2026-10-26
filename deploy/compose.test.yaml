@@ -5,6 +5,8 @@ name: fvoci-test
 services:
   postgres:
     image: postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641
+    # 기본 시험 동시성을 유지하며 연결 수 표본 92의 약 두 배 여유를 둔다.
+    command: ['postgres', '-c', 'max_connections=200']
     environment:
       POSTGRES_USER: fvoci
       POSTGRES_PASSWORD: fvoci-test-password
