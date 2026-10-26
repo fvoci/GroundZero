@@ -816,7 +816,10 @@
       <!-- 알림은 문장에만 둔다(안의 덮어쓰기 확인이 따로 알리므로 알림 전체를 두 번 읽지 않게). -->
       <div class="rounded-md border border-amber-500/50 p-3 text-sm">
         <p role="alert">
-          {m.tasks_conflict({ title: latest.title, status: STATUS_LABEL[latest.status] })}
+          {m.tasks_conflict({
+            title: latest.title,
+            status: latest.status_name ?? STATUS_LABEL[latest.status],
+          })}
         </p>
         <div class="mt-2 flex gap-2">
           <Button
@@ -1083,7 +1086,7 @@
               >
               <span class="min-w-0 [overflow-wrap:anywhere]">{sub.title}</span>
               <span class="ml-auto shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >{STATUS_LABEL[sub.status]}</span
+                >{sub.status_name ?? STATUS_LABEL[sub.status]}</span
               >
             </button>
           {:else}
