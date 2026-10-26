@@ -61,6 +61,17 @@
   let lastTarget = '';
   let showResolved = $state<Set<string>>(new Set());
   let busy = $state(false);
+  let editors = $state<Record<string, { discardInput(): void } | undefined>>({});
+
+  export function isSaving(): boolean {
+    return busy;
+  }
+
+  export function discardInput(): boolean {
+    if (busy) return false;
+    for (const editor of Object.values(editors)) editor?.discardInput();
+    return true;
+  }
   let reloadKey = $state(0);
   let seq = 0;
 
@@ -172,6 +183,7 @@
           </div>
         {:else}
           <CommentItem
+            bind:this={editors[`edit:${t.root.id}`]}
             comment={t.root}
             canWrite={writable}
             {busy}
@@ -188,6 +200,7 @@
           {#each t.replies as r (r.id)}
             <div class="ml-4 border-l pl-3">
               <CommentItem
+                bind:this={editors[`edit:${r.id}`]}
                 comment={r}
                 canWrite={writable}
                 {busy}
@@ -217,6 +230,7 @@
             {/if}
           </div>
           <CommentComposer
+            bind:this={editors[`reply:${t.root.id}`]}
             {target}
             root={t.root.id}
             {writable}
@@ -234,6 +248,7 @@
     {/each}
   </ul>
   <CommentComposer
+    bind:this={editors.new}
     {target}
     {writable}
     {busy}

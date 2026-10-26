@@ -8,6 +8,7 @@ import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { itemTaskPath, router } from '$lib/router.svelte';
+import { me } from '$lib/me.svelte';
 
 // 사용자 결정(2026-10-22): 업무 대화상자는 고친 입력이 있어도 Esc·바깥 클릭·닫기 단추로 말없이 닫혀 입력을 버렸다.
 // 이제 고친 입력이 있으면 "계속 편집 / 변경 버리고 닫기"를 묻고, 버리기를 고를 때만 닫는다. 고친 것이 없으면 바로 닫는다.
@@ -162,6 +163,82 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 }
 
 describe('closing the task dialog with unsaved input', () => {
+  it.each(['새 댓글', '새 항목'])(
+    'does not close or offer to discard while %s is being saved',
+    async (label) => {
+      me.userId = 'user-a';
+      window.localStorage.clear();
+      const pending = deferred<undefined>();
+      try {
+        const { back } = await openBoard();
+        const save =
+          label === '새 댓글'
+            ? vi.spyOn(api, 'addComment').mockImplementation(async () => {
+                await pending.promise;
+                return 'new-comment';
+              })
+            : vi.spyOn(api, 'addChecklist').mockImplementation(async () => {
+                await pending.promise;
+                return task('t1');
+              });
+        await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
+          target: { value: '저장하는 입력' },
+        });
+        await fireEvent.click(
+          within(content()).getByRole('button', {
+            name: label === '새 댓글' ? '댓글 달기' : '추가',
+          }),
+        );
+        await waitFor(() => {
+          expect(save).toHaveBeenCalledTimes(1);
+        });
+        await escape(content());
+        expect(confirmBox()).toBeNull();
+        expect(back).not.toHaveBeenCalled();
+        expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
+        pending.resolve(undefined);
+        await waitFor(() => {
+          expect(closeButton()).toBeInTheDocument();
+        });
+      } finally {
+        pending.resolve(undefined);
+        me.userId = '';
+        window.localStorage.clear();
+      }
+    },
+  );
+
+  it.each(['새 댓글', '새 항목'])(
+    'discards the %s draft when the parent discard is confirmed',
+    async (label) => {
+      me.userId = 'user-a';
+      window.localStorage.clear();
+      try {
+        const { back, reopen } = await openBoard();
+        const input = await screen.findByLabelText(new RegExp(`^${label}`));
+        await fireEvent.input(input, { target: { value: '명시적으로 버릴 입력' } });
+        const draftValues = () =>
+          Object.keys(window.localStorage).map((key) => window.localStorage.getItem(key));
+        await waitFor(() => {
+          expect(draftValues().some((value) => value?.includes('명시적으로 버릴 입력'))).toBe(true);
+        });
+        await fireEvent.click(closeButton());
+        const box = await findConfirm();
+        await fireEvent.click(
+          within(box).getByRole('button', { name: m.common_discard_confirm() }),
+        );
+        expect(back).toHaveBeenCalledTimes(1);
+        await reopen(undefined);
+        await reopen('t1');
+        await screen.findByLabelText(new RegExp(`^${label}`));
+        expect(draftValues().some((value) => value?.includes('명시적으로 버릴 입력'))).toBe(false);
+      } finally {
+        me.userId = '';
+        window.localStorage.clear();
+      }
+    },
+  );
+
   it('closes at once when nothing was changed', async () => {
     const { back } = await openBoard();
     field('task-title').focus();

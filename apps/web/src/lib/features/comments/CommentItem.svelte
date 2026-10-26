@@ -95,6 +95,12 @@
       draft.persist();
     });
   }
+
+  export function discardInput(): void {
+    if (busy) return;
+    const attempt = draft.capture();
+    if (attempt !== undefined) draft.complete(attempt);
+  }
 </script>
 
 <DiscardChangesConfirm

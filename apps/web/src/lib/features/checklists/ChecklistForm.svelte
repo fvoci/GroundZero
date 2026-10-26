@@ -129,6 +129,17 @@
     ondraftkept?.(true);
   });
 
+  export function isSaving(): boolean {
+    return busy;
+  }
+
+  export function discardInput(): boolean {
+    if (busy) return false;
+    const attempt = formDraft.capture();
+    if (attempt !== undefined) formDraft.complete(attempt);
+    return true;
+  }
+
   async function guard(
     action: (user: string, isCurrent: () => boolean) => Promise<void>,
   ): Promise<void> {

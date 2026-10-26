@@ -75,8 +75,8 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 it("ignores another account's late record success without changing the new input or status", async () => {
-  let finish: ((value: RecordView) => void) | undefined;
-  const pending = new Promise<RecordView>((resolve) => {
+  let finish: ((value: string) => void) | undefined;
+  const pending = new Promise<string>((resolve) => {
     finish = resolve;
   });
   vi.spyOn(api, 'createRecord').mockReturnValue(pending);
@@ -88,7 +88,7 @@ it("ignores another account's late record success without changing the new input
   await waitFor(() => expect(input('title')).toHaveValue(''));
   await fireEvent.input(input('title'), { target: { value: 'user-b input' } });
   if (finish === undefined) throw new Error('missing completion');
-  finish(record);
+  finish(record.id);
   await pending;
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(input('title')).toHaveValue('user-b input');
