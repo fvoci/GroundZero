@@ -2,12 +2,17 @@ import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, parseTask } from '$lib/api/client';
+import { displaySettings } from '$lib/display';
+import { dayIn } from '$lib/features/events/time';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskCalendar from '$lib/features/tasks/TaskCalendar.svelte';
+import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { itemPath, itemViewPath, router } from '$lib/router.svelte';
 import { TASK_ITEM, taskViews, WORKSPACE } from '../../stories/fixtures/synthetic';
+
+const originalTimeZone = me.timeZone;
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
@@ -21,6 +26,8 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  me.timeZone = originalTimeZone;
   router.guard = undefined;
 });
 
@@ -129,10 +136,16 @@ it('restores the scoped session without rewriting a path that has no view', asyn
   expect(replace).not.toHaveBeenCalled();
 });
 
-it('renders every date of a period and a point for a single date', () => {
+it.each([
+  ['2026-10-31T15:30:00Z', 'Asia/Seoul'],
+  ['2026-11-01T00:30:00Z', 'America/Los_Angeles'],
+])('renders periods and points across the month boundary at %s in %s', (now, zone) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(now));
+  me.timeZone = zone;
   const first = taskViews()[0];
   if (first === undefined) throw new Error('missing fixture');
-  const month = new Date().toISOString().slice(0, 7);
+  const month = dayIn(new Date().toISOString(), displaySettings().timeZone).slice(0, 7);
   render(TaskCalendar, {
     tasks: [
       { ...first, start_date: `${month}-10`, due_date: `${month}-12` },

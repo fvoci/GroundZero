@@ -56,7 +56,7 @@ function eachDay(from: string, to: string, lo: string, hi: string): string[] {
 }
 
 /**
- * 날짜별 항목. 업무는 마감일(없으면 시작일) 한 칸에만 놓아 여러 날 업무가 칸을 채우지 않게 한다.
+ * 날짜별 항목. 업무는 시작·마감이 모두 있으면 기간에, 하나만 있으면 그 날짜에 놓는다(D-121).
  * 일정은 걸친 날마다 놓는다. 시각 있는 일정의 날짜는 보는 사람의 시간대로 정한다.
  */
 export function entriesByDay(
@@ -123,16 +123,20 @@ export function entriesByDay(
     const day = task.due_date ?? task.start_date;
     if (day === null) continue;
     const words = { reference: task.reference ?? '', title: task.title };
-    const label = task.milestone
-      ? m.events_entry_milestone(words)
-      : task.due_date === null
-        ? m.events_entry_task_start(words)
-        : m.events_entry_task_due(words);
     const days =
       task.start_date !== null && task.due_date !== null
         ? eachDay(task.start_date, task.due_date, from, to)
-        : [day];
-    for (const date of days) push(date, { kind: 'task', task, label });
+        : eachDay(day, day, from, to);
+    for (const date of days) {
+      const label = task.milestone
+        ? m.events_entry_milestone(words)
+        : date === task.due_date
+          ? m.events_entry_task_due(words)
+          : date === task.start_date
+            ? m.events_entry_task_start(words)
+            : m.events_entry_task_continued(words);
+      push(date, { kind: 'task', task, label });
+    }
   }
   for (const d of dates) {
     if (d.date < from || d.date > to) continue;

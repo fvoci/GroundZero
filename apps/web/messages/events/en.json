@@ -25,6 +25,7 @@
   "events_entry_projected_milestone": "Planned ◆ {title}",
   "events_entry_task_start": "Starts {reference} {title}",
   "events_entry_task_due": "Due {reference} {title}",
+  "events_entry_task_continued": "Continues {reference} {title}",
   "events_entry_milestone": "◆ {reference} {title}",
   "events_date_episode": "Watch",
   "events_date_study_unit": "Study",
