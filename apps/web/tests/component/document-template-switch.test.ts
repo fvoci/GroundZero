@@ -1,13 +1,19 @@
 import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
+
+beforeEach(() => {
+  me.userId = 'user-a';
+  localStorage.clear();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -12,6 +12,12 @@ export interface StoredFormDraft<T> {
   value: T;
 }
 
+/** Captured creation owner and successful-response fence for name forms. */
+export interface CreateFormContext {
+  userId: string;
+  saved: () => boolean;
+}
+
 /**
  * 이 사용자의 이 이름의 키 앞부분. 로그인 전이면 없다. 조직은 넣지 않는다(업무·항목 id는 조직을 넘어 유일하고, 되살릴 때의
  * 조직 문맥이 남길 때와 다를 수 있다).
