@@ -206,6 +206,53 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(server.made).toHaveLength(2);
   });
 
+  it('offers a closed tab batch and preserves completed rows and request ids in a new tab', async () => {
+    const server = fakeServer();
+    server.lose('B');
+    const onimported = vi.fn(() => Promise.resolve());
+    const first = render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    await setText('A\nB');
+    await pressImport(onimported, 1);
+    const id = server.create.mock.calls[1]?.[2];
+    first.unmount();
+    const key = Object.keys(localStorage).find((k) => k.includes('csv-import:i1:tab:'));
+    if (key === undefined) throw new Error('missing batch');
+    const priorKey = key.replace(/:tab:.+$/, ':tab:closed-tab');
+    localStorage.setItem(priorKey, localStorage.getItem(key) ?? '');
+    localStorage.removeItem(key);
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    await screen.findByTestId('task-csv-draft-offer');
+    expect(server.create).toHaveBeenCalledTimes(2);
+    await fireEvent.click(screen.getByRole('button', { name: '입력 복원' }));
+    await pressImport(onimported, 2);
+    expect(server.titles()).toEqual(['A', 'B', 'B']);
+    expect(server.create.mock.calls[2]?.[2]).toBe(id);
+  });
+
+  it('does not overwrite another tab while editing a new batch', async () => {
+    const key = `${org.key('csv-import:i1')}:tab:other-tab`;
+    const raw = JSON.stringify({ text: '다른 탭', rows: [] });
+    localStorage.setItem(key, raw);
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
+    await screen.findByTestId('task-csv-draft-offer');
+    await setText('현재 탭');
+    expect(localStorage.getItem(key)).toBe(raw);
+    expect(screen.getByRole('button', { name: '입력 복원' })).toBeDisabled();
+  });
+
+  it('keeps the offered source if storage fails while restoring', async () => {
+    const key = `${org.key('csv-import:i1')}:tab:closed-tab`;
+    const raw = JSON.stringify({ text: '보존 원본', rows: [] });
+    localStorage.setItem(key, raw);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 복원' }));
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('보존 원본');
+    expect(localStorage.getItem(key)).toBe(raw);
+  });
+
   it('cancels the in-flight request, retains its id, and stops before the next row', async () => {
     let signal: AbortSignal | undefined;
     const create = vi.spyOn(api, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {

@@ -4,6 +4,7 @@
   import type { CommentTarget } from '$lib/api/client';
   import { newRequestId } from '$lib/api/client';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -17,8 +18,9 @@
     busy: boolean;
     onpost: (body: string, root: string | null, requestId: string) => Promise<boolean>;
     onunsaved: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
   }
-  const { target, root, writable, busy, onpost, onunsaved }: Props = $props();
+  const { target, root, writable, busy, onpost, onunsaved, ondraftkept }: Props = $props();
   let text = $state('');
   let request = $state<{ body: string; requestId: string } | null>(null);
   let open = $state(false);
@@ -62,10 +64,12 @@
   });
 
   $effect(() => {
-    onunsaved(text !== '' && !accountSwitching());
+    onunsaved(text !== '');
+    ondraftkept?.(draft.kept);
   });
   onDestroy(() => {
     onunsaved(false);
+    ondraftkept?.(true);
   });
 
   async function post(): Promise<void> {
@@ -81,12 +85,22 @@
   }
 
   function cancel(): void {
-    text = '';
-    request = null;
-    open = false;
-    draft.persist();
+    if (!draft.active) return;
+    draft.leave.request(() => {
+      text = '';
+      request = null;
+      open = false;
+      draft.persist();
+    });
   }
 </script>
+
+<DiscardChangesConfirm
+  open={draft.active && draft.leave.open}
+  description={m.comments_discard_reply()}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.leave.discard}
+/>
 
 {#each draft.offers as offer (offer.key)}
   <div data-testid={root === undefined ? 'comment-draft-offer' : 'comment-reply-draft-offer'}>

@@ -20,9 +20,10 @@
     /** 문서·업무 응답에는 보관 칸이 없어, 안내용 부모 상태를 읽을 때 쓴다. */
     itemId?: string | null;
     onunsaved?: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
   }
 
-  const { target, canWrite = false, archived, itemId, onunsaved }: Props = $props();
+  const { target, canWrite = false, archived, itemId, onunsaved, ondraftkept }: Props = $props();
   let parentArchived = $state(false);
   const isArchived = $derived(archived ?? parentArchived);
   const writable = $derived(canWrite && !isArchived);
@@ -52,8 +53,10 @@
   let loaded = $state(false);
   let error = $state<string | undefined>(undefined);
   let unsaved = $state<Record<string, boolean>>({});
+  let kept = $state<Record<string, boolean>>({});
   $effect(() => {
     onunsaved?.(Object.values(unsaved).some(Boolean));
+    ondraftkept?.(Object.entries(unsaved).every(([key, dirty]) => !dirty || kept[key] === true));
   });
   let lastTarget = '';
   let showResolved = $state<Set<string>>(new Set());
@@ -69,6 +72,7 @@
     if (identity !== lastTarget) {
       lastTarget = identity;
       unsaved = {};
+      kept = {};
       busy = false;
       // 다른 대상의 댓글·오류·완료 문구를 보이지 않는다. 다시 읽기(작업 뒤)는 받을 때까지 지금 목록을 둔다.
       comments = [];
@@ -177,6 +181,9 @@
             onunsaved={(value: boolean) => {
               unsaved[`edit:${t.root.id}`] = value;
             }}
+            ondraftkept={(value: boolean) => {
+              kept[`edit:${t.root.id}`] = value;
+            }}
           />
           {#each t.replies as r (r.id)}
             <div class="ml-4 border-l pl-3">
@@ -189,6 +196,9 @@
                 ondelete={() => void remove(r.id)}
                 onunsaved={(value: boolean) => {
                   unsaved[`edit:${r.id}`] = value;
+                }}
+                ondraftkept={(value: boolean) => {
+                  kept[`edit:${r.id}`] = value;
                 }}
               />
             </div>
@@ -215,6 +225,9 @@
             onunsaved={(value: boolean) => {
               unsaved[`reply:${t.root.id}`] = value;
             }}
+            ondraftkept={(value: boolean) => {
+              kept[`reply:${t.root.id}`] = value;
+            }}
           />
         {/if}
       </li>
@@ -227,6 +240,9 @@
     onpost={post}
     onunsaved={(value: boolean) => {
       unsaved.new = value;
+    }}
+    ondraftkept={(value: boolean) => {
+      kept.new = value;
     }}
   />
 </section>

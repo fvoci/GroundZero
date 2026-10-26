@@ -87,6 +87,53 @@ async function mountWithOpenTask(): Promise<HTMLElement> {
 }
 
 describe('task board unload warning while the account is switching', () => {
+  it('does not treat child unmount during account hiding as successful persistence', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    await mountWithOpenTask();
+    await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '남기지 못함' } });
+    vi.spyOn(api, 'updateTask').mockRejectedValue(
+      new ApiError(409, 'account_changed', '계정이 바뀌었습니다'),
+    );
+    const save = document.getElementById('task-save');
+    if (save === null) throw new Error('task-save');
+    await fireEvent.click(save);
+    await screen.findByText(/계정이 바뀌어 입력을 숨겼습니다/);
+    accountSafety.switching = true;
+    expect(unloadPrevented()).toBe(true);
+  });
+  it.each(['새 댓글', '새 항목'])('allows reload for durably kept %s input', async (label) => {
+    await mountWithOpenTask();
+    await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
+      target: { value: '남긴 입력' },
+    });
+    expect(unloadPrevented()).toBe(true);
+    accountSafety.switching = true;
+    await Promise.resolve();
+    expect(unloadPrevented()).toBe(false);
+  });
+
+  it.each(['새 댓글', '새 항목'])(
+    'keeps warning for failed %s storage and recovers after a successful write',
+    async (label) => {
+      const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('quota', 'QuotaExceededError');
+      });
+      await mountWithOpenTask();
+      const input = await screen.findByLabelText(new RegExp(`^${label}`));
+      await fireEvent.input(input, { target: { value: '남기지 못함' } });
+      accountSafety.switching = true;
+      await Promise.resolve();
+      expect(unloadPrevented()).toBe(true);
+      quota.mockRestore();
+      accountSafety.switching = false;
+      await fireEvent.input(input, { target: { value: '이번에는 남김' } });
+      accountSafety.switching = true;
+      await Promise.resolve();
+      expect(unloadPrevented()).toBe(false);
+    },
+  );
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     me.userId = 'user-a';

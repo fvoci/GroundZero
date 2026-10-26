@@ -11,6 +11,7 @@
   import { newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import { canonicalJson } from '$lib/features/documents/drafts';
@@ -31,10 +32,20 @@
     onrename: (id: string, text: string, editingUser: string) => Promise<void>;
     onremove: (id: string, editingUser: string) => Promise<void>;
     onunsaved?: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
   }
 
-  const { idPrefix, items, canEdit, onadd, ontoggle, onrename, onremove, onunsaved }: Props =
-    $props();
+  const {
+    idPrefix,
+    items,
+    canEdit,
+    onadd,
+    ontoggle,
+    onrename,
+    onremove,
+    onunsaved,
+    ondraftkept,
+  }: Props = $props();
 
   /** 문구를 고치는 항목과 입력. */
   let renaming = $state<{ id: string; text: string; original: string } | undefined>(undefined);
@@ -44,8 +55,9 @@
     if (current === undefined) return;
     const text = current.text.trim();
     const before = items.find((i) => i.id === current.id)?.text;
-    if (text === '' || text === before) {
-      renaming = undefined;
+    if (text === '') return;
+    if (text === before) {
+      cancelRename();
       return;
     }
     void guard(async (user, isCurrent) => {
@@ -66,6 +78,7 @@
   let draftRequest = $state<{ text: string; requestId: string } | undefined>();
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
+  let discardDescription = $state('');
   const dirty = $derived(
     draft !== '' ||
       pasted !== '' ||
@@ -108,10 +121,12 @@
     busy: () => busy,
   });
   $effect(() => {
-    onunsaved?.(dirty && !accountSwitching());
+    onunsaved?.(dirty);
+    ondraftkept?.(formDraft.kept);
   });
   onDestroy(() => {
     onunsaved?.(false);
+    ondraftkept?.(true);
   });
 
   async function guard(
@@ -149,7 +164,47 @@
   }
 
   function expand(): void {
-    preview = parseMarkdownChecklist(pasted);
+    const next = parseMarkdownChecklist(pasted);
+    requestDiscard(
+      preview.length > 0 && canonicalJson(preview) !== canonicalJson(next),
+      () => {
+        preview = next;
+      },
+      m.checklists_discard_preview(),
+    );
+  }
+
+  /** 로컬 확인은 바꿀 입력에만 적용한다. 부모가 담당하는 경로 이탈 가드는 등록하지 않는다. */
+  function requestDiscard(affected: boolean, action: () => void, description: string): void {
+    if (!formDraft.active || busy) return;
+    const proceed = (): void => {
+      action();
+      formDraft.persist();
+    };
+    if (affected) {
+      discardDescription = description;
+      formDraft.leave.request(proceed);
+    } else proceed();
+  }
+
+  function cancelRename(): void {
+    requestDiscard(
+      renaming !== undefined && renaming.text !== renaming.original,
+      () => {
+        renaming = undefined;
+      },
+      m.checklists_discard_rename(),
+    );
+  }
+
+  function startRename(item: ChecklistItem): void {
+    requestDiscard(
+      renaming !== undefined && renaming.text !== renaming.original,
+      () => {
+        renaming = { id: item.id, text: item.text, original: item.text };
+      },
+      m.checklists_discard_rename(),
+    );
   }
 
   function confirmPaste(): void {
@@ -181,6 +236,13 @@
 
   const done = $derived(items.filter((i) => i.done).length);
 </script>
+
+<DiscardChangesConfirm
+  open={formDraft.active && formDraft.leave.open}
+  description={discardDescription}
+  onkeep={formDraft.leave.keep}
+  ondiscard={formDraft.leave.discard}
+/>
 
 <section aria-labelledby={`${idPrefix}-heading`} class="flex flex-col gap-3">
   <h3 id={`${idPrefix}-heading`} class="text-sm font-semibold">
@@ -240,17 +302,13 @@
               onkeydown={(e: KeyboardEvent) => {
                 if (e.key === 'Escape') {
                   e.preventDefault();
-                  renaming = undefined;
+                  e.stopPropagation();
+                  cancelRename();
                 }
               }}
             />
             <Button type="submit" size="sm" disabled={busy}>{m.checklists_save()}</Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onclick={() => {
-                renaming = undefined;
-              }}>{m.checklists_cancel()}</Button
+            <Button size="sm" variant="ghost" onclick={cancelRename}>{m.checklists_cancel()}</Button
             >
           </form>
         {:else}
@@ -265,9 +323,9 @@
             size="sm"
             class="ml-auto"
             aria-label={m.checklists_edit_aria({ text: item.text })}
-            disabled={busy || (renaming !== undefined && renaming.text !== renaming.original)}
+            disabled={busy}
             onclick={() => {
-              renaming = { id: item.id, text: item.text, original: item.text };
+              startRename(item);
             }}>{m.checklists_edit()}</Button
           >
           <Button

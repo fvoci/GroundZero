@@ -27,5 +27,7 @@
   "comments_delete": "지우기",
   "comments_delete_confirm_label": "댓글 지우기 확인",
   "comments_delete_confirm": "이 댓글을 지울까요?",
-  "comments_loading": "불러오는 중…"
+  "comments_loading": "불러오는 중…",
+  "comments_discard_reply": "이 답글 입력을 버릴까요? 다른 댓글 입력은 남습니다.",
+  "comments_discard_edit": "이 댓글의 수정 입력을 버릴까요? 다른 댓글 입력은 남습니다."
 }
