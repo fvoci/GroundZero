@@ -136,6 +136,20 @@ const json = (status: number, body: unknown): Response =>
   });
 
 describe('task form input across reloads and account switches', () => {
+  it('keeps the dirty warning when a save discovers read-only access', async () => {
+    const changed = vi.fn();
+    mount(detail(), changed);
+    await typeDescription('권한 철회 전 입력');
+    vi.mocked(api.task).mockResolvedValue(detail({ access: 'read', version: 2 }));
+    vi.spyOn(api, 'addChecklist').mockResolvedValue(detail());
+    await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '항목' } });
+    await fireEvent.click(screen.getByRole('button', { name: '추가', exact: true }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('제목', { exact: true })).toBeDisabled();
+    });
+    expect(changed).toHaveBeenLastCalledWith(true);
+    expect(stored(A)[0]?.description).toBe('권한 철회 전 입력');
+  });
   it.each(['새 댓글', '새 항목'])(
     'includes the %s child editor in the parent leave warning',
     async (label) => {

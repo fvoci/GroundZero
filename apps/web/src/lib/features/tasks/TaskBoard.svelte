@@ -16,8 +16,8 @@
     PlanBlockedView,
     UndatedTaskView,
   } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { canonicalJson } from '$lib/features/documents/drafts';
   import { errorText } from '$lib/api/errors';
   import { org } from '$lib/org.svelte';
   import { readSession, writeSession } from '$lib/storage';
@@ -184,18 +184,27 @@
   }
   let viewName = $state('');
   let viewDefault = $state(false);
+  interface ViewRequest {
+    id: string;
+    payload: string;
+    target: { id: string; version: number } | null;
+  }
+  let viewRequest = $state<ViewRequest | null>(null);
   const viewDirty = $derived(
-    viewName.trim() !== (views.find((v) => v.id === selectedView)?.name ?? ''),
+    viewRequest !== null ||
+      viewName.trim() !== (views.find((v) => v.id === selectedView)?.name ?? ''),
   );
   interface ViewDraft {
     name: string;
     config: { view: TaskViewMode; filter: TaskFilter; sort: TaskSort; default: boolean };
+    request: ViewRequest | null;
   }
   const viewDraft = createFormDraft<ViewDraft>({
     name: () => `task-view:${item.id}`,
     snapshot: () => ({
       name: viewName,
       config: { view, filter: { ...filter }, sort, default: viewDefault },
+      request: viewRequest,
     }),
     parse: (value) => {
       if (!isRecord(value) || typeof value.name !== 'string' || !isRecord(value.config))
@@ -203,6 +212,23 @@
       return {
         name: value.name,
         config: { ...readConfig(value.config), default: value.config.default === true },
+        request:
+          isRecord(value.request) &&
+          typeof value.request.id === 'string' &&
+          typeof value.request.payload === 'string' &&
+          (value.request.target === null ||
+            (isRecord(value.request.target) &&
+              typeof value.request.target.id === 'string' &&
+              typeof value.request.target.version === 'number'))
+            ? {
+                id: value.request.id,
+                payload: value.request.payload,
+                target:
+                  value.request.target === null
+                    ? null
+                    : { id: value.request.target.id, version: value.request.target.version },
+              }
+            : null,
       };
     },
     restore: (value) => {
@@ -212,15 +238,16 @@
       filter = value.config.filter;
       sort = value.config.sort;
       viewDefault = value.config.default;
+      viewRequest = value.request;
     },
     reset: () => {
       viewName = views.find((v) => v.id === selectedView)?.name ?? '';
+      viewRequest = null;
     },
     dirty: () => viewDirty,
   });
   let contextTouched = false;
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
-  const viewKey = new RetryKey();
   // 보기·필터·정렬은 이 탭에서 항목마다 기억한다. 다른 화면에 갔다 돌아와도 그대로다(이 브라우저 탭에만 남는 개인
   // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
   const contextKey = (itemId: string): string => org.key(`board:${itemId}`);
@@ -352,21 +379,27 @@
     const target = views.find((v) => v.name === name);
     // 기다리는 사이 사용자가 목록에서 다른 보기를 고르면 늦은 응답이 그 선택을 되돌리지 않는다.
     const selectedAtStart = selectedView;
+    const payload = canonicalJson({
+      item: itemId,
+      name,
+      config,
+    });
+    if (viewRequest?.payload !== payload)
+      viewRequest = {
+        id: newRequestId(),
+        payload,
+        target: target === undefined ? null : { id: target.id, version: target.version },
+      };
+    const requestId = viewRequest.id;
+    const requestedTarget = viewRequest.target;
     const draftAttempt = viewDraft.capture();
     if (draftAttempt === undefined) return;
     try {
-      const requestId = viewKey.for({
-        item: itemId,
-        name,
-        config,
-        target: target === undefined ? null : { id: target.id, version: target.version },
-      });
       const result =
-        target === undefined
+        requestedTarget === null
           ? await api.createView(itemId, requestId, name, config)
-          : await api.updateView(target.id, requestId, target.version, config);
+          : await api.updateView(requestedTarget.id, requestId, requestedTarget.version, config);
       if (!viewDraft.isOwner(draftAttempt)) return;
-      viewKey.done(requestId);
       // 응답이 준 보기(저장한 것 또는 409의 최신)는 목록 다시 읽기가 실패해도 남긴다. 비면 다시 저장이 PUT 대신 POST가
       // 되어 또 409였다(CodeRabbit).
       const returned = result.kind === 'saved' ? result.view : result.current;
@@ -375,6 +408,7 @@
       views = withView(reread, returned);
       if (selectedView === selectedAtStart) selectedView = returned.id;
       if (result.kind !== 'saved') {
+        viewRequest = null;
         // 다른 탭이 이 이름으로 먼저 만들거나 저장했다. 서버는 아무것도 바꾸지 않았다. 지금 화면의 설정과 이름은 그대로
         // 두고 최신 목록만 읽는다(최신 설정은 목록에서 고르면 보이고, 다시 저장하면 최신 판을 기준으로 이 설정이 된다).
         status = '';

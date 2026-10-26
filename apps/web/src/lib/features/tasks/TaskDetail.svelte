@@ -477,7 +477,7 @@
   });
   // 업무 대화상자가 닫기 전에 버릴지 물을 입력이 있는지(편집할 수 있을 때만).
   const unsaved = $derived(
-    canEdit &&
+    !hiddenForAccount &&
       (changed ||
         linkChanged ||
         parentChoice !== '' ||

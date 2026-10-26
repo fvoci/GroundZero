@@ -112,6 +112,45 @@ function viewServer(
 }
 
 describe('saved view save on a stale version', () => {
+  it('reuses the saved view request id after a lost response and explicit draft restore', async () => {
+    const saved: Stored[] = [];
+    vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve(saved));
+    const create = vi.spyOn(api, 'createView').mockImplementation(() => {
+      saved.push({ id: 'created', name: '응답 유실', config: {}, version: 1 });
+      return Promise.reject(new Error('response lost'));
+    });
+    const update = vi.spyOn(api, 'updateView');
+    const props = { item, workspaces: [], openTaskId: undefined };
+    const first = render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '응답 유실' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledOnce();
+    });
+    const id = create.mock.calls[0]?.[1];
+    first.unmount();
+    render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 되살리기' }));
+    expect(create).toHaveBeenCalledOnce();
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+    expect(create.mock.calls[1]?.[1]).toBe(id);
+    expect(update).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '다른 보기' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(3);
+    });
+    expect(create.mock.calls[2]?.[1]).not.toBe(id);
+  });
   it('offers an unsaved view name after remount and restores it without sending a save', async () => {
     const sent = viewServer([]);
     const props = { item, workspaces: [], openTaskId: undefined };

@@ -27,7 +27,11 @@
     resetRow,
     resumeCount,
     rowApplied,
-    restoreImport,
+    listImportDrafts,
+    holdImportDraft,
+    importTabKey,
+    removeImportDraft,
+    type ImportDraft,
     saveImport,
     type RowProgress,
     type RowStep,
@@ -49,13 +53,15 @@
   // 줄별 진행 상태. 이 묶음을 모두 넣을 때까지 지킨다(글자에서 지운 줄의 것도: 다시 넣으면 같은 업무). 글자를 모두
   // 지우면 버린다(새 묶음). 안의 값은 등록하면서 고치므로 등록이 끝날 때 배열을 바꿔 안내를 다시 계산한다.
   let progress = $state.raw<RowProgress[]>([]);
-  let offered = $state<{ text: string; rows: RowProgress[] } | undefined>();
+  let offers = $state<ImportDraft[]>([]);
+  let restoredSource: string | undefined;
   const storageKey = $derived.by(() => {
     // 같은 조직의 다른 계정으로 목록을 다시 받아도 사용자 키를 다시 계산한다.
     if (org.organizations.length === 0) return '';
     return org.key(`csv-import:${itemId}`);
   });
   let loadedKey = $state('');
+  const reserved = $derived(offers.some((entry) => entry.key === importTabKey(loadedKey)));
   let controller: AbortController | undefined;
   let generation = 0;
   let leaving = $state(false);
@@ -69,8 +75,8 @@
     const selected = org.currentId;
     const mine = ++generation;
     untrack(() => {
-      const saved = restoreImport(key);
-      offered = saved.text !== '' || saved.rows.length > 0 ? saved : undefined;
+      offers = listImportDrafts(key).map((entry) => holdImportDraft(key, entry));
+      restoredSource = undefined;
       text = '';
       progress = [];
       loadedKey = key;
@@ -95,13 +101,29 @@
 
   $effect(() => {
     if (
-      offered === undefined &&
+      !reserved &&
       me.userId === editingUser &&
       loadedKey === storageKey &&
       org.currentId !== undefined
     )
-      saveImport(loadedKey, text, progress);
+      persistImport(loadedKey, text, progress);
   });
+
+  function persistImport(key: string, source: string, rows: RowProgress[]): void {
+    if (!saveImport(key, source, rows)) return;
+    if (restoredSource !== undefined && restoredSource !== importTabKey(key))
+      removeImportDraft(restoredSource);
+    restoredSource = undefined;
+  }
+
+  function restoreOffer(entry: ImportDraft): void {
+    if (busy || text !== '') return;
+    text = entry.value.text;
+    progress = entry.value.rows;
+    restoredSource = entry.key;
+    offers = offers.filter((candidate) => candidate.key !== entry.key);
+    persistImport(loadedKey, text, progress);
+  }
 
   $effect(() => {
     const previous = router.guard;
@@ -143,7 +165,7 @@
   async function importRows(): Promise<void> {
     const result = parsed;
     if (result === undefined || result.errors.length > 0 || busy) return;
-    if (org.currentId === undefined || me.userId !== editingUser || offered !== undefined) return;
+    if (org.currentId === undefined || me.userId !== editingUser || reserved) return;
     const mine = generation;
     const keyForImport = loadedKey;
     const abort = new AbortController();
@@ -155,7 +177,7 @@
     const resumed = progress.some((p) => used.has(p));
     progress = resumed ? [...used, ...progress.filter((p) => !used.has(p))] : [...used];
     const batch = progress;
-    saveImport(keyForImport, source, batch);
+    persistImport(keyForImport, source, batch);
     busy = true;
     error = undefined;
     let done = 0;
@@ -195,7 +217,7 @@
           // 같은 요청 id에 업무가 이미 있었다(응답을 잃은 앞선 요청). 다시 쓰지 않으므로 다르면 알린다. 다시 누르면
           // 다음 줄부터 넣는다(같은 업무를 또 만들지 않는다).
           line.applied = key;
-          saveImport(keyForImport, source, batch);
+          persistImport(keyForImport, source, batch);
           // 빈 상태 칸은 서버가 기본 상태를 고르므로 응답의 상태를 그대로 허용한다.
           if (!rowApplied({ ...row, status: row.status ?? task.status }, task)) {
             differs = row.title;
@@ -237,7 +259,7 @@
       if (mine === generation) {
         busy = false;
         progress = [...progress];
-        saveImport(keyForImport, text, progress);
+        persistImport(keyForImport, text, progress);
         await onimported();
       }
     }
@@ -264,7 +286,7 @@
     controller?.abort();
     leaving = false;
     allowLeave = true;
-    saveImport(loadedKey, '', []);
+    persistImport(loadedKey, '', []);
     const next = proceed;
     proceed = undefined;
     next?.();
@@ -276,27 +298,26 @@
   <Collapsible.Root bind:open={expanded} class="text-sm">
     <Collapsible.Trigger>{m.tasks_csv_summary()}</Collapsible.Trigger>
     <Collapsible.Content class="flex flex-col gap-2 pt-2">
-      {#if offered !== undefined && me.userId === editingUser}
+      {#each offers as entry (entry.key)}
         <div role="region" aria-label={m.tasks_draft_region()} data-testid="task-csv-draft-offer">
           <p>{m.tasks_draft_region()}</p>
+          <p class="max-w-full truncate">{entry.value.text.split('\n')[0]}</p>
           <Button
             variant="outline"
+            disabled={text !== '' || busy}
             onclick={() => {
-              if (offered === undefined) return;
-              text = offered.text;
-              progress = offered.rows;
-              offered = undefined;
+              restoreOffer(entry);
             }}>{m.tasks_draft_restore()}</Button
           >
           <Button
             variant="ghost"
             onclick={() => {
-              saveImport(loadedKey, '', []);
-              offered = undefined;
+              removeImportDraft(entry.key);
+              offers = offers.filter((candidate) => candidate.key !== entry.key);
             }}>{m.tasks_draft_discard()}</Button
           >
         </div>
-      {/if}
+      {/each}
       <Label for={`tasks-csv-${itemId}`}
         >{m.tasks_csv_label({
           statuses: statuses.map((definition) => definition.name).join(' · '),
@@ -306,7 +327,7 @@
         id={`tasks-csv-${itemId}`}
         class="max-h-96 min-h-32 overflow-y-auto font-code"
         bind:value={text}
-        disabled={busy || offered !== undefined || me.userId !== editingUser}
+        disabled={busy || reserved || me.userId !== editingUser}
         oninput={(e: Event) => {
           if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
         }}
@@ -333,7 +354,7 @@
         <Button
           variant="outline"
           disabled={busy ||
-            offered !== undefined ||
+            reserved ||
             me.userId !== editingUser ||
             org.currentId === undefined ||
             parsed === undefined ||

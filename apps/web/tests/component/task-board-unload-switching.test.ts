@@ -87,6 +87,37 @@ async function mountWithOpenTask(): Promise<HTMLElement> {
 }
 
 describe('task board unload warning while the account is switching', () => {
+  it.each(['새 댓글', '새 항목'])('allows reload for durably kept %s input', async (label) => {
+    await mountWithOpenTask();
+    await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
+      target: { value: '남긴 입력' },
+    });
+    expect(unloadPrevented()).toBe(true);
+    accountSafety.switching = true;
+    await Promise.resolve();
+    expect(unloadPrevented()).toBe(false);
+  });
+
+  it.each(['새 댓글', '새 항목'])(
+    'keeps warning for failed %s storage and recovers after a successful write',
+    async (label) => {
+      const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('quota', 'QuotaExceededError');
+      });
+      await mountWithOpenTask();
+      const input = await screen.findByLabelText(new RegExp(`^${label}`));
+      await fireEvent.input(input, { target: { value: '남기지 못함' } });
+      accountSafety.switching = true;
+      await Promise.resolve();
+      expect(unloadPrevented()).toBe(true);
+      quota.mockRestore();
+      accountSafety.switching = false;
+      await fireEvent.input(input, { target: { value: '이번에는 남김' } });
+      accountSafety.switching = true;
+      await Promise.resolve();
+      expect(unloadPrevented()).toBe(false);
+    },
+  );
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     me.userId = 'user-a';
