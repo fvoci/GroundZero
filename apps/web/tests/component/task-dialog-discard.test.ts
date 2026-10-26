@@ -9,6 +9,9 @@ import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { itemTaskPath, router } from '$lib/router.svelte';
 import { me } from '$lib/me.svelte';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
+import { storeFormDraft } from '$lib/features/common/form-draft';
+import { formOf } from '$lib/features/tasks/form';
 
 // 사용자 결정(2026-10-22): 업무 대화상자는 고친 입력이 있어도 Esc·바깥 클릭·닫기 단추로 말없이 닫혀 입력을 버렸다.
 // 이제 고친 입력이 있으면 "계속 편집 / 변경 버리고 닫기"를 묻고, 버리기를 고를 때만 닫는다. 고친 것이 없으면 바로 닫는다.
@@ -163,6 +166,48 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 }
 
 describe('closing the task dialog with unsaved input', () => {
+  it('keeps the account-switch warning when recurrence storage fails beside a reserved task draft', async () => {
+    me.userId = 'user-a';
+    window.localStorage.clear();
+    const initial = task('t1', {
+      start_date: '2026-10-27',
+      series: {
+        id: 'series-1',
+        root_task_id: 't1',
+        timezone: 'Asia/Seoul',
+        rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
+      },
+    });
+    expect(
+      storeFormDraft('task:t1', {
+        baseVersion: initial.version,
+        baseline: formOf(initial),
+        form: { ...formOf(initial), title: 'Previously kept title' },
+        tagsText: '가, 나',
+        estimateText: '30',
+        savedAt: new Date().toISOString(),
+      }),
+    ).toBe(true);
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+    try {
+      await openBoard([initial]);
+      await screen.findByRole('button', { name: m.tasks_draft_restore() });
+      await type('task-recurrence-interval', '2');
+      accountSafety.switching = true;
+      await flush();
+      const unload = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+    } finally {
+      write.mockRestore();
+      accountSafety.switching = false;
+      me.userId = '';
+      window.localStorage.clear();
+    }
+  });
+
   it('blocks closing and opening another task while recurrence is saving', async () => {
     me.userId = 'user-a';
     const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };

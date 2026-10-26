@@ -233,6 +233,7 @@
   let checklistDraftKept = $state(true);
   let commentsDraftKept = $state(true);
   let recurrenceDraftKept = $state(true);
+  let taskDraftKept = $state(true);
   let parentStatus = $state('');
   const parentCandidates = $derived(
     tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
@@ -776,11 +777,15 @@
           : null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
-      ondraftkept?.(kept && checklistDraftKept && commentsDraftKept && recurrenceDraftKept);
+      taskDraftKept = kept;
     } else {
       clearFormDraft(draftName);
-      ondraftkept?.(checklistDraftKept && commentsDraftKept && recurrenceDraftKept);
+      taskDraftKept = true;
     }
+  });
+  // 본문 초안이 보류되어 위 효과가 일찍 끝나도 자식 입력의 보존 실패는 부모에 전달한다.
+  $effect(() => {
+    ondraftkept?.(taskDraftKept && checklistDraftKept && commentsDraftKept && recurrenceDraftKept);
   });
   // 폼이 사라지면(닫기·다른 업무 열기) 이 폼의 초안 상태도 끝난다: 다음 폼의 깨끗한 상태가 옛 실패를 물려받지 않게 한다.
   $effect(() => () => ondraftkept?.(true));

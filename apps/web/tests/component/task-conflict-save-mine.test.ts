@@ -18,6 +18,7 @@ import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
+import { describeRule } from '$lib/features/events/labels';
 
 // 업무 저장 충돌(409) 뒤 "내 입력으로 다시 저장"(실제 브라우저 점검에서 찾음): 전에는 내 폼 전체를 새 판 번호로 보내,
 // 내가 고치지 않은 칸(다른 사람이 바꾼 제목 등)을 옛 값으로 조용히 되돌렸다. 이제 최신 판 위에 내가 고친 칸만 올리고,
@@ -1269,6 +1270,7 @@ it.each(['success', 'conflict'] as const)(
     await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
     expect(screen.getByLabelText('간격')).toHaveValue('2');
     expect(screen.queryByText(/그사이 다른 사람이 반복 규칙/)).toBeNull();
+    expect(screen.queryByText(describeRule({ ...rule, interval: 7 }), { exact: false })).toBeNull();
     window.localStorage.clear();
   },
 );
@@ -1326,5 +1328,6 @@ it.each(['success', 'conflict'] as const)(
     await waitFor(() => expect(screen.getByLabelText('간격')).toHaveValue('4'));
     expect(field('task-title')).toHaveValue(other.title);
     expect(screen.queryByText(/그사이 다른 사람이 반복 규칙/)).toBeNull();
+    expect(screen.queryByText(describeRule({ ...rule, interval: 7 }), { exact: false })).toBeNull();
   },
 );
