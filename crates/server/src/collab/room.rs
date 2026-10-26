@@ -32,6 +32,8 @@ use yrs::updates::encoder::Encode;
 use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
+use super::lease::{Lease, MovePermit, WritePermit};
+use super::visibility::{CommittedMove, Snapshot};
 use crate::config::Limits;
 use crate::db::Db;
 use crate::error::AppError;
@@ -144,8 +146,8 @@ pub struct Peer {
     pub user: UserId,
     /// 세션 토큰의 해시. 주기적으로 세션이 살아 있는지 본다.
     pub session: Vec<u8>,
-    pub can_write: bool,
     pub out: mpsc::Sender<Outbound>,
+    pub(crate) access: Lease,
 }
 
 #[derive(Debug)]
@@ -160,6 +162,7 @@ enum Command {
         data: Vec<u8>,
         /// 웹소켓에서 받은 때. 문서를 옮긴 커밋 뒤에 받은 것은 넣지 않는다(새 자리에서 권한을 잃은 사람의 쓰기).
         received: Instant,
+        permit: Option<WritePermit>,
     },
     Leave {
         conn: u64,
@@ -259,16 +262,25 @@ impl Drop for ClosingGuard {
 pub struct Membership {
     conn: u64,
     tx: mpsc::Sender<Command>,
+    access: Lease,
 }
 
 impl Membership {
+    /// 방 작업이 끝나면 유휴 소켓도 더 이상 연결을 유지하지 않는다.
+    pub(crate) async fn closed(&self) {
+        self.tx.closed().await;
+    }
+
     /// 받은 메시지를 방에 넘긴다(받은 때와 함께). 방이 닫혔으면 거짓.
     pub async fn send(&self, data: Vec<u8>) -> bool {
+        let permit = self.access.write_permit();
+        let received = Instant::now();
         self.tx
             .send(Command::Incoming {
                 conn: self.conn,
                 data,
-                received: Instant::now(),
+                received,
+                permit,
             })
             .await
             .is_ok()
@@ -386,6 +398,7 @@ impl Rooms {
                     return Ok(Membership {
                         conn,
                         tx: handle.tx.clone(),
+                        access: peer.access.clone(),
                     });
                 }
                 Ok(Err(err)) => return Err(err),
@@ -591,6 +604,11 @@ impl Rooms {
         );
         match room.load(admin).await {
             Ok(loaded) => room.doc = Some(loaded),
+            // 다른 OFF 요청이 같은 pending 목록을 먼저 저장하고 실시간을 껐을 수 있다.
+            // load의 55000만 다시 확인하며, 실제 pending이나 권한/DB 실패는 계속 거부한다.
+            Err(AppError::Conflict(_)) => {
+                return pending_already_saved(db, doc, admin).await.unwrap_or(false);
+            }
             Err(err) => {
                 tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not load a pending live state");
                 return false;
@@ -660,6 +678,29 @@ impl Rooms {
     }
 }
 
+async fn pending_already_saved(db: &Db, doc: DocumentId, admin: UserId) -> Result<bool, AppError> {
+    let mut tx = db.begin_as(admin).await?;
+    let workspace: Option<Option<Uuid>> =
+        sqlx::query_scalar("SELECT workspace_id FROM documents WHERE id=$1")
+            .bind(doc)
+            .fetch_optional(tx.conn())
+            .await?;
+    let Some(Some(workspace)) = workspace else {
+        return Ok(false);
+    };
+    // 기존 관리자 전용 pending 판정을 그대로 쓴다. 문서 비가시성·관리자 철회는 성공으로 삼지 않는다.
+    let pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM app_collab_pending($1) pending WHERE pending=$2)",
+    )
+    .bind(workspace)
+    .bind(doc)
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(!pending)
+}
+
 /// 방마다 명령을 보내고 답을 모두 합쳐 `wait`까지 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다.
 async fn ask_all<T: Send + 'static>(
     handles: Vec<Handle>,
@@ -721,6 +762,34 @@ struct Pending {
     conn: u64,
     user: UserId,
     update: Vec<u8>,
+    authorization: EditAuthorization,
+}
+
+#[derive(Debug, Clone)]
+enum EditAuthorization {
+    Current,
+    BeforeMove { permit: MovePermit },
+}
+
+impl EditAuthorization {
+    fn allows(&self, access: &Lease) -> bool {
+        match self {
+            Self::Current => access.permission() == Some(true),
+            Self::BeforeMove { permit } => permit.deadline().is_some(),
+        }
+    }
+
+    async fn check_session(&self, db: &Db, peer: &Peer) -> Result<(), CloseReason> {
+        match self {
+            Self::BeforeMove { permit } => permit.check_session(session_alive(db, peer)).await,
+            Self::Current => match peer.access.until_closed(session_alive(db, peer)).await {
+                Ok(Some(true)) => Ok(()),
+                Ok(Some(false)) => Err(CloseReason::AccessLost),
+                Ok(None) => Err(CloseReason::Busy),
+                Err(reason) => Err(reason),
+            },
+        }
+    }
 }
 
 /// `app_collab_load`의 한 줄: 문서 리비전, 제목, 본문, 저장된 상태와 그 편집자(상태를 쓸 수 없으면 둘 다 없음).
@@ -759,7 +828,6 @@ struct Room {
     /// 마지막 리비전 뒤로 고친 사람(마지막이 앞). 리비전을 남기면 비운다. 상태와 함께 저장하고(D-95), 작성자가 이 안에
     /// 없으면(대신 저장) 리비전에 실제 편집자로 적는다(`edited_by`).
     edited_since: Vec<UserId>,
-    last_recheck: Instant,
     /// 연결의 세션·권한을 다시 확인하는 간격(`FVOCI_COLLAB_RECHECK_SECS`).
     recheck_every: Duration,
 }
@@ -795,7 +863,6 @@ impl Room {
             persisted: None,
             editors: Vec::new(),
             edited_since: Vec::new(),
-            last_recheck: Instant::now(),
             recheck_every,
         }
     }
@@ -827,8 +894,8 @@ impl Room {
                     if self.dirty_since_snapshot && self.last_change.elapsed() >= SNAPSHOT_IDLE {
                         self.snapshot().await;
                     }
-                    if self.last_recheck.elapsed() >= self.recheck_every {
-                        self.recheck().await;
+                    if self.remove_closed_peers() {
+                        self.stop_realtime().await;
                     }
                 }
             }
@@ -857,6 +924,10 @@ impl Room {
                             return false;
                         }
                     }
+                }
+                if peer.access.permission().is_none() {
+                    let _ignored = reply.send(Err(AppError::Unauthorized));
+                    return true;
                 }
                 let start = self.start_messages();
                 if start
@@ -1000,11 +1071,12 @@ impl Room {
         // 옛 자리 권한을 볼 수 없으므로 남는 창은 마지막 재확인 ~ 커밋이고 그 길이는 재확인 간격을 넘지 않는다(문서화된
         // 권한 철회 지연과 같다). 세션은 `drain_after_move`가 한 번 더 본다.
         self.recheck().await;
-        let (mut outcome, committed_at) = match self.move_rechecking(&request).await {
+        let (mut outcome, committed_at, commit) = match self.move_rechecking(&request).await {
             Ok(MoveReply::Moved {
                 outcome,
                 committed_at,
-            }) => (outcome, committed_at),
+                commit,
+            }) => (outcome, committed_at, commit),
             // 옮기지 않았다(확인한 미리보기가 달라짐·오류). 기다리던 메시지는 평소처럼 받는다.
             other => {
                 let _ignored = done.send(other);
@@ -1012,7 +1084,7 @@ impl Room {
             }
         };
         self.rooms.moved(self.doc_id, outcome.workspace_id.0);
-        let shutdowns = self.drain_after_move(committed_at, rx).await;
+        let shutdowns = self.drain_after_move(committed_at, commit, rx).await;
         // 커밋 전에 받은 편집까지 새 자리에서 리비전으로 남긴다. 작성자는 마지막으로 고친 사람·연결된 작성자 가운데 새
         // 자리에서 쓸 수 있는 사람, 없으면 옮긴 사람(대신 저장이면 실제 편집자를 따로 적는다, D-95). 남기면 그때 상태를
         // 저장하고 그 편집의 확인을 처음 보낸다.
@@ -1042,6 +1114,7 @@ impl Room {
         let _ignored = done.send(Ok(MoveReply::Moved {
             outcome,
             committed_at,
+            commit,
         }));
         false
     }
@@ -1062,7 +1135,8 @@ impl Room {
             tokio::select! {
                 reply = &mut moving => return reply,
                 _ = every.tick() => {
-                    let _off = self.recheck_peers().await;
+                    // 커밋 직후 새 위치 확인과 경합해도, 큐의 대리 저장 근거를 확인하기 전 peer를 버리지 않는다.
+                    self.refresh_peers().await;
                 }
             }
         }
@@ -1090,6 +1164,7 @@ impl Room {
     async fn drain_after_move(
         &mut self,
         committed_at: Instant,
+        commit: CommittedMove,
         rx: &mut mpsc::Receiver<Command>,
     ) -> Vec<oneshot::Sender<bool>> {
         let mut shutdowns = Vec::new();
@@ -1100,9 +1175,17 @@ impl Room {
                     conn,
                     data,
                     received,
+                    permit,
                 }) => {
-                    if received <= committed_at {
-                        self.incoming(conn, &data);
+                    if received <= committed_at
+                        && let Some(permit) = permit
+                        && let Some(permit) = permit.freeze_move(commit)
+                    {
+                        self.incoming_with_authorization(
+                            conn,
+                            &data,
+                            EditAuthorization::BeforeMove { permit },
+                        );
                     }
                 }
                 // 나가기 전에 보낸 편집은 아래에서 넣은 뒤에 나간다(평소의 나가기와 같다).
@@ -1122,8 +1205,7 @@ impl Room {
         shutdowns
     }
 
-    /// 넣기를 기다리는 편집을 보낸 연결의 세션만 다시 본다. 끝났으면 연결을 닫아(4403) 그 편집을 버린다(`flush`는 닫힌
-    /// 연결의 편집을 넣지 않는다). DB 오류로 알 수 없으면 그대로 둔다(`recheck`와 같다).
+    /// 넣기를 기다리는 편집을 보낸 연결의 세션을 다시 본다. DB 오류와 기한 초과도 연결을 닫고 대기 편집을 버린다.
     async fn drop_ended_sessions(&mut self) {
         let mut checked = HashSet::new();
         let conns: Vec<u64> = self
@@ -1136,8 +1218,10 @@ impl Room {
             let Some(peer) = self.conns.get(&conn).map(|c| c.peer.clone()) else {
                 continue;
             };
-            if session_alive(&self.db, &peer).await == Some(false) {
-                self.close(conn, CloseReason::AccessLost);
+            if let Some(pending) = self.pending.iter().find(|pending| pending.conn == conn)
+                && let Err(reason) = pending.authorization.check_session(&self.db, &peer).await
+            {
+                self.close(conn, reason);
             }
         }
     }
@@ -1255,14 +1339,33 @@ impl Room {
     }
 
     fn incoming(&mut self, conn: u64, data: &[u8]) {
+        self.incoming_with_authorization(conn, data, EditAuthorization::Current);
+    }
+
+    fn incoming_with_authorization(
+        &mut self,
+        conn: u64,
+        data: &[u8],
+        authorization: EditAuthorization,
+    ) {
         let Some(connection) = self.conns.get(&conn) else {
             return;
         };
-        let (user, can_write, out) = (
-            connection.peer.user,
-            connection.peer.can_write,
-            connection.peer.out.clone(),
-        );
+        let permission = match &authorization {
+            EditAuthorization::Current => connection.peer.access.permission(),
+            EditAuthorization::BeforeMove { .. } => authorization
+                .allows(&connection.peer.access)
+                .then_some(true),
+        };
+        let Some(can_write) = permission else {
+            if matches!(authorization, EditAuthorization::BeforeMove { .. }) {
+                return;
+            }
+            let reason = connection.peer.access.reason().unwrap_or(CloseReason::Busy);
+            self.close(conn, reason);
+            return;
+        };
+        let (user, can_write, out) = (connection.peer.user, can_write, connection.peer.out.clone());
         let mut decoder = DecoderV1::from(data);
         let messages: Vec<Message> = MessageReader::new(&mut decoder)
             .take(MAX_MESSAGES_PER_FRAME + 1)
@@ -1300,7 +1403,12 @@ impl Room {
                         tracing::debug!(event = "collab.read_only_change", document = %self.doc_id.0, "ignored a change from a read-only connection");
                         continue;
                     }
-                    self.pending.push(Pending { conn, user, update });
+                    self.pending.push(Pending {
+                        conn,
+                        user,
+                        update,
+                        authorization: authorization.clone(),
+                    });
                 }
                 Message::Awareness(update) => self.awareness_update(conn, update),
                 Message::AwarenessQuery => {
@@ -1360,25 +1468,28 @@ impl Room {
         }
         let pending = std::mem::take(&mut self.pending);
         let mut order: Vec<u64> = Vec::new();
-        let mut by_conn: HashMap<u64, (UserId, Vec<Vec<u8>>)> = HashMap::new();
+        let mut by_conn: HashMap<u64, Vec<Pending>> = HashMap::new();
         for item in pending {
             if !order.contains(&item.conn) {
                 order.push(item.conn);
             }
-            by_conn
-                .entry(item.conn)
-                .or_insert_with(|| (item.user, Vec::new()))
-                .1
-                .push(item.update);
+            by_conn.entry(item.conn).or_default().push(item);
         }
         for conn in order {
-            let Some((user, updates)) = by_conn.remove(&conn) else {
+            let Some(edits) = by_conn.remove(&conn) else {
                 continue;
             };
-            if !self.conns.contains_key(&conn) {
+            let Some(first) = edits.first() else { continue };
+            let user = first.user;
+            if !self.conns.get(&conn).is_some_and(|c| {
+                edits
+                    .iter()
+                    .all(|edit| edit.authorization.allows(&c.peer.access))
+            }) {
                 continue;
             }
-            let Ok(merged) = yrs::merge_updates_v1(&updates) else {
+            let Ok(merged) = yrs::merge_updates_v1(edits.iter().map(|edit| edit.update.as_slice()))
+            else {
                 self.close(conn, CloseReason::Invalid);
                 continue;
             };
@@ -1415,6 +1526,28 @@ impl Room {
                     continue;
                 }
             }
+            // 새 위치 거부와 달리 검사 중 세션이 끝났거나 DB로 확인하지 못하면 대리 저장도 받지 않는다.
+            if matches!(first.authorization, EditAuthorization::BeforeMove { .. }) {
+                let Some(peer) = self
+                    .conns
+                    .get(&conn)
+                    .map(|connection| connection.peer.clone())
+                else {
+                    continue;
+                };
+                if let Err(reason) = first.authorization.check_session(&self.db, &peer).await {
+                    self.close(conn, reason);
+                    continue;
+                }
+            }
+            // 본문 검사 동안 기한이 지나거나 권한이 철회됐을 수 있다.
+            if !self.conns.get(&conn).is_some_and(|c| {
+                edits
+                    .iter()
+                    .all(|edit| edit.authorization.allows(&c.peer.access))
+            }) {
+                continue;
+            }
             let Some(doc) = &self.doc else {
                 return;
             };
@@ -1450,7 +1583,7 @@ impl Room {
         let closed: Vec<u64> = self
             .conns
             .iter()
-            .filter(|(_, c)| c.peer.out.is_closed())
+            .filter(|(_, c)| c.peer.out.is_closed() || c.peer.access.permission().is_none())
             .map(|(id, _)| *id)
             .collect();
         for id in closed {
@@ -1486,12 +1619,20 @@ impl Room {
 
     fn close(&mut self, conn: u64, reason: CloseReason) {
         if let Some(c) = self.conns.get(&conn) {
+            c.peer.access.close(reason);
             let _ignored = c.peer.out.try_send(Outbound::Close(reason));
         }
         self.leave(conn);
     }
 
     fn send(&mut self, out: &mpsc::Sender<Outbound>, bytes: Vec<u8>, conn: u64) {
+        if !self
+            .conns
+            .get(&conn)
+            .is_some_and(|c| c.peer.access.permission().is_some())
+        {
+            return;
+        }
         if out.try_send(Outbound::Binary(bytes)).is_err() {
             self.close(conn, CloseReason::Busy);
         }
@@ -1501,7 +1642,7 @@ impl Room {
         let slow: Vec<u64> = self
             .conns
             .iter()
-            .filter(|(id, _)| Some(**id) != except)
+            .filter(|(id, c)| Some(**id) != except && c.peer.access.permission().is_some())
             .filter(|(_, c)| {
                 c.peer
                     .out
@@ -1594,7 +1735,11 @@ impl Room {
             return false;
         }
         let mut authors = self.editors.clone();
-        for c in self.conns.values().filter(|c| c.peer.can_write) {
+        for c in self
+            .conns
+            .values()
+            .filter(|c| c.peer.access.permission() == Some(true))
+        {
             if !authors.contains(&c.peer.user) {
                 authors.push(c.peer.user);
             }
@@ -1718,29 +1863,53 @@ impl Room {
         Ok(Some(row.revision))
     }
 
-    /// 연결마다 세션과 권한을 다시 본다. 끝났거나 쓰기 권한을 잃었으면 닫고(4403, 다시 붙으면 지금 권한으로),
-    /// 실시간이 꺼졌으면 리비전을 남기고 닫으며, 읽기에서 쓰기로 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
+    /// 독립적인 연결 감시가 실시간 해제를 확인했으면 리비전을 남긴다. 연결 종료는 저장을 기다리지 않는다.
     async fn recheck(&mut self) {
         if self.recheck_peers().await {
-            self.flush().await;
-            // 리비전을 남기면 그때 상태를 저장하고 확인을 보낸다. 남기지 못한 편집은 확인하지 않는다: 연결을 닫은 뒤에
-            // 상태만 저장한다(#71).
-            self.snapshot().await;
-            for (_, c) in self.conns.drain() {
-                let _ignored = c
-                    .peer
-                    .out
-                    .try_send(Outbound::Close(CloseReason::RealtimeOff));
-            }
-            self.persist().await;
+            self.stop_realtime().await;
         }
     }
 
-    /// 연결마다 세션과 권한만 다시 본다(끝났거나 쓰기 권한을 잃은 연결은 4403으로 닫고, 읽기에서 쓰기로 바뀌었으면 따른다).
-    /// 실시간이 꺼졌으면 참(닫기는 부르는 쪽이 한다). 닫힌 연결이 대기열에 남긴 편집은 넣지 않는다(`incoming`·`flush`가 그
-    /// 연결을 찾지 못한다).
+    async fn stop_realtime(&mut self) {
+        self.flush().await;
+        // 리비전을 남기지 못한 편집은 확인하지 않는다. 연결을 닫은 뒤 상태만 저장한다(#71).
+        self.snapshot().await;
+        for (_, c) in self.conns.drain() {
+            let _ignored = c
+                .peer
+                .out
+                .try_send(Outbound::Close(CloseReason::RealtimeOff));
+        }
+        self.persist().await;
+    }
+
+    /// 이동 직전 등 명시적인 재확인도 유지한다. peer별로 병렬 확인하며 기존 기한보다 오래 기다리지 않는다.
     async fn recheck_peers(&mut self) -> bool {
-        self.last_recheck = Instant::now();
+        self.refresh_peers().await;
+        self.remove_closed_peers()
+    }
+
+    async fn refresh_peers(&self) {
+        let peers: Vec<(u64, Peer)> = self
+            .conns
+            .iter()
+            .map(|(id, c)| (*id, c.peer.clone()))
+            .collect();
+        let checks = peers.iter().map(|(_, peer)| async {
+            let started = tokio::time::Instant::now();
+            if let Ok(observed) = peer
+                .access
+                .until_closed(observe_access(&self.db, self.doc_id, peer))
+                .await
+            {
+                peer.access.observe(started, observed);
+            }
+        });
+        futures_util::future::join_all(checks).await;
+    }
+
+    /// 주기 처리는 독립 감시의 결과만 소비하고 DB 검사를 중복해서 시작하지 않는다.
+    fn remove_closed_peers(&mut self) -> bool {
         let peers: Vec<(u64, Peer)> = self
             .conns
             .iter()
@@ -1748,18 +1917,9 @@ impl Room {
             .collect();
         let mut off = false;
         for (conn, peer) in peers {
-            match peer_access(&self.db, self.doc_id, &peer).await {
-                PeerAccess::Allowed { can_write } => {
-                    // 쓰기 권한을 잃은 연결은 닫는다. 열어 두면 화면은 "연결됨"인 채로 그 사람의 입력을 조용히 버린다.
-                    if !can_write && peer.can_write {
-                        self.close(conn, CloseReason::AccessLost);
-                    } else if let Some(c) = self.conns.get_mut(&conn) {
-                        c.peer.can_write = can_write;
-                    }
-                }
-                PeerAccess::Denied => self.close(conn, CloseReason::AccessLost),
-                PeerAccess::RealtimeOff => off = true,
-                PeerAccess::Unknown => {}
+            if let Some(reason) = peer.access.reason() {
+                off |= reason == CloseReason::RealtimeOff;
+                self.close(conn, reason);
             }
         }
         off
@@ -1837,8 +1997,23 @@ pub enum PeerAccess {
     },
     Denied,
     RealtimeOff,
-    /// DB 오류 등으로 알 수 없음. 다음에 다시 본다.
+    /// DB 오류 등으로 알 수 없음. 연결은 재접속 가능한 오류로 종료한다.
     Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct AccessCheck {
+    pub(super) access: PeerAccess,
+    pub(super) snapshot: Option<Arc<Snapshot>>,
+}
+
+impl From<PeerAccess> for AccessCheck {
+    fn from(access: PeerAccess) -> Self {
+        Self {
+            access,
+            snapshot: None,
+        }
+    }
 }
 
 /// 그 연결의 세션이 아직 그 사람의 것인지. DB 오류로 알 수 없으면 `None`.
@@ -1858,29 +2033,53 @@ async fn session_alive(db: &Db, peer: &Peer) -> Option<bool> {
 
 /// 세션이 살아 있고 문서를 실시간으로 열 수 있는지.
 pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> PeerAccess {
+    observe_access(db, doc, peer).await.access
+}
+
+pub(super) async fn observe_access(db: &Db, doc: DocumentId, peer: &Peer) -> AccessCheck {
     match session_alive(db, peer).await {
         Some(true) => {}
-        Some(false) => return PeerAccess::Denied,
-        None => return PeerAccess::Unknown,
+        Some(false) => return PeerAccess::Denied.into(),
+        None => return PeerAccess::Unknown.into(),
     }
     let access = async {
-        let mut tx = db.begin_as(peer.user).await?;
-        let access: String = sqlx::query_scalar("SELECT app_collab_access($1)")
+        let mut tx = db.begin_anonymous().await?;
+        // begin_as의 set_config SELECT보다 먼저 격리를 정한다. 예외로 끝나는 권한 판정도
+        // 그 판정과 같은 snapshot을 보존하며 mover 신원이나 문서 위치를 추가로 읽지 않는다.
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            .execute(tx.conn())
+            .await?;
+        let snapshot = Arc::new(Snapshot::read(&mut tx).await?);
+        sqlx::query("SELECT set_config('app.user_id', $1, true)")
+            .bind(peer.user.0.to_string())
+            .execute(tx.conn())
+            .await?;
+        let access: Result<String, AppError> = sqlx::query_scalar("SELECT app_collab_access($1)")
             .bind(doc)
             .fetch_one(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
-        tx.commit().await?;
-        Ok::<String, AppError>(access)
+            .map_err(AppError::from_db_function);
+        if access.is_ok() {
+            tx.commit().await?;
+        }
+        Ok::<_, AppError>((access, snapshot))
     }
     .await;
-    match access {
+    let (access, snapshot) = match access {
+        Ok(observed) => observed,
+        Err(_) => return PeerAccess::Unknown.into(),
+    };
+    let access = match access {
         Ok(a) => PeerAccess::Allowed {
             can_write: matches!(a.as_str(), "owner" | "write"),
         },
         Err(AppError::NotFound | AppError::Forbidden) => PeerAccess::Denied,
         Err(AppError::Conflict(_)) => PeerAccess::RealtimeOff,
         Err(_) => PeerAccess::Unknown,
+    };
+    AccessCheck {
+        access,
+        snapshot: Some(snapshot),
     }
 }
 

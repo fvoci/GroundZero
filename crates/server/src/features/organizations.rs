@@ -20,6 +20,7 @@ use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::members::OfferOwnership;
+use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::ids::{OrganizationId, Role, UserId, WorkspaceId};
 
@@ -477,17 +478,17 @@ pub async fn set_settings(
     State(state): State<AppState>,
     ExpectedUser(user): ExpectedUser,
     Path(org): Path<OrganizationId>,
-    Json(patch): Json<Value>,
+    Json(mut patch): Json<Value>,
 ) -> Result<Json<Organization>, AppError> {
-    let input: OrganizationSettingsPatch = serde_json::from_value(patch.clone())
+    let input = OrganizationSettingsPatch::deserialize(&patch)
         .map_err(|_| AppError::BadRequest("invalid organization settings".into()))?;
-    if patch.get("name").is_some()
-        && input
+    if patch.get("name").is_some() {
+        let name = input
             .name
-            .as_ref()
-            .is_none_or(|name| name.trim_matches(' ').is_empty())
-    {
-        return Err(AppError::BadRequest("the organization needs a name".into()));
+            .as_deref()
+            .ok_or_else(|| AppError::BadRequest("the organization needs a name".into()))?;
+        let name = validate_title(name, state.config.limits.max_title_chars, "name")?;
+        patch["name"] = Value::String(name);
     }
     validate_limits(&input.limits)?;
     let mut tx = state.db.begin_as(user).await?;
@@ -540,7 +541,7 @@ pub async fn set_workspace_limits(
     Path(ws): Path<WorkspaceId>,
     Json(patch): Json<Value>,
 ) -> Result<Json<OrganizationLimits>, AppError> {
-    let input: OrganizationLimits = serde_json::from_value(patch.clone())
+    let input = OrganizationLimits::deserialize(&patch)
         .map_err(|_| AppError::BadRequest("invalid workspace limits".into()))?;
     validate_limits(&input)?;
     let mut tx = state.db.begin_as(user).await?;
@@ -754,10 +755,11 @@ pub async fn create(
     CurrentUser(user): CurrentUser,
     Json(input): Json<CreateOrganization>,
 ) -> Result<(StatusCode, Json<CreatedOrganization>), AppError> {
+    let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
     let id = sqlx::query_scalar("SELECT app_create_organization($1, $2, $3, $4)")
         .bind(input.request_id)
-        .bind(input.name)
+        .bind(name)
         .bind(input.first_admin_user_id)
         .bind(new_ids(3))
         .fetch_one(tx.conn())
