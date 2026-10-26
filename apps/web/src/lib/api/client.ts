@@ -1118,6 +1118,8 @@ export interface TaskView {
   title: string;
   description: string;
   status: TaskStatus;
+  /** 서버가 준 상태 이름 그대로(항목 정의, D-116). 화면 열은 `status`(기본 이름이거나 범주로 맞춘 값), 저장 본문은 이 이름이다. 없으면 `status`. */
+  status_name?: string;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1153,7 +1155,8 @@ export interface TaskDetailView extends TaskView {
 export interface TaskInput {
   title: string;
   description: string;
-  status: TaskStatus;
+  /** 상태 이름(항목 정의, D-116). 이 단계 화면은 기본 세 이름만 고르지만, 서버가 준 다른 이름은 그대로 돌려보낸다. */
+  status: string;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1314,7 +1317,7 @@ function parseSchedulePlan(value: Json): SchedulePlanView {
 /**
  * 업무 상태 이름은 항목이 정의한 문자열이다(D-116, 1단계 계약). 이 단계의 화면은 기본 세 이름(`todo`·`in_progress`·`done`)으로
  * 열을 그리므로, 다른 이름이면 서버가 함께 주는 범주(`status_category`: todo·doing·done)의 열로 보인다. 모르는 값으로
- * 목록 전체를 버리지 않는다. 항목별 상태 정의 화면은 3단계 범위다.
+ * 목록 전체를 버리지 않는다. 저장 본문은 원래 이름(`status_name`)을 돌려보낸다(`formOf`). 항목별 상태 정의 화면은 3단계 범위다.
  */
 function taskStatus(value: string, category: unknown): TaskStatus {
   const found = TASK_STATUSES.find((s) => s === value);
@@ -1347,6 +1350,7 @@ export function parseTask(value: Json): TaskView {
     title: str(o, 'title'),
     description: str(o, 'description'),
     status: taskStatus(str(o, 'status'), o.status_category),
+    status_name: str(o, 'status'),
     priority: taskPriority(str(o, 'priority')),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
