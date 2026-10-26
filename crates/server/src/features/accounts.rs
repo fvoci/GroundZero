@@ -206,7 +206,7 @@ fn client_for(
 }
 
 /// 로그인 시작: 제공자 인증 화면으로 보낸다.
-#[utoipa::path(get, path = "/auth/login", params(LoginQuery),
+#[utoipa::path(get, path = "/auth/login", params(LoginQuery), security(),
     responses((status = 303, description = "제공자 로그인 화면으로 이동")), tag = "auth")]
 pub async fn login(
     State(state): State<AppState>,
@@ -367,7 +367,7 @@ pub async fn claim_initial_admin(
 }
 
 /// 제공자 콜백: 상태 확인, 코드 교환, ID 토큰 검증, 세션 발급.
-#[utoipa::path(get, path = "/auth/callback", params(CallbackQuery),
+#[utoipa::path(get, path = "/auth/callback", params(CallbackQuery), security(),
     responses((status = 303, description = "로그인 완료 후 원래 경로로 이동"),
               (status = 400, description = "상태 불일치·만료", body = ErrorBody)), tag = "auth")]
 pub async fn callback(
@@ -476,7 +476,7 @@ pub struct LogoutResponse {
 }
 
 /// 로그아웃: 서버 세션 삭제 + 제공자 로그아웃 URL.
-#[utoipa::path(post, path = "/auth/logout",
+#[utoipa::path(post, path = "/auth/logout", security(),
     responses((status = 200, description = "세션 삭제됨", body = LogoutResponse)), tag = "auth")]
 pub async fn logout(
     State(state): State<AppState>,
@@ -732,7 +732,7 @@ pub struct AuthInfo {
     pub oidc_enabled: bool,
 }
 
-#[utoipa::path(get, path = "/api/auth-info", responses((status = 200, body = AuthInfo)), tag = "auth")]
+#[utoipa::path(get, path = "/api/auth-info", security(), responses((status = 200, body = AuthInfo)), tag = "auth")]
 pub async fn auth_info(State(state): State<AppState>) -> Json<AuthInfo> {
     Json(AuthInfo {
         oidc_enabled: state.oidc.is_some(),

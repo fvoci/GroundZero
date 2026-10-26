@@ -26,7 +26,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/api/checklist-items/{item_id}": {
@@ -8247,7 +8248,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/api/record-kinds": {
@@ -12619,7 +12621,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/auth/login": {
@@ -12647,7 +12650,8 @@
           "303": {
             "description": "제공자 로그인 화면으로 이동"
           }
-        }
+        },
+        "security": []
       }
     },
     "/auth/logout": {
@@ -12668,7 +12672,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/healthz": {
@@ -12699,7 +12704,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     }
   },
@@ -20273,8 +20279,30 @@
           }
         }
       }
+    },
+    "securitySchemes": {
+      "session_http": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "fvoci_session",
+        "description": "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTP일 때 이 쿠키만 받는다. HttpOnly·SameSite=Lax이며 Path=/이다. HTTPS 배포에서는 이 이름을 받지 않는다."
+      },
+      "session_https": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-fvoci_session",
+        "description": "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTPS일 때 이 쿠키만 받는다. HttpOnly·Secure·SameSite=Lax이며 Path=/이다."
+      }
     }
   },
+  "security": [
+    {
+      "session_https": []
+    },
+    {
+      "session_http": []
+    }
+  ],
   "tags": [
     {
       "name": "system",

@@ -156,7 +156,7 @@ pub async fn revoke(
 }
 
 /// 공개 보기(로그인 불필요, 읽기 전용). 철회·만료되면 404. 캐시에 남지 않게 `no-store`.
-#[utoipa::path(get, path = "/api/public/{token}", operation_id = "view_public_document",
+#[utoipa::path(get, path = "/api/public/{token}", operation_id = "view_public_document", security(),
     params(("token" = String, Path)),
     responses((status = 200, body = PublicDocument), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn view(

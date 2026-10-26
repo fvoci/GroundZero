@@ -61,6 +61,7 @@ pub struct Health {
 #[utoipa::path(
     get,
     path = "/healthz",
+    security(),
     responses(
         (status = 200, description = "모두 정상", body = Health),
         (status = 503, description = "데이터베이스 연결 실패", body = Health),
@@ -247,6 +248,8 @@ async fn api_not_found() -> AppError {
 #[derive(Debug, OpenApi)]
 #[openapi(
     info(title = "fvoci API", version = "0.1.0"),
+    modifiers(&SessionSecurity),
+    security(("session_https" = []), ("session_http" = [])),
     paths(
         healthz,
         accounts::login,
@@ -746,6 +749,39 @@ async fn api_not_found() -> AppError {
     )
 )]
 pub struct ApiDoc;
+
+/// Describe the existing session cookies; the configured public URL selects
+/// exactly one cookie name at runtime (see `accounts::session_cookie_name`).
+#[derive(Debug)]
+struct SessionSecurity;
+
+impl utoipa::Modify for SessionSecurity {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+
+        let components = openapi.components.get_or_insert_with(Default::default);
+        for (scheme, cookie, description) in [
+            (
+                "session_https",
+                accounts::SECURE_SESSION_COOKIE,
+                "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTPS일 때 이 쿠키만 받는다. HttpOnly·Secure·SameSite=Lax이며 Path=/이다.",
+            ),
+            (
+                "session_http",
+                accounts::SESSION_COOKIE,
+                "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTP일 때 이 쿠키만 받는다. HttpOnly·SameSite=Lax이며 Path=/이다. HTTPS 배포에서는 이 이름을 받지 않는다.",
+            ),
+        ] {
+            components.add_security_scheme(
+                scheme,
+                SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                    cookie,
+                    description,
+                ))),
+            );
+        }
+    }
+}
 
 /// 라우터를 조립한다.
 /// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
@@ -1267,6 +1303,53 @@ mod tests {
     use utoipa::OpenApi;
 
     use super::ApiDoc;
+
+    #[test]
+    fn session_authentication_is_declared_for_protected_operations() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+        let required = serde_json::json!([{ "session_https": [] }, { "session_http": [] }]);
+        assert_eq!(doc["security"], required);
+        for (scheme, name) in [
+            (
+                "session_https",
+                crate::features::accounts::SECURE_SESSION_COOKIE,
+            ),
+            ("session_http", crate::features::accounts::SESSION_COOKIE),
+        ] {
+            let definition = &doc["components"]["securitySchemes"][scheme];
+            assert_eq!(definition["type"], "apiKey");
+            assert_eq!(definition["in"], "cookie");
+            assert_eq!(definition["name"], name);
+        }
+        // These handlers do not require an existing application session. The
+        // callback still validates its login state, and public links their token.
+        let public = HashSet::from([
+            ("/healthz", "get"),
+            ("/auth/login", "get"),
+            ("/auth/callback", "get"),
+            ("/auth/logout", "post"),
+            ("/api/auth-info", "get"),
+            ("/api/public/{token}", "get"),
+        ]);
+        let mut seen_public = HashSet::new();
+        for (path, item) in doc["paths"].as_object().unwrap() {
+            for method in [
+                "get", "put", "post", "delete", "patch", "head", "options", "trace",
+            ] {
+                let Some(operation) = item.get(method) else {
+                    continue;
+                };
+                let effective = operation.get("security").unwrap_or(&doc["security"]);
+                if public.contains(&(path.as_str(), method)) {
+                    assert_eq!(*effective, serde_json::json!([]), "{method} {path}");
+                    seen_public.insert((path.as_str(), method));
+                } else {
+                    assert_eq!(*effective, required, "{method} {path}");
+                }
+            }
+        }
+        assert_eq!(seen_public, public);
+    }
 
     /// 핸들러 이름이 같으면(예: 두 모듈의 `list`) operationId가 겹쳐 생성 타입이 깨진다. 계약에서 미리 막는다.
     #[test]
