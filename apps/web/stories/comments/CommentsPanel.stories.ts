@@ -4,6 +4,8 @@ import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import type { CommentView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
+import { formDraftTabKey } from '$lib/features/common/form-draft';
+import { me } from '$lib/me.svelte';
 
 import { comment, THREAD } from '../fixtures/comments';
 
@@ -14,6 +16,12 @@ const meta = {
   title: 'Comments/CommentsPanel',
   component: CommentsPanel,
   args: { target: { kind: 'document', id: 'doc-0001' }, canWrite: true },
+  beforeEach: () => {
+    me.userId = 'story-comments';
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('fvoci:story-comments:')) localStorage.removeItem(key);
+    }
+  },
 } satisfies Meta<typeof CommentsPanel>;
 
 export default meta;
@@ -128,5 +136,40 @@ export const BrandDark: Story = {
 };
 export const BrandNarrowLargeText: Story = {
   ...Threads,
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+
+export const RestoreOffer: Story = {
+  beforeEach: () => {
+    spyOn(api, 'comments').mockResolvedValue([]);
+    const key = formDraftTabKey('comment-compose:document:doc-0001:new');
+    if (key === undefined) throw new Error('missing story user');
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: '2026-10-26T12:00:00Z',
+        input: {
+          text: '검토하면서 남긴 댓글 초안입니다. 새로고침 뒤 사용자가 되살릴 수 있습니다.',
+          request: null,
+        },
+      }),
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByTestId('comment-draft-offer')).toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: NEW_BOX })).toHaveValue('');
+  },
+};
+export const RestoreLight: Story = {
+  ...RestoreOffer,
+  globals: { theme: 'light', viewport: { value: 'desktop' } },
+};
+export const RestoreDark: Story = {
+  ...RestoreOffer,
+  globals: { theme: 'dark', viewport: { value: 'desktop' } },
+};
+export const RestoreNarrowLargeText: Story = {
+  ...RestoreOffer,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

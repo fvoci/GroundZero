@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
 import { parseMarkdownChecklist } from '$lib/features/checklists/checklist-item';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 function handlers() {
   return {
@@ -18,6 +19,12 @@ function handlers() {
 describe('ChecklistForm (D-30, editor-less screens)', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    localStorage.clear();
+  });
+  afterEach(() => {
+    me.userId = '';
+    localStorage.clear();
   });
 
   it('adds an item and reuses the request id when the same text is retried', async () => {
@@ -44,7 +51,7 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
       ...h,
     });
     await fireEvent.click(screen.getByRole('checkbox', { name: '미완료 항목: 초안 작성' }));
-    expect(h.ontoggle).toHaveBeenCalledWith('a', true);
+    expect(h.ontoggle).toHaveBeenCalledWith('a', true, 'user-a');
   });
 
   // 감사 9번: 붙여넣기 확인의 응답을 잃은 뒤 줄을 고쳐 다시 보내면 새 요청 id여야 한다(같은 id면 서버가 처음 것을
@@ -85,7 +92,7 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     const input = screen.getByLabelText('초안 작성의 새 문구');
     await fireEvent.input(input, { target: { value: '  초안 다시 작성 ' } });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    expect(h.onrename).toHaveBeenCalledWith('a', '초안 다시 작성');
+    expect(h.onrename).toHaveBeenCalledWith('a', '초안 다시 작성', 'user-a');
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.getByLabelText('초안 작성의 새 문구')).toHaveValue('  초안 다시 작성 ');
 
