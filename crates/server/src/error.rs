@@ -63,6 +63,9 @@ pub enum AppError {
     /// 새 요청 id로 보내라는 뜻이고, 항목을 볼 수 없는 404와 구분된다. 아무것도 바꾸지 않고 409 `task_deleted`.
     #[error("task deleted")]
     TaskDeleted,
+    /// 같은 대상의 타이머가 이미 실행 중이며 이어가기/새 기록 선택이 필요하다.
+    #[error("a timer for this target is already running")]
+    TimerRunning,
     /// 파일 저장소(로컬·S3) 실패.
     #[error("storage error: {0}")]
     Storage(String),
@@ -83,6 +86,9 @@ impl AppError {
             Some("P0002") => Self::NotFound,
             Some("42501") => Self::Forbidden,
             Some("22023") => Self::BadRequest(message),
+            Some("55000") if message == "a timer for this target is already running" => {
+                Self::TimerRunning
+            }
             Some("55000") => Self::Conflict(message),
             Some("FV004") => Self::TaskDeleted,
             // 동시에 같은 업무를 바꾸다 부딪힌 경우(교착 감지·다시 시도 요청): 아무것도 바뀌지 않았으니 다시 보내면 된다.
@@ -118,6 +124,7 @@ impl AppError {
             Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
             Self::AccountChanged => (StatusCode::CONFLICT, "account_changed"),
             Self::TaskDeleted => (StatusCode::CONFLICT, "task_deleted"),
+            Self::TimerRunning => (StatusCode::CONFLICT, "timer_running"),
             Self::Oidc(_) => (StatusCode::BAD_GATEWAY, "oidc_error"),
             Self::Storage(_) => (StatusCode::BAD_GATEWAY, "storage_error"),
             Self::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream_error"),
@@ -161,6 +168,7 @@ impl IntoResponse for AppError {
             Self::TaskDeleted => {
                 "the task made by this request was deleted; send a new request id".to_owned()
             }
+            Self::TimerRunning => self.to_string(),
             _ => status.canonical_reason().unwrap_or("error").to_owned(),
         };
         let body = ErrorBody {

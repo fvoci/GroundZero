@@ -122,7 +122,7 @@ async fn create_task_needs_seven_ids_for_two_assignees() {
     let a = w.member("member").await;
     let b = w.member("member").await;
     let result = boundary(&w,
-        "SELECT fvoci.app_create_task($1,$2,'bounded task',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3,$4],false,@ids) AS id",
+        "SELECT fvoci.app_create_task($1,$2,'bounded task',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3,$4],false,@ids) AS id",
         &[w.item, Uuid::now_v7(), a.id.0, b.id.0], 7).await;
     let task = id(&result[0]);
     assert_eq!(
@@ -222,7 +222,7 @@ async fn member_fixture(w: &World) -> common::TestUser {
         w.share(w.doc().await, &member, "read").await;
     }
     made(&w.state,&w.owner,
-        "SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",
+        "SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",
         &[w.item,Uuid::now_v7(),member.id.0]).await;
     member
 }

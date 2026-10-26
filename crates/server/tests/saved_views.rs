@@ -41,7 +41,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
     let uri = format!("/api/items/{item_id}/views");
 
     let config =
-        json!({ "view": "list", "filter": { "assignee": "me", "status": "todo" }, "sort": "due" });
+        json!({ "view": "list", "filter": { "assignee": "me", "status": "할 일" }, "sort": "due" });
     let saved = send(
         &app,
         Method::POST,

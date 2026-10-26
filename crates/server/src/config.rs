@@ -129,9 +129,9 @@ pub struct Config {
     pub role: RunRole,
     /// 백그라운드 작업 확인 간격. `FVOCI_WORKER_INTERVAL_SECS`, 기본 60, 5~3600.
     pub worker_interval: Duration,
-    /// 감사 기록 보존 일수. 미설정이면 서버 기본 보존 기간이 없다.
+    /// 감사 기록 보존 일수. 환경 변수 미설정 시 730일.
     pub audit_retention_days: Option<i32>,
-    /// 활동 기록 보존 일수. 미설정이면 서버 기본 보존 기간이 없다.
+    /// 활동 기록 보존 일수. 환경 변수 미설정 시 365일.
     pub activity_retention_days: Option<i32>,
     pub search: Option<SearchConfig>,
     /// 파일 저장소.
@@ -378,11 +378,13 @@ impl Config {
             audit_retention_days: retention_days(
                 lookup("FVOCI_AUDIT_RETENTION_DAYS"),
                 "FVOCI_AUDIT_RETENTION_DAYS",
-            )?,
+            )?
+            .or(Some(730)),
             activity_retention_days: retention_days(
                 lookup("FVOCI_ACTIVITY_RETENTION_DAYS"),
                 "FVOCI_ACTIVITY_RETENTION_DAYS",
-            )?,
+            )?
+            .or(Some(365)),
             search,
             storage,
             files,
@@ -465,8 +467,8 @@ mod tests {
     #[test]
     fn retention_is_optional_and_bounded() {
         let cfg = Config::from_lookup(with_db(&[])).unwrap();
-        assert_eq!(cfg.audit_retention_days, None);
-        assert_eq!(cfg.activity_retention_days, None);
+        assert_eq!(cfg.audit_retention_days, Some(730));
+        assert_eq!(cfg.activity_retention_days, Some(365));
         for key in [
             "FVOCI_AUDIT_RETENTION_DAYS",
             "FVOCI_ACTIVITY_RETENTION_DAYS",

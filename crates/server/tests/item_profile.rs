@@ -174,7 +174,7 @@ async fn private_items_open_to_their_members_only() {
     );
     // 업무 담당으로 지정.
     let assigned = send(&app, Method::PUT, &format!("/api/tasks/{}", task.json["id"].as_str().unwrap()), Some(&owner), Some(json!({
-        "base_version": task.json["version"], "title": "함께 할 일", "description": "", "status": "todo", "priority": "none",
+        "base_version": task.json["version"], "title": "함께 할 일", "description": "", "status": "할 일", "priority": "none",
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [mate.id.0] }))).await;
     assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);
@@ -418,7 +418,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     let b = task("구현", None).await;
     let b_id = b["id"].as_str().unwrap().to_owned();
     let done = send(&app, Method::PUT, &format!("/api/tasks/{a_id}"), Some(&writer), Some(json!({
-        "base_version": a["version"], "title": "설계", "description": "", "status": "done", "priority": "high",
+        "base_version": a["version"], "title": "설계", "description": "", "status": "완료", "priority": "high",
         "start_date": null, "due_date": "2026-11-01", "estimate_minutes": 120, "tags": ["ux"], "milestone": false,
         "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
@@ -561,7 +561,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         na["reference"].as_str().unwrap().starts_with("TWO-"),
         "{na:?}"
     );
-    assert_eq!(na["status"], "todo");
+    assert_eq!(na["status"], "할 일");
     // D-116: 새로 시작하는 사본은 상태 이름과 범주를 함께 초기화한다.
     assert_eq!(na["status_category"], "todo");
     assert!(na["due_date"].is_null());
@@ -617,7 +617,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         .find(|t| t["title"] == "설계")
         .unwrap()
         .clone();
-    assert_eq!(design["status"], "done");
+    assert_eq!(design["status"], "완료");
     assert_eq!(design["status_category"], "done");
     assert_eq!(design["due_date"], "2026-11-01");
 
@@ -741,7 +741,7 @@ async fn group_changes_and_leaving_end_item_roles() {
         assert_eq!(p.status, StatusCode::NO_CONTENT, "{:?}", p.json);
         let t = send(&app, Method::GET, &task_uri, Some(&owner), None).await;
         let a = send(&app, Method::PUT, &task_uri, Some(&owner), Some(json!({
-            "base_version": t.json["version"], "title": "할 일", "description": "", "status": "todo",
+            "base_version": t.json["version"], "title": "할 일", "description": "", "status": "할 일",
             "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [],
             "milestone": false, "assignee_ids": [grouped.id.0] }))).await;
         assert_eq!(a.status, StatusCode::OK, "{:?}", a.json);

@@ -18,7 +18,7 @@ async fn activity_records_creation_comments_status_moves_and_assignments() {
     let event = made(&w.state,&w.owner,"SELECT fvoci.app_create_event($1,$2,'meeting','event','',true,current_date,current_date,NULL,NULL,'UTC',@ids) AS id",&[w.item,Uuid::now_v7()]).await;
     let comment = made(&w.state, &member, COMMENT, &[Uuid::now_v7(), task]).await;
     let update = UPDATE_TASK
-        .replace("'todo'", "'in_progress'")
+        .replace("'할 일'", "'진행 중'")
         .replace("'{}','{}'", "'{}',ARRAY[$2]");
     rows(&w.state, &w.owner, &update, &[task, member.id.0]).await;
     rows(
@@ -26,14 +26,14 @@ async fn activity_records_creation_comments_status_moves_and_assignments() {
         &w.owner,
         &UPDATE_TASK
             .replace("$1,1,", "$1,2,")
-            .replace("'todo'", "'in_progress'"),
+            .replace("'할 일'", "'진행 중'"),
         &[task],
     )
     .await;
     rows(
         &w.state,
         &w.owner,
-        "SELECT fvoci.app_move_task($1,'done',NULL,NULL,@ids)",
+        "SELECT fvoci.app_move_task($1,'완료',NULL,NULL,@ids)",
         &[task],
     )
     .await;
@@ -72,11 +72,11 @@ async fn activity_records_creation_comments_status_moves_and_assignments() {
     );
     assert_eq!(
         get("status")["detail"],
-        serde_json::json!({"from":"todo","to":"in_progress","from_category":"todo","to_category":"doing"})
+        serde_json::json!({"from":"할 일","to":"진행 중","from_category":"todo","to_category":"doing"})
     );
     assert_eq!(
         get("kanban_move")["detail"],
-        serde_json::json!({"from":"in_progress","to":"done","before":null})
+        serde_json::json!({"from":"진행 중","to":"완료","before":null})
     );
     for kind in ["assign", "unassign"] {
         assert_eq!(get(kind)["detail"]["user"], member.id.0.to_string());
@@ -99,7 +99,7 @@ async fn activity_records_creation_comments_status_moves_and_assignments() {
     assert_eq!(moved["target_kind"], "document");
     assert_eq!(moved["detail"]["from_workspace"], w.ws.to_string());
     assert_eq!(moved["detail"]["from_item"], w.item.to_string());
-    let assigned = made(&w.state,&w.owner,"SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[w.item,Uuid::now_v7(),member.id.0]).await;
+    let assigned = made(&w.state,&w.owner,"SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[w.item,Uuid::now_v7(),member.id.0]).await;
     rows(
         &w.state,
         &w.owner,
@@ -203,12 +203,13 @@ async fn audit_retention_handles_single_equal_conflicting_and_absent_settings() 
 }
 
 async fn retention(table: &str, setting: &str, purge: &str) {
+    // 개정 2026-10-26(⑥, D-124): 조직 값이 상한이고 실효값은 최솟값이다(org 8·ws 7 → 7). 둘 다 없으면 서버 기본값.
     // 각 삭제를 앱 역할 트랜잭션 안에서 관찰하고 롤백: 동시에 실행되는 다른 보존 시험을 건드리지 않는다.
     for (org, ws, default, deleted) in [
         ("7", "null", "NULL", true),
         ("null", "7", "NULL", true),
         ("7", "7", "NULL", true),
-        ("7", "8", "NULL", false),
+        ("8", "7", "NULL", true),
         ("null", "null", "NULL", false),
         ("null", "null", "7", true),
     ] {
@@ -267,4 +268,35 @@ async fn retention(table: &str, setting: &str, purge: &str) {
         );
         tx.rollback().await.unwrap();
     }
+    // 워크스페이스 값은 조직 값을 넘지 못한다(22023 → 400). 조직 값이 없으면 제한이 없다.
+    let w = World::new().await;
+    rows(
+        &w.state,
+        &w.owner,
+        &format!("SELECT fvoci.app_set_workspace_limits($1,'{{\"{setting}\":30}}',@ids)"),
+        &[w.ws],
+    )
+    .await;
+    rows(
+        &w.state,
+        &w.owner,
+        &format!("SELECT fvoci.app_set_organization_settings($1,'{{\"{setting}\":7}}',@ids)"),
+        &[w.org],
+    )
+    .await;
+    denied(
+        &w.state,
+        &w.owner,
+        &format!("SELECT fvoci.app_set_workspace_limits($1,'{{\"{setting}\":8}}',@ids)"),
+        &[w.ws],
+        "22023",
+    )
+    .await;
+    rows(
+        &w.state,
+        &w.owner,
+        &format!("SELECT fvoci.app_set_workspace_limits($1,'{{\"{setting}\":7}}',@ids)"),
+        &[w.ws],
+    )
+    .await;
 }

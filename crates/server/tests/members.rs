@@ -1137,11 +1137,10 @@ async fn only_the_owner_cancels_an_ownership_offer() {
     );
 }
 
-/// 2단계에서 가져온 조직 초대 경로(PR #139 "1단계로 가져온 2단계 구현"). 워크스페이스 초대는 조직 멤버만 받아들일 수
-/// 있으므로(D-114) 조직 초대가 먼저다: 받은 초대 목록에 `kind: organization`·workspace null로 보이고, 수락 응답도
-/// `kind: organization`이다. 조직 관리자가 아니면 만들 수 없다.
+/// 조직·워크스페이스 초대를 함께 표시하고, 공간 초대를 먼저 수락하면 조직에도 가입한다(⑬).
+/// 이후 조직 초대를 수락해도 기존 멤버 역할을 유지한다. 조직 초대 생성은 관리자만 할 수 있다.
 #[tokio::test]
-async fn organization_invitation_over_http_admits_the_member_before_the_workspace_invitation() {
+async fn workspace_invitation_over_http_joins_the_organization_before_its_pending_invitation() {
     let state = common::state();
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
@@ -1151,11 +1150,6 @@ async fn organization_invitation_over_http_admits_the_member_before_the_workspac
     let newcomer = login_with_email(&state, "newcomer", &email, true).await;
     let ws_inv = invite(&app, &owner, &ws, &email, "member").await;
     let ws_inv_id = ws_inv["id"].as_str().unwrap();
-    assert_eq!(
-        accept(&app, &newcomer, ws_inv_id).await,
-        StatusCode::CONFLICT,
-        "a workspace invitation cannot be accepted before organization membership"
-    );
 
     let org_path = format!("/api/organizations/{org}/invitations");
     let input = json!({ "email": email, "role": "member" });
@@ -1202,6 +1196,16 @@ async fn organization_invitation_over_http_admits_the_member_before_the_workspac
     assert_eq!(ws_row["kind"], "workspace");
     assert_eq!(ws_row["workspace_id"], ws.as_str());
 
+    assert_eq!(accept(&app, &newcomer, ws_inv_id).await, StatusCode::OK);
+    let mut tx = state.db.begin_as(newcomer.id).await.unwrap();
+    let role: String = sqlx::query_scalar("SELECT role FROM app_my_organizations() WHERE id = $1")
+        .bind(org)
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(role, "member", "공간 초대 수락이 조직 멤버 가입을 포함한다");
+
     let r = send(
         &app,
         Method::POST,
@@ -1214,5 +1218,8 @@ async fn organization_invitation_over_http_admits_the_member_before_the_workspac
     assert_eq!(r.json["kind"], "organization");
     assert_eq!(r.json["organization_id"], json!(org));
     assert!(r.json["workspace_id"].is_null());
-    assert_eq!(accept(&app, &newcomer, ws_inv_id).await, StatusCode::OK);
+    assert_eq!(
+        accept(&app, &newcomer, ws_inv_id).await,
+        StatusCode::CONFLICT
+    );
 }

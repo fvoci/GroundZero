@@ -1,7 +1,7 @@
 //! 조직(D-111·D-112): 조직·서버 관리 API와 개인 화면의 "현재 조직" 문맥.
 //!
-//! 현재 조직은 서버에 저장하지 않는다. 화면의 조직 › 워크스페이스 전환기가 고른 조직을 요청마다 `organization_id`
-//! 질의로 보내고(구현 해석, 사용자 결정 밖), 서버는 그 조직의 멤버인지만 확인한다(`app_access('organization', …)`).
+//! 마지막으로 고른 조직은 개인 설정에 저장한다. 화면의 조직 › 워크스페이스 전환기가 고른 조직을 요청마다
+//! `organization_id` 질의로 보내고, 서버는 그 조직의 멤버인지만 확인한다(`app_access('organization', …)`).
 //! 조직 관리(멤버·설정·한도·공개 링크 토글·관리자로 참여)와 서버 관리자 API는 이 모듈에 이어서 둔다. 모두 정의자 함수가
 //! 권한·불변식·감사 기록을 처리하고 여기서는 입력 검증과 응답 변환만 한다.
 
@@ -19,6 +19,7 @@ use crate::access::{self, Kind};
 use crate::db::{UserTx, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
+use crate::features::members::OfferOwnership;
 use crate::http::AppState;
 use crate::ids::{OrganizationId, Role, UserId, WorkspaceId};
 
@@ -71,7 +72,8 @@ pub struct OrganizationLimits {
     pub max_storage_bytes: Option<i64>,
     #[schema(minimum = 1)]
     pub max_concurrent_uploads: Option<i32>,
-    /// 열만 두고 아직 적용하지 않는다(사용자 결정 대기: 적용 대상·채널·초과 처리).
+    /// 이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.
+    /// 현재 외부 채널은 구현되어 있지 않다.
     #[schema(minimum = 1)]
     pub notification_rate_per_hour: Option<i32>,
     #[schema(minimum = 1, maximum = 3650)]
@@ -630,6 +632,22 @@ pub async fn join_as_admin(
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     // 내용에 접근할 필요 없이 관리자 메타데이터 함수로 URL의 부모·자식 관계를 확인한다.
+    require_organization_workspace(&mut tx, org, ws).await?;
+    sqlx::query("SELECT app_join_workspace_as_admin($1, $2)")
+        .bind(ws)
+        .bind(new_ids(2))
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn require_organization_workspace(
+    tx: &mut UserTx,
+    org: OrganizationId,
+    ws: WorkspaceId,
+) -> Result<(), AppError> {
     let belongs: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM app_organization_workspaces($1) WHERE id = $2)",
     )
@@ -641,9 +659,49 @@ pub async fn join_as_admin(
     if !belongs {
         return Err(AppError::NotFound);
     }
-    sqlx::query("SELECT app_join_workspace_as_admin($1, $2)")
+    Ok(())
+}
+
+/// 조직 관리자가 보존 기간 안의 삭제된 워크스페이스를 복원한다.
+#[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore", operation_id = "restore_organization_workspace",
+    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "organizations")]
+pub async fn restore_workspace(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    require_organization_workspace(&mut tx, org, ws).await?;
+    sqlx::query("SELECT app_restore_workspace($1, $2)")
         .bind(ws)
         .bind(new_ids(2))
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// 조직 관리자가 워크스페이스 멤버에게 소유권 인계를 제안한다.
+#[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer", operation_id = "offer_organization_workspace_ownership",
+    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    request_body = OfferOwnership,
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody)), tag = "organizations")]
+pub async fn offer_workspace_ownership(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
+    Json(input): Json<OfferOwnership>,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    require_organization_workspace(&mut tx, org, ws).await?;
+    sqlx::query("SELECT app_offer_ownership($1, $2, $3)")
+        .bind(ws)
+        .bind(input.to_user)
+        .bind(new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

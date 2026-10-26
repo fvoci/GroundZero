@@ -25,30 +25,30 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
   const title = `배포 점검표 정리 ${tag}`;
   const task = str(await api.createTask(item, title), 'id');
   await openBoard(page, ws, item);
-  await expect(card(lane(page, 'todo'), title)).toBeVisible();
+  await expect(card(lane(page, '할 일'), title)).toBeVisible();
 
   // 메뉴로 옮기기.
   await page.getByRole('button', { name: `${title} 옮기기` }).click();
-  await page.getByRole('menuitem', { name: 'in_progress(으)로 옮기기' }).click();
-  await expect(card(lane(page, 'in_progress'), title)).toBeVisible();
-  await expect.poll(() => serverStatus(api, task)).toBe('in_progress');
+  await page.getByRole('menuitem', { name: '진행 중(으)로 옮기기' }).click();
+  await expect(card(lane(page, '진행 중'), title)).toBeVisible();
+  await expect.poll(() => serverStatus(api, task)).toBe('진행 중');
 
   // 되돌리기.
   await page.getByRole('button', { name: `${title} 이동 되돌리기` }).click();
-  await expect(card(lane(page, 'todo'), title)).toBeVisible();
-  await expect.poll(() => serverStatus(api, task)).toBe('todo');
+  await expect(card(lane(page, '할 일'), title)).toBeVisible();
+  await expect.poll(() => serverStatus(api, task)).toBe('할 일');
 
   // 키보드로 옮기기: 카드에 초점을 둔 채 Alt+오른쪽.
   await card(page, title).focus();
   await page.keyboard.press('Alt+ArrowRight');
-  await expect(card(lane(page, 'in_progress'), title)).toBeVisible();
-  await expect.poll(() => serverStatus(api, task)).toBe('in_progress');
+  await expect(card(lane(page, '진행 중'), title)).toBeVisible();
+  await expect.poll(() => serverStatus(api, task)).toBe('진행 중');
   await expect(card(page, title)).toBeFocused();
 
   // 새로 읽어도 서버의 자리 그대로다.
   await page.reload();
-  await expect(card(lane(page, 'in_progress'), title)).toBeVisible();
-  await expect(card(lane(page, 'todo'), title)).toHaveCount(0);
+  await expect(card(lane(page, '진행 중'), title)).toBeVisible();
+  await expect(card(lane(page, '할 일'), title)).toHaveCount(0);
 });
 
 test('keeps unsaved task input when closing is cancelled, and returns focus', async ({

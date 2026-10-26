@@ -650,7 +650,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let report = new_task(format!("{tok} 보고서")).await;
     new_task(format!("{tok} 기획")).await;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", report["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "done",
+        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "완료",
         "priority": "none", "start_date": null, "due_date": "2026-11-05", "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [admin.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -1815,7 +1815,7 @@ async fn date_only_values_keep_their_day_and_timed_events_follow_the_viewer() {
     .await
     .json;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": due, "description": "", "status": "todo",
+        "base_version": task["version"], "title": due, "description": "", "status": "할 일",
         "priority": "none", "start_date": null, "due_date": "2026-10-21", "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);

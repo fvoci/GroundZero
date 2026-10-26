@@ -231,6 +231,25 @@ pub async fn current(
     Ok(Json(row.map(to_entry).transpose()?))
 }
 
+/// 같은 대상에서 실행 중인 타이머를 다시 시작할 때의 선택.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TimerStartMode {
+    /// 실행 중인 기록을 그대로 이어간다.
+    Continue,
+    /// 실행 중인 기록을 끝내고 새 기록을 시작한다.
+    New,
+}
+
+impl TimerStartMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Continue => "continue",
+            Self::New => "new",
+        }
+    }
+}
+
 /// 타이머 시작.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct StartTimer {
@@ -239,6 +258,8 @@ pub struct StartTimer {
     pub kind: TimeKind,
     pub memo: String,
     pub target: Option<TargetInput>,
+    /// 같은 대상이 실행 중이면 필수. 생략 시 409 `timer_running`.
+    pub mode: Option<TimerStartMode>,
 }
 
 /// 새 타이머와 자동으로 끝낸 이전 기록.
@@ -250,9 +271,10 @@ pub struct StartedTimer {
     pub stopped_entry_id: Option<Uuid>,
 }
 
-/// 타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다.
+/// 타이머 시작. 다른 대상의 기록은 자동으로 끝내며 같은 대상은 명시한 선택을 따른다.
 #[utoipa::path(post, path = "/api/me/timer", operation_id = "start_timer", request_body = StartTimer,
-    responses((status = 201, body = StartedTimer), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "time")]
+    responses((status = 201, body = StartedTimer), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, description = "같은 대상 실행 중: timer_running, 그 밖의 상태 충돌: invalid_state", body = ErrorBody)), tag = "time")]
 pub async fn start(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -263,7 +285,7 @@ pub async fn start(
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let (id, stopped_entry_id): (Uuid, Option<Uuid>) = sqlx::query_as(
-            "SELECT entry_id, stopped_entry_id FROM app_start_timer($1, $2, $3, $4, $5, $6)",
+            "SELECT entry_id, stopped_entry_id FROM app_start_timer($1, $2, $3, $4, $5, $6, $7)",
         )
         .bind(input.request_id)
         .bind(input.kind.as_str())
@@ -271,6 +293,7 @@ pub async fn start(
         .bind(target_kind)
         .bind(target_id)
         .bind(new_ids(1))
+        .bind(input.mode.map(TimerStartMode::as_str))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

@@ -271,7 +271,7 @@ async fn last_admin_owner_guard_and_removal_preview_match_cleanup() {
     let note = w.note().await;
     let team_share = w.share(doc, &member, "read").await;
     let note_share = w.share(note, &member, "write").await;
-    let task = made(&w.state,&w.owner,"SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','todo','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[w.item,Uuid::now_v7(),member.id.0]).await;
+    let task = made(&w.state,&w.owner,"SELECT fvoci.app_create_task($1,$2,'assigned',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",&[w.item,Uuid::now_v7(),member.id.0]).await;
     let path = format!("{org}/members/{}", member.id.0);
     let preview = format!("{path}/removal-preview");
     let before = json!({"workspaces":2,"shares":2,"assignments":1});
@@ -409,18 +409,9 @@ async fn organization_and_workspace_invitations_have_typed_context_and_responses
         )
         .await;
     }
-    expect(
-        &app,
-        Method::POST,
-        &format!("/api/invitations/{ws_id}/accept"),
-        &invitee,
-        None,
-        409,
-    )
-    .await;
     for (id, kind, ws) in [
-        (org_id, "organization", Value::Null),
         (ws_id, "workspace", json!(w.ws)),
+        (org_id, "organization", Value::Null),
     ] {
         let accepted = expect(
             &app,
@@ -435,6 +426,7 @@ async fn organization_and_workspace_invitations_have_typed_context_and_responses
             accepted,
             json!({"kind":kind,"organization_id":w.org,"workspace_id":ws})
         );
+        assert_eq!(one(&w.state, &invitee, "SELECT role FROM fvoci.organization_members WHERE organization_id=$1 AND user_id=$2", &[w.org, invitee.id.0]).await["role"], "member");
         expect(
             &app,
             Method::POST,
@@ -445,6 +437,7 @@ async fn organization_and_workspace_invitations_have_typed_context_and_responses
         )
         .await;
     }
+    assert_eq!(one(&w.state, &w.owner, "SELECT count(*)::integer AS n FROM fvoci.audit_log WHERE organization_id=$1 AND target_id=$2 AND detail->>'via'='workspace_invitation'", &[w.org, invitee.id.0]).await["n"], 1);
     assert_eq!(
         expect(&app, Method::GET, "/api/invitations", &invitee, None, 200).await,
         json!([])
@@ -963,4 +956,116 @@ async fn organization_timestamps_are_rfc3339_and_empty_tz_means_default() {
         400,
     )
     .await;
+}
+
+#[tokio::test]
+async fn organization_admin_restores_and_offers_ownership_without_joining() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let admin = login(&w.state, "restore organization admin").await;
+    common::join_organization(w.org, &admin, "admin").await;
+    let member = login(&w.state, "ordinary organization member").await;
+    common::join_organization(w.org, &member, "member").await;
+    let outsider = login(&w.state, "outside organization").await;
+    let recipient = w.member("member").await;
+    let foreign = World::new().await;
+    common::join_organization(foreign.org, &admin, "admin").await;
+    let base = format!("/api/organizations/{}/workspaces/{}", w.org, w.ws);
+    let restore = format!("{base}/restore");
+    let offer = format!("{base}/ownership-offer");
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_delete_workspace($1,'SQL workspace',@ids)",
+        &[w.ws],
+    )
+    .await;
+    for (user, status) in [(&member, 403), (&outsider, 404)] {
+        expect(&app, Method::POST, &restore, user, None, status).await;
+    }
+    expect(
+        &app,
+        Method::POST,
+        &format!(
+            "/api/organizations/{}/workspaces/{}/restore",
+            foreign.org, w.ws
+        ),
+        &admin,
+        None,
+        404,
+    )
+    .await;
+    expect(&app, Method::POST, &restore, &admin, None, 204).await;
+    expect(&app, Method::POST, &restore, &admin, None, 404).await;
+    assert!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT deleted_at FROM fvoci.workspaces WHERE id=$1",
+            &[w.ws]
+        )
+        .await["deleted_at"]
+            .is_null()
+    );
+    let body = json!({"to_user":recipient.id});
+    for (user, status) in [(&member, 403), (&outsider, 404)] {
+        expect(&app, Method::POST, &offer, user, Some(body.clone()), status).await;
+    }
+    expect(
+        &app,
+        Method::POST,
+        &format!(
+            "/api/organizations/{}/workspaces/{}/ownership-offer",
+            foreign.org, w.ws
+        ),
+        &admin,
+        Some(body.clone()),
+        404,
+    )
+    .await;
+    expect(
+        &app,
+        Method::POST,
+        &offer,
+        &admin,
+        Some(json!({"to_user":outsider.id})),
+        400,
+    )
+    .await;
+    expect(&app, Method::POST, &offer, &admin, Some(body), 204).await;
+    assert_eq!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT to_user FROM fvoci.ownership_offers WHERE workspace_id=$1",
+            &[w.ws]
+        )
+        .await["to_user"],
+        json!(recipient.id)
+    );
+    assert_eq!(one(&w.state, &w.owner, "SELECT count(*)::integer AS n FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2", &[w.ws, admin.id.0]).await["n"], 0, "metadata operations must not join the administrator");
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_cancel_ownership_offer($1,@ids)",
+        &[w.ws],
+    )
+    .await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_delete_workspace($1,'SQL workspace',@ids)",
+        &[w.ws],
+    )
+    .await;
+    fixture(
+        "UPDATE fvoci.workspaces SET deleted_at = now() - interval '3660 days' WHERE id=$1",
+        &[w.ws],
+    )
+    .await;
+    let expired = expect(&app, Method::POST, &restore, &admin, None, 409).await;
+    assert_eq!(
+        expired["error"], "invalid_state",
+        "other SQLSTATE 55000 errors retain their code"
+    );
 }
