@@ -1,6 +1,9 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "common_save": "Save",
+  "common_draft_available": "There is unsaved input. Restore it?",
+  "common_draft_restore": "Restore input",
+  "common_draft_discard": "Discard saved input",
   "common_cancel": "Cancel",
   "common_items_count": [
     {
