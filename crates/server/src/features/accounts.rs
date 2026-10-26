@@ -35,7 +35,7 @@ use crate::config::{Config, OidcConfig};
 use crate::db::{Db, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
-use crate::ids::UserId;
+use crate::ids::{OrganizationId, UserId};
 use uuid::Uuid;
 
 /// http 공개 원점(개발·테스트)의 세션 쿠키 이름.
@@ -614,6 +614,8 @@ pub struct Me {
     pub hour_cycle: String,
     /// 화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`.
     pub theme: String,
+    /// 마지막으로 고른 조직. 미설정이면 null이며 현재 소속 여부는 조직 목록에서 확인한다.
+    pub last_organization_id: Option<OrganizationId>,
     /// 서버 입력 상한. 강의 회차 제목의 고정 한도(300자)는 이 설정과 별개다.
     pub limits: InputLimits,
 }
@@ -634,11 +636,12 @@ pub async fn me(
         String,
         String,
         String,
+        Option<OrganizationId>,
     );
-    let (display_name, email, time_zone, locale, week_start, hour_cycle, theme): MeRow =
+    let (display_name, email, time_zone, locale, week_start, hour_cycle, theme, last_organization_id): MeRow =
         sqlx::query_as(
             "SELECT u.display_name, u.email, coalesce(s.time_zone, ''), coalesce(s.locale, ''),
-                coalesce(s.week_start, ''), coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system')
+                coalesce(s.week_start, ''), coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system'), s.last_organization_id
          FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1",
         )
         .bind(user)
@@ -655,11 +658,12 @@ pub async fn me(
         week_start,
         hour_cycle,
         theme,
+        last_organization_id,
         limits: state.config.limits.into(),
     }))
 }
 
-/// 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.
+/// 내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MySettings {
     /// IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다.
@@ -677,10 +681,23 @@ pub struct MySettings {
     /// `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`).
     #[serde(default)]
     pub theme: Option<String>,
+    /// 마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다.
+    #[serde(default, deserialize_with = "deserialize_last_organization")]
+    #[schema(value_type = Option<String>, format = Uuid, nullable = true)]
+    pub last_organization_id: Option<Option<OrganizationId>>,
 }
 
-/// 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
-/// 모르는 값이면 400.
+fn deserialize_last_organization<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<OrganizationId>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<OrganizationId>::deserialize(deserializer).map(Some)
+}
+
+/// 내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.
+/// 모르는 설정 값이나 소속하지 않은 조직이면 400.
 #[utoipa::path(put, path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
 pub async fn set_settings(
@@ -698,6 +715,13 @@ pub async fn set_settings(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
+    if let Some(organization) = input.last_organization_id {
+        sqlx::query("SELECT app_set_last_organization($1)")
+            .bind(organization)
+            .execute(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    }
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
