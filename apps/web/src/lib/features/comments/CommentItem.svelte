@@ -54,7 +54,9 @@
   $effect(() => {
     onunsaved?.(editing !== undefined && editing !== original && !accountSwitching());
   });
-  onDestroy(() => onunsaved?.(false));
+  onDestroy(() => {
+    onunsaved?.(false);
+  });
 
   async function save(): Promise<void> {
     if (
@@ -63,7 +65,7 @@
       !canWrite ||
       !comment.can_edit ||
       accountSwitching() ||
-      draft.offers.length > 0
+      draft.blocked
     )
       return;
     const attempt = draft.capture();
@@ -88,8 +90,12 @@
     <div data-testid="comment-edit-draft-offer">
       <p class="text-sm whitespace-pre-wrap">{offer.value.input.text}</p>
       <FormDraftOffer
-        onrestore={() => draft.restore(offer)}
-        ondiscard={() => draft.discard(offer)}
+        onrestore={() => {
+          draft.restore(offer);
+        }}
+        ondiscard={() => {
+          draft.discard(offer);
+        }}
       />
     </div>
   {/each}
@@ -103,9 +109,7 @@
     >
       <Textarea aria-label={m.comments_edit_label()} bind:value={editing} maxlength={10000} />
       <div class="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy || draft.offers.length > 0}
-          >{m.common_save()}</Button
-        >
+        <Button type="submit" size="sm" disabled={busy || draft.blocked}>{m.common_save()}</Button>
         <Button
           size="sm"
           variant="ghost"

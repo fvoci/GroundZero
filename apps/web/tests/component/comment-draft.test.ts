@@ -41,7 +41,9 @@ describe('comment drafts', () => {
     const view = render(CommentsPanel, { props });
     await fireEvent.input(screen.getByLabelText(/새 댓글/), { target: { value: '남길 댓글' } });
     await fireEvent.click(screen.getByRole('button', { name: '댓글 달기' }));
-    await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledTimes(1);
+    });
     view.unmount();
     render(CommentsPanel, { props });
     expect(screen.getByLabelText(/새 댓글/)).toHaveValue('');
@@ -52,9 +54,13 @@ describe('comment drafts', () => {
     expect(add).toHaveBeenCalledTimes(1);
     add.mockResolvedValueOnce('c-1');
     await fireEvent.click(screen.getByRole('button', { name: '댓글 달기' }));
-    await waitFor(() => expect(add).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledTimes(2);
+    });
     expect(add.mock.calls[1]?.[3]).toBe(add.mock.calls[0]?.[3]);
-    await waitFor(() => expect(screen.getByLabelText(/새 댓글/)).toHaveValue(''));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/새 댓글/)).toHaveValue('');
+    });
     view.unmount();
     cleanup();
     render(CommentsPanel, { props });
@@ -68,9 +74,13 @@ describe('comment drafts', () => {
     await fireEvent.input(screen.getByLabelText(/새 댓글/), {
       target: { value: 'A의 비공개 입력' },
     });
-    await waitFor(() => expect(unsaved).toHaveBeenLastCalledWith(true));
+    await waitFor(() => {
+      expect(unsaved).toHaveBeenLastCalledWith(true);
+    });
     me.userId = 'user-b';
-    await waitFor(() => expect(screen.getByLabelText(/새 댓글/)).toHaveValue(''));
+    await waitFor(() => {
+      expect(screen.getByLabelText(/새 댓글/)).toHaveValue('');
+    });
     expect(screen.queryByTestId('comment-draft-offer')).toBeNull();
     expect(Object.keys(localStorage).filter((key) => key.includes('user-b'))).toEqual([]);
     me.userId = 'user-a';
@@ -102,8 +112,12 @@ describe('comment drafts', () => {
       target: { value: '수정 중인 원댓글' },
     });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(unsaved).toHaveBeenLastCalledWith(true));
+    await waitFor(() => {
+      expect(edit).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(unsaved).toHaveBeenLastCalledWith(true);
+    });
     view.unmount();
     render(CommentsPanel, { props });
     expect(await screen.findAllByTestId('comment-reply-draft-offer')).toHaveLength(2);
@@ -114,9 +128,10 @@ describe('comment drafts', () => {
       await fireEvent.click(button);
     expect(screen.getByLabelText('댓글 고치기')).toHaveValue('수정 중인 원댓글');
     expect(
-      screen
-        .getAllByRole('textbox', { name: '답글' })
-        .map((box) => (box as HTMLTextAreaElement).value),
+      screen.getAllByRole('textbox', { name: '답글' }).map((box) => {
+        if (!(box instanceof HTMLTextAreaElement)) throw new Error('reply textarea');
+        return box.value;
+      }),
     ).toEqual(['c1 답글 초안', 'c2 답글 초안']);
     expect(edit).toHaveBeenCalledTimes(1);
     expect(add).not.toHaveBeenCalled();
@@ -155,8 +170,33 @@ describe('comment drafts', () => {
     await fireEvent.input(screen.getByLabelText(/새 댓글/), { target: { value: '메모' } });
     expect(unsaved).toHaveBeenLastCalledWith(true);
     await fireEvent.click(screen.getByRole('button', { name: '댓글 달기' }));
-    await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByLabelText(/새 댓글/)).toHaveValue(''));
+    await waitFor(() => {
+      expect(add).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText(/새 댓글/)).toHaveValue('');
+    });
     expect(unsaved).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not overwrite or clear another tab when this tab saves', async () => {
+    vi.spyOn(api, 'addComment').mockResolvedValue('c1');
+    sessionStorage.setItem('fvoci:tab', 'first-tab');
+    const first = render(CommentsPanel, { props });
+    const a = within(first.container);
+    sessionStorage.setItem('fvoci:tab', 'second-tab');
+    const second = render(CommentsPanel, { props });
+    const b = within(second.container);
+    await fireEvent.input(a.getByLabelText(/새 댓글/), { target: { value: '첫 탭' } });
+    await fireEvent.input(b.getByLabelText(/새 댓글/), { target: { value: '둘째 탭' } });
+    const secondKey = Object.keys(localStorage).find((key) => key.endsWith(':tab:second-tab'));
+    if (secondKey === undefined) throw new Error('second tab draft');
+    const saved = localStorage.getItem(secondKey);
+    await fireEvent.click(a.getByRole('button', { name: '댓글 달기' }));
+    await waitFor(() => {
+      expect(a.getByLabelText(/새 댓글/)).toHaveValue('');
+    });
+    expect(b.getByLabelText(/새 댓글/)).toHaveValue('둘째 탭');
+    expect(localStorage.getItem(secondKey)).toBe(saved);
   });
 });

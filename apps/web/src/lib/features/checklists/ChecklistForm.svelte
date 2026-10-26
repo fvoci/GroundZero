@@ -110,7 +110,9 @@
   $effect(() => {
     onunsaved?.(dirty && !accountSwitching());
   });
-  onDestroy(() => onunsaved?.(false));
+  onDestroy(() => {
+    onunsaved?.(false);
+  });
 
   async function guard(
     action: (user: string, isCurrent: () => boolean) => Promise<void>,
@@ -121,7 +123,7 @@
     busy = true;
     error = undefined;
     try {
-      await action(attempt.userId, () => formDraft.isCurrent(attempt));
+      await action(attempt.userId, () => formDraft.isCurrent(attempt) && !accountSwitching());
     } catch (e: unknown) {
       if (formDraft.isOwner(attempt)) error = errorText(e, m.checklists_action_failed());
     } finally {
@@ -199,8 +201,12 @@
           .join('\n')}
       </p>
       <FormDraftOffer
-        onrestore={() => formDraft.restore(offer)}
-        ondiscard={() => formDraft.discard(offer)}
+        onrestore={() => {
+          formDraft.restore(offer);
+        }}
+        ondiscard={() => {
+          formDraft.discard(offer);
+        }}
       />
     </div>
   {/each}
