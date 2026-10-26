@@ -17,9 +17,11 @@ use uuid::Uuid;
 
 use crate::db::{needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::events::{Event, EventConflict};
-use crate::features::tasks::{TaskDetail, format_date, load_detail, parse_date};
+use crate::features::tasks::{
+    EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, format_date, load_detail, parse_date,
+};
 use crate::http::AppState;
 use crate::ids::ItemId;
 
@@ -104,12 +106,13 @@ pub struct SetTaskRecurrence {
 /// 반복 업무 정하기·바꾸기·멈추기(쓰기 권한, 첫 회차에서). 처음 정하면 그 업무가 첫 회차가 되고, 오늘까지의
 /// 회차와 다음 회차를 만든다. 이미 만든 회차는 바꾸지 않는다.
 #[utoipa::path(put, path = "/api/tasks/{task_id}/recurrence", operation_id = "set_task_recurrence",
-    params(("task_id" = String, Path, format = Uuid)), request_body = SetTaskRecurrence,
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = SetTaskRecurrence,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = crate::features::tasks::TaskConflict)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "rule_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn set_task(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetTaskRecurrence>,
 ) -> Result<Response, AppError> {
@@ -192,12 +195,13 @@ pub struct SyncResult {
 
 /// 항목의 반복 업무 회차 만들기(쓰기 권한). 화면이 쓰기 권한으로 항목을 열 때 보낸다. 독자는 403.
 #[utoipa::path(post, path = "/api/items/{item_id}/recurrences/sync", operation_id = "sync_item_recurrences",
-    params(("item_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = SyncResult), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ErrorBody)), tag = "tasks")]
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
+    responses((status = 200, body = SyncResult), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn sync_item(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<SyncResult>, AppError> {
     let mut tx = state.db.begin_as(user).await?;

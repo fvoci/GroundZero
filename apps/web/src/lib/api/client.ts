@@ -26,6 +26,7 @@ import {
   switchAccount,
 } from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
+import { me } from '$lib/me.svelte';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {
@@ -2290,7 +2291,7 @@ export interface MoveTargetInput {
 const none = (): undefined => undefined;
 
 /**
- * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리(문서 저장·내 노트 만들기). 서버는 세션의 사용자와 비교만 하고
+ * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리. 서버는 세션의 사용자와 비교만 하고
  * 권한은 세션으로만 정한다.
  */
 const EXPECTED_USER = 'x-fvoci-expected-user';
@@ -2304,10 +2305,15 @@ async function request(
   let response: Response;
   const expiriesAtStart = sessionExpiries();
   try {
+    const headers = new Headers(extra);
+    if (method !== 'GET' && method !== 'HEAD' && me.userId !== '' && !headers.has(EXPECTED_USER)) {
+      headers.set(EXPECTED_USER, me.userId);
+    }
+    if (body !== undefined) headers.set('Content-Type', 'application/json');
     const init: RequestInit = {
       method,
       credentials: 'same-origin',
-      headers: body === undefined ? extra : { ...extra, 'Content-Type': 'application/json' },
+      headers,
     };
     if (body !== undefined) init.body = JSON.stringify(body);
     response = await fetch(path, init);

@@ -19,6 +19,9 @@ use sha2::{Digest, Sha256};
 
 const MIB: usize = 1024 * 1024;
 
+// 두 시험이 같은 file_versions 테이블에 트리거 DDL을 걸어 서로 교착하지 않게 한다.
+static COMPLETE_TRIGGER_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn state_with(overrides: &[(&str, &str)]) -> AppState {
     let mut all = vec![("FVOCI_UPLOAD_CHUNK_BYTES", "5242880")];
     all.extend_from_slice(overrides);
@@ -955,6 +958,7 @@ async fn moving_a_document_takes_its_attachments_along() {
 /// 풀어 다음 요청이 이어서 마친다.
 #[tokio::test]
 async fn a_transient_failure_while_finishing_lets_the_next_complete_go_through() {
+    let _guard = COMPLETE_TRIGGER_LOCK.lock().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -1106,6 +1110,7 @@ async fn a_late_attempt_leaves_a_claim_taken_over_by_another_alone() {
 /// 작업 안에서 한다.
 #[tokio::test]
 async fn a_dropped_complete_request_still_releases_a_stalled_claim() {
+    let _guard = COMPLETE_TRIGGER_LOCK.lock().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
