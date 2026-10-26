@@ -74,6 +74,27 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("ignores another account's late record success without changing the new input or status", async () => {
+  let finish: ((value: RecordView) => void) | undefined;
+  const pending = new Promise<RecordView>((resolve) => {
+    finish = resolve;
+  });
+  vi.spyOn(api, 'createRecord').mockReturnValue(pending);
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+  await fireEvent.input(input('title'), { target: { value: 'user-a input' } });
+  await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));
+  me.userId = 'user-b';
+  await waitFor(() => expect(input('title')).toHaveValue(''));
+  await fireEvent.input(input('title'), { target: { value: 'user-b input' } });
+  if (finish === undefined) throw new Error('missing completion');
+  finish(record);
+  await pending;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(input('title')).toHaveValue('user-b input');
+  expect(screen.queryByText(m.records_added({ label: '위험' }))).not.toBeInTheDocument();
+});
+
 it('restores raw numeric and long text input without sending, and warns on cancel and browser exit', async () => {
   const create = vi
     .spyOn(api, 'createRecord')
@@ -140,4 +161,28 @@ it('restores the edit-start version after a remount and keeps another account is
       expect.objectContaining({ title: '개인 입력' }),
     );
   });
+});
+
+it('ignores a conflict reload that finishes after the editing account changes', async () => {
+  vi.spyOn(api, 'updateRecord').mockRejectedValue(new ApiError(409, 'conflict', 'changed'));
+  let finish: ((value: RecordView[]) => void) | undefined;
+  const pending = new Promise<RecordView[]>((resolve) => {
+    finish = resolve;
+  });
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+  await fireEvent.input(input('title'), { target: { value: 'user-a edit' } });
+  vi.mocked(api.itemRecords).mockReturnValue(pending);
+  await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
+  await waitFor(() => {
+    expect(api.itemRecords).toHaveBeenCalledTimes(2);
+  });
+  me.userId = 'user-b';
+  await waitFor(() => expect(input('title')).toHaveValue(''));
+  if (finish === undefined) throw new Error('missing conflict response');
+  finish([{ ...record, version: 4, title: 'old account response' }]);
+  await pending;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(screen.queryByText('old account response')).not.toBeInTheDocument();
+  expect(input('title')).toHaveValue('');
 });

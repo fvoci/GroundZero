@@ -206,13 +206,18 @@
    * 기준 판은 그대로 두고 지금 저장된 내용을 보여 준다. 다시 저장해도 같은 기준 판을 보내 덮어쓰지 않고, 덮어쓰기를
    * 골라야 바꾼다. 기록이 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
    */
-  async function recordMovedOn(id: string, version: number): Promise<boolean> {
+  async function recordMovedOn(
+    id: string,
+    version: number,
+    stillCurrent: () => boolean,
+  ): Promise<boolean> {
     let list: RecordView[];
     try {
       list = await api.itemRecords(item.id);
     } catch {
       return false;
     }
+    if (!stillCurrent()) return true;
     records = list;
     // 기다리는 사이 고치기를 닫았거나 다른 기록을 열었으면 그 편집에 손대지 않는다.
     if (editingId !== id) return true;
@@ -253,15 +258,17 @@
     if (attempt === undefined) return;
     busy = true;
     try {
+      let savedStatus: string;
       if (creating && pending !== null) {
         const requestId = pending.requestId;
         await api.createRecord(item.id, requestId, def.kind, built.input);
-        status = m.records_added({ label: recordKindLabel(def) });
+        savedStatus = m.records_added({ label: recordKindLabel(def) });
       } else if (base !== undefined) {
         await api.updateRecord(base.id, base.version, built.input);
-        status = m.records_updated({ label: recordKindLabel(def) });
-      }
+        savedStatus = m.records_updated({ label: recordKindLabel(def) });
+      } else return;
       if (!draft.complete(attempt)) return;
+      status = savedStatus;
       creating = false;
       editingId = undefined;
       conflict = undefined;
@@ -269,7 +276,13 @@
     } catch (e: unknown) {
       if (!draft.isCurrent(attempt)) return;
       const refused = e instanceof ApiError && e.status === 409;
-      if (refused && base !== undefined && (await recordMovedOn(base.id, base.version))) return;
+      if (
+        refused &&
+        base !== undefined &&
+        (await recordMovedOn(base.id, base.version, () => draft.isCurrent(attempt)))
+      )
+        return;
+      if (!draft.isCurrent(attempt)) return;
       error = refused ? m.records_conflict() : errorText(e, m.records_save_failed());
     } finally {
       if (draft.isOwner(attempt)) busy = false;

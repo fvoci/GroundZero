@@ -81,29 +81,33 @@ const item: ItemView = {
   ends_on: null,
 };
 
-it('restores a failed item copy with its target and request ID', async () => {
-  await setLocale('ko', { reload: false });
-  me.userId = 'module-draft-user';
-  vi.spyOn(api, 'modules').mockResolvedValue([mod]);
-  const copy = vi.spyOn(api, 'copyItem').mockRejectedValue(new NetworkError('offline'));
-  const first = render(ItemCopy, { item, module: mod });
-  await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
-  await fireEvent.input(await screen.findByLabelText(m.modules_copy_new_title()), {
-    target: { value: '새 사본' },
-  });
-  await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
-  await screen.findByRole('alert');
-  const requestId = copy.mock.calls[0]?.[1];
-  first.unmount();
-  render(ItemCopy, { item, module: mod });
-  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
-  expect(screen.getByLabelText(m.modules_copy_new_title())).toHaveValue('새 사본');
-  await screen.findByRole('option', { name: '개발 (DEV)' });
-  expect(copy).toHaveBeenCalledTimes(1);
-  await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
-  await screen.findByRole('alert');
-  expect(copy.mock.calls[1]?.[1]).toBe(requestId);
-});
+it.each([true, false])(
+  'restores a failed item copy with its request ID (edited title: %s)',
+  async (edited) => {
+    await setLocale('ko', { reload: false });
+    me.userId = 'module-draft-user';
+    vi.spyOn(api, 'modules').mockResolvedValue([mod]);
+    const copy = vi.spyOn(api, 'copyItem').mockRejectedValue(new NetworkError('offline'));
+    const first = render(ItemCopy, { item, module: mod });
+    await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
+    const input = await screen.findByLabelText(m.modules_copy_new_title());
+    if (edited) await fireEvent.input(input, { target: { value: '새 사본' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
+    await screen.findByRole('alert');
+    const requestId = copy.mock.calls[0]?.[1];
+    first.unmount();
+    render(ItemCopy, { item, module: mod });
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+    expect(screen.getByLabelText(m.modules_copy_new_title())).toHaveValue(
+      edited ? '새 사본' : m.modules_copy_title_default({ title: item.title }),
+    );
+    await screen.findByRole('option', { name: '개발 (DEV)' });
+    expect(copy).toHaveBeenCalledTimes(1);
+    await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
+    await screen.findByRole('alert');
+    expect(copy.mock.calls[1]?.[1]).toBe(requestId);
+  },
+);
 
 it('offers module settings after remount without saving until explicitly restored', async () => {
   await setLocale('ko', { reload: false });

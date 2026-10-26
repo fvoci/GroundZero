@@ -71,7 +71,8 @@
       busy = false;
       error = undefined;
     },
-    dirty: () => open && (title !== initialTitle || target !== initialTarget || !reset),
+    dirty: () =>
+      open && (pending !== null || title !== initialTitle || target !== initialTarget || !reset),
     busy: () => busy,
   });
   onMount(draft.attach);
