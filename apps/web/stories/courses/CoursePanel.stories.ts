@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
-import { userEvent, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
+import { storeFormDraft } from '$lib/features/common/form-draft';
+import { newRequestId } from '$lib/api/client';
+import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { setUpTime } from '../time/setup';
@@ -10,7 +13,17 @@ const meta = {
   component: CoursePanel,
   args: { itemId: 'item-1' },
   decorators: [() => ({ Component: MainFrame })],
-  beforeEach: () => setUpTime(),
+  beforeEach: async () => {
+    const restore = await setUpTime();
+    me.userId = 'story-course-learner';
+    return async () => {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('fvoci:story-course-learner:')) localStorage.removeItem(key);
+      }
+      me.userId = '';
+      await restore();
+    };
+  },
 } satisfies Meta<typeof CoursePanel>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -25,4 +38,37 @@ export const StartEpisode: Story = {
 };
 export const NarrowDark200: Story = {
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
+};
+
+export const RestoreDraft: Story = {
+  beforeEach: () => {
+    storeFormDraft('course:item-1:new', {
+      savedAt: '2026-10-27T00:00:00Z',
+      input: {
+        title: '다음 강의 / Next lecture',
+        chapter: '2장',
+        duration: '12:xx',
+        planned_on: '2026-11-01',
+        requestId: newRequestId(),
+        requestPayload: '',
+      },
+    });
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.common_draft_restore() }));
+    await expect(canvas.getByLabelText(m.courses_new_title())).toHaveValue(
+      '다음 강의 / Next lecture',
+    );
+    await expect(canvas.getByLabelText(m.courses_duration())).toHaveValue('12:xx');
+  },
+};
+export const RestoreDraftDark: Story = { ...RestoreDraft, globals: { theme: 'dark' } };
+export const RestoreDraftNarrow: Story = {
+  ...RestoreDraft,
+  globals: { viewport: { value: 'narrow375' } },
+};
+export const RestoreDraftLarge: Story = {
+  ...RestoreDraft,
+  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
 };

@@ -1,11 +1,15 @@
 <script lang="ts">
   // 강의 모듈의 강좌 화면(D-37): 강좌 정보, 진도 요약, 회차 목록과 내 진도, 회차 추가·CSV 일괄 등록, 함께
   // 수강하는 사람의 진도 집계. 완료는 직접 표시한다. 회차마다 강의 시간 측정을 시작할 수 있다(D-32).
-  import { tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
 
   import type { CourseView, EpisodeStatus, EpisodeView, ParticipantView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { me } from '$lib/me.svelte';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import { localTimeZone, wallTime } from '$lib/features/events/time';
@@ -112,9 +116,9 @@
     await tick();
     document.getElementById(`episode-delete-${id}`)?.focus();
   }
-  // 번호 칸(type="number")은 숫자를 주고, 비우면 null을 준다.
+  // 잘못된 숫자도 초안에 남기고 제출할 때만 숫자로 바꾼다.
   let shared = $state<{
-    number: number | null;
+    number: string;
     title: string;
     chapter: string;
     duration: string;
@@ -122,7 +126,7 @@
     materials: string;
     planned_on: string;
   }>({
-    number: null,
+    number: '',
     title: '',
     chapter: '',
     duration: '',
@@ -132,6 +136,167 @@
   });
   let reloadKey = $state(0);
   let seq = 0;
+  let owner = $state(me.userId);
+  let loadedItem = '';
+  let detailsBase = $state('');
+  let sharedBase = $state('');
+  let mineBase = $state('');
+  let baseVersion = $state('');
+  let newId = $state(newRequestId());
+  let newPayload = $state('');
+  let csvIds = $state<string[]>([]);
+  let csvSentText = $state('');
+  let adding = $state(false);
+  let savingMine = $state(false);
+
+  // All values stay strings until submit, including invalid numbers and durations.
+  function textFields<T extends Record<string, string>>(raw: unknown, shape: T): T | undefined {
+    const valid = (value: unknown): value is T =>
+      typeof value === 'object' &&
+      value !== null &&
+      Object.keys(shape).every(
+        (key) => key in value && typeof Reflect.get(value, key) === 'string',
+      );
+    return valid(raw) ? raw : undefined;
+  }
+  function resetDetails(): void {
+    const d = course?.details;
+    details = {
+      subject: d?.subject ?? '',
+      instructor: d?.instructor ?? '',
+      platform: d?.platform ?? '',
+      url: d?.url ?? '',
+      textbook: d?.textbook ?? '',
+      starts_on: d?.starts_on ?? '',
+      expires_on: d?.expires_on ?? '',
+      target_on: d?.target_on ?? '',
+    };
+    detailsBase = JSON.stringify(details);
+  }
+  function resetShared(): void {
+    const e = editingEpisode;
+    shared = {
+      number: e === undefined ? '' : String(e.number),
+      title: e?.title ?? '',
+      chapter: e?.chapter ?? '',
+      duration: e?.duration_seconds ? clockText(e.duration_seconds) : '',
+      url: e?.url ?? '',
+      materials: e?.materials ?? '',
+      planned_on: e?.planned_on ?? '',
+    };
+    sharedBase = JSON.stringify(shared);
+    baseVersion = String(e?.version ?? 0);
+  }
+  function resetMine(): void {
+    const e = course?.episodes.find((entry) => entry.id === openEpisode);
+    mine = {
+      planned_on: e?.mine.planned_on ?? '',
+      position:
+        e?.mine.last_position_seconds == null ? '' : clockText(e.mine.last_position_seconds),
+      note: e?.mine.note ?? '',
+    };
+    mineBase = JSON.stringify(mine);
+    positionError = undefined;
+  }
+  const detailsDraft = createFormDraft({
+    name: () => `course:${itemId}:details`,
+    snapshot: () => ({ ...details, base: detailsBase }),
+    parse: (raw) => textFields(raw, { ...details, base: '' }),
+    restore: ({ base, ...input }) => {
+      details = input;
+      detailsBase = base;
+      editing = true;
+    },
+    reset: resetDetails,
+    dirty: () => editing && JSON.stringify(details) !== detailsBase,
+    busy: () => savingDetails,
+  });
+  const episodeDraft = createFormDraft({
+    name: () =>
+      editingEpisode === undefined
+        ? undefined
+        : `course:${itemId}:episode:${editingEpisode.id}:edit`,
+    snapshot: () => ({ ...shared, base: sharedBase, version: baseVersion }),
+    parse: (raw) => textFields(raw, { ...shared, base: '', version: '' }),
+    restore: ({ base, version, ...input }) => {
+      shared = input;
+      sharedBase = base;
+      baseVersion = version;
+    },
+    reset: resetShared,
+    dirty: () => editingEpisode !== undefined && JSON.stringify(shared) !== sharedBase,
+    busy: () => savingEpisode,
+  });
+  const mineDraft = createFormDraft({
+    name: () =>
+      openEpisode === undefined ? undefined : `course:${itemId}:episode:${openEpisode}:mine`,
+    snapshot: () => ({ ...mine, base: mineBase }),
+    parse: (raw) => textFields(raw, { ...mine, base: '' }),
+    restore: ({ base, ...input }) => {
+      mine = input;
+      mineBase = base;
+    },
+    reset: resetMine,
+    dirty: () => openEpisode !== undefined && JSON.stringify(mine) !== mineBase,
+    busy: () => savingMine,
+  });
+  const newDraft = createFormDraft({
+    name: () => `course:${itemId}:new`,
+    snapshot: () => ({ ...newEpisode, requestId: newId, requestPayload: newPayload }),
+    parse: (raw) => textFields(raw, { ...newEpisode, requestId: '', requestPayload: '' }),
+    restore: ({ requestId, requestPayload, ...input }) => {
+      newEpisode = input;
+      newId = requestId;
+      newPayload = requestPayload;
+    },
+    reset: () => {
+      newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
+      newId = newRequestId();
+      newPayload = '';
+    },
+    dirty: () => Object.values(newEpisode).some((value) => value !== ''),
+    busy: () => adding,
+  });
+  const csvDraft = createFormDraft({
+    name: () => `course:${itemId}:import`,
+    snapshot: () => ({ text: csvText, sentText: csvSentText, ids: [...csvIds] }),
+    parse: (raw) => {
+      if (
+        typeof raw !== 'object' ||
+        raw === null ||
+        !('text' in raw) ||
+        typeof raw.text !== 'string' ||
+        !('sentText' in raw) ||
+        typeof raw.sentText !== 'string' ||
+        !('ids' in raw) ||
+        !Array.isArray(raw.ids) ||
+        !raw.ids.every((id): id is string => typeof id === 'string')
+      )
+        return undefined;
+      return { text: raw.text, sentText: raw.sentText, ids: raw.ids };
+    },
+    restore: (input) => {
+      csvText = input.text;
+      csvSentText = input.sentText;
+      csvIds = input.ids;
+    },
+    reset: () => {
+      csvText = '';
+      csvSentText = '';
+      csvIds = [];
+    },
+    dirty: () => csvText !== '',
+    busy: () => adding,
+  });
+  const drafts = [detailsDraft, episodeDraft, mineDraft, newDraft, csvDraft];
+  onMount(() => {
+    const detach = drafts.map((draft) => draft.attach());
+    return () => {
+      detach.forEach((remove) => {
+        remove();
+      });
+    };
+  });
 
   const progress = $derived(
     course === undefined
@@ -141,8 +306,26 @@
 
   $effect(() => {
     const id = itemId;
+    const userId = me.userId;
+    const switching = accountSwitching();
     if (reloadKey < 0) return;
+    untrack(() => {
+      if (owner !== userId || loadedItem !== id) {
+        owner = userId;
+        loadedItem = id;
+        course = undefined;
+        participants = [];
+        editing = false;
+        editingEpisode = undefined;
+        openEpisode = undefined;
+        savingDetails = false;
+        savingEpisode = false;
+        savingMine = false;
+        adding = false;
+      }
+    });
     const mine = ++seq;
+    if (switching) return;
     Promise.all([api.course(id), api.courseParticipants(id, today)])
       .then(([c, p]) => {
         if (mine !== seq) return;
@@ -156,15 +339,20 @@
   });
 
   /** 처리하고 다시 읽는다. 성공하면 true(실패하면 오류를 보이고 false). */
-  async function run(action: () => Promise<unknown>, done: string): Promise<boolean> {
+  async function run(
+    action: () => Promise<unknown>,
+    done: string,
+    stillOwner: () => boolean = () => true,
+  ): Promise<boolean> {
     error = undefined;
     try {
       await action();
+      if (!stillOwner()) return false;
       status = done;
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
-      error = errorText(e, m.courses_action_failed());
+      if (stillOwner()) error = errorText(e, m.courses_action_failed());
       return false;
     }
   }
@@ -187,6 +375,7 @@
     };
     editSession += 1;
     editing = true;
+    detailsBase = JSON.stringify(details);
   }
 
   const orNull = (v: string): string | null => (v === '' ? null : v);
@@ -214,6 +403,11 @@
   }
 
   function open(e: EpisodeView): void {
+    mineDraft.leave.request(() => {
+      selectEpisode(e);
+    });
+  }
+  function selectEpisode(e: EpisodeView): void {
     if (openEpisode === e.id) {
       openEpisode = undefined;
       return;
@@ -226,16 +420,22 @@
         e.mine.last_position_seconds === null ? '' : clockText(e.mine.last_position_seconds),
       note: e.mine.note,
     };
+    mineBase = JSON.stringify(mine);
   }
 
   function editEpisode(e: EpisodeView): void {
+    episodeDraft.leave.request(() => {
+      selectEditEpisode(e);
+    });
+  }
+  function selectEditEpisode(e: EpisodeView): void {
     if (editingEpisode?.id === e.id) {
       editingEpisode = undefined;
       return;
     }
     editingEpisode = e;
     shared = {
-      number: e.number,
+      number: String(e.number),
       title: e.title,
       chapter: e.chapter,
       duration: e.duration_seconds > 0 ? clockText(e.duration_seconds) : '',
@@ -243,6 +443,8 @@
       materials: e.materials,
       planned_on: e.planned_on ?? '',
     };
+    sharedBase = JSON.stringify(shared);
+    baseVersion = String(e.version);
   }
 
   /**
@@ -252,11 +454,11 @@
   let savingEpisode = $state(false);
 
   async function saveEpisode(base: EpisodeView): Promise<void> {
-    const number = shared.number;
+    const number = Number(shared.number);
     const seconds = parseDuration(shared.duration);
     const url = shared.url.trim();
     if (
-      number === null ||
+      shared.number.trim() === '' ||
       !Number.isInteger(number) ||
       number < 1 ||
       shared.title.trim() === '' ||
@@ -271,11 +473,13 @@
     }
     // 저장 중에 다시 누르면(Enter 두 번 등) 같은 판으로 두 번 보내, 내 첫 저장 때문에 두 번째가 409를 받고 "다른 사람이
     // 먼저 고쳤다"고 잘못 알린다. 끝날 때까지 다시 보내지 않는다.
-    if (savingEpisode) return;
+    if (savingEpisode || !course?.can_write) return;
+    const attempt = episodeDraft.capture();
+    if (attempt === undefined) return;
     savingEpisode = true;
     error = undefined;
     try {
-      await api.updateEpisode(base.id, base.version, {
+      await api.updateEpisode(base.id, Number(baseVersion), {
         number,
         title: shared.title.trim(),
         chapter: shared.chapter.trim(),
@@ -284,14 +488,23 @@
         materials: shared.materials,
         planned_on: orNull(shared.planned_on),
       });
-      editingEpisode = undefined;
+      if (!episodeDraft.isOwner(attempt)) return;
+      // Closing this target makes isOwner false, so release its busy state first.
+      savingEpisode = false;
+      if (episodeDraft.complete(attempt)) editingEpisode = undefined;
       status = m.courses_episode_saved({ number });
       reloadKey += 1;
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 409 && (await episodeMovedOn(base))) return;
+      if (!episodeDraft.isOwner(attempt)) return;
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (await episodeMovedOn(base, () => episodeDraft.isOwner(attempt)))
+      )
+        return;
       error = errorText(e, m.courses_action_failed());
     } finally {
-      savingEpisode = false;
+      if (episodeDraft.isOwner(attempt)) savingEpisode = false;
     }
   }
 
@@ -299,22 +512,23 @@
    * 409를 받은 뒤 지금 회차를 다시 읽는다. 다른 사람이 먼저 고쳐 판이 바뀌었으면(보관으로 막힌 409와 구분) 기준을 지금
    * 판으로 바꾸고 알린다(입력은 그대로). 회차가 지워졌으면 고치기를 닫고 알린다. 처리했으면 true.
    */
-  async function episodeMovedOn(base: EpisodeView): Promise<boolean> {
+  async function episodeMovedOn(base: EpisodeView, stillOwner: () => boolean): Promise<boolean> {
     let now: CourseView;
     try {
       now = await api.course(itemId);
     } catch {
       return false;
     }
+    if (!stillOwner()) return true;
     course = now;
     const latest = now.episodes.find((x) => x.id === base.id);
     if (latest === undefined) {
-      editingEpisode = undefined;
       error = m.common_error_not_found();
       return true;
     }
     if (latest.version === base.version) return false;
     editingEpisode = latest;
+    baseVersion = String(latest.version);
     error = m.courses_episode_changed();
     return true;
   }
@@ -323,11 +537,13 @@
 
   // 요청 id는 입력을 시작할 때 정하고 성공할 때까지 지킨다. 응답을 잃고 다시 눌러도 서버가 같은 회차로 본다.
   // 한 회차 추가: 같은 입력의 재시도는 같은 요청 id, 고친 입력은 새 id.
-  const draftKey = new RetryKey();
-  const csvIds = $derived(csv === undefined ? [] : csv.rows.map(() => newRequestId()));
 
   /** 회차를 더한다. 성공하면 true. */
-  async function addEpisodes(rows: EpisodeRow[], ids: readonly string[]): Promise<boolean> {
+  async function addEpisodes(
+    rows: EpisodeRow[],
+    ids: readonly string[],
+    stillOwner: () => boolean,
+  ): Promise<boolean> {
     if (course === undefined || rows.length === 0) return false;
     const before = progress?.percentByCount ?? 0;
     error = undefined;
@@ -343,10 +559,18 @@
         })),
       );
     } catch (e: unknown) {
-      error = errorText(e, m.courses_action_failed());
+      if (stillOwner()) error = errorText(e, m.courses_action_failed());
       return false;
     }
-    const after = await api.course(itemId);
+    if (!stillOwner()) return false;
+    let after: CourseView;
+    try {
+      after = await api.course(itemId);
+    } catch (e: unknown) {
+      if (stillOwner()) error = errorText(e, m.courses_load_failed());
+      return false;
+    }
+    if (!stillOwner()) return false;
     course = after;
     reloadKey += 1;
     const now = courseProgress(after.episodes, today, after.details.target_on).percentByCount;
@@ -354,14 +578,63 @@
     status = m.courses_added({ count: added, before, after: now });
     return true;
   }
+
+  async function saveMine(e: EpisodeView): Promise<void> {
+    if (savingMine || !course?.can_write) return;
+    const raw = mine.position.trim();
+    const position = raw === '' ? null : parseDuration(raw);
+    if (raw !== '' && (position === null || position > MAX_SECONDS)) {
+      positionError = m.courses_position_invalid();
+      return;
+    }
+    const attempt = mineDraft.capture();
+    if (attempt === undefined) return;
+    const sent = { ...mine };
+    error = undefined;
+    positionError = undefined;
+    savingMine = true;
+    try {
+      const fresh = await freshMine(e);
+      if (!mineDraft.isOwner(attempt)) return;
+      await api.setEpisodeProgress(e.id, {
+        status: fresh.status,
+        planned_on: orNull(sent.planned_on),
+        last_position_seconds: position,
+        note: sent.note,
+        today,
+      });
+      if (!mineDraft.isOwner(attempt)) return;
+      // Keep the successful values visible; only this submitted snapshot becomes clean.
+      if (mineDraft.isCurrent(attempt)) {
+        mineDraft.complete(attempt);
+        mine = sent;
+        mineBase = JSON.stringify(sent);
+        mineDraft.persist();
+      }
+      status = m.courses_mine_saved({ number: e.number });
+      reloadKey += 1;
+    } catch (e: unknown) {
+      if (mineDraft.isOwner(attempt)) error = errorText(e, m.courses_action_failed());
+    } finally {
+      if (mineDraft.isOwner(attempt)) savingMine = false;
+    }
+  }
 </script>
+
+{#each drafts as draft (draft)}
+  <DiscardChangesConfirm
+    open={draft.active && draft.leave.open}
+    onkeep={draft.leave.keep}
+    ondiscard={draft.discardAndLeave}
+  />
+{/each}
 
 {#if error !== undefined}
   <p role="alert" class="text-sm text-destructive">{error}</p>
 {/if}
 <p aria-live="polite" class="text-sm">{status}</p>
 
-{#if course !== undefined && progress !== undefined}
+{#if course !== undefined && progress !== undefined && owner === me.userId && !accountSwitching()}
   {@const c = course}
   {@const p = progress}
   <section class="flex flex-col gap-2" aria-labelledby="course-info-heading">
@@ -377,6 +650,16 @@
         >
       {/if}
     </div>
+    {#each detailsDraft.offers as offer (offer.key)}
+      <FormDraftOffer
+        onrestore={() => {
+          detailsDraft.restore(offer);
+        }}
+        ondiscard={() => {
+          detailsDraft.discard(offer);
+        }}
+      />
+    {/each}
     {#if editing}
       <form
         class="grid gap-2 @xl:grid-cols-2"
@@ -388,6 +671,9 @@
           }
           // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
           if (savingDetails) return;
+          if (!c.can_write) return;
+          const attempt = detailsDraft.capture();
+          if (attempt === undefined) return;
           savingDetails = true;
           // 보낸 입력. 응답을 기다리는 사이 더 고친 칸이 있으면 닫지 않는다(보내지 않은 입력이 사라지지 않게).
           const sent = { ...details };
@@ -405,12 +691,15 @@
                 target_on: orNull(sent.target_on),
               }),
             m.courses_details_saved(),
+            () => detailsDraft.isOwner(attempt),
           ).then((ok) => {
+            if (!detailsDraft.isOwner(attempt)) return;
             savingDetails = false;
             if (
               ok &&
               session === editSession &&
-              detailKeys.every((key) => details[key] === sent[key])
+              detailKeys.every((key) => details[key] === sent[key]) &&
+              detailsDraft.complete(attempt)
             )
               editing = false;
           });
@@ -430,7 +719,14 @@
         {/each}
         <div class="flex gap-2 @xl:col-span-2">
           <Button type="submit" disabled={savingDetails}>{m.common_save()}</Button>
-          <Button variant="ghost" onclick={() => (editing = false)}>{m.common_cancel()}</Button>
+          <Button
+            variant="ghost"
+            onclick={() => {
+              detailsDraft.leave.request(() => {
+                editing = false;
+              });
+            }}>{m.common_cancel()}</Button
+          >
         </div>
       </form>
     {:else}
@@ -653,6 +949,16 @@
           {/if}
           {#if editingEpisode?.id === e.id}
             {@const base = editingEpisode}
+            {#each episodeDraft.offers as offer (offer.key)}
+              <FormDraftOffer
+                onrestore={() => {
+                  episodeDraft.restore(offer);
+                }}
+                ondiscard={() => {
+                  episodeDraft.discard(offer);
+                }}
+              />
+            {/each}
             <form
               class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
               aria-label={m.courses_episode_form({ number: e.number })}
@@ -663,7 +969,7 @@
             >
               <div class="flex flex-col gap-1">
                 <Label for={`ep-number-${e.id}`}>{m.courses_number()}</Label>
-                <Input id={`ep-number-${e.id}`} type="number" min={1} bind:value={shared.number} />
+                <Input id={`ep-number-${e.id}`} inputmode="numeric" bind:value={shared.number} />
               </div>
               <div class="flex flex-col gap-1 @xl:col-span-3">
                 <Label for={`ep-title-${e.id}`}>{m.courses_new_title()}</Label>
@@ -703,38 +1009,30 @@
                   size="sm"
                   variant="ghost"
                   onclick={() => {
-                    editingEpisode = undefined;
+                    episodeDraft.leave.request(() => {
+                      editingEpisode = undefined;
+                    });
                   }}>{m.common_cancel()}</Button
                 >
               </div>
             </form>
           {/if}
           {#if openEpisode === e.id}
+            {#each mineDraft.offers as offer (offer.key)}
+              <FormDraftOffer
+                onrestore={() => {
+                  mineDraft.restore(offer);
+                }}
+                ondiscard={() => {
+                  mineDraft.discard(offer);
+                }}
+              />
+            {/each}
             <form
               class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
               onsubmit={(ev: SubmitEvent) => {
                 ev.preventDefault();
-                // 빈칸은 위치 지우기(null), 그 밖은 분:초·시:분:초·분 수(CSV와 같은 규칙). 읽을 수 없는 입력은 보내지
-                // 않고 칸 옆에 알리며 저장된 값은 그대로 둔다(전에는 'abc'가 0초, '12:xx'가 지우기로 저장됐다).
-                const raw = mine.position.trim();
-                const position = raw === '' ? null : parseDuration(raw);
-                // 서버와 같은 한도(100시간, i32)를 넘는 값도 보내지 않는다.
-                if (raw !== '' && (position === null || position > MAX_SECONDS)) {
-                  positionError = m.courses_position_invalid();
-                  return;
-                }
-                positionError = undefined;
-                void run(
-                  async () =>
-                    api.setEpisodeProgress(e.id, {
-                      status: (await freshMine(e)).status,
-                      planned_on: orNull(mine.planned_on),
-                      last_position_seconds: position,
-                      note: mine.note,
-                      today,
-                    }),
-                  m.courses_mine_saved({ number: e.number }),
-                );
+                void saveMine(e);
               }}
             >
               <div class="flex flex-col gap-1">
@@ -775,6 +1073,16 @@
     </ol>
 
     {#if c.can_write}
+      {#each newDraft.offers as offer (offer.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            newDraft.restore(offer);
+          }}
+          ondiscard={() => {
+            newDraft.discard(offer);
+          }}
+        />
+      {/each}
       <form
         class="flex flex-wrap items-end gap-2"
         onsubmit={(ev: SubmitEvent) => {
@@ -790,12 +1098,23 @@
             duration_seconds: seconds,
             planned_on: orNull(newEpisode.planned_on),
           };
-          const requestId = draftKey.for({ itemId, row });
-          void addEpisodes([row], [requestId]).then((ok) => {
-            if (!ok) return;
-            newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
-            draftKey.done(requestId);
-          });
+          if (adding) return;
+          const payload = JSON.stringify(row);
+          if (payload !== newPayload) {
+            newPayload = payload;
+            newId = newRequestId();
+          }
+          const attempt = newDraft.capture();
+          if (attempt === undefined) return;
+          const requestId = newId;
+          adding = true;
+          void addEpisodes([row], [requestId], () => newDraft.isOwner(attempt))
+            .then((ok) => {
+              if (ok) newDraft.complete(attempt);
+            })
+            .finally(() => {
+              if (newDraft.isOwner(attempt)) adding = false;
+            });
         }}
       >
         <!-- 최소 폭 12rem은 200% 글꼴의 375px에서 화면보다 넓어지므로 컨테이너 폭을 넘지 않게 한다(D-110). -->
@@ -820,6 +1139,16 @@
       <details class="text-sm">
         <summary class="cursor-pointer">{m.courses_csv_summary()}</summary>
         <div class="flex flex-col gap-2 pt-2">
+          {#each csvDraft.offers as offer (offer.key)}
+            <FormDraftOffer
+              onrestore={() => {
+                csvDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                csvDraft.discard(offer);
+              }}
+            />
+          {/each}
           <Label for="episodes-csv">{m.courses_csv_help()}</Label>
           <Textarea
             id="episodes-csv"
@@ -846,9 +1175,22 @@
               disabled={csv === undefined || csv.rows.length === 0 || csv.errors.length > 0}
               onclick={() => {
                 const rows = csv?.rows ?? [];
-                void addEpisodes(rows, csvIds).then((ok) => {
-                  if (ok) csvText = '';
-                });
+                if (adding) return;
+                if (csvSentText !== csvText) {
+                  csvSentText = csvText;
+                  csvIds = rows.map(() => newRequestId());
+                }
+                if (rows.length !== csvIds.length) return;
+                const attempt = csvDraft.capture();
+                if (attempt === undefined) return;
+                adding = true;
+                void addEpisodes(rows, csvIds, () => csvDraft.isOwner(attempt))
+                  .then((ok) => {
+                    if (ok) csvDraft.complete(attempt);
+                  })
+                  .finally(() => {
+                    if (csvDraft.isOwner(attempt)) adding = false;
+                  });
               }}>{m.courses_csv_add()}</Button
             >
           </div>
