@@ -1,4 +1,5 @@
 import { untrack } from 'svelte';
+import { SvelteDate } from 'svelte/reactivity';
 
 import { me } from '$lib/me.svelte';
 
@@ -40,9 +41,10 @@ export interface FormDraftAttempt {
 export function createFormDraft<T>(options: DraftOptions<T>) {
   let session = $state<{ userId: string; name: string; key: string | undefined }>();
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
+  let restoredKey: string | undefined;
 
   function current(): boolean {
-    return session !== undefined && session.userId === me.userId && session.name === options.name();
+    return session?.userId === me.userId && session.name === options.name();
   }
 
   function persist(): void {
@@ -52,7 +54,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     writeFormDraftAt(
       session.key,
       options.dirty()
-        ? { savedAt: new Date().toISOString(), input: options.snapshot() }
+        ? { savedAt: new SvelteDate().toISOString(), input: options.snapshot() }
         : undefined,
     );
   }
@@ -68,9 +70,10 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     const userId = me.userId;
     const name = options.name();
     untrack(() => {
-      if (session !== undefined && session.userId === userId && session.name === name) return;
+      if (session?.userId === userId && session.name === name) return;
       leave.keep();
       if (session !== undefined) options.reset();
+      restoredKey = undefined;
       session =
         name === undefined || userId === ''
           ? undefined
@@ -146,7 +149,11 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     }
     // Keep the offered copy if storage fails; never destroy the only durable copy.
     options.restore(entry.value.input);
-    if (session !== undefined && writeFormDraftAt(session.key, entry.value)) discard(entry);
+    const stored = session !== undefined && writeFormDraftAt(session.key, entry.value);
+    restoredKey = stored ? undefined : entry.key;
+    offers = offers.filter((candidate) => candidate.key !== entry.key);
+    if (stored && entry.key !== session?.key) removeFormDraftAt(entry.key);
+    persist();
   }
 
   function capture(): FormDraftAttempt | undefined {
@@ -168,12 +175,16 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     if (!offers.some((entry) => entry.key === session?.key)) {
       writeFormDraftAt(session?.key, undefined);
     }
+    if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
+    restoredKey = undefined;
     options.reset();
     return true;
   }
 
   function discardAndLeave(): void {
     if (!leave.open || !current() || options.busy?.() === true) return;
+    if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
+    restoredKey = undefined;
     options.reset();
     persist();
     leave.discard();

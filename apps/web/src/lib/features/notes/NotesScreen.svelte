@@ -3,6 +3,7 @@
   import type { SummaryView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
   import { me } from '$lib/me.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
@@ -76,7 +77,7 @@
     label={m.notes_new_title_label()}
     placeholder={m.notes_new_title_placeholder()}
     submitLabel={m.notes_create()}
-    create={async (requestId, title, context) => {
+    create={async (requestId: string, title: string, context: CreateFormContext) => {
       const note = await api.createNote(
         context.userId,
         requestId,

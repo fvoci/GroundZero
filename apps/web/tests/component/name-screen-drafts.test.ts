@@ -8,6 +8,7 @@ import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
 import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router, workspacePath } from '$lib/router.svelte';
 
 const workspace: Workspace = {
   id: 'ws-1',
@@ -28,8 +29,8 @@ beforeEach(async () => {
   vi.spyOn(api, 'modules').mockResolvedValue([]);
   vi.spyOn(api, 'myNotes').mockResolvedValue([]);
   vi.spyOn(api, 'myInvitations').mockResolvedValue([]);
-  vi.spyOn(api, 'home').mockImplementation(() => new Promise(() => {}));
-  vi.spyOn(api, 'myTasks').mockImplementation(() => new Promise(() => {}));
+  vi.spyOn(api, 'home').mockImplementation(() => new Promise(() => undefined));
+  vi.spyOn(api, 'myTasks').mockImplementation(() => new Promise(() => undefined));
   vi.spyOn(api, 'recentActivity').mockResolvedValue([]);
 });
 afterEach(() => {
@@ -53,9 +54,40 @@ async function roundTrip(mount: () => void, id: string): Promise<void> {
 it('preserves a workspace name in the selected organization without creating it on restore', async () => {
   const create = vi.spyOn(api, 'createWorkspace');
   await roundTrip(() => {
-    render(HomeScreen, { props: { workspaces: [], oncreated: vi.fn(), onjoined: async () => {} } });
+    render(HomeScreen, {
+      props: {
+        workspaces: [],
+        oncreated: vi.fn(),
+        onjoined: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      },
+    });
   }, 'new-workspace');
   expect(create).not.toHaveBeenCalled();
+});
+
+it('clears a successful workspace draft before navigating without asking to discard it', async () => {
+  router.path = '/';
+  vi.spyOn(api, 'createWorkspace').mockResolvedValue(workspace);
+  const created = vi.fn();
+  render(HomeScreen, {
+    props: {
+      workspaces: [],
+      oncreated: created,
+      onjoined: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    },
+  });
+  const box = document.getElementById('new-workspace');
+  if (box === null) throw new Error('missing workspace input');
+  await fireEvent.input(box, { target: { value: 'Space' } });
+  const form = box.closest('form');
+  if (form === null) throw new Error('missing create form');
+  await fireEvent.submit(form);
+  expect(created).toHaveBeenCalledWith(workspace);
+  expect(router.path).toBe(workspacePath(workspace.id));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(
+    Object.keys(localStorage).filter((key) => key.includes('form-draft:workspace-new:')),
+  ).toHaveLength(0);
 });
 
 it('preserves a wiki title in its workspace without creating it on restore', async () => {

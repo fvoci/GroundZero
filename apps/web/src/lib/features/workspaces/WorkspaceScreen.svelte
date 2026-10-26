@@ -4,6 +4,7 @@
 
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { moveThenReload } from '$lib/features/documents/tree';
@@ -157,7 +158,7 @@
       label={m.workspaces_new_doc_title()}
       placeholder={m.workspaces_new_doc_placeholder()}
       submitLabel={m.workspaces_create_doc()}
-      create={async (requestId, title, context) => {
+      create={async (requestId: string, title: string, context: CreateFormContext) => {
         const workspaceId = workspace.id;
         const doc = await api.createWikiDocument(
           workspaceId,

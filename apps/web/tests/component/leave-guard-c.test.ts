@@ -15,7 +15,7 @@ it('does not resurrect a detached sibling when children unmount out of order', (
   const detachFirst = first.attach();
   const detachSecond = second.attach();
   detachFirst();
-  expect(router.guard?.(vi.fn())).toBe(true);
+  expect(router.guard(vi.fn())).toBe(true);
   expect(first.open).toBe(false);
   detachSecond();
   expect(router.guard).toBe(previous);
