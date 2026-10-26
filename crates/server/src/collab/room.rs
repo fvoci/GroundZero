@@ -32,6 +32,7 @@ use yrs::updates::encoder::Encode;
 use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
+use super::lease::Lease;
 use crate::config::Limits;
 use crate::db::Db;
 use crate::error::AppError;
@@ -146,6 +147,7 @@ pub struct Peer {
     pub session: Vec<u8>,
     pub can_write: bool,
     pub out: mpsc::Sender<Outbound>,
+    pub(crate) access: Lease,
 }
 
 #[derive(Debug)]
@@ -759,7 +761,6 @@ struct Room {
     /// 마지막 리비전 뒤로 고친 사람(마지막이 앞). 리비전을 남기면 비운다. 상태와 함께 저장하고(D-95), 작성자가 이 안에
     /// 없으면(대신 저장) 리비전에 실제 편집자로 적는다(`edited_by`).
     edited_since: Vec<UserId>,
-    last_recheck: Instant,
     /// 연결의 세션·권한을 다시 확인하는 간격(`FVOCI_COLLAB_RECHECK_SECS`).
     recheck_every: Duration,
 }
@@ -795,7 +796,6 @@ impl Room {
             persisted: None,
             editors: Vec::new(),
             edited_since: Vec::new(),
-            last_recheck: Instant::now(),
             recheck_every,
         }
     }
@@ -827,9 +827,7 @@ impl Room {
                     if self.dirty_since_snapshot && self.last_change.elapsed() >= SNAPSHOT_IDLE {
                         self.snapshot().await;
                     }
-                    if self.last_recheck.elapsed() >= self.recheck_every {
-                        self.recheck().await;
-                    }
+                    self.recheck().await;
                 }
             }
             if self.doc.is_some() && self.conns.is_empty() {
@@ -857,6 +855,10 @@ impl Room {
                             return false;
                         }
                     }
+                }
+                if peer.access.permission().is_none() {
+                    let _ignored = reply.send(Err(AppError::Unauthorized));
+                    return true;
                 }
                 let start = self.start_messages();
                 if start
@@ -1122,8 +1124,7 @@ impl Room {
         shutdowns
     }
 
-    /// 넣기를 기다리는 편집을 보낸 연결의 세션만 다시 본다. 끝났으면 연결을 닫아(4403) 그 편집을 버린다(`flush`는 닫힌
-    /// 연결의 편집을 넣지 않는다). DB 오류로 알 수 없으면 그대로 둔다(`recheck`와 같다).
+    /// 넣기를 기다리는 편집을 보낸 연결의 세션을 다시 본다. DB 오류와 기한 초과도 연결을 닫고 대기 편집을 버린다.
     async fn drop_ended_sessions(&mut self) {
         let mut checked = HashSet::new();
         let conns: Vec<u64> = self
@@ -1136,8 +1137,15 @@ impl Room {
             let Some(peer) = self.conns.get(&conn).map(|c| c.peer.clone()) else {
                 continue;
             };
-            if session_alive(&self.db, &peer).await == Some(false) {
-                self.close(conn, CloseReason::AccessLost);
+            match peer
+                .access
+                .until_closed(session_alive(&self.db, &peer))
+                .await
+            {
+                Ok(Some(true)) => {}
+                Ok(Some(false)) => self.close(conn, CloseReason::AccessLost),
+                Ok(None) => self.close(conn, CloseReason::Busy),
+                Err(reason) => self.close(conn, reason),
             }
         }
     }
@@ -1258,11 +1266,12 @@ impl Room {
         let Some(connection) = self.conns.get(&conn) else {
             return;
         };
-        let (user, can_write, out) = (
-            connection.peer.user,
-            connection.peer.can_write,
-            connection.peer.out.clone(),
-        );
+        let Some(can_write) = connection.peer.access.permission() else {
+            let reason = connection.peer.access.reason().unwrap_or(CloseReason::Busy);
+            self.close(conn, reason);
+            return;
+        };
+        let (user, can_write, out) = (connection.peer.user, can_write, connection.peer.out.clone());
         let mut decoder = DecoderV1::from(data);
         let messages: Vec<Message> = MessageReader::new(&mut decoder)
             .take(MAX_MESSAGES_PER_FRAME + 1)
@@ -1375,7 +1384,11 @@ impl Room {
             let Some((user, updates)) = by_conn.remove(&conn) else {
                 continue;
             };
-            if !self.conns.contains_key(&conn) {
+            if !self
+                .conns
+                .get(&conn)
+                .is_some_and(|c| c.peer.access.permission() == Some(true))
+            {
                 continue;
             }
             let Ok(merged) = yrs::merge_updates_v1(&updates) else {
@@ -1415,6 +1428,14 @@ impl Room {
                     continue;
                 }
             }
+            // 본문 검사 동안 기한이 지나거나 권한이 철회됐을 수 있다.
+            if !self
+                .conns
+                .get(&conn)
+                .is_some_and(|c| c.peer.access.permission() == Some(true))
+            {
+                continue;
+            }
             let Some(doc) = &self.doc else {
                 return;
             };
@@ -1450,7 +1471,7 @@ impl Room {
         let closed: Vec<u64> = self
             .conns
             .iter()
-            .filter(|(_, c)| c.peer.out.is_closed())
+            .filter(|(_, c)| c.peer.out.is_closed() || c.peer.access.permission().is_none())
             .map(|(id, _)| *id)
             .collect();
         for id in closed {
@@ -1486,12 +1507,20 @@ impl Room {
 
     fn close(&mut self, conn: u64, reason: CloseReason) {
         if let Some(c) = self.conns.get(&conn) {
+            c.peer.access.close(reason);
             let _ignored = c.peer.out.try_send(Outbound::Close(reason));
         }
         self.leave(conn);
     }
 
     fn send(&mut self, out: &mpsc::Sender<Outbound>, bytes: Vec<u8>, conn: u64) {
+        if !self
+            .conns
+            .get(&conn)
+            .is_some_and(|c| c.peer.access.permission().is_some())
+        {
+            return;
+        }
         if out.try_send(Outbound::Binary(bytes)).is_err() {
             self.close(conn, CloseReason::Busy);
         }
@@ -1501,7 +1530,7 @@ impl Room {
         let slow: Vec<u64> = self
             .conns
             .iter()
-            .filter(|(id, _)| Some(**id) != except)
+            .filter(|(id, c)| Some(**id) != except && c.peer.access.permission().is_some())
             .filter(|(_, c)| {
                 c.peer
                     .out
@@ -1594,7 +1623,11 @@ impl Room {
             return false;
         }
         let mut authors = self.editors.clone();
-        for c in self.conns.values().filter(|c| c.peer.can_write) {
+        for c in self
+            .conns
+            .values()
+            .filter(|c| c.peer.access.permission() == Some(true))
+        {
             if !authors.contains(&c.peer.user) {
                 authors.push(c.peer.user);
             }
@@ -1718,8 +1751,7 @@ impl Room {
         Ok(Some(row.revision))
     }
 
-    /// 연결마다 세션과 권한을 다시 본다. 끝났거나 쓰기 권한을 잃었으면 닫고(4403, 다시 붙으면 지금 권한으로),
-    /// 실시간이 꺼졌으면 리비전을 남기고 닫으며, 읽기에서 쓰기로 바뀌었으면 따른다. 일시적인 DB 오류로는 닫지 않는다.
+    /// 독립적인 연결 감시가 실시간 해제를 확인했으면 리비전을 남긴다. 연결 종료는 저장을 기다리지 않는다.
     async fn recheck(&mut self) {
         if self.recheck_peers().await {
             self.flush().await;
@@ -1736,11 +1768,8 @@ impl Room {
         }
     }
 
-    /// 연결마다 세션과 권한만 다시 본다(끝났거나 쓰기 권한을 잃은 연결은 4403으로 닫고, 읽기에서 쓰기로 바뀌었으면 따른다).
-    /// 실시간이 꺼졌으면 참(닫기는 부르는 쪽이 한다). 닫힌 연결이 대기열에 남긴 편집은 넣지 않는다(`incoming`·`flush`가 그
-    /// 연결을 찾지 못한다).
+    /// 독립적인 연결 감시의 결과를 방에 반영한다. 이 경로에서 DB를 기다리거나 기한을 갱신하지 않는다.
     async fn recheck_peers(&mut self) -> bool {
-        self.last_recheck = Instant::now();
         let peers: Vec<(u64, Peer)> = self
             .conns
             .iter()
@@ -1748,18 +1777,9 @@ impl Room {
             .collect();
         let mut off = false;
         for (conn, peer) in peers {
-            match peer_access(&self.db, self.doc_id, &peer).await {
-                PeerAccess::Allowed { can_write } => {
-                    // 쓰기 권한을 잃은 연결은 닫는다. 열어 두면 화면은 "연결됨"인 채로 그 사람의 입력을 조용히 버린다.
-                    if !can_write && peer.can_write {
-                        self.close(conn, CloseReason::AccessLost);
-                    } else if let Some(c) = self.conns.get_mut(&conn) {
-                        c.peer.can_write = can_write;
-                    }
-                }
-                PeerAccess::Denied => self.close(conn, CloseReason::AccessLost),
-                PeerAccess::RealtimeOff => off = true,
-                PeerAccess::Unknown => {}
+            if let Some(reason) = peer.access.reason() {
+                off |= reason == CloseReason::RealtimeOff;
+                self.close(conn, reason);
             }
         }
         off

@@ -2773,7 +2773,7 @@ async fn live_move_race_setup_rechecking(label: &str, recheck_secs: &str) -> (Te
 /// 1초 재확인은 3초 상태 저장 주기를 기다리지 않는다. 여유 250ms는 로컬 소켓 전달/시험 스케줄링용이다.
 #[tokio::test]
 async fn a_one_second_recheck_closes_a_logged_out_connection() {
-    let (writer, (_state, app, _addr, _admin, _from, _to, _id, mut editor, mut reader)) =
+    let (writer, (_state, app, _addr, _admin, _from, _to, _id, mut editor, reader)) =
         live_move_race_setup_rechecking("짧은 재확인", "1").await;
     let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
     assert!(logout.status.is_success(), "{:?}", logout.json);
@@ -2785,7 +2785,7 @@ async fn a_one_second_recheck_closes_a_logged_out_connection() {
 /// 저장 쿼리가 잠겨 방이 명령을 읽지 못해도, 연결의 권한 기한은 독립적으로 적용된다.
 #[tokio::test]
 async fn a_one_second_recheck_closes_during_a_blocked_room_persist() {
-    let (writer, (_state, app, _addr, _admin, _from, _to, id, mut editor, mut reader)) =
+    let (writer, (_state, app, _addr, admin, from, _to, id, mut editor, reader)) =
         live_move_race_setup_rechecking("저장 대기 중 재확인", "1").await;
     assert!(
         editor.until(acked).await,
@@ -2809,16 +2809,174 @@ async fn a_one_second_recheck_closes_during_a_blocked_room_persist() {
     until_waiting_on_lock("app_system_collab_store", holder).await;
     let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
     assert!(logout.status.is_success(), "{:?}", logout.json);
+    editor
+        .try_paragraph("만료 뒤 적용하면 안 되는 대기 편집")
+        .await;
     let closed = tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await;
+    let late_ack = acked(&editor);
     // 실패해도 시험이 잡은 잠금은 먼저 풀어 다른 시험/표준 정리를 막지 않는다.
     hold.rollback().await.unwrap();
     owner.close().await;
-    reader.close().await;
     assert_eq!(
         closed.ok().flatten(),
         Some(4403),
         "room persistence delayed revocation"
     );
+    assert!(
+        !late_ack,
+        "the expired connection acknowledged its queued edit"
+    );
+    let off = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({"enabled":false})),
+    )
+    .await;
+    assert_eq!(off.status, StatusCode::NO_CONTENT, "{:?}", off.json);
+    let saved = get_doc(&app, &admin, &id).await;
+    assert!(saved["body"].to_string().contains("체크포인트 전 문단"));
+    assert!(
+        !saved["body"]
+            .to_string()
+            .contains("만료 뒤 적용하면 안 되는 대기 편집")
+    );
+    reader.close().await;
+}
+
+/// 한 시험 앱의 DB 연결만 중계한다. 다른 시험이나 원본 앱의 DB에는 장애를 주지 않는다.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProxyMode {
+    Running,
+    Stalled,
+    Failed,
+}
+
+struct DbProxy {
+    url: String,
+    mode: tokio::sync::watch::Sender<ProxyMode>,
+    stalled: tokio::sync::mpsc::Receiver<()>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl DbProxy {
+    async fn start() -> Self {
+        let mut url = url::Url::parse(&std::env::var("DATABASE_URL").unwrap()).unwrap();
+        let target = (
+            url.host_str().unwrap().to_owned(),
+            url.port().unwrap_or(5432),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        url.set_host(Some("127.0.0.1")).unwrap();
+        url.set_port(Some(listener.local_addr().unwrap().port()))
+            .unwrap();
+        let (mode, receiver) = tokio::sync::watch::channel(ProxyMode::Running);
+        let (stalled, received) = tokio::sync::mpsc::channel(32);
+        let task = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let (mut incoming, _) = listener.accept().await.unwrap();
+                let mut changes = receiver.clone();
+                let target = target.clone();
+                let stalled = stalled.clone();
+                connections.spawn(async move {
+                    let mut outgoing = TcpStream::connect(target).await.unwrap();
+                    if *changes.borrow() == ProxyMode::Running {
+                        tokio::select! {
+                            _ = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing) => return,
+                            _ = changes.changed() => {},
+                        }
+                    }
+                    if *changes.borrow() == ProxyMode::Stalled {
+                        let _ignored = stalled.send(()).await;
+                        while *changes.borrow_and_update() == ProxyMode::Stalled {
+                            if changes.changed().await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                });
+                while connections.try_join_next().is_some() {}
+            }
+        });
+        Self {
+            url: url.into(),
+            mode,
+            stalled: received,
+            task,
+        }
+    }
+
+    async fn pause(&mut self) {
+        self.mode.send(ProxyMode::Stalled).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), self.stalled.recv())
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    fn fail(&self) {
+        self.mode.send(ProxyMode::Failed).unwrap();
+    }
+}
+
+impl Drop for DbProxy {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+/// 유효한 확인은 1초를 넘겨 연결을 유지한다. 이후 해당 풀만 지연/실패해도 다른 연결의 기한은 독립적이다.
+#[tokio::test]
+async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure() {
+    for pause in [true, false] {
+        let (writer, (state, app, _addr, _admin, _from, _to, id, editor, mut reader)) =
+            live_move_race_setup_rechecking("독립 DB 재확인", "1").await;
+        let mut proxy = DbProxy::start().await;
+        let mut proxied = state.clone();
+        proxied.db = fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(
+            proxy.url.clone(),
+        ))
+        .unwrap();
+        let addr = serve(common::app(&proxied)).await;
+        let mut client = connect(addr, Some(&writer), &id, true).await.unwrap();
+        let healthy_until = tokio::time::Instant::now() + Duration::from_millis(1300);
+        while tokio::time::Instant::now() < healthy_until {
+            assert!(
+                !matches!(
+                    client.next(Duration::from_millis(50)).await,
+                    Event::Closed(_)
+                ),
+                "healthy rechecks closed the connection"
+            );
+        }
+        client.read_by_server().await;
+        if pause {
+            proxy.pause().await;
+        } else {
+            proxy.fail();
+        }
+        let closed = tokio::time::timeout(Duration::from_millis(1250), client.closed()).await;
+        proxy.fail();
+        assert_eq!(closed.ok().flatten(), Some(4503), "pause={pause}");
+        // 같은 문서의 원본 풀 연결은 장애를 받지 않았고 계속 살아 있다.
+        reader.read_by_server().await;
+        assert_eq!(
+            send(
+                &app,
+                Method::GET,
+                &format!("/api/documents/{id}"),
+                Some(&writer),
+                None
+            )
+            .await
+            .status,
+            StatusCode::OK
+        );
+        editor.close().await;
+        reader.close().await;
+    }
 }
 
 /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
