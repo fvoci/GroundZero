@@ -162,6 +162,11 @@ describe('saved view save on a stale version', () => {
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
+    feedback.accountSafety.switching = true;
+    const switchingUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(switchingUnload);
+    expect(switchingUnload.defaultPrevented).toBe(false);
+    feedback.accountSafety.switching = false;
     first.unmount();
     render(TaskBoard, props);
     await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));

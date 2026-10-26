@@ -773,12 +773,16 @@
       beforeUnload: () => {
         if (openTaskId === undefined)
           return accountSwitching()
-            ? viewDirty || [...newKept.values()].some((kept) => !kept)
+            ? (viewDirty && !viewDraft.kept) || [...newKept.values()].some((kept) => !kept)
             : newDirty.size > 0 || viewDirty;
         // 편집 가능 여부(canEdit)와 무관하게 "고친 입력이 있는데 초안을 남기지 못했는지"만 본다(TaskDetail이 알린다; 고친 칸이
         // 없거나 폼이 사라지면 true). 저장이 409 account_changed로 끝나 폼이 잠긴 뒤에도 입력은 지켜야 한다.
         if (accountSwitching())
-          return !detailDraftKept || viewDirty || [...newKept.values()].some((kept) => !kept);
+          return (
+            !detailDraftKept ||
+            (viewDirty && !viewDraft.kept) ||
+            [...newKept.values()].some((kept) => !kept)
+          );
         return detailUnsaved || detailSaving || newDirty.size > 0 || viewDirty;
       },
     }),

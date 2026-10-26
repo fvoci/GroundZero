@@ -207,6 +207,8 @@
   let childDraft = $state<{ name: string; requestId: string | null } | undefined>();
   let checklistUnsaved = $state(false);
   let commentsUnsaved = $state(false);
+  let checklistDraftKept = $state(true);
+  let commentsDraftKept = $state(true);
   let parentStatus = $state('');
   const parentCandidates = $derived(
     tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
@@ -748,10 +750,10 @@
           : null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
-      ondraftkept?.(kept && !checklistUnsaved && !commentsUnsaved);
+      ondraftkept?.(kept && checklistDraftKept && commentsDraftKept);
     } else {
       clearFormDraft(draftName);
-      ondraftkept?.(!checklistUnsaved && !commentsUnsaved);
+      ondraftkept?.(checklistDraftKept && commentsDraftKept);
     }
   });
   // 폼이 사라지면(닫기·다른 업무 열기) 이 폼의 초안 상태도 끝난다: 다음 폼의 깨끗한 상태가 옛 실패를 물려받지 않게 한다.
@@ -1698,7 +1700,10 @@
           items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
           {canEdit}
           onunsaved={(value: boolean) => {
-            if (value || !accountSwitching()) checklistUnsaved = value;
+            checklistUnsaved = value;
+          }}
+          ondraftkept={(value: boolean) => {
+            checklistDraftKept = value;
           }}
           onadd={(entries: NewChecklistEntry[], user: string) =>
             reloadChecklist(
@@ -1723,7 +1728,10 @@
           canWrite={current.access !== 'read'}
           itemId={current.item_id}
           onunsaved={(value: boolean) => {
-            if (value || !accountSwitching()) commentsUnsaved = value;
+            commentsUnsaved = value;
+          }}
+          ondraftkept={(value: boolean) => {
+            commentsDraftKept = value;
           }}
         />
 
