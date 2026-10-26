@@ -190,6 +190,20 @@ it('fences account switching before me changes and lets the reload proceed', asy
   expect(keys().some((key) => key.includes('user-b'))).toBe(false);
 });
 
+it('warns before account-switch reload when the original input could not be preserved', async () => {
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('full');
+  });
+  mount();
+  await fireEvent.input(input(), { target: { value: 'only in memory' } });
+  markAccountSwitch();
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  expect(input()).toHaveValue('only in memory');
+  expect(create).not.toHaveBeenCalled();
+});
+
 it('does not clear the original draft on a late success after account switching begins', async () => {
   let finish: (() => void) | undefined;
   create.mockImplementation(

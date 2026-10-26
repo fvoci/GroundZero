@@ -7,6 +7,7 @@ import { api, NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
 
 // D-96·D-128: 만들지 않은 새 업무 제목(아래 폼·열의 빠른 추가)은 친 계정의 브라우저 초안으로 남고, 다시 읽은 뒤 같은 계정에게만
 // 되살릴지 묻는다. 되살리면 제목과 그때의 request_id를 시드하므로 응답을 잃었던 만들기를 다시 눌러도 중복되지 않는다. 사용자가
@@ -118,6 +119,23 @@ function reloadLike(): void {
 }
 
 describe('new task title across reloads and account switches', () => {
+  it('guards route changes and browser unload while a new title is unsaved', async () => {
+    await mount();
+    await fireEvent.input(await input('새 업무 제목'), { target: { value: '나가기 전 제목' } });
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    const path = router.path;
+    router.navigate('/tasks');
+    await screen.findByRole('alertdialog');
+    expect(router.path).toBe(path);
+    await fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+    expect(await input('새 업무 제목')).toHaveValue('나가기 전 제목');
+    router.navigate('/tasks');
+    await fireEvent.click(await screen.findByRole('button', { name: '변경 버리고 닫기' }));
+    expect(router.path).toBe('/tasks');
+    expect(keysOf(A)).toEqual([]);
+  });
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.localStorage.clear();
@@ -159,7 +177,7 @@ describe('new task title across reloads and account switches', () => {
     await waitFor(() => {
       expect(create).toHaveBeenCalledTimes(2);
     });
-    expect(create).toHaveBeenLastCalledWith('i1', requestId, 'A의 새 업무');
+    expect(create).toHaveBeenLastCalledWith(A, 'i1', requestId, 'A의 새 업무');
     await waitFor(() => {
       expect(keysOf(A)).toEqual([]);
     });
@@ -234,7 +252,7 @@ describe('new task title across reloads and account switches', () => {
     await waitFor(() => {
       expect(create).toHaveBeenCalledTimes(1);
     });
-    const firstRequestId = create.mock.calls[0]?.[1];
+    const firstRequestId = create.mock.calls[0]?.[2];
     // 만들기가 끝나 폼이 비워질 때까지 기다린다(보내는 중에는 Esc를 받지 않는다).
     await waitFor(() => {
       expect(seeded.value).toBe('');
@@ -257,6 +275,6 @@ describe('new task title across reloads and account switches', () => {
     await waitFor(() => {
       expect(create).toHaveBeenCalledTimes(2);
     });
-    expect(create.mock.calls[1]?.[1]).not.toBe(firstRequestId);
+    expect(create.mock.calls[1]?.[2]).not.toBe(firstRequestId);
   });
 });

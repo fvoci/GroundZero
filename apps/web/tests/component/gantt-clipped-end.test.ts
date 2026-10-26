@@ -131,7 +131,7 @@ describe('gantt bar clipped at the end of the shown period', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[2]).toMatchObject({
+    expect(update.mock.calls[0]?.[3]).toMatchObject({
       start_date: '2026-01-03',
       due_date: '2028-01-03',
     });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseDocNode, parseDocument } from '$lib/api/client';
+import { parseDocNode, parseDocument, parseShareView } from '$lib/api/client';
 import { plainText } from '$lib/features/documents/drafts';
 import { parseRoute } from '$lib/router.svelte';
 
@@ -25,6 +25,26 @@ describe('parseRoute', () => {
 });
 
 describe('response validation', () => {
+  it.each([null, undefined, 'reader@example.test'])(
+    'parses a share with email %s and its display name',
+    (email) => {
+      expect(
+        parseShareView({ id, email, display_name: '공유 수신자', permission: 'read' }),
+      ).toEqual({
+        id,
+        email: email ?? null,
+        display_name: '공유 수신자',
+        permission: 'read',
+      });
+    },
+  );
+
+  it('rejects malformed share identity fields', () => {
+    const share = { id, email: null, display_name: '공유 수신자', permission: 'read' };
+    expect(() => parseShareView({ ...share, email: 1 })).toThrow();
+    expect(() => parseShareView({ ...share, display_name: undefined })).toThrow();
+  });
+
   const valid = {
     id,
     workspace_id: ws,

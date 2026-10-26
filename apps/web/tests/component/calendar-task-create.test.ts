@@ -128,9 +128,9 @@ describe('creating a task from a calendar day', () => {
     await waitFor(() => {
       expect(oncreated).toHaveBeenCalled();
     });
-    expect(create.mock.calls[0]?.[0]).toBe('i1');
-    expect(create.mock.calls[0]?.[2]).toBe('자료 준비');
-    expect(create.mock.calls[0]?.[4]).toEqual({ due_date: '2026-10-23' });
+    expect(create.mock.calls[0]?.[1]).toBe('i1');
+    expect(create.mock.calls[0]?.[3]).toBe('자료 준비');
+    expect(create.mock.calls[0]?.[5]).toEqual({ due_date: '2026-10-23' });
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -200,9 +200,16 @@ describe('creating a task from a calendar day', () => {
     });
     await fireEvent.click(within(dialog).getByRole('button', { name: '업무 만들기' }));
     await waitFor(() => {
-      expect(create).toHaveBeenCalledWith('i1', expect.any(String), '자료 준비', null, {
-        due_date: '2026-10-23',
-      });
+      expect(create).toHaveBeenCalledWith(
+        expect.any(String),
+        'i1',
+        expect.any(String),
+        '자료 준비',
+        null,
+        {
+          due_date: '2026-10-23',
+        },
+      );
     });
   });
 

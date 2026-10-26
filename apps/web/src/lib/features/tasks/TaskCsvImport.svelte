@@ -1,4 +1,6 @@
 <script lang="ts">
+  const editingUser = untrack(() => me.userId);
+  import { me } from '$lib/me.svelte';
   // 업무 CSV 일괄 등록(D-39). 한 줄씩 기존 업무 만들기 API로 넣는다(같은 검증과 권한). 한 줄은 모든 칸을 실은 요청
   // 하나라(D-105) 서버가 한 트랜잭션에서 확인·저장하고, 거절된 줄은 아무것도 남기지 않는다. 줄마다 진행 상태를 기억해
   // 두어(csv-import.ts) 중간에 실패해도 다시 누르면 다 넣은 줄은 건너뛰고 나머지를 같은 요청 id로 보낸다(응답을 잃은 줄이
@@ -47,6 +49,7 @@
   // 줄별 진행 상태. 이 묶음을 모두 넣을 때까지 지킨다(글자에서 지운 줄의 것도: 다시 넣으면 같은 업무). 글자를 모두
   // 지우면 버린다(새 묶음). 안의 값은 등록하면서 고치므로 등록이 끝날 때 배열을 바꿔 안내를 다시 계산한다.
   let progress = $state.raw<RowProgress[]>([]);
+  let offered = $state<{ text: string; rows: RowProgress[] } | undefined>();
   const storageKey = $derived.by(() => {
     // 같은 조직의 다른 계정으로 목록을 다시 받아도 사용자 키를 다시 계산한다.
     if (org.organizations.length === 0) return '';
@@ -67,8 +70,9 @@
     const mine = ++generation;
     untrack(() => {
       const saved = restoreImport(key);
-      text = saved.text;
-      progress = saved.rows;
+      offered = saved.text !== '' || saved.rows.length > 0 ? saved : undefined;
+      text = '';
+      progress = [];
       loadedKey = key;
       busy = false;
       status = '';
@@ -90,7 +94,12 @@
   });
 
   $effect(() => {
-    if (loadedKey === storageKey && org.currentId !== undefined)
+    if (
+      offered === undefined &&
+      me.userId === editingUser &&
+      loadedKey === storageKey &&
+      org.currentId !== undefined
+    )
       saveImport(loadedKey, text, progress);
   });
 
@@ -134,7 +143,7 @@
   async function importRows(): Promise<void> {
     const result = parsed;
     if (result === undefined || result.errors.length > 0 || busy) return;
-    if (org.currentId === undefined) return;
+    if (org.currentId === undefined || me.userId !== editingUser || offered !== undefined) return;
     const mine = generation;
     const keyForImport = loadedKey;
     const abort = new AbortController();
@@ -156,6 +165,7 @@
     let current: RowStep | undefined;
     try {
       for (const step of steps) {
+        if (me.userId !== editingUser) return;
         abort.signal.throwIfAborted();
         const { row, key, progress: line } = step;
         // 다 넣은 줄은 다시 보내지 않는다. 여기 오는 줄은 새 줄이거나 아직 다 넣지 못한 줄이다(matchRows는 다 넣은
@@ -163,6 +173,7 @@
         if (line.applied !== key) {
           current = step;
           const task = await api.createTask(
+            editingUser,
             itemId,
             line.requestId,
             row.title,
@@ -253,6 +264,7 @@
     controller?.abort();
     leaving = false;
     allowLeave = true;
+    saveImport(loadedKey, '', []);
     const next = proceed;
     proceed = undefined;
     next?.();
@@ -260,55 +272,80 @@
   }}
 />
 
-<Collapsible.Root bind:open={expanded} class="text-sm">
-  <Collapsible.Trigger>{m.tasks_csv_summary()}</Collapsible.Trigger>
-  <Collapsible.Content class="flex flex-col gap-2 pt-2">
-    <Label for={`tasks-csv-${itemId}`}
-      >{m.tasks_csv_label({
-        statuses: statuses.map((definition) => definition.name).join(' · '),
-      })}</Label
-    >
-    <Textarea
-      id={`tasks-csv-${itemId}`}
-      class="max-h-96 min-h-32 overflow-y-auto font-code"
-      bind:value={text}
-      disabled={busy}
-      oninput={(e: Event) => {
-        if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
-      }}
-    />
-    <p role="status" hidden={status === ''}>{status}</p>
-    <p aria-live="polite">
-      {#if error !== undefined}
-        <span class="text-destructive">{error}</span>
-      {:else if parsed !== undefined}
-        {m.tasks_csv_read({ count: parsed.rows.length })}
-        {#if parsed.errors.length > 0}
-          <span class="text-destructive">
-            {m.tasks_csv_fix_lines({
-              lines: parsed.errors
-                .map((er) => m.tasks_csv_line_error({ line: er.line, reason: er.reason }))
-                .join(', '),
-            })}
-          </span>
-        {/if}
+{#if me.userId === editingUser}
+  <Collapsible.Root bind:open={expanded} class="text-sm">
+    <Collapsible.Trigger>{m.tasks_csv_summary()}</Collapsible.Trigger>
+    <Collapsible.Content class="flex flex-col gap-2 pt-2">
+      {#if offered !== undefined && me.userId === editingUser}
+        <div role="region" aria-label={m.tasks_draft_region()} data-testid="task-csv-draft-offer">
+          <p>{m.tasks_draft_region()}</p>
+          <Button
+            variant="outline"
+            onclick={() => {
+              if (offered === undefined) return;
+              text = offered.text;
+              progress = offered.rows;
+              offered = undefined;
+            }}>{m.tasks_draft_restore()}</Button
+          >
+          <Button
+            variant="ghost"
+            onclick={() => {
+              saveImport(loadedKey, '', []);
+              offered = undefined;
+            }}>{m.tasks_draft_discard()}</Button
+          >
+        </div>
       {/if}
-    </p>
-    <p class="text-muted-foreground" aria-live="polite">{resume}</p>
-    <div>
-      <Button
-        variant="outline"
-        disabled={busy ||
-          org.currentId === undefined ||
-          parsed === undefined ||
-          parsed.rows.length === 0 ||
-          parsed.errors.length > 0}
-        onclick={() => void importRows()}>{m.tasks_csv_import()}</Button
+      <Label for={`tasks-csv-${itemId}`}
+        >{m.tasks_csv_label({
+          statuses: statuses.map((definition) => definition.name).join(' · '),
+        })}</Label
       >
-      {#if busy}<Button variant="outline" onclick={() => controller?.abort()}
-          >{m.common_cancel()}</Button
-        >{/if}
-      {#if org.currentId === undefined}<p>{m.app_organization_required()}</p>{/if}
-    </div>
-  </Collapsible.Content>
-</Collapsible.Root>
+      <Textarea
+        id={`tasks-csv-${itemId}`}
+        class="max-h-96 min-h-32 overflow-y-auto font-code"
+        bind:value={text}
+        disabled={busy || offered !== undefined || me.userId !== editingUser}
+        oninput={(e: Event) => {
+          if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
+        }}
+      />
+      <p role="status" hidden={status === ''}>{status}</p>
+      <p aria-live="polite">
+        {#if error !== undefined}
+          <span class="text-destructive">{error}</span>
+        {:else if parsed !== undefined}
+          {m.tasks_csv_read({ count: parsed.rows.length })}
+          {#if parsed.errors.length > 0}
+            <span class="text-destructive">
+              {m.tasks_csv_fix_lines({
+                lines: parsed.errors
+                  .map((er) => m.tasks_csv_line_error({ line: er.line, reason: er.reason }))
+                  .join(', '),
+              })}
+            </span>
+          {/if}
+        {/if}
+      </p>
+      <p class="text-muted-foreground" aria-live="polite">{resume}</p>
+      <div>
+        <Button
+          variant="outline"
+          disabled={busy ||
+            offered !== undefined ||
+            me.userId !== editingUser ||
+            org.currentId === undefined ||
+            parsed === undefined ||
+            parsed.rows.length === 0 ||
+            parsed.errors.length > 0}
+          onclick={() => void importRows()}>{m.tasks_csv_import()}</Button
+        >
+        {#if busy}<Button variant="outline" onclick={() => controller?.abort()}
+            >{m.common_cancel()}</Button
+          >{/if}
+        {#if org.currentId === undefined}<p>{m.app_organization_required()}</p>{/if}
+      </div>
+    </Collapsible.Content>
+  </Collapsible.Root>
+{/if}

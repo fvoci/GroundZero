@@ -3,13 +3,31 @@ import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
 import { api, ApiError, newRequestId } from '$lib/api/client';
 import { errorText } from '$lib/api/errors';
 import { m } from '$lib/paraglide/messages.js';
-import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+import { me } from '$lib/me.svelte';
 
 import { liveSeconds } from './format';
 
 class TimerStore {
   entry = $state<TimeEntryView | null>(null);
   error = $state<string | undefined>(undefined);
+  restartPending = $state(false);
+  #restartChoice: ((mode: 'continue' | 'new' | undefined) => void) | undefined;
+
+  /** 취소·다른 쓰기·계정 전환도 대기 중인 선택을 끝내 원래 호출을 풀어 준다. */
+  chooseRestart(mode: 'continue' | 'new' | undefined): void {
+    const resolve = this.#restartChoice;
+    this.#restartChoice = undefined;
+    this.restartPending = false;
+    resolve?.(mode);
+  }
+
+  #askRestart(): Promise<'continue' | 'new' | undefined> {
+    this.restartPending = true;
+    return new Promise((resolve) => {
+      this.#restartChoice = resolve;
+    });
+  }
   #fetchedAt = $state(Date.now());
   #now = $state(Date.now());
   #tick: ReturnType<typeof setInterval> | undefined;
@@ -23,6 +41,7 @@ class TimerStore {
   #resync = false;
 
   #beginWrite(): number {
+    this.chooseRestart(undefined);
     this.#seq += 1;
     this.#writing += 1;
     this.#writeSeq += 1;
@@ -89,18 +108,40 @@ class TimerStore {
     memo = '',
   ): Promise<void> {
     const mine = this.#beginWrite();
+    const userId = me.userId;
+    const requestId = newRequestId();
+    const current = (): boolean =>
+      mine === this.#writeSeq && me.userId === userId && !accountSwitching();
     let entry: TimeEntryView;
     try {
-      const started = await api.startTimer(newRequestId(), kind, memo, target);
+      let started;
+      try {
+        started = await api.startTimer(requestId, kind, memo, target);
+      } catch (error: unknown) {
+        if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'timer_running')
+          throw error;
+        if (!current()) {
+          await this.#finishWrite(true);
+          return;
+        }
+        const mode = await this.#askRestart();
+        if (mode === undefined || !current()) {
+          await this.#finishWrite(true);
+          return;
+        }
+        started = await api.startTimer(requestId, kind, memo, target, mode);
+      }
       entry = started;
-      notifyDone(
-        started.stopped_entry_id != null ? m.time_previous_saved() : m.time_timer_started(),
-      );
+      if (current()) {
+        notifyDone(
+          started.stopped_entry_id != null ? m.time_previous_saved() : m.time_timer_started(),
+        );
+      }
     } catch (e: unknown) {
       await this.#finishWrite(!TimerStore.#stale(e));
       throw e;
     }
-    const latest = mine === this.#writeSeq;
+    const latest = current();
     if (latest) this.#set(entry);
     await this.#finishWrite(latest);
   }

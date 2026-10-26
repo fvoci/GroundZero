@@ -86,7 +86,7 @@ describe('move menu within a column', () => {
       expect(move).toHaveBeenCalledTimes(1);
     });
     // 같은 열(todo)의 "문서 검토" 앞으로.
-    expect(move.mock.calls[0]?.slice(0, 3)).toEqual(['2', 'todo', '1']);
+    expect(move.mock.calls[0]?.slice(1, 4)).toEqual(['2', 'todo', '1']);
   });
 });
 
@@ -126,6 +126,6 @@ describe('reordering under a non-default sort', () => {
     await waitFor(() => {
       expect(move).toHaveBeenCalledTimes(1);
     });
-    expect(move.mock.calls[0]?.slice(0, 3)).toEqual(['1', 'in_progress', null]);
+    expect(move.mock.calls[0]?.slice(1, 4)).toEqual(['1', 'in_progress', null]);
   });
 });

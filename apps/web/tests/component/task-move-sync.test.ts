@@ -357,7 +357,7 @@ describe('kanban save states', () => {
     await fireEvent.click(within(box).getByRole('button', { name: '다시 시도' }));
     await flush();
     expect(move).toHaveBeenCalledTimes(2);
-    expect(move).toHaveBeenLastCalledWith('a', 'in_progress', null, 1);
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', 'in_progress', null, 1);
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('in_progress');
     // 응답의 판이 이 이동만으로 될 판(1 → 2)이므로 겹친 변경으로 알리지 않는다.
@@ -422,13 +422,13 @@ describe('kanban save states', () => {
     await flush();
     expect(saveState('a')).toBe('not_saved');
     // 처음 옮기기는 조건 없이 보낸다(D-79).
-    expect(move.mock.calls[0]?.[3]).toBeUndefined();
+    expect(move.mock.calls[0]?.[4]).toBeUndefined();
     const box = card('a').closest<HTMLElement>('[data-board-card]');
     if (box === null) throw new Error('box');
     await fireEvent.click(within(box).getByRole('button', { name: '다시 시도' }));
     await flush();
     expect(move).toHaveBeenCalledTimes(2);
-    expect(move.mock.calls[1]).toEqual(['a', 'in_progress', null, 1]);
+    expect(move.mock.calls[1]).toEqual([expect.any(String), 'a', 'in_progress', null, 1]);
     expect(read).toHaveBeenCalledTimes(4);
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('done');
@@ -514,9 +514,16 @@ describe('kanban save states', () => {
     await fireEvent.input(input, { target: { value: '새 업무' } });
     await fireEvent.submit(input.closest('form') ?? input);
     await flush();
-    expect(create).toHaveBeenCalledWith('i1', expect.any(String), '새 업무', null, {
-      status: 'in_progress',
-    });
+    expect(create).toHaveBeenCalledWith(
+      expect.any(String),
+      'i1',
+      expect.any(String),
+      '새 업무',
+      null,
+      {
+        status: 'in_progress',
+      },
+    );
     expect(move).not.toHaveBeenCalled();
     expect(laneOf('n')).toBe('in_progress');
     expect(saveState('n')).toBeNull();
@@ -595,7 +602,7 @@ describe('kanban save states', () => {
     await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 다시 저장' }));
     await fireEvent.click(screen.getByRole('button', { name: '내 입력으로 다시 저장' }));
     expect(move).toHaveBeenCalledTimes(2);
-    expect(move).toHaveBeenLastCalledWith('a', 'in_progress', null, 5);
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', 'in_progress', null, 5);
     save.resolve({ ...newest, status: 'in_progress', move_version: 6, checklist: [] });
     await flush();
   });
@@ -611,7 +618,7 @@ describe('kanban save states', () => {
     expect(liveText()).toContain('앞선 이동을 저장하는 중입니다');
     await moveRight('b');
     expect(move).toHaveBeenCalledTimes(2);
-    expect(move).toHaveBeenLastCalledWith('b', 'in_progress', null, undefined);
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'b', 'in_progress', null, undefined);
   });
 
   // 떠난 뒤 남는 가짜 타이머는 이 보드 것이 아니다: Svelte 이벤트 위임이 거는 1회성 0ms 타이머와 연결 확인 주기(전역,

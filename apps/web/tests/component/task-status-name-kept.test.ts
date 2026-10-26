@@ -82,7 +82,7 @@ describe('custom task status names survive a save of other fields', () => {
     await setLocale('ko', { reload: false });
     const current = detail();
     const sent: TaskInput[] = [];
-    vi.spyOn(api, 'updateTask').mockImplementation((_id, _base, input) => {
+    vi.spyOn(api, 'updateTask').mockImplementation((_user, _id, _base, input) => {
       sent.push(input);
       return Promise.resolve({
         kind: 'updated',

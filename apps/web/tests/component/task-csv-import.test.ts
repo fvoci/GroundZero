@@ -77,6 +77,7 @@ function fakeServer() {
     .spyOn(api, 'createTask')
     .mockImplementation(
       async (
+        _user: string,
         _item: string,
         requestId: string,
         title: string,
@@ -152,7 +153,7 @@ function fakeServer() {
     });
     return release;
   };
-  const titles = (): string[] => create.mock.calls.map((c) => c[2]);
+  const titles = (): string[] => create.mock.calls.map((c) => c[3]);
   return { create, update, bump, remove, hide, reject, lose, holdNextCreate, made, tasks, titles };
 }
 
@@ -172,6 +173,7 @@ const tooManyTags = (): ApiError => new ApiError(400, 'bad_request', 'at most 20
 describe('TaskCsvImport one request per row (D-105)', () => {
   beforeEach(async () => {
     sessionStorage.clear();
+    localStorage.clear();
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'assignable').mockResolvedValue([
       { user_id: 'u1', display_name: '가람' },
@@ -190,19 +192,23 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const first = render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB');
     await pressImport(onimported, 1);
-    const lostId = server.create.mock.calls[1]?.[1];
+    const lostId = server.create.mock.calls[1]?.[2];
     first.unmount();
     render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('');
+    expect(server.create).toHaveBeenCalledTimes(2);
+    sessionStorage.clear();
+    await fireEvent.click(screen.getByRole('button', { name: '입력 복원' }));
     expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('A\nB');
     await pressImport(onimported, 2);
     expect(server.titles()).toEqual(['A', 'B', 'B']);
-    expect(server.create.mock.calls[2]?.[1]).toBe(lostId);
+    expect(server.create.mock.calls[2]?.[2]).toBe(lostId);
     expect(server.made).toHaveLength(2);
   });
 
   it('cancels the in-flight request, retains its id, and stops before the next row', async () => {
     let signal: AbortSignal | undefined;
-    const create = vi.spyOn(api, 'createTask').mockImplementation((_i, _r, _t, _p, _f, s) => {
+    const create = vi.spyOn(api, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {
       signal = s;
       return new Promise((_resolve, reject) =>
         s?.addEventListener('abort', () => {
@@ -215,7 +221,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     await setText('A\nB');
     await fireEvent.click(screen.getByRole('button', { name: '등록' }));
     const stored = restoreImport(org.key('csv-import:i1'));
-    expect(stored.rows[0]?.requestId).toBe(create.mock.calls[0]?.[1]);
+    expect(stored.rows[0]?.requestId).toBe(create.mock.calls[0]?.[2]);
     await fireEvent.click(screen.getByRole('button', { name: m.common_cancel() }));
     await waitFor(() => {
       expect(onimported).toHaveBeenCalled();
@@ -228,7 +234,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 
   it('unmount aborts and preserves the request id before the response arrives', async () => {
     let signal: AbortSignal | undefined;
-    const create = vi.spyOn(api, 'createTask').mockImplementation((_i, _r, _t, _p, _f, s) => {
+    const create = vi.spyOn(api, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {
       signal = s;
       return new Promise((_resolve, reject) =>
         s?.addEventListener('abort', () => {
@@ -243,7 +249,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     view.unmount();
     expect(signal?.aborted).toBe(true);
     expect(restoreImport(org.key('csv-import:i1')).rows[0]?.requestId).toBe(
-      create.mock.calls[0]?.[1],
+      create.mock.calls[0]?.[2],
     );
     expect(onimported).not.toHaveBeenCalled();
   });
@@ -266,10 +272,10 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     router.navigate('/csv-away');
     await fireEvent.click(await screen.findByRole('button', { name: m.tasks_csv_leave() }));
     expect(router.path).toBe('/csv-away');
-    expect(restoreImport(org.key('csv-import:i1')).text).toBe('A');
+    expect(restoreImport(org.key('csv-import:i1')).text).toBe('');
   });
 
-  it('keeps each account and organization in a separate session draft', async () => {
+  it('offers each account and organization draft for explicit restoration', async () => {
     org.load('csv-user-a', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
     render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
     await setText('계정 A');
@@ -279,18 +285,16 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     });
     await setText('계정 B');
     org.load('csv-user-a', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
-    await waitFor(() => {
-      expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('계정 A');
-    });
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 복원' }));
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('계정 A');
     const other = { ...TEST_ORGANIZATION, id: 'org-2' };
     org.load('csv-user-a', [TEST_ORGANIZATION, other], other.id);
     await waitFor(() => {
       expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('');
     });
     org.select(TEST_ORGANIZATION.id);
-    await waitFor(() => {
-      expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('계정 A');
-    });
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 복원' }));
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('계정 A');
   });
 
   // 한 줄은 모든 칸을 실은 만들기 하나다. 고치기를 보내지 않으므로 제목만 있는 업무가 남을 두 번째 단계가 없다.
@@ -304,7 +308,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     });
     await pressImport(onimported, 1);
     expect(server.create).toHaveBeenCalledTimes(2);
-    expect(server.create.mock.calls[0]?.[4]).toEqual({
+    expect(server.create.mock.calls[0]?.[5]).toEqual({
       description: '설명',
       status: '검토 대기',
       priority: 'high',
@@ -316,7 +320,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
       milestone: false,
     });
     expect(server.update).not.toHaveBeenCalled();
-    expect(server.create.mock.calls[1]?.[4]).not.toHaveProperty('status');
+    expect(server.create.mock.calls[1]?.[5]).not.toHaveProperty('status');
     expect(server.tasks.get('t2')?.status).toBe('검토 대기');
     expect(server.made).toEqual(['t1', 't2']);
     expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
@@ -357,11 +361,11 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     await pressImport(onimported, 1);
     expect(screen.getByText(/1개 등록됨/)).toBeInTheDocument();
     expect(server.made).toEqual(['t1', 't2']);
-    const firstB = server.create.mock.calls.find((c) => c[2] === 'B')?.[1];
+    const firstB = server.create.mock.calls.find((c) => c[3] === 'B')?.[2];
     server.create.mockClear();
     await pressImport(onimported, 2);
     expect(server.titles()).toEqual(['B', 'C']);
-    expect(server.create.mock.calls[0]?.[1]).toBe(firstB);
+    expect(server.create.mock.calls[0]?.[2]).toBe(firstB);
     expect(server.made).toEqual(['t1', 't2', 't3']);
     expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
   });
@@ -375,11 +379,11 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('A\nB,,,,2026-10-01\nC');
     await pressImport(onimported, 1);
-    const firstB = server.create.mock.calls.find((c) => c[2] === 'B')?.[1];
+    const firstB = server.create.mock.calls.find((c) => c[3] === 'B')?.[2];
     await setText('A\nB,,,,2026-10-02\nC');
     await pressImport(onimported, 2);
-    const lastB = server.create.mock.calls.filter((c) => c[2] === 'B').at(-1);
-    expect(lastB?.[1]).toBe(firstB);
+    const lastB = server.create.mock.calls.filter((c) => c[3] === 'B').at(-1);
+    expect(lastB?.[2]).toBe(firstB);
     expect(server.made).toEqual(['t1', 't2', 't3']);
     expect(server.tasks.get('t2')?.start_date).toBe('2026-10-02');
     expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
@@ -423,7 +427,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
       '"A" 업무가 지워졌습니다. 다시 누르면 새로 만듭니다.',
     );
     await pressImport(onimported, 3);
-    const ids = server.create.mock.calls.map((c) => c[1]);
+    const ids = server.create.mock.calls.map((c) => c[2]);
     expect(ids[1]).toBe(ids[0]);
     expect(ids[2]).not.toBe(ids[0]);
     expect(server.made).toEqual(['t1', 't2']);
@@ -446,7 +450,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(message).not.toHaveTextContent('새로 만듭니다');
     server.hide(false);
     await pressImport(onimported, 3);
-    const ids = server.create.mock.calls.filter((c) => c[2] === 'A').map((c) => c[1]);
+    const ids = server.create.mock.calls.filter((c) => c[3] === 'A').map((c) => c[2]);
     expect(ids).toEqual([ids[0], ids[0], ids[0]]);
     expect(server.made).toEqual(['t1', 't2']);
     expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
@@ -511,12 +515,12 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
     await setText('청소\nB');
     await pressImport(onimported, 1);
-    const firstIds = server.create.mock.calls.map((c) => c[1]);
+    const firstIds = server.create.mock.calls.map((c) => c[2]);
     await setText('');
     await setText('청소');
     await pressImport(onimported, 2);
     expect(server.create).toHaveBeenCalledTimes(3);
-    expect(firstIds).not.toContain(server.create.mock.calls.at(-1)?.[1]);
+    expect(firstIds).not.toContain(server.create.mock.calls.at(-1)?.[2]);
     expect(server.made).toEqual(['t1', 't2']);
     expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
   });

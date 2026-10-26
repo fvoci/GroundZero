@@ -11,8 +11,8 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 
 // D-96·D-128(PR #141 r4372766851): 업무 편집 폼의 저장하지 않은 입력은 편집한 계정의 브라우저 초안(사용자별·탭별 키)으로 남고,
 // 다시 읽은 뒤 같은 계정에게만 되살릴지 묻는다. 되살린 입력은 사용자가 "저장"을 눌러야 보내며(자동 재전송 없음) 남길 때의
-// 판으로 보낸다. 문서 초안 시험(document-save-account-changed)과 별개의 업무 폼 시험이다. 서버의 업무 쓰기는 아직 기대
-// 사용자 머리를 받지 않으므로 아래 409는 그 계약이 생길 때의 클라이언트 방어를 흉내 낸 것이다(서버 재현이 아니다).
+// 판으로 보낸다. 문서 초안 시험(document-save-account-changed)과 별개의 업무 폼 시험이다. 아래 409는 서버 기대 사용자
+// 계약에 대한 클라이언트 반응을 흉내 내며, 서버 자체 검증은 서버 통합 시험이 담당한다.
 
 const A = 'user-a';
 const B = 'user-b';
@@ -80,7 +80,10 @@ function detail(over: Partial<TaskDetailView> = {}): TaskDetailView {
   };
 }
 
-function mount(server: TaskDetailView): void {
+function mount(
+  server: TaskDetailView,
+  onunsaved: (dirty: boolean) => void = (): void => undefined,
+): void {
   vi.spyOn(api, 'task').mockResolvedValue(server);
   vi.spyOn(api, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
@@ -92,6 +95,7 @@ function mount(server: TaskDetailView): void {
       workspaces: [],
       onchanged: () => undefined,
       onopen: () => undefined,
+      onunsaved,
     },
   });
 }
@@ -132,6 +136,45 @@ const json = (status: number, body: unknown): Response =>
   });
 
 describe('task form input across reloads and account switches', () => {
+  it.each(['새 댓글', '새 항목'])(
+    'includes the %s child editor in the parent leave warning',
+    async (label) => {
+      const changed = vi.fn();
+      mount(detail(), changed);
+      await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
+        target: { value: '입력 보존' },
+      });
+      await waitFor(() => {
+        expect(changed).toHaveBeenLastCalledWith(true);
+      });
+    },
+  );
+  it('keeps a subtask title and request identity for explicit restoration and marks it unsaved', async () => {
+    const changed = vi.fn();
+    mount(detail(), changed);
+    await fireEvent.input(await screen.findByLabelText('하위 업무 제목'), {
+      target: { value: '하위 초안' },
+    });
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(true);
+    });
+    expect(keysOf(A)).toHaveLength(1);
+    reloadLike();
+    mount(detail());
+    await screen.findByTestId('task-draft-offer');
+    expect(screen.getByLabelText('하위 업무 제목')).toHaveValue('');
+    await fireEvent.click(screen.getByRole('button', { name: '입력 복원' }));
+    expect(screen.getByLabelText('하위 업무 제목')).toHaveValue('하위 초안');
+  });
+  it('treats a changed relationship lag as unsaved even without editing the task body', async () => {
+    const changed = vi.fn();
+    mount(detail({ predecessors: [{ task_id: 't-0', kind: 'FS', lag_days: 0 }] }), changed);
+    await fireEvent.click(await screen.findByRole('button', { name: /관계 고치기/ }));
+    await fireEvent.input(await screen.findByLabelText('지연(일)'), { target: { value: '3' } });
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(true);
+    });
+  });
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.localStorage.clear();
@@ -223,6 +266,7 @@ describe('task form input across reloads and account switches', () => {
       expect(update).toHaveBeenCalledTimes(1);
     });
     expect(update).toHaveBeenCalledWith(
+      A,
       't-1',
       1,
       expect.objectContaining({ description: EDIT, title: '설계' }),
@@ -304,6 +348,7 @@ describe('task form input across reloads and account switches', () => {
       expect(update).toHaveBeenCalledTimes(1);
     });
     expect(update).toHaveBeenCalledWith(
+      A,
       't-1',
       3,
       expect.objectContaining({ description: EDIT, title: '설계 (3판)' }),
@@ -432,7 +477,7 @@ describe('relation editor input across reloads', () => {
       expect(set).toHaveBeenCalledTimes(1);
     });
     expect(preview).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith('t-1', 't-0', 'FS', 3, { kind: 'FS', lag_days: 0 }, []);
+    expect(set).toHaveBeenCalledWith(A, 't-1', 't-0', 'FS', 3, { kind: 'FS', lag_days: 0 }, []);
     await waitFor(() => {
       expect(keysOf(A)).toEqual([]);
     });

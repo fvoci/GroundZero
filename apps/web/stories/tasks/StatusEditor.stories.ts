@@ -1,9 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { fn, userEvent, within } from 'storybook/test';
 import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
+import { storeFormDraft } from '$lib/features/common/form-draft';
+import { setUpScreen } from '../fixtures/screens';
 const meta = {
   title: 'Tasks/StatusEditor',
   component: StatusEditor,
+  beforeEach: () => {
+    const restore = setUpScreen('/status-editor');
+    storeFormDraft('task-status:item:two', {
+      savedAt: '2026-10-26T00:00:00Z',
+      input: { name: '검토 의견 반영 중', color: '', category: 'doing', position: '1' },
+    });
+    return restore;
+  },
   args: {
     itemId: 'item',
     archived: false,

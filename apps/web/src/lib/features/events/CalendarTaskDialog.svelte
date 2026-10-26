@@ -129,7 +129,9 @@
     busy = true;
     try {
       const requestId = key.for({ item: targetId, title: name, due });
-      const created = await api.createTask(targetId, requestId, name, null, { due_date: due });
+      const created = await api.createTask(editingUser, targetId, requestId, name, null, {
+        due_date: due,
+      });
       key.done(requestId);
       oncreated(created);
     } catch (e: unknown) {

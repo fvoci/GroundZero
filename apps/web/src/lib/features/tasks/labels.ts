@@ -1,23 +1,11 @@
 // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
-import type { AssigneeView, LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/client';
+import type { AssigneeView, LinkKind, TaskInput, TaskPriority } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { shortId } from '$lib/features/workspaces/badge';
 import { m } from '$lib/paraglide/messages.js';
 
 import type { MergeUnit } from './form';
 import { MERGE_UNITS, scheduleOf, trimLikeServer } from './form';
-
-export const STATUS_LABEL: Record<TaskStatus, string> = {
-  get todo() {
-    return m.tasks_status_todo();
-  },
-  get in_progress() {
-    return m.tasks_status_in_progress();
-  },
-  get done() {
-    return m.tasks_status_done();
-  },
-};
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   get none() {

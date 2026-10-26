@@ -54,21 +54,29 @@ afterEach(() => {
 describe('link conflict responses', () => {
   it('turns a stale approval (TaskConflict) into a shift conflict with the latest task', async () => {
     reply(409, { error: 'shift_conflict', current: task });
-    const result = await api.setPredecessor('b', 'a', 'SS', 1, null, []);
+    const result = await api.setPredecessor('user-a', 'b', 'a', 'SS', 1, null, []);
     expect(result.kind).toBe('shift_conflict');
     expect(result.kind === 'shift_conflict' ? result.current.version : 0).toBe(3);
   });
 
   it('turns a changed link (TaskConflict link_conflict) into a link conflict with the latest task', async () => {
     reply(409, { error: 'link_conflict', current: task });
-    const result = await api.setPredecessor('b', 'a', 'SS', 1, { kind: 'FS', lag_days: 0 }, []);
+    const result = await api.setPredecessor(
+      'user-a',
+      'b',
+      'a',
+      'SS',
+      1,
+      { kind: 'FS', lag_days: 0 },
+      [],
+    );
     expect(result.kind).toBe('link_conflict');
     expect(result.kind === 'link_conflict' ? result.current.version : 0).toBe(3);
   });
 
   it('reports an archived or retried change (ErrorBody) as an ordinary 409 error', async () => {
     reply(409, { error: 'invalid_state', message: 'the item is archived', request_id: 'r1' });
-    const failed = await api.setPredecessor('b', 'a', 'SS', 1, null, []).then(
+    const failed = await api.setPredecessor('user-a', 'b', 'a', 'SS', 1, null, []).then(
       () => undefined,
       (e: unknown) => e,
     );

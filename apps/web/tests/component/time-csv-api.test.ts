@@ -47,6 +47,7 @@ it('passes cancellation to fetch without reporting an offline connection', async
     }),
   );
   const creating = api.createTask(
+    'user-a',
     'item-1',
     'request-1',
     '제목',
