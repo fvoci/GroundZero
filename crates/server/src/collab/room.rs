@@ -831,7 +831,9 @@ impl Room {
                     if self.dirty_since_snapshot && self.last_change.elapsed() >= SNAPSHOT_IDLE {
                         self.snapshot().await;
                     }
-                    self.recheck().await;
+                    if self.remove_closed_peers() {
+                        self.stop_realtime().await;
+                    }
                 }
             }
             if self.doc.is_some() && self.conns.is_empty() {
@@ -1758,18 +1760,21 @@ impl Room {
     /// 독립적인 연결 감시가 실시간 해제를 확인했으면 리비전을 남긴다. 연결 종료는 저장을 기다리지 않는다.
     async fn recheck(&mut self) {
         if self.recheck_peers().await {
-            self.flush().await;
-            // 리비전을 남기면 그때 상태를 저장하고 확인을 보낸다. 남기지 못한 편집은 확인하지 않는다: 연결을 닫은 뒤에
-            // 상태만 저장한다(#71).
-            self.snapshot().await;
-            for (_, c) in self.conns.drain() {
-                let _ignored = c
-                    .peer
-                    .out
-                    .try_send(Outbound::Close(CloseReason::RealtimeOff));
-            }
-            self.persist().await;
+            self.stop_realtime().await;
         }
+    }
+
+    async fn stop_realtime(&mut self) {
+        self.flush().await;
+        // 리비전을 남기지 못한 편집은 확인하지 않는다. 연결을 닫은 뒤 상태만 저장한다(#71).
+        self.snapshot().await;
+        for (_, c) in self.conns.drain() {
+            let _ignored = c
+                .peer
+                .out
+                .try_send(Outbound::Close(CloseReason::RealtimeOff));
+        }
+        self.persist().await;
     }
 
     /// 이동 직전 등 명시적인 재확인도 유지한다. peer별로 병렬 확인하며 기존 기한보다 오래 기다리지 않는다.
@@ -1794,6 +1799,16 @@ impl Room {
             }
         });
         futures_util::future::join_all(checks).await;
+        self.remove_closed_peers()
+    }
+
+    /// 주기 처리는 독립 감시의 결과만 소비하고 DB 검사를 중복해서 시작하지 않는다.
+    fn remove_closed_peers(&mut self) -> bool {
+        let peers: Vec<(u64, Peer)> = self
+            .conns
+            .iter()
+            .map(|(id, c)| (*id, c.peer.clone()))
+            .collect();
         let mut off = false;
         for (conn, peer) in peers {
             if let Some(reason) = peer.access.reason() {

@@ -155,7 +155,7 @@ async fn run(
         };
         loop {
             tokio::select! {
-                _ = membership.closed() => break,
+                biased;
                 item = outbox.recv() => {
                     match item {
                         Some(Outbound::Binary(bytes)) => {
@@ -167,6 +167,7 @@ async fn run(
                         None => break,
                     }
                 }
+                _ = membership.closed() => break,
                 message = stream.next() => {
                     match message {
                         Some(Ok(WsMessage::Binary(bytes))) => {

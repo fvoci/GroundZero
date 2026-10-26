@@ -2858,6 +2858,7 @@ struct DbProxy {
     mode: tokio::sync::watch::Sender<ProxyMode>,
     stalled: tokio::sync::mpsc::Receiver<()>,
     task: tokio::task::JoinHandle<()>,
+    server: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl DbProxy {
@@ -2905,7 +2906,17 @@ impl DbProxy {
             mode,
             stalled: received,
             task,
+            server: None,
         }
+    }
+
+    async fn serve(&mut self, app: Router) -> SocketAddr {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        self.server = Some(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap()
+        }));
+        addr
     }
 
     async fn pause(&mut self) {
@@ -2923,6 +2934,9 @@ impl DbProxy {
 
 impl Drop for DbProxy {
     fn drop(&mut self) {
+        if let Some(server) = &self.server {
+            server.abort();
+        }
         self.task.abort();
     }
 }
@@ -2939,7 +2953,7 @@ async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure(
             proxy.url.clone(),
         ))
         .unwrap();
-        let addr = serve(common::app(&proxied)).await;
+        let addr = proxy.serve(common::app(&proxied)).await;
         let mut client = connect(addr, Some(&writer), &id, true).await.unwrap();
         let healthy_until = tokio::time::Instant::now() + Duration::from_millis(1300);
         while tokio::time::Instant::now() < healthy_until {
