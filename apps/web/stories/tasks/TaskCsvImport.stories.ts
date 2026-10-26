@@ -1,11 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import type { TaskStatusDefinition } from '@fvoci/api-client';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import TaskCsvImport from '$lib/features/tasks/TaskCsvImport.svelte';
 import { matchRows, saveImport } from '$lib/features/tasks/csv-import';
 import { parseTasksCsv } from '$lib/features/tasks/csv';
 import { org } from '$lib/org.svelte';
-import { writeSession } from '$lib/storage';
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { setUpScreen } from '../fixtures/screens';
 const statuses: TaskStatusDefinition[] = [
@@ -30,7 +29,7 @@ const meta = {
       steps.map((s) => s.progress),
     );
     return () => {
-      writeSession(key, null);
+      saveImport(key, '', []);
       restore();
     };
   },
@@ -40,6 +39,8 @@ type Story = StoryObj<typeof meta>;
 export const Reentered: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    await expect(c.getByRole('textbox')).toHaveValue('');
+    await userEvent.click(c.getByRole('button', { name: '입력 복원' }));
     await expect(c.getByRole('textbox')).toHaveValue('저장한 업무\n응답을 기다리던 업무');
     await expect(c.getByLabelText(/검토 대기 · Ready/)).toBeVisible();
   },
@@ -47,4 +48,16 @@ export const Reentered: Story = {
 export const NarrowDark200: Story = {
   ...Reentered,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
+};
+export const Dark: Story = {
+  ...Reentered,
+  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop' } },
+};
+export const Narrow: Story = {
+  ...Reentered,
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'narrow375' } },
+};
+export const LargeText: Story = {
+  ...Reentered,
+  globals: { theme: 'light', fontScale: '200', viewport: { value: 'desktop' } },
 };

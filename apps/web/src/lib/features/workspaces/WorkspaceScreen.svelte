@@ -4,6 +4,7 @@
 
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { moveThenReload } from '$lib/features/documents/tree';
@@ -152,19 +153,23 @@
     <TemplatePicker workspaceId={workspace.id} id="new-document-template" bind:value={templateId} />
     <CreateForm
       id="new-document"
+      draftName={`wiki-new:${workspace.id}`}
+      bind:draftContext={templateId}
       label={m.workspaces_new_doc_title()}
       placeholder={m.workspaces_new_doc_placeholder()}
       submitLabel={m.workspaces_create_doc()}
-      create={async (requestId: string, title: string) => {
+      create={async (requestId: string, title: string, context: CreateFormContext) => {
+        const workspaceId = workspace.id;
         const doc = await api.createWikiDocument(
-          workspace.id,
+          workspaceId,
           requestId,
           title,
           null,
           templateId === '' ? null : templateId,
         );
+        if (!context.saved()) return;
         workspaceNav.refreshDocs();
-        router.navigate(documentPath(workspace.id, doc.id));
+        router.navigate(documentPath(workspaceId, doc.id));
       }}
     />
   {/if}

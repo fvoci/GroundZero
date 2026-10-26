@@ -1,6 +1,9 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "common_save": "저장",
+  "common_draft_available": "저장하지 않은 입력이 있습니다. 되살릴까요?",
+  "common_draft_restore": "입력 되살리기",
+  "common_draft_discard": "남긴 입력 버리기",
   "common_cancel": "취소",
   "common_items_count": [
     {

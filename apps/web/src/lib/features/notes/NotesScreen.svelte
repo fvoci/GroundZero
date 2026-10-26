@@ -3,6 +3,7 @@
   import type { SummaryView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
   import { me } from '$lib/me.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
@@ -71,17 +72,20 @@
   <TemplatePicker workspaceId={null} id="new-note-template" bind:value={templateId} />
   <CreateForm
     id="new-note"
+    draftName="note-new"
+    bind:draftContext={templateId}
     label={m.notes_new_title_label()}
     placeholder={m.notes_new_title_placeholder()}
     submitLabel={m.notes_create()}
-    create={async (requestId: string, title: string) => {
+    create={async (requestId: string, title: string, context: CreateFormContext) => {
       const note = await api.createNote(
-        me.userId,
+        context.userId,
         requestId,
         title,
         null,
         templateId === '' ? null : templateId,
       );
+      if (!context.saved()) return;
       router.navigate(standalonePath(note.id));
     }}
   />

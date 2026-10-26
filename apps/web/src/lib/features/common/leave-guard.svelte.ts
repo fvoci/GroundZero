@@ -1,4 +1,8 @@
 import { router } from '$lib/router.svelte';
+import { SvelteSet } from 'svelte/reactivity';
+
+type NavigationGuard = (action: () => void) => boolean;
+const attached = new SvelteSet<{ guard: NavigationGuard; previous: NavigationGuard | undefined }>();
 
 interface LeaveOptions {
   dirty: () => boolean;
@@ -50,21 +54,42 @@ export function createLeaveGuard(options: LeaveOptions) {
     /** 떠나기를 막아야 하면 true. 초안 보존은 호출 화면이 수행한다. */
     beforeUnload?: () => boolean;
   } = {}): () => void {
-    const previous = router.guard;
+    const link: { guard: NavigationGuard; previous: NavigationGuard | undefined } = {
+      guard: () => true,
+      previous: router.guard,
+    };
     const guard = (action: () => void): boolean => {
-      if (bypass) return true;
+      if (bypass) return link.previous?.(action) ?? true;
       if (options.busy?.() === true) return false;
-      if (!options.dirty()) return previous?.(action) ?? true;
-      request(action);
+      if (!options.dirty()) return link.previous?.(action) ?? true;
+      // Carry each accepted guard's bypass into the remaining confirmations.
+      // Otherwise a sibling's later confirmation would ask this dirty form again.
+      const resume = (): void => {
+        proceed(action);
+      };
+      request(() => {
+        if (link.previous?.(resume) ?? true) resume();
+      });
       return false;
     };
     const unload = (event: BeforeUnloadEvent): void => {
       if (beforeUnload()) event.preventDefault();
     };
-    if (navigation) router.guard = guard;
+    link.guard = guard;
+    if (navigation) {
+      attached.add(link);
+      router.guard = guard;
+    }
     window.addEventListener('beforeunload', unload);
     return () => {
-      if (navigation && router.guard === guard) router.guard = previous;
+      if (navigation) {
+        if (router.guard === guard) router.guard = link.previous;
+        // Siblings need not unmount in the reverse order of attachment.
+        for (const other of attached) {
+          if (other.previous === guard) other.previous = link.previous;
+        }
+        attached.delete(link);
+      }
       window.removeEventListener('beforeunload', unload);
       keep();
     };

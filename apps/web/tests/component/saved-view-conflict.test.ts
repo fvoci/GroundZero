@@ -7,6 +7,7 @@ import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 // D-103(감사 P-26): 이미 있는 보기는 목록에서 읽은 판으로 고친다(`PUT /api/views/{id}`). 그사이 다른 탭이 저장했으면
 // 서버는 409와 최신 보기를 돌려주고 아무것도 바꾸지 않는다. 화면은 지금 설정과 이름을 그대로 두고 목록을 다시 읽어,
@@ -111,7 +112,29 @@ function viewServer(
 }
 
 describe('saved view save on a stale version', () => {
+  it('offers an unsaved view name after remount and restores it without sending a save', async () => {
+    const sent = viewServer([]);
+    const props = { item, workspaces: [], openTaskId: undefined };
+    const first = render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '집중할 업무' },
+    });
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    first.unmount();
+    render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await screen.findByTestId('form-draft-offer');
+    expect(screen.getByRole('textbox', { name: '보기 이름' })).toHaveValue('');
+    await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
+    expect(screen.getByRole('textbox', { name: '보기 이름' })).toHaveValue('집중할 업무');
+    expect(sent).toEqual([]);
+  });
   beforeEach(async () => {
+    me.userId = 'user-a';
+    localStorage.clear();
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(api, 'tasks').mockResolvedValue([]);

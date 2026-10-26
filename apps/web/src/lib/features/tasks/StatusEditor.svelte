@@ -1,4 +1,7 @@
 <script lang="ts">
+  const editingUser = untrack(() => me.userId);
+  import { onMount, untrack } from 'svelte';
+  import { me } from '$lib/me.svelte';
   import type { StatusCategory, TaskStatusDefinition } from '@fvoci/api-client';
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -8,6 +11,9 @@
   import { Input } from '$lib/ui/input';
   import { NativeSelect } from '$lib/ui/native-select';
   import * as Dialog from '$lib/ui/dialog';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   const {
     itemId,
@@ -37,6 +43,60 @@
   let busy = $state(false);
   let error = $state('');
   let invalid = $state('');
+  interface StatusDraft {
+    name: string;
+    color: string;
+    category: StatusCategory;
+    position: string;
+  }
+  const initial = (): StatusDraft => ({
+    name: selected?.name ?? '',
+    color: selected?.color ?? '',
+    category: selected?.category ?? 'todo',
+    position: String(selected?.position ?? statuses.length),
+  });
+  const snapshot = (): StatusDraft => ({ name, color, category, position });
+  const draft = createFormDraft<StatusDraft>({
+    name: () => (open && !removing ? `task-status:${itemId}:${selected?.id ?? 'new'}` : undefined),
+    snapshot,
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('name' in value && 'color' in value && 'category' in value && 'position' in value)
+      )
+        return undefined;
+      if (
+        typeof value.name !== 'string' ||
+        typeof value.color !== 'string' ||
+        typeof value.position !== 'string' ||
+        (value.category !== 'todo' && value.category !== 'doing' && value.category !== 'done')
+      )
+        return undefined;
+      return {
+        name: value.name,
+        color: value.color,
+        position: value.position,
+        category: value.category,
+      };
+    },
+    restore: (value) => {
+      name = value.name;
+      color = value.color;
+      category = value.category;
+      position = value.position;
+    },
+    reset: () => {
+      const value = initial();
+      name = value.name;
+      color = value.color;
+      category = value.category;
+      position = value.position;
+    },
+    dirty: () => open && !removing && JSON.stringify(snapshot()) !== JSON.stringify(initial()),
+    busy: () => busy,
+  });
+  onMount(draft.attach);
 
   function edit(status?: TaskStatusDefinition, remove = false): void {
     selected = status;
@@ -70,19 +130,29 @@
       invalid = m.tasks_status_move_required();
       return;
     }
+    const attempt = draft.capture();
+    if (!removing && attempt === undefined) return;
     busy = true;
     try {
       if (removing && selected !== undefined)
-        await api.deleteTaskStatus(itemId, selected.id, moveTo);
+        await api.deleteTaskStatus(editingUser, itemId, selected.id, moveTo);
       else if (selected === undefined)
-        await api.createTaskStatus(itemId, name.trim(), color.toLowerCase(), category);
+        await api.createTaskStatus(
+          attempt?.userId ?? editingUser,
+          itemId,
+          name.trim(),
+          color.toLowerCase(),
+          category,
+        );
       else
-        await api.updateTaskStatus(itemId, selected.id, {
+        await api.updateTaskStatus(attempt?.userId ?? editingUser, itemId, selected.id, {
           name: name.trim(),
           color: color.toLowerCase(),
           category,
           position: Number(position),
         });
+      if (attempt !== undefined && !draft.isCurrent(attempt)) return;
+      if (attempt !== undefined) draft.complete(attempt);
       await onchanged();
       open = false;
       notifyDone(m.common_saved());
@@ -131,7 +201,17 @@
   >
 </section>
 
-<Dialog.Root bind:open>
+<Dialog.Root
+  bind:open={
+    () => open,
+    (value) => {
+      if (!value)
+        draft.leave.request(() => {
+          open = false;
+        });
+    }
+  }
+>
   <Dialog.Content
     escapeKeydownBehavior={busy ? 'ignore' : 'close'}
     interactOutsideBehavior={busy ? 'ignore' : 'close'}
@@ -144,6 +224,16 @@
       <Dialog.Description>{m.tasks_status_description()}</Dialog.Description>
     </Dialog.Header>
     <form class="flex flex-col gap-3" onsubmit={(e) => void save(e)}>
+      {#each draft.offers as entry (entry.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            draft.restore(entry);
+          }}
+          ondiscard={() => {
+            draft.discard(entry);
+          }}
+        />
+      {/each}
       <fieldset disabled={busy} class="flex flex-col gap-3">
         {#if removing}
           <label
@@ -181,8 +271,14 @@
         </p>
         {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
         <Dialog.Footer>
-          <Button type="button" variant="outline" onclick={() => (open = false)}
-            >{m.common_cancel()}</Button
+          <Button
+            type="button"
+            variant="outline"
+            onclick={() => {
+              draft.leave.request(() => {
+                open = false;
+              });
+            }}>{m.common_cancel()}</Button
           >
           <Button type="submit" variant={removing ? 'destructive' : 'default'}
             >{removing ? m.tasks_status_delete_confirm() : m.common_save()}</Button
@@ -192,3 +288,9 @@
     </form>
   </Dialog.Content>
 </Dialog.Root>
+
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>

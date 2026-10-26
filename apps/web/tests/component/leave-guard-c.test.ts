@@ -7,6 +7,39 @@ afterEach(() => {
   router.guard = undefined;
 });
 
+it('does not resurrect a detached sibling when children unmount out of order', () => {
+  const previous = vi.fn(() => true);
+  router.guard = previous;
+  const first = createLeaveGuard({ dirty: () => true });
+  const second = createLeaveGuard({ dirty: () => false });
+  const detachFirst = first.attach();
+  const detachSecond = second.attach();
+  detachFirst();
+  expect(router.guard(vi.fn())).toBe(true);
+  expect(first.open).toBe(false);
+  detachSecond();
+  expect(router.guard).toBe(previous);
+});
+
+it('asks each dirty sibling once and resumes only after both accept', () => {
+  const first = createLeaveGuard({ dirty: () => true });
+  const second = createLeaveGuard({ dirty: () => true });
+  const detachFirst = first.attach();
+  const detachSecond = second.attach();
+  const move = vi.fn();
+  router.confirmLeave(move);
+  expect(second.open).toBe(true);
+  second.discard();
+  expect(first.open).toBe(true);
+  expect(move).not.toHaveBeenCalled();
+  first.discard();
+  expect(move).toHaveBeenCalledOnce();
+  expect(first.open).toBe(false);
+  expect(second.open).toBe(false);
+  detachFirst();
+  detachSecond();
+});
+
 it('shares discard/keep, busy and stale-session protection', () => {
   let dirty = true;
   let busy = false;

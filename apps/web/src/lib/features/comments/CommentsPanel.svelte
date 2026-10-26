@@ -2,13 +2,13 @@
   // 댓글(D-27, D-20). 서버가 쓰기를 허용한 대상에만 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
   import type { CommentTarget, CommentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
-  import { Textarea } from '$lib/ui/textarea';
 
+  import CommentComposer from './CommentComposer.svelte';
   import CommentItem from './CommentItem.svelte';
   import { threads } from './threads';
 
@@ -19,9 +19,10 @@
     archived?: boolean;
     /** 문서·업무 응답에는 보관 칸이 없어, 안내용 부모 상태를 읽을 때 쓴다. */
     itemId?: string | null;
+    onunsaved?: (value: boolean) => void;
   }
 
-  const { target, canWrite = false, archived, itemId }: Props = $props();
+  const { target, canWrite = false, archived, itemId, onunsaved }: Props = $props();
   let parentArchived = $state(false);
   const isArchived = $derived(archived ?? parentArchived);
   const writable = $derived(canWrite && !isArchived);
@@ -50,12 +51,10 @@
   // 이 대상의 목록을 한 번이라도 받았는지. 받기 전에는 "댓글이 없습니다" 대신 불러오는 중이라고 보인다.
   let loaded = $state(false);
   let error = $state<string | undefined>(undefined);
-  let draft = $state('');
-  let replyTo = $state<string | undefined>(undefined);
-  let replyDraft = $state('');
-  // 같은 내용의 재시도는 같은 요청 id(응답을 잃고 다시 눌러도 같은 댓글), 고쳐서 보내면 새 id.
-  const draftKey = new RetryKey();
-  const replyKey = new RetryKey();
+  let unsaved = $state<Record<string, boolean>>({});
+  $effect(() => {
+    onunsaved?.(Object.values(unsaved).some(Boolean));
+  });
   let lastTarget = '';
   let showResolved = $state<Set<string>>(new Set());
   let busy = $state(false);
@@ -64,19 +63,17 @@
 
   $effect(() => {
     const t = { kind: target.kind, id: target.id };
+    const identity = `${me.userId}:${t.kind}:${t.id}`;
     if (reloadKey < 0) return;
     // 대상이 바뀌면 남은 요청 id를 새로 정한다(다른 대상에 옛 id가 쓰이지 않게).
-    if (t.id !== lastTarget) {
-      lastTarget = t.id;
-      draftKey.done();
-      replyKey.done();
+    if (identity !== lastTarget) {
+      lastTarget = identity;
+      unsaved = {};
+      busy = false;
       // 다른 대상의 댓글·오류·완료 문구를 보이지 않는다. 다시 읽기(작업 뒤)는 받을 때까지 지금 목록을 둔다.
       comments = [];
       loaded = false;
       error = undefined;
-      draft = '';
-      replyDraft = '';
-      replyTo = undefined;
     }
     const mine = ++seq;
     api
@@ -93,15 +90,20 @@
   });
 
   async function run(action: () => Promise<unknown>, done: string): Promise<boolean> {
-    if (busy) return false;
+    if (busy || accountSwitching()) return false;
+    const identity = `${me.userId}:${target.kind}:${target.id}`;
+    const current = (): boolean =>
+      identity === `${me.userId}:${target.kind}:${target.id}` && !accountSwitching();
     busy = true;
     error = undefined;
     try {
       await action();
+      if (!current()) return false;
       notifyDone(done);
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
+      if (!current()) return false;
       error =
         e instanceof ApiError &&
         e.status === 409 &&
@@ -111,31 +113,16 @@
           : errorText(e, m.comments_action_failed());
       return false;
     } finally {
-      busy = false;
+      if (current()) busy = false;
     }
   }
 
-  async function post(): Promise<void> {
-    if (!writable) return;
-    const body = draft.trim();
-    if (body === '') return;
-    const requestId = draftKey.for({ target: target.id, body });
-    if (await run(() => api.addComment(target, body, null, requestId), m.comments_posted())) {
-      draft = '';
-      draftKey.done(requestId);
-    }
-  }
-
-  async function reply(root: string): Promise<void> {
-    if (!writable) return;
-    const body = replyDraft.trim();
-    if (body === '') return;
-    const requestId = replyKey.for({ target: target.id, root, body });
-    if (await run(() => api.addComment(target, body, root, requestId), m.comments_replied())) {
-      replyDraft = '';
-      replyKey.done(requestId);
-      replyTo = undefined;
-    }
+  function post(body: string, root: string | null, requestId: string): Promise<boolean> {
+    if (!writable) return Promise.resolve(false);
+    return run(
+      () => api.addComment(target, body, root, requestId),
+      root === null ? m.comments_posted() : m.comments_replied(),
+    );
   }
 
   let heading = $state<HTMLHeadingElement | undefined>();
@@ -143,18 +130,6 @@
   /** 지운 댓글이 사라져도 키보드 초점을 잃지 않게 댓글 제목으로 옮긴다. */
   async function remove(id: string): Promise<void> {
     if (await run(() => api.deleteComment(id), m.comments_deleted())) heading?.focus();
-  }
-
-  /** 답글 칸이 열리면 바로 쓸 수 있게 초점을 옮긴다(키보드 사용). */
-  function focusOnMount(node: HTMLTextAreaElement): void {
-    node.focus();
-  }
-
-  function submitOnCtrlEnter(e: KeyboardEvent, send: () => void): void {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      send();
-    }
   }
 </script>
 
@@ -199,6 +174,9 @@
             onedit={(body: string) =>
               run(() => api.editComment(t.root.id, body), m.comments_edited())}
             ondelete={() => void remove(t.root.id)}
+            onunsaved={(value: boolean) => {
+              unsaved[`edit:${t.root.id}`] = value;
+            }}
           />
           {#each t.replies as r (r.id)}
             <div class="ml-4 border-l pl-3">
@@ -209,21 +187,13 @@
                 onedit={(body: string) =>
                   run(() => api.editComment(r.id, body), m.comments_edited())}
                 ondelete={() => void remove(r.id)}
+                onunsaved={(value: boolean) => {
+                  unsaved[`edit:${r.id}`] = value;
+                }}
               />
             </div>
           {/each}
           <div class="flex flex-wrap gap-1">
-            {#if writable && replyTo !== t.root.id}
-              <Button
-                size="sm"
-                variant="outline"
-                onclick={() => {
-                  replyTo = t.root.id;
-                  replyDraft = '';
-                  replyKey.done();
-                }}>{m.comments_reply()}</Button
-              >
-            {/if}
             {#if writable && t.root.can_resolve}
               <Button
                 size="sm"
@@ -236,58 +206,27 @@
               >
             {/if}
           </div>
-          {#if writable && replyTo === t.root.id}
-            <form
-              class="ml-4 flex flex-col gap-2"
-              onsubmit={(e: SubmitEvent) => {
-                e.preventDefault();
-                void reply(t.root.id);
-              }}
-            >
-              <Textarea
-                {@attach focusOnMount}
-                aria-label={m.comments_reply()}
-                bind:value={replyDraft}
-                maxlength={10000}
-                onkeydown={(e: KeyboardEvent) => {
-                  submitOnCtrlEnter(e, () => void reply(t.root.id));
-                }}
-              />
-              <div class="flex gap-2">
-                <Button type="submit" size="sm" disabled={busy || replyDraft.trim() === ''}
-                  >{m.comments_reply_submit()}</Button
-                >
-                <Button size="sm" variant="ghost" onclick={() => (replyTo = undefined)}
-                  >{m.common_cancel()}</Button
-                >
-              </div>
-            </form>
-          {/if}
+          <CommentComposer
+            {target}
+            root={t.root.id}
+            {writable}
+            {busy}
+            onpost={post}
+            onunsaved={(value: boolean) => {
+              unsaved[`reply:${t.root.id}`] = value;
+            }}
+          />
         {/if}
       </li>
     {/each}
   </ul>
-  {#if writable}
-    <form
-      class="flex flex-col gap-2"
-      onsubmit={(e: SubmitEvent) => {
-        e.preventDefault();
-        void post();
-      }}
-    >
-      <Textarea
-        aria-label={m.comments_new_label()}
-        class="min-h-20"
-        bind:value={draft}
-        maxlength={10000}
-        placeholder={m.comments_new_placeholder()}
-        onkeydown={(e: KeyboardEvent) => {
-          submitOnCtrlEnter(e, () => void post());
-        }}
-      />
-      <div>
-        <Button type="submit" disabled={busy || draft.trim() === ''}>{m.comments_post()}</Button>
-      </div>
-    </form>
-  {/if}
+  <CommentComposer
+    {target}
+    {writable}
+    {busy}
+    onpost={post}
+    onunsaved={(value: boolean) => {
+      unsaved.new = value;
+    }}
+  />
 </section>
