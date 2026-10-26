@@ -6,31 +6,38 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import { Textarea } from '$lib/ui/textarea';
+  import { onDestroy } from 'svelte';
 
   import { newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import { canonicalJson } from '$lib/features/documents/drafts';
   import { m } from '$lib/paraglide/messages.js';
 
   import type { ChecklistItem, NewChecklistEntry, ParsedChecklistItem } from './checklist-item';
   import { parseMarkdownChecklist } from './checklist-item';
+  import { parseChecklistDraft, type ChecklistDraft } from './checklist-draft';
 
   interface Props {
     /** 화면 안에서 id가 겹치지 않게 붙이는 접두어. */
     idPrefix: string;
     items: ChecklistItem[];
     canEdit: boolean;
-    onadd: (items: NewChecklistEntry[]) => Promise<void>;
-    ontoggle: (id: string, done: boolean) => Promise<void>;
+    onadd: (items: NewChecklistEntry[], editingUser: string) => Promise<void>;
+    ontoggle: (id: string, done: boolean, editingUser: string) => Promise<void>;
     /** 항목 문구 바꾸기(완료 여부는 그대로). */
-    onrename: (id: string, text: string) => Promise<void>;
-    onremove: (id: string) => Promise<void>;
+    onrename: (id: string, text: string, editingUser: string) => Promise<void>;
+    onremove: (id: string, editingUser: string) => Promise<void>;
+    onunsaved?: (value: boolean) => void;
   }
 
-  const { idPrefix, items, canEdit, onadd, ontoggle, onrename, onremove }: Props = $props();
+  const { idPrefix, items, canEdit, onadd, ontoggle, onrename, onremove, onunsaved }: Props =
+    $props();
 
   /** 문구를 고치는 항목과 입력. */
-  let renaming = $state<{ id: string; text: string } | undefined>(undefined);
+  let renaming = $state<{ id: string; text: string; original: string } | undefined>(undefined);
 
   function saveRename(): void {
     const current = renaming;
@@ -41,9 +48,9 @@
       renaming = undefined;
       return;
     }
-    void guard(async () => {
-      await onrename(current.id, text);
-      renaming = undefined;
+    void guard(async (user, isCurrent) => {
+      await onrename(current.id, text, user);
+      if (isCurrent()) renaming = undefined;
     });
   }
 
@@ -54,32 +61,88 @@
   // 미리보기 줄의 재시도 id. 줄 자리가 아니라 내용(문구·완료)과 같은 내용 가운데 몇 번째인지에 붙인다: 고치지 않고
   // 다시 보내면 다시 펼치거나 줄 순서를 바꿔도 같은 id, 고친 줄은 새 id(같은 id면 서버가 처음 것을 남기고 고친 내용을
   // 버린다). 덧붙이기가 성공했을 때만 비운다.
-  let previewIds: Record<string, string[]> = {};
+  let previewIds = $state<Record<string, string[]>>({});
   // 한 줄 추가의 재시도용 요청 id. 입력이 바뀌면 새로 만든다.
-  let draftRequest: { text: string; requestId: string } | undefined;
+  let draftRequest = $state<{ text: string; requestId: string } | undefined>();
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
+  const dirty = $derived(
+    draft !== '' ||
+      pasted !== '' ||
+      preview.length > 0 ||
+      (renaming !== undefined && renaming.text !== renaming.original),
+  );
+  const formDraft = createFormDraft<ChecklistDraft>({
+    name: () => `checklist:${idPrefix}`,
+    snapshot: () => ({
+      draft,
+      draftRequest: draftRequest ?? null,
+      renaming: renaming ?? null,
+      pasteOpen,
+      pasted,
+      preview,
+      previewIds,
+    }),
+    parse: parseChecklistDraft,
+    restore: (value) => {
+      draft = value.draft;
+      draftRequest = value.draftRequest ?? undefined;
+      renaming = value.renaming ?? undefined;
+      pasteOpen = value.pasteOpen;
+      pasted = value.pasted;
+      preview = value.preview;
+      previewIds = value.previewIds;
+    },
+    reset: () => {
+      draft = '';
+      draftRequest = undefined;
+      renaming = undefined;
+      pasteOpen = false;
+      pasted = '';
+      preview = [];
+      previewIds = {};
+      error = undefined;
+      busy = false;
+    },
+    dirty: () => dirty,
+    busy: () => busy,
+  });
+  $effect(() => {
+    onunsaved?.(dirty && !accountSwitching());
+  });
+  onDestroy(() => onunsaved?.(false));
 
-  async function guard(action: () => Promise<void>): Promise<void> {
+  async function guard(
+    action: (user: string, isCurrent: () => boolean) => Promise<void>,
+  ): Promise<void> {
+    if (busy || !canEdit || accountSwitching()) return;
+    const attempt = formDraft.capture();
+    if (attempt === undefined) return;
     busy = true;
     error = undefined;
     try {
-      await action();
+      await action(attempt.userId, () => formDraft.isCurrent(attempt));
     } catch (e: unknown) {
-      error = errorText(e, m.checklists_action_failed());
+      if (formDraft.isOwner(attempt)) error = errorText(e, m.checklists_action_failed());
     } finally {
-      busy = false;
+      if (formDraft.isOwner(attempt)) {
+        busy = false;
+        formDraft.persist();
+      }
     }
   }
 
   function addOne(): void {
     const text = draft.trim();
     if (text === '') return;
-    void guard(async () => {
-      if (draftRequest?.text !== text) draftRequest = { text, requestId: newRequestId() };
-      await onadd([{ text, done: false, requestId: draftRequest.requestId }]);
-      draftRequest = undefined;
-      draft = '';
+    if (draftRequest?.text !== text) draftRequest = { text, requestId: newRequestId() };
+    const requestId = draftRequest.requestId;
+    void guard(async (user, isCurrent) => {
+      await onadd([{ text, done: false, requestId }], user);
+      if (isCurrent()) {
+        draftRequest = undefined;
+        draft = '';
+      }
     });
   }
 
@@ -103,12 +166,14 @@
       confirmed.push({ ...entry, requestId });
     }
     if (confirmed.length === 0) return;
-    void guard(async () => {
-      await onadd(confirmed);
-      pasted = '';
-      preview = [];
-      previewIds = {};
-      pasteOpen = false;
+    void guard(async (user, isCurrent) => {
+      await onadd(confirmed, user);
+      if (isCurrent()) {
+        pasted = '';
+        preview = [];
+        previewIds = {};
+        pasteOpen = false;
+      }
     });
   }
 
@@ -121,6 +186,25 @@
     <span class="font-normal text-muted-foreground">{done}/{items.length}</span>
   </h3>
 
+  {#each formDraft.offers as offer (offer.key)}
+    <div data-testid="checklist-new-item-draft-offer">
+      <p class="text-sm whitespace-pre-wrap">
+        {[
+          offer.value.input.draft,
+          offer.value.input.renaming?.text,
+          offer.value.input.pasted,
+          ...offer.value.input.preview.map((entry) => entry.text),
+        ]
+          .filter(Boolean)
+          .join('\n')}
+      </p>
+      <FormDraftOffer
+        onrestore={() => formDraft.restore(offer)}
+        ondiscard={() => formDraft.discard(offer)}
+      />
+    </div>
+  {/each}
+
   <ul class="flex flex-col gap-2" data-testid="checklist-items">
     {#each items as item (item.id)}
       <li class="flex items-center gap-2">
@@ -128,12 +212,12 @@
           id={`${idPrefix}-check-${item.id}`}
           checked={item.done}
           disabled={!canEdit || busy}
-          onCheckedChange={(value) => void guard(() => ontoggle(item.id, value === true))}
+          onCheckedChange={(value) => void guard((user) => ontoggle(item.id, value === true, user))}
           aria-label={item.done
             ? m.checklists_item_done_aria({ text: item.text })
             : m.checklists_item_open_aria({ text: item.text })}
         />
-        {#if renaming?.id === item.id}
+        {#if canEdit && renaming?.id === item.id && !accountSwitching()}
           {@const editing = renaming}
           <form
             class="flex flex-1 items-center gap-2"
@@ -175,9 +259,9 @@
             size="sm"
             class="ml-auto"
             aria-label={m.checklists_edit_aria({ text: item.text })}
-            disabled={busy}
+            disabled={busy || (renaming !== undefined && renaming.text !== renaming.original)}
             onclick={() => {
-              renaming = { id: item.id, text: item.text };
+              renaming = { id: item.id, text: item.text, original: item.text };
             }}>{m.checklists_edit()}</Button
           >
           <Button
@@ -185,7 +269,8 @@
             size="sm"
             aria-label={m.checklists_delete_aria({ text: item.text })}
             disabled={busy}
-            onclick={() => void guard(() => onremove(item.id))}>{m.checklists_delete()}</Button
+            onclick={() => void guard((user) => onremove(item.id, user))}
+            >{m.checklists_delete()}</Button
           >
         {/if}
       </li>
@@ -194,7 +279,7 @@
     {/each}
   </ul>
 
-  {#if canEdit}
+  {#if canEdit && !accountSwitching()}
     <!-- 375px·200%에서는 입력 칸과 두 단추가 한 줄에 들지 않아 줄바꿈한다(가로 넘침 금지, D-110). -->
     <form
       class="flex flex-wrap items-end gap-2"

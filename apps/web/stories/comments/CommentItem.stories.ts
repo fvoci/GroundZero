@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, fn, userEvent, within } from 'storybook/test';
 
 import CommentItem from '$lib/features/comments/CommentItem.svelte';
+import { me } from '$lib/me.svelte';
 
 import { comment, WRITER_NAME } from '../fixtures/comments';
 import { EMOJI, LONG_KO, NO_SPACE, NUMBERS } from '../fixtures/text';
@@ -15,6 +16,12 @@ const meta = {
     busy: false,
     onedit: fn(() => Promise.resolve(true)),
     ondelete: fn(),
+  },
+  beforeEach: () => {
+    me.userId = 'story-comment-item';
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('fvoci:story-comment-item:')) localStorage.removeItem(key);
+    }
   },
 } satisfies Meta<typeof CommentItem>;
 
