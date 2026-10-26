@@ -33,7 +33,7 @@ use yrs::{Doc, ReadTxn, Transact, Update};
 /// 자동 정리(`app_system_purge_old_versions`)는 DB 전체를 본다. 그것을 부르는 시험끼리는 차례로 돌아 서로의 정리 대상을
 /// 지우거나 세지 않게 한다.
 static GLOBAL_PURGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-/// 추가 이동 경합 fixture는 각자 풀·서버를 사용한다. 공유 시험 DB의 접속 한도를 동시에 소모하지 않는다.
+/// 추가 이동·끄기 경합 fixture는 각자 풀·서버를 사용한다. 공유 시험 DB의 접속 한도를 동시에 소모하지 않는다.
 static POST_MOVE_FIXTURES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 async fn serve(app: Router) -> SocketAddr {
@@ -1048,6 +1048,7 @@ async fn turning_realtime_off_keeps_live_edits() {
 /// 두 번째 OFF 요청이 먼저 읽은 pending 목록을 첫 요청이 저장·OFF한 뒤 처리하는 순서를 재현한다.
 #[tokio::test]
 async fn a_stale_pending_list_after_realtime_off_is_already_saved() {
+    let _fixture = POST_MOVE_FIXTURES.lock().await;
     let state =
         fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
     let app = common::app(&state);
