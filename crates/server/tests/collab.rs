@@ -2922,6 +2922,10 @@ impl DbProxy {
                 let gate = gate.clone();
                 connections.spawn(async move {
                     let mut outgoing = TcpStream::connect(target).await.unwrap();
+                    if gate.is_some() {
+                        incoming.set_nodelay(true).unwrap();
+                        outgoing.set_nodelay(true).unwrap();
+                    }
                     if *changes.borrow() == ProxyMode::Running {
                         tokio::select! {
                             _ = async {
