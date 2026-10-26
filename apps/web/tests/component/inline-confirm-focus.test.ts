@@ -12,8 +12,10 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 취소하면 처음 단추로 돌아온다. 휴지통은 목록을 받기 전 "비어 있습니다" 대신 불러오는 중, 첫 읽기 실패에 다시 시도.
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };

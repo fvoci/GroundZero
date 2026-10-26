@@ -10,8 +10,10 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 멤버 화면: 첫 읽기 실패 뒤 다시 시도, 그룹 삭제 확인, 초대·받은 초대의 중복 요청 막기.
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -103,7 +105,7 @@ describe('members screen', () => {
     vi.spyOn(api, 'invite').mockResolvedValue({
       id: 'inv-1',
       email: 'kim@lab.example',
-      role: 'writer',
+      role: 'member',
       expires_at: '2026-11-01T00:00:00Z',
     });
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
@@ -131,7 +133,7 @@ describe('received invitations', () => {
       workspace_id: 'ws-1',
       workspace_name: '연구실',
       invited_by: '관리자',
-      role: 'writer',
+      role: 'member',
       expires_at: '2026-11-01T00:00:00Z',
     };
     vi.spyOn(api, 'myInvitations').mockResolvedValue([inv]);

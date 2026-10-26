@@ -14,7 +14,15 @@ afterEach(() => {
 });
 
 function workspace(id: string): Workspace {
-  return { id, name: `공간 ${id}`, role: 'writer', is_owner: false, realtime_enabled: false };
+  return {
+    id,
+    organization_id: 'org-1',
+    name: `공간 ${id}`,
+    role: 'member',
+    access: 'write',
+    is_owner: false,
+    realtime_enabled: false,
+  };
 }
 
 const templateOfA = { id: 't-a', title: 'A 회의록 양식', reference: 'WIKI-1', personal: false };

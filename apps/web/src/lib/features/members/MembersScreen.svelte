@@ -31,7 +31,7 @@
   let error = $state<string | undefined>(undefined);
   let notice = $state<string | undefined>(undefined);
   let inviteEmail = $state('');
-  let inviteRole = $state<Role>('writer');
+  let inviteRole = $state<Role>('member');
   let groupName = $state('');
   // 초대·그룹 만들기 실패는 그 입력 칸 옆에 보이고 입력은 남긴다(D-82).
   let inviteError = $state<string | undefined>(undefined);

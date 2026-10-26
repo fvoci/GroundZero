@@ -91,7 +91,7 @@ describe('search author that is no longer in the member list', () => {
             user_id: 'u-2',
             display_name: '가상 멤버',
             email: null,
-            role: 'writer',
+            role: 'member',
             is_owner: false,
           },
         ],
@@ -145,10 +145,11 @@ describe('search author that is no longer in the member list', () => {
     vi.spyOn(api, 'modules').mockResolvedValue([]);
     const roster: Awaited<ReturnType<typeof api.members>> = {
       members: [
-        { user_id: 'u-1', display_name: '가상 멤버', email: null, role: 'writer', is_owner: false },
+        { user_id: 'u-1', display_name: '가상 멤버', email: null, role: 'member', is_owner: false },
       ],
       my_role: 'admin',
       i_am_owner: true,
+      can_manage_members: true,
     };
     const members = vi.spyOn(api, 'members').mockResolvedValue(roster);
     const search = vi.spyOn(api, 'search').mockResolvedValue([]);

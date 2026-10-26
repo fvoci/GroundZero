@@ -8,7 +8,15 @@ import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '공간', role: 'admin', is_owner: true, realtime_enabled: false },
+  {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '공간',
+    role: 'admin',
+    access: 'owner',
+    is_owner: true,
+    realtime_enabled: false,
+  },
 ];
 
 function documentWith(visibility: 'workspace' | 'private', allowCopy: boolean): DocumentView {

@@ -34,7 +34,15 @@ vi.mock(import('$lib/features/documents/live'), async (importOriginal) => {
 });
 
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '공간', role: 'writer', is_owner: false, realtime_enabled: true },
+  {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '공간',
+    role: 'member',
+    access: 'write',
+    is_owner: false,
+    realtime_enabled: true,
+  },
 ];
 
 function paragraph(text: string): DocNode {

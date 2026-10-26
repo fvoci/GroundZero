@@ -15,6 +15,7 @@ export type Member = Schemas['Member'];
 export type MembersView = Schemas['MembersView'];
 export type Invitation = Schemas['Invitation'];
 export type ReceivedInvitation = Schemas['ReceivedInvitation'];
+export type Accepted = Schemas['Accepted'];
 export type Group = Schemas['Group'];
 export type ModuleKind = Schemas['ModuleKind'];
 export type Module = Schemas['Module'];

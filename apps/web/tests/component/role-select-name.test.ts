@@ -10,9 +10,9 @@ describe('role select accessible name', () => {
   it('includes the visible current role', async () => {
     await setLocale('ko', { reload: false });
     render(RoleSelect, {
-      props: { value: 'writer', label: '김연구 역할', onchange: () => undefined },
+      props: { value: 'member', label: '김연구 역할', onchange: () => undefined },
     });
-    const trigger = screen.getByRole('button', { name: '김연구 역할: 작성자' });
-    expect(trigger).toHaveTextContent('작성자');
+    const trigger = screen.getByRole('button', { name: '김연구 역할: 멤버' });
+    expect(trigger).toHaveTextContent('멤버');
   });
 });

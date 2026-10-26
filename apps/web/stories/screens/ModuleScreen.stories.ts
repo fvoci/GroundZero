@@ -60,7 +60,7 @@ export const EmptyModule: Story = {
 
 /** 읽기 전용(워크스페이스 읽기 역할): 항목은 보이지만 만들기·설정·지우기가 없다. */
 export const ReadOnly: Story = {
-  args: { workspace: workspaceAs('reader') },
+  args: { workspace: workspaceAs('readonly') },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByTestId('item-list');

@@ -37,7 +37,15 @@ function summary(id: string, title: string, parent: string | null): SummaryView 
   return { id, title, parent_id: parent, reference: null, revision: 1, updated_at: '' };
 }
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '모듈 예제', role: 'writer', is_owner: false, realtime_enabled: false },
+  {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '모듈 예제',
+    role: 'member',
+    access: 'write',
+    is_owner: false,
+    realtime_enabled: false,
+  },
 ];
 const list = [
   summary('guide', '운영 안내', null),

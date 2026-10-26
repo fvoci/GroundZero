@@ -30,7 +30,15 @@ const me: Me = {
 };
 
 function workspace(id: string, name: string, realtime: boolean): Workspace {
-  return { id, name, role: 'admin', is_owner: true, realtime_enabled: realtime };
+  return {
+    id,
+    organization_id: 'org-1',
+    name,
+    role: 'admin',
+    access: 'owner',
+    is_owner: true,
+    realtime_enabled: realtime,
+  };
 }
 
 function checkbox(): HTMLInputElement {

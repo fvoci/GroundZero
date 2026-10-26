@@ -10,8 +10,10 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 초대를 목록에서 뺀다. 이유는 다시 읽은 뒤에도 남는다.
 const workspace: Workspace = {
   id: 'ws-1',
+  organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -35,7 +37,7 @@ const view: MembersView = {
 const invitation: Invitation = {
   id: 'inv-1',
   email: 'kim@lab.example',
-  role: 'writer',
+  role: 'member',
   expires_at: '2026-11-01T00:00:00Z',
 };
 

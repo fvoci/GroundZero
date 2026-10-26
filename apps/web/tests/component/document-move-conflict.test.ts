@@ -91,8 +91,24 @@ const doc: DocumentView = {
 };
 // 문서가 있는 ws-1의 위키는 대상에서 빠지므로 옮길 곳은 ws-2 위키 하나다.
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '운영', role: 'writer', is_owner: false, realtime_enabled: true },
-  { id: 'ws-2', name: '개발', role: 'writer', is_owner: false, realtime_enabled: false },
+  {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '운영',
+    role: 'member',
+    access: 'write',
+    is_owner: false,
+    realtime_enabled: true,
+  },
+  {
+    id: 'ws-2',
+    organization_id: 'org-1',
+    name: '개발',
+    role: 'member',
+    access: 'write',
+    is_owner: false,
+    realtime_enabled: false,
+  },
 ];
 
 describe('move panel when the live room is busy', () => {

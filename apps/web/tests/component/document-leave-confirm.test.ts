@@ -11,7 +11,15 @@ import { router } from '$lib/router.svelte';
 // 저장하지 않은 문서에서 다른 화면으로 가려 하면 브라우저 기본 확인창(window.confirm)이 떴다(UI 감사). 업무·일정
 // 대화상자와 같은 확인(DiscardChangesConfirm)을 쓰고, 계속 편집하면 입력을 그대로 두며, 떠나기로 하면 같은 이동을 한다.
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '공간', role: 'writer', is_owner: false, realtime_enabled: false },
+  {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '공간',
+    role: 'member',
+    access: 'write',
+    is_owner: false,
+    realtime_enabled: false,
+  },
 ];
 
 const doc: DocumentView = {

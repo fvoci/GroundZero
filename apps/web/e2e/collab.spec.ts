@@ -12,7 +12,8 @@ test('two users edit a live document together and the result persists', async ({
   const writer = await signIn('test-user-2');
   const tag = unique();
   const ws = await owner.api.createWorkspace(`공동 편집 시험 ${tag}`);
-  await owner.api.invite(ws, writer.user.email, 'writer');
+  await owner.api.ensureOrganizationMember(writer.api, writer.user.email);
+  await owner.api.invite(ws, writer.user.email, 'member');
   await writer.api.acceptInvitation(ws);
   await owner.api.setRealtime(ws, true);
   const doc = await owner.api.createWikiDocument(ws, `공동 편집 ${tag}`);
