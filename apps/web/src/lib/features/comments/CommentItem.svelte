@@ -4,6 +4,7 @@
   import { onDestroy } from 'svelte';
   import type { CommentView } from '$lib/api/client';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -75,7 +76,22 @@
       draft.complete(attempt);
     }
   }
+
+  function cancel(): void {
+    if (!draft.active) return;
+    draft.leave.request(() => {
+      editing = undefined;
+      draft.persist();
+    });
+  }
 </script>
+
+<DiscardChangesConfirm
+  open={draft.active && draft.leave.open}
+  description={m.comments_discard_edit()}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.leave.discard}
+/>
 
 <div class="flex flex-col gap-1">
   <div class="flex flex-wrap items-baseline gap-2 text-sm">
@@ -110,14 +126,7 @@
       <Textarea aria-label={m.comments_edit_label()} bind:value={editing} maxlength={10000} />
       <div class="flex gap-2">
         <Button type="submit" size="sm" disabled={busy || draft.blocked}>{m.common_save()}</Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onclick={() => {
-            editing = undefined;
-            draft.persist();
-          }}>{m.common_cancel()}</Button
-        >
+        <Button size="sm" variant="ghost" onclick={cancel}>{m.common_cancel()}</Button>
       </div>
     </form>
   {:else}

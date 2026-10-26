@@ -139,6 +139,7 @@ describe('ChecklistForm (D-30, editor-less screens)', () => {
     await fireEvent.click(screen.getByRole('button', { name: /덧붙이기/ }));
     await fireEvent.input(source(), { target: { value: '- [ ] 초안 작성\n- [ ] 자료 수집' } });
     await fireEvent.click(expand());
+    await fireEvent.click(await screen.findByRole('button', { name: '변경 버리고 닫기' }));
     await fireEvent.click(screen.getByRole('button', { name: /덧붙이기/ }));
     const byText = (call: number): Record<string, string> =>
       Object.fromEntries((h.onadd.mock.calls[call]?.[0] ?? []).map((e) => [e.text, e.requestId]));

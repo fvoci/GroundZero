@@ -91,6 +91,8 @@ export const EditCancel: Story = {
     await userEvent.click(canvas.getByRole('button', { name: '고치기' }));
     await userEvent.type(canvas.getByRole('textbox', { name: '댓글 고치기' }), ' 추가');
     await userEvent.click(canvas.getByRole('button', { name: '취소' }));
+    const confirmation = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+    await userEvent.click(within(confirmation).getByRole('button', { name: '변경 버리고 닫기' }));
     await expect(canvas.queryByRole('textbox')).toBeNull();
     await expect(args.onedit).not.toHaveBeenCalled();
   },
