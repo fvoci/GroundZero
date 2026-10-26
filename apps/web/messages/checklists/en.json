@@ -32,5 +32,7 @@
   "checklists_edit_aria": "Edit {text}",
   "checklists_edit_label": "New text for {text}",
   "checklists_save": "Save",
-  "checklists_cancel": "Cancel"
+  "checklists_cancel": "Cancel",
+  "checklists_discard_rename": "Discard changes to this item? New item and pasted input will be kept.",
+  "checklists_discard_preview": "Replace the current preview text and completion states with the source? New item and existing item edits will be kept."
 }

@@ -31,5 +31,7 @@
   "checklists_edit_aria": "{text} 고치기",
   "checklists_edit_label": "{text}의 새 문구",
   "checklists_save": "저장",
-  "checklists_cancel": "취소"
+  "checklists_cancel": "취소",
+  "checklists_discard_rename": "이 항목의 수정 입력을 버릴까요? 새 항목과 붙여넣기 입력은 남습니다.",
+  "checklists_discard_preview": "현재 미리보기의 문구와 완료 상태를 원문으로 다시 펼칠까요? 새 항목과 기존 항목의 수정 입력은 남습니다."
 }
