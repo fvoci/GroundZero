@@ -71,17 +71,20 @@
   <TemplatePicker workspaceId={null} id="new-note-template" bind:value={templateId} />
   <CreateForm
     id="new-note"
+    draftName="note-new"
+    bind:draftContext={templateId}
     label={m.notes_new_title_label()}
     placeholder={m.notes_new_title_placeholder()}
     submitLabel={m.notes_create()}
-    create={async (requestId: string, title: string) => {
+    create={async (requestId, title, context) => {
       const note = await api.createNote(
-        me.userId,
+        context.userId,
         requestId,
         title,
         null,
         templateId === '' ? null : templateId,
       );
+      if (!context.saved()) return;
       router.navigate(standalonePath(note.id));
     }}
   />

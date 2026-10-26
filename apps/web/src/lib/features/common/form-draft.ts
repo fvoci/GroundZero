@@ -16,13 +16,13 @@ export interface StoredFormDraft<T> {
  * 이 사용자의 이 이름의 키 앞부분. 로그인 전이면 없다. 조직은 넣지 않는다(업무·항목 id는 조직을 넘어 유일하고, 되살릴 때의
  * 조직 문맥이 남길 때와 다를 수 있다).
  */
-function base(name: string): string | undefined {
-  return me.userId === '' ? undefined : scopedKey(`form-draft:${name}`, me.userId, undefined);
+function base(name: string, userId = me.userId): string | undefined {
+  return userId === '' ? undefined : scopedKey(`form-draft:${name}`, userId, undefined);
 }
 
 /** 이 탭의 지금 입력의 키. */
-export function formDraftTabKey(name: string): string | undefined {
-  const b = base(name);
+export function formDraftTabKey(name: string, userId = me.userId): string | undefined {
+  const b = base(name, userId);
   return b === undefined ? undefined : `${b}:tab:${tabId()}`;
 }
 
@@ -37,7 +37,7 @@ function read(key: string): unknown {
   }
 }
 
-function write(key: string | undefined, value: unknown): boolean {
+export function writeFormDraftAt(key: string | undefined, value: unknown): boolean {
   if (key === undefined) return false;
   try {
     if (value === undefined) window.localStorage.removeItem(key);
@@ -54,12 +54,12 @@ export function storeFormDraft(
   name: string,
   value: Record<string, unknown> & { savedAt: string },
 ): boolean {
-  return write(formDraftTabKey(name), value);
+  return writeFormDraftAt(formDraftTabKey(name), value);
 }
 
 /** 이 탭의 지금 입력을 지운다(다른 탭·보류한 것은 두고). */
 export function clearFormDraft(name: string): void {
-  write(formDraftTabKey(name), undefined);
+  writeFormDraftAt(formDraftTabKey(name), undefined);
 }
 
 /**
@@ -68,8 +68,9 @@ export function clearFormDraft(name: string): void {
 export function listFormDrafts<T extends { savedAt: string }>(
   name: string,
   parse: (value: unknown) => T | undefined,
+  userId = me.userId,
 ): StoredFormDraft<T>[] {
-  const b = base(name);
+  const b = base(name, userId);
   if (b === undefined) return [];
   const prefix = `${b}:`;
   const keys: string[] = [];
@@ -91,7 +92,7 @@ export function listFormDrafts<T extends { savedAt: string }>(
 
 /** 남긴 입력 하나를 지운다(되살렸거나 버렸거나 이미 반영됐다). */
 export function removeFormDraftAt(key: string): void {
-  write(key, undefined);
+  writeFormDraftAt(key, undefined);
 }
 
 /**
@@ -101,11 +102,12 @@ export function removeFormDraftAt(key: string): void {
 export function holdFormDraft<T extends { savedAt: string }>(
   name: string,
   entry: StoredFormDraft<T>,
+  userId = me.userId,
 ): StoredFormDraft<T> {
-  const b = base(name);
-  if (b === undefined || entry.key !== formDraftTabKey(name)) return entry;
+  const b = base(name, userId);
+  if (b === undefined || entry.key !== formDraftTabKey(name, userId)) return entry;
   const held = `${b}:held:${crypto.randomUUID()}`;
-  if (!write(held, entry.value)) return entry;
-  write(entry.key, undefined);
+  if (!writeFormDraftAt(held, entry.value)) return entry;
+  writeFormDraftAt(entry.key, undefined);
   return { key: held, value: entry.value };
 }
