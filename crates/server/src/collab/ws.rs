@@ -89,7 +89,6 @@ pub async fn connect(
             let peer = Peer {
                 user,
                 session,
-                can_write,
                 out,
                 access: Lease::new(can_write, checked_at, state.config.collab_recheck),
             };
@@ -156,6 +155,7 @@ async fn run(
         };
         loop {
             tokio::select! {
+                _ = membership.closed() => break,
                 item = outbox.recv() => {
                     match item {
                         Some(Outbound::Binary(bytes)) => {

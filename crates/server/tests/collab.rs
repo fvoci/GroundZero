@@ -2930,9 +2930,9 @@ impl Drop for DbProxy {
 /// 유효한 확인은 1초를 넘겨 연결을 유지한다. 이후 해당 풀만 지연/실패해도 다른 연결의 기한은 독립적이다.
 #[tokio::test]
 async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure() {
+    let (writer, (state, app, _addr, _admin, _from, _to, id, editor, mut reader)) =
+        live_move_race_setup_rechecking("독립 DB 재확인", "1").await;
     for pause in [true, false] {
-        let (writer, (state, app, _addr, _admin, _from, _to, id, editor, mut reader)) =
-            live_move_race_setup_rechecking("독립 DB 재확인", "1").await;
         let mut proxy = DbProxy::start().await;
         let mut proxied = state.clone();
         proxied.db = fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(
@@ -2974,9 +2974,9 @@ async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure(
             .status,
             StatusCode::OK
         );
-        editor.close().await;
-        reader.close().await;
     }
+    editor.close().await;
+    reader.close().await;
 }
 
 /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.

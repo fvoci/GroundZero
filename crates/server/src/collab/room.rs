@@ -145,7 +145,6 @@ pub struct Peer {
     pub user: UserId,
     /// 세션 토큰의 해시. 주기적으로 세션이 살아 있는지 본다.
     pub session: Vec<u8>,
-    pub can_write: bool,
     pub out: mpsc::Sender<Outbound>,
     pub(crate) access: Lease,
 }
@@ -264,6 +263,11 @@ pub struct Membership {
 }
 
 impl Membership {
+    /// 방 작업이 끝나면 유휴 소켓도 더 이상 연결을 유지하지 않는다.
+    pub(crate) async fn closed(&self) {
+        self.tx.closed().await;
+    }
+
     /// 받은 메시지를 방에 넘긴다(받은 때와 함께). 방이 닫혔으면 거짓.
     pub async fn send(&self, data: Vec<u8>) -> bool {
         self.tx
@@ -1872,7 +1876,7 @@ pub enum PeerAccess {
     },
     Denied,
     RealtimeOff,
-    /// DB 오류 등으로 알 수 없음. 다음에 다시 본다.
+    /// DB 오류 등으로 알 수 없음. 연결은 재접속 가능한 오류로 종료한다.
     Unknown,
 }
 
