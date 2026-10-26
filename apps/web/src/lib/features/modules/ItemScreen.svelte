@@ -292,7 +292,7 @@
 <nav aria-label={m.modules_breadcrumb()} class="-mb-6 min-w-0 text-sm text-muted-foreground">
   <ol class="flex min-w-0 items-center gap-1">
     {#each crumbs as crumb, index (crumb.path)}
-      <li class={`flex min-w-0 items-center gap-1 ${index === 0 ? 'shrink' : 'shrink-0'}`}>
+      <li class="flex max-w-full min-w-0 shrink items-center gap-1">
         {#if index > 0}<ChevronRight class="size-3.5 shrink-0" aria-hidden="true" />{/if}
         <a
           class="truncate rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

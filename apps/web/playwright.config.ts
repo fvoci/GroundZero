@@ -49,6 +49,7 @@ export default defineConfig({
       // 좁은 화면이 의미 있는 배치 시험만 돈다.
       testMatch: [
         '00-representative.spec.ts',
+        'draft-offer-layout.spec.ts',
         'layout.spec.ts',
         'layout-control.spec.ts',
         'gantt.spec.ts',

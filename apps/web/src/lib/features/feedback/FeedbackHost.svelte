@@ -15,7 +15,7 @@
     auth,
     accountSafety,
     connection,
-    markAccountSwitch,
+    switchAccount,
     onAccountSwitch,
     watchConnection,
   } from './feedback.svelte';
@@ -66,23 +66,34 @@
   // 있다. 세션이 끝난 동안이 아니어도 쿠키는 이미 바뀌었다). 같은 계정이면 화면과 입력은 그대로 두고, 세션이 끝난
   // 동안이었으면 client.ts가 성공한 응답을 보고 배너를 내린다. 다른 계정이면 이 창의 화면·입력·상태는 앞 계정의
   // 것이므로 남기지 않고 처음부터 다시 읽는다. 아직 로그인 전인 창은 확인하지 않는다.
+  //
+  // 감지 시점(#88): 창 `focus`와 문서가 다시 보이는 `visibilitychange` 둘 다 쓴다. 키보드·OS로 탭을 바꾸면 창 focus 없이
+  // 탭만 보이게 될 수 있고, 헤드리스 Chromium의 탭 전환은 focus를 내지 않았다(e2e account-switch의 focus-path 기록).
+  // 두 이벤트가 잇달아 와도 확인 요청은 한 번에 하나만 보내고(`checking`), 전환은 `switchAccount()`가 한 번만 시작한다.
   $effect(() => {
+    let checking = false;
     const recheck = (): void => {
       const signedIn = currentUser.userId;
-      if (signedIn === '' || accountSafety.switching) return;
+      if (signedIn === '' || accountSafety.switching || checking) return;
+      checking = true;
       void api
         .me()
         .then((now) => {
-          if (now !== undefined && now.id !== signedIn) {
-            markAccountSwitch();
-            reload();
-          }
+          if (now !== undefined && now.id !== signedIn) switchAccount();
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          checking = false;
+        });
+    };
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') recheck();
     };
     window.addEventListener('focus', recheck);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       window.removeEventListener('focus', recheck);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   });
 

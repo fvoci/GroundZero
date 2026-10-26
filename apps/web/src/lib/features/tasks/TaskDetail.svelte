@@ -481,15 +481,58 @@
   // 이 업무를 열면 되살릴지 묻는다. 다른 계정은 키가 달라 보지 못하고, 되살린 입력은 사용자가 "저장"을 눌러야 간다(자동
   // 재전송 없음). 범위는 이탈 확인이 지키는 입력(이 폼)과 같다: 관계 편집 칸·체크리스트 새 항목·댓글 입력은 이탈 확인에도
   // 들지 않는다.
+  /** 선행 관계 편집 칸의 입력(D-128 대표 경로의 "선행 지정"). `editing`은 고치던 관계의 선행 업무, 새 관계면 null. */
+  interface LinkDraft {
+    editing: string | null;
+    predecessor: string;
+    kind: LinkKind;
+    lag: string;
+    base: LinkBase | null;
+  }
   interface TaskDraft {
     baseVersion: number;
     baseline: TaskInput;
     form: TaskInput;
     tagsText: string;
     estimateText: string;
+    /** 관계 편집 칸에 입력이 있을 때만. 옛 초안에는 없다(null). */
+    link: LinkDraft | null;
     savedAt: string;
   }
   const draftName = $derived(`task:${taskId}`);
+  const isLinkKind = (value: unknown): value is LinkKind => LINK_KINDS.some((k) => k === value);
+  function parseLinkDraft(value: unknown): LinkDraft | null | undefined {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'object') return undefined;
+    if (!(
+      'editing' in value &&
+      'predecessor' in value &&
+      'kind' in value &&
+      'lag' in value &&
+      'base' in value
+    ))
+      return undefined;
+    const { editing: edited, predecessor, kind, lag, base } = value;
+    if (
+      (edited !== null && typeof edited !== 'string') ||
+      typeof predecessor !== 'string' ||
+      !isLinkKind(kind) ||
+      typeof lag !== 'string'
+    )
+      return undefined;
+    if (base !== null) {
+      if (typeof base !== 'object' || !('kind' in base && 'lag_days' in base)) return undefined;
+      if (!isLinkKind(base.kind) || typeof base.lag_days !== 'number') return undefined;
+      return {
+        editing: edited,
+        predecessor,
+        kind,
+        lag,
+        base: { kind: base.kind, lag_days: base.lag_days },
+      };
+    }
+    return { editing: edited, predecessor, kind, lag, base: null };
+  }
   function isTaskInput(value: unknown): value is TaskInput {
     if (typeof value !== 'object' || value === null) return false;
     if (!(
@@ -534,13 +577,15 @@
       return undefined;
     const { baseVersion: version, baseline: before, form: kept, savedAt } = value;
     const { tagsText: tags, estimateText: estimate } = value;
+    const link = parseLinkDraft('link' in value ? value.link : null);
     if (
       typeof version !== 'number' ||
       typeof tags !== 'string' ||
       typeof estimate !== 'string' ||
       typeof savedAt !== 'string' ||
       !isTaskInput(before) ||
-      !isTaskInput(kept)
+      !isTaskInput(kept) ||
+      link === undefined
     )
       return undefined;
     return {
@@ -549,16 +594,23 @@
       form: kept,
       tagsText: tags,
       estimateText: estimate,
+      link,
       savedAt,
     };
   }
   let restorable = $state<StoredFormDraft<TaskDraft> | undefined>(undefined);
   // 묻는 입력이 보류 키로 옮기지 못해 이 탭의 키에 그대로 있으면(저장소 가득 참) 고를 때까지 그 키에 새 입력을 쓰지 않는다.
   let reserved = false;
-  /** 서버 내용과 같은(이미 반영된) 입력인지. */
+  /** 서버 내용과 같은(이미 반영된) 입력인지. 관계 편집 칸에 입력이 남아 있으면 같지 않다. */
   const isServer = (d: TaskDraft, server: TaskDetailView): boolean =>
+    d.link === null &&
     estimateOf(d.estimateText) !== 'invalid' &&
     !edited(formOf(server), inputOf(d.form, d.tagsText, d.estimateText));
+  // 관계 편집 칸에 입력이 있는지(고치는 관계를 열었거나 선행 업무·종류·지연일을 기본값에서 바꿨다). 이 칸은 이탈 확인(`unsaved`)에는
+  // 들지 않고(기존 동작 유지) 브라우저 보존에만 든다.
+  const linkChanged = $derived(
+    editing !== undefined || predecessorChoice !== '' || linkKind !== 'FS' || lagText !== '0',
+  );
   /**
    * 되살릴지 물을 입력을 고른다: 서버와 같은 것은 지우고 가장 새 것을 묻는다. `others`면 이 탭의 지금 입력은 빼고 본다
    * (고른 뒤 다음 것을 물을 때).
@@ -603,6 +655,21 @@
     pending = undefined;
     clashAsk = undefined;
     error = undefined;
+    // 관계 편집 칸: 고치던 관계가 아직 있으면 그 편집(기준 관계 포함)을, 없어졌으면 새 관계 입력으로 되살린다. 기준 관계가
+    // 그사이 바뀌었으면 "관계 저장"이 서버의 409로 알고 최신 관계를 보인다(말없이 덮지 않음).
+    const link = kept.link;
+    if (link === null) resetLinkEditor();
+    else {
+      const stillLinked =
+        link.editing !== null && current.predecessors.some((l) => l.task_id === link.editing);
+      editing = stillLinked && link.editing !== null ? link.editing : undefined;
+      predecessorChoice =
+        stillLinked || !candidates.some((c) => c.id === link.predecessor) ? '' : link.predecessor;
+      linkKind = link.kind;
+      lagText = link.lag;
+      linkBase = stillLinked ? link.base : null;
+      linkStatus = '';
+    }
     // 남길 때의 판보다 서버가 앞섰으면 기존 다시 채우기로 병합한다(양쪽이 다르게 바꾼 칸은 옛 판 번호를 남겨 저장이 충돌
     // 화면으로 간다). 같은 판이면 그 판으로 저장한다.
     if (current.version !== kept.baseVersion) refresh(current);
@@ -621,7 +688,7 @@
   $effect(() => {
     const mine = currentInput();
     const before = baseline;
-    const dirty = changed;
+    const dirty = changed || linkChanged;
     if (task === undefined || mine === undefined || before === undefined || form === undefined)
       return;
     if (reserved) return;
@@ -632,6 +699,15 @@
         form: $state.snapshot(form),
         tagsText,
         estimateText,
+        link: linkChanged
+          ? {
+              editing: editing ?? null,
+              predecessor: predecessorChoice,
+              kind: linkKind,
+              lag: lagText,
+              base: linkBase === null ? null : { kind: linkBase.kind, lag_days: linkBase.lag_days },
+            }
+          : null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
     } else {

@@ -332,3 +332,159 @@ describe('task form input across reloads and account switches', () => {
     expect(stored(A)).toEqual([{ description: EDIT, baseVersion: 1 }]);
   });
 });
+
+// D-128 대표 경로의 "선행 지정": 관계 편집 칸(고치는 관계·선행 업무·종류·지연일)도 같은 초안에 남고, 되살린 뒤 사용자가
+// "관계 저장"을 눌러야 보낸다. 되살린 기준 관계가 그사이 바뀌었으면 서버의 409가 최신 관계를 보이고 입력은 남는다.
+describe('relation editor input across reloads', () => {
+  const predecessor: TaskDetailView = detail({
+    id: 't-0',
+    reference: 'KED-0',
+    title: '설계',
+    start_date: '2026-10-19',
+    due_date: '2026-10-21',
+  });
+  const linked = (): TaskDetailView =>
+    detail({
+      predecessors: [{ task_id: 't-0', kind: 'FS', lag_days: 0 }],
+      start_date: '2026-10-22',
+      due_date: '2026-10-24',
+    });
+  function mountLinked(server: TaskDetailView = linked()): void {
+    vi.spyOn(api, 'task').mockResolvedValue(server);
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    render(TaskDetail, {
+      props: {
+        taskId: 't-1',
+        tasks: [predecessor, server],
+        workspaces: [],
+        onchanged: () => undefined,
+        onopen: () => undefined,
+      },
+    });
+  }
+  async function lagBox(): Promise<HTMLInputElement> {
+    const box = await screen.findByLabelText('지연(일)');
+    if (!(box instanceof HTMLInputElement)) throw new Error('지연(일)');
+    return box;
+  }
+  function storedLink(): unknown[] {
+    return keysOf(A).map((k) => {
+      const value: unknown = JSON.parse(window.localStorage.getItem(k) ?? 'null');
+      if (typeof value !== 'object' || value === null || !('link' in value))
+        throw new Error('draft');
+      return value.link;
+    });
+  }
+
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    window.localStorage.clear();
+    me.userId = A;
+    accountSafety.switching = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(json(404, { error: 'not_found', message: 'not found' })),
+    );
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    me.userId = '';
+    accountSafety.switching = false;
+    window.localStorage.clear();
+  });
+
+  it('keeps a relation being edited even when the form itself is unchanged, and restores it for an explicit save', async () => {
+    mountLinked();
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-0 설계 관계 고치기' }));
+    await fireEvent.input(await lagBox(), { target: { value: '3' } });
+    await waitFor(() => {
+      expect(storedLink()).toEqual([
+        {
+          editing: 't-0',
+          predecessor: '',
+          kind: 'FS',
+          lag: '3',
+          base: { kind: 'FS', lag_days: 0 },
+        },
+      ]);
+    });
+    reloadLike();
+
+    // 폼 본문은 서버와 같지만 관계 입력이 남아 있으므로 제안한다.
+    mountLinked();
+    await screen.findByTestId('task-draft-offer');
+    const preview = vi
+      .spyOn(api, 'previewLink')
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
+      kind: 'updated',
+      task: detail({ predecessors: [{ task_id: 't-0', kind: 'FS', lag_days: 3 }], version: 2 }),
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
+    expect((await lagBox()).value).toBe('3');
+    expect(document.getElementById('predecessor-label')).toHaveTextContent('고치기');
+    expect(set).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole('button', { name: /^관계 저장$/ }));
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(1);
+    });
+    expect(preview).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith('t-1', 't-0', 'FS', 3, { kind: 'FS', lag_days: 0 }, []);
+    await waitFor(() => {
+      expect(keysOf(A)).toEqual([]);
+    });
+  });
+
+  it('after restoring, a relation changed elsewhere is reported by the server and the input stays', async () => {
+    mountLinked();
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-0 설계 관계 고치기' }));
+    await fireEvent.input(await lagBox(), { target: { value: '3' } });
+    await waitFor(() => {
+      expect(storedLink()).toHaveLength(1);
+    });
+    reloadLike();
+
+    mountLinked();
+    await screen.findByTestId('task-draft-offer');
+    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
+      kind: 'link_conflict',
+      current: detail({ predecessors: [{ task_id: 't-0', kind: 'SS', lag_days: 1 }], version: 2 }),
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
+    await fireEvent.click(screen.getByRole('button', { name: /^관계 저장$/ }));
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(1);
+    });
+    // 서버의 최신 관계를 알리고 내 입력(지연 3)은 그대로다. 다음 저장은 최신 관계를 기준으로 보낸다.
+    expect(await screen.findByRole('alert')).toHaveTextContent('관계가');
+    expect((await lagBox()).value).toBe('3');
+  });
+
+  it('shows no relation offer to another account and clears the relation input on close', async () => {
+    mountLinked();
+    await fireEvent.click(await screen.findByRole('button', { name: 'KED-0 설계 관계 고치기' }));
+    await fireEvent.input(await lagBox(), { target: { value: '3' } });
+    await waitFor(() => {
+      expect(storedLink()).toHaveLength(1);
+    });
+    reloadLike();
+    me.userId = B;
+    mountLinked();
+    await descriptionBox();
+    expect(screen.queryByTestId('task-draft-offer')).toBeNull();
+    expect(keysOf(A)).toHaveLength(1);
+    cleanup();
+
+    me.userId = A;
+    mountLinked();
+    await screen.findByTestId('task-draft-offer');
+    // 사용자가 닫으면(언마운트) 이 탭의 입력은 지운다.
+    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
+    cleanup();
+    expect(keysOf(A)).toEqual([]);
+  });
+});

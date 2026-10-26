@@ -213,8 +213,11 @@
         />
       </div>
       <Button type="submit" disabled={busy || draft.trim() === ''}>{m.checklists_add()}</Button>
-      <Button type="button" variant="outline" onclick={() => (pasteOpen = !pasteOpen)}
-        >{m.checklists_paste_markdown()}</Button
+      <Button
+        type="button"
+        variant="outline"
+        class="h-auto max-w-full whitespace-normal"
+        onclick={() => (pasteOpen = !pasteOpen)}>{m.checklists_paste_markdown()}</Button
       >
     </form>
     {#if pasteOpen}

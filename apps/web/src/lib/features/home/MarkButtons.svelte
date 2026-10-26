@@ -62,7 +62,11 @@
       </p>{/if}
   </DropdownMenu.Group>
 {:else if marks !== undefined}
-  <div class="flex items-center gap-1" role="group" aria-label={m.home_marks_group()}>
+  <div
+    class="flex min-w-0 flex-wrap items-center gap-1"
+    role="group"
+    aria-label={m.home_marks_group()}
+  >
     <Button
       size="sm"
       variant={marks.pin ? 'secondary' : 'ghost'}
