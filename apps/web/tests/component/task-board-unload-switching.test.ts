@@ -1,5 +1,5 @@
 import './fixtures/task-statuses';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
@@ -9,9 +9,10 @@ import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
-// #88·D-96: 다른 계정으로 바뀌어 이 창을 다시 읽을 때는 저장 안 한 편집의 beforeunload 경고로 다시 읽기를 막지 않는다
-// (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다; 입력은 앞 계정의 초안으로 이미 남아 있다). 문서
-// 편집기는 이 규칙을 따랐고 업무 보드의 이탈 가드도 같아야 한다. 전환이 아닐 때는 전처럼 경고한다.
+// #88·D-96: 다른 계정으로 바뀌어 이 창을 다시 읽을 때, 저장 안 한 업무 입력이 앞 계정의 브라우저 초안으로 **남았으면** beforeunload
+// 경고로 다시 읽기를 막지 않는다(막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 초안을 **남기지 못했으면**
+// (저장소 사용 불가·용량 초과) 보통 떠나기처럼 경고해 입력을 잃지 않게 한다 — 문서 편집기(DocumentEditor)와 같은 규칙이다. 전환이
+// 아닐 때는 전처럼 경고한다. 실제 TaskBoard+TaskDetail 폼과 실제 localStorage로 본다.
 
 const item: ItemView = {
   id: 'i1',
@@ -62,10 +63,27 @@ const detail: TaskDetailView = {
   checklist: [],
 };
 
+const draftKeys = (): string[] =>
+  Object.keys(window.localStorage).filter((k) =>
+    k.startsWith('fvoci:user-a:-:form-draft:task:t-1'),
+  );
+
 function unloadPrevented(): boolean {
   const event = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+
+async function mountWithOpenTask(): Promise<HTMLElement> {
+  vi.spyOn(api, 'tasks').mockResolvedValue([detail]);
+  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(api, 'task').mockResolvedValue(detail);
+  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });
+  return screen.findByLabelText('설명', { exact: true });
 }
 
 describe('task board unload warning while the account is switching', () => {
@@ -73,6 +91,7 @@ describe('task board unload warning while the account is switching', () => {
     await setLocale('ko', { reload: false });
     me.userId = 'user-a';
     accountSafety.switching = false;
+    window.localStorage.clear();
   });
   afterEach(() => {
     accountSafety.switching = false;
@@ -81,18 +100,13 @@ describe('task board unload warning while the account is switching', () => {
     window.localStorage.clear();
   });
 
-  it('warns about unsaved task input normally but not while switching accounts', async () => {
-    vi.spyOn(api, 'tasks').mockResolvedValue([detail]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    vi.spyOn(api, 'task').mockResolvedValue(detail);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
-    vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
-    render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });
-    const description = await screen.findByLabelText('설명', { exact: true });
+  it('warns normally, but not while switching when the input is kept as a draft', async () => {
+    const description = await mountWithOpenTask();
     expect(unloadPrevented()).toBe(false);
     await fireEvent.input(description, { target: { value: '아직 저장하지 않은 설명' } });
+    await waitFor(() => {
+      expect(draftKeys()).toHaveLength(1);
+    });
     expect(unloadPrevented()).toBe(true);
 
     accountSafety.switching = true;
@@ -100,5 +114,35 @@ describe('task board unload warning while the account is switching', () => {
 
     accountSafety.switching = false;
     expect(unloadPrevented()).toBe(true);
+  });
+
+  it('keeps warning while switching when the draft could not be stored, so the input is not lost', async () => {
+    // 저장소 사용 불가·용량 초과: 초안 쓰기가 던진다(읽기는 그대로).
+    const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded (test)', 'QuotaExceededError');
+    });
+    const description = await mountWithOpenTask();
+    await fireEvent.input(description, { target: { value: '남기지 못한 설명' } });
+    await waitFor(() => {
+      expect(quota).toHaveBeenCalled();
+    });
+    expect(draftKeys()).toEqual([]);
+    expect(unloadPrevented()).toBe(true);
+
+    accountSafety.switching = true;
+    // 전환 중이어도 초안이 없으면 경고를 유지한다(막아도 화면은 안전 상태가 가리고 요청은 차단된다).
+    expect(unloadPrevented()).toBe(true);
+    if (!(description instanceof HTMLTextAreaElement)) throw new Error('설명');
+    expect(description.value).toBe('남기지 못한 설명');
+
+    // 저장소가 돌아와 다음 입력이 남으면 전환 중 경고는 사라진다.
+    quota.mockRestore();
+    accountSafety.switching = false;
+    await fireEvent.input(description, { target: { value: '남기지 못한 설명 (이어서)' } });
+    await waitFor(() => {
+      expect(draftKeys()).toHaveLength(1);
+    });
+    accountSafety.switching = true;
+    expect(unloadPrevented()).toBe(false);
   });
 });

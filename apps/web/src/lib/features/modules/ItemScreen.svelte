@@ -552,6 +552,7 @@
       routeView={taskRoute?.view}
       openTaskId={taskRoute === undefined ? taskId : taskRoute.taskId}
       tasksVersion={taskVersion}
+      locked={moduleArchived}
       onstale={() => {
         // 권한·보관이 바뀌었을 수 있다. 입력 중인 칸은 두고, 항목 상태와 고치지 않은 칸은 새로 읽은 값으로 바꾼다
         // (옛 값이 남으면 다음 저장이 그사이 바뀐 제목·설명을 되돌린다).

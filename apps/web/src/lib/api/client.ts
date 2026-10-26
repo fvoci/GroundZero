@@ -29,6 +29,8 @@ import type {
   TaskStatusDefinition,
 } from '@fvoci/api-client';
 
+import { untrack } from 'svelte';
+
 import {
   auth,
   accountSwitching,
@@ -2216,7 +2218,7 @@ export function fileContentUrl(id: string, version?: number, inline = false): st
 /** 업로드 조각 보내기(날것 본문 + SHA-256 머리글). */
 async function putPart(upload: string, number: number, body: Blob, sha256: string): Promise<void> {
   // 작업자 C: 일반 JSON 요청 밖 업로드 재시도도 계정 전환 시 멈춘다.
-  if (accountSwitching())
+  if (untrack(accountSwitching))
     throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   try {
@@ -2521,7 +2523,10 @@ async function request(
   signal?: AbortSignal,
 ): Promise<{ status: number; json: Json; etag: string | null }> {
   // 작업자 C: 계정 변경 감지 뒤 자동 재시도·늦은 응답을 기존 화면에 적용하지 않는다(D-96).
-  if (accountSwitching())
+  // 전환 상태는 반응형 읽기가 아니다: 화면의 $effect가 요청을 부를 때 여기서 읽은 switching이 그 효과의 의존성이 되면, 전환이
+  // 시작되는 순간 그 효과들이 다시 실행돼 화면이 로딩 상태로 돌아가고(DOM·메모리 입력·떠나기 가드가 사라짐) 입력 보존 설계가
+  // 깨진다(#88). 그래서 untrack으로 읽는다. 전환 중 요청을 막는 동작은 같다.
+  if (untrack(accountSwitching))
     throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   const expiriesAtStart = sessionExpiries();
@@ -2542,7 +2547,7 @@ async function request(
   }
   const text = await response.text();
   // 작업자 C: 진행 중이던 요청도 계정 전환 안전 상태를 벗어나지 못한다.
-  if (accountSwitching())
+  if (untrack(accountSwitching))
     throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let json: Json = null;
   if (text !== '') {

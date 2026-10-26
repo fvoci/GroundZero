@@ -97,11 +97,21 @@
     routeView?: TaskViewMode | undefined;
     /** 옮기기가 권한·보관 때문에 거절되면 항목을 다시 읽게 한다(쓰기 단추를 끄기 위해). */
     onstale?: () => void;
+    /** 항목 밖의 읽기 전용 사유(보관된 모듈). 서버가 쓰기를 거부하므로 추가·이동 조작을 끈다. */
+    locked?: boolean;
     /** 같은 화면의 다른 곳(항목 달력)에서 업무를 만들 때마다 늘어난다(목록을 다시 읽는다). */
     tasksVersion?: number;
   }
 
-  const { item, workspaces, openTaskId, routeView, onstale, tasksVersion = 0 }: Props = $props();
+  const {
+    item,
+    workspaces,
+    openTaskId,
+    routeView,
+    onstale,
+    locked = false,
+    tasksVersion = 0,
+  }: Props = $props();
   $effect(() => {
     if (tasksVersion === 0) return;
     untrack(() => {
@@ -610,7 +620,9 @@
     void loadViews(item.id, true);
   });
 
-  const canWrite = $derived(!hiddenForAccount && item.access !== 'read' && !item.archived);
+  const canWrite = $derived(
+    !hiddenForAccount && item.access !== 'read' && !item.archived && !locked,
+  );
   const board = $derived(lanes(shown, statusNames));
   // 열 머리의 예상 합계(D-31 예상 시간). 거르기 중이면 보이는 카드 기준과 열 전체를 함께 보인다(실제 시간은 목록에 없어 넣지 않음).
   const allLanes = $derived(lanes(tasks, statusNames));
@@ -653,6 +665,8 @@
   let detailUnsaved = $state(false);
   // 폼을 저장하는 동안은 닫지도 묻지도 않는다: 이미 보낸 저장은 서버에 남으므로 "버리고 닫기"가 거짓이 된다(일정 대화상자와 같음).
   let detailSaving = $state(false);
+  // 열린 업무의 고친 입력이 이 탭의 브라우저 초안으로 남았는지(TaskDetail이 알린다). 전환 중 떠나기 경고의 기준.
+  let detailDraftKept = $state(true);
   // 상세 안의 단추(상위·하위·선행·후속·첫 회차)로 다른 업무를 열려다 물었으면 그 업무. 버리기를 고르면 닫지 않고 그것을
   // 연다. 물을 때마다 정한다(확인이 닫히는 동안 문구가 바뀌지 않게 지우지 않는다).
   let openNext = $state<string | undefined>(undefined);
@@ -673,10 +687,14 @@
 
   $effect(() =>
     leave.attach({
-      // 다른 계정으로 바뀌어 다시 읽는 중에는 경고하지 않는다(D-96·#88: 막고 남으면 앞 계정의 화면이 새 계정의 세션으로 요청을
-      // 보낸다; 입력은 앞 계정의 초안으로 이미 남아 있다. 문서 편집기와 같은 규칙).
-      beforeUnload: () =>
-        !accountSwitching() && openTaskId !== undefined && (detailUnsaved || detailSaving),
+      // 다른 계정으로 바뀌어 다시 읽는 중: 고친 입력이 앞 계정의 초안으로 남았으면 막지 않는다(D-96·#88: 막고 남으면 앞 계정의
+      // 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 남기지 못했으면(저장소 사용 불가·용량 초과) 보통 떠나기처럼 경고해
+      // 입력을 잃지 않게 한다 — 문서 편집기(DocumentEditor)와 같은 규칙. 전환이 아니면 전처럼 경고한다.
+      beforeUnload: () => {
+        if (openTaskId === undefined) return false;
+        if (accountSwitching()) return detailUnsaved && !detailDraftKept;
+        return detailUnsaved || detailSaving;
+      },
     }),
   );
 
@@ -2121,6 +2139,9 @@
           onopen={requestOpen}
           onunsaved={(value: boolean) => {
             detailUnsaved = value;
+          }}
+          ondraftkept={(kept: boolean) => {
+            detailDraftKept = kept;
           }}
           onsaving={(value: boolean) => {
             detailSaving = value;

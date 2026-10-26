@@ -94,9 +94,15 @@
     onunsaved?: ((unsaved: boolean) => void) | undefined;
     /** 폼을 저장하는 중인지 바뀔 때마다 알린다(대화상자는 그동안 닫지 않는다). */
     onsaving?: ((saving: boolean) => void) | undefined;
+    /**
+     * 고친 입력을 이 탭의 브라우저 초안으로 남겼는지 바뀔 때마다 알린다(남기지 못했으면 — 저장소 사용 불가·용량 초과 — 계정 전환
+     * 중에도 떠나기 경고를 유지해 입력을 잃지 않게 한다, D-96). 고친 칸이 없으면 true.
+     */
+    ondraftkept?: ((kept: boolean) => void) | undefined;
   }
 
-  const { taskId, tasks, workspaces, onchanged, onopen, onunsaved, onsaving }: Props = $props();
+  const { taskId, tasks, workspaces, onchanged, onopen, onunsaved, onsaving, ondraftkept }: Props =
+    $props();
 
   const editingUser = untrack(() => me.userId);
   let accountBlocked = $state(false);
@@ -693,7 +699,7 @@
       return;
     if (reserved) return;
     if (dirty) {
-      storeFormDraft(draftName, {
+      const kept = storeFormDraft(draftName, {
         baseVersion,
         baseline: before,
         form: $state.snapshot(form),
@@ -710,8 +716,10 @@
           : null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
+      ondraftkept?.(kept);
     } else {
       clearFormDraft(draftName);
+      ondraftkept?.(true);
     }
   });
   // 사용자가 버리고 닫거나 다른 업무를 열어 이 폼이 없어지면 이 탭의 입력도 지운다(방금 버린 입력을 다음에 되살리자고 하지
