@@ -143,7 +143,7 @@ describe('task form input across reloads and account switches', () => {
     vi.mocked(api.task).mockResolvedValue(detail({ access: 'read', version: 2 }));
     vi.spyOn(api, 'addChecklist').mockResolvedValue(detail());
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '항목' } });
-    await fireEvent.click(screen.getByRole('button', { name: '추가', exact: true }));
+    await fireEvent.click(screen.getByRole('button', { name: '추가' }));
     await waitFor(() => {
       expect(screen.getByLabelText('제목', { exact: true })).toBeDisabled();
     });

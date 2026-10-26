@@ -3,10 +3,10 @@
   import FileText from '@lucide/svelte/icons/file-text';
   import SquareCheck from '@lucide/svelte/icons/square-check';
   import type { Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
 
   import type { CalendarView, HomeView, MarkedTargetView, NotificationView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { me } from '$lib/me.svelte';
   import type { CalendarEntry } from '$lib/features/events/calendar';
@@ -25,6 +25,9 @@
   import { Label } from '$lib/ui/label';
   import { NativeSelect } from '$lib/ui/native-select';
   import * as Collapsible from '$lib/ui/collapsible';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import MyTasksScreen from './MyTasksScreen.svelte';
   import { invitationChanges } from './invitations.svelte';
@@ -147,22 +150,79 @@
     title: '',
     item: '',
   });
-  // 같은 입력의 재시도는 같은 요청 id, 종류·대상·제목을 고치면 새 id.
-  const quickKey = new RetryKey();
+  interface QuickDraft {
+    title: string;
+    item: string;
+    pending: { requestId: string; signature: string } | null;
+  }
+  let pending = $state<QuickDraft['pending']>(null);
   let quickOpen = $state(false);
   let adding = $state(false);
-  let quickUser = $state('');
   let quickError = $state<string | undefined>(undefined);
   const writableItems = $derived((home?.active_items ?? []).filter((i) => i.can_write));
 
-  $effect(() => {
-    quickUser = me.userId;
-    const key = org.key('quick-add-item');
-    quick.item = readLocal(key) ?? '';
+  function resetQuick(): void {
+    quick.item = readLocal(org.key('quick-add-item')) ?? '';
     quick.title = '';
+    pending = null;
     quickError = undefined;
+  }
+
+  let quickIdentity = '';
+  $effect(() => {
+    const identity = JSON.stringify([me.userId, org.currentId]);
+    if (quickIdentity === identity) return;
+    quickIdentity = identity;
+    resetQuick();
     quickOpen = false;
+    adding = false;
   });
+
+  const quickDraft = createFormDraft<QuickDraft>({
+    name: () => (org.currentId === undefined ? undefined : `home-quick-task:${org.currentId}`),
+    snapshot: () => ({ ...quick, pending }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('title' in value) ||
+        typeof value.title !== 'string' ||
+        !('item' in value) ||
+        typeof value.item !== 'string' ||
+        !('pending' in value)
+      )
+        return undefined;
+      const retry = value.pending;
+      let restoredPending: QuickDraft['pending'] = null;
+      if (retry !== null) {
+        if (
+          typeof retry !== 'object' ||
+          !('requestId' in retry) ||
+          typeof retry.requestId !== 'string' ||
+          !('signature' in retry) ||
+          typeof retry.signature !== 'string'
+        )
+          return undefined;
+        restoredPending = { requestId: retry.requestId, signature: retry.signature };
+      }
+      return {
+        title: value.title,
+        item: value.item,
+        pending: restoredPending,
+      };
+    },
+    restore: (value) => {
+      quick.title = value.title;
+      quick.item = value.item;
+      pending = value.pending;
+      quickOpen = true;
+      quickError = undefined;
+    },
+    reset: resetQuick,
+    dirty: () => quick.title !== '' || pending !== null,
+    busy: () => adding,
+  });
+  onMount(quickDraft.attach);
 
   async function addQuick(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -178,20 +238,23 @@
       quickError = m.home_pick_item_required();
       return;
     }
-    const requestId = quickKey.for({ ...send, organizationId, user: quickUser });
+    const signature = JSON.stringify({ ...send, organizationId });
+    if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
+    const requestId = pending.requestId;
+    const attempt = quickDraft.capture();
+    if (attempt === undefined) return;
     adding = true;
     try {
-      await api.createQuickTask(quickUser, send.item, requestId, title, quickUser);
-      quickKey.done(requestId);
+      await api.createQuickTask(attempt.userId, send.item, requestId, title, attempt.userId);
+      if (!quickDraft.isCurrent(attempt)) return;
       writeLocal(storageKey, send.item);
-      if (org.currentId !== organizationId) return;
+      if (!quickDraft.complete(attempt)) return;
       notifyDone(m.home_task_created({ title }));
-      quick.title = '';
       reloadKey += 1;
     } catch (e: unknown) {
-      if (org.currentId === organizationId) quickError = errorText(e, m.home_create_failed());
+      if (quickDraft.isCurrent(attempt)) quickError = errorText(e, m.home_create_failed());
     } finally {
-      adding = false;
+      if (quickDraft.isOwner(attempt)) adding = false;
     }
   }
 
@@ -202,6 +265,16 @@
   <p role="status">{m.app_organization_required()}</p>
 {:else}
   <section class="flex flex-col gap-6" aria-labelledby="dashboard-heading">
+    {#each quickDraft.offers as offer (offer.key)}
+      <FormDraftOffer
+        onrestore={() => {
+          quickDraft.restore(offer);
+        }}
+        ondiscard={() => {
+          quickDraft.discard(offer);
+        }}
+      />
+    {/each}
     <Collapsible.Root bind:open={quickOpen}>
       <div class="flex flex-wrap items-baseline gap-2">
         <h1 id="dashboard-heading" class="text-xl font-semibold">{m.home_today_heading()}</h1>
@@ -425,3 +498,9 @@
     </section>
   </section>
 {/if}
+
+<DiscardChangesConfirm
+  open={quickDraft.leave.open}
+  onkeep={quickDraft.leave.keep}
+  ondiscard={quickDraft.discardAndLeave}
+/>

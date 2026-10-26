@@ -6,6 +6,7 @@ import { api } from '$lib/api/client';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 // 멤버 화면: 첫 읽기 실패 뒤 다시 시도, 그룹 삭제 확인, 초대·받은 초대의 중복 요청 막기.
 const workspace: Workspace = {
@@ -40,9 +41,13 @@ const pending = <T>(): Promise<T> => new Promise<T>(() => undefined);
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
+  me.userId = 'u1';
+  localStorage.clear();
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  me.userId = '';
+  localStorage.clear();
 });
 
 describe('members screen', () => {

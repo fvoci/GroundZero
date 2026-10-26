@@ -2,6 +2,7 @@
   // 멤버·초대·그룹·소유권 화면 (D-20, D-51). 권한 판단은 서버가 하고, 화면은 가능한 동작만 보여준다.
   import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
 
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -12,6 +13,10 @@
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { me } from '$lib/me.svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import RoleSelect from './RoleSelect.svelte';
   import { roleLabel } from './roles';
@@ -37,6 +42,7 @@
   let inviteError = $state<string | undefined>(undefined);
   // 초대를 보내는 중. 그동안 다시 보내지 않는다(Enter 두 번이면 같은 초대가 두 번 나갔다).
   let inviting = $state(false);
+  let grouping = $state(false);
   let groupError = $state<string | undefined>(undefined);
   let deleteName = $state('');
   let deleteError = $state<string | undefined>(undefined);
@@ -63,6 +69,114 @@
   // 관리 가능 여부는 서버가 접근 등급으로 계산한 칸이다(D-113). 역할은 표시에만 쓴다.
   const isAdmin = $derived(view?.can_manage_members === true);
 
+  const inviteDraft = createFormDraft<{ email: string; role: Role }>({
+    name: () => `members-invite:${workspace.id}`,
+    snapshot: () => ({ email: inviteEmail, role: inviteRole }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('email' in value) ||
+        typeof value.email !== 'string' ||
+        !('role' in value) ||
+        (value.role !== 'admin' && value.role !== 'member' && value.role !== 'readonly')
+      )
+        return undefined;
+      return { email: value.email, role: value.role };
+    },
+    restore: (value) => {
+      inviteEmail = value.email;
+      inviteRole = value.role;
+      inviteError = undefined;
+    },
+    reset: () => {
+      inviteEmail = '';
+      inviteRole = 'member';
+      inviteError = undefined;
+    },
+    dirty: () => inviteEmail !== '',
+    busy: () => inviting,
+  });
+  const groupDraft = createFormDraft<string>({
+    name: () => `members-group:${workspace.id}`,
+    snapshot: () => groupName,
+    parse: (value) => (typeof value === 'string' ? value : undefined),
+    restore: (value) => {
+      groupName = value;
+      groupError = undefined;
+    },
+    reset: () => {
+      groupName = '';
+      groupError = undefined;
+    },
+    dirty: () => groupName !== '',
+    busy: () => grouping,
+  });
+  onMount(() => {
+    const detachInvite = inviteDraft.attach();
+    const detachGroup = groupDraft.attach();
+    return () => {
+      detachGroup();
+      detachInvite();
+    };
+  });
+
+  async function invite(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (inviting || !isAdmin) return;
+    const attempt = inviteDraft.capture();
+    if (attempt === undefined) return;
+    const wsId = workspace.id;
+    const email = inviteEmail;
+    const role = inviteRole;
+    inviteError = undefined;
+    notice = undefined;
+    inviting = true;
+    try {
+      await api.invite(wsId, email, role);
+      if (!inviteDraft.isOwner(attempt)) return;
+      if (inviteDraft.complete(attempt)) notice = m.members_invited({ email });
+      await load(wsId);
+      if (inviteDraft.isOwner(attempt)) onchanged();
+    } catch (e: unknown) {
+      if (!inviteDraft.isOwner(attempt)) return;
+      if (e instanceof ApiError && e.status === 409) {
+        await load(wsId);
+        if (inviteDraft.isOwner(attempt)) onchanged();
+      }
+      if (inviteDraft.isCurrent(attempt)) inviteError = errorText(e, m.members_request_failed());
+    } finally {
+      if (inviteDraft.isOwner(attempt)) inviting = false;
+    }
+  }
+
+  async function createGroup(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (grouping || !isAdmin) return;
+    const attempt = groupDraft.capture();
+    if (attempt === undefined) return;
+    const wsId = workspace.id;
+    const name = groupName;
+    groupError = undefined;
+    grouping = true;
+    try {
+      await api.createGroup(wsId, name);
+      if (!groupDraft.isOwner(attempt)) return;
+      groupDraft.complete(attempt);
+      await load(wsId);
+      if (groupDraft.isOwner(attempt)) onchanged();
+    } catch (e: unknown) {
+      if (!groupDraft.isOwner(attempt)) return;
+      if (e instanceof ApiError && e.status === 409) {
+        await load(wsId);
+        if (groupDraft.isOwner(attempt)) onchanged();
+      }
+      if (groupDraft.isCurrent(attempt)) groupError = errorText(e, m.members_request_failed());
+    } finally {
+      if (groupDraft.isOwner(attempt)) grouping = false;
+    }
+  }
+
   function nameOf(userId: string): string {
     return view?.members.find((member) => member.user_id === userId)?.display_name ?? userId;
   }
@@ -71,16 +185,24 @@
   // 실패해도 다시 읽기 단추는 남는다.
   let loadError = $state<string | undefined>(undefined);
 
+  let loadSequence = 0;
   async function load(wsId: string = workspace.id): Promise<void> {
+    const sequence = ++loadSequence;
+    const userId = me.userId;
+    const current = (): boolean =>
+      sequence === loadSequence && workspace.id === wsId && me.userId === userId;
     try {
       const v = await api.members(wsId);
+      const loadedGroups = await api.groups(wsId);
+      const loadedInvitations = v.can_manage_members ? await api.invitations(wsId) : [];
+      if (!current()) return;
       view = v;
-      groups = await api.groups(wsId);
-      invitations = v.can_manage_members ? await api.invitations(wsId) : [];
+      groups = loadedGroups;
+      invitations = loadedInvitations;
       error = undefined;
       loadError = undefined;
     } catch (e: unknown) {
-      loadError = errorText(e, m.members_load_failed());
+      if (current()) loadError = errorText(e, m.members_load_failed());
     }
   }
 
@@ -116,6 +238,14 @@
 
   // 다른 워크스페이스로 바뀌면 다시 읽는다.
   $effect(() => {
+    view = undefined;
+    groups = [];
+    invitations = [];
+    inviting = false;
+    grouping = false;
+    notice = undefined;
+    error = undefined;
+    loadError = undefined;
     void load(workspace.id);
   });
 </script>
@@ -240,26 +370,17 @@
         <p class="text-sm text-muted-foreground">
           {m.members_invite_hint()}
         </p>
-        <form
-          class="flex flex-wrap items-end gap-2"
-          onsubmit={(e) => {
-            e.preventDefault();
-            if (inviting) return;
-            const email = inviteEmail;
-            inviteError = undefined;
-            inviting = true;
-            void act(
-              () => api.invite(workspace.id, email, inviteRole),
-              m.members_invited({ email }),
-              (text: string) => (inviteError = text),
-            )
-              .then((ok: boolean) => {
-                // 성공했을 때만, 그사이 고쳐 치지 않았으면 비운다.
-                if (ok && inviteEmail === email) inviteEmail = '';
-              })
-              .finally(() => (inviting = false));
-          }}
-        >
+        {#each inviteDraft.offers as offer (offer.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              inviteDraft.restore(offer);
+            }}
+            ondiscard={() => {
+              inviteDraft.discard(offer);
+            }}
+          />
+        {/each}
+        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
           <div class="flex min-w-60 flex-1 flex-col gap-1">
             <Label for="invite-email">{m.members_email()}</Label>
             <Input
@@ -357,21 +478,17 @@
         </div>
       {/each}
       {#if isAdmin}
-        <form
-          class="flex flex-wrap items-end gap-2"
-          onsubmit={(e) => {
-            e.preventDefault();
-            const name = groupName;
-            groupError = undefined;
-            void act(
-              () => api.createGroup(workspace.id, name),
-              undefined,
-              (text: string) => (groupError = text),
-            ).then((ok: boolean) => {
-              if (ok && groupName === name) groupName = '';
-            });
-          }}
-        >
+        {#each groupDraft.offers as offer (offer.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              groupDraft.restore(offer);
+            }}
+            ondiscard={() => {
+              groupDraft.discard(offer);
+            }}
+          />
+        {/each}
+        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void createGroup(e)}>
           <div class="flex flex-1 flex-col gap-1">
             <Label for="group-name">{m.members_new_group_name()}</Label>
             <Input
@@ -383,7 +500,7 @@
               aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
             />
           </div>
-          <Button type="submit" disabled={groupName.trim() === ''}
+          <Button type="submit" disabled={grouping || groupName.trim() === ''}
             >{m.members_create_group()}</Button
           >
           {#if groupError !== undefined}
@@ -490,3 +607,14 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<DiscardChangesConfirm
+  open={inviteDraft.leave.open}
+  onkeep={inviteDraft.leave.keep}
+  ondiscard={inviteDraft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={groupDraft.leave.open}
+  onkeep={groupDraft.leave.keep}
+  ondiscard={groupDraft.discardAndLeave}
+/>

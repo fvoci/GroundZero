@@ -147,12 +147,12 @@ describe('organization summaries', () => {
     await fireEvent.click(screen.getByRole('button', { name: m.home_add() }));
     await screen.findByRole('alert');
     expect(title).toHaveValue('새 내 업무');
-    const request = add.mock.calls[0]?.[1];
+    const request = add.mock.calls[0]?.[2];
     await fireEvent.click(screen.getByRole('button', { name: m.home_add() }));
     await waitFor(() => {
       expect(add).toHaveBeenCalledTimes(2);
     });
-    expect(add).toHaveBeenLastCalledWith(item.id, request, '새 내 업무', 'user-a');
+    expect(add).toHaveBeenLastCalledWith('user-a', item.id, request, '새 내 업무', 'user-a');
     expect(localStorage.getItem(org.key('quick-add-item'))).toBe(item.id);
     org.select(second.id);
     await waitFor(() => {

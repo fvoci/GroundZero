@@ -5,7 +5,7 @@
   import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
   import type { Snippet } from 'svelte';
-  import { tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
 
   import type {
     DocumentView,
@@ -14,10 +14,13 @@
     PublicLinkView,
     ShareView,
   } from '$lib/api/client';
-  import { api } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { me } from '$lib/me.svelte';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
   import { m } from '$lib/paraglide/messages.js';
   import { org } from '$lib/org.svelte';
@@ -66,19 +69,23 @@
   }
 
   function open(next: Panel): void {
+    const change = (): void => {
+      openNow(next);
+    };
+    if (panel === 'share') shareDraft.leave.request(change);
+    else if (panel === 'copy') copyDraft.leave.request(change);
+    else change();
+  }
+
+  function openNow(next: Panel): void {
     error = undefined;
     panel = next;
-    opened = next;
+    if (next !== undefined) opened = next;
     if (next === 'share') {
       newLinkUrl = undefined;
       void loadShares();
       void loadLinks();
       void refreshSettings();
-    }
-    if (next === 'copy') {
-      copyTitle = m.documents_copy_default_title({ title: doc.title });
-      copyTarget = 'personal';
-      copyKey.done();
     }
     if (next === 'move') void openMove();
   }
@@ -87,29 +94,75 @@
   let shares = $state<ShareView[]>([]);
   let shareEmail = $state('');
   let sharePermission = $state<'read' | 'write'>('read');
+  let sharing = $state(false);
+  interface ShareDraft {
+    email: string;
+    permission: 'read' | 'write';
+  }
+  function resetShare(): void {
+    shareEmail = '';
+    sharePermission = 'read';
+  }
+  const shareDraft = createFormDraft<ShareDraft>({
+    name: () => `document-share:${doc.id}:${org.currentId ?? ''}`,
+    snapshot: () => ({ email: shareEmail, permission: sharePermission }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('email' in value) ||
+        typeof value.email !== 'string' ||
+        !('permission' in value) ||
+        (value.permission !== 'read' && value.permission !== 'write')
+      )
+        return undefined;
+      return { email: value.email, permission: value.permission };
+    },
+    restore: (value) => {
+      shareEmail = value.email;
+      sharePermission = value.permission;
+    },
+    reset: resetShare,
+    dirty: () => shareEmail !== '',
+    busy: () => sharing,
+  });
+  onMount(shareDraft.attach);
+  let sharesSequence = 0;
 
   async function loadShares(): Promise<void> {
+    const sequence = ++sharesSequence;
+    const documentId = doc.id;
+    const userId = me.userId;
+    const current = (): boolean =>
+      alive && sequence === sharesSequence && documentId === doc.id && userId === me.userId;
     try {
-      shares = await api.shares(doc.id);
+      const result = await api.shares(documentId);
+      if (current()) shares = result;
     } catch (e: unknown) {
-      fail(e);
+      if (current()) fail(e);
     }
   }
 
   async function addShare(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (sharing) return;
     const organizationId = org.currentId;
     if (organizationId === undefined) {
       error = m.app_organization_required();
       return;
     }
+    const attempt = shareDraft.capture();
+    if (attempt === undefined) return;
+    sharing = true;
     try {
       await api.share(doc.id, shareEmail, sharePermission, organizationId);
-      notifyDone(m.common_saved());
-      shareEmail = '';
+      if (!shareDraft.isOwner(attempt)) return;
+      if (shareDraft.complete(attempt)) notifyDone(m.common_saved());
       await loadShares();
     } catch (e: unknown) {
-      fail(e);
+      if (shareDraft.isCurrent(attempt)) fail(e);
+    } finally {
+      if (shareDraft.isOwner(attempt)) sharing = false;
     }
   }
 
@@ -268,21 +321,108 @@
   // --- 복제 ---------------------------------------------------------------
   let copyTitle = $state('');
   let copyTarget = $state('personal');
-  // 같은 대상·제목의 재시도는 같은 요청 id, 고치면 새 id.
-  const copyKey = new RetryKey();
+  let copyBaseline = $state('');
+  let copying = $state(false);
+  interface CopyDraft {
+    title: string;
+    target: string;
+    baseline: string;
+    pending: { requestId: string; signature: string } | null;
+  }
+  let copyPending = $state<CopyDraft['pending']>(null);
+  function resetCopy(): void {
+    copyBaseline = m.documents_copy_default_title({ title: doc.title });
+    copyTitle = copyBaseline;
+    copyTarget = 'personal';
+    copyPending = null;
+  }
+  const copyDraft = createFormDraft<CopyDraft>({
+    name: () => `document-copy:${doc.id}:${org.currentId ?? ''}`,
+    snapshot: () => ({
+      title: copyTitle,
+      target: copyTarget,
+      baseline: copyBaseline,
+      pending: copyPending,
+    }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('title' in value) ||
+        typeof value.title !== 'string' ||
+        !('target' in value) ||
+        typeof value.target !== 'string' ||
+        !('baseline' in value) ||
+        typeof value.baseline !== 'string' ||
+        !('pending' in value)
+      )
+        return undefined;
+      const pending = value.pending;
+      let restoredPending: CopyDraft['pending'] = null;
+      if (pending !== null) {
+        if (
+          typeof pending !== 'object' ||
+          !('requestId' in pending) ||
+          typeof pending.requestId !== 'string' ||
+          !('signature' in pending) ||
+          typeof pending.signature !== 'string'
+        )
+          return undefined;
+        restoredPending = { requestId: pending.requestId, signature: pending.signature };
+      }
+      return {
+        title: value.title,
+        target: value.target,
+        baseline: value.baseline,
+        pending: restoredPending,
+      };
+    },
+    restore: (value) => {
+      copyTitle = value.title;
+      copyTarget = value.target;
+      copyBaseline = value.baseline;
+      copyPending = value.pending;
+    },
+    reset: resetCopy,
+    dirty: () => copyTitle !== copyBaseline || copyTarget !== 'personal' || copyPending !== null,
+    busy: () => copying,
+  });
+  onMount(copyDraft.attach);
+  let formIdentity: string | undefined;
+  $effect(() => {
+    const identity = JSON.stringify([me.userId, doc.id, org.currentId]);
+    if (identity === formIdentity) return;
+    formIdentity = identity;
+    untrack(() => {
+      resetShare();
+      resetCopy();
+      sharing = false;
+      copying = false;
+      panel = undefined;
+      error = undefined;
+    });
+  });
 
   async function submitCopy(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (copying) return;
+    const target = copyTarget === 'personal' ? null : copyTarget;
+    const signature = JSON.stringify({ doc: doc.id, target, title: copyTitle });
+    if (copyPending?.signature !== signature)
+      copyPending = { requestId: newRequestId(), signature };
+    const attempt = copyDraft.capture();
+    if (attempt === undefined) return;
+    copying = true;
     try {
-      const target = copyTarget === 'personal' ? null : copyTarget;
-      const requestId = copyKey.for({ doc: doc.id, target, title: copyTitle });
-      const copied = await api.copyDocument(doc.id, requestId, target, copyTitle);
-      copyKey.done(requestId);
+      const copied = await api.copyDocument(doc.id, copyPending.requestId, target, copyTitle);
+      if (!copyDraft.complete(attempt)) return;
       notifyDone(m.common_saved());
       panel = undefined;
       router.navigate(pathFor(copied, memberOf));
     } catch (e: unknown) {
-      fail(e);
+      if (copyDraft.isCurrent(attempt)) fail(e);
+    } finally {
+      if (copyDraft.isOwner(attempt)) copying = false;
     }
   }
 
@@ -437,10 +577,12 @@
 </div>
 
 <Dialog.Root
-  open={panel !== undefined}
-  onOpenChange={(o: boolean) => {
-    if (!o) panel = undefined;
-  }}
+  bind:open={
+    () => panel !== undefined,
+    (value: boolean) => {
+      if (!value) open(undefined);
+    }
+  }
 >
   <!-- 복제·이동은 "더 보기" 메뉴의 항목(닫히며 사라짐)에서 열린다. 닫으면 브라우저에 맡기지 않고 "더 보기"로 초점을 돌린다. -->
   <Dialog.Content
@@ -509,6 +651,16 @@
           {m.documents_restrict_only()}
         </p>
       {:else}
+        {#each shareDraft.offers as offer (offer.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              shareDraft.restore(offer);
+            }}
+            ondiscard={() => {
+              shareDraft.discard(offer);
+            }}
+          />
+        {/each}
         <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
           <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
             <Label for="share-email">{m.documents_email()}</Label>
@@ -541,7 +693,9 @@
               >
             </Select.Content>
           </Select.Root>
-          <Button type="submit" disabled={shareEmail.trim() === ''}>{m.documents_share()}</Button>
+          <Button type="submit" disabled={sharing || shareEmail.trim() === ''}
+            >{m.documents_share()}</Button
+          >
         </form>
       {/if}
       <div class="flex flex-col gap-2 border-t pt-3">
@@ -682,6 +836,16 @@
           {m.documents_copy_description()}
         </Dialog.Description>
       </Dialog.Header>
+      {#each copyDraft.offers as offer (offer.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            copyDraft.restore(offer);
+          }}
+          ondiscard={() => {
+            copyDraft.discard(offer);
+          }}
+        />
+      {/each}
       <form class="flex flex-col gap-3" onsubmit={(e) => void submitCopy(e)}>
         <div class="flex flex-col gap-1">
           <Label for="copy-title">{m.documents_new_title()}</Label>
@@ -694,7 +858,7 @@
             type="single"
             value={copyTarget}
             onValueChange={(v: string) => {
-              // 대상만 바꾼 것으로는 키를 비우지 않는다(보낼 때 내용이 다르면 for가 새 id를 준다. 되돌린 뒤 다시 보내면 같은 id).
+              // 보낼 때 대상·제목이 달라졌으면 새 요청 ID를 만든다.
               copyTarget = v;
             }}
           >
@@ -714,10 +878,16 @@
           </Select.Root>
         </div>
         <Dialog.Footer>
-          <Button variant="ghost" type="button" onclick={() => (panel = undefined)}
-            >{m.common_cancel()}</Button
+          <Button
+            variant="ghost"
+            type="button"
+            onclick={() => {
+              open(undefined);
+            }}>{m.common_cancel()}</Button
           >
-          <Button type="submit" disabled={copyTitle.trim() === ''}>{m.documents_copy()}</Button>
+          <Button type="submit" disabled={copying || copyTitle.trim() === ''}
+            >{m.documents_copy()}</Button
+          >
         </Dialog.Footer>
       </form>
     {:else if panel === 'move'}
@@ -808,3 +978,14 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<DiscardChangesConfirm
+  open={shareDraft.leave.open}
+  onkeep={shareDraft.leave.keep}
+  ondiscard={shareDraft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={copyDraft.leave.open}
+  onkeep={copyDraft.leave.keep}
+  ondiscard={copyDraft.discardAndLeave}
+/>

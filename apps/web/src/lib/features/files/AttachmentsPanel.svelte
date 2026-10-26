@@ -1,12 +1,15 @@
 <script lang="ts">
   // 문서·항목의 첨부 파일(D-06, D-35). 조각 업로드(끊기면 같은 파일을 다시 고르면 이어짐), 새 버전, 이전 버전
   // 내려받기, 이름 바꾸기, 휴지통. 권한은 서버가 판단하고 화면은 가능한 동작만 보인다.
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import type { FileTarget, FileVersionView, FileView } from '$lib/api/client';
   import { api, fileContentUrl } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { formatInstant } from '$lib/display';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -45,7 +48,12 @@
   let progress = $state<{ name: string; percent: number } | undefined>(undefined);
   let versions = $state<{ id: string; list: FileVersionView[] } | undefined>(undefined);
   // `opened`: 칸을 열 때마다 새로 매기는 번호. 같은 파일의 칸을 닫았다가 다시 열어도 앞의 칸과 구별한다.
-  let renaming = $state<{ id: string; name: string; opened: number } | undefined>(undefined);
+  interface RenameDraft {
+    id: string;
+    name: string;
+    baseline: string;
+  }
+  let renaming = $state<(RenameDraft & { opened: number }) | undefined>(undefined);
   let renameOpened = 0;
   // 이름 바꾸기 실패는 입력 칸 옆에 보이고 입력은 남긴다(D-82).
   let renameError = $state<string | undefined>(undefined);
@@ -59,18 +67,65 @@
   let versionFor: string | undefined;
   let controller: AbortController | undefined;
   let seq = 0;
+  const renameDraft = createFormDraft<RenameDraft | null>({
+    name: () => `attachment-rename:${target.kind}:${target.id}`,
+    snapshot: () =>
+      renaming === undefined
+        ? null
+        : {
+            id: renaming.id,
+            name: renaming.name,
+            baseline: renaming.baseline,
+          },
+    parse: (value) => {
+      if (value === null) return null;
+      if (
+        typeof value !== 'object' ||
+        !('id' in value) ||
+        typeof value.id !== 'string' ||
+        !('name' in value) ||
+        typeof value.name !== 'string' ||
+        !('baseline' in value) ||
+        typeof value.baseline !== 'string'
+      )
+        return undefined;
+      return { id: value.id, name: value.name, baseline: value.baseline };
+    },
+    restore: (value) => {
+      renaming = value === null ? undefined : { ...value, opened: ++renameOpened };
+      renameError = undefined;
+    },
+    reset: () => {
+      renaming = undefined;
+      renameError = undefined;
+    },
+    dirty: () => renaming !== undefined && renaming.name !== renaming.baseline,
+  });
+  onMount(renameDraft.attach);
+  let renameIdentity: string | undefined;
+  $effect(() => {
+    const identity = JSON.stringify([me.userId, target.kind, target.id]);
+    if (identity !== renameIdentity) {
+      renameIdentity = identity;
+      renameBusy = false;
+    }
+  });
 
   $effect(() => {
     const { kind, id } = target;
+    const userId = me.userId;
     if (reloadKey < 0) return;
     const mine = ++seq;
     (kind === 'document' ? api.documentFiles(id) : api.itemFiles(id))
       .then((found) => {
-        if (mine === seq) files = found;
+        if (mine === seq && userId === me.userId) files = found;
       })
       .catch((e: unknown) => {
-        if (mine === seq) error = errorText(e, m.files_load_failed());
+        if (mine === seq && userId === me.userId) error = errorText(e, m.files_load_failed());
       });
+    return () => {
+      seq += 1;
+    };
   });
 
   async function send(chosen: FileList | null): Promise<void> {
@@ -151,20 +206,24 @@
    */
   async function rename(file: FileView, name: string, opened: number): Promise<void> {
     if (renameBusy) return;
+    const attempt = renameDraft.capture();
+    if (attempt === undefined) return;
     renameBusy = true;
     renameError = undefined;
     error = undefined;
     try {
       await api.renameFile(file.id, name);
-      if (renaming?.opened === opened) renaming = undefined;
+      if (!renameDraft.isOwner(attempt)) return;
+      if (renaming?.opened === opened) renameDraft.complete(attempt);
       notifyDone(m.files_renamed({ name }));
       reloadKey += 1;
     } catch (e: unknown) {
+      if (!renameDraft.isOwner(attempt)) return;
       const reason = errorText(e, m.files_action_failed());
-      if (renaming?.opened === opened) renameError = reason;
+      if (renaming?.opened === opened && renameDraft.isCurrent(attempt)) renameError = reason;
       else error = m.files_named_error({ name: file.name, error: reason });
     } finally {
-      renameBusy = false;
+      if (renameDraft.isOwner(attempt)) renameBusy = false;
     }
   }
 
@@ -205,6 +264,16 @@
       <span class="text-destructive">{error}</span>
     {/if}
   </p>
+  {#each renameDraft.offers as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        renameDraft.restore(offer);
+      }}
+      ondiscard={() => {
+        renameDraft.discard(offer);
+      }}
+    />
+  {/each}
   {#if files.length === 0}
     <p class="text-sm text-muted-foreground">{m.files_empty()}</p>
   {:else}
@@ -233,8 +302,10 @@
                   size="sm"
                   variant="ghost"
                   onclick={() => {
-                    renaming = undefined;
-                    renameError = undefined;
+                    renameDraft.leave.request(() => {
+                      renaming = undefined;
+                      renameError = undefined;
+                    });
                   }}>{m.common_cancel()}</Button
                 >
                 {#if renameError !== undefined}
@@ -314,8 +385,10 @@
                 variant="ghost"
                 aria-label={m.files_rename_aria({ name: f.name })}
                 onclick={() => {
-                  renaming = { id: f.id, name: f.name, opened: ++renameOpened };
-                  renameError = undefined;
+                  renameDraft.leave.request(() => {
+                    renaming = { id: f.id, name: f.name, baseline: f.name, opened: ++renameOpened };
+                    renameError = undefined;
+                  });
                 }}>{m.files_rename()}</Button
               >
               <Button
@@ -381,3 +454,9 @@
     {/key}
   {/if}
 </section>
+
+<DiscardChangesConfirm
+  open={renameDraft.leave.open}
+  onkeep={renameDraft.leave.keep}
+  ondiscard={renameDraft.discardAndLeave}
+/>

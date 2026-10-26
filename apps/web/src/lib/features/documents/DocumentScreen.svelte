@@ -2,6 +2,7 @@
   // 문서를 불러와 동작 막대와 편집기에 넘긴다. 다른 문서로 바뀌면 편집기를 새로 만든다.
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import type { Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
 
   import type { DocumentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
@@ -19,6 +20,10 @@
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
+  import { me } from '$lib/me.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -40,6 +45,29 @@
   let epoch = $state(0);
   // 편집기에 저장하지 않은 편집이 있는지(내보내기 안내).
   let unsaved = $state(false);
+  let commentsUnsaved = $state(false);
+  let commentsKept = $state(true);
+  const commentsIdentity = $derived(`${me.userId}:${documentId}`);
+  const commentsLeave = createLeaveGuard({
+    dirty: () => commentsUnsaved && !accountSwitching(),
+    identity: () => commentsIdentity,
+  });
+  let previousCommentsIdentity = '';
+  $effect(() => {
+    if (previousCommentsIdentity === commentsIdentity) return;
+    previousCommentsIdentity = commentsIdentity;
+    commentsUnsaved = false;
+    commentsKept = true;
+    commentsLeave.keep();
+  });
+  $effect(() => {
+    if (accountSwitching()) commentsLeave.keep();
+  });
+  onMount(() =>
+    commentsLeave.attach({
+      beforeUnload: () => commentsUnsaved && (!accountSwitching() || !commentsKept),
+    }),
+  );
   // 목차가 읽는 본문 영역.
   let bodyArea = $state<HTMLDivElement | undefined>(undefined);
   // "더 보기" 메뉴에서 여는 내보내기·지우기 확인과, 그 일이 끝나면 초점을 돌려줄 "더 보기" 단추.
@@ -257,9 +285,23 @@
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
   />
-  <CommentsPanel
-    target={{ kind: 'document', id: doc.id }}
-    canWrite={doc.access !== 'read'}
-    itemId={doc.item_id}
-  />
+  {#key doc.id}
+    <CommentsPanel
+      target={{ kind: 'document', id: doc.id }}
+      canWrite={doc.access !== 'read'}
+      itemId={doc.item_id}
+      onunsaved={(value: boolean) => {
+        commentsUnsaved = value;
+      }}
+      ondraftkept={(value: boolean) => {
+        commentsKept = value;
+      }}
+    />
+  {/key}
 {/if}
+
+<DiscardChangesConfirm
+  open={commentsLeave.open}
+  onkeep={commentsLeave.keep}
+  ondiscard={commentsLeave.discard}
+/>

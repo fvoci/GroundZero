@@ -209,26 +209,31 @@
     parse: (value) => {
       if (!isRecord(value) || typeof value.name !== 'string' || !isRecord(value.config))
         return undefined;
+      let request: ViewRequest | null = null;
+      if (
+        isRecord(value.request) &&
+        typeof value.request.id === 'string' &&
+        typeof value.request.payload === 'string'
+      ) {
+        const target = value.request.target;
+        if (target === null) {
+          request = { id: value.request.id, payload: value.request.payload, target: null };
+        } else if (
+          isRecord(target) &&
+          typeof target.id === 'string' &&
+          typeof target.version === 'number'
+        ) {
+          request = {
+            id: value.request.id,
+            payload: value.request.payload,
+            target: { id: target.id, version: target.version },
+          };
+        }
+      }
       return {
         name: value.name,
         config: { ...readConfig(value.config), default: value.config.default === true },
-        request:
-          isRecord(value.request) &&
-          typeof value.request.id === 'string' &&
-          typeof value.request.payload === 'string' &&
-          (value.request.target === null ||
-            (isRecord(value.request.target) &&
-              typeof value.request.target.id === 'string' &&
-              typeof value.request.target.version === 'number'))
-            ? {
-                id: value.request.id,
-                payload: value.request.payload,
-                target:
-                  value.request.target === null
-                    ? null
-                    : { id: value.request.target.id, version: value.request.target.version },
-              }
-            : null,
+        request,
       };
     },
     restore: (value) => {
