@@ -3,8 +3,6 @@
   // 기록은 본인만 본다(워크스페이스 관리자에게도 보이지 않는다). 날짜는 보는 사람 시간대, 기록은 시작한 날에 센다.
   import { untrack } from 'svelte';
 
-  import type { Workspace } from '@fvoci/api-client';
-
   import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/api/client';
   import { api, TIME_KINDS } from '$lib/api/client';
   import { RetryKey } from '$lib/api/retry-key';
@@ -15,7 +13,6 @@
   import { dayNumber, fromDayNumber } from '$lib/features/tasks/gantt';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
-  import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
@@ -23,12 +20,6 @@
   import { durationText, TIME_KIND_LABEL } from './format';
   import TimeEntryDialog from './TimeEntryDialog.svelte';
   import { timer } from './timer.svelte';
-
-  interface Props {
-    workspaces: Workspace[];
-  }
-
-  const { workspaces }: Props = $props();
 
   // 오늘·주 시작·시각 표시는 사용자 표시 설정(D-81).
   const settings = displaySettings();
@@ -46,12 +37,6 @@
   let monthly = $state<TimeSummaryRowView[]>([]);
   // 첫 목록을 받기 전에는 빈 표·"기록이 없습니다" 대신 불러오는 중이라고 보인다.
   let loaded = $state(false);
-  let sharing = $state<Record<string, boolean>>({});
-  // 공유 설정을 받기 전·못 받았을 때는 선택 칸을 막는다(모르는 상태를 "꺼짐"으로 보이고 누르면 엉뚱한 값을 보낸다).
-  let sharingLoad = $state<'loading' | 'ready' | 'error'>('loading');
-  let sharingKey = $state(0);
-  // 바꾸는 중인 워크스페이스. 응답이 오기 전 다시 누르면 순서가 뒤섞이므로 그동안 막는다.
-  let sharingBusy = $state<Record<string, boolean>>({});
   let error = $state<string | undefined>(undefined);
   let editing = $state<TimeEntryView | undefined>(undefined);
   let reloadKey = $state(0);
@@ -84,25 +69,6 @@
       })
       .catch((e: unknown) => {
         if (!cancelled) error = errorText(e, m.time_load_failed());
-      });
-    return () => {
-      cancelled = true;
-    };
-  });
-
-  const sharingRequest = $derived({ list: workspaces, key: sharingKey });
-  $effect(() => {
-    const { list } = sharingRequest;
-    let cancelled = false;
-    sharingLoad = 'loading';
-    void Promise.all(list.map(async (w) => [w.id, await api.timeSharing(w.id)] as const))
-      .then((pairs) => {
-        if (cancelled) return;
-        sharing = Object.fromEntries(pairs);
-        sharingLoad = 'ready';
-      })
-      .catch(() => {
-        if (!cancelled) sharingLoad = 'error';
       });
     return () => {
       cancelled = true;
@@ -174,18 +140,6 @@
       reloadKey += 1;
     } catch (e: unknown) {
       manualError = errorText(e, m.time_manual_failed());
-    }
-  }
-
-  async function toggleSharing(ws: string, on: boolean): Promise<void> {
-    if (sharingBusy[ws] === true) return;
-    sharingBusy = { ...sharingBusy, [ws]: true };
-    try {
-      sharing = { ...sharing, [ws]: await api.setTimeSharing(ws, on) };
-    } catch (e: unknown) {
-      error = errorText(e, m.time_sharing_failed());
-    } finally {
-      sharingBusy = { ...sharingBusy, [ws]: false };
     }
   }
 
@@ -401,32 +355,6 @@
       <p role="alert" class="text-sm text-destructive">{manualError}</p>
     {/if}
     <p class="sr-only" aria-live="polite">{manualStatus}</p>
-  </section>
-
-  <section class="flex flex-col gap-2" aria-labelledby="time-sharing-heading">
-    <h2 id="time-sharing-heading" class="text-lg font-semibold">{m.time_sharing_heading()}</h2>
-    <p class="text-sm text-muted-foreground">{m.time_sharing_hint()}</p>
-    {#if sharingLoad === 'error'}
-      <p role="alert" class="text-sm text-destructive">
-        {m.time_sharing_load_failed()}
-        <Button size="sm" variant="outline" class="ml-2" onclick={() => (sharingKey += 1)}
-          >{m.common_retry()}</Button
-        >
-      </p>
-    {/if}
-    {#each workspaces as w (w.id)}
-      <div class="flex items-center gap-2">
-        <Checkbox
-          id={`time-share-${w.id}`}
-          checked={sharing[w.id] === true}
-          disabled={sharingLoad !== 'ready' || sharingBusy[w.id] === true}
-          onCheckedChange={(v) => void toggleSharing(w.id, v === true)}
-        />
-        <Label for={`time-share-${w.id}`}>{w.name}</Label>
-      </div>
-    {:else}
-      <p class="text-sm text-muted-foreground">{m.time_no_workspaces()}</p>
-    {/each}
   </section>
 </section>
 

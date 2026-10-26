@@ -340,5 +340,6 @@
   "documents_reparent_target_root": "옮길 곳: 맨 위(상위 문서 없음)",
   "documents_reparent_target_current": "이미 이 문서 아래에 있습니다. 다른 곳을 고르세요.",
   "documents_children_heading": "하위 문서 {count}개",
-  "documents_children_failed": "하위 문서를 불러오지 못했습니다."
+  "documents_children_failed": "하위 문서를 불러오지 못했습니다.",
+  "documents_move_changes": "접근 등급이 바뀌는 사람"
 }
