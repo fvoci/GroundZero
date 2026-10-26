@@ -57,8 +57,8 @@
     // 부모의 같은 워크스페이스 객체 교체는 편집 세션 전환이 아니다.
     if (
       loadedContext?.ws !== owner.ws ||
-      loadedContext?.userId !== owner.userId ||
-      loadedContext?.admin !== owner.admin
+      loadedContext.userId !== owner.userId ||
+      loadedContext.admin !== owner.admin
     ) {
       loadedContext = owner;
       untrack(() => {
