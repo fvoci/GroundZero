@@ -5882,7 +5882,7 @@ export interface operations {
             header: {
                 /** @description 단건 조회의 강한 ETag. 다르면 412 */
                 "If-Match"?: string | null;
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path: {
@@ -9593,7 +9593,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path?: never;
@@ -12490,7 +12490,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path?: never;
