@@ -41,9 +41,20 @@ pub async fn access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, A
     crate::access::grade(tx, crate::access::Kind::Document, id).await
 }
 
-/// 공유·공개 링크 관리도 현재 문서 접근 등급을 따른다.
-pub async fn manager_access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    access(tx, id).await
+/// 관리 목록은 SQL의 관리 판단(현재 등급 + 보관 중 관리자 예외)을 따른다.
+/// 관리 허용이 내용 쓰기 등급을 높이지는 않는다.
+pub async fn require_manager(tx: &mut UserTx, id: DocumentId) -> Result<(), AppError> {
+    let can_manage: bool = sqlx::query_scalar("SELECT app_document_can_manage($1)")
+        .bind(id)
+        .fetch_one(tx.conn())
+        .await?;
+    if can_manage {
+        return Ok(());
+    }
+    match access(tx, id).await? {
+        None => Err(AppError::NotFound),
+        Some(_) => Err(AppError::Forbidden),
+    }
 }
 
 /// 문서 목록 항목.
@@ -90,8 +101,8 @@ pub struct Document {
     pub visibility: String,
     /// 소유 권한자 외의 사람이 복제할 수 있는지 (D-20).
     pub allow_copy: bool,
-    /// 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
-    /// 보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
+    /// 공유·공개 링크·설정을 관리할 수 있는지.
+    /// 보관된 항목 아래 문서는 `access`가 `read`여도 워크스페이스 관리자·소유자는 참이다.
     pub can_manage: bool,
     /// 휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서).
     pub can_delete: bool,
@@ -368,7 +379,7 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     CASE WHEN app_access('item', item_id) <> 'none' THEN item_id END AS item_id, \
     CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id, placement, \
     app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
-    visibility, allow_copy, coalesce(app_access('document', id) = 'owner', false) AS can_manage, \
+    visibility, allow_copy, app_document_can_manage(id) AS can_manage, \
     coalesce(app_access('document', id) = 'owner' \
       OR (app_access('document', id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
     is_template, app_document_realtime(id) AS realtime, app_document_can_export(id) AS can_export";
@@ -1059,11 +1070,7 @@ pub async fn list_shares(
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<Share>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    match manager_access(&mut tx, id).await? {
-        None => return Err(AppError::NotFound),
-        Some(Access::Owner) => {}
-        Some(_) => return Err(AppError::Forbidden),
-    }
+    require_manager(&mut tx, id).await?;
     let rows: Vec<Share> = sqlx::query_as(
         "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission FROM document_shares s
          JOIN users u ON u.id = s.grantee_user_id WHERE s.document_id = $1 ORDER BY s.created_at",

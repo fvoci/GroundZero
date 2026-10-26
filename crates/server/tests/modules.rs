@@ -645,8 +645,7 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
         .await
         .1;
     assert_eq!(archived["access"], "read");
-    // 응답의 관리 플래그와 관리 목록 API는 2단계에서 새 SQL 판단에 연결한다.
-    assert_eq!(archived["can_manage"], false);
+    assert_eq!(archived["can_manage"], true);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await

@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::db::new_ids;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, random_token, token_hash};
-use crate::features::documents::{Access, manager_access};
+use crate::features::documents::require_manager;
 use crate::http::AppState;
 use crate::ids::DocumentId;
 
@@ -75,11 +75,7 @@ pub async fn list(
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<PublicLink>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    match manager_access(&mut tx, id).await? {
-        None => return Err(AppError::NotFound),
-        Some(Access::Owner) => {}
-        Some(_) => return Err(AppError::Forbidden),
-    }
+    require_manager(&mut tx, id).await?;
     let rows: Vec<(Uuid, OffsetDateTime, Option<OffsetDateTime>, bool)> = sqlx::query_as(
         "SELECT id, created_at, expires_at,
                 revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
