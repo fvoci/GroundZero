@@ -3010,7 +3010,8 @@ impl DbProxy {
             url.set_query(None);
             url.query_pairs_mut()
                 .extend_pairs(query)
-                .append_pair("sslmode", "disable");
+                .append_pair("sslmode", "disable")
+                .append_pair("application_name", "collab-commit-race");
         }
         let target = (
             url.host_str().unwrap().to_owned(),
@@ -3307,8 +3308,13 @@ async fn delayed_move_commit_reply_does_not_extend_source_or_admit_destination_i
 
 async fn move_commit_reply_race(destination_writable: bool) {
     let _fixture = POST_MOVE_FIXTURES.lock().await;
-    let state =
+    let mut proxy = DbProxy::holding_move_commit().await;
+    let mut state =
         fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    // 준비와 최종 조회도 같은 풀로 한다. COMMIT 장벽은 실제 이동 실행 연결만 멈춘다.
+    state.db =
+        fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(proxy.url.clone()))
+            .unwrap();
     let original = common::app(&state);
     let admin = login(&state, "commit-response-admin").await;
     let from = create_workspace(&original, &admin, "commit response source").await;
@@ -3341,13 +3347,7 @@ async fn move_commit_reply_race(destination_writable: bool) {
         .await;
         assert_eq!(on.status, StatusCode::NO_CONTENT, "{:?}", on.json);
     }
-    let mut proxy = DbProxy::holding_move_commit().await;
-    let mut proxied = state.clone();
-    proxied.db =
-        fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(proxy.url.clone()))
-            .unwrap();
-    proxied.collab = fvoci_server::collab::Rooms::default();
-    let app = common::app(&proxied);
+    let app = original.clone();
     let addr = proxy.serve(app.clone()).await;
     let mut editor = connect(addr, Some(&writer), &id, true).await.unwrap();
     editor.paragraph("응답 지연 전 확인 편집").await;
@@ -3355,7 +3355,12 @@ async fn move_commit_reply_race(destination_writable: bool) {
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").unwrap();
     let owner = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)
-        .connect(&owner_url)
+        .connect_with(
+            owner_url
+                .parse::<sqlx::postgres::PgConnectOptions>()
+                .unwrap()
+                .application_name("collab-commit-observer"),
+        )
         .await
         .unwrap();
     let (hold, holder) = hold_tree(&owner, &to).await;
@@ -3416,7 +3421,6 @@ async fn move_commit_reply_race(destination_writable: bool) {
     let acknowledged = acked(&editor);
     let saved = get_doc(&original, &admin, &id).await;
     owner.close().await;
-    proxied.db.close().await;
     state.db.close().await;
     if !destination_writable {
         assert!(
