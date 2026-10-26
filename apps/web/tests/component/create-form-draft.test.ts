@@ -40,7 +40,9 @@ it('offers a failed request on remount and retries only after restore with the s
   mount();
   await fireEvent.input(input(), { target: { value: '  남긴 이름  ' } });
   await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledOnce();
+  });
   const id = create.mock.calls[0]?.[0];
   cleanup();
   mount();
@@ -51,9 +53,13 @@ it('offers a failed request on remount and retries only after restore with the s
   expect(input()).toHaveValue('  남긴 이름  ');
   create.mockResolvedValue(undefined);
   await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledTimes(2);
+  });
   expect(create.mock.calls[1]?.slice(0, 2)).toEqual([id, '남긴 이름']);
-  await waitFor(() => expect(keys()).toHaveLength(0));
+  await waitFor(() => {
+    expect(keys()).toHaveLength(0);
+  });
 });
 
 it('keeps offered input intact when typing a different input before deciding', async () => {
@@ -157,23 +163,47 @@ it('preserves newly typed input as another offer when restoring an older draft',
   expect(keys().some((key) => localStorage.getItem(key)?.includes('newer'))).toBe(true);
 });
 
+it('allows an explicitly restored draft to save even if storage subsequently fills up', async () => {
+  mount();
+  await fireEvent.input(input(), { target: { value: 'restore then save' } });
+  cleanup();
+  mount();
+  await screen.findByTestId('form-draft-offer');
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('full');
+  });
+  await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
+  expect(input()).toHaveValue('restore then save');
+  await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledOnce();
+  });
+  expect(keys()).toHaveLength(0);
+});
+
 it('preserves a template and retry ID together and changes the ID for a different template', async () => {
   create.mockRejectedValue(new NetworkError('offline'));
-  let view = render(CreateForm, { props: { ...props, draftContext: 'template-a' } });
+  render(CreateForm, { props: { ...props, draftContext: 'template-a' } });
   await fireEvent.input(input(), { target: { value: 'title' } });
   await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledOnce();
+  });
   const first = create.mock.calls[0]?.[0];
   cleanup();
-  view = mount();
+  const view = mount();
   await screen.findByTestId('form-draft-offer');
   await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledTimes(2);
+  });
   expect(create.mock.calls[1]?.[0]).toBe(first);
   await waitFor(() => expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled());
   await view.rerender({ ...props, draftContext: 'template-b' });
   await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-  await waitFor(() => expect(create).toHaveBeenCalledTimes(3));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledTimes(3);
+  });
   expect(create.mock.calls[2]?.[0]).not.toBe(first);
 });

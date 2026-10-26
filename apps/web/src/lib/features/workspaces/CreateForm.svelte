@@ -14,6 +14,7 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
 
   /** 아직 만들지 않은 입력(이름과, 그 이름으로 보냈던 request_id). */
   interface CreateDraft {
@@ -29,7 +30,7 @@
     create: (
       requestId: string,
       name: string,
-      context: { userId: string; saved: () => boolean },
+      context: CreateFormContext,
     ) => Promise<void>;
     /** Stable form kind + container/parent ID. Omit for externally managed drafts. */
     draftName?: string;
@@ -177,7 +178,7 @@
 </script>
 
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer onrestore={() => draft.restore(entry)} ondiscard={() => draft.discard(entry)} />
+  <FormDraftOffer onrestore={() => { draft.restore(entry); }} ondiscard={() => { draft.discard(entry); }} />
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}

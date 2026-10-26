@@ -2,6 +2,7 @@
   import type { Workspace } from '@fvoci/api-client';
 
   import { api } from '$lib/api/client';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
   import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router, workspacePath } from '$lib/router.svelte';
@@ -58,7 +59,7 @@
       label={m.workspaces_new_name()}
       placeholder={m.workspaces_new_placeholder()}
       submitLabel={m.workspaces_create()}
-      create={async (requestId, name, context) => {
+      create={async (requestId: string, name: string, context: CreateFormContext) => {
         const ws = await api.createWorkspace(requestId, organizationId, name);
         if (!context.saved()) return;
         oncreated(ws);

@@ -1,7 +1,8 @@
 import { router } from '$lib/router.svelte';
+import { SvelteSet } from 'svelte/reactivity';
 
 type NavigationGuard = (action: () => void) => boolean;
-const attached = new Set<{ guard: NavigationGuard; previous: NavigationGuard | undefined }>();
+const attached = new SvelteSet<{ guard: NavigationGuard; previous: NavigationGuard | undefined }>();
 
 interface LeaveOptions {
   dirty: () => boolean;
@@ -53,14 +54,19 @@ export function createLeaveGuard(options: LeaveOptions) {
     /** 떠나기를 막아야 하면 true. 초안 보존은 호출 화면이 수행한다. */
     beforeUnload?: () => boolean;
   } = {}): () => void {
-    const link = { guard: (_action: () => void): boolean => true, previous: router.guard };
+    const link: { guard: NavigationGuard; previous: NavigationGuard | undefined } = {
+      guard: () => true,
+      previous: router.guard,
+    };
     const guard = (action: () => void): boolean => {
       if (bypass) return link.previous?.(action) ?? true;
       if (options.busy?.() === true) return false;
       if (!options.dirty()) return link.previous?.(action) ?? true;
       // Carry each accepted guard's bypass into the remaining confirmations.
       // Otherwise a sibling's later confirmation would ask this dirty form again.
-      const resume = (): void => proceed(action);
+      const resume = (): void => {
+        proceed(action);
+      };
       request(() => {
         if (link.previous?.(resume) ?? true) resume();
       });
