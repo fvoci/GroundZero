@@ -167,6 +167,45 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: ()
 }
 
 describe('closing the task dialog with unsaved input', () => {
+  it.each(['clean', 'discard'] as const)(
+    'keeps board input when closing the task detail (%s)',
+    async (mode) => {
+      me.userId = 'user-a';
+      window.localStorage.clear();
+      try {
+        const { back, reopen } = await openBoard([task('t1')], async () => {
+          await fireEvent.input(await screen.findByLabelText(m.tasks_new_title()), {
+            target: { value: 'Keep this new title' },
+          });
+          await fireEvent.click(screen.getByTestId('task-filter-toggle'));
+          await fireEvent.input(await screen.findByLabelText(m.tasks_view_name_aria()), {
+            target: { value: 'Keep this view name' },
+          });
+        });
+        if (mode === 'discard') await type('task-description', 'Discard only this detail');
+        await fireEvent.click(closeButton());
+        if (mode === 'discard') {
+          await fireEvent.click(
+            within(await findConfirm()).getByRole('button', { name: m.common_discard_confirm() }),
+          );
+        } else {
+          expect(confirmBox()).toBeNull();
+        }
+        expect(back).toHaveBeenCalledTimes(1);
+        await reopen(undefined);
+        expect(screen.getByLabelText(m.tasks_new_title())).toHaveValue('Keep this new title');
+        expect(screen.getByLabelText(m.tasks_view_name_aria())).toHaveValue('Keep this view name');
+        const path = router.path;
+        router.navigate('/tasks');
+        await findConfirm();
+        expect(router.path).toBe(path);
+      } finally {
+        me.userId = '';
+        window.localStorage.clear();
+      }
+    },
+  );
+
   it('opens details without discarding new task and view input that stays on the same board', async () => {
     me.userId = 'user-a';
     window.localStorage.clear();

@@ -773,12 +773,18 @@
   let openNext = $state<string | undefined>(undefined);
   let keepFocus: HTMLElement | null = null;
   let dialogContent = $state<HTMLElement | null>(null);
+  // 상세 안의 이동·닫기는 보드 입력을 없애지 않는다. 실제 보드 이탈만 보드 입력까지 확인·폐기한다.
+  let detailNavigation = false;
+  let discardBoardInput = true;
 
   const leave = createLeaveGuard({
-    dirty: () => (detailUnsaved && openTaskId !== undefined) || newDirty.size > 0 || viewDirty,
+    dirty: () =>
+      (detailUnsaved && openTaskId !== undefined) ||
+      (!detailNavigation && (newDirty.size > 0 || viewDirty)),
     busy: () => detailSaving,
     identity: () => openTaskId,
     onAsk: () => {
+      discardBoardInput = !detailNavigation;
       const active = document.activeElement;
       keepFocus =
         active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
@@ -811,7 +817,16 @@
 
   /** Esc·바깥 클릭·닫기 단추. 저장하지 않은 입력이 있으면 닫지 않고 버릴지 묻는다. */
   function requestClose(): void {
-    leave.request(close);
+    requestDetail(close);
+  }
+
+  function requestDetail(action: () => void): void {
+    detailNavigation = true;
+    try {
+      leave.request(action);
+    } finally {
+      detailNavigation = false;
+    }
   }
 
   /**
@@ -826,7 +841,7 @@
       });
       return;
     }
-    leave.request(() => {
+    requestDetail(() => {
       open(id);
     });
     openNext = id;
@@ -2293,15 +2308,17 @@
   onkeep={leave.keep}
   ondiscard={() => {
     if (detailEditor?.discardChildInput() === false) return;
-    for (const lane of newDirty) clearFormDraft(newDraftName(item.id, lane));
-    newDirty = new Set();
-    newKept = new Map();
-    newTaskInitial = undefined;
-    newTaskSeed += 1;
-    adding = undefined;
-    quickInitial = undefined;
-    viewName = views.find((v) => v.id === selectedView)?.name ?? '';
-    viewDraft.persist();
+    if (discardBoardInput) {
+      for (const lane of newDirty) clearFormDraft(newDraftName(item.id, lane));
+      newDirty = new Set();
+      newKept = new Map();
+      newTaskInitial = undefined;
+      newTaskSeed += 1;
+      adding = undefined;
+      quickInitial = undefined;
+      viewName = views.find((v) => v.id === selectedView)?.name ?? '';
+      viewDraft.persist();
+    }
     leave.discard();
   }}
   returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : dialogContent)}
