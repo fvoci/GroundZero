@@ -14,13 +14,14 @@ export async function offenders(container: Locator): Promise<Offender[]> {
   return container.evaluate((root) => {
     const limit = root.getBoundingClientRect().left + root.clientWidth;
     const found: { tag: string; cls: string; text: string; right: number; limit: number }[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>('*')) {
+    // SVG 요소는 className이 SVGAnimatedString이고 innerText가 없으므로 속성·textContent로 읽는다.
+    for (const el of root.querySelectorAll('*')) {
       const r = el.getBoundingClientRect();
       if (r.width > 0 && r.right > limit + 1)
         found.push({
           tag: el.tagName.toLowerCase(),
-          cls: el.className.slice(0, 80),
-          text: el.innerText.trim().slice(0, 40),
+          cls: (el.getAttribute('class') ?? '').slice(0, 80),
+          text: el.textContent.replace(/\s+/g, ' ').trim().slice(0, 40),
           right: Math.round(r.right),
           limit: Math.round(limit),
         });

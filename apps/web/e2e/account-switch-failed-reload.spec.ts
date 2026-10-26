@@ -88,13 +88,21 @@ test('a failed reload after an account switch leaves no previous screen, writes 
     if (request.url().includes('/api/') && request.method() !== 'GET')
       writes.push(`${request.method()} ${new URL(request.url()).pathname}`);
   });
+  // 전환 중 다시 읽기는 저장 안 한 편집의 beforeunload 경고로 막지 않는다(D-96: 막고 남으면 앞 계정의 화면이 새 계정의 세션으로 요청을
+  // 보낸다; 입력은 초안으로 남아 있다). 어떤 대화상자가 떴는지 기록해 두고 2·3단계 뒤에 beforeunload가 없었는지 본다. 4단계는
+  // 전환이 아닌 스크립트 다시 읽기에서 경고가 뜨는 대조군이다.
+  const prompts: string[] = [];
   page.on('dialog', (prompt) => {
+    prompts.push(prompt.type());
     void prompt.accept();
   });
 
   await test.step('A: 설명을 치고 저장하지 않는다', async () => {
     await page.goto(detailPath);
     await expect(dialog).toBeVisible();
+    // 클릭으로 사용자 활성화를 준다: 그래야 뒤의 다시 읽기에서 브라우저가 beforeunload 경고를 낼 수 있어 "전환 중 경고 없음" 단언이
+    // 뜻을 가진다(4단계 대조군은 이 활성화로 경고가 뜬다).
+    await description.click();
     await description.fill(edit);
     await expect.poll(() => draftKeys(page, a)).toHaveLength(1);
     expect(str(await serverTask(), 'description')).toBe('');
@@ -179,6 +187,13 @@ test('a failed reload after an account switch leaves no previous screen, writes 
     await expect(save).toBeEnabled();
     await expect.poll(() => draftKeys(page, a)).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath('4-a-recovered-after-503.png') });
+  });
+
+  await test.step('전환 중의 두 다시 읽기에는 beforeunload 경고가 없었다', () => {
+    const note = `dialogs during switch-triggered reloads: ${prompts.join(',') || 'none'}`;
+    testInfo.annotations.push({ type: 'dialogs', description: note });
+    appendFileSync(testInfo.outputPath('dialog-record.txt'), `${note}\n`);
+    expect(prompts.filter((t) => t === 'beforeunload')).toEqual([]);
   });
 
   await test.step('취소 경로 기록: 저장하지 않은 편집에서 스크립트가 부른 다시 읽기에 beforeunload 경고가 뜨는지', async () => {

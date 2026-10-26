@@ -117,8 +117,8 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       lag: num(p, 'lag_days'),
     }));
   // 저장하지 않은 편집의 창 닫기·새로고침 경고(beforeunload)는 떠나기로 답한다. 떠나도 입력은 브라우저에 남아야 한다.
-  // (헤드리스 Chromium은 스크립트가 부른 다시 읽기에 이 경고를 띄우지 않았다. "취소된 다시 읽기"의 안전 상태는 mock 시험
-  // account-safety-c가 보고, 여기서는 다시 읽기의 문서 요청을 붙잡아 둔 "끝나지 않는 다시 읽기"와 끊은 "실패한 다시 읽기"를 본다.)
+  // (전환 중 다시 읽기는 저장 안 한 편집의 beforeunload 경고를 내지 않는다 — 문서 편집기·업무 보드의 이탈 가드 규칙(D-96). "취소된
+  // 다시 읽기"의 안전 상태는 mock 시험 account-safety-c가, 경고 유무와 실패 경로는 account-switch-failed-reload.spec.ts가 본다.)
   page.on('dialog', (prompt) => {
     void prompt.accept();
   });

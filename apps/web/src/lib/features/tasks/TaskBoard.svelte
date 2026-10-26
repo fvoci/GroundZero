@@ -46,7 +46,7 @@
     storeFormDraft,
   } from '$lib/features/common/form-draft';
   import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay, formatInstant } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
@@ -673,7 +673,10 @@
 
   $effect(() =>
     leave.attach({
-      beforeUnload: () => openTaskId !== undefined && (detailUnsaved || detailSaving),
+      // 다른 계정으로 바뀌어 다시 읽는 중에는 경고하지 않는다(D-96·#88: 막고 남으면 앞 계정의 화면이 새 계정의 세션으로 요청을
+      // 보낸다; 입력은 앞 계정의 초안으로 이미 남아 있다. 문서 편집기와 같은 규칙).
+      beforeUnload: () =>
+        !accountSwitching() && openTaskId !== undefined && (detailUnsaved || detailSaving),
     }),
   );
 
@@ -793,6 +796,11 @@
   let quickInitial = $state<{ lane: string; name: string; requestId: string | null } | undefined>();
   let newTaskInitial = $state<{ name: string; requestId: string | null } | undefined>();
   let newTaskSeed = $state(0);
+  // 되살린 열의 시드는 그 열의 폼이 열려 있는 동안만 산다. 닫거나 다른 열을 열면 지워, 같은 열을 다시 열 때 옛 제목과 옛
+  // request_id가 다시 채워지지 않게 한다(CodeRabbit #141; 아래 폼의 시드는 {#key newTaskSeed}로 되살릴 때만 새로 읽는다).
+  $effect(() => {
+    if (quickInitial !== undefined && adding !== quickInitial.lane) quickInitial = undefined;
+  });
   function restoreNewDraft(entry: StoredFormDraft<NewTaskDraft>): void {
     const kept = entry.value;
     removeFormDraftAt(entry.key);

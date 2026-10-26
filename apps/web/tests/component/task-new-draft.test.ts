@@ -210,4 +210,53 @@ describe('new task title across reloads and account switches', () => {
     expect(stored(A)).toEqual([{ lane: null, name: 'A의 새 업무', requestId: null }]);
     expect(keysOf(B)).toEqual([]);
   });
+
+  it('drops the restored quick-add seed when that lane form closes, so reopening starts empty with a fresh request id', async () => {
+    await mount();
+    await fireEvent.click(firstAddButton());
+    await fireEvent.input(await input('todo에 업무 추가'), { target: { value: 'todo 열의 업무' } });
+    await waitFor(() => {
+      expect(stored(A)).toHaveLength(1);
+    });
+    reloadLike();
+
+    await mount();
+    await screen.findByTestId('task-new-draft-offer');
+    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
+    const seeded = await input('todo에 업무 추가');
+    expect(seeded.value).toBe('todo 열의 업무');
+    const create = vi
+      .spyOn(api, 'createTask')
+      .mockResolvedValue({ ...task('9', 'todo 열의 업무'), checklist: [] });
+    const form = seeded.closest('form');
+    if (form === null) throw new Error('quick add form');
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+    const firstRequestId = create.mock.calls[0]?.[1];
+    // 만들기가 끝나 폼이 비워질 때까지 기다린다(보내는 중에는 Esc를 받지 않는다).
+    await waitFor(() => {
+      expect(seeded.value).toBe('');
+    });
+    expect(typeof firstRequestId).toBe('string');
+
+    // 닫고 같은 열을 다시 연다: 옛 제목이 다시 채워지지 않고, 같은 제목을 쳐도 새 request_id로 보낸다(옛 id면 서버가 앞서
+    // 만든 업무를 돌려줘 새 업무가 생기지 않는다).
+    await fireEvent.keyDown(await input('todo에 업무 추가'), { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByLabelText('todo에 업무 추가')).toBeNull();
+    });
+    await fireEvent.click(firstAddButton());
+    const reopened = await input('todo에 업무 추가');
+    expect(reopened.value).toBe('');
+    await fireEvent.input(reopened, { target: { value: 'todo 열의 업무' } });
+    const again = reopened.closest('form');
+    if (again === null) throw new Error('quick add form');
+    await fireEvent.submit(again);
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+    expect(create.mock.calls[1]?.[1]).not.toBe(firstRequestId);
+  });
 });

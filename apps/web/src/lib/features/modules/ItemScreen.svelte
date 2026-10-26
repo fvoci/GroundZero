@@ -151,10 +151,14 @@
     };
   });
 
-  // 작업자 C: 접근 등급은 보관까지 반영한 서버 app_access 결과를 그대로 쓴다(D-113).
+  // 작업자 C: 접근 등급은 서버 app_access 결과를 그대로 쓴다(D-113). 보관은 등급이 아니라 아래 canEdit에서 본다.
   const moduleArchived = $derived(mod?.archived === true);
   const shownItem = $derived(item);
-  const canEdit = $derived(item !== undefined && item.access !== 'read');
+  // 보관된 항목과 보관된 모듈의 항목은 읽기 전용이다(서버도 쓰기를 거부한다: app_item_archived 55000). 등급(app_grade_item)은 보관을
+  // 반영하지 않으므로 소유자·쓰기 권한자에게도 편집 폼과 "보관" 단추 대신 아래의 "보관 해제" 단추만 보인다.
+  const canEdit = $derived(
+    item !== undefined && item.access !== 'read' && !item.archived && !moduleArchived,
+  );
   const isOwner = $derived(item?.access === 'owner');
 
   // 이 화면은 다른 항목으로 옮겨 가도 다시 만들어지지 않는다. 기다리는 사이 옮겨 갔으면 시작한 항목의 결과·오류를
