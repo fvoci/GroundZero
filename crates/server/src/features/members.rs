@@ -440,7 +440,8 @@ async fn respond(
     let target: Uuid = sqlx::query_scalar("SELECT app_respond_invitation($1, $2, $3)")
         .bind(id)
         .bind(accept)
-        .bind(new_ids(1))
+        // 수락: 워크스페이스 초대면 조직 자동 가입 감사 행까지 최대 2개(개정 2026-10-26 ⑬).
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

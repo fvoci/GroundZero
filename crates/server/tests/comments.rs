@@ -303,7 +303,7 @@ async fn comments_threads_and_notifications_follow_access() {
     let today = time::OffsetDateTime::now_utc().date();
     let tomorrow = today.next_day().unwrap();
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "보고서", "description": "", "status": "todo", "priority": task["priority"],
+        "base_version": task["version"], "title": "보고서", "description": "", "status": "할 일", "priority": task["priority"],
         "start_date": null, "due_date": tomorrow.to_string(), "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -547,7 +547,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     .await
     .json;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "내 업무", "description": "", "status": "todo", "priority": task["priority"],
+        "base_version": task["version"], "title": "내 업무", "description": "", "status": "할 일", "priority": task["priority"],
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [admin.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -682,7 +682,7 @@ async fn due_notices_skip_tasks_in_an_archived_module() {
     // 마감은 아직 멀다(다른 시험의 작업 실행이 먼저 알리지 않게).
     let later = time::OffsetDateTime::now_utc().date() + time::Duration::days(20);
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "보고서", "description": "", "status": "todo",
+        "base_version": task["version"], "title": "보고서", "description": "", "status": "할 일",
         "priority": task["priority"], "start_date": null, "due_date": later.to_string(), "estimate_minutes": null,
         "tags": [], "milestone": false, "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);

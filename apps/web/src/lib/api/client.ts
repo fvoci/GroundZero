@@ -1332,12 +1332,29 @@ function parseSchedulePlan(value: Json): SchedulePlanView {
 }
 
 /**
+ * 새 항목의 기본 상태 이름(SQL `app_seed_task_statuses`, 개정 2026-10-26 ⑪): `할 일`·`진행 중`·`완료`. 이 단계의 화면은 열을
+ * 안쪽 id(`todo`·`in_progress`·`done`)로 다루므로, 서버로 보낼 때 열 id를 이 이름으로 바꾸고 받을 때 이 이름을 열 id로 돌린다.
+ * 다른 이름(사용자 정의 상태)은 그대로 보내고 범주로 열을 정한다. 항목별 상태 정의 화면은 3단계 범위다.
+ */
+export const SEED_STATUS_NAME: Readonly<Record<TaskStatus, string>> = {
+  todo: '할 일',
+  in_progress: '진행 중',
+  done: '완료',
+};
+
+/** 서버에 보낼 상태 이름: 열 id면 기본 상태 이름으로, 그 밖(항목이 정의한 이름)은 그대로. */
+export function toServerStatus(status: string): string {
+  const lane = TASK_STATUSES.find((s) => s === status);
+  return lane === undefined ? status : SEED_STATUS_NAME[lane];
+}
+
+/**
  * 업무 상태 이름은 항목이 정의한 문자열이다(D-116, 1단계 계약). 이 단계의 화면은 기본 세 이름(`todo`·`in_progress`·`done`)으로
  * 열을 그리므로, 다른 이름이면 서버가 함께 주는 범주(`status_category`: todo·doing·done)의 열로 보인다. 모르는 값으로
  * 목록 전체를 버리지 않는다. 저장 본문은 원래 이름(`status_name`)을 돌려보낸다(`formOf`). 항목별 상태 정의 화면은 3단계 범위다.
  */
 function taskStatus(value: string, category: unknown): TaskStatus {
-  const found = TASK_STATUSES.find((s) => s === value);
+  const found = TASK_STATUSES.find((s) => s === value || SEED_STATUS_NAME[s] === value);
   if (found !== undefined) return found;
   if (category === 'doing') return 'in_progress';
   if (category === 'done') return 'done';
@@ -2919,6 +2936,7 @@ export const api = {
   ) =>
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
       ...fields,
+      ...(fields?.status === undefined ? {} : { status: toServerStatus(fields.status) }),
       request_id: requestId,
       title,
       parent_id: parentId,
@@ -2959,7 +2977,7 @@ export const api = {
    */
   moveTask: (id: string, status: TaskStatus, beforeId: string | null, baseMoveVersion?: number) =>
     expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
-      status,
+      status: toServerStatus(status),
       before_id: beforeId,
       ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
     }),

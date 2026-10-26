@@ -141,7 +141,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
         StatusCode::NOT_FOUND
     );
 
-    // 진행은 사람마다. 독자도 자기 진행을 남긴다. 완료한 날은 사용자의 오늘.
+    // 진행은 사람마다. 멤버 이상만 자기 진행을 남긴다. 완료한 날은 사용자의 오늘.
     let p = plan(&app, &reader, &item).await;
     assert_eq!(p["can_write"], false);
     let units = p["units"].as_array().unwrap().clone();
@@ -152,30 +152,55 @@ async fn study_units_are_shared_and_progress_is_personal() {
     let yesterday = today - time::Duration::days(1);
     let progress =
         |unit: &Value| format!("/api/study-units/{}/progress", unit["id"].as_str().unwrap());
-    let done = send(
+    // 읽기 전용은 자기 진도도 남기지 못한다(개정 2026-10-26 ⑧, D-20).
+    let refused = send(
         &app,
         Method::PUT,
         &progress(&units[0]),
         Some(&reader),
+        Some(json!({ "status": "done", "done_amount": 30, "today": today.to_string() })),
+    )
+    .await;
+    assert_eq!(refused.status, StatusCode::FORBIDDEN, "{:?}", refused.json);
+    let done = send(
+        &app,
+        Method::PUT,
+        &progress(&units[0]),
+        Some(&writer),
         Some(json!({
         "status": "done", "done_amount": 30, "note": "어려웠음", "today": today.to_string() })),
     )
     .await;
     assert_eq!(done.status, StatusCode::NO_CONTENT, "{:?}", done.json);
-    let mine = plan(&app, &reader, &item).await;
+    let mine = plan(&app, &writer, &item).await;
     assert_eq!(mine["units"][0]["mine"]["status"], "done");
     assert_eq!(mine["units"][0]["mine"]["completed_on"], today.to_string());
     assert_eq!(mine["units"][0]["mine"]["note"], "어려웠음");
-    let theirs = plan(&app, &writer, &item).await;
+    let theirs = plan(&app, &admin, &item).await;
     assert_eq!(theirs["units"][0]["mine"]["status"], "not_started");
     assert_eq!(theirs["units"][0]["mine"]["note"], "");
 
     // 밀린 단위를 사용자가 정한 날짜로 재배치(내 계획일만, 상태는 그대로).
-    let replan = send(
+    let refused_plan = send(
         &app,
         Method::PUT,
         &format!("/api/items/{item}/study/plan"),
         Some(&reader),
+        Some(json!({ "entries": [{ "unit_id": units[1]["id"], "planned_on": yesterday.to_string() }] })),
+    )
+    .await;
+    assert_eq!(
+        refused_plan.status,
+        StatusCode::FORBIDDEN,
+        "{:?}",
+        refused_plan.json
+    );
+    assert!(plan(&app, &reader, &item).await["units"][1]["mine"]["planned_on"].is_null());
+    let replan = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}/study/plan"),
+        Some(&writer),
         Some(json!({
         "entries": [
             { "unit_id": units[1]["id"], "planned_on": two_days_ago.to_string() },
@@ -184,7 +209,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
     )
     .await;
     assert_eq!(replan.json["planned"], 2, "{:?}", replan.json);
-    let mine = plan(&app, &reader, &item).await;
+    let mine = plan(&app, &writer, &item).await;
     assert_eq!(
         mine["units"][1]["mine"]["planned_on"],
         two_days_ago.to_string()
@@ -195,7 +220,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
         &app,
         Method::PUT,
         &format!("/api/items/{course}/study/plan"),
-        Some(&reader),
+        Some(&writer),
         Some(json!({
         "entries": [{ "unit_id": units[1]["id"], "planned_on": "2026-10-20" }] })),
     )
@@ -219,7 +244,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
         }
     };
     let list = participants(writer.clone()).await;
-    assert_eq!(list[0]["display_name"], "readonly", "{list:?}");
+    assert_eq!(list[0]["display_name"], "member", "{list:?}");
     assert_eq!(list[0]["done"], 1);
     assert_eq!(list[0]["done_amount"], 30);
     assert_eq!(list[0]["overdue"], 2);

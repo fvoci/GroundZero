@@ -189,8 +189,8 @@ pub async fn workspace(state: &AppState, user: &TestUser, org: Uuid) -> Uuid {
     .await
 }
 
-pub const CREATE_TASK: &str = "SELECT fvoci.app_create_task($1,$2,'SQL task',NULL,'','todo','none',NULL,NULL,NULL,'{}','{}',false,@ids) AS id";
-pub const UPDATE_TASK: &str = "SELECT fvoci.app_update_task($1,1,'edited','','todo','none',NULL,NULL,NULL,'{}','{}',false,'[]',@ids) AS outcome";
+pub const CREATE_TASK: &str = "SELECT fvoci.app_create_task($1,$2,'SQL task',NULL,'','할 일','none',NULL,NULL,NULL,'{}','{}',false,@ids) AS id";
+pub const UPDATE_TASK: &str = "SELECT fvoci.app_update_task($1,1,'edited','','할 일','none',NULL,NULL,NULL,'{}','{}',false,'[]',@ids) AS outcome";
 pub const COMMENT: &str = "SELECT fvoci.app_add_comment($1,NULL,$2,NULL,'SQL comment',@ids) AS id";
 
 pub async fn task(state: &AppState, user: &TestUser, item: Uuid) -> Uuid {

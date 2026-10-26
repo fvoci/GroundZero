@@ -52,7 +52,7 @@
   ],
   "tasks_csv_resume_restart": "To start a new import instead, clear the text first.",
   "tasks_csv_summary": "Import tasks from CSV",
-  "tasks_csv_label": "One task per line: title, description, status (todo, in_progress, done), priority (none, low, medium, high, urgent), start date, due date (YYYY-MM-DD), estimate (minutes), assignees (names, separated by ;), tags (separated by ;)",
+  "tasks_csv_label": "One task per line: title, description, status (할 일, 진행 중, 완료 or the item's status name), priority (none, low, medium, high, urgent), start date, due date (YYYY-MM-DD), estimate (minutes), assignees (names, separated by ;), tags (separated by ;)",
   "tasks_csv_read": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

@@ -73,7 +73,7 @@ async fn dated_task(app: &Router, user: &TestUser, item: &Value, title: &str, du
     .await
     .json;
     let r = send(app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
-                 Some(json!({ "base_version": t["version"], "title": title, "description": "", "status": "todo",
+                 Some(json!({ "base_version": t["version"], "title": title, "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": due, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -240,7 +240,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
         Method::PUT,
         &format!("/api/tasks/{}/position", first_open["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "status": "done", "before_id": null })),
+        Some(json!({ "status": "완료", "before_id": null })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
@@ -291,7 +291,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     .await
     .json;
     let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
-                 Some(json!({ "base_version": fresh["version"], "title": "월간 보고", "description": "", "status": "todo",
+                 Some(json!({ "base_version": fresh["version"], "title": "월간 보고", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": fresh["due_date"], "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(r.status, StatusCode::OK);
@@ -575,7 +575,7 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
     .await
     .json;
     let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
-                 Some(json!({ "base_version": fresh["version"], "title": "정리", "description": "", "status": "todo",
+                 Some(json!({ "base_version": fresh["version"], "title": "정리", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
@@ -936,7 +936,7 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
     .await
     .json;
     let finished = send(&app, Method::PUT, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
-        Some(json!({ "base_version": current["version"], "title": "완료 뿌리", "description": "", "status": "done",
+        Some(json!({ "base_version": current["version"], "title": "완료 뿌리", "description": "", "status": "완료",
                      "priority": "none", "start_date": null, "due_date": day(today), "estimate_minutes": null,
                      "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(finished.status, StatusCode::OK, "{:?}", finished.json);

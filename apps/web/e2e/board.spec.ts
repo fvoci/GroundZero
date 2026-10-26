@@ -31,18 +31,18 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
   await page.getByRole('button', { name: `${title} 옮기기` }).click();
   await page.getByRole('menuitem', { name: '진행 중으로' }).click();
   await expect(card(lane(page, '진행 중'), title)).toBeVisible();
-  await expect.poll(() => serverStatus(api, task)).toBe('in_progress');
+  await expect.poll(() => serverStatus(api, task)).toBe('진행 중');
 
   // 되돌리기.
   await page.getByRole('button', { name: `${title} 이동 되돌리기` }).click();
   await expect(card(lane(page, '할 일'), title)).toBeVisible();
-  await expect.poll(() => serverStatus(api, task)).toBe('todo');
+  await expect.poll(() => serverStatus(api, task)).toBe('할 일');
 
   // 키보드로 옮기기: 카드에 초점을 둔 채 Alt+오른쪽.
   await card(page, title).focus();
   await page.keyboard.press('Alt+ArrowRight');
   await expect(card(lane(page, '진행 중'), title)).toBeVisible();
-  await expect.poll(() => serverStatus(api, task)).toBe('in_progress');
+  await expect.poll(() => serverStatus(api, task)).toBe('진행 중');
   await expect(card(page, title)).toBeFocused();
 
   // 새로 읽어도 서버의 자리 그대로다.
