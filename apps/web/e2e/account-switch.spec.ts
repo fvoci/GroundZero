@@ -2,7 +2,9 @@
 // 읽힌 뒤에도 원래 계정에게만 되살린다. 실제 Keycloak 로그아웃·로그인, 실제 창 복귀 확인(FeedbackHost의 /api/me 비교),
 // 실제 다시 읽기(window.location.reload)를 거친다. 다시 읽기가 beforeunload에서 취소되거나 네트워크로 실패해도 이전 화면은
 // 가려진 채 남고(#88 안전 상태) 이전 화면은 API를 더 부르지 않는다. 다른 계정은 입력을 보지 못하고, 되살린 입력은 사용자가
-// 직접 저장·관계 저장·만들기를 눌러야 서버로 간다(중복 저장·생성 없음). HTTP mock·저장소 주입은 없다.
+// 직접 저장·관계 저장·만들기를 눌러야 서버로 간다(중복 저장·생성 없음). 응답을 흉내 내지 않는다. 다시 읽기의 문서 응답을 잠시
+// 붙잡아 두는 것(지연 뒤 성공 경로)과 이전 문서 안의 관찰용 기록기(fetch 호출 기록·상태 표본, 동작은 바꾸지 않음)만 쓴다. 실패·취소
+// 경로는 account-switch-failed-reload.spec.ts가 본다.
 import { appendFileSync } from 'node:fs';
 
 import type { Page, TestInfo } from '@playwright/test';
