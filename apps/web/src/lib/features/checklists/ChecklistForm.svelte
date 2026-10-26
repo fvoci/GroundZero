@@ -32,10 +32,20 @@
     onrename: (id: string, text: string, editingUser: string) => Promise<void>;
     onremove: (id: string, editingUser: string) => Promise<void>;
     onunsaved?: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
   }
 
-  const { idPrefix, items, canEdit, onadd, ontoggle, onrename, onremove, onunsaved }: Props =
-    $props();
+  const {
+    idPrefix,
+    items,
+    canEdit,
+    onadd,
+    ontoggle,
+    onrename,
+    onremove,
+    onunsaved,
+    ondraftkept,
+  }: Props = $props();
 
   /** 문구를 고치는 항목과 입력. */
   let renaming = $state<{ id: string; text: string; original: string } | undefined>(undefined);
@@ -111,10 +121,12 @@
     busy: () => busy,
   });
   $effect(() => {
-    onunsaved?.(dirty && !accountSwitching());
+    onunsaved?.(dirty);
+    ondraftkept?.(formDraft.kept);
   });
   onDestroy(() => {
     onunsaved?.(false);
+    ondraftkept?.(true);
   });
 
   async function guard(

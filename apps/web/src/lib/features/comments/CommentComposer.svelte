@@ -18,8 +18,9 @@
     busy: boolean;
     onpost: (body: string, root: string | null, requestId: string) => Promise<boolean>;
     onunsaved: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
   }
-  const { target, root, writable, busy, onpost, onunsaved }: Props = $props();
+  const { target, root, writable, busy, onpost, onunsaved, ondraftkept }: Props = $props();
   let text = $state('');
   let request = $state<{ body: string; requestId: string } | null>(null);
   let open = $state(false);
@@ -63,10 +64,12 @@
   });
 
   $effect(() => {
-    onunsaved(text !== '' && !accountSwitching());
+    onunsaved(text !== '');
+    ondraftkept?.(draft.kept);
   });
   onDestroy(() => {
     onunsaved(false);
+    ondraftkept?.(true);
   });
 
   async function post(): Promise<void> {

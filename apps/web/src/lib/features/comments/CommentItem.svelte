@@ -19,9 +19,18 @@
     onedit: (body: string) => Promise<boolean>;
     ondelete: () => void;
     onunsaved?: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
   }
 
-  const { comment, busy, canWrite = true, onedit, ondelete, onunsaved }: Props = $props();
+  const {
+    comment,
+    busy,
+    canWrite = true,
+    onedit,
+    ondelete,
+    onunsaved,
+    ondraftkept,
+  }: Props = $props();
 
   let editing = $state<string | undefined>(undefined);
   let original = $state('');
@@ -53,10 +62,12 @@
     busy: () => busy,
   });
   $effect(() => {
-    onunsaved?.(editing !== undefined && editing !== original && !accountSwitching());
+    onunsaved?.(editing !== undefined && editing !== original);
+    ondraftkept?.(draft.kept);
   });
   onDestroy(() => {
     onunsaved?.(false);
+    ondraftkept?.(true);
   });
 
   async function save(): Promise<void> {

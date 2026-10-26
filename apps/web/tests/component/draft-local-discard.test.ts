@@ -7,6 +7,7 @@ import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 
 const comment: CommentView = {
   id: 'c1',
@@ -56,6 +57,7 @@ describe('confirm only the local input being discarded', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     me.userId = 'user-a';
+    accountSafety.switching = false;
     localStorage.clear();
   });
   afterEach(() => {
@@ -63,6 +65,7 @@ describe('confirm only the local input being discarded', () => {
     vi.restoreAllMocks();
     localStorage.clear();
     me.userId = '';
+    accountSafety.switching = false;
   });
 
   it('asks before cancelling a reply or edited comment, retaining the other comment input', async () => {
@@ -209,4 +212,75 @@ describe('confirm only the local input being discarded', () => {
     expect(screen.getByLabelText('항목 A의 새 문구')).toHaveValue('A의 수정');
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
+
+  it.each([true, false])(
+    'reports comment preservation during account switching (storage available: %s)',
+    async (available) => {
+      vi.spyOn(api, 'comments').mockResolvedValue([comment]);
+      const onunsaved = vi.fn();
+      const ondraftkept = vi.fn();
+      render(CommentsPanel, {
+        props: { target: { kind: 'document', id: 'd1' }, canWrite: true, onunsaved, ondraftkept },
+      });
+      await screen.findByText('원댓글');
+      await fireEvent.input(screen.getByLabelText(/새 댓글/), {
+        target: { value: '저장된 새 댓글' },
+      });
+      expect(ondraftkept).toHaveBeenLastCalledWith(true);
+      if (!available)
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new Error('full');
+        });
+      await fireEvent.click(screen.getByRole('button', { name: '답글' }));
+      await fireEvent.input(screen.getByRole('textbox', { name: '답글' }), {
+        target: { value: '답글 입력' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
+      await fireEvent.input(screen.getByLabelText('댓글 고치기'), {
+        target: { value: '수정 입력' },
+      });
+      await waitFor(() => {
+        expect(ondraftkept).toHaveBeenLastCalledWith(available);
+      });
+      accountSafety.switching = true;
+      await waitFor(() => {
+        expect(screen.queryByLabelText('댓글 고치기')).toBeNull();
+      });
+      expect(onunsaved).toHaveBeenLastCalledWith(true);
+      expect(ondraftkept).toHaveBeenLastCalledWith(available);
+    },
+  );
+
+  it.each([true, false])(
+    'reports checklist preservation during account switching (storage available: %s)',
+    async (available) => {
+      if (!available)
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new Error('full');
+        });
+      const onunsaved = vi.fn();
+      const ondraftkept = vi.fn();
+      render(ChecklistForm, {
+        idPrefix: 'task-kept',
+        canEdit: true,
+        items: [],
+        onadd: vi.fn(),
+        ontoggle: vi.fn(),
+        onrename: vi.fn(),
+        onremove: vi.fn(),
+        onunsaved,
+        ondraftkept,
+      });
+      await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '보존할 항목' } });
+      await waitFor(() => {
+        expect(ondraftkept).toHaveBeenLastCalledWith(available);
+      });
+      accountSafety.switching = true;
+      await waitFor(() => {
+        expect(screen.queryByLabelText('새 항목')).toBeNull();
+      });
+      expect(onunsaved).toHaveBeenLastCalledWith(true);
+      expect(ondraftkept).toHaveBeenLastCalledWith(available);
+    },
+  );
 });
