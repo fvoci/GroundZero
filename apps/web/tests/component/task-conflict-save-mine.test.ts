@@ -117,6 +117,19 @@ function sides(ask: HTMLElement, key: string): { server: string; mine: string } 
 }
 
 describe('saving my input after a task conflict', () => {
+  it('shows the latest custom status name in the conflict notice', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'conflict',
+      current: { ...v2, version: 3, status: 'in_progress', status_name: '검수 대기' },
+    });
+    await screen.findByLabelText('설명');
+    await type('task-description', '내 설명');
+    await saveIntoConflict();
+    expect(screen.getByText(/검수 대기/)).toBeInTheDocument();
+  });
+
   it('keeps the title the other person changed when I only edited the description', async () => {
     await setLocale('ko', { reload: false });
     mount();

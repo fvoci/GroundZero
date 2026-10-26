@@ -268,7 +268,8 @@ export interface SharedView {
 
 export interface ShareView {
   id: string;
-  email: string;
+  email: string | null;
+  display_name: string;
   permission: 'read' | 'write';
 }
 
@@ -326,7 +327,12 @@ export function parseSharedView(value: Json): SharedView {
 
 export function parseShareView(value: Json): ShareView {
   const o = rec(value, 'share');
-  return { id: str(o, 'id'), email: str(o, 'email'), permission: permission(str(o, 'permission')) };
+  return {
+    id: str(o, 'id'),
+    email: optStr(o, 'email'),
+    display_name: str(o, 'display_name'),
+    permission: permission(str(o, 'permission')),
+  };
 }
 
 function parseMoveAccessChange(value: Json): MoveAccessChangeView {
