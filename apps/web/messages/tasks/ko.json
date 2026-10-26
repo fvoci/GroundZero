@@ -7,7 +7,7 @@
   "tasks_move_requested": "{title}: 요청한 상태 {status}",
   "tasks_move_latest": "최신본 확인",
   "tasks_rule_save_mine": "반복 규칙: 내 입력으로 다시 저장",
-  "tasks_account_changed": "계정이 바뀌어 입력을 숨겼습니다. 편집을 시작한 계정으로 돌아오면 다시 확인하세요.",
+  "tasks_account_changed": "계정이 바뀌어 입력을 숨겼습니다. 입력은 편집을 시작한 계정의 것으로 이 브라우저에 남아, 그 계정으로 다시 열면 되살릴 수 있습니다.",
   "tasks_account_verify": "편집 계정 확인",
   "tasks_move_to_status": "{status}(으)로 옮기기",
   "$schema": "https://inlang.com/schema/inlang-message-format",
@@ -375,5 +375,12 @@
   "tasks_status_description": "상태 이름·색·범주·순서를 정합니다. 삭제할 때는 업무를 다른 상태로 옮깁니다.",
   "tasks_category_todo": "할 일",
   "tasks_category_doing": "진행 중",
-  "tasks_category_done": "완료"
+  "tasks_category_done": "완료",
+  "tasks_draft_region": "보관된 입력",
+  "tasks_draft_found": "이 브라우저에 저장하지 않은 입력이 있습니다 ({time}).",
+  "tasks_draft_restore": "입력 복원",
+  "tasks_draft_discard": "입력 버리기",
+  "tasks_draft_read_only": "지금은 이 업무를 편집할 수 없어 되살릴 수 없습니다. 버리기 전까지 이 브라우저에 남습니다.",
+  "tasks_new_draft_found": "이 브라우저에 만들지 않은 새 업무 제목이 있습니다: “{title}” ({time}).",
+  "tasks_new_draft_found_lane": "이 브라우저에 {status} 열에 만들지 않은 새 업무 제목이 있습니다: “{title}” ({time})."
 }

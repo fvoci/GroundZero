@@ -47,3 +47,8 @@ description: fvoci 웹(apps/web)을 바꿀 때 읽을 코드와 결정, UI·조�
 - 강의 질문·복습(D-123): 기록 종류 `question`·`review`(module_kind course)와 칸 형식 `episode`. `RecordsPanel`이 `api.course(item)`의
   회차를 "번호. 제목"으로 고르게 하고 `records.ts`의 `summary`가 같은 이름으로 보인다. 복습 알림은 서버가 보낸다(알림 kind `review`).
 - 업무 만들기에서 `status`를 비우면 서버가 항목의 기본 상태를 고른다(CSV 빈 칸도 같다). 웹은 상태 이름을 번역하거나 기본 이름을 끼워 넣지 않는다.
+- 폼 입력의 브라우저 보존(D-96·D-128, 문서 초안 D-27과 같은 규칙): `common/form-draft.ts`(사용자별·탭별 localStorage 키). 업무 편집 폼
+  (`TaskDetail`)과 새 업무 제목(`TaskBoard`의 `CreateForm`)은 저장하지 않은 입력을 남기고, 다시 읽은 뒤 같은 계정에게만 되살릴지
+  묻는다(`task-draft-offer`·`task-new-draft-offer`). 되살린 입력은 사용자가 저장·만들기를 눌러야 보낸다(자동 재전송 없음, 만들기는
+  같은 request_id). 사용자가 버리고 닫거나 Esc로 버리면 지운다. 서버의 업무 쓰기는 기대 사용자 머리를 받지 않으므로 업무 폼의 계정
+  변경 감지는 창 복귀 확인(FeedbackHost)뿐이다(`task-form-draft`·`task-new-draft`·e2e `account-switch.spec.ts`).

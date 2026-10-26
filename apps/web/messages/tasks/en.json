@@ -7,7 +7,7 @@
   "tasks_move_requested": "{title}: requested status {status}",
   "tasks_move_latest": "Check latest",
   "tasks_rule_save_mine": "Recurrence: save my input again",
-  "tasks_account_changed": "Your input is hidden because the account changed. Return to the account that started editing.",
+  "tasks_account_changed": "Your input is hidden because the account changed. It stays in this browser for the account that started editing and can be restored when that account opens this again.",
   "tasks_account_verify": "Verify editing account",
   "tasks_move_to_status": "Move to {status}",
   "$schema": "https://inlang.com/schema/inlang-message-format",
@@ -401,5 +401,12 @@
   "tasks_status_description": "Set the name, color, category and position. Deleting a status moves its tasks to another status.",
   "tasks_category_todo": "To do",
   "tasks_category_doing": "Doing",
-  "tasks_category_done": "Done"
+  "tasks_category_done": "Done",
+  "tasks_draft_region": "Kept input",
+  "tasks_draft_found": "This browser has input you have not saved ({time}).",
+  "tasks_draft_restore": "Restore input",
+  "tasks_draft_discard": "Discard input",
+  "tasks_draft_read_only": "This task cannot be edited now, so the input cannot be restored. It stays in this browser until you discard it.",
+  "tasks_new_draft_found": "This browser has a new task title you have not created: “{title}” ({time}).",
+  "tasks_new_draft_found_lane": "This browser has a new task title for {status} you have not created: “{title}” ({time})."
 }

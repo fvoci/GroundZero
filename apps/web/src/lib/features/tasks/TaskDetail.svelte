@@ -1,7 +1,7 @@
 <script lang="ts">
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
-  import { tick, untrack } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
 
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
@@ -28,10 +28,20 @@
     MAX_LAG_DAYS,
     TASK_PRIORITIES,
   } from '$lib/api/client';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
+  import type { StoredFormDraft } from '$lib/features/common/form-draft';
+  import {
+    clearFormDraft,
+    formDraftTabKey,
+    holdFormDraft,
+    listFormDrafts,
+    removeFormDraftAt,
+    storeFormDraft,
+  } from '$lib/features/common/form-draft';
   import { canonicalJson } from '$lib/features/documents/drafts';
+  import { formatInstant } from '$lib/display';
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
   import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
   import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
@@ -382,6 +392,8 @@
       .task(id)
       .then((detail) => {
         if (cancelled) return;
+        // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
+        offerDraft(detail);
         fill(detail);
         peopleError = undefined;
         void api.assignable(detail.item_id).then(
@@ -413,19 +425,19 @@
   let saving = $state(false);
   const locked = $derived(!canEdit || saving);
 
-  function currentInput(): TaskInput | undefined {
-    if (form === undefined) return undefined;
-    const estimate = estimateOf(estimateText);
+  /** 폼 값·태그 글자·예상 시간 글자를 저장될 모양의 입력으로(지금 입력과 보관한 입력을 같은 규칙으로 견준다). */
+  function inputOf(f: TaskInput, tags: string, estimate: string): TaskInput {
+    const minutes = estimateOf(estimate);
     return {
-      ...form,
+      ...f,
       // 병합과 같은 규칙(마일스톤이면 시작일 없음, 빈 칸은 없음)이라 병합이 고른 일정이 그대로 보내진다.
-      ...scheduleOf(form),
+      ...scheduleOf(f),
       // 잘못된 입력은 저장 전에 막는다(submit). 여기서는 비교용으로만 쓴다.
-      estimate_minutes: estimate === 'invalid' ? null : estimate,
+      estimate_minutes: minutes === 'invalid' ? null : minutes,
       // 서버(`validate_tags`)처럼 앞뒤 공백을 떼고 겹친 태그는 처음 것만 둔다: 비교·확인·보내는 값이 저장될 값과 같다.
       tags: [
         ...new Set(
-          tagsText
+          tags
             .split(',')
             .map(trimLikeServer)
             .filter((t) => t !== ''),
@@ -434,17 +446,23 @@
     };
   }
 
-  // 기준과 다르게 고친 칸이 있는지(업무 대화상자가 닫기 전에 버릴지 묻는다). 병합과 같은 판정이다: 저장될 모양으로
-  // 견주고(제목·설명은 서버처럼 앞뒤 공백을 떼고 태그는 서버처럼 정리), 예상 시간은 입력한 글자의 값으로 본다(잘못된
-  // 글자는 고친 것이다).
-  const unsaved = $derived.by(() => {
+  function currentInput(): TaskInput | undefined {
+    return form === undefined ? undefined : inputOf(form, tagsText, estimateText);
+  }
+
+  // 기준과 다르게 고친 칸이 있는지. 병합과 같은 판정이다: 저장될 모양으로 견주고(제목·설명은 서버처럼 앞뒤 공백을 떼고
+  // 태그는 서버처럼 정리), 예상 시간은 입력한 글자의 값으로 본다(잘못된 글자는 고친 것이다). 편집할 수 있는지와 무관하다
+  // (계정이 바뀌어 폼을 숨겨도 고친 입력은 고친 입력이라 브라우저에 남긴다).
+  const changed = $derived.by(() => {
     const mine = currentInput();
-    if (!canEdit || mine === undefined || baseline === undefined) return false;
+    if (mine === undefined || baseline === undefined) return false;
     return (
       estimateOf(estimateText) !== baseline.estimate_minutes ||
       edited(baseline, { ...mine, estimate_minutes: baseline.estimate_minutes })
     );
   });
+  // 업무 대화상자가 닫기 전에 버릴지 물을 입력이 있는지(편집할 수 있을 때만).
+  const unsaved = $derived(canEdit && changed);
   $effect(() => {
     onunsaved?.(unsaved);
     return () => {
@@ -456,6 +474,174 @@
     return () => {
       onsaving?.(false);
     };
+  });
+
+  // 저장하지 않은 입력의 브라우저 보존(D-96·D-128; 문서 초안 D-27과 같은 규칙, common/form-draft.ts). 입력이 기준과 다르면
+  // 이 사용자·이 탭의 키에 남기고 같아지면 지운다. 다시 읽은 뒤(새로고침, 다른 탭에서 계정이 바뀌어 다시 읽음) 같은 계정이
+  // 이 업무를 열면 되살릴지 묻는다. 다른 계정은 키가 달라 보지 못하고, 되살린 입력은 사용자가 "저장"을 눌러야 간다(자동
+  // 재전송 없음). 범위는 이탈 확인이 지키는 입력(이 폼)과 같다: 관계 편집 칸·체크리스트 새 항목·댓글 입력은 이탈 확인에도
+  // 들지 않는다.
+  interface TaskDraft {
+    baseVersion: number;
+    baseline: TaskInput;
+    form: TaskInput;
+    tagsText: string;
+    estimateText: string;
+    savedAt: string;
+  }
+  const draftName = $derived(`task:${taskId}`);
+  function isTaskInput(value: unknown): value is TaskInput {
+    if (typeof value !== 'object' || value === null) return false;
+    if (!(
+      'title' in value &&
+      'description' in value &&
+      'status' in value &&
+      'priority' in value &&
+      'start_date' in value &&
+      'due_date' in value &&
+      'estimate_minutes' in value &&
+      'tags' in value &&
+      'assignee_ids' in value &&
+      'milestone' in value
+    ))
+      return false;
+    const text = (x: unknown): x is string => typeof x === 'string';
+    const dateOrNull = (x: unknown): x is string | null => x === null || typeof x === 'string';
+    const texts = (x: unknown): x is string[] => Array.isArray(x) && x.every(text);
+    return (
+      text(value.title) &&
+      text(value.description) &&
+      text(value.status) &&
+      TASK_PRIORITIES.some((p) => p === value.priority) &&
+      dateOrNull(value.start_date) &&
+      dateOrNull(value.due_date) &&
+      (value.estimate_minutes === null || typeof value.estimate_minutes === 'number') &&
+      texts(value.tags) &&
+      texts(value.assignee_ids) &&
+      typeof value.milestone === 'boolean'
+    );
+  }
+  function parseTaskDraft(value: unknown): TaskDraft | undefined {
+    if (typeof value !== 'object' || value === null) return undefined;
+    if (!(
+      'baseVersion' in value &&
+      'baseline' in value &&
+      'form' in value &&
+      'tagsText' in value &&
+      'estimateText' in value &&
+      'savedAt' in value
+    ))
+      return undefined;
+    const { baseVersion: version, baseline: before, form: kept, savedAt } = value;
+    const { tagsText: tags, estimateText: estimate } = value;
+    if (
+      typeof version !== 'number' ||
+      typeof tags !== 'string' ||
+      typeof estimate !== 'string' ||
+      typeof savedAt !== 'string' ||
+      !isTaskInput(before) ||
+      !isTaskInput(kept)
+    )
+      return undefined;
+    return {
+      baseVersion: version,
+      baseline: before,
+      form: kept,
+      tagsText: tags,
+      estimateText: estimate,
+      savedAt,
+    };
+  }
+  let restorable = $state<StoredFormDraft<TaskDraft> | undefined>(undefined);
+  // 묻는 입력이 보류 키로 옮기지 못해 이 탭의 키에 그대로 있으면(저장소 가득 참) 고를 때까지 그 키에 새 입력을 쓰지 않는다.
+  let reserved = false;
+  /** 서버 내용과 같은(이미 반영된) 입력인지. */
+  const isServer = (d: TaskDraft, server: TaskDetailView): boolean =>
+    estimateOf(d.estimateText) !== 'invalid' &&
+    !edited(formOf(server), inputOf(d.form, d.tagsText, d.estimateText));
+  /**
+   * 되살릴지 물을 입력을 고른다: 서버와 같은 것은 지우고 가장 새 것을 묻는다. `others`면 이 탭의 지금 입력은 빼고 본다
+   * (고른 뒤 다음 것을 물을 때).
+   */
+  function offerDraft(server: TaskDetailView, others = false): void {
+    const name = draftName;
+    const tab = formDraftTabKey(name);
+    let next: StoredFormDraft<TaskDraft> | undefined;
+    for (const entry of listFormDrafts(name, parseTaskDraft)) {
+      if (isServer(entry.value, server)) {
+        removeFormDraftAt(entry.key);
+        continue;
+      }
+      if (others && entry.key === tab) continue;
+      next ??= entry;
+    }
+    if (next === undefined) {
+      restorable = undefined;
+      reserved = false;
+      return;
+    }
+    const held = holdFormDraft(name, next);
+    reserved = held.key === tab;
+    restorable = held;
+  }
+  /** 되살리기: 폼·기준·판을 남길 때대로 되돌린다. 보내는 것은 없다(사용자가 "저장"을 누른다). */
+  function restoreDraft(): void {
+    const entry = restorable;
+    const current = task;
+    if (entry === undefined || current === undefined || current.access === 'read' || busy) return;
+    const kept = entry.value;
+    removeFormDraftAt(entry.key);
+    restorable = undefined;
+    reserved = false;
+    form = kept.form;
+    tagsText = kept.tagsText;
+    estimateText = kept.estimateText;
+    baseline = kept.baseline;
+    baseVersion = kept.baseVersion;
+    clashed = false;
+    conflict = undefined;
+    pending = undefined;
+    clashAsk = undefined;
+    error = undefined;
+    // 남길 때의 판보다 서버가 앞섰으면 기존 다시 채우기로 병합한다(양쪽이 다르게 바꾼 칸은 옛 판 번호를 남겨 저장이 충돌
+    // 화면으로 간다). 같은 판이면 그 판으로 저장한다.
+    if (current.version !== kept.baseVersion) refresh(current);
+    else task = current;
+    offerDraft(current, true);
+    void focusLater('task-title');
+  }
+  function discardDraft(): void {
+    const entry = restorable;
+    if (entry === undefined) return;
+    removeFormDraftAt(entry.key);
+    restorable = undefined;
+    reserved = false;
+    if (task !== undefined) offerDraft(task, true);
+  }
+  $effect(() => {
+    const mine = currentInput();
+    const before = baseline;
+    const dirty = changed;
+    if (task === undefined || mine === undefined || before === undefined || form === undefined)
+      return;
+    if (reserved) return;
+    if (dirty) {
+      storeFormDraft(draftName, {
+        baseVersion,
+        baseline: before,
+        form: $state.snapshot(form),
+        tagsText,
+        estimateText,
+        savedAt: new Date().toISOString(),
+      } satisfies TaskDraft);
+    } else {
+      clearFormDraft(draftName);
+    }
+  });
+  // 사용자가 버리고 닫거나 다른 업무를 열어 이 폼이 없어지면 이 탭의 입력도 지운다(방금 버린 입력을 다음에 되살리자고 하지
+  // 않게). 다른 계정으로 바뀌어 다시 읽는 중과 새로고침·탭 닫기는 여기를 거치지 않아 입력이 남는다.
+  onDestroy(() => {
+    if (!accountSwitching()) clearFormDraft(draftName);
   });
 
   /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
@@ -851,6 +1037,28 @@
           {/if}
         </div>
       </div>
+
+      {#if restorable !== undefined}
+        {@const kept = restorable.value}
+        <div
+          class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+          role="region"
+          aria-label={m.tasks_draft_region()}
+          inert={clashAsk !== undefined}
+          data-testid="task-draft-offer"
+        >
+          <span>{m.tasks_draft_found({ time: formatInstant(kept.savedAt) })}</span>
+          {#if current.access === 'read'}
+            <span class="text-muted-foreground">{m.tasks_draft_read_only()}</span>
+          {:else}
+            <Button size="sm" variant="outline" disabled={busy} onclick={restoreDraft}
+              >{m.tasks_draft_restore()}</Button
+            >
+          {/if}
+          <Button size="sm" variant="ghost" onclick={discardDraft}>{m.tasks_draft_discard()}</Button
+          >
+        </div>
+      {/if}
 
       {#if conflict !== undefined}
         {@const latest = conflict}

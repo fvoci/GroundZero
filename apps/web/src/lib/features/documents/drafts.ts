@@ -16,7 +16,7 @@ export interface Draft {
 // 이 탭의 id. 같은 사람이 같은 문서를 여러 탭에서 열어도 서로의 초안을 덮거나 지우지 않게, 지금 편집의 초안은
 // 탭마다 따로 둔다. 새로고침해도 같은 탭이면 같은 id(sessionStorage). 쓸 수 없으면 이 페이지 동안만 쓰는 id.
 let memoryTab: string | undefined;
-function tabId(): string {
+export function tabId(): string {
   try {
     let id = window.sessionStorage.getItem('fvoci:tab');
     if (id === null) {

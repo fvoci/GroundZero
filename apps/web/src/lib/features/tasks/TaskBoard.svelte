@@ -37,9 +37,17 @@
   import TaskTimeStart from '$lib/features/time/TaskTimeStart.svelte';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import type { StoredFormDraft } from '$lib/features/common/form-draft';
+  import {
+    clearFormDraft,
+    holdFormDraft,
+    listFormDrafts,
+    removeFormDraftAt,
+    storeFormDraft,
+  } from '$lib/features/common/form-draft';
   import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
-  import { formatDay } from '$lib/display';
+  import { formatDay, formatInstant } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
   import {
@@ -719,6 +727,90 @@
   // 열마다 빠르게 더하기(Kaneo처럼 열 아래). 만들기는 "할 일"로 만들어지므로, 다른 열이면 같은 이동 저장 경로로 그
   // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
   let adding = $state<TaskStatus | undefined>(undefined);
+
+  // 만들지 않은 새 업무 제목의 브라우저 보존(D-96·D-128; 문서 초안 D-27과 같은 규칙, common/form-draft.ts). 아래 "새 업무
+  // 제목"과 열의 빠른 추가 입력을 이 사용자·이 탭의 키에 남기고, 다시 읽은 뒤 같은 계정이 이 항목의 보드를 열면 되살릴지
+  // 묻는다. 되살리면 그 입력란에 제목과 그때의 request_id를 시드하고 사용자가 "업무 만들기"를 눌러야 보낸다(같은 제목이면 같은
+  // request_id라 응답을 잃었던 만들기도 중복되지 않는다). 만들었거나 Esc로 버리거나 비우면 지운다. 이 입력은 이탈 확인이
+  // 지키지 않으므로 화면을 떠나도 남겨 두고 다음에 묻는다.
+  interface NewTaskDraft {
+    lane: string | null;
+    name: string;
+    requestId: string | null;
+    savedAt: string;
+  }
+  function newDraftName(itemId: string, lane: string | null): string {
+    return `task-new:${itemId}:${lane === null ? '-' : encodeURIComponent(lane)}`;
+  }
+  function parseNewTaskDraft(value: unknown): NewTaskDraft | undefined {
+    if (typeof value !== 'object' || value === null) return undefined;
+    if (!('lane' in value && 'name' in value && 'requestId' in value && 'savedAt' in value))
+      return undefined;
+    const { lane, name, requestId, savedAt } = value;
+    if (
+      (lane !== null && typeof lane !== 'string') ||
+      typeof name !== 'string' ||
+      (requestId !== null && typeof requestId !== 'string') ||
+      typeof savedAt !== 'string'
+    )
+      return undefined;
+    return { lane, name, requestId, savedAt };
+  }
+  /**
+   * 남은 입력을 읽고 이 탭의 키에 있는 것은 보류 키로 옮긴다. 입력란(자식)이 그려지며 비어 있다고 알려 이 탭의 키를 지우기
+   * 전에 끝나야 하므로 처음에는 효과가 아니라 초기화에서 부른다.
+   */
+  function loadNewDrafts(itemId: string): StoredFormDraft<NewTaskDraft>[] {
+    return listFormDrafts(`task-new:${itemId}`, parseNewTaskDraft).map((entry) =>
+      holdFormDraft(newDraftName(itemId, entry.value.lane), entry),
+    );
+  }
+  let draftsItem = untrack(() => item.id);
+  let newDrafts = $state(loadNewDrafts(draftsItem));
+  $effect(() => {
+    const itemId = item.id;
+    if (itemId === draftsItem) return;
+    draftsItem = itemId;
+    untrack(() => {
+      newDrafts = loadNewDrafts(itemId);
+    });
+  });
+  function keepNewDraft(
+    lane: string | null,
+    draft: { name: string; requestId: string | null } | undefined,
+  ): void {
+    const name = newDraftName(item.id, lane);
+    if (draft === undefined) clearFormDraft(name);
+    else
+      storeFormDraft(name, {
+        lane,
+        name: draft.name,
+        requestId: draft.requestId,
+        savedAt: new Date().toISOString(),
+      } satisfies NewTaskDraft);
+  }
+  // 되살린 입력의 시드. 열의 빠른 추가는 열릴 때 읽고, 아래 폼은 다시 그려 읽는다.
+  let quickInitial = $state<{ lane: string; name: string; requestId: string | null } | undefined>();
+  let newTaskInitial = $state<{ name: string; requestId: string | null } | undefined>();
+  let newTaskSeed = $state(0);
+  function restoreNewDraft(entry: StoredFormDraft<NewTaskDraft>): void {
+    const kept = entry.value;
+    removeFormDraftAt(entry.key);
+    newDrafts = newDrafts.filter((e) => e.key !== entry.key);
+    const seed = { name: kept.name, requestId: kept.requestId };
+    if (kept.lane !== null && statusNames.includes(kept.lane)) {
+      quickInitial = { lane: kept.lane, ...seed };
+      adding = kept.lane;
+    } else {
+      // 그 열이 이제 없으면 아래 폼(기본 상태)으로 되살린다.
+      newTaskInitial = seed;
+      newTaskSeed += 1;
+    }
+  }
+  function discardNewDraft(entry: StoredFormDraft<NewTaskDraft>): void {
+    removeFormDraftAt(entry.key);
+    newDrafts = newDrafts.filter((e) => e.key !== entry.key);
+  }
   // 달력 보기의 날짜 칸에서 이 항목에 업무 만들기(그 날짜가 마감일).
   let createDay = $state<string | undefined>(undefined);
   let boardCalendar = $state<HTMLElement | undefined>(undefined);
@@ -1354,6 +1446,44 @@
     </div>
   </div>
 
+  {#each newDrafts as entry (entry.key)}
+    <div
+      class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+      role="region"
+      aria-label={m.tasks_draft_region()}
+      data-testid="task-new-draft-offer"
+    >
+      <span
+        >{entry.value.lane === null
+          ? m.tasks_new_draft_found({
+              title: entry.value.name,
+              time: formatInstant(entry.value.savedAt),
+            })
+          : m.tasks_new_draft_found_lane({
+              status: entry.value.lane,
+              title: entry.value.name,
+              time: formatInstant(entry.value.savedAt),
+            })}</span
+      >
+      {#if canWrite}
+        <Button
+          size="sm"
+          variant="outline"
+          onclick={() => {
+            restoreNewDraft(entry);
+          }}>{m.tasks_draft_restore()}</Button
+        >
+      {/if}
+      <Button
+        size="sm"
+        variant="ghost"
+        onclick={() => {
+          discardNewDraft(entry);
+        }}>{m.tasks_draft_discard()}</Button
+      >
+    </div>
+  {/each}
+
   {#if item.access === 'owner'}
     <Button
       variant="outline"
@@ -1816,6 +1946,10 @@
                 create={(requestId: string, title: string) => quickAdd(lane, requestId, title)}
                 autofocus
                 oncancel={() => void closeQuickAdd(lane)}
+                initial={quickInitial?.lane === lane ? quickInitial : undefined}
+                onchange={(draft: { name: string; requestId: string | null } | undefined) => {
+                  keepNewDraft(lane, draft);
+                }}
               />
             {:else}
               <Button
@@ -1916,16 +2050,22 @@
   {/if}
 
   {#if canWrite}
-    <CreateForm
-      id="new-task"
-      label={m.tasks_new_title()}
-      placeholder={m.tasks_new_placeholder()}
-      submitLabel={m.tasks_create()}
-      create={async (requestId: string, title: string) => {
-        await api.createTask(item.id, requestId, title);
-        await reload();
-      }}
-    />
+    {#key newTaskSeed}
+      <CreateForm
+        id="new-task"
+        label={m.tasks_new_title()}
+        placeholder={m.tasks_new_placeholder()}
+        submitLabel={m.tasks_create()}
+        create={async (requestId: string, title: string) => {
+          await api.createTask(item.id, requestId, title);
+          await reload();
+        }}
+        initial={newTaskInitial}
+        onchange={(draft: { name: string; requestId: string | null } | undefined) => {
+          keepNewDraft(null, draft);
+        }}
+      />
+    {/key}
     <TaskCsvImport itemId={item.id} statuses={definitions} onimported={reload} />
   {/if}
   <p class="sr-only" aria-live="polite">{status}</p>
