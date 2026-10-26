@@ -71,7 +71,7 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
   return {
     tasks: (itemId) => Promise.resolve(itemId === TASK_ITEM.id ? list : []),
     task: (id) => Promise.resolve({ ...find(id), checklist: [] }),
-    moveTask: (id, status, beforeId) => {
+    moveTask: (_expectedUser, id, status, beforeId) => {
       const before = find(id);
       list = applyMove(list, id, { status, beforeId }).map((t) =>
         t.id === id ? { ...t, move_version: before.move_version + 1 } : t,

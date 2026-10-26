@@ -43,6 +43,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   let session = $state<{ userId: string; name: string; key: string | undefined }>();
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
   let restoredKey: string | undefined;
+  let kept = $state(false);
 
   function owned(): boolean {
     return session?.userId === me.userId && session.name === options.name();
@@ -59,13 +60,16 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   function persist(): void {
     if (!owned() || session === undefined) return;
     // A failed move to a held key must never overwrite the offered input.
-    if (blocked()) return;
-    writeFormDraftAt(
+    if (blocked()) {
+      kept = false;
+      return;
+    }
+    const dirty = options.dirty();
+    const written = writeFormDraftAt(
       session.key,
-      options.dirty()
-        ? { savedAt: new SvelteDate().toISOString(), input: options.snapshot() }
-        : undefined,
+      dirty ? { savedAt: new SvelteDate().toISOString(), input: options.snapshot() } : undefined,
     );
+    kept = !dirty || written;
   }
 
   const leave = createLeaveGuard({
@@ -211,7 +215,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return leave.attach({
       beforeUnload: () => {
         persist();
-        return current() && options.dirty();
+        return owned() && options.dirty() && (!accountSwitching() || !kept);
       },
     });
   }
@@ -225,6 +229,10 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     },
     get blocked() {
       return blocked();
+    },
+    /** 원 사용자 입력을 보존했는지. 계정 전환 reload 허용 여부를 부모가 판단한다. */
+    get kept() {
+      return owned() && (!options.dirty() || kept);
     },
     leave,
     persist,

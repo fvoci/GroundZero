@@ -28,6 +28,7 @@ const me: Me = {
   time_zone: '',
   week_start: '',
   theme: 'system',
+  last_organization_id: TEST_ORGANIZATION.id,
   limits: {
     max_title_chars: 200,
     max_document_bytes: 2_000_000,
@@ -85,6 +86,7 @@ beforeEach(async () => {
     ),
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
+  vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
   vi.spyOn(api, 'workspaces').mockResolvedValue(workspaces);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION, OTHER]);
   vi.spyOn(api, 'unreadCount').mockResolvedValue(0);

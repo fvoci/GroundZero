@@ -1,7 +1,7 @@
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   AssigneeView,
@@ -16,11 +16,16 @@ import { clashRows } from '$lib/features/tasks/labels';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 // 업무 저장 충돌(409) 뒤 "내 입력으로 다시 저장"(실제 브라우저 점검에서 찾음): 전에는 내 폼 전체를 새 판 번호로 보내,
 // 내가 고치지 않은 칸(다른 사람이 바꾼 제목 등)을 옛 값으로 조용히 되돌렸다. 이제 최신 판 위에 내가 고친 칸만 올리고,
 // 같은 칸을 다른 사람도 다른 값으로 바꿨으면 양쪽 값을 보이고 덮어쓸지 묻는다(D-94).
+beforeEach(() => {
+  me.userId = 'user-a';
+});
 afterEach(() => {
+  me.userId = '';
   vi.restoreAllMocks();
 });
 
@@ -119,6 +124,19 @@ function sides(ask: HTMLElement, key: string): { server: string; mine: string } 
 }
 
 describe('saving my input after a task conflict', () => {
+  it('shows the latest custom status name in the conflict notice', async () => {
+    await setLocale('ko', { reload: false });
+    mount();
+    vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'conflict',
+      current: { ...v2, version: 3, status: '검수 대기' },
+    });
+    await screen.findByLabelText('설명');
+    await type('task-description', '내 설명');
+    await saveIntoConflict();
+    expect(screen.getByText(/검수 대기/)).toBeInTheDocument();
+  });
+
   it('keeps the title the other person changed when I only edited the description', async () => {
     await setLocale('ko', { reload: false });
     mount();

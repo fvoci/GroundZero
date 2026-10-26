@@ -81,7 +81,7 @@
         api.workspaces(),
         api.myOrganizations(),
       ]);
-      org.load(me.id, organizations);
+      org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };
     } catch (e: unknown) {
       // 브라우저·서버의 원문 대신 번역된 문구(D-81). 서버에 닿지 않은 경우는 다시 시도하면 된다고 알린다.
