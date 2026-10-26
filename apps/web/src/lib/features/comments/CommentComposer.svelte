@@ -64,10 +64,12 @@
   $effect(() => {
     onunsaved(text !== '' && !accountSwitching());
   });
-  onDestroy(() => onunsaved(false));
+  onDestroy(() => {
+    onunsaved(false);
+  });
 
   async function post(): Promise<void> {
-    if (!writable || busy || accountSwitching() || draft.offers.length > 0) return;
+    if (!writable || busy || accountSwitching() || draft.blocked) return;
     const body = text.trim();
     if (body === '') return;
     if (request?.body !== body) request = { body, requestId: newRequestId() };
@@ -89,7 +91,14 @@
 {#each draft.offers as offer (offer.key)}
   <div data-testid={root === undefined ? 'comment-draft-offer' : 'comment-reply-draft-offer'}>
     <p class="text-sm whitespace-pre-wrap">{offer.value.input.text}</p>
-    <FormDraftOffer onrestore={() => draft.restore(offer)} ondiscard={() => draft.discard(offer)} />
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(offer);
+      }}
+      ondiscard={() => {
+        draft.discard(offer);
+      }}
+    />
   </div>
 {/each}
 {#if writable && !accountSwitching()}
@@ -104,6 +113,9 @@
       }}
     >
       <Textarea
+        {@attach (node: HTMLTextAreaElement) => {
+          if (root !== undefined) node.focus();
+        }}
         aria-label={root === undefined ? m.comments_new_label() : m.comments_reply()}
         class={root === undefined ? 'min-h-20' : ''}
         bind:value={text}
@@ -120,7 +132,7 @@
         <Button
           type="submit"
           size={root === undefined ? 'default' : 'sm'}
-          disabled={busy || text.trim() === '' || draft.offers.length > 0}
+          disabled={busy || text.trim() === '' || draft.blocked}
         >
           {root === undefined ? m.comments_post() : m.comments_reply_submit()}
         </Button>

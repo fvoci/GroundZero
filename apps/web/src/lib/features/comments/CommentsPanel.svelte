@@ -174,7 +174,9 @@
             onedit={(body: string) =>
               run(() => api.editComment(t.root.id, body), m.comments_edited())}
             ondelete={() => void remove(t.root.id)}
-            onunsaved={(value) => (unsaved[`edit:${t.root.id}`] = value)}
+            onunsaved={(value: boolean) => {
+              unsaved[`edit:${t.root.id}`] = value;
+            }}
           />
           {#each t.replies as r (r.id)}
             <div class="ml-4 border-l pl-3">
@@ -185,7 +187,9 @@
                 onedit={(body: string) =>
                   run(() => api.editComment(r.id, body), m.comments_edited())}
                 ondelete={() => void remove(r.id)}
-                onunsaved={(value) => (unsaved[`edit:${r.id}`] = value)}
+                onunsaved={(value: boolean) => {
+                  unsaved[`edit:${r.id}`] = value;
+                }}
               />
             </div>
           {/each}
@@ -208,7 +212,9 @@
             {writable}
             {busy}
             onpost={post}
-            onunsaved={(value) => (unsaved[`reply:${t.root.id}`] = value)}
+            onunsaved={(value: boolean) => {
+              unsaved[`reply:${t.root.id}`] = value;
+            }}
           />
         {/if}
       </li>
@@ -219,6 +225,8 @@
     {writable}
     {busy}
     onpost={post}
-    onunsaved={(value) => (unsaved.new = value)}
+    onunsaved={(value: boolean) => {
+      unsaved.new = value;
+    }}
   />
 </section>

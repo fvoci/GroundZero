@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
@@ -61,7 +61,9 @@ describe('checklist drafts', () => {
     expect(onadd).toHaveBeenCalledTimes(1);
     onadd.mockResolvedValueOnce(undefined);
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
-    await waitFor(() => expect(onadd).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(onadd).toHaveBeenCalledTimes(2);
+    });
     expect(onadd.mock.calls[1]?.[0]).toEqual(onadd.mock.calls[0]?.[0]);
     expect(onadd.mock.calls[1]?.[1]).toBe('user-a');
   });
@@ -102,13 +104,19 @@ describe('checklist drafts', () => {
     ).toBeChecked();
     expect(h.onadd).toHaveBeenCalledTimes(1);
     await fireEvent.click(screen.getByRole('button', { name: '2개 덧붙이기' }));
-    await waitFor(() => expect(h.onadd).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(h.onadd).toHaveBeenCalledTimes(2);
+    });
     expect(h.onadd.mock.calls[1]).toEqual(h.onadd.mock.calls[0]);
     expect(screen.getByLabelText('원래 문구의 새 문구')).toHaveValue('고치는 중');
     expect(onunsaved).toHaveBeenLastCalledWith(true);
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await waitFor(() => expect(h.onrename).toHaveBeenCalledWith('c1', '고치는 중', 'user-a'));
-    await waitFor(() => expect(onunsaved).toHaveBeenLastCalledWith(false));
+    await waitFor(() => {
+      expect(h.onrename).toHaveBeenCalledWith('c1', '고치는 중', 'user-a');
+    });
+    await waitFor(() => {
+      expect(onunsaved).toHaveBeenLastCalledWith(false);
+    });
     expect(
       Object.keys(localStorage).filter((key) => key.includes('form-draft:checklist:')),
     ).toEqual([]);
@@ -127,12 +135,16 @@ describe('checklist drafts', () => {
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: 'A 입력' } });
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
     me.userId = 'user-b';
-    await waitFor(() => expect(screen.getByLabelText('새 항목')).toHaveValue(''));
+    await waitFor(() => {
+      expect(screen.getByLabelText('새 항목')).toHaveValue('');
+    });
     expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
     expect(Object.keys(localStorage).filter((key) => key.includes('user-b'))).toEqual([]);
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: 'B 입력' } });
     resolve();
-    await waitFor(() => expect(screen.getByLabelText('새 항목')).toHaveValue('B 입력'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('새 항목')).toHaveValue('B 입력');
+    });
     me.userId = 'user-a';
     expect(await screen.findByTestId('checklist-new-item-draft-offer')).toHaveTextContent('A 입력');
     await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
@@ -171,8 +183,36 @@ describe('checklist drafts', () => {
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '저장소 없이' } });
     expect(onunsaved).toHaveBeenLastCalledWith(true);
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
-    await waitFor(() => expect(h.onadd).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByLabelText('새 항목')).toHaveValue(''));
+    await waitFor(() => {
+      expect(h.onadd).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText('새 항목')).toHaveValue('');
+    });
     expect(onunsaved).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps another tab input intact when this tab saves', async () => {
+    const h = handlers();
+    sessionStorage.setItem('fvoci:tab', 'checklist-first');
+    const first = render(ChecklistForm, { ...base, ...h });
+    const a = within(first.container);
+    sessionStorage.setItem('fvoci:tab', 'checklist-second');
+    const second = render(ChecklistForm, { ...base, ...h });
+    const b = within(second.container);
+    // 같은 문서에 두 탭을 흉내 내므로 id/label은 중복된다. 각 컨테이너의 입력을 직접 고른다.
+    await fireEvent.input(a.getByRole('textbox'), { target: { value: '첫 탭 항목' } });
+    await fireEvent.input(b.getByRole('textbox'), { target: { value: '둘째 탭 항목' } });
+    const key = Object.keys(localStorage).find((candidate) =>
+      candidate.endsWith(':tab:checklist-second'),
+    );
+    if (key === undefined) throw new Error('second tab draft');
+    const saved = localStorage.getItem(key);
+    await fireEvent.click(a.getByRole('button', { name: '추가' }));
+    await waitFor(() => {
+      expect(a.getByRole('textbox')).toHaveValue('');
+    });
+    expect(b.getByRole('textbox')).toHaveValue('둘째 탭 항목');
+    expect(localStorage.getItem(key)).toBe(saved);
   });
 });
