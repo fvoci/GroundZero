@@ -5,6 +5,8 @@ import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setUpScreen } from '../fixtures/screens';
 import { recurring } from '../time/fixtures';
+import { me } from '$lib/me.svelte';
+import { storeFormDraft } from '$lib/features/common/form-draft';
 
 // 일정 대화상자(features/events/EventDialog.svelte). 기본은 반복 일정이고 저장이 반복 끝 위치 오류(#76)로 거절되는 상태다.
 // Light·Dark·NarrowLargeText는 반복 없는 회의 일정의 기본 모양(밝음·어두움·375px·200% 글꼴)이다.
@@ -14,12 +16,20 @@ const meta = {
   component: EventDialog,
   args: { eventId: recurring.id, onclose: () => undefined, onchanged: () => undefined },
   beforeEach: () => {
+    const previousUser = me.userId;
+    me.userId = 'event-story-user';
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('fvoci:event-story-user:-:form-draft:')) localStorage.removeItem(key);
+    }
     const restore = setUpScreen('/events');
     spyOn(api, 'event').mockResolvedValue(recurring);
     spyOn(api, 'updateEvent').mockRejectedValue(
       new ApiError(400, 'bad_request', 'until must not be before the first occurrence'),
     );
-    return restore;
+    return () => {
+      restore();
+      me.userId = previousUser;
+    };
   },
 } satisfies Meta<typeof EventDialog>;
 export default meta;
@@ -79,4 +89,44 @@ export const NarrowLargeText: Story = {
   args: { eventId: 'event-example' },
   beforeEach: plainMeeting,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+
+/** Synthetic unfinished recurrence text; restoring never submits it. */
+export const DraftAvailable: Story = {
+  beforeEach: () => {
+    const baseFields = {
+      freq: 'weekly',
+      interval: '1',
+      weekdays: [1],
+      end: 'never',
+      until: '',
+      count: '10',
+    };
+    storeFormDraft(`event-recurrence:${recurring.id}`, {
+      savedAt: '2026-10-26T12:00:00Z',
+      input: {
+        fields: { ...baseFields, interval: '아직 입력 중' },
+        baseFields,
+        base: recurring.recurrence,
+      },
+    });
+    return () => {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith(`fvoci:event-story-user:-:form-draft:event-recurrence:${recurring.id}:`))
+          localStorage.removeItem(key);
+      }
+    };
+  },
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await page.findAllByRole('button', { name: m.common_draft_restore() });
+  },
+};
+export const DraftAvailableDark: Story = {
+  ...DraftAvailable,
+  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop' } },
+};
+export const DraftAvailableNarrow200: Story = {
+  ...DraftAvailable,
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

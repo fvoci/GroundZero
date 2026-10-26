@@ -587,6 +587,7 @@ describe('saving my input after an event conflict (D-94)', () => {
     await screen.findByRole('alertdialog', { name: m.events_clash_question() });
 
     await rerender(props(undefined));
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_discard_confirm() }));
     await rerender(props('A'));
     await screen.findByDisplayValue('회의');
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -600,3 +601,4 @@ describe('saving my input after an event conflict (D-94)', () => {
     expect(update.mock.calls[1]).toEqual(['A', 5, sent()]);
   });
 });
+import './fixtures/event-user';

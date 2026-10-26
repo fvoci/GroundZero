@@ -3,13 +3,15 @@
   // 항목 가운데, 워크스페이스 범위면 모듈과 항목을 고른다(쓸 수 있는 것만: 보관·서식이 아니고 읽기 전용이 아닌 항목).
   // 제목·마감은 한 번의 생성 요청으로 저장한다(#104).
   import type { Module } from '@fvoci/api-client';
-  import { untrack } from 'svelte';
-  import { me } from '$lib/me.svelte';
+  import { onMount, untrack } from 'svelte';
 
   import type { ItemView, TaskDetailView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, request } from './input-drafts';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -30,36 +32,89 @@
   }
 
   const { workspaceId, day, item, moduleId, onclose, oncreated }: Props = $props();
+  let activeDay = $state(untrack(() => day));
 
   const writable = (i: ItemView): boolean => i.access !== 'read' && !i.archived && !i.is_template;
 
-  const editingUser = untrack(() => me.userId);
   let accountBlocked = $state(false);
-  let date = $state('');
+  let date = $state(untrack(() => activeDay ?? ''));
   let title = $state('');
-  let pickedModule = $state('');
-  let pickedItem = $state('');
+  let pickedModule = $state(untrack(() => moduleId ?? ''));
+  let pickedItem = $state(untrack(() => item?.id ?? ''));
   let modules = $state<Module[] | undefined>(undefined);
   let items = $state<ItemView[] | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
-  const key = new RetryKey();
-
-  // 창을 열 때마다 처음부터.
-  $effect(() => {
-    if (day === undefined) return;
-    date = day;
+  let retry = $state<{ id: string; payload: string } | null>(null);
+  interface Draft {
+    date: string;
+    title: string;
+    module: string;
+    item: string;
+    retry: typeof retry;
+  }
+  function reset(): void {
+    date = activeDay ?? '';
     title = '';
-    error = undefined;
     pickedModule = moduleId ?? '';
     pickedItem = item?.id ?? '';
-    key.done();
+    retry = null;
+    error = undefined;
+    accountBlocked = false;
+    busy = false;
+  }
+  const draft = createFormDraft<Draft>({
+    name: () =>
+      activeDay === undefined
+        ? undefined
+        : `calendar-task:${workspaceId}:${item?.id ?? moduleId ?? 'workspace'}:${activeDay}`,
+    snapshot: () => ({ date, title, module: pickedModule, item: pickedItem, retry }),
+    parse: (value) => {
+      const o = object(value);
+      if (!o) return;
+      const retry = request(o.retry);
+      if (
+        typeof o.date !== 'string' ||
+        typeof o.title !== 'string' ||
+        typeof o.module !== 'string' ||
+        typeof o.item !== 'string' ||
+        retry === undefined
+      )
+        return;
+      return { date: o.date, title: o.title, module: o.module, item: o.item, retry };
+    },
+    restore: (value) => {
+      date = value.date;
+      title = value.title;
+      pickedModule = value.module;
+      pickedItem = value.item;
+      retry = value.retry;
+    },
+    reset,
+    dirty: () =>
+      title !== '' ||
+      date !== (activeDay ?? '') ||
+      pickedModule !== (moduleId ?? '') ||
+      pickedItem !== (item?.id ?? ''),
+    busy: () => busy,
+  });
+  onMount(draft.attach);
+  $effect(() => {
+    const next = day;
+    untrack(() => {
+      if (next !== activeDay) {
+        draft.leave.keep();
+        draft.leave.request(() => {
+          activeDay = next;
+        });
+      }
+    });
   });
 
   // 워크스페이스 범위: 모듈 목록.
   $effect(() => {
-    if (day === undefined || item !== undefined || moduleId !== undefined) return;
+    if (activeDay === undefined || item !== undefined || moduleId !== undefined) return;
     let cancelled = false;
     modules = undefined;
     api
@@ -77,13 +132,9 @@
   // 고른 모듈의 쓸 수 있는 항목.
   $effect(() => {
     const mod = pickedModule;
-    if (day === undefined || item !== undefined) return;
+    if (activeDay === undefined || item !== undefined) return;
     items = undefined;
     loadError = undefined;
-    // 다른 모듈을 고르면 앞 모듈의 항목 선택은 버린다(새 목록을 읽는 사이 앞 항목에 만들지 않게).
-    untrack(() => {
-      pickedItem = '';
-    });
     if (mod === '') return;
     let cancelled = false;
     api
@@ -108,12 +159,16 @@
   /** 닫기. 보내는 중에는 닫지 않는다(늦게 온 결과가 다시 연 창의 날짜로 저장되지 않게). */
   function close(): void {
     if (busy) return;
-    onclose(false);
+    draft.leave.request(() => {
+      onclose(false);
+    });
   }
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy || accountBlocked || me.userId !== editingUser) return;
+    if (busy || accountBlocked) return;
+    const attempt = draft.capture();
+    if (attempt === undefined) return;
     error = undefined;
     const name = title.trim();
     if (name === '' || targetId === '') {
@@ -128,23 +183,27 @@
     const due = date;
     busy = true;
     try {
-      const requestId = key.for({ item: targetId, title: name, due });
-      const created = await api.createTask(editingUser, targetId, requestId, name, null, {
+      const payload = JSON.stringify({ item: targetId, title: name, due });
+      if (retry?.payload !== payload) retry = { id: newRequestId(), payload };
+      const saving = draft.capture();
+      if (saving === undefined) return;
+      const created = await api.createTask(attempt.userId, targetId, retry.id, name, null, {
         due_date: due,
       });
-      key.done(requestId);
+      if (!draft.complete(saving)) return;
       oncreated(created);
     } catch (e: unknown) {
+      if (!draft.isOwner(attempt)) return;
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
       error = errorText(e, m.events_task_create_failed());
     } finally {
-      busy = false;
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 </script>
 
 <Dialog.Root
-  open={day !== undefined}
+  open={activeDay !== undefined}
   onOpenChange={(o: boolean) => {
     if (!o) close();
   }}
@@ -163,15 +222,25 @@
       <Dialog.Title>{m.events_task_create_title()}</Dialog.Title>
       <Dialog.Description>{m.events_task_create_description()}</Dialog.Description>
     </Dialog.Header>
-    {#if accountBlocked || me.userId !== editingUser}<p role="alert">
+    {#if accountBlocked || !draft.active}<p role="alert">
         {m.tasks_account_changed()}
       </p>{/if}
     <form
-      hidden={accountBlocked || me.userId !== editingUser}
+      hidden={accountBlocked || !draft.active}
       class="flex flex-col gap-3"
       onsubmit={(e) => void submit(e)}
       novalidate
     >
+      {#each draft.offers as offer (offer.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            draft.restore(offer);
+          }}
+          ondiscard={() => {
+            draft.discard(offer);
+          }}
+        />
+      {/each}
       {#if item !== undefined}
         <p class="text-sm">{m.events_task_in_item({ title: item.title })}</p>
       {:else}
@@ -230,5 +299,10 @@
         </Button>
       </Dialog.Footer>
     </form>
+    <DiscardChangesConfirm
+      open={draft.leave.open}
+      onkeep={draft.leave.keep}
+      ondiscard={draft.discardAndLeave}
+    />
   </Dialog.Content>
 </Dialog.Root>

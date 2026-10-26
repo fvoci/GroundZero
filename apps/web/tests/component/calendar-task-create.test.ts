@@ -292,3 +292,4 @@ describe('creating a task from a calendar day', () => {
     );
   });
 });
+import './fixtures/event-user';

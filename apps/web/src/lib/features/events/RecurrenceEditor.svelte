@@ -2,6 +2,10 @@
   // 반복 규칙 입력(업무·일정 공통, D-31). 단순한 규칙만: 매일·매주(요일)·매달·매년, 간격, 끝(없음·날짜·횟수).
   // 없는 날(31일·2월 29일)은 건너뛴다. 저장하면 이미 만든 회차는 바뀌지 않는다.
   import type { Frequency, RecurrenceRule } from '$lib/api/client';
+  import { onDestroy, untrack } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import { parseRuleDraft, type RuleDraft } from './input-drafts';
   import { ApiError, FREQUENCIES } from '$lib/api/client';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
@@ -20,11 +24,26 @@
     canEdit: boolean;
     /** 이 반복의 시간대(업무는 "오늘"의 기준, 일정은 일정 시간대). */
     zoneNote: string;
-    onsave: (rule: RecurrenceRule | null) => Promise<void>;
+    onsave: (rule: RecurrenceRule | null, baseRule?: RecurrenceRule | null) => Promise<void>;
+    draftName?: string;
+    onunsaved?: (value: boolean) => void;
+    ondraftkept?: (value: boolean) => void;
+    onsaving?: (value: boolean) => void;
     untilError?: string | undefined;
   }
 
-  const { idPrefix, rule, canEdit, zoneNote, onsave, untilError }: Props = $props();
+  const {
+    idPrefix,
+    rule,
+    canEdit,
+    zoneNote,
+    onsave,
+    untilError,
+    draftName,
+    onunsaved,
+    ondraftkept,
+    onsaving,
+  }: Props = $props();
 
   const FREQ_LABEL: Record<Frequency | 'none', string> = {
     get none() {
@@ -68,6 +87,51 @@
   let saved = $state(false);
   let localUntilError = $state<string | undefined>(undefined);
   let conflicted = $state(false);
+  let baseFields = $state(initial());
+  let baseRule = $state.raw(untrack(() => rule));
+  const dirty = $derived(JSON.stringify(f) !== JSON.stringify(baseFields));
+  const draft = createFormDraft<RuleDraft>({
+    name: () => draftName,
+    snapshot: () => ({ fields: { ...f, weekdays: [...f.weekdays] }, baseFields, base: baseRule }),
+    parse: parseRuleDraft,
+    restore: (value) => {
+      Object.assign(f, value.fields);
+      baseFields = value.baseFields;
+      baseRule = value.base;
+    },
+    reset: () => {
+      Object.assign(f, initial());
+      baseFields = initial();
+      baseRule = rule;
+      error = undefined;
+      busy = false;
+      saved = false;
+      conflicted = false;
+      localUntilError = undefined;
+    },
+    dirty: () => dirty,
+    busy: () => busy,
+  });
+  export function discardDraft(): void {
+    if (busy) return;
+    const attempt = draft.capture();
+    if (attempt !== undefined && draft.complete(attempt)) return;
+    Object.assign(f, baseFields);
+    draft.persist();
+  }
+  export function isSaving(): boolean {
+    return busy;
+  }
+  $effect(() => {
+    onunsaved?.(dirty);
+    ondraftkept?.(draft.kept);
+    onsaving?.(busy);
+  });
+  onDestroy(() => {
+    onunsaved?.(false);
+    ondraftkept?.(true);
+    onsaving?.(false);
+  });
 
   /** 입력을 규칙으로. 틀린 값은 조용히 바꾸지 않고 오류 글로 돌려준다. */
   function build(): RecurrenceRule | null | string {
@@ -92,22 +156,31 @@
 
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy) return;
+    if (busy || !canEdit) return;
+    const attempt = draftName === undefined ? undefined : draft.capture();
+    if (draftName !== undefined && attempt === undefined) return;
     error = undefined;
     localUntilError = undefined;
     saved = false;
-    const rule = build();
-    if (typeof rule === 'string') {
-      error = rule;
+    const proposed = build();
+    if (typeof proposed === 'string') {
+      error = proposed;
       return;
     }
     busy = true;
+    const savedFields = { ...f, weekdays: [...f.weekdays] };
     try {
-      await onsave(rule);
+      await onsave(proposed, baseRule);
+      if (attempt !== undefined && !draft.complete(attempt)) return;
+      Object.assign(f, savedFields);
+      baseFields = savedFields;
+      baseRule = proposed;
+      draft.persist();
       saved = true;
       conflicted = false;
       notifyDone(m.common_saved());
     } catch (e: unknown) {
+      if (attempt !== undefined && !draft.isOwner(attempt)) return;
       // #76: 반복 끝이 첫 회차보다 앞서면 반복 끝 칸 옆에 구체 이유를 보인다.
       if (
         e instanceof ApiError &&
@@ -118,23 +191,34 @@
         return;
       }
       conflicted = e instanceof ApiError && e.code === 'rule_conflict';
+      if (conflicted) baseRule = rule;
       // 그사이 다른 사람이 규칙을 바꿨다(서버 409). 입력한 칸은 그대로 두고, 요약(서버 규칙)과 함께 알린다.
       error =
         e instanceof ApiError && e.code === 'rule_conflict'
           ? m.events_rule_changed_meanwhile()
           : errorText(e, m.events_recurrence_save_failed());
     } finally {
-      busy = false;
+      if (attempt === undefined || draft.isOwner(attempt)) busy = false;
     }
   }
 </script>
 
 <section class="flex flex-col gap-2" aria-labelledby={`${idPrefix}-heading`}>
+  {#each draft.offers as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(offer);
+      }}
+      ondiscard={() => {
+        draft.discard(offer);
+      }}
+    />
+  {/each}
   <h3 id={`${idPrefix}-heading`} class="text-sm font-semibold">{m.events_recurrence()}</h3>
   <p class="text-sm text-muted-foreground">
     {rule === null ? m.events_no_recurrence() : describeRule(rule)} ({zoneNote})
   </p>
-  {#if canEdit}
+  {#if canEdit && (draftName === undefined || draft.active)}
     <form class="flex flex-wrap items-end gap-3" onsubmit={(e) => void save(e)}>
       <div class="flex flex-col gap-1">
         <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}>{m.events_frequency()}</span
