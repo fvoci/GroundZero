@@ -55,18 +55,22 @@
 
   const request = $derived({ from: weekStart, to: weekEnd, key: reloadKey });
   let listOwner: string | undefined;
+  let listOrganization: string | undefined;
   $effect(() => {
     const { from, to } = request;
     const userId = me.userId;
-    if (org.currentId === undefined) return;
-    if (listOwner !== userId) {
+    const organizationId = org.currentId;
+    if (listOwner !== userId || listOrganization !== organizationId) {
       entries = [];
       daily = [];
       monthly = [];
       loaded = false;
+      error = undefined;
       editing = undefined;
       listOwner = userId;
+      listOrganization = organizationId;
     }
+    if (organizationId === undefined) return;
     const monthFrom = `${today.slice(0, 7)}-01`;
     let cancelled = false;
     Promise.all([

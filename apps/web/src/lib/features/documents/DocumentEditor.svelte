@@ -504,6 +504,7 @@
         // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
         const kept =
           accountSwitching() &&
+          !reservedDraft &&
           storeDraft(server.id, {
             baseRevision: server.revision,
             title,
