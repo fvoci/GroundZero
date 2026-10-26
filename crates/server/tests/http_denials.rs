@@ -339,6 +339,10 @@ async fn sharing_and_moving_cannot_cross_organization_boundaries() {
     .await;
     assert_eq!(moved.status, StatusCode::CONFLICT, "{}", moved.json);
     assert_eq!(
+        moved.json["message"],
+        "documents move within the organization"
+    );
+    assert_eq!(
         one(
             &w.state,
             &w.owner,

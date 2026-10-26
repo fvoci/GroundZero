@@ -505,6 +505,143 @@ async fn organization_and_workspace_invitations_have_typed_context_and_responses
 }
 
 #[tokio::test]
+async fn organization_names_on_create_use_configured_unicode_validation() {
+    let state =
+        fvoci_server::app::build_state(common::config_with(&[("FVOCI_MAX_TITLE_CHARS", "4")]))
+            .unwrap();
+    let app = common::app(&state);
+    let server = login(&state, "name-validation-server").await;
+    common::make_server_admin(&server).await;
+    let first = login(&state, "name-validation-admin").await;
+    let mut failures = Vec::new();
+    for name in ["", " \t\u{2003}\u{00a0}", "a\nb", "a\u{7f}b", "가나다라마"] {
+        let request_id = Uuid::now_v7();
+        let response = request(
+            &app,
+            Method::POST,
+            "/api/server/organizations",
+            &server,
+            Some(json!({"request_id":request_id,"name":name,"first_admin_user_id":first.id})),
+        )
+        .await;
+        if response.status != StatusCode::BAD_REQUEST {
+            failures.push(format!(
+                "create {name:?}: expected400, got {} {}",
+                response.status, response.json
+            ));
+        }
+        if !rows(
+            &state,
+            &first,
+            "SELECT id FROM fvoci.organizations WHERE request_id=$1",
+            &[request_id],
+        )
+        .await
+        .is_empty()
+        {
+            failures.push(format!("create {name:?}: rejected name was stored"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    for (raw, normalized) in [
+        ("\t\u{2003}한글😀é\u{00a0}\n", "한글😀é"),
+        (" e\u{301}😀a ", "e\u{301}😀a"),
+        (" 가 나😀 ", "가 나😀"),
+    ] {
+        let created = expect(
+            &app,
+            Method::POST,
+            "/api/server/organizations",
+            &server,
+            Some(json!({"request_id":Uuid::now_v7(),"name":raw,"first_admin_user_id":first.id})),
+            201,
+        )
+        .await;
+        let org = format!("/api/organizations/{}", created["id"].as_str().unwrap());
+        assert_eq!(
+            expect(&app, Method::GET, &org, &first, None, 200).await["name"],
+            normalized
+        );
+    }
+    state.db.close().await;
+}
+
+#[tokio::test]
+async fn organization_names_on_settings_preserve_patch_semantics() {
+    let state =
+        fvoci_server::app::build_state(common::config_with(&[("FVOCI_MAX_TITLE_CHARS", "4")]))
+            .unwrap();
+    let app = common::app(&state);
+    let server = login(&state, "settings-name-server").await;
+    common::make_server_admin(&server).await;
+    let admin = login(&state, "settings-name-admin").await;
+    let created = expect(
+        &app,
+        Method::POST,
+        "/api/server/organizations",
+        &server,
+        Some(json!({"request_id":Uuid::now_v7(),"name":"기존","first_admin_user_id":admin.id})),
+        201,
+    )
+    .await;
+    let org = format!("/api/organizations/{}", created["id"].as_str().unwrap());
+    let settings = format!("{org}/settings");
+    expect(&app, Method::PUT, &settings, &admin,
+        Some(json!({"max_file_bytes":10,"max_storage_bytes":2,"max_concurrent_uploads":3,"public_links_enabled":false})), 200).await;
+    let mut failures = Vec::new();
+    for name in ["", " \t\u{2003}\u{00a0}", "a\nb", "a\u{7f}b", "가나다라마"] {
+        let before = expect(&app, Method::GET, &org, &admin, None, 200).await;
+        let response = request(
+            &app,
+            Method::PUT,
+            &settings,
+            &admin,
+            Some(json!({"name":name,"max_file_bytes":null,"public_links_enabled":true})),
+        )
+        .await;
+        if response.status != StatusCode::BAD_REQUEST {
+            failures.push(format!(
+                "settings {name:?}: expected400, got {} {}",
+                response.status, response.json
+            ));
+        }
+        if expect(&app, Method::GET, &org, &admin, None, 200).await != before {
+            failures.push(format!("settings {name:?}: rejection changed settings"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+
+    let renamed = expect(&app, Method::PUT, &settings, &admin,
+        Some(json!({"name":"\t\u{2003}한글😀é\u{00a0}\n","max_file_bytes":null,"max_storage_bytes":7,"public_links_enabled":true})), 200).await;
+    assert_eq!(renamed["name"], "한글😀é");
+    assert!(renamed["limits"]["max_file_bytes"].is_null());
+    assert_eq!(renamed["limits"]["max_storage_bytes"], 7);
+    assert_eq!(renamed["limits"]["max_concurrent_uploads"], 3);
+    assert_eq!(renamed["public_links_enabled"], true);
+    let unchanged_name = expect(
+        &app,
+        Method::PUT,
+        &settings,
+        &admin,
+        Some(json!({"max_storage_bytes":8})),
+        200,
+    )
+    .await;
+    assert_eq!(unchanged_name["name"], "한글😀é");
+    for rejected in [
+        json!({"name":null,"max_storage_bytes":9}),
+        json!({"name":"\u{2003}이름\u{00a0}","max_file_bytes":null,"unknown":{"nested":[null,1]}}),
+    ] {
+        expect(&app, Method::PUT, &settings, &admin, Some(rejected), 400).await;
+        assert_eq!(
+            expect(&app, Method::GET, &org, &admin, None, 200).await,
+            unchanged_name
+        );
+    }
+    state.db.close().await;
+}
+
+#[tokio::test]
 async fn settings_validate_patch_preserve_null_and_require_expected_user() {
     let w = World::new().await;
     let app = common::app(&w.state);
