@@ -105,6 +105,22 @@
     $props();
 
   const editingUser = untrack(() => me.userId);
+  interface ChildEditor {
+    discardInput(): boolean;
+    isSaving(): boolean;
+  }
+  let commentsEditor = $state<ChildEditor>();
+  let checklistEditor = $state<ChildEditor>();
+  const childSaving = $derived(
+    commentsEditor?.isSaving() === true || checklistEditor?.isSaving() === true,
+  );
+
+  export function discardChildInput(): boolean {
+    if (childSaving || saving) return false;
+    commentsEditor?.discardInput();
+    checklistEditor?.discardInput();
+    return true;
+  }
   let accountBlocked = $state(false);
   const hiddenForAccount = $derived(accountBlocked || me.userId !== editingUser);
   async function verifyAccount(): Promise<void> {
@@ -494,7 +510,7 @@
     };
   });
   $effect(() => {
-    onsaving?.(saving);
+    onsaving?.(saving || childSaving);
     return () => {
       onsaving?.(false);
     };
@@ -1696,6 +1712,7 @@
         {/if}
 
         <ChecklistForm
+          bind:this={checklistEditor}
           idPrefix={`task-${current.id}`}
           items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
           {canEdit}
@@ -1724,6 +1741,7 @@
         <TaskTimePanel taskId={current.id} />
         <!-- 작업자 C: 댓글 입력은 서버 접근 등급으로 연다(D-113). -->
         <CommentsPanel
+          bind:this={commentsEditor}
           target={{ kind: 'task', id: current.id }}
           canWrite={current.access !== 'read'}
           itemId={current.item_id}

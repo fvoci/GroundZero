@@ -47,9 +47,11 @@
   let unsaved = $state(false);
   let commentsUnsaved = $state(false);
   let commentsKept = $state(true);
+  let commentsEditor = $state<{ discardInput(): boolean; isSaving(): boolean }>();
   const commentsIdentity = $derived(`${me.userId}:${documentId}`);
   const commentsLeave = createLeaveGuard({
     dirty: () => commentsUnsaved && !accountSwitching(),
+    busy: () => commentsEditor?.isSaving() === true,
     identity: () => commentsIdentity,
   });
   let previousCommentsIdentity = '';
@@ -287,6 +289,7 @@
   />
   {#key doc.id}
     <CommentsPanel
+      bind:this={commentsEditor}
       target={{ kind: 'document', id: doc.id }}
       canWrite={doc.access !== 'read'}
       itemId={doc.item_id}
@@ -303,5 +306,7 @@
 <DiscardChangesConfirm
   open={commentsLeave.open}
   onkeep={commentsLeave.keep}
-  ondiscard={commentsLeave.discard}
+  ondiscard={() => {
+    if (commentsEditor?.discardInput() !== false) commentsLeave.discard();
+  }}
 />

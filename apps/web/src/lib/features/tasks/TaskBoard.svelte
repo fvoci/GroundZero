@@ -752,6 +752,7 @@
   let detailSaving = $state(false);
   // 열린 업무의 고친 입력이 이 탭의 브라우저 초안으로 남았는지(TaskDetail이 알린다). 전환 중 떠나기 경고의 기준.
   let detailDraftKept = $state(true);
+  let detailEditor = $state<{ discardChildInput(): boolean }>();
   // 상세 안의 단추(상위·하위·선행·후속·첫 회차)로 다른 업무를 열려다 물었으면 그 업무. 버리기를 고르면 닫지 않고 그것을
   // 연다. 물을 때마다 정한다(확인이 닫히는 동안 문구가 바뀌지 않게 지우지 않는다).
   let openNext = $state<string | undefined>(undefined);
@@ -2253,6 +2254,7 @@
     {#if openTaskId !== undefined}
       {#key openTaskId}
         <TaskDetail
+          bind:this={detailEditor}
           taskId={openTaskId}
           {tasks}
           {workspaces}
@@ -2279,6 +2281,7 @@
   confirmLabel={openNext === undefined ? undefined : m.tasks_discard_open_confirm()}
   onkeep={leave.keep}
   ondiscard={() => {
+    if (detailEditor?.discardChildInput() === false) return;
     for (const lane of newDirty) clearFormDraft(newDraftName(item.id, lane));
     newDirty = new Set();
     newKept = new Map();
