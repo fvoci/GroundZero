@@ -9,6 +9,7 @@ afterEach(() => {
 
 describe('document body typeface (D-86)', () => {
   it('defaults to sans and keeps a serif choice in this browser only', () => {
+    const originalStorage = { ...window.localStorage };
     expect(storedDocFont()).toBe('sans');
     expect(document.documentElement.dataset.docFont).toBeUndefined();
     setDocFont('serif');
@@ -16,7 +17,7 @@ describe('document body typeface (D-86)', () => {
     expect(document.documentElement.dataset.docFont).toBe('serif');
     setDocFont('sans');
     expect(storedDocFont()).toBe('sans');
-    expect(window.localStorage.length).toBe(0);
+    expect({ ...window.localStorage }).toEqual(originalStorage);
     expect(document.documentElement.dataset.docFont).toBeUndefined();
   });
 });

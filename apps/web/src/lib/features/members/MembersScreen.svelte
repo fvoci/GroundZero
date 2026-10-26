@@ -193,11 +193,13 @@
       sequence === loadSequence && workspace.id === wsId && me.userId === userId;
     try {
       const v = await api.members(wsId);
-      const loadedGroups = await api.groups(wsId);
-      const loadedInvitations = v.can_manage_members ? await api.invitations(wsId) : [];
       if (!current()) return;
       view = v;
+      const loadedGroups = await api.groups(wsId);
+      if (!current()) return;
       groups = loadedGroups;
+      const loadedInvitations = v.can_manage_members ? await api.invitations(wsId) : [];
+      if (!current()) return;
       invitations = loadedInvitations;
       error = undefined;
       loadError = undefined;

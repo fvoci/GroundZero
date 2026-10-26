@@ -44,8 +44,9 @@ describe('drafts are per user', () => {
     expect(window.localStorage.getItem('fvoci:draft:doc-2')).not.toBeNull();
 
     me.userId = '';
+    const beforeAnonymousWrite = { ...window.localStorage };
     storeDraft('doc-3', draft);
-    expect(window.localStorage.length).toBe(1);
+    expect({ ...window.localStorage }).toEqual(beforeAnonymousWrite);
   });
 });
 

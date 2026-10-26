@@ -6,15 +6,20 @@ import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
 import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
 import { org } from '$lib/org.svelte';
+import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { ACCESS_DOCUMENT, ACCESS_FILE } from '../../stories/fixtures/access';
 import { comment } from '../../stories/fixtures/comments';
 import { TASK_ITEM, PROJECT_MODULE } from '../../stories/fixtures/synthetic';
 
 beforeEach(async () => {
+  me.userId = 'u1';
   await setLocale('ko', { reload: false });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  me.userId = '';
+});
 
 describe('server access and archived comments (D-20·D-106·D-113)', () => {
   it.each(['document', 'task'] as const)(
