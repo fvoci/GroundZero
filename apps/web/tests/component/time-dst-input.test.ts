@@ -17,6 +17,8 @@ describe('time entries at a wall time that does not exist', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     me.timeZone = ZONE;
+    me.userId = 'user-a';
+    localStorage.clear();
     vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
     vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
     vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
@@ -24,6 +26,8 @@ describe('time entries at a wall time that does not exist', () => {
   });
   afterEach(() => {
     me.timeZone = '';
+    me.userId = '';
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -285,11 +289,13 @@ describe('editing a time entry at a wall time that occurs twice', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     // 항목의 시각은 표시 설정(D-81)을 따르므로 한국어·24시간 표시로 본다.
-    Object.assign(me, { timeZone: ZONE, locale: 'ko', hourCycle: 'h23' });
+    Object.assign(me, { userId: 'user-a', timeZone: ZONE, locale: 'ko', hourCycle: 'h23' });
+    localStorage.clear();
     vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
   });
   afterEach(() => {
-    Object.assign(me, { timeZone: '', locale: '', hourCycle: '' });
+    Object.assign(me, { userId: '', timeZone: '', locale: '', hourCycle: '' });
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 
