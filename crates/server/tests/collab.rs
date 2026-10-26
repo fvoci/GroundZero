@@ -2770,6 +2770,57 @@ async fn live_move_race_setup_rechecking(label: &str, recheck_secs: &str) -> (Te
     (writer, (state, app, addr, admin, from, to, id, e, r))
 }
 
+/// 1초 재확인은 3초 상태 저장 주기를 기다리지 않는다. 여유 250ms는 로컬 소켓 전달/시험 스케줄링용이다.
+#[tokio::test]
+async fn a_one_second_recheck_closes_a_logged_out_connection() {
+    let (writer, (_state, app, _addr, _admin, _from, _to, _id, mut editor, mut reader)) =
+        live_move_race_setup_rechecking("짧은 재확인", "1").await;
+    let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
+    assert!(logout.status.is_success(), "{:?}", logout.json);
+    let closed = tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await;
+    reader.close().await;
+    assert_eq!(closed.ok().flatten(), Some(4403));
+}
+
+/// 저장 쿼리가 잠겨 방이 명령을 읽지 못해도, 연결의 권한 기한은 독립적으로 적용된다.
+#[tokio::test]
+async fn a_one_second_recheck_closes_during_a_blocked_room_persist() {
+    let (writer, (_state, app, _addr, _admin, _from, _to, id, mut editor, mut reader)) =
+        live_move_race_setup_rechecking("저장 대기 중 재확인", "1").await;
+    assert!(
+        editor.until(acked).await,
+        "initial edit was not acknowledged"
+    );
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query(
+        "SELECT 1 FROM fvoci.document_collab_states WHERE document_id = $1::uuid FOR UPDATE",
+    )
+    .bind(&id)
+    .execute(&mut *hold)
+    .await
+    .unwrap();
+    editor.paragraph("잠긴 저장").await;
+    until_waiting_on_lock("app_system_collab_store", holder).await;
+    let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
+    assert!(logout.status.is_success(), "{:?}", logout.json);
+    let closed = tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await;
+    // 실패해도 시험이 잡은 잠금은 먼저 풀어 다른 시험/표준 정리를 막지 않는다.
+    hold.rollback().await.unwrap();
+    owner.close().await;
+    reader.close().await;
+    assert_eq!(
+        closed.ok().flatten(),
+        Some(4403),
+        "room persistence delayed revocation"
+    );
+}
+
 /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
 async fn hold_tree(
     owner: &sqlx::PgPool,
