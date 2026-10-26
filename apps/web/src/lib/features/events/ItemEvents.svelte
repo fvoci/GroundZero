@@ -1,6 +1,7 @@
 <script lang="ts">
   // 항목의 일정(회의·발표·행사, D-31): 목록, 추가, 상세 대화상자.
   import { tick } from 'svelte';
+  import { me } from '$lib/me.svelte';
 
   import type { EventInput, EventView, ItemView } from '$lib/api/client';
   import { api } from '$lib/api/client';
@@ -62,13 +63,16 @@
     void reload(item.id);
   });
 
-  async function create(input: EventInput): Promise<void> {
-    const requestId = createKey.for({ item: item.id, input });
-    await api.createEvent(item.id, requestId, input);
+  async function create(input: EventInput, savedRequestId?: string): Promise<boolean> {
+    const itemId = item.id;
+    const user = me.userId;
+    const requestId = savedRequestId ?? createKey.for({ item: itemId, input });
+    await api.createEvent(itemId, requestId, input);
+    if (item.id !== itemId || me.userId !== user) return false;
     createKey.done(requestId);
-    adding = false;
     onchanged?.();
     await reload();
+    return true;
   }
 
   let returnTo: string | undefined;
@@ -107,15 +111,21 @@
     </p>
   {/if}
   {#if adding}
-    <div class="rounded-md border p-3">
-      <EventForm
-        idPrefix="event-new"
-        initial={undefined}
-        submitLabel={m.events_create()}
-        onsubmit={create}
-        oncancel={() => (adding = false)}
-      />
-    </div>
+    {#key item.id}
+      <div class="rounded-md border p-3">
+        <EventForm
+          idPrefix="event-new"
+          draftName={`event-new:${item.id}`}
+          initial={undefined}
+          submitLabel={m.events_create()}
+          onsubmit={create}
+          onsaved={() => {
+            adding = false;
+          }}
+          oncancel={() => (adding = false)}
+        />
+      </div>
+    {/key}
   {/if}
   <ul class="flex flex-col gap-1">
     {#each events as e (e.id)}

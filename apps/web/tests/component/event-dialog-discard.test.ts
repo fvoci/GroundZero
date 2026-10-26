@@ -148,7 +148,7 @@ describe('closing the event dialog with unsaved input', () => {
     expect(confirmBox()).toBeNull();
   });
 
-  it('does not count spaces the server trims as a change', async () => {
+  it('protects raw whitespace input even when the server would trim it', async () => {
     stub();
     const onclose = vi.fn();
     await open(onclose);
@@ -156,7 +156,8 @@ describe('closing the event dialog with unsaved input', () => {
     await fireEvent.input(field(m.events_description()), { target: { value: ' \n ' } });
     field(m.events_title()).focus();
     await escape();
-    expect(onclose).toHaveBeenCalledTimes(1);
+    await findConfirm();
+    expect(onclose).not.toHaveBeenCalled();
   });
 
   it('asks before Escape drops a changed title, and Escape on the question keeps the input and focus', async () => {
@@ -433,7 +434,7 @@ describe('closing the event dialog with unsaved input', () => {
     expect(field(m.events_title()).value).toBe('내 제목');
   });
 
-  it('drops the question when another event opens, and does not close or carry over to it', async () => {
+  it('requires discarding before another event opens, and does not carry input over to it', async () => {
     stub();
     const onclose = vi.fn();
     const { reopen } = await open(onclose);
@@ -442,6 +443,10 @@ describe('closing the event dialog with unsaved input', () => {
     await escape();
     await findConfirm();
     await reopen('B');
+    expect(field(m.events_title()).value).toBe('새 회의');
+    await fireEvent.click(
+      within(await findConfirm()).getByRole('button', { name: m.common_discard_confirm() }),
+    );
     await screen.findByDisplayValue('다른 회의');
     await waitFor(() => {
       expect(confirmBox()).toBeNull();
@@ -453,3 +458,4 @@ describe('closing the event dialog with unsaved input', () => {
     expect(onclose).toHaveBeenCalledTimes(1);
   });
 });
+import './fixtures/event-user';

@@ -87,7 +87,7 @@ describe('event dialog late results', () => {
       onclose,
       onchanged: () => undefined,
     });
-    const { rerender } = render(EventDialog, { props: props('A') });
+    const { unmount } = render(EventDialog, { props: props('A') });
     await screen.findByDisplayValue('A 일정');
     await fireEvent.input(titleInput(), { target: { value: 'A 새 제목' } });
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
@@ -95,9 +95,9 @@ describe('event dialog late results', () => {
       expect(update).toHaveBeenCalledTimes(1);
     });
 
-    // 부르는 쪽이 창을 닫았다가 B를 연다.
-    await rerender(props(undefined));
-    await rerender(props('B'));
+    // Navigation teardown can unmount even when a request is pending.
+    unmount();
+    render(EventDialog, { props: props('B') });
     await screen.findByDisplayValue('B 일정');
 
     late.resolve({ kind: 'updated', event: ev('A', 2, 'A 새 제목') });
@@ -120,13 +120,13 @@ describe('event dialog late results', () => {
     const onclose = vi.fn();
     const onchanged = vi.fn();
     const props = (eventId: string | undefined) => ({ eventId, onclose, onchanged });
-    const { rerender } = render(EventDialog, { props: props('A') });
+    const { unmount } = render(EventDialog, { props: props('A') });
     await screen.findByDisplayValue('A 일정');
     await fireEvent.click(screen.getByRole('button', { name: m.events_delete_event() }));
     await fireEvent.click(screen.getByRole('button', { name: m.events_delete() }));
 
-    await rerender(props(undefined));
-    await rerender(props('B'));
+    unmount();
+    render(EventDialog, { props: props('B') });
     await screen.findByDisplayValue('B 일정');
 
     late.resolve(undefined);
@@ -285,3 +285,4 @@ describe('event dialog load server', () => {
     );
   });
 });
+import './fixtures/event-user';
