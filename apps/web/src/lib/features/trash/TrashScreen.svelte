@@ -33,10 +33,11 @@
   let confirmPurge = $state<string | undefined>(undefined);
   let days = $state('');
   let editingDays = $state(false);
-  let savedDays = $state('');
+  // undefined는 아직 모르는 서버 값이다. 빈 문자열 초안을 서버와 같다고 지우지 않는다.
+  let savedDays = $state<string | undefined>();
   let versionDays = $state('');
   let editingVersionDays = $state(false);
-  let savedVersionDays = $state('');
+  let savedVersionDays = $state<string | undefined>();
   // 보존 기간 칸의 입력·저장 오류는 그 칸 옆에 보인다(D-82).
   let daysError = $state<string | undefined>(undefined);
   let versionDaysError = $state<string | undefined>(undefined);
@@ -63,8 +64,8 @@
       loadedContext = owner;
       untrack(() => {
         trash = undefined;
-        savedDays = days = '';
-        savedVersionDays = versionDays = '';
+        savedDays = savedVersionDays = undefined;
+        days = versionDays = '';
         editingDays = editingVersionDays = false;
         daysError = versionDaysError = error = undefined;
         status = '';
@@ -105,7 +106,7 @@
       daysError = undefined;
     },
     reset: () => {
-      days = savedDays;
+      days = savedDays ?? '';
       editingDays = false;
       daysError = undefined;
     },
@@ -122,7 +123,7 @@
       versionDaysError = undefined;
     },
     reset: () => {
-      versionDays = savedVersionDays;
+      versionDays = savedVersionDays ?? '';
       editingVersionDays = false;
       versionDaysError = undefined;
     },
