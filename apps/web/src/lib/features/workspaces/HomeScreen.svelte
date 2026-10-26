@@ -54,11 +54,13 @@
     {@const organizationId = org.currentId}
     <CreateForm
       id="new-workspace"
+      draftName={`workspace-new:${organizationId}`}
       label={m.workspaces_new_name()}
       placeholder={m.workspaces_new_placeholder()}
       submitLabel={m.workspaces_create()}
-      create={async (requestId: string, name: string) => {
+      create={async (requestId, name, context) => {
         const ws = await api.createWorkspace(requestId, organizationId, name);
+        if (!context.saved()) return;
         oncreated(ws);
         router.navigate(workspacePath(ws.id));
       }}
