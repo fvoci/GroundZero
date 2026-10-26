@@ -3108,15 +3108,27 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
 /// 커밋 전 큐 편집의 본문 검사를 잠시 멈춘 사이 새 자리의 재확인이 먼저 연결을 닫는 순서를 강제한다.
 #[test]
 fn a_post_commit_access_check_does_not_discard_the_movers_pending_edits() {
-    post_commit_validation_race(false);
+    post_commit_validation_race(PostCommitCheck::Denied);
 }
 
 #[test]
 fn a_session_ending_during_post_commit_validation_still_discards_the_pending_edit() {
-    post_commit_validation_race(true);
+    post_commit_validation_race(PostCommitCheck::SessionEnded);
 }
 
-fn post_commit_validation_race(logout_during_validation: bool) {
+#[test]
+fn a_move_between_writable_realtime_workspaces_keeps_the_pending_edit() {
+    post_commit_validation_race(PostCommitCheck::Allowed);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PostCommitCheck {
+    Denied,
+    SessionEnded,
+    Allowed,
+}
+
+fn post_commit_validation_race(scenario: PostCommitCheck) {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .max_blocking_threads(1)
@@ -3125,6 +3137,15 @@ fn post_commit_validation_race(logout_during_validation: bool) {
         .block_on(async {
             let (writer, (_state, app, _addr, admin, _from, to, id, mut editor, reader)) =
                 live_move_race_setup_rechecking("커밋 뒤 권한 확인 경합", "1").await;
+            if scenario == PostCommitCheck::Allowed {
+                let mut fixture = common::fixture_conn().await;
+                sqlx::query("INSERT INTO fvoci.workspace_members (workspace_id, user_id, role) VALUES ($1::uuid, $2, 'member')")
+                    .bind(&to).bind(writer.id.0).execute(&mut fixture).await.unwrap();
+                sqlx::Connection::close(fixture).await.unwrap();
+                let on = send(&app, Method::PUT, &format!("/api/workspaces/{to}/realtime"),
+                    Some(&admin), Some(json!({"enabled":true}))).await;
+                assert_eq!(on.status, StatusCode::NO_CONTENT, "{:?}", on.json);
+            }
             assert!(
                 editor.until(acked).await,
                 "checkpoint edit was not acknowledged"
@@ -3151,10 +3172,17 @@ fn post_commit_validation_race(logout_during_validation: bool) {
             editor.read_by_server().await;
             hold.rollback().await.unwrap();
 
-            let closed = tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await;
+            let early_close = if scenario == PostCommitCheck::Allowed {
+                // 정밀한 source TTL 전후는 주입 시각 unit이 검사한다. 여기서는 양쪽 쓰기/실시간 경로를 검사한다.
+                tokio::time::sleep(Duration::from_millis(600)).await;
+                editor.read_by_server().await;
+                None
+            } else {
+                tokio::time::timeout(Duration::from_millis(1250), editor.closed()).await.ok().flatten()
+            };
             let waited_for_validation = !moving.is_finished();
             let acknowledged_before_release = acked(&editor);
-            if logout_during_validation {
+            if scenario == PostCommitCheck::SessionEnded {
                 let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
                 assert!(logout.status.is_success(), "{:?}", logout.json);
             }
@@ -3166,14 +3194,15 @@ fn post_commit_validation_race(logout_during_validation: bool) {
                 .unwrap()
                 .unwrap();
             let saved = get_doc(&app, &admin, &id).await;
+            let closed = if scenario == PostCommitCheck::Allowed { editor.closed().await } else { early_close };
             let (revision, author) = last_revision(&owner, &id).await;
             let (_, edited_by) = revision_authors(&owner, &id, revision).await;
             owner.close().await;
             reader.close().await;
 
             assert_eq!(
-                closed.ok().flatten(),
-                Some(4403),
+                closed,
+                Some(if scenario == PostCommitCheck::Allowed { 4409 } else { 4403 }),
                 "new-place access check must end the connection"
             );
             assert!(
@@ -3191,12 +3220,19 @@ fn post_commit_validation_race(logout_during_validation: bool) {
                 saved["body"]
                     .to_string()
                     .contains("이동자가 대리 저장할 커밋 전 편집"),
-                !logout_during_validation,
-                "logout_during_validation={logout_during_validation}: {saved}"
+                scenario != PostCommitCheck::SessionEnded,
+                "scenario={scenario:?}: {saved}"
             );
-            if !logout_during_validation {
-                assert_eq!(author, admin.id.0);
-                assert_eq!(edited_by, Some(vec![writer.id.0]));
+            match scenario {
+                PostCommitCheck::Denied => {
+                    assert_eq!(author, admin.id.0);
+                    assert_eq!(edited_by, Some(vec![writer.id.0]));
+                },
+                PostCommitCheck::Allowed => {
+                    assert_eq!(author, writer.id.0);
+                    assert_eq!(edited_by, None);
+                },
+                PostCommitCheck::SessionEnded => {},
             }
         });
 }

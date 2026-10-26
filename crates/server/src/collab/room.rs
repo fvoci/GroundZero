@@ -32,7 +32,7 @@ use yrs::updates::encoder::Encode;
 use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
-use super::lease::{Lease, WritePermit};
+use super::lease::{Lease, MovePermit, WritePermit};
 use crate::config::Limits;
 use crate::db::Db;
 use crate::error::AppError;
@@ -739,27 +739,20 @@ struct Pending {
 #[derive(Debug, Clone)]
 enum EditAuthorization {
     Current,
-    BeforeMove {
-        permit: WritePermit,
-        committed: Instant,
-    },
+    BeforeMove { permit: MovePermit },
 }
 
 impl EditAuthorization {
     fn allows(&self, access: &Lease) -> bool {
         match self {
             Self::Current => access.permission() == Some(true),
-            Self::BeforeMove { permit, committed } => permit.move_deadline(*committed).is_some(),
+            Self::BeforeMove { permit } => permit.deadline().is_some(),
         }
     }
 
     async fn check_session(&self, db: &Db, peer: &Peer) -> Result<(), CloseReason> {
         match self {
-            Self::BeforeMove { permit, committed } => {
-                permit
-                    .check_session(*committed, session_alive(db, peer))
-                    .await
-            }
+            Self::BeforeMove { permit } => permit.check_session(session_alive(db, peer)).await,
             Self::Current => match peer.access.until_closed(session_alive(db, peer)).await {
                 Ok(Some(true)) => Ok(()),
                 Ok(Some(false)) => Err(CloseReason::AccessLost),
@@ -1154,14 +1147,12 @@ impl Room {
                 }) => {
                     if received <= committed_at
                         && let Some(permit) = permit
+                        && let Some(permit) = permit.freeze_move(committed_at)
                     {
                         self.incoming_with_authorization(
                             conn,
                             &data,
-                            EditAuthorization::BeforeMove {
-                                permit,
-                                committed: committed_at,
-                            },
+                            EditAuthorization::BeforeMove { permit },
                         );
                     }
                 }

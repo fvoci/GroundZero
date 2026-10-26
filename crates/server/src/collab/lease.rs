@@ -1,5 +1,6 @@
 //! 연결의 마지막 유효한 권한 확인에 기한을 둔다. 방 작업과 소켓 송신이 기다려도 기한은 연장되지 않는다.
 
+use std::collections::VecDeque;
 use std::future::Future;
 use std::time::Duration;
 
@@ -28,10 +29,17 @@ struct State {
     closed: Option<Closed>,
 }
 
+#[derive(Debug)]
+struct Verifications {
+    current: State,
+    /// 커밋 경계가 나중에 알려져도 마지막 source 확인을 찾는다. 유효 기간이 끝난 기록은 남기지 않는다.
+    checks: VecDeque<Check>,
+}
+
 /// 소켓과 방이 함께 보는 연결별 권한 유효 기간. 닫힌 연결은 다시 유효해지지 않는다.
 #[derive(Debug, Clone)]
 pub(crate) struct Lease {
-    state: watch::Sender<State>,
+    state: watch::Sender<Verifications>,
     period: Duration,
 }
 
@@ -43,14 +51,55 @@ pub(crate) struct WritePermit {
 }
 
 impl WritePermit {
-    pub(crate) fn move_deadline(&self, committed: std::time::Instant) -> Option<Instant> {
-        self.move_deadline_at(Instant::from_std(committed), Instant::now())
+    pub(crate) fn freeze_move(&self, committed: std::time::Instant) -> Option<MovePermit> {
+        self.freeze_move_at(Instant::from_std(committed), Instant::now())
     }
 
+    #[cfg(test)]
     fn move_deadline_at(&self, committed: Instant, now: Instant) -> Option<Instant> {
+        self.freeze_move_at(committed, now)
+            .and_then(|permit| permit.deadline_at(now))
+    }
+
+    fn freeze_move_at(&self, committed: Instant, now: Instant) -> Option<MovePermit> {
+        self.access.current_at(now);
+        let source_deadline = self
+            .access
+            .state
+            .borrow()
+            .checks
+            .iter()
+            .filter(|check| check.finished <= committed)
+            .map(|check| check.started + self.access.period)
+            .max()
+            .unwrap_or(self.deadline)
+            .max(self.deadline);
+        let permit = MovePermit {
+            access: self.access.clone(),
+            committed,
+            deadline: source_deadline,
+        };
+        permit.deadline_at(now).map(|_| permit)
+    }
+}
+
+/// 커밋 경계에서 확정한 대리 저장 근거. 현재 위치의 성공 확인은 이 기한을 바꾸지 않는다.
+#[derive(Debug, Clone)]
+pub(crate) struct MovePermit {
+    access: Lease,
+    committed: Instant,
+    deadline: Instant,
+}
+
+impl MovePermit {
+    pub(crate) fn deadline(&self) -> Option<Instant> {
+        self.deadline_at(Instant::now())
+    }
+
+    fn deadline_at(&self, now: Instant) -> Option<Instant> {
         let state = self.access.current_at(now);
         if state.closed.is_some_and(|closed| {
-            closed.at <= committed
+            closed.at <= self.committed
                 || !matches!(
                     closed.reason,
                     CloseReason::AccessLost | CloseReason::RealtimeOff
@@ -58,23 +107,16 @@ impl WritePermit {
         }) {
             return None;
         }
-        // 커밋 전에 끝난 유효한 재확인만 기존 근거를 갱신할 수 있다. 새 위치의 권한으로 옛 입력을 승인하지 않는다.
-        let deadline = if state.check.is_some_and(|check| check.finished <= committed) {
-            self.deadline.max(state.deadline)
-        } else {
-            self.deadline
-        };
-        (now < deadline).then_some(deadline)
+        (now < self.deadline).then_some(self.deadline)
     }
 
     pub(crate) async fn check_session(
         &self,
-        committed: std::time::Instant,
         check: impl Future<Output = Option<bool>>,
     ) -> Result<(), CloseReason> {
-        let deadline = self.move_deadline(committed).ok_or(CloseReason::Busy)?;
+        let deadline = self.deadline().ok_or(CloseReason::Busy)?;
         match tokio::time::timeout_at(deadline, check).await {
-            Ok(Some(true)) if self.move_deadline(committed).is_some() => Ok(()),
+            Ok(Some(true)) if self.deadline().is_some() => Ok(()),
             Ok(Some(false)) => Err(CloseReason::AccessLost),
             _ => Err(CloseReason::Busy),
         }
@@ -83,17 +125,25 @@ impl WritePermit {
 
 impl Lease {
     pub(crate) fn new(can_write: bool, started: Instant, period: Duration) -> Self {
-        let (state, _) = watch::channel(State {
-            check: None,
-            deadline: started + period,
-            can_write,
-            closed: None,
+        let (state, _) = watch::channel(Verifications {
+            current: State {
+                check: None,
+                deadline: started + period,
+                can_write,
+                closed: None,
+            },
+            checks: VecDeque::new(),
         });
         Self { state, period }
     }
 
     fn current_at(&self, now: Instant) -> State {
-        self.state.send_if_modified(|state| {
+        self.state.send_if_modified(|verifications| {
+            let previous_len = verifications.checks.len();
+            verifications
+                .checks
+                .retain(|check| now < check.started + self.period);
+            let state = &mut verifications.current;
             if state.closed.is_none() && now >= state.deadline {
                 state.closed = Some(Closed {
                     reason: CloseReason::Busy,
@@ -101,10 +151,10 @@ impl Lease {
                 });
                 true
             } else {
-                false
+                verifications.checks.len() != previous_len
             }
         });
-        *self.state.borrow()
+        self.state.borrow().current
     }
 
     pub(crate) fn permission(&self) -> Option<bool> {
@@ -131,7 +181,8 @@ impl Lease {
     }
 
     fn close_at(&self, reason: CloseReason, at: Instant) {
-        self.state.send_if_modified(|state| {
+        self.state.send_if_modified(|verifications| {
+            let state = &mut verifications.current;
             if state.closed.is_some() {
                 return false;
             }
@@ -146,7 +197,8 @@ impl Lease {
     }
 
     fn confirm_at(&self, started: Instant, can_write: bool, now: Instant) {
-        self.state.send_if_modified(|state| {
+        self.state.send_if_modified(|verifications| {
+            let state = &mut verifications.current;
             if state.closed.is_some() {
                 return false;
             }
@@ -161,12 +213,17 @@ impl Lease {
                     at: now,
                 });
             } else if state.check.is_none_or(|last| started >= last.started) {
-                state.check = Some(Check {
+                let check = Check {
                     started,
                     finished: now,
-                });
+                };
+                state.check = Some(check);
                 state.deadline = started + self.period;
                 state.can_write = can_write;
+                verifications
+                    .checks
+                    .retain(|check| now < check.started + self.period);
+                verifications.checks.push_back(check);
             } else {
                 return false;
             }
@@ -424,10 +481,9 @@ mod tests {
             lease.confirm(start, true);
             let permit = lease.write_permit().unwrap();
             let committed = std::time::Instant::now();
+            let permit = permit.freeze_move(committed).unwrap();
             lease.close(CloseReason::AccessLost);
-            let result = permit
-                .check_session(committed, std::future::ready(outcome))
-                .await;
+            let result = permit.check_session(std::future::ready(outcome)).await;
             assert_eq!(
                 result,
                 Err(if outcome.is_none() {
@@ -443,11 +499,10 @@ mod tests {
         lease.confirm(start, true);
         let permit = lease.write_permit().unwrap();
         let committed = std::time::Instant::now();
+        let permit = permit.freeze_move(committed).unwrap();
         lease.close(CloseReason::RealtimeOff);
         assert_eq!(
-            permit
-                .check_session(committed, std::future::pending())
-                .await,
+            permit.check_session(std::future::pending()).await,
             Err(CloseReason::Busy)
         );
     }
@@ -463,23 +518,21 @@ mod tests {
             lease.confirm_at(source, true, source);
             let committed = start + Duration::from_millis(400);
             let expected = start + Duration::from_millis(1300);
-            if observed_before_destination {
-                assert_eq!(
-                    permit.move_deadline_at(committed, committed),
-                    Some(expected)
-                );
-            }
+            let frozen = observed_before_destination
+                .then(|| permit.freeze_move_at(committed, committed).unwrap());
             for millis in [500, 600, 700, 800] {
                 let destination = start + Duration::from_millis(millis);
                 lease.confirm_at(destination, true, destination);
             }
+            let now = start + Duration::from_millis(1100);
+            let frozen = frozen.unwrap_or_else(|| permit.freeze_move_at(committed, now).unwrap());
             assert_eq!(
-                permit.move_deadline_at(committed, start + Duration::from_millis(1100)),
+                frozen.deadline_at(now),
                 Some(expected),
                 "observed_before_destination={observed_before_destination}"
             );
             assert!(
-                permit.move_deadline_at(committed, expected).is_none(),
+                frozen.deadline_at(expected).is_none(),
                 "destination success must not extend the frozen source deadline"
             );
         }
