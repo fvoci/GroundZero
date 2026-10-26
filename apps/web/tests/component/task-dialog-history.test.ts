@@ -161,7 +161,7 @@ describe('move menu', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'API 연결 옮기기' }));
     await fireEvent.click(await screen.findByRole('menuitem', { name: 'done(으)로 옮기기' }));
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('2', 'done', null, undefined);
+      expect(move).toHaveBeenCalledWith(expect.any(String), '2', 'done', null, undefined);
     });
   });
 });
@@ -187,12 +187,19 @@ describe('quick add in a column', () => {
     await fireEvent.input(input, { target: { value: '새 업무' } });
     await fireEvent.submit(input.closest('form') ?? input);
     await waitFor(() => {
-      expect(create).toHaveBeenCalledWith('i1', expect.any(String), '새 업무', null, {
-        status: 'in_progress',
-      });
+      expect(create).toHaveBeenCalledWith(
+        expect.any(String),
+        'i1',
+        expect.any(String),
+        '새 업무',
+        null,
+        {
+          status: 'in_progress',
+        },
+      );
       expect(move).not.toHaveBeenCalled();
     });
-    expect(create.mock.calls[0]?.[2]).toBe('새 업무');
+    expect(create.mock.calls[0]?.[3]).toBe('새 업무');
   });
 });
 
@@ -230,9 +237,16 @@ describe('quick add focus, cancel and notice', () => {
     await fireEvent.submit(again.closest('form') ?? again);
     // 전에는 만든 업무가 아직 목록에 없어 ": 옮겼습니다(in_progress)."처럼 제목이 비었다.
     await waitFor(() => {
-      expect(api.createTask).toHaveBeenCalledWith('i1', expect.any(String), '새 업무', null, {
-        status: 'in_progress',
-      });
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.any(String),
+        'i1',
+        expect.any(String),
+        '새 업무',
+        null,
+        {
+          status: 'in_progress',
+        },
+      );
     });
     expect(api.moveTask).not.toHaveBeenCalled();
   });
@@ -301,7 +315,7 @@ describe('drag cancel when the release is not seen', () => {
       clientY: 10,
     });
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('2', 'done', null, undefined);
+      expect(move).toHaveBeenCalledWith(expect.any(String), '2', 'done', null, undefined);
     });
   });
 

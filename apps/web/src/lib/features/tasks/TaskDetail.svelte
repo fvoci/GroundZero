@@ -183,6 +183,11 @@
   // 편집을 시작한 관계의 종류·지연일(새 관계면 null). 저장할 때 함께 보내 그사이 다른 곳에서 바뀌었으면 서버가 409로
   // 거절한다(말없이 덮지 않음).
   let linkBase = $state<LinkBase | null>(null);
+  const linkChanged = $derived(
+    editing === undefined
+      ? predecessorChoice !== '' || linkKind !== 'FS' || lagText !== '0'
+      : linkKind !== linkBase?.kind || lagText !== String(linkBase?.lag_days),
+  );
   let linkStatus = $state('');
   // 관계를 바꾸면 옮겨야 하는 후속 업무(미리보기). 승인하면 본 관계·목록 그대로 보낸다.
   interface LinkPending {
@@ -199,6 +204,7 @@
   // 상위 업무 고르기. 'top'은 최상위로 빼기. 서버 규칙(한 단계, 하위 업무가 있으면 옮길 수 없음)에 맞는 후보만 보인다.
   const TOP = 'top';
   let parentChoice = $state('');
+  let childDraft = $state<{ name: string; requestId: string | null } | undefined>();
   let parentStatus = $state('');
   const parentCandidates = $derived(
     tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
@@ -468,7 +474,13 @@
     );
   });
   // 업무 대화상자가 닫기 전에 버릴지 물을 입력이 있는지(편집할 수 있을 때만).
-  const unsaved = $derived(canEdit && changed);
+  const unsaved = $derived(
+    canEdit &&
+      (changed ||
+      linkChanged ||
+        parentChoice !== '' ||
+        childDraft !== undefined),
+  );
   $effect(() => {
     onunsaved?.(unsaved);
     return () => {
@@ -485,8 +497,7 @@
   // 저장하지 않은 입력의 브라우저 보존(D-96·D-128; 문서 초안 D-27과 같은 규칙, common/form-draft.ts). 입력이 기준과 다르면
   // 이 사용자·이 탭의 키에 남기고 같아지면 지운다. 다시 읽은 뒤(새로고침, 다른 탭에서 계정이 바뀌어 다시 읽음) 같은 계정이
   // 이 업무를 열면 되살릴지 묻는다. 다른 계정은 키가 달라 보지 못하고, 되살린 입력은 사용자가 "저장"을 눌러야 간다(자동
-  // 재전송 없음). 범위는 이탈 확인이 지키는 입력(이 폼)과 같다: 관계 편집 칸·체크리스트 새 항목·댓글 입력은 이탈 확인에도
-  // 들지 않는다.
+  // 재전송 없음). 관계·상위 선택·하위 업무 제목도 이 초안과 이탈 확인에 포함한다.
   /** 선행 관계 편집 칸의 입력(D-128 대표 경로의 "선행 지정"). `editing`은 고치던 관계의 선행 업무, 새 관계면 null. */
   interface LinkDraft {
     editing: string | null;
@@ -503,6 +514,8 @@
     estimateText: string;
     /** 관계 편집 칸에 입력이 있을 때만. 옛 초안에는 없다(null). */
     link: LinkDraft | null;
+    parent: string;
+    child: { name: string; requestId: string | null } | null;
     savedAt: string;
   }
   const draftName = $derived(`task:${taskId}`);
@@ -601,22 +614,32 @@
       tagsText: tags,
       estimateText: estimate,
       link,
+      parent: 'parent' in value && typeof value.parent === 'string' ? value.parent : '',
+      child:
+        'child' in value &&
+        typeof value.child === 'object' &&
+        value.child !== null &&
+        'name' in value.child &&
+        typeof value.child.name === 'string' &&
+        'requestId' in value.child &&
+        (value.child.requestId === null || typeof value.child.requestId === 'string')
+          ? { name: value.child.name, requestId: value.child.requestId }
+          : null,
       savedAt,
     };
   }
   let restorable = $state<StoredFormDraft<TaskDraft> | undefined>(undefined);
+  let childInitial = $state<{ name: string; requestId: string | null } | undefined>();
+  let childSeed = $state(0);
   // 묻는 입력이 보류 키로 옮기지 못해 이 탭의 키에 그대로 있으면(저장소 가득 참) 고를 때까지 그 키에 새 입력을 쓰지 않는다.
   let reserved = false;
   /** 서버 내용과 같은(이미 반영된) 입력인지. 관계 편집 칸에 입력이 남아 있으면 같지 않다. */
   const isServer = (d: TaskDraft, server: TaskDetailView): boolean =>
     d.link === null &&
+    d.parent === '' &&
+    d.child === null &&
     estimateOf(d.estimateText) !== 'invalid' &&
     !edited(formOf(server), inputOf(d.form, d.tagsText, d.estimateText));
-  // 관계 편집 칸에 입력이 있는지(고치는 관계를 열었거나 선행 업무·종류·지연일을 기본값에서 바꿨다). 이 칸은 이탈 확인(`unsaved`)에는
-  // 들지 않고(기존 동작 유지) 브라우저 보존에만 든다.
-  const linkChanged = $derived(
-    editing !== undefined || predecessorChoice !== '' || linkKind !== 'FS' || lagText !== '0',
-  );
   /**
    * 되살릴지 물을 입력을 고른다: 서버와 같은 것은 지우고 가장 새 것을 묻는다. `others`면 이 탭의 지금 입력은 빼고 본다
    * (고른 뒤 다음 것을 물을 때).
@@ -661,6 +684,9 @@
     pending = undefined;
     clashAsk = undefined;
     error = undefined;
+    parentChoice = kept.parent;
+    childInitial = kept.child ?? undefined;
+    childSeed += 1;
     // 관계 편집 칸: 고치던 관계가 아직 있으면 그 편집(기준 관계 포함)을, 없어졌으면 새 관계 입력으로 되살린다. 기준 관계가
     // 그사이 바뀌었으면 "관계 저장"이 서버의 409로 알고 최신 관계를 보인다(말없이 덮지 않음).
     const link = kept.link;
@@ -694,10 +720,10 @@
   $effect(() => {
     const mine = currentInput();
     const before = baseline;
-    const dirty = changed || linkChanged;
+    const dirty = changed || linkChanged || parentChoice !== '' || childDraft !== undefined;
     if (task === undefined || mine === undefined || before === undefined || form === undefined)
       return;
-    if (reserved) return;
+    if (reserved || me.userId !== editingUser) return;
     if (dirty) {
       const kept = storeFormDraft(draftName, {
         baseVersion,
@@ -705,6 +731,8 @@
         form: $state.snapshot(form),
         tagsText,
         estimateText,
+        parent: parentChoice,
+        child: childDraft ?? null,
         link: linkChanged
           ? {
               editing: editing ?? null,
@@ -727,7 +755,7 @@
   // 사용자가 버리고 닫거나 다른 업무를 열어 이 폼이 없어지면 이 탭의 입력도 지운다(방금 버린 입력을 다음에 되살리자고 하지
   // 않게). 다른 계정으로 바뀌어 다시 읽는 중과 새로고침·탭 닫기는 여기를 거치지 않아 입력이 남는다.
   onDestroy(() => {
-    if (!accountSwitching()) clearFormDraft(draftName);
+    if (!accountSwitching() && me.userId === editingUser) clearFormDraft(draftName);
   });
 
   /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
@@ -808,7 +836,13 @@
     // 초점이 문서로 빠지므로 "내 입력으로 다시 저장"으로 돌린다. 폼의 "저장"은 그대로 있으므로 두고(2차 검증 nit),
     // "내 입력으로 다시 저장"·덮어쓰기에서 바로 보낸 저장은 `saveMerged`가 돌린다.
     const refocus = pending !== undefined;
-    const result = await api.updateTask(task.id, baseVersion, input, shifts.map(toShift));
+    const result = await api.updateTask(
+      editingUser,
+      task.id,
+      baseVersion,
+      input,
+      shifts.map(toShift),
+    );
     if (result.kind === 'conflict') {
       pending = undefined;
       conflict = result.current;
@@ -867,6 +901,7 @@
     try {
       const base = latestRule ?? task;
       const fresh = await api.setTaskRecurrence(
+        editingUser,
         task.id,
         rule,
         base.series?.timezone ?? localTimeZone(),
@@ -894,7 +929,7 @@
     error = undefined;
     linkStatus = '';
     try {
-      const fresh = await api.removePredecessor(task.id, predecessor);
+      const fresh = await api.removePredecessor(editingUser, task.id, predecessor);
       if (task.version === fresh.version) task = fresh;
       else refresh(fresh);
       if (editing === predecessor) resetLinkEditor();
@@ -987,6 +1022,7 @@
   ): Promise<void> {
     if (task === undefined) return;
     const result = await api.setPredecessor(
+      editingUser,
       task.id,
       predecessor,
       kind,
@@ -1062,10 +1098,12 @@
   }
 
   async function changeParent(id: string, parentId: string | null): Promise<void> {
+    const choiceAtStart = parentChoice;
     error = undefined;
     parentStatus = '';
     try {
-      const fresh = await api.setTaskParent(id, parentId);
+      const fresh = await api.setTaskParent(editingUser, id, parentId);
+      if (parentChoice === choiceAtStart) parentChoice = '';
       if (task?.version === fresh.version) task = fresh;
       else refresh(fresh);
       parentStatus = m.tasks_parent_changed();
@@ -1114,7 +1152,7 @@
           {#if canEdit}
             <DeleteButton
               what={m.tasks_noun_task()}
-              remove={() => api.trashTask(current.id)}
+              remove={() => api.trashTask(editingUser, current.id)}
               ondeleted={() => {
                 onchanged();
                 router.navigate(itemPath(current.workspace_id, current.item_id));
@@ -1395,7 +1433,6 @@
                 disabled={parentChoice === ''}
                 onclick={() => {
                   const chosen = parentChoice;
-                  parentChoice = '';
                   void changeParent(current.id, chosen === TOP ? null : chosen);
                 }}>{m.tasks_parent_change()}</Button
               >
@@ -1427,16 +1464,28 @@
               <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
             {/each}
             {#if canEdit}
-              <CreateForm
-                id="new-subtask"
-                label={m.tasks_subtask_title()}
-                placeholder={m.tasks_subtask_placeholder()}
-                submitLabel={m.tasks_subtask_add()}
-                create={async (requestId: string, title: string) => {
-                  await api.createTask(current.item_id, requestId, title, current.id);
-                  onchanged();
-                }}
-              />
+              {#key childSeed}
+                <CreateForm
+                  id="new-subtask"
+                  label={m.tasks_subtask_title()}
+                  placeholder={m.tasks_subtask_placeholder()}
+                  submitLabel={m.tasks_subtask_add()}
+                  initial={childInitial}
+                  onchange={(draft) => {
+                    childDraft = draft;
+                  }}
+                  create={async (requestId: string, title: string) => {
+                    await api.createTask(
+                      editingUser,
+                      current.item_id,
+                      requestId,
+                      title,
+                      current.id,
+                    );
+                    onchanged();
+                  }}
+                />
+              {/key}
             {/if}
           </section>
         {/if}
@@ -1647,15 +1696,16 @@
           onadd={(entries: NewChecklistEntry[]) =>
             reloadChecklist(
               api.addChecklist(
+                editingUser,
                 current.id,
                 entries.map((e) => ({ request_id: e.requestId, text: e.text, checked: e.done })),
               ),
             )}
           ontoggle={(id: string, done: boolean) =>
-            reloadChecklist(api.updateChecklistItem(id, { checked: done }))}
+            reloadChecklist(api.updateChecklistItem(editingUser, id, { checked: done }))}
           onrename={(id: string, text: string) =>
-            reloadChecklist(api.updateChecklistItem(id, { text }))}
-          onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(id))}
+            reloadChecklist(api.updateChecklistItem(editingUser, id, { text }))}
+          onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(editingUser, id))}
         />
 
         <TaskTimePanel taskId={current.id} />

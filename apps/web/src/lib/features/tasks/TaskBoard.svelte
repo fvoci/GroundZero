@@ -46,6 +46,8 @@
     storeFormDraft,
   } from '$lib/features/common/form-draft';
   import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay, formatInstant } from '$lib/display';
 
@@ -181,6 +183,40 @@
   }
   let viewName = $state('');
   let viewDefault = $state(false);
+  const viewDirty = $derived(
+    viewName.trim() !== (views.find((v) => v.id === selectedView)?.name ?? ''),
+  );
+  interface ViewDraft {
+    name: string;
+    config: { view: TaskViewMode; filter: TaskFilter; sort: TaskSort; default: boolean };
+  }
+  const viewDraft = createFormDraft<ViewDraft>({
+    name: () => `task-view:${item.id}`,
+    snapshot: () => ({
+      name: viewName,
+      config: { view, filter: { ...filter }, sort, default: viewDefault },
+    }),
+    parse: (value) => {
+      if (!isRecord(value) || typeof value.name !== 'string' || !isRecord(value.config))
+        return undefined;
+      return {
+        name: value.name,
+        config: { ...readConfig(value.config), default: value.config.default === true },
+      };
+    },
+    restore: (value) => {
+      contextTouched = true;
+      viewName = value.name;
+      view = value.config.view;
+      filter = value.config.filter;
+      sort = value.config.sort;
+      viewDefault = value.config.default;
+    },
+    reset: () => {
+      viewName = views.find((v) => v.id === selectedView)?.name ?? '';
+    },
+    dirty: () => viewDirty,
+  });
   let contextTouched = false;
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   const viewKey = new RetryKey();
@@ -280,6 +316,9 @@
   }
 
   function applyView(id: string): void {
+    leave.request(() => applyViewNow(id));
+  }
+  function applyViewNow(id: string): void {
     askingViewDelete = false;
     selectedView = id;
     const v = views.find((x) => x.id === id);
@@ -310,6 +349,8 @@
     const target = views.find((v) => v.name === name);
     // 기다리는 사이 사용자가 목록에서 다른 보기를 고르면 늦은 응답이 그 선택을 되돌리지 않는다.
     const selectedAtStart = selectedView;
+    const draftAttempt = viewDraft.capture();
+    if (draftAttempt === undefined) return;
     try {
       const requestId = viewKey.for({
         item: itemId,
@@ -321,6 +362,7 @@
         target === undefined
           ? await api.createView(itemId, requestId, name, config)
           : await api.updateView(target.id, requestId, target.version, config);
+      if (!viewDraft.isOwner(draftAttempt)) return;
       viewKey.done(requestId);
       // 응답이 준 보기(저장한 것 또는 409의 최신)는 목록 다시 읽기가 실패해도 남긴다. 비면 다시 저장이 PUT 대신 POST가
       // 되어 또 409였다(CodeRabbit).
@@ -336,6 +378,7 @@
         error = m.tasks_view_conflict({ name });
         return;
       }
+      if (draftAttempt !== undefined) viewDraft.complete(draftAttempt);
       notifyDone(m.tasks_view_saved({ name }));
       error = undefined;
     } catch (e: unknown) {
@@ -610,7 +653,7 @@
 
   // 쓰기 권한으로 항목을 열면 반복 업무의 회차를 먼저 맞춘다(독자는 만들지 않는다, O-19 전까지의 방식).
   async function loadItem(itemId: string, write: boolean): Promise<void> {
-    if (write) await api.syncRecurrences(itemId).catch(() => 0);
+    if (write) await api.syncRecurrences(editingUser, itemId).catch(() => 0);
     await reload(itemId);
   }
 
@@ -674,7 +717,7 @@
   let dialogContent = $state<HTMLElement | null>(null);
 
   const leave = createLeaveGuard({
-    dirty: () => detailUnsaved && openTaskId !== undefined,
+    dirty: () => (detailUnsaved && openTaskId !== undefined) || newDirty.size > 0 || viewDirty,
     busy: () => detailSaving,
     identity: () => openTaskId,
     onAsk: () => {
@@ -691,11 +734,15 @@
       // 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 남기지 못했으면(저장소 사용 불가·용량 초과) 보통 떠나기처럼 경고해
       // 입력을 잃지 않게 한다 — 문서 편집기(DocumentEditor)와 같은 규칙. 전환이 아니면 전처럼 경고한다.
       beforeUnload: () => {
-        if (openTaskId === undefined) return false;
+        if (openTaskId === undefined)
+          return accountSwitching()
+            ? viewDirty || [...newKept.values()].some((kept) => !kept)
+            : newDirty.size > 0 || viewDirty;
         // 편집 가능 여부(canEdit)와 무관하게 "고친 입력이 있는데 초안을 남기지 못했는지"만 본다(TaskDetail이 알린다; 고친 칸이
         // 없거나 폼이 사라지면 true). 저장이 409 account_changed로 끝나 폼이 잠긴 뒤에도 입력은 지켜야 한다.
-        if (accountSwitching()) return !detailDraftKept;
-        return detailUnsaved || detailSaving;
+        if (accountSwitching())
+          return !detailDraftKept || viewDirty || [...newKept.values()].some((kept) => !kept);
+        return detailUnsaved || detailSaving || newDirty.size > 0 || viewDirty;
       },
     }),
   );
@@ -750,12 +797,13 @@
   // 열마다 빠르게 더하기(Kaneo처럼 열 아래). 만들기는 "할 일"로 만들어지므로, 다른 열이면 같은 이동 저장 경로로 그
   // 열 끝에 옮긴다. 옮기기가 실패하면 업무는 "할 일"에 남고 실패를 알린다(만든 것은 사라지지 않는다).
   let adding = $state<TaskStatus | undefined>(undefined);
+  let newDirty = $state<Set<string | null>>(new Set());
+  let newKept = $state<Map<string | null, boolean>>(new Map());
 
   // 만들지 않은 새 업무 제목의 브라우저 보존(D-96·D-128; 문서 초안 D-27과 같은 규칙, common/form-draft.ts). 아래 "새 업무
   // 제목"과 열의 빠른 추가 입력을 이 사용자·이 탭의 키에 남기고, 다시 읽은 뒤 같은 계정이 이 항목의 보드를 열면 되살릴지
   // 묻는다. 되살리면 그 입력란에 제목과 그때의 request_id를 시드하고 사용자가 "업무 만들기"를 눌러야 보낸다(같은 제목이면 같은
-  // request_id라 응답을 잃었던 만들기도 중복되지 않는다). 만들었거나 Esc로 버리거나 비우면 지운다. 이 입력은 이탈 확인이
-  // 지키지 않으므로 화면을 떠나도 남겨 두고 다음에 묻는다.
+  // request_id라 응답을 잃었던 만들기도 중복되지 않는다). 만들었거나 명시적으로 버리거나 비우면 지우고, 이탈 전에도 확인한다.
   interface NewTaskDraft {
     lane: string | null;
     name: string;
@@ -802,15 +850,28 @@
     lane: string | null,
     draft: { name: string; requestId: string | null } | undefined,
   ): void {
+    if (me.userId !== editingUser) return;
+    const next = new Set(newDirty);
+    if (draft === undefined) next.delete(lane);
+    else next.add(lane);
+    newDirty = next;
     const name = newDraftName(item.id, lane);
-    if (draft === undefined) clearFormDraft(name);
-    else
-      storeFormDraft(name, {
+    const kept = new Map(newKept);
+    if (draft === undefined) {
+      clearFormDraft(name);
+      kept.delete(lane);
+    } else {
+      kept.set(
         lane,
-        name: draft.name,
-        requestId: draft.requestId,
-        savedAt: new Date().toISOString(),
-      } satisfies NewTaskDraft);
+        storeFormDraft(name, {
+          lane,
+          name: draft.name,
+          requestId: draft.requestId,
+          savedAt: new Date().toISOString(),
+        } satisfies NewTaskDraft),
+      );
+    }
+    newKept = kept;
   }
   // 되살린 입력의 시드. 열의 빠른 추가는 열릴 때 읽고, 아래 폼은 다시 그려 읽는다.
   let quickInitial = $state<{ lane: string; name: string; requestId: string | null } | undefined>();
@@ -936,6 +997,7 @@
     noShiftNeeded = shifts.length === 0,
   ): Promise<'saved' | 'asked' | 'stopped'> {
     const result = await api.updateTask(
+      editingUser,
       t.id,
       baseVersion,
       input,
@@ -1023,7 +1085,7 @@
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
     const itemId = item.id;
     const created = await api
-      .createTask(itemId, requestId, title, null, { status: lane })
+      .createTask(editingUser, itemId, requestId, title, null, { status: lane })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
         throw e;
@@ -1112,6 +1174,7 @@
       // 업무의 열·위치가 바뀌었으면 서버가 아무것도 바꾸지 않고 409 `move_conflict`를 돌려준다. 처음 옮기기는 조건 없이.
       const guarded = replacing !== undefined || undo !== undefined;
       const saved = await api.moveTask(
+        editingUser,
         id,
         plan.status,
         plan.beforeId,
@@ -1664,6 +1727,12 @@
             {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
           </NativeSelect>
         </label>
+        {#each viewDraft.offers as entry (entry.key)}
+          <FormDraftOffer
+            onrestore={() => viewDraft.restore(entry)}
+            ondiscard={() => viewDraft.discard(entry)}
+          />
+        {/each}
         <label class="flex flex-col gap-0.5">
           <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
           <Input
@@ -2085,7 +2154,7 @@
         placeholder={m.tasks_new_placeholder()}
         submitLabel={m.tasks_create()}
         create={async (requestId: string, title: string) => {
-          await api.createTask(item.id, requestId, title);
+          await api.createTask(editingUser, item.id, requestId, title);
           await reload();
         }}
         initial={newTaskInitial}
@@ -2151,16 +2220,28 @@
         />
       {/key}
     {/if}
-    <DiscardChangesConfirm
-      open={leave.open}
-      description={openNext === undefined ? undefined : m.tasks_discard_open_description()}
-      confirmLabel={openNext === undefined ? undefined : m.tasks_discard_open_confirm()}
-      onkeep={leave.keep}
-      ondiscard={leave.discard}
-      returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : dialogContent)}
-    />
   </Dialog.Content>
 </Dialog.Root>
+
+<DiscardChangesConfirm
+  open={leave.open}
+  description={openNext === undefined ? undefined : m.tasks_discard_open_description()}
+  confirmLabel={openNext === undefined ? undefined : m.tasks_discard_open_confirm()}
+  onkeep={leave.keep}
+  ondiscard={() => {
+    for (const lane of newDirty) clearFormDraft(newDraftName(item.id, lane));
+    newDirty = new Set();
+    newKept = new Map();
+    newTaskInitial = undefined;
+    newTaskSeed += 1;
+    adding = undefined;
+    quickInitial = undefined;
+    viewName = views.find((v) => v.id === selectedView)?.name ?? '';
+    viewDraft.persist();
+    leave.discard();
+  }}
+  returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : dialogContent)}
+/>
 
 <CalendarTaskDialog
   workspaceId={item.workspace_id}

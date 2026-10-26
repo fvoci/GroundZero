@@ -131,7 +131,14 @@ describe('saving my input after a task conflict', () => {
     await screen.findByLabelText('설명');
     await type('task-description', 'B 설명');
     await saveIntoConflict();
-    expect(update).toHaveBeenNthCalledWith(1, 't1', 2, { ...unchanged, description: 'B 설명' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      't1',
+      2,
+      { ...unchanged, description: 'B 설명' },
+      [],
+    );
 
     await fireEvent.click(saveMineButton());
     await waitFor(() => {
@@ -140,6 +147,7 @@ describe('saving my input after a task conflict', () => {
     // 겹친 칸이 없으므로 묻지 않고 최신 판 번호로 저장한다.
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       { ...unchanged, title: '새 제목', description: 'B 설명' },
@@ -221,6 +229,7 @@ describe('saving my input after a task conflict', () => {
     });
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       {
@@ -262,6 +271,7 @@ describe('saving my input after a task conflict', () => {
     expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: in_progress/)).toBeTruthy();
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       { ...unchanged, title: '새 제목', description: 'B 설명' },
@@ -280,6 +290,7 @@ describe('saving my input after a task conflict', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(update).toHaveBeenNthCalledWith(
       3,
+      expect.any(String),
       't1',
       4,
       { ...unchanged, title: '세 번째 제목', status: 'in_progress', description: 'B 설명' },
@@ -362,6 +373,7 @@ describe('saving my input after a task conflict', () => {
     });
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       {
@@ -460,7 +472,7 @@ describe('the overwrite question after a task conflict', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    const sent = update.mock.calls[1]?.[2];
+    const sent = update.mock.calls[1]?.[3];
     if (sent === undefined) throw new Error('no second save');
     expect(sent).toEqual({
       ...unchanged,
@@ -490,6 +502,7 @@ describe('the overwrite question after a task conflict', () => {
     await saveIntoConflict();
     expect(update).toHaveBeenNthCalledWith(
       1,
+      expect.any(String),
       't1',
       2,
       { ...unchanged, assignee_ids: ['u2', 'u1'] },
@@ -503,6 +516,7 @@ describe('the overwrite question after a task conflict', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       { ...unchanged, title: '새 제목', assignee_ids: ['u1', 'u2'] },
@@ -755,7 +769,14 @@ describe('the overwrite question after the second review', () => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, tags: ['b'] }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, tags: ['b'] },
+      [],
+    );
   });
 
   it('shows and saves my tags without repeats', async () => {
@@ -775,7 +796,14 @@ describe('the overwrite question after the second review', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, tags: ['b', 'a'] }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, tags: ['b', 'a'] },
+      [],
+    );
   });
 
   // 2차 검증: 앞뒤 공백만 친 제목은 저장되는 값이 그대로라 고친 칸이 아니다. 묻지 않고 다른 사람이 바꾼 제목을 따른다.
@@ -794,7 +822,14 @@ describe('the overwrite question after the second review', () => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, title: '남의 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, title: '남의 제목' },
+      [],
+    );
   });
 
   // 2차 검증: 줄 끝 공백만 다른 설명처럼 서로 다른 값이 화면에서 똑같아 보이면 그렇다고 알린다.
@@ -854,7 +889,14 @@ describe('the overwrite question after the second review', () => {
     const ask = await askAboutTitle();
     await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
     expect(await screen.findByText(/지금 제목: “세 번째 제목”/)).toBeTruthy();
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
     expect(field('task-title').value).toBe('내 제목');
     await waitFor(() => {
       expect(document.activeElement?.id).toBe('task-save-mine');
@@ -867,7 +909,14 @@ describe('the overwrite question after the second review', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(3);
     });
-    expect(update).toHaveBeenNthCalledWith(3, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      3,
+      expect.any(String),
+      't1',
+      4,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 
   // 승인한 덮어쓰기가 실패하면(서버에 닿지 않음) 입력과 충돌 화면이 남는다. 이미 승인한 판 3 위에서 다시 시도하므로
@@ -895,7 +944,14 @@ describe('the overwrite question after the second review', () => {
       expect(update).toHaveBeenCalledTimes(3);
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(update).toHaveBeenNthCalledWith(3, 't1', 3, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      3,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 });
 
@@ -957,7 +1013,14 @@ describe('a late response while the overwrite question is open', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      4,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 
   it('asks again with the reloaded version when it is newer than the conflict', async () => {
@@ -980,7 +1043,14 @@ describe('a late response while the overwrite question is open', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      4,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 
   it('closes the question and returns to saving mine when the newer version no longer clashes', async () => {
@@ -1088,6 +1158,6 @@ it('keeps recurrence input on 409, shows the latest rule and explicitly resaves 
   await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
   await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
   expect(save).toHaveBeenCalledTimes(2);
-  expect(save.mock.calls[1]?.[1]).toEqual({ ...base, interval: 2 });
-  expect(save.mock.calls[1]?.[3]).toEqual(latest);
+  expect(save.mock.calls[1]?.[2]).toEqual({ ...base, interval: 2 });
+  expect(save.mock.calls[1]?.[4]).toEqual(latest);
 });

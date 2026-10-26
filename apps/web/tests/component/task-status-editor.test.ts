@@ -4,11 +4,36 @@ import { api, ApiError } from '$lib/api/client';
 import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { TEST_STATUSES } from './fixtures/task-statuses';
+import { me } from '$lib/me.svelte';
 
 beforeEach(async () => {
+  me.userId = 'user-a';
+  localStorage.clear();
   await setLocale('ko', { reload: false });
 });
 afterEach(() => vi.restoreAllMocks());
+
+it('preserves status name and color, offers them explicitly, and guards closing', async () => {
+  const create = vi.spyOn(api, 'createTaskStatus');
+  const props = { itemId: 'i', statuses: TEST_STATUSES, archived: false, onchanged: vi.fn() };
+  const first = render(StatusEditor, props);
+  await fireEvent.click(screen.getByRole('button', { name: '상태 추가' }));
+  await fireEvent.input(screen.getByLabelText('상태 이름'), { target: { value: '공동 검토' } });
+  await fireEvent.input(screen.getByLabelText('색 (#rrggbb)'), { target: { value: '#abcdef' } });
+  await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+  await screen.findByRole('alertdialog');
+  await fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+  first.unmount();
+  render(StatusEditor, props);
+  await fireEvent.click(screen.getByRole('button', { name: '상태 추가' }));
+  await screen.findByTestId('form-draft-offer');
+  expect(screen.getByLabelText('상태 이름')).toHaveValue('');
+  expect(create).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
+  expect(screen.getByLabelText('상태 이름')).toHaveValue('공동 검토');
+  expect(screen.getByLabelText('색 (#rrggbb)')).toHaveValue('#abcdef');
+  expect(create).not.toHaveBeenCalled();
+});
 
 it('adds a status, validates fields, and prevents duplicate requests', async () => {
   const create = vi.spyOn(api, 'createTaskStatus').mockReturnValue(new Promise(() => undefined));
@@ -24,7 +49,7 @@ it('adds a status, validates fields, and prevents duplicate requests', async () 
   await fireEvent.input(screen.getByLabelText('상태 이름'), { target: { value: '검토 대기' } });
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-  expect(create).toHaveBeenCalledExactlyOnceWith('i', '검토 대기', '', 'todo');
+  expect(create).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'i', '검토 대기', '', 'todo');
 });
 
 it('preserves edits on 400 and 409, then saves name, color, category and position', async () => {
@@ -56,7 +81,7 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
   await waitFor(() => {
     expect(changed).toHaveBeenCalledOnce();
   });
-  expect(update).toHaveBeenLastCalledWith('i', 's-todo', {
+  expect(update).toHaveBeenLastCalledWith(expect.any(String), 'i', 's-todo', {
     name: '검토',
     color: '#abcdef',
     category: 'doing',
@@ -79,7 +104,7 @@ it('requires another status before deletion and sends its id', async () => {
     target: { value: 's-doing' },
   });
   await fireEvent.click(screen.getByRole('button', { name: '업무를 옮기고 삭제' }));
-  expect(remove).toHaveBeenCalledExactlyOnceWith('i', 's-todo', 's-doing');
+  expect(remove).toHaveBeenCalledExactlyOnceWith(expect.any(String), 'i', 's-todo', 's-doing');
 });
 
 it('disables editing archived items', () => {

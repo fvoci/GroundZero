@@ -154,12 +154,12 @@ describe('gantt reschedule', () => {
       );
     });
     expect(preview).toHaveBeenCalledWith('a', '2026-10-21', '2026-10-23');
-    expect(update.mock.calls[0]?.[1]).toBe(1);
-    expect(update.mock.calls[0]?.[2]).toMatchObject({
+    expect(update.mock.calls[0]?.[2]).toBe(1);
+    expect(update.mock.calls[0]?.[3]).toMatchObject({
       start_date: '2026-10-21',
       due_date: '2026-10-23',
     });
-    expect(update.mock.calls[0]?.[3]).toEqual([]);
+    expect(update.mock.calls[0]?.[4]).toEqual([]);
   });
 
   it('asks before moving later tasks and saves them together when approved', async () => {
@@ -190,7 +190,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[3]).toEqual([
+    expect(update.mock.calls[0]?.[4]).toEqual([
       { task_id: 'b', base_version: 1, start_date: '2026-10-24', due_date: '2026-10-26' },
     ]);
     await waitFor(() => {
@@ -240,7 +240,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[3]).toEqual([]);
+    expect(update.mock.calls[0]?.[4]).toEqual([]);
   });
 
   it('cannot be cancelled once the change is being saved', async () => {
@@ -343,7 +343,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[2]).toMatchObject({
+    expect(update.mock.calls[0]?.[3]).toMatchObject({
       start_date: '2026-10-22',
       due_date: '2026-10-24',
     });

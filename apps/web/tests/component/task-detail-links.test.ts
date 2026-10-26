@@ -149,9 +149,15 @@ describe('task detail dependency kinds', () => {
       within(panel).getByRole('button', { name: '관계 저장하고 후속 업무 옮기기' }),
     );
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, { kind: 'SS', lag_days: 1 }, [
-        { task_id: 'b', base_version: 1, start_date: '2026-10-22', due_date: '2026-10-24' },
-      ]);
+      expect(set).toHaveBeenCalledWith(
+        expect.any(String),
+        'b',
+        'a',
+        'SS',
+        3,
+        { kind: 'SS', lag_days: 1 },
+        [{ task_id: 'b', base_version: 1, start_date: '2026-10-22', due_date: '2026-10-24' }],
+      );
     });
     expect((await screen.findByTestId('link-status')).textContent).toContain(
       '관계를 저장했습니다.',
@@ -224,7 +230,7 @@ describe('task detail dependency kinds', () => {
     await waitFor(() => {
       expect(set).toHaveBeenCalledTimes(1);
     });
-    expect(set.mock.calls[0]?.[4]).toEqual({ kind: 'SS', lag_days: 1 });
+    expect(set.mock.calls[0]?.[5]).toEqual({ kind: 'SS', lag_days: 1 });
     expect((await screen.findByRole('alert')).textContent).toContain(
       '지금: 종료 후 종료 (FF), 4일 뒤',
     );
@@ -234,7 +240,7 @@ describe('task detail dependency kinds', () => {
     await waitFor(() => {
       expect(set).toHaveBeenCalledTimes(2);
     });
-    expect(set.mock.calls[1]?.slice(0, 5)).toEqual([
+    expect(set.mock.calls[1]?.slice(1, 6)).toEqual([
       'b',
       'a',
       'SS',
@@ -256,7 +262,15 @@ describe('task detail dependency kinds', () => {
       .mockResolvedValue({ kind: 'updated', task: { ...build, checklist: [] } });
     await editLagTo('0');
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 0, { kind: 'SS', lag_days: 1 }, []);
+      expect(set).toHaveBeenCalledWith(
+        expect.any(String),
+        'b',
+        'a',
+        'SS',
+        0,
+        { kind: 'SS', lag_days: 1 },
+        [],
+      );
     });
     expect((await screen.findByTestId('link-status')).textContent).toContain(
       '날짜가 없어 옮기지 않는 업무: KED-c 검토',
@@ -298,7 +312,15 @@ describe('task detail dependency kinds', () => {
     expect(set).not.toHaveBeenCalled();
     await fireEvent.click(within(panel).getByRole('button', { name: '관계만 저장' }));
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith('b', 'a', 'SS', 3, { kind: 'SS', lag_days: 1 }, []);
+      expect(set).toHaveBeenCalledWith(
+        expect.any(String),
+        'b',
+        'a',
+        'SS',
+        3,
+        { kind: 'SS', lag_days: 1 },
+        [],
+      );
     });
   });
 
@@ -339,7 +361,7 @@ describe('removing a dependency while editing', () => {
     expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
     await waitFor(() => {
-      expect(remove).toHaveBeenCalledWith('b', 'a');
+      expect(remove).toHaveBeenCalledWith(expect.any(String), 'b', 'a');
     });
     // 편집 칸은 새 관계 추가로 돌아가고(고르지 않으면 저장할 수 없음), 지운 관계를 가리키는 글이 없다.
     await waitFor(() => {

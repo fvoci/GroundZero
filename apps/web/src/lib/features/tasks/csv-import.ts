@@ -4,8 +4,8 @@
 // 보낸다(응답을 잃은 만들기가 서버에 반영됐으면 그 업무를 돌려받고 새로 만들지 않는다).
 import type { TaskView } from '$lib/api/client';
 import { newRequestId } from '$lib/api/client';
-import { canonicalJson } from '$lib/features/documents/drafts';
-import { readSession, writeSession } from '$lib/storage';
+import { canonicalJson, tabId } from '$lib/features/documents/drafts';
+import { readLocal, writeLocal } from '$lib/storage';
 
 import type { TaskRow } from './csv';
 
@@ -35,13 +35,16 @@ export interface RowStep extends RowPair {
 
 /** #84: 요청을 보내기 전 id를 저장한다. 응답을 못 받아도 같은 id로 재개한다. */
 export function saveImport(key: string, text: string, rows: readonly RowProgress[]): void {
-  writeSession(key, text === '' && rows.length === 0 ? null : JSON.stringify({ text, rows }));
+  writeLocal(
+    `${key}:tab:${tabId()}`,
+    text === '' && rows.length === 0 ? null : JSON.stringify({ text, rows }),
+  );
 }
 
 export function restoreImport(key: string): { text: string; rows: RowProgress[] } {
   const empty = { text: '', rows: [] };
   try {
-    const raw: unknown = JSON.parse(readSession(key) ?? 'null');
+    const raw: unknown = JSON.parse(readLocal(`${key}:tab:${tabId()}`) ?? 'null');
     if (
       typeof raw !== 'object' ||
       raw === null ||
