@@ -73,12 +73,12 @@ const unchanged: TaskInput = {
   milestone: v2.milestone,
 };
 
-function mount(current: TaskDetailView = v2, people: AssigneeView[] = []): void {
+function mount(current: TaskDetailView = v2, people: AssigneeView[] = []) {
   vi.spyOn(api, 'task').mockResolvedValue(current);
   vi.spyOn(api, 'assignable').mockResolvedValue(people);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
-  render(TaskDetail, {
+  return render(TaskDetail, {
     props: {
       taskId: current.id,
       tasks: [current],
@@ -1173,9 +1173,155 @@ it('keeps recurrence input on 409, shows the latest rule and explicitly resaves 
   await screen.findByText(/그사이 다른 사람이 반복 규칙/);
   expect(screen.getByLabelText('간격')).toHaveValue('2');
   expect(save).toHaveBeenCalledTimes(1);
+  expect(save.mock.calls[0]?.[4]).toEqual(base);
   await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
   await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
   expect(save).toHaveBeenCalledTimes(2);
   expect(save.mock.calls[1]?.[2]).toEqual({ ...base, interval: 2 });
   expect(save.mock.calls[1]?.[4]).toEqual(latest);
 });
+
+it('restores a recurrence draft with its original base and requires an explicit conflict retry', async () => {
+  await setLocale('ko', { reload: false });
+  window.localStorage.clear();
+  const base = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+  const latest = { ...base, interval: 3 };
+  const initial = {
+    ...v2,
+    due_date: '2026-10-26',
+    series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule: base },
+  };
+  const first = mount(initial);
+  try {
+    await screen.findByLabelText('간격');
+    await type('task-recurrence-interval', '2');
+    await waitFor(() => {
+      expect(
+        Object.values(window.localStorage).some((value: string) =>
+          value.includes('"interval":"2"'),
+        ),
+      ).toBe(true);
+    });
+    first.unmount();
+    vi.restoreAllMocks();
+    const current = { ...initial, series: { ...initial.series, rule: latest } };
+    mount(current);
+    const save = vi
+      .spyOn(api, 'setTaskRecurrence')
+      .mockRejectedValueOnce(new TaskRuleConflict(current))
+      .mockResolvedValueOnce({
+        ...current,
+        series: { ...current.series, rule: { ...base, interval: 2 } },
+      });
+    await fireEvent.click(await screen.findByRole('button', { name: '되살리기' }));
+    expect(screen.getByLabelText('간격')).toHaveValue('2');
+    expect(save).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+    await screen.findByText(/그사이 다른 사람이 반복 규칙/);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]?.[4]).toEqual(base);
+    await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]?.[4]).toEqual(latest);
+  } finally {
+    window.localStorage.clear();
+  }
+});
+
+it.each(['success', 'conflict'] as const)(
+  'ignores a late recurrence %s after switching accounts',
+  async (result) => {
+    await setLocale('ko', { reload: false });
+    window.localStorage.clear();
+    const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+    const initial = {
+      ...v2,
+      due_date: '2026-10-26',
+      series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule },
+    };
+    mount(initial);
+    let resolve!: (value: TaskDetailView) => void;
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<TaskDetailView>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending);
+    await screen.findByLabelText('간격');
+    await type('task-recurrence-interval', '2');
+    await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+    me.userId = 'user-b';
+    await waitFor(() => expect(field('task-title')).not.toBeVisible());
+    const fresh = {
+      ...initial,
+      version: 3,
+      title: 'late result',
+      series: { ...initial.series, rule: { ...rule, interval: 7 } },
+    };
+    if (result === 'success') resolve(fresh);
+    else reject(new TaskRuleConflict(fresh));
+    await pending.catch(() => undefined);
+    me.userId = 'user-a';
+    await waitFor(() => expect(field('task-title')).toBeVisible());
+    expect(field('task-title')).toHaveValue(v2.title);
+    expect(screen.getByLabelText('간격')).toHaveValue('2');
+    expect(screen.queryByText(/그사이 다른 사람이 반복 규칙/)).toBeNull();
+    window.localStorage.clear();
+  },
+);
+
+it.each(['success', 'conflict'] as const)(
+  'ignores a late recurrence %s after opening another task',
+  async (result) => {
+    await setLocale('ko', { reload: false });
+    const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+    const initial = {
+      ...v2,
+      due_date: '2026-10-26',
+      series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule },
+    };
+    const view = mount(initial);
+    let resolve!: (value: TaskDetailView) => void;
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<TaskDetailView>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending);
+    await screen.findByLabelText('간격');
+    await type('task-recurrence-interval', '2');
+    await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+    const other = {
+      ...initial,
+      id: 't2',
+      title: '다른 업무',
+      series: {
+        ...initial.series,
+        id: 'other-series',
+        root_task_id: 't2',
+        rule: { ...rule, interval: 4 },
+      },
+    };
+    vi.mocked(api.task).mockResolvedValue(other);
+    await view.rerender({
+      taskId: other.id,
+      tasks: [initial, other],
+      workspaces: [],
+      onchanged: () => undefined,
+      onopen: () => undefined,
+    });
+    await waitFor(() => expect(field('task-title')).toHaveValue(other.title));
+    const fresh = {
+      ...initial,
+      version: 3,
+      title: 'late result',
+      series: { ...initial.series, rule: { ...rule, interval: 7 } },
+    };
+    if (result === 'success') resolve(fresh);
+    else reject(new TaskRuleConflict(fresh));
+    await pending.catch(() => undefined);
+    await waitFor(() => expect(screen.getByLabelText('간격')).toHaveValue('4'));
+    expect(field('task-title')).toHaveValue(other.title);
+    expect(screen.queryByText(/그사이 다른 사람이 반복 규칙/)).toBeNull();
+  },
+);

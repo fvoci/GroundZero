@@ -163,6 +163,75 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 }
 
 describe('closing the task dialog with unsaved input', () => {
+  it('blocks closing and opening another task while recurrence is saving', async () => {
+    const initial = task('t1', {
+      start_date: '2026-10-27',
+      series: {
+        id: 'series-1',
+        root_task_id: 't1',
+        timezone: 'Asia/Seoul',
+        rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
+      },
+    });
+    const { back } = await openBoard([initial, task('t2', { parent_id: 't1' })]);
+    const pending = deferred<TaskDetailView>();
+    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending.promise);
+    const navigate = vi.spyOn(router, 'navigate');
+    await type('task-recurrence-interval', '2');
+    await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
+    await escape(content());
+    await clickOutside();
+    await fireEvent.click(within(content()).getByRole('button', { name: /KED-2\s*다른 업무/ }));
+    expect(confirmBox()).toBeNull();
+    expect(back).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
+    pending.resolve({
+      ...initial,
+      series: { ...initial.series!, rule: { ...initial.series!.rule, interval: 2 } },
+    });
+    await waitFor(() => {
+      expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
+    });
+    await escape(content());
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it('guards recurrence-only changes and discards them through the parent confirmation', async () => {
+    me.userId = 'user-a';
+    window.localStorage.clear();
+    try {
+      const { back, reopen } = await openBoard([
+        task('t1', {
+          start_date: '2026-10-27',
+          series: {
+            id: 'series-1',
+            root_task_id: 't1',
+            timezone: 'Asia/Seoul',
+            rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
+          },
+        }),
+      ]);
+      await type('task-recurrence-interval', '2');
+      const unload = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+      await fireEvent.click(closeButton());
+      const box = await findConfirm();
+      await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_confirm() }));
+      expect(back).toHaveBeenCalledTimes(1);
+      await reopen(undefined);
+      await reopen('t1');
+      await waitFor(() => {
+        expect(field('task-recurrence-interval')).toHaveValue('1');
+      });
+      expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    } finally {
+      me.userId = '';
+      window.localStorage.clear();
+    }
+  });
+
   it.each(['새 댓글', '새 항목'])(
     'does not close or offer to discard while %s is being saved',
     async (label) => {

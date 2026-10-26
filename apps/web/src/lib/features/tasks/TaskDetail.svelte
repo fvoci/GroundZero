@@ -111,14 +111,20 @@
   }
   let commentsEditor = $state<ChildEditor>();
   let checklistEditor = $state<ChildEditor>();
+  let recurrenceEditor = $state<RecurrenceEditor>();
+  let recurrenceSaving = $state(false);
   const childSaving = $derived(
-    commentsEditor?.isSaving() === true || checklistEditor?.isSaving() === true,
+    commentsEditor?.isSaving() === true ||
+      checklistEditor?.isSaving() === true ||
+      recurrenceSaving ||
+      recurrenceEditor?.isSaving() === true,
   );
 
   export function discardChildInput(): boolean {
     if (childSaving || saving) return false;
     commentsEditor?.discardInput();
     checklistEditor?.discardInput();
+    recurrenceEditor?.discardDraft();
     return true;
   }
   let accountBlocked = $state(false);
@@ -223,8 +229,10 @@
   let childDraft = $state<{ name: string; requestId: string | null } | undefined>();
   let checklistUnsaved = $state(false);
   let commentsUnsaved = $state(false);
+  let recurrenceUnsaved = $state(false);
   let checklistDraftKept = $state(true);
   let commentsDraftKept = $state(true);
+  let recurrenceDraftKept = $state(true);
   let parentStatus = $state('');
   const parentCandidates = $derived(
     tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
@@ -417,6 +425,7 @@
     const id = taskId;
     let cancelled = false;
     task = undefined;
+    latestRule = undefined;
     conflict = undefined;
     clashAsk = undefined;
     error = undefined;
@@ -501,7 +510,8 @@
         parentChoice !== '' ||
         childDraft !== undefined ||
         checklistUnsaved ||
-        commentsUnsaved),
+        commentsUnsaved ||
+        recurrenceUnsaved),
   );
   $effect(() => {
     onunsaved?.(unsaved);
@@ -766,10 +776,10 @@
           : null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
-      ondraftkept?.(kept && checklistDraftKept && commentsDraftKept);
+      ondraftkept?.(kept && checklistDraftKept && commentsDraftKept && recurrenceDraftKept);
     } else {
       clearFormDraft(draftName);
-      ondraftkept?.(checklistDraftKept && commentsDraftKept);
+      ondraftkept?.(checklistDraftKept && commentsDraftKept && recurrenceDraftKept);
     }
   });
   // 폼이 사라지면(닫기·다른 업무 열기) 이 폼의 초안 상태도 끝난다: 다음 폼의 깨끗한 상태가 옛 실패를 물려받지 않게 한다.
@@ -918,24 +928,39 @@
   }
 
   let latestRule = $state<TaskDetailView | undefined>();
-  async function saveRule(rule: RecurrenceRule | null): Promise<void> {
-    if (task === undefined) return;
+  const recurrenceIdentity = $derived({ taskId, userId: me.userId });
+  let mounted = true;
+  onDestroy(() => {
+    mounted = false;
+  });
+  async function saveRule(
+    rule: RecurrenceRule | null,
+    baseRule?: RecurrenceRule | null,
+  ): Promise<void> {
+    if (task === undefined || hiddenForAccount) return;
+    const identity = recurrenceIdentity;
+    const id = task.id;
+    const stillCurrent = (): boolean =>
+      mounted && identity === recurrenceIdentity && task?.id === id;
     try {
       const base = latestRule ?? task;
       const fresh = await api.setTaskRecurrence(
         editingUser,
-        task.id,
+        id,
         rule,
         base.series?.timezone ?? localTimeZone(),
-        base.series?.rule ?? null,
+        baseRule === undefined ? (base.series?.rule ?? null) : baseRule,
       );
+      if (!stillCurrent()) return;
       latestRule = undefined;
       if (task.version === fresh.version) task = fresh;
       else refresh(fresh);
       onchanged();
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      if (e instanceof TaskRuleConflict) latestRule = e.current;
+      if (stillCurrent()) {
+        if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
+        if (e instanceof TaskRuleConflict) latestRule = e.current;
+      }
       throw e;
     }
   }
@@ -1696,15 +1721,28 @@
               </div>
             </section>
           {:else}
-            <RecurrenceEditor
-              idPrefix="task-recurrence"
-              rule={(latestRule ?? current).series?.rule ?? null}
-              canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
-              zoneNote={m.tasks_recurrence_zone({
-                zone: current.series?.timezone ?? localTimeZone(),
-              })}
-              onsave={saveRule}
-            />
+            {#key current.id}
+              <RecurrenceEditor
+                bind:this={recurrenceEditor}
+                idPrefix="task-recurrence"
+                draftName={`task-recurrence:${current.id}`}
+                rule={(latestRule ?? current).series?.rule ?? null}
+                canEdit={canEdit && (current.due_date !== null || current.start_date !== null)}
+                zoneNote={m.tasks_recurrence_zone({
+                  zone: current.series?.timezone ?? localTimeZone(),
+                })}
+                onsave={saveRule}
+                onunsaved={(value: boolean) => {
+                  recurrenceUnsaved = value;
+                }}
+                ondraftkept={(value: boolean) => {
+                  recurrenceDraftKept = value;
+                }}
+                onsaving={(value: boolean) => {
+                  recurrenceSaving = value;
+                }}
+              />
+            {/key}
             {#if canEdit && current.due_date === null && current.start_date === null}
               <p class="text-sm text-muted-foreground">{m.tasks_recurrence_needs_date()}</p>
             {/if}
