@@ -318,6 +318,10 @@
         editing = false;
         editingEpisode = undefined;
         openEpisode = undefined;
+        savingDetails = false;
+        savingEpisode = false;
+        savingMine = false;
+        adding = false;
       }
     });
     const mine = ++seq;
@@ -485,6 +489,8 @@
         planned_on: orNull(shared.planned_on),
       });
       if (!episodeDraft.isOwner(attempt)) return;
+      // Closing this target makes isOwner false, so release its busy state first.
+      savingEpisode = false;
       if (episodeDraft.complete(attempt)) editingEpisode = undefined;
       status = m.courses_episode_saved({ number });
       reloadKey += 1;
@@ -498,7 +504,7 @@
         return;
       error = errorText(e, m.courses_action_failed());
     } finally {
-      savingEpisode = false;
+      if (episodeDraft.isOwner(attempt)) savingEpisode = false;
     }
   }
 
@@ -610,7 +616,7 @@
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.courses_action_failed());
     } finally {
-      savingMine = false;
+      if (mineDraft.isOwner(attempt)) savingMine = false;
     }
   }
 </script>
@@ -687,6 +693,7 @@
             m.courses_details_saved(),
             () => detailsDraft.isOwner(attempt),
           ).then((ok) => {
+            if (!detailsDraft.isOwner(attempt)) return;
             savingDetails = false;
             if (
               ok &&
@@ -1106,7 +1113,7 @@
               if (ok) newDraft.complete(attempt);
             })
             .finally(() => {
-              adding = false;
+              if (newDraft.isOwner(attempt)) adding = false;
             });
         }}
       >
@@ -1182,7 +1189,7 @@
                     if (ok) csvDraft.complete(attempt);
                   })
                   .finally(() => {
-                    adding = false;
+                    if (csvDraft.isOwner(attempt)) adding = false;
                   });
               }}>{m.courses_csv_add()}</Button
             >

@@ -242,6 +242,9 @@
         participants = [];
         editingUnit = undefined;
         openUnit = undefined;
+        savingUnit = false;
+        savingMine = false;
+        adding = false;
       }
     });
     let cancelled = false;
@@ -346,11 +349,12 @@
   async function saveUnit(base: StudyUnitView): Promise<void> {
     const amount = wholeAmount(shared.amount);
     const number = Number(shared.number);
+    const title = shared.title.trim();
     if (
       shared.number.trim() === '' ||
       !Number.isInteger(number) ||
       number < 1 ||
-      shared.title.trim() === '' ||
+      title === '' ||
       amount === undefined
     ) {
       error = m.study_unit_edit_invalid();
@@ -365,15 +369,17 @@
     try {
       await api.updateStudyUnit(base.id, Number(baseVersion), {
         number,
-        title: shared.title.trim(),
+        title,
         chapter: shared.chapter.trim(),
         unit: shared.unit,
         amount,
         planned_on: shared.planned_on === '' ? null : shared.planned_on,
       });
       if (!unitDraft.isOwner(attempt)) return;
+      // Closing this target makes isOwner false, so release its busy state first.
+      savingUnit = false;
       if (unitDraft.complete(attempt)) editingUnit = undefined;
-      status = m.study_unit_saved({ title: shared.title.trim() });
+      status = m.study_unit_saved({ title });
       reloadKey += 1;
     } catch (e: unknown) {
       if (!unitDraft.isOwner(attempt)) return;
@@ -385,7 +391,7 @@
         return;
       error = errorText(e, m.study_action_failed());
     } finally {
-      savingUnit = false;
+      if (unitDraft.isOwner(attempt)) savingUnit = false;
     }
   }
 
@@ -447,7 +453,7 @@
     } catch (e: unknown) {
       if (newDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
     } finally {
-      adding = false;
+      if (newDraft.isOwner(attempt)) adding = false;
     }
   }
 
@@ -485,7 +491,7 @@
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
     } finally {
-      savingMine = false;
+      if (mineDraft.isOwner(attempt)) savingMine = false;
     }
   }
 </script>

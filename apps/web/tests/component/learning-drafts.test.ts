@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
 
 import { api, ApiError, type CourseView, type StudyPlanView } from '$lib/api/client';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
@@ -64,6 +65,179 @@ beforeEach(async () => {
   vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
   vi.spyOn(api, 'studyPlan').mockResolvedValue(plan);
   vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
+});
+
+describe('learning pending request ownership', () => {
+  const cases = [
+    {
+      name: 'course details',
+      kind: 'course',
+      field: 'course-instructor',
+      open: () => firstButton(m.courses_edit()),
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'setCourseDetails').mockImplementation(pending),
+    },
+    {
+      name: 'shared episode',
+      kind: 'course',
+      field: 'ep-title-e1',
+      open: () => firstButton(m.courses_edit_episode_aria({ number: 1 })),
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'updateEpisode').mockImplementation(pending),
+    },
+    {
+      name: 'private episode',
+      kind: 'course',
+      field: 'mine-note-e1',
+      open: () => firstButton(m.courses_notes_aria({ number: 1 })),
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'setEpisodeProgress').mockImplementation(pending),
+    },
+    {
+      name: 'new episode',
+      kind: 'course',
+      field: 'episode-title',
+      open: async () => {
+        await screen.findByText('Episode 1');
+      },
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'addEpisodes').mockImplementation(pending),
+    },
+    {
+      name: 'episode CSV',
+      kind: 'course',
+      field: 'episodes-csv',
+      open: async () => {
+        await screen.findByText('Episode 1');
+      },
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'addEpisodes').mockImplementation(pending),
+    },
+    {
+      name: 'shared study unit',
+      kind: 'study',
+      field: 'unit-title-u1',
+      open: () => firstButton(m.study_edit_aria({ title: 'Unit 1' })),
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'updateStudyUnit').mockImplementation(pending),
+    },
+    {
+      name: 'private study unit',
+      kind: 'study',
+      field: 'unit-note-u1',
+      open: () => firstButton(m.study_mine()),
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'setUnitProgress').mockImplementation(pending),
+    },
+    {
+      name: 'new study unit',
+      kind: 'study',
+      field: 'study-unit-title',
+      open: async () => {
+        await screen.findByText('Unit 1');
+      },
+      mock: (pending: () => Promise<never>) =>
+        vi.spyOn(api, 'addStudyUnits').mockImplementation(pending),
+    },
+  ];
+
+  for (const entry of cases) {
+    for (const transition of ['account', 'item']) {
+      it(`${entry.name} resets busy on ${transition} change and ignores old completion`, async () => {
+        const rejects: (() => void)[] = [];
+        const pending = (): Promise<never> =>
+          new Promise((_resolve, reject) => {
+            rejects.push(() => {
+              reject(new Error('delayed failure'));
+            });
+          });
+        const request = entry.mock(pending);
+        const view =
+          entry.kind === 'course'
+            ? render(CoursePanel, { itemId: 'i1' })
+            : render(StudyPanel, { itemId: 'i1' });
+        async function submit(text: string): Promise<void> {
+          await input(entry.field, text);
+          if (entry.field === 'episodes-csv') {
+            await fireEvent.click(screen.getByRole('button', { name: m.courses_csv_add() }));
+          } else {
+            const form = document.getElementById(entry.field)?.closest('form');
+            if (form == null) throw new Error('Missing form');
+            await fireEvent.submit(form);
+          }
+        }
+        await entry.open();
+        await submit('First');
+        await waitFor(() => {
+          expect(request).toHaveBeenCalledTimes(1);
+        });
+        if (transition === 'account') {
+          me.userId = 'learner-b';
+          await tick();
+        } else {
+          await view.rerender({ itemId: 'i2' });
+        }
+        await entry.open();
+        await submit('Second');
+        await waitFor(() => {
+          expect(request).toHaveBeenCalledTimes(2);
+        });
+        rejects[0]?.();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await submit('Still pending');
+        expect(request).toHaveBeenCalledTimes(2);
+        rejects[1]?.();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await submit('Current retry');
+        await waitFor(() => {
+          expect(request).toHaveBeenCalledTimes(3);
+        });
+        rejects[2]?.();
+        await tick();
+      });
+    }
+  }
+
+  it('reports the submitted study title after successful form reset', async () => {
+    vi.spyOn(api, 'updateStudyUnit').mockResolvedValue(undefined);
+    render(StudyPanel, { itemId: 'i1' });
+    await firstButton(m.study_edit_aria({ title: 'Unit 1' }));
+    await input('unit-title-u1', 'Submitted title');
+    const form = document.getElementById('unit-title-u1')?.closest('form');
+    if (form == null) throw new Error('Missing form');
+    await fireEvent.submit(form);
+    expect(
+      await screen.findByText(m.study_unit_saved({ title: 'Submitted title' })),
+    ).toBeInTheDocument();
+  });
+
+  it.each(['course', 'study'])(
+    'allows reopening and saving a successful shared %s edit',
+    async (kind) => {
+      const update =
+        kind === 'course'
+          ? vi.spyOn(api, 'updateEpisode').mockResolvedValue(undefined)
+          : vi.spyOn(api, 'updateStudyUnit').mockResolvedValue(undefined);
+      if (kind === 'course') render(CoursePanel, { itemId: 'i1' });
+      else render(StudyPanel, { itemId: 'i1' });
+      const field = kind === 'course' ? 'ep-title-e1' : 'unit-title-u1';
+      const label =
+        kind === 'course'
+          ? m.courses_edit_episode_aria({ number: 1 })
+          : m.study_edit_aria({ title: 'Unit 1' });
+      for (const title of ['First revision', 'Second revision']) {
+        await firstButton(label);
+        await input(field, title);
+        const form = document.getElementById(field)?.closest('form');
+        if (form == null) throw new Error('Missing form');
+        await fireEvent.submit(form);
+        await waitFor(() => {
+          expect(document.getElementById(field)).toBeNull();
+        });
+      }
+      expect(update).toHaveBeenCalledTimes(2);
+    },
+  );
 });
 afterEach(() => {
   cleanup();
