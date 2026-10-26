@@ -98,8 +98,13 @@
 
   async function addShare(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    const organizationId = org.currentId;
+    if (organizationId === undefined) {
+      error = m.app_organization_required();
+      return;
+    }
     try {
-      await api.share(doc.id, shareEmail, sharePermission);
+      await api.share(doc.id, shareEmail, sharePermission, organizationId);
       notifyDone(m.common_saved());
       shareEmail = '';
       await loadShares();

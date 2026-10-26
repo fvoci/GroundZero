@@ -203,6 +203,7 @@ export function parseMe(value: Json): Me {
     week_start: typeof o.week_start === 'string' ? o.week_start : '',
     hour_cycle: typeof o.hour_cycle === 'string' ? o.hour_cycle : '',
     theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'system',
+    last_organization_id: optStr(o, 'last_organization_id'),
     limits: parseInputLimits(rec(o.limits, 'me.limits')),
   };
 }
@@ -2648,6 +2649,7 @@ export const api = {
     week_start?: string;
     hour_cycle?: string;
     theme?: string;
+    last_organization_id?: string | null;
   }) => expectOk('PUT', '/api/me/settings', none, settings),
   async logout(): Promise<string> {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
@@ -2981,10 +2983,11 @@ export const api = {
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
     ),
-  share: (id: string, email: string, perm: 'read' | 'write') =>
+  share: (id: string, email: string, perm: 'read' | 'write', organizationId: string) =>
     expectOk('POST', `/api/documents/${encodeURIComponent(id)}/shares`, parseShareView, {
       email,
       permission: perm,
+      organization_id: organizationId,
     }),
   unshare: (shareId: string) =>
     expectOk('DELETE', `/api/document-shares/${encodeURIComponent(shareId)}`, none),
@@ -3530,6 +3533,7 @@ export const api = {
     kind: TimeKind,
     memo: string,
     target: { kind: TimeTargetKind; id: string } | null,
+    mode?: 'continue' | 'new',
   ) =>
     expectOk(
       'POST',
@@ -3543,6 +3547,7 @@ export const api = {
         kind,
         memo,
         target: target === null ? null : { ...target },
+        ...(mode === undefined ? {} : { mode }),
       },
     ),
   timerAction: (id: string, action: 'pause' | 'resume' | 'stop') =>

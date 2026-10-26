@@ -10,6 +10,7 @@
   import { Toaster } from '$lib/ui/sonner';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
+  import TimerRestartDialog from '$lib/features/time/TimerRestartDialog.svelte';
 
   import {
     auth,
@@ -102,6 +103,8 @@
     `/auth/login?return_to=${encodeURIComponent(router.path + router.hash)}`,
   );
 </script>
+
+<TimerRestartDialog />
 
 <!-- 이미 열린 대화상자의 초점 덫 위에 안전 상태를 연다. 기존 편집 상태는 그대로 보존한다. -->
 <Dialog.Root open={accountSafety.switching}>
