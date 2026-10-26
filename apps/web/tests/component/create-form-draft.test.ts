@@ -111,6 +111,27 @@ it('isolates account and target switches and ignores a late success', async () =
   expect(input()).toHaveValue('A private');
 });
 
+it('does not erase a remounted form draft when the old request completes', async () => {
+  let finish: (() => void) | undefined;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  create.mockReturnValue(pending);
+  const oldForm = mount();
+  await fireEvent.input(input(), { target: { value: 'old request' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+  oldForm.unmount();
+  mount();
+  await screen.findByTestId('form-draft-offer');
+  await fireEvent.input(input(), { target: { value: 'new unsaved input' } });
+  if (finish === undefined) throw new Error('missing completion');
+  finish();
+  await pending;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(input()).toHaveValue('new unsaved input');
+  expect(keys().some((key) => localStorage.getItem(key)?.includes('new unsaved input'))).toBe(true);
+});
+
 it('guards navigation and unload even when storage is unavailable', async () => {
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new Error('full');
