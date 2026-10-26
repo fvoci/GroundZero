@@ -102,6 +102,39 @@ async fn statuses_are_defined_per_item_by_its_owner_and_tasks_follow_them() {
     assert_eq!(created.json["color"], "#f59e0b");
     assert_eq!(created.json["task_count"], 0);
     let review = created.json["id"].as_str().unwrap().to_owned();
+    // 상태 수정·삭제도 같은 소유 권한이 필요하다. 기대 사용자 헤더가 맞아도
+    // 일반 멤버와 읽기 전용 멤버에게 권한을 부여하지 않는다.
+    for user in [&member, &reader] {
+        let changed = send(
+            &app,
+            Method::PUT,
+            &format!("{path}/{review}"),
+            Some(user),
+            Some(json!({ "category": "done" })),
+        )
+        .await;
+        assert_eq!(changed.status, StatusCode::FORBIDDEN, "{:?}", changed.json);
+        let removed = send(
+            &app,
+            Method::DELETE,
+            &format!("{path}/{review}"),
+            Some(user),
+            None,
+        )
+        .await;
+        assert_eq!(removed.status, StatusCode::FORBIDDEN, "{:?}", removed.json);
+    }
+    let unchanged = send(&app, Method::GET, &path, Some(&admin), None).await;
+    assert_eq!(unchanged.status, StatusCode::OK, "{:?}", unchanged.json);
+    assert_eq!(
+        unchanged
+            .json
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == review),
+        Some(&created.json)
+    );
     // 같은 이름은 409, 모르는 범주는 본문 역직렬화 거절(422, 서버의 기존 규칙).
     assert_eq!(
         send(&app, Method::POST, &path, Some(&admin), Some(body.clone()))
