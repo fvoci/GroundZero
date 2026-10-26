@@ -1045,6 +1045,116 @@ async fn turning_realtime_off_keeps_live_edits() {
     owner.close().await;
 }
 
+/// 두 번째 OFF 요청이 먼저 읽은 pending 목록을 첫 요청이 저장·OFF한 뒤 처리하는 순서를 재현한다.
+#[tokio::test]
+async fn a_stale_pending_list_after_realtime_off_is_already_saved() {
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "stale-off-admin").await;
+    let outsider = login(&state, "stale-off-outsider").await;
+    let ws = create_workspace(&app, &admin, "stale OFF pending").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "stale-off-writer", "member").await;
+    let document = common::create_doc(&app, &admin, &ws, "stale OFF document").await;
+    let id = document["id"].as_str().unwrap();
+    let realtime_uri = format!("/api/workspaces/{ws}/realtime");
+    let set = |enabled| {
+        send(
+            &app,
+            Method::PUT,
+            &realtime_uri,
+            Some(&admin),
+            Some(json!({"enabled": enabled})),
+        )
+    };
+    assert_eq!(set(true).await.status, StatusCode::NO_CONTENT);
+    let mut editor = connect(addr, Some(&writer), id, true).await.unwrap();
+    editor.paragraph("OFF 전에 저장 확인한 본문").await;
+    assert!(editor.until(acked).await);
+    let demoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", writer.id.0),
+        Some(&admin),
+        Some(json!({"role":"readonly"})),
+    )
+    .await;
+    assert_eq!(demoted.status, StatusCode::NO_CONTENT);
+    assert_eq!(editor.closed().await, Some(4403));
+    until_no_room(&state, id).await;
+
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let stale_pending: Vec<fvoci_server::ids::DocumentId> =
+        sqlx::query_scalar("SELECT app_collab_pending($1::uuid)")
+            .bind(&ws)
+            .fetch_all(tx.conn())
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        stale_pending,
+        vec![fvoci_server::ids::DocumentId(
+            uuid::Uuid::parse_str(id).unwrap()
+        )]
+    );
+    assert_eq!(set(false).await.status, StatusCode::NO_CONTENT);
+    let saved = get_doc(&app, &admin, id).await;
+    assert!(
+        saved["body"]
+            .to_string()
+            .contains("OFF 전에 저장 확인한 본문")
+    );
+    assert!(
+        !state
+            .collab
+            .save_pending(
+                &state.db,
+                &state.config.limits,
+                stale_pending[0],
+                outsider.id
+            )
+            .await,
+        "a stale list must not bypass permissions"
+    );
+    assert!(
+        state
+            .collab
+            .save_pending(&state.db, &state.config.limits, stale_pending[0], admin.id)
+            .await,
+        "the second OFF request must accept the already saved pending document"
+    );
+    assert_eq!(
+        get_doc(&app, &admin, id).await["revision"],
+        saved["revision"],
+        "a stale list must not create another revision"
+    );
+
+    // 실제 pending이 남은 OFF 상태는 이미 저장한 것으로 취급하면 안 된다.
+    let mut fixture = common::fixture_conn().await;
+    sqlx::query("UPDATE fvoci.document_collab_states SET pending=true, revision=(SELECT revision FROM fvoci.documents WHERE id=$1::uuid) WHERE document_id=$1::uuid")
+        .bind(id).execute(&mut fixture).await.unwrap();
+    sqlx::Connection::close(fixture).await.unwrap();
+    assert!(
+        !state
+            .collab
+            .save_pending(&state.db, &state.config.limits, stale_pending[0], admin.id)
+            .await,
+        "unsaved pending state must still refuse OFF completion"
+    );
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let pending: Vec<fvoci_server::ids::DocumentId> =
+        sqlx::query_scalar("SELECT app_collab_pending($1::uuid)")
+            .bind(&ws)
+            .fetch_all(tx.conn())
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(pending, stale_pending);
+    assert_eq!(get_doc(&app, &admin, id).await["body"], saved["body"]);
+    state.db.close().await;
+}
+
 /// 감사 반영: 다시 붙은 연결의 동기화 답(이미 반영된 지움 기록)은 편집이 아니다. 편집으로 치면 다시 붙을 때마다
 /// 조용한 시간이 처음부터 시작돼 리비전이 남지 않는다. 혼자 있는 연결도 자기 참여자 표시를 돌려받아(연결 유지)
 /// 30초마다 다시 붙지 않는다.
