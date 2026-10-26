@@ -1221,7 +1221,9 @@ it('restores a recurrence draft with its original base and requires an explicit 
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0]?.[4]).toEqual(base);
     await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
-    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(2);
+    });
     expect(save.mock.calls[1]?.[4]).toEqual(latest);
   } finally {
     window.localStorage.clear();

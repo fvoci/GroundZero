@@ -111,7 +111,7 @@
   }
   let commentsEditor = $state<ChildEditor>();
   let checklistEditor = $state<ChildEditor>();
-  let recurrenceEditor = $state<RecurrenceEditor>();
+  let recurrenceEditor = $state<{ discardDraft: () => void; isSaving: () => boolean }>();
   let recurrenceSaving = $state(false);
   const childSaving = $derived(
     commentsEditor?.isSaving() === true ||

@@ -12,6 +12,13 @@ import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
+const recurrence = {
+  freq: 'daily' as const,
+  interval: 1,
+  weekdays: [],
+  until: null,
+  count: null,
+};
 const event: EventView = {
   id: 'draft-event',
   item_id: 'i1',
@@ -25,13 +32,7 @@ const event: EventView = {
   starts_at: null,
   ends_at: null,
   timezone: 'Asia/Seoul',
-  recurrence: {
-    freq: 'daily',
-    interval: 1,
-    weekdays: [],
-    until: null,
-    count: null,
-  },
+  recurrence,
   excluded_dates: [],
   version: 3,
   access: 'write',
@@ -56,7 +57,7 @@ it('loading server event fields preserves edited recurrence text and its origina
     ...event,
     version: 4,
     description: 'Server description',
-    recurrence: { ...event.recurrence!, interval: 3 },
+    recurrence: { ...recurrence, interval: 3 },
   };
   vi.spyOn(api, 'updateEvent').mockResolvedValue({ kind: 'conflict', current: latest });
   const saveRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue({ ...latest, version: 5 });
@@ -106,7 +107,7 @@ it.each(['event', 'recurrence'] as const)(
     } else {
       vi.spyOn(api, 'setEventRecurrence').mockImplementationOnce(async () => {
         await pending;
-        return { ...latest, recurrence: { ...event.recurrence!, interval: 2 } };
+        return { ...latest, recurrence: { ...recurrence, interval: 2 } };
       });
       await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
     }

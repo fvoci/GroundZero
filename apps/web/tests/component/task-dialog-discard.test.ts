@@ -165,14 +165,16 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 describe('closing the task dialog with unsaved input', () => {
   it('blocks closing and opening another task while recurrence is saving', async () => {
     me.userId = 'user-a';
+    const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+    const series = {
+      id: 'series-1',
+      root_task_id: 't1',
+      timezone: 'Asia/Seoul',
+      rule,
+    };
     const initial = task('t1', {
       start_date: '2026-10-27',
-      series: {
-        id: 'series-1',
-        root_task_id: 't1',
-        timezone: 'Asia/Seoul',
-        rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
-      },
+      series,
     });
     const { back } = await openBoard([initial, task('t2', { parent_id: 't1' })]);
     const pending = deferred<TaskDetailView>();
@@ -189,7 +191,7 @@ describe('closing the task dialog with unsaved input', () => {
     expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
     pending.resolve({
       ...initial,
-      series: { ...initial.series!, rule: { ...initial.series!.rule, interval: 2 } },
+      series: { ...series, rule: { ...rule, interval: 2 } },
     });
     await waitFor(() => {
       expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
