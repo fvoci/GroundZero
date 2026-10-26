@@ -195,24 +195,22 @@ async fn run(
 /// 연결마다 따로 확인하므로 한 peer의 DB 대기나 방의 긴 저장 작업이 다른 peer를 막지 않는다.
 struct Recheck {
     task: tokio::task::JoinHandle<()>,
-    access: Lease,
 }
 
 impl Recheck {
     fn spawn(db: crate::db::Db, id: DocumentId, peer: Peer) -> Self {
-        let access = peer.access.clone();
         let task = tokio::spawn(async move {
             peer.access
                 .monitor(|| room::peer_access(&db, id, &peer))
                 .await;
         });
-        Self { task, access }
+        Self { task }
     }
 }
 
 impl Drop for Recheck {
     fn drop(&mut self) {
-        self.access.close(CloseReason::Busy);
+        // 정상 종료 전에 받은 편집은 기존 기한 안에서 방이 처리한다. 새 검증은 멈추되 기한을 연장하지 않는다.
         self.task.abort();
     }
 }

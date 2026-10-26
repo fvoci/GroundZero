@@ -1768,13 +1768,28 @@ impl Room {
         }
     }
 
-    /// 독립적인 연결 감시의 결과를 방에 반영한다. 이 경로에서 DB를 기다리거나 기한을 갱신하지 않는다.
+    /// 이동 직전 등 명시적인 재확인도 유지한다. peer별로 병렬 확인하며 기존 기한보다 오래 기다리지 않는다.
     async fn recheck_peers(&mut self) -> bool {
         let peers: Vec<(u64, Peer)> = self
             .conns
             .iter()
             .map(|(id, c)| (*id, c.peer.clone()))
             .collect();
+        let checks = peers.iter().map(|(_, peer)| async {
+            let started = tokio::time::Instant::now();
+            match peer
+                .access
+                .until_closed(peer_access(&self.db, self.doc_id, peer))
+                .await
+            {
+                Ok(PeerAccess::Allowed { can_write }) => peer.access.confirm(started, can_write),
+                Ok(PeerAccess::Denied) => peer.access.close(CloseReason::AccessLost),
+                Ok(PeerAccess::RealtimeOff) => peer.access.close(CloseReason::RealtimeOff),
+                Ok(PeerAccess::Unknown) => peer.access.close(CloseReason::Busy),
+                Err(_) => {}
+            }
+        });
+        futures_util::future::join_all(checks).await;
         let mut off = false;
         for (conn, peer) in peers {
             if let Some(reason) = peer.access.reason() {
