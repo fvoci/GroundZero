@@ -3,6 +3,7 @@
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
   import { tick, untrack } from 'svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   import type {
     ItemView,
@@ -316,7 +317,9 @@
   }
 
   function applyView(id: string): void {
-    leave.request(() => applyViewNow(id));
+    leave.request(() => {
+      applyViewNow(id);
+    });
   }
   function applyViewNow(id: string): void {
     askingViewDelete = false;
@@ -378,7 +381,7 @@
         error = m.tasks_view_conflict({ name });
         return;
       }
-      if (draftAttempt !== undefined) viewDraft.complete(draftAttempt);
+      viewDraft.complete(draftAttempt);
       notifyDone(m.tasks_view_saved({ name }));
       error = undefined;
     } catch (e: unknown) {
@@ -851,12 +854,12 @@
     draft: { name: string; requestId: string | null } | undefined,
   ): void {
     if (me.userId !== editingUser) return;
-    const next = new Set(newDirty);
+    const next = new SvelteSet(newDirty);
     if (draft === undefined) next.delete(lane);
     else next.add(lane);
     newDirty = next;
     const name = newDraftName(item.id, lane);
-    const kept = new Map(newKept);
+    const kept = new SvelteMap(newKept);
     if (draft === undefined) {
       clearFormDraft(name);
       kept.delete(lane);
@@ -1729,8 +1732,12 @@
         </label>
         {#each viewDraft.offers as entry (entry.key)}
           <FormDraftOffer
-            onrestore={() => viewDraft.restore(entry)}
-            ondiscard={() => viewDraft.discard(entry)}
+            onrestore={() => {
+              viewDraft.restore(entry);
+            }}
+            ondiscard={() => {
+              viewDraft.discard(entry);
+            }}
           />
         {/each}
         <label class="flex flex-col gap-0.5">

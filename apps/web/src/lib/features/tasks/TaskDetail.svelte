@@ -186,7 +186,7 @@
   const linkChanged = $derived(
     editing === undefined
       ? predecessorChoice !== '' || linkKind !== 'FS' || lagText !== '0'
-      : linkKind !== linkBase?.kind || lagText !== String(linkBase?.lag_days),
+      : linkKind !== linkBase?.kind || lagText !== String(linkBase.lag_days),
   );
   let linkStatus = $state('');
   // 관계를 바꾸면 옮겨야 하는 후속 업무(미리보기). 승인하면 본 관계·목록 그대로 보낸다.
@@ -205,6 +205,8 @@
   const TOP = 'top';
   let parentChoice = $state('');
   let childDraft = $state<{ name: string; requestId: string | null } | undefined>();
+  let checklistUnsaved = $state(false);
+  let commentsUnsaved = $state(false);
   let parentStatus = $state('');
   const parentCandidates = $derived(
     tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
@@ -477,9 +479,11 @@
   const unsaved = $derived(
     canEdit &&
       (changed ||
-      linkChanged ||
+        linkChanged ||
         parentChoice !== '' ||
-        childDraft !== undefined),
+        childDraft !== undefined ||
+        checklistUnsaved ||
+        commentsUnsaved),
   );
   $effect(() => {
     onunsaved?.(unsaved);
@@ -744,10 +748,10 @@
           : null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
-      ondraftkept?.(kept);
+      ondraftkept?.(kept && !checklistUnsaved && !commentsUnsaved);
     } else {
       clearFormDraft(draftName);
-      ondraftkept?.(true);
+      ondraftkept?.(!checklistUnsaved && !commentsUnsaved);
     }
   });
   // 폼이 사라지면(닫기·다른 업무 열기) 이 폼의 초안 상태도 끝난다: 다음 폼의 깨끗한 상태가 옛 실패를 물려받지 않게 한다.
@@ -1471,7 +1475,7 @@
                   placeholder={m.tasks_subtask_placeholder()}
                   submitLabel={m.tasks_subtask_add()}
                   initial={childInitial}
-                  onchange={(draft) => {
+                  onchange={(draft: { name: string; requestId: string | null } | undefined) => {
                     childDraft = draft;
                   }}
                   create={async (requestId: string, title: string) => {
@@ -1693,19 +1697,23 @@
           idPrefix={`task-${current.id}`}
           items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
           {canEdit}
-          onadd={(entries: NewChecklistEntry[]) =>
+          onunsaved={(value: boolean) => {
+            if (value || !accountSwitching()) checklistUnsaved = value;
+          }}
+          onadd={(entries: NewChecklistEntry[], user: string) =>
             reloadChecklist(
               api.addChecklist(
-                editingUser,
+                user,
                 current.id,
                 entries.map((e) => ({ request_id: e.requestId, text: e.text, checked: e.done })),
               ),
             )}
-          ontoggle={(id: string, done: boolean) =>
-            reloadChecklist(api.updateChecklistItem(editingUser, id, { checked: done }))}
-          onrename={(id: string, text: string) =>
-            reloadChecklist(api.updateChecklistItem(editingUser, id, { text }))}
-          onremove={(id: string) => reloadChecklist(api.deleteChecklistItem(editingUser, id))}
+          ontoggle={(id: string, done: boolean, user: string) =>
+            reloadChecklist(api.updateChecklistItem(user, id, { checked: done }))}
+          onrename={(id: string, text: string, user: string) =>
+            reloadChecklist(api.updateChecklistItem(user, id, { text }))}
+          onremove={(id: string, user: string) =>
+            reloadChecklist(api.deleteChecklistItem(user, id))}
         />
 
         <TaskTimePanel taskId={current.id} />
@@ -1714,6 +1722,9 @@
           target={{ kind: 'task', id: current.id }}
           canWrite={current.access !== 'read'}
           itemId={current.item_id}
+          onunsaved={(value: boolean) => {
+            if (value || !accountSwitching()) commentsUnsaved = value;
+          }}
         />
 
         <Backlinks kind="task" id={current.id} {workspaces} />

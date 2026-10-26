@@ -80,7 +80,10 @@ function detail(over: Partial<TaskDetailView> = {}): TaskDetailView {
   };
 }
 
-function mount(server: TaskDetailView, onunsaved = (_dirty: boolean): void => undefined): void {
+function mount(
+  server: TaskDetailView,
+  onunsaved: (dirty: boolean) => void = (): void => undefined,
+): void {
   vi.spyOn(api, 'task').mockResolvedValue(server);
   vi.spyOn(api, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
@@ -133,13 +136,28 @@ const json = (status: number, body: unknown): Response =>
   });
 
 describe('task form input across reloads and account switches', () => {
+  it.each(['새 댓글', '새 항목'])(
+    'includes the %s child editor in the parent leave warning',
+    async (label) => {
+      const changed = vi.fn();
+      mount(detail(), changed);
+      await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
+        target: { value: '입력 보존' },
+      });
+      await waitFor(() => {
+        expect(changed).toHaveBeenLastCalledWith(true);
+      });
+    },
+  );
   it('keeps a subtask title and request identity for explicit restoration and marks it unsaved', async () => {
     const changed = vi.fn();
     mount(detail(), changed);
     await fireEvent.input(await screen.findByLabelText('하위 업무 제목'), {
       target: { value: '하위 초안' },
     });
-    await waitFor(() => expect(changed).toHaveBeenLastCalledWith(true));
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(true);
+    });
     expect(keysOf(A)).toHaveLength(1);
     reloadLike();
     mount(detail());
@@ -153,7 +171,9 @@ describe('task form input across reloads and account switches', () => {
     mount(detail({ predecessors: [{ task_id: 't-0', kind: 'FS', lag_days: 0 }] }), changed);
     await fireEvent.click(await screen.findByRole('button', { name: /관계 고치기/ }));
     await fireEvent.input(await screen.findByLabelText('지연(일)'), { target: { value: '3' } });
-    await waitFor(() => expect(changed).toHaveBeenLastCalledWith(true));
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(true);
+    });
   });
   beforeEach(async () => {
     await setLocale('ko', { reload: false });

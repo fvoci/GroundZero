@@ -226,8 +226,12 @@
     <form class="flex flex-col gap-3" onsubmit={(e) => void save(e)}>
       {#each draft.offers as entry (entry.key)}
         <FormDraftOffer
-          onrestore={() => draft.restore(entry)}
-          ondiscard={() => draft.discard(entry)}
+          onrestore={() => {
+            draft.restore(entry);
+          }}
+          ondiscard={() => {
+            draft.discard(entry);
+          }}
         />
       {/each}
       <fieldset disabled={busy} class="flex flex-col gap-3">
@@ -270,10 +274,11 @@
           <Button
             type="button"
             variant="outline"
-            onclick={() =>
+            onclick={() => {
               draft.leave.request(() => {
                 open = false;
-              })}>{m.common_cancel()}</Button
+              });
+            }}>{m.common_cancel()}</Button
           >
           <Button type="submit" variant={removing ? 'destructive' : 'default'}
             >{removing ? m.tasks_status_delete_confirm() : m.common_save()}</Button

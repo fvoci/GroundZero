@@ -1306,7 +1306,7 @@ async function expectTask<T>(
   method: string,
   path: string,
   parse: (v: Json) => T,
-  body: Json | undefined,
+  body: Json,
   expectedUser: string,
   // 선택적 취소 신호(#84 CSV 가져오기 중단). 기존 호출은 그대로.
   signal?: AbortSignal,
