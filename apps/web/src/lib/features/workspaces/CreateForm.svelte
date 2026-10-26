@@ -27,11 +27,7 @@
     label: string;
     placeholder: string;
     submitLabel: string;
-    create: (
-      requestId: string,
-      name: string,
-      context: CreateFormContext,
-    ) => Promise<void>;
+    create: (requestId: string, name: string, context: CreateFormContext) => Promise<void>;
     /** Stable form kind + container/parent ID. Omit for externally managed drafts. */
     draftName?: string;
     /** Related selection (for example a template ID), preserved with the name. */
@@ -178,7 +174,14 @@
 </script>
 
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer onrestore={() => { draft.restore(entry); }} ondiscard={() => { draft.discard(entry); }} />
+  <FormDraftOffer
+    onrestore={() => {
+      draft.restore(entry);
+    }}
+    ondiscard={() => {
+      draft.discard(entry);
+    }}
+  />
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}
