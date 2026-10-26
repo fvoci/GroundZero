@@ -181,7 +181,7 @@
     const requestId = quickKey.for({ ...send, organizationId, user: quickUser });
     adding = true;
     try {
-      await api.createQuickTask(send.item, requestId, title, quickUser);
+      await api.createQuickTask(quickUser, send.item, requestId, title, quickUser);
       quickKey.done(requestId);
       writeLocal(storageKey, send.item);
       if (org.currentId !== organizationId) return;
