@@ -21,6 +21,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::collab::room::MoveRequest;
+use crate::collab::visibility::CommittedMove;
 use crate::config::Limits;
 use crate::db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
@@ -1364,6 +1365,8 @@ pub enum MoveReply {
     Moved {
         outcome: Box<MoveOutcome>,
         committed_at: std::time::Instant,
+        /// 정확히 이 이동이 권한 확인 snapshot에 보이는지 구분하는 커밋 증거.
+        commit: CommittedMove,
     },
     /// 확인한 미리보기가 없거나 잠근 뒤 다시 계산한 것과 달라 옮기지 않았다(새 미리보기).
     Changed(MovePreview),
@@ -1462,6 +1465,12 @@ pub(crate) async fn move_in_db(
             .await
             .map_err(move_lock_error)?;
     let document = visible_document(&mut tx, id).await?;
+    let xid: String = sqlx::query_scalar("SELECT pg_current_xact_id()::text")
+        .fetch_one(tx.conn())
+        .await?;
+    let xid = xid
+        .parse::<u64>()
+        .map_err(|err| AppError::Database(sqlx::Error::Decode(Box::new(err))))?;
     tx.commit().await?;
     Ok(MoveReply::Moved {
         outcome: Box::new(MoveOutcome {
@@ -1470,6 +1479,7 @@ pub(crate) async fn move_in_db(
             document,
         }),
         committed_at: std::time::Instant::now(),
+        commit: CommittedMove::new(xid),
     })
 }
 

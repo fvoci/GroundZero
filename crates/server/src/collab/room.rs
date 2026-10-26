@@ -33,6 +33,7 @@ use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
 use super::lease::{Lease, MovePermit, WritePermit};
+use super::visibility::{CommittedMove, Snapshot};
 use crate::config::Limits;
 use crate::db::Db;
 use crate::error::AppError;
@@ -1042,11 +1043,12 @@ impl Room {
         // 옛 자리 권한을 볼 수 없으므로 남는 창은 마지막 재확인 ~ 커밋이고 그 길이는 재확인 간격을 넘지 않는다(문서화된
         // 권한 철회 지연과 같다). 세션은 `drain_after_move`가 한 번 더 본다.
         self.recheck().await;
-        let (mut outcome, committed_at) = match self.move_rechecking(&request).await {
+        let (mut outcome, committed_at, commit) = match self.move_rechecking(&request).await {
             Ok(MoveReply::Moved {
                 outcome,
                 committed_at,
-            }) => (outcome, committed_at),
+                commit,
+            }) => (outcome, committed_at, commit),
             // 옮기지 않았다(확인한 미리보기가 달라짐·오류). 기다리던 메시지는 평소처럼 받는다.
             other => {
                 let _ignored = done.send(other);
@@ -1054,7 +1056,7 @@ impl Room {
             }
         };
         self.rooms.moved(self.doc_id, outcome.workspace_id.0);
-        let shutdowns = self.drain_after_move(committed_at, rx).await;
+        let shutdowns = self.drain_after_move(committed_at, commit, rx).await;
         // 커밋 전에 받은 편집까지 새 자리에서 리비전으로 남긴다. 작성자는 마지막으로 고친 사람·연결된 작성자 가운데 새
         // 자리에서 쓸 수 있는 사람, 없으면 옮긴 사람(대신 저장이면 실제 편집자를 따로 적는다, D-95). 남기면 그때 상태를
         // 저장하고 그 편집의 확인을 처음 보낸다.
@@ -1084,6 +1086,7 @@ impl Room {
         let _ignored = done.send(Ok(MoveReply::Moved {
             outcome,
             committed_at,
+            commit,
         }));
         false
     }
@@ -1133,6 +1136,7 @@ impl Room {
     async fn drain_after_move(
         &mut self,
         committed_at: Instant,
+        commit: CommittedMove,
         rx: &mut mpsc::Receiver<Command>,
     ) -> Vec<oneshot::Sender<bool>> {
         let mut shutdowns = Vec::new();
@@ -1147,7 +1151,7 @@ impl Room {
                 }) => {
                     if received <= committed_at
                         && let Some(permit) = permit
-                        && let Some(permit) = permit.freeze_move(committed_at)
+                        && let Some(permit) = permit.freeze_move(commit)
                     {
                         self.incoming_with_authorization(
                             conn,
@@ -1865,16 +1869,12 @@ impl Room {
             .collect();
         let checks = peers.iter().map(|(_, peer)| async {
             let started = tokio::time::Instant::now();
-            match peer
+            if let Ok(observed) = peer
                 .access
-                .until_closed(peer_access(&self.db, self.doc_id, peer))
+                .until_closed(observe_access(&self.db, self.doc_id, peer))
                 .await
             {
-                Ok(PeerAccess::Allowed { can_write }) => peer.access.confirm(started, can_write),
-                Ok(PeerAccess::Denied) => peer.access.close(CloseReason::AccessLost),
-                Ok(PeerAccess::RealtimeOff) => peer.access.close(CloseReason::RealtimeOff),
-                Ok(PeerAccess::Unknown) => peer.access.close(CloseReason::Busy),
-                Err(_) => {}
+                peer.access.observe(started, observed);
             }
         });
         futures_util::future::join_all(checks).await;
@@ -1973,6 +1973,21 @@ pub enum PeerAccess {
     Unknown,
 }
 
+#[derive(Debug, Clone)]
+pub(super) struct AccessCheck {
+    pub(super) access: PeerAccess,
+    pub(super) snapshot: Option<Arc<Snapshot>>,
+}
+
+impl From<PeerAccess> for AccessCheck {
+    fn from(access: PeerAccess) -> Self {
+        Self {
+            access,
+            snapshot: None,
+        }
+    }
+}
+
 /// 그 연결의 세션이 아직 그 사람의 것인지. DB 오류로 알 수 없으면 `None`.
 async fn session_alive(db: &Db, peer: &Peer) -> Option<bool> {
     let session = async {
@@ -1990,29 +2005,53 @@ async fn session_alive(db: &Db, peer: &Peer) -> Option<bool> {
 
 /// 세션이 살아 있고 문서를 실시간으로 열 수 있는지.
 pub async fn peer_access(db: &Db, doc: DocumentId, peer: &Peer) -> PeerAccess {
+    observe_access(db, doc, peer).await.access
+}
+
+pub(super) async fn observe_access(db: &Db, doc: DocumentId, peer: &Peer) -> AccessCheck {
     match session_alive(db, peer).await {
         Some(true) => {}
-        Some(false) => return PeerAccess::Denied,
-        None => return PeerAccess::Unknown,
+        Some(false) => return PeerAccess::Denied.into(),
+        None => return PeerAccess::Unknown.into(),
     }
     let access = async {
-        let mut tx = db.begin_as(peer.user).await?;
-        let access: String = sqlx::query_scalar("SELECT app_collab_access($1)")
+        let mut tx = db.begin_anonymous().await?;
+        // begin_as의 set_config SELECT보다 먼저 격리를 정한다. 예외로 끝나는 권한 판정도
+        // 그 판정과 같은 snapshot을 보존하며 mover 신원이나 문서 위치를 추가로 읽지 않는다.
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            .execute(tx.conn())
+            .await?;
+        let snapshot = Arc::new(Snapshot::read(&mut tx).await?);
+        sqlx::query("SELECT set_config('app.user_id', $1, true)")
+            .bind(peer.user.0.to_string())
+            .execute(tx.conn())
+            .await?;
+        let access: Result<String, AppError> = sqlx::query_scalar("SELECT app_collab_access($1)")
             .bind(doc)
             .fetch_one(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
-        tx.commit().await?;
-        Ok::<String, AppError>(access)
+            .map_err(AppError::from_db_function);
+        if access.is_ok() {
+            tx.commit().await?;
+        }
+        Ok::<_, AppError>((access, snapshot))
     }
     .await;
-    match access {
+    let (access, snapshot) = match access {
+        Ok(observed) => observed,
+        Err(_) => return PeerAccess::Unknown.into(),
+    };
+    let access = match access {
         Ok(a) => PeerAccess::Allowed {
             can_write: matches!(a.as_str(), "owner" | "write"),
         },
         Err(AppError::NotFound | AppError::Forbidden) => PeerAccess::Denied,
         Err(AppError::Conflict(_)) => PeerAccess::RealtimeOff,
         Err(_) => PeerAccess::Unknown,
+    };
+    AccessCheck {
+        access,
+        snapshot: Some(snapshot),
     }
 }
 

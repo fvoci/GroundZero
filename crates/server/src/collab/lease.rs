@@ -2,26 +2,28 @@
 
 use std::collections::VecDeque;
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::watch;
 use tokio::time::Instant;
 
-use super::room::{CloseReason, PeerAccess};
+use super::room::{AccessCheck, CloseReason, PeerAccess};
+use super::visibility::{CommittedMove, Snapshot};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Closed {
     reason: CloseReason,
-    at: Instant,
+    snapshot: Option<Arc<Snapshot>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Check {
     started: Instant,
-    finished: Instant,
+    snapshot: Arc<Snapshot>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct State {
     check: Option<Check>,
     deadline: Instant,
@@ -48,20 +50,24 @@ pub(crate) struct Lease {
 pub(crate) struct WritePermit {
     access: Lease,
     deadline: Instant,
+    snapshot: Arc<Snapshot>,
 }
 
 impl WritePermit {
-    pub(crate) fn freeze_move(&self, committed: std::time::Instant) -> Option<MovePermit> {
-        self.freeze_move_at(Instant::from_std(committed), Instant::now())
+    pub(crate) fn freeze_move(&self, committed: CommittedMove) -> Option<MovePermit> {
+        self.freeze_move_at(committed, Instant::now())
     }
 
     #[cfg(test)]
-    fn move_deadline_at(&self, committed: Instant, now: Instant) -> Option<Instant> {
+    fn move_deadline_at(&self, committed: CommittedMove, now: Instant) -> Option<Instant> {
         self.freeze_move_at(committed, now)
             .and_then(|permit| permit.deadline_at(now))
     }
 
-    fn freeze_move_at(&self, committed: Instant, now: Instant) -> Option<MovePermit> {
+    fn freeze_move_at(&self, committed: CommittedMove, now: Instant) -> Option<MovePermit> {
+        if self.snapshot.sees(committed) {
+            return None;
+        }
         self.access.current_at(now);
         let source_deadline = self
             .access
@@ -69,7 +75,7 @@ impl WritePermit {
             .borrow()
             .checks
             .iter()
-            .filter(|check| check.finished <= committed)
+            .filter(|check| !check.snapshot.sees(committed))
             .map(|check| check.started + self.access.period)
             .max()
             .unwrap_or(self.deadline)
@@ -87,7 +93,7 @@ impl WritePermit {
 #[derive(Debug, Clone)]
 pub(crate) struct MovePermit {
     access: Lease,
-    committed: Instant,
+    committed: CommittedMove,
     deadline: Instant,
 }
 
@@ -99,7 +105,9 @@ impl MovePermit {
     fn deadline_at(&self, now: Instant) -> Option<Instant> {
         let state = self.access.current_at(now);
         if state.closed.is_some_and(|closed| {
-            closed.at <= self.committed
+            !closed
+                .snapshot
+                .is_some_and(|snapshot| snapshot.sees(self.committed))
                 || !matches!(
                     closed.reason,
                     CloseReason::AccessLost | CloseReason::RealtimeOff
@@ -147,14 +155,14 @@ impl Lease {
             if state.closed.is_none() && now >= state.deadline {
                 state.closed = Some(Closed {
                     reason: CloseReason::Busy,
-                    at: state.deadline,
+                    snapshot: None,
                 });
                 true
             } else {
                 verifications.checks.len() != previous_len
             }
         });
-        self.state.borrow().current
+        self.state.borrow().current.clone()
     }
 
     pub(crate) fn permission(&self) -> Option<bool> {
@@ -164,9 +172,14 @@ impl Lease {
 
     pub(crate) fn write_permit(&self) -> Option<WritePermit> {
         let state = self.current_at(Instant::now());
-        (state.closed.is_none() && state.check.is_some() && state.can_write).then(|| WritePermit {
+        if state.closed.is_some() || !state.can_write {
+            return None;
+        }
+        let check = state.check?;
+        Some(WritePermit {
             access: self.clone(),
             deadline: state.deadline,
+            snapshot: check.snapshot,
         })
     }
 
@@ -177,58 +190,99 @@ impl Lease {
     }
 
     pub(crate) fn close(&self, reason: CloseReason) {
-        self.close_at(reason, Instant::now());
+        self.close_observed(reason, None);
     }
 
-    fn close_at(&self, reason: CloseReason, at: Instant) {
+    fn close_observed(&self, reason: CloseReason, snapshot: Option<Arc<Snapshot>>) {
         self.state.send_if_modified(|verifications| {
             let state = &mut verifications.current;
             if state.closed.is_some() {
                 return false;
             }
-            state.closed = Some(Closed { reason, at });
+            state.closed = Some(Closed {
+                reason,
+                snapshot: snapshot.clone(),
+            });
             true
         });
     }
 
     /// 검사를 끝낸 때가 아닌 시작한 때를 기준으로 한다. 늦게 온 성공으로 만료된 연결을 되살리지 않는다.
-    pub(crate) fn confirm(&self, started: Instant, can_write: bool) {
+    #[cfg(test)]
+    fn confirm(&self, started: Instant, can_write: bool) {
         self.confirm_at(started, can_write, Instant::now());
     }
 
+    #[cfg(test)]
     fn confirm_at(&self, started: Instant, can_write: bool, now: Instant) {
+        self.confirm_snapshot_at(started, can_write, Arc::new(Snapshot::fixture(false)), now);
+    }
+
+    fn confirm_snapshot_at(
+        &self,
+        started: Instant,
+        can_write: bool,
+        snapshot: Arc<Snapshot>,
+        now: Instant,
+    ) {
         self.state.send_if_modified(|verifications| {
+            // 독립 monitor와 강제 확인은 완료 순서가 바뀔 수 있다. 현재 위치의 더 최근 확인이
+            // 먼저 끝나도 아직 유효한 source 증거를 버리거나 닫힌 연결을 되살리지 않는다.
+            let check = Check {
+                started,
+                snapshot: snapshot.clone(),
+            };
+            let recorded = can_write && now < started + self.period;
+            if recorded {
+                verifications
+                    .checks
+                    .retain(|check| now < check.started + self.period);
+                verifications.checks.push_back(check.clone());
+            }
             let state = &mut verifications.current;
             if state.closed.is_some() {
-                return false;
+                return recorded;
             }
             if now >= state.deadline || now >= started + self.period {
                 state.closed = Some(Closed {
                     reason: CloseReason::Busy,
-                    at: state.deadline.min(started + self.period),
+                    snapshot: None,
                 });
             } else if state.can_write && !can_write {
                 state.closed = Some(Closed {
                     reason: CloseReason::AccessLost,
-                    at: now,
+                    snapshot: Some(snapshot.clone()),
                 });
-            } else if state.check.is_none_or(|last| started >= last.started) {
-                let check = Check {
-                    started,
-                    finished: now,
-                };
+            } else if state
+                .check
+                .as_ref()
+                .is_none_or(|last| started >= last.started)
+            {
                 state.check = Some(check);
                 state.deadline = started + self.period;
                 state.can_write = can_write;
-                verifications
-                    .checks
-                    .retain(|check| now < check.started + self.period);
-                verifications.checks.push_back(check);
             } else {
-                return false;
+                return recorded;
             }
             true
         });
+    }
+
+    pub(super) fn observe(&self, started: Instant, observed: AccessCheck) {
+        match observed.access {
+            PeerAccess::Allowed { can_write } => {
+                if let Some(snapshot) = observed.snapshot {
+                    self.confirm_snapshot_at(started, can_write, snapshot, Instant::now());
+                } else {
+                    self.close(CloseReason::Busy);
+                }
+            }
+            PeerAccess::Denied => self.close_observed(CloseReason::AccessLost, observed.snapshot),
+            PeerAccess::RealtimeOff => {
+                self.close_observed(CloseReason::RealtimeOff, observed.snapshot)
+            }
+            PeerAccess::Unknown => self.close(CloseReason::Busy),
+        }
     }
 
     pub(crate) async fn ready(&self) {
@@ -267,21 +321,17 @@ impl Lease {
         }
     }
 
-    pub(crate) async fn monitor<F, C>(&self, mut check: C)
+    pub(super) async fn monitor<F, C, O>(&self, mut check: C)
     where
-        F: Future<Output = PeerAccess>,
+        F: Future<Output = O>,
         C: FnMut() -> F,
+        O: Into<AccessCheck>,
     {
         let checking = async {
             loop {
                 self.next_check().await;
                 let started = Instant::now();
-                match check().await {
-                    PeerAccess::Allowed { can_write } => self.confirm(started, can_write),
-                    PeerAccess::Denied => self.close(CloseReason::AccessLost),
-                    PeerAccess::RealtimeOff => self.close(CloseReason::RealtimeOff),
-                    PeerAccess::Unknown => self.close(CloseReason::Busy),
-                }
+                self.observe(started, check().await.into());
                 if self.reason().is_some() {
                     break;
                 }
@@ -397,7 +447,7 @@ mod tests {
     #[test]
     fn move_permits_distinguish_new_place_denial_from_old_revocation_and_unknown() {
         let start = Instant::now();
-        let commit = start + Duration::from_millis(400);
+        let commit = CommittedMove::new(100);
         for (reason, closed_after_commit, allowed) in [
             (CloseReason::AccessLost, true, true),
             (CloseReason::RealtimeOff, true, true),
@@ -409,8 +459,10 @@ mod tests {
             let lease = Lease::new(true, start, Duration::from_secs(1));
             lease.confirm_at(start, true, start);
             let permit = lease.write_permit().unwrap();
-            let ended = start + Duration::from_millis(if closed_after_commit { 500 } else { 300 });
-            lease.close_at(reason, ended);
+            lease.close_observed(
+                reason,
+                Some(Arc::new(Snapshot::fixture(closed_after_commit))),
+            );
             assert_eq!(
                 permit
                     .move_deadline_at(commit, start + Duration::from_millis(600))
@@ -435,14 +487,19 @@ mod tests {
     #[test]
     fn only_source_rechecks_can_refresh_a_queued_move_permit() {
         let start = Instant::now();
-        let commit = start + Duration::from_millis(400);
+        let commit = CommittedMove::new(100);
         for check_before_commit in [true, false] {
             let lease = Lease::new(true, start, Duration::from_secs(1));
             lease.confirm_at(start, true, start);
             let permit = lease.write_permit().unwrap();
             let checked =
                 start + Duration::from_millis(if check_before_commit { 300 } else { 500 });
-            lease.confirm_at(checked, true, checked);
+            lease.confirm_snapshot_at(
+                checked,
+                true,
+                Arc::new(Snapshot::fixture(!check_before_commit)),
+                checked,
+            );
             let now = start + Duration::from_millis(1100);
             assert_eq!(
                 permit.move_deadline_at(commit, now).is_some(),
@@ -455,12 +512,12 @@ mod tests {
     }
 
     #[test]
-    fn a_check_started_before_commit_but_finished_after_it_cannot_refresh_source_proof() {
+    fn a_source_snapshot_keeps_its_original_ttl_when_the_reply_arrives_after_commit() {
         let start = Instant::now();
         let lease = Lease::new(true, start, Duration::from_secs(1));
         lease.confirm_at(start, true, start);
         let permit = lease.write_permit().unwrap();
-        let commit = start + Duration::from_millis(400);
+        let commit = CommittedMove::new(100);
         lease.confirm_at(
             start + Duration::from_millis(300),
             true,
@@ -469,7 +526,7 @@ mod tests {
         assert!(
             permit
                 .move_deadline_at(commit, start + Duration::from_millis(1100))
-                .is_none()
+                .is_some()
         );
     }
 
@@ -480,9 +537,12 @@ mod tests {
             let lease = Lease::new(true, start, Duration::from_secs(1));
             lease.confirm(start, true);
             let permit = lease.write_permit().unwrap();
-            let committed = std::time::Instant::now();
+            let committed = CommittedMove::new(100);
             let permit = permit.freeze_move(committed).unwrap();
-            lease.close(CloseReason::AccessLost);
+            lease.close_observed(
+                CloseReason::AccessLost,
+                Some(Arc::new(Snapshot::fixture(true))),
+            );
             let result = permit.check_session(std::future::ready(outcome)).await;
             assert_eq!(
                 result,
@@ -498,9 +558,12 @@ mod tests {
         let lease = Lease::new(true, start, Duration::from_secs(1));
         lease.confirm(start, true);
         let permit = lease.write_permit().unwrap();
-        let committed = std::time::Instant::now();
+        let committed = CommittedMove::new(100);
         let permit = permit.freeze_move(committed).unwrap();
-        lease.close(CloseReason::RealtimeOff);
+        lease.close_observed(
+            CloseReason::RealtimeOff,
+            Some(Arc::new(Snapshot::fixture(true))),
+        );
         assert_eq!(
             permit.check_session(std::future::pending()).await,
             Err(CloseReason::Busy)
@@ -518,14 +581,23 @@ mod tests {
             lease.confirm_at(source, true, source);
             let committed = start + Duration::from_millis(400);
             let expected = start + Duration::from_millis(1300);
-            let frozen = observed_before_destination
-                .then(|| permit.freeze_move_at(committed, committed).unwrap());
+            let frozen = observed_before_destination.then(|| {
+                permit
+                    .freeze_move_at(CommittedMove::new(100), committed)
+                    .unwrap()
+            });
             for millis in [500, 600, 700, 800] {
                 let destination = start + Duration::from_millis(millis);
-                lease.confirm_at(destination, true, destination);
+                lease.confirm_snapshot_at(
+                    destination,
+                    true,
+                    Arc::new(Snapshot::fixture(true)),
+                    destination,
+                );
             }
             let now = start + Duration::from_millis(1100);
-            let frozen = frozen.unwrap_or_else(|| permit.freeze_move_at(committed, now).unwrap());
+            let frozen = frozen
+                .unwrap_or_else(|| permit.freeze_move_at(CommittedMove::new(100), now).unwrap());
             assert_eq!(
                 frozen.deadline_at(now),
                 Some(expected),
@@ -536,5 +608,72 @@ mod tests {
                 "destination success must not extend the frozen source deadline"
             );
         }
+    }
+
+    #[test]
+    fn a_source_result_finishing_after_destination_preserves_proof_without_reviving_a_socket() {
+        for destination_closes in [false, true] {
+            let start = Instant::now();
+            let lease = Lease::new(true, start, Duration::from_secs(1));
+            lease.confirm_at(start, true, start);
+            let queued = lease.write_permit().unwrap();
+            let destination = start + Duration::from_millis(500);
+            lease.confirm_snapshot_at(
+                destination,
+                true,
+                Arc::new(Snapshot::fixture(true)),
+                start + Duration::from_millis(600),
+            );
+            if destination_closes {
+                lease.close_observed(
+                    CloseReason::AccessLost,
+                    Some(Arc::new(Snapshot::fixture(true))),
+                );
+            }
+            lease.confirm_snapshot_at(
+                start + Duration::from_millis(300),
+                true,
+                Arc::new(Snapshot::fixture(false)),
+                start + Duration::from_millis(700),
+            );
+            let now = start + Duration::from_millis(1100);
+            assert_eq!(
+                queued.move_deadline_at(CommittedMove::new(100), now),
+                Some(start + Duration::from_millis(1300))
+            );
+            assert_eq!(
+                lease.permission().is_none(),
+                destination_closes,
+                "source evidence must not change current socket closure"
+            );
+            assert_eq!(
+                lease.current_at(now).deadline,
+                destination + Duration::from_secs(1)
+            );
+        }
+    }
+
+    #[test]
+    fn an_input_with_destination_proof_cannot_borrow_an_older_source_grant() {
+        let start = Instant::now();
+        let lease = Lease::new(true, start, Duration::from_secs(1));
+        lease.confirm_at(start, true, start);
+        lease.confirm_snapshot_at(start, true, Arc::new(Snapshot::fixture(true)), start);
+        let destination_input = lease.write_permit().unwrap();
+        assert!(
+            destination_input
+                .freeze_move(CommittedMove::new(100))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_session_denial_without_a_document_snapshot_cannot_delegate() {
+        let start = Instant::now();
+        let lease = Lease::new(true, start, Duration::from_secs(1));
+        lease.confirm_at(start, true, start);
+        let permit = lease.write_permit().unwrap();
+        lease.observe(start, PeerAccess::Denied.into());
+        assert!(permit.freeze_move(CommittedMove::new(100)).is_none());
     }
 }

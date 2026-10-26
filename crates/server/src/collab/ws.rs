@@ -202,7 +202,7 @@ impl Recheck {
     fn spawn(db: crate::db::Db, id: DocumentId, peer: Peer) -> Self {
         let task = tokio::spawn(async move {
             peer.access
-                .monitor(|| room::peer_access(&db, id, &peer))
+                .monitor(|| room::observe_access(&db, id, &peer))
                 .await;
         });
         Self { task }

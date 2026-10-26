@@ -3,6 +3,7 @@
 pub mod convert;
 mod lease;
 pub mod room;
+pub mod visibility;
 pub mod ws;
 
 pub use room::Rooms;
