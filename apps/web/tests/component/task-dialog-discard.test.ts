@@ -164,6 +164,7 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 
 describe('closing the task dialog with unsaved input', () => {
   it('blocks closing and opening another task while recurrence is saving', async () => {
+    me.userId = 'user-a';
     const initial = task('t1', {
       start_date: '2026-10-27',
       series: {
@@ -195,6 +196,7 @@ describe('closing the task dialog with unsaved input', () => {
     });
     await escape(content());
     expect(back).toHaveBeenCalledTimes(1);
+    me.userId = '';
   });
 
   it('guards recurrence-only changes and discards them through the parent confirmation', async () => {

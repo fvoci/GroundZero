@@ -50,6 +50,75 @@ afterEach(() => {
 const mountEvent = () =>
   render(EventDialog, { eventId: event.id, onclose: vi.fn(), onchanged: vi.fn() });
 
+it('loading server event fields preserves edited recurrence text and its original base', async () => {
+  vi.spyOn(api, 'event').mockResolvedValue(event);
+  const latest = {
+    ...event,
+    version: 4,
+    description: 'Server description',
+    recurrence: { ...event.recurrence!, interval: 3 },
+  };
+  vi.spyOn(api, 'updateEvent').mockResolvedValue({ kind: 'conflict', current: latest });
+  const saveRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue({ ...latest, version: 5 });
+  mountEvent();
+  const description = await screen.findByLabelText(m.events_description());
+  await fireEvent.input(description, { target: { value: 'My description' } });
+  await fireEvent.input(screen.getByLabelText(m.events_interval()), { target: { value: '2' } });
+  await fireEvent.submit(formOf(description));
+  await fireEvent.click(await screen.findByRole('button', { name: m.events_load_server() }));
+  expect(screen.getByLabelText(m.events_description())).toHaveValue('Server description');
+  expect(screen.getByLabelText(m.events_interval())).toHaveValue('2');
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
+  expect(saveRule).toHaveBeenCalledWith(
+    event.id,
+    { ...event.recurrence, interval: 2 },
+    event.recurrence,
+  );
+});
+
+it.each(['event', 'recurrence'] as const)(
+  'cannot load server fields while an %s save is pending',
+  async (kind) => {
+    vi.spyOn(api, 'event').mockResolvedValue(event);
+    const latest = { ...event, version: 4, description: 'Server description' };
+    const update = vi
+      .spyOn(api, 'updateEvent')
+      .mockResolvedValueOnce({ kind: 'conflict', current: latest });
+    mountEvent();
+    const description = await screen.findByLabelText(m.events_description());
+    await fireEvent.input(description, { target: { value: 'My description' } });
+    await fireEvent.input(screen.getByLabelText(m.events_interval()), { target: { value: '2' } });
+    await fireEvent.submit(formOf(description));
+    const load = await screen.findByRole('button', { name: m.events_load_server() });
+    let resolve!: () => void;
+    const pending = new Promise<void>((yes) => {
+      resolve = yes;
+    });
+    if (kind === 'event') {
+      update.mockImplementationOnce(async () => {
+        await pending;
+        return { kind: 'updated', event: latest };
+      });
+      await fireEvent.click(screen.getByRole('button', { name: m.events_save_mine() }));
+    } else {
+      vi.spyOn(api, 'setEventRecurrence').mockImplementationOnce(async () => {
+        await pending;
+        return { ...latest, recurrence: { ...event.recurrence!, interval: 2 } };
+      });
+      await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
+    }
+    expect(load).toBeDisabled();
+    await fireEvent.click(load);
+    expect(screen.getByLabelText(m.events_description())).toHaveValue('My description');
+    expect(screen.getByLabelText(m.events_interval())).toHaveValue('2');
+    resolve();
+    await waitFor(() => expect(screen.getByLabelText(m.events_description())).not.toBeDisabled());
+  },
+);
+
 function formOf(field: HTMLElement): HTMLFormElement {
   const form = field.closest('form');
   if (form === null) throw new Error('Missing form');
