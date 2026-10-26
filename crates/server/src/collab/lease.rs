@@ -451,4 +451,37 @@ mod tests {
             Err(CloseReason::Busy)
         );
     }
+
+    #[test]
+    fn destination_success_does_not_replace_the_last_completed_source_deadline() {
+        for observed_before_destination in [false, true] {
+            let start = Instant::now();
+            let lease = Lease::new(true, start, Duration::from_secs(1));
+            lease.confirm_at(start, true, start);
+            let permit = lease.write_permit().unwrap();
+            let source = start + Duration::from_millis(300);
+            lease.confirm_at(source, true, source);
+            let committed = start + Duration::from_millis(400);
+            let expected = start + Duration::from_millis(1300);
+            if observed_before_destination {
+                assert_eq!(
+                    permit.move_deadline_at(committed, committed),
+                    Some(expected)
+                );
+            }
+            for millis in [500, 600, 700, 800] {
+                let destination = start + Duration::from_millis(millis);
+                lease.confirm_at(destination, true, destination);
+            }
+            assert_eq!(
+                permit.move_deadline_at(committed, start + Duration::from_millis(1100)),
+                Some(expected),
+                "observed_before_destination={observed_before_destination}"
+            );
+            assert!(
+                permit.move_deadline_at(committed, expected).is_none(),
+                "destination success must not extend the frozen source deadline"
+            );
+        }
+    }
 }
