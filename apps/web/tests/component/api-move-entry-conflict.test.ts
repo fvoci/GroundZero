@@ -6,8 +6,22 @@ import { api, ApiError } from '$lib/api/client';
 // 문서 이동의 409는 두 모양이다: 그사이 접근 변화가 바뀌었으면 새 미리보기(`MovePreview`, 다시 확인을 받는다),
 // 그 밖의 충돌은 `ErrorBody`(일반 오류). 일정·시간 기록 고치기의 409는 기준 버전이 지난 것이며 서버 최신본이 온다.
 const preview: MovePreviewView = {
-  gains: ['김연구'],
-  loses: ['이조교'],
+  changes: [
+    {
+      change: 'gain',
+      user_id: 'u-kim',
+      display_name: '김연구',
+      from_grade: null,
+      to_grade: 'read',
+    },
+    {
+      change: 'lose',
+      user_id: 'u-lee',
+      display_name: '이조교',
+      from_grade: 'read',
+      to_grade: null,
+    },
+  ],
   history_moves_with_document: true,
   reference_changes: true,
   active_public_links: 1,
@@ -118,11 +132,25 @@ describe('document move', () => {
   });
 
   it('returns the new preview when the access change differs (409 MovePreview)', async () => {
-    const changed = { ...preview, loses: ['이조교', '박학생'] };
+    const changed = {
+      ...preview,
+      changes: [
+        ...preview.changes,
+        {
+          change: 'lose',
+          user_id: 'u-park',
+          display_name: '박학생',
+          from_grade: 'read',
+          to_grade: null,
+        },
+      ],
+    };
     const seen = reply(409, changed);
     const result = await api.moveDocument('d1', { workspaceId: 'ws-2', itemId: 'i2' }, preview);
     expect(result.kind).toBe('changed');
-    expect(result.kind === 'changed' ? result.preview.loses : []).toEqual(['이조교', '박학생']);
+    expect(
+      result.kind === 'changed' ? result.preview.changes.map((c) => c.display_name) : [],
+    ).toEqual(['김연구', '이조교', '박학생']);
     // 확인한 것은 접근이 생기고 사라지는 사람뿐이다.
     expect(seen).toStrictEqual([
       {
@@ -131,7 +159,7 @@ describe('document move', () => {
         body: {
           target_workspace_id: 'ws-2',
           target_item_id: 'i2',
-          acknowledged: { gains: ['김연구'], loses: ['이조교'] },
+          acknowledged: { changes: preview.changes },
         },
       },
     ]);

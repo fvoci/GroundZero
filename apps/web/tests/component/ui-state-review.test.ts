@@ -131,8 +131,6 @@ describe('members', () => {
 const totals = (mine: number): TaskTimeView => ({
   estimate_minutes: null,
   mine_seconds: mine,
-  shared_seconds: 0,
-  shared_people: 0,
 });
 
 describe('task time panel', () => {
@@ -181,12 +179,11 @@ describe('task time panel', () => {
 describe('time screen', () => {
   it('drops "loading" after a failed first load and clears the error while retrying', async () => {
     vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeSharing').mockResolvedValue(false);
     vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
     vi.spyOn(api, 'timeEntries')
       .mockRejectedValueOnce(new Error('offline'))
       .mockReturnValue(new Promise(() => undefined));
-    render(TimeScreen, { props: { workspaces: [workspace] } });
+    render(TimeScreen);
 
     const retry = await screen.findByRole('button', { name: '다시 시도' });
     expect(screen.queryAllByText('불러오는 중…')).toHaveLength(0);
@@ -197,10 +194,9 @@ describe('time screen', () => {
 
   it('says there are no entries in an empty week', async () => {
     vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeSharing').mockResolvedValue(false);
     vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
     vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    render(TimeScreen, { props: { workspaces: [workspace] } });
+    render(TimeScreen);
 
     expect(await screen.findByText('기록이 없습니다.')).toBeInTheDocument();
   });
