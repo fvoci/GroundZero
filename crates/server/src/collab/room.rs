@@ -604,6 +604,11 @@ impl Rooms {
         );
         match room.load(admin).await {
             Ok(loaded) => room.doc = Some(loaded),
+            // 다른 OFF 요청이 같은 pending 목록을 먼저 저장하고 실시간을 껐을 수 있다.
+            // load의 55000만 다시 확인하며, 실제 pending이나 권한/DB 실패는 계속 거부한다.
+            Err(AppError::Conflict(_)) => {
+                return pending_already_saved(db, doc, admin).await.unwrap_or(false);
+            }
             Err(err) => {
                 tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not load a pending live state");
                 return false;
@@ -671,6 +676,29 @@ impl Rooms {
             rooms.remove(&doc);
         }
     }
+}
+
+async fn pending_already_saved(db: &Db, doc: DocumentId, admin: UserId) -> Result<bool, AppError> {
+    let mut tx = db.begin_as(admin).await?;
+    let workspace: Option<Option<Uuid>> =
+        sqlx::query_scalar("SELECT workspace_id FROM documents WHERE id=$1")
+            .bind(doc)
+            .fetch_optional(tx.conn())
+            .await?;
+    let Some(Some(workspace)) = workspace else {
+        return Ok(false);
+    };
+    // 기존 관리자 전용 pending 판정을 그대로 쓴다. 문서 비가시성·관리자 철회는 성공으로 삼지 않는다.
+    let pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM app_collab_pending($1) pending WHERE pending=$2)",
+    )
+    .bind(workspace)
+    .bind(doc)
+    .fetch_one(tx.conn())
+    .await
+    .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(!pending)
 }
 
 /// 방마다 명령을 보내고 답을 모두 합쳐 `wait`까지 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다.

@@ -1361,7 +1361,7 @@ pub async fn move_document(
 /// 이동 트랜잭션의 결과.
 #[derive(Debug)]
 pub enum MoveReply {
-    /// 옮겼다. `committed_at`: 커밋을 마친 때(열린 방은 이 뒤에 받은 편집을 넣지 않는다).
+    /// 옮겼다. `committed_at`은 서버가 커밋 응답을 받은 때이며, 그 뒤 받은 편집은 넣지 않는다.
     Moved {
         outcome: Box<MoveOutcome>,
         committed_at: std::time::Instant,
