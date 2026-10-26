@@ -53,6 +53,11 @@ async function restore(field: Field): Promise<void> {
 function drafts(): string[] {
   return Object.keys(localStorage).filter((key) => key.includes('form-draft:trash-'));
 }
+function warnsBeforeUnload(): boolean {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -406,3 +411,111 @@ it('preserves both strings when the parent replaces the same workspace with a ne
   expect(api.setTrashRetention).not.toHaveBeenCalled();
   expect(api.setVersionRetention).not.toHaveBeenCalled();
 });
+
+describe.each(fields)('%s unknown server baseline', (field) => {
+  it.each(['pending', 'rejected'] as const)(
+    'preserves a restored blank draft while the reload is %s',
+    async (loadState) => {
+      await mount();
+      await type(field, '');
+      expect(drafts()).toHaveLength(1);
+      cleanup();
+
+      const load = deferred<TrashView>();
+      vi.mocked(api.trash).mockReturnValueOnce(load.promise);
+      render(TrashScreen, { props: { workspace } });
+      await screen.findByTestId('form-draft-offer');
+      if (loadState === 'rejected') {
+        load.reject(new ApiError(503, 'unavailable', 'unavailable'));
+        await screen.findByRole('alert');
+      }
+      await restore(field);
+      expect(input(field)).toHaveValue('');
+      expect(drafts()).toHaveLength(1);
+      expect(warnsBeforeUnload()).toBe(true);
+      const move = vi.fn();
+      router.confirmLeave(move);
+      await screen.findByRole('alertdialog');
+      expect(move).not.toHaveBeenCalled();
+      await fireEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
+      expect(drafts()).toHaveLength(1);
+      expect(api.setTrashRetention).not.toHaveBeenCalled();
+      expect(api.setVersionRetention).not.toHaveBeenCalled();
+
+      cleanup();
+      await mount();
+      await restore(field);
+      expect(input(field)).toHaveValue('');
+      expect(drafts()).toHaveLength(1);
+      expect(warnsBeforeUnload()).toBe(true);
+    },
+  );
+});
+
+it('cleans a restored blank only after the server confirms null and keeps that baseline for a fresh workspace object', async () => {
+  await mount();
+  await type('version-retention', '');
+  cleanup();
+  const load = deferred<TrashView>();
+  vi.mocked(api.trash).mockReturnValueOnce(load.promise);
+  const view = render(TrashScreen, { props: { workspace } });
+  await restore('version-retention');
+  expect(drafts()).toHaveLength(1);
+  expect(warnsBeforeUnload()).toBe(true);
+
+  load.resolve({ ...initial, version_retention_days: null });
+  await vi.waitFor(() => {
+    expect(drafts()).toHaveLength(0);
+  });
+  expect(input('version-retention')).toHaveValue('');
+  expect(warnsBeforeUnload()).toBe(false);
+  vi.mocked(api.trash).mockReturnValue(new Promise<TrashView>(() => undefined));
+  await view.rerender({ workspace: { ...workspace, name: '같은 공간' } });
+  await type('version-retention', '7');
+  expect(warnsBeforeUnload()).toBe(true);
+  await type('version-retention', '');
+  expect(drafts()).toHaveLength(0);
+  expect(warnsBeforeUnload()).toBe(false);
+  expect(api.setVersionRetention).not.toHaveBeenCalled();
+});
+
+it.each(fields)(
+  'saving %s confirms only its own baseline while the other is unknown',
+  async (field) => {
+    const other: Field = field === 'trash-retention' ? 'version-retention' : 'trash-retention';
+    const method = field === 'trash-retention' ? 'setTrashRetention' : 'setVersionRetention';
+    await mount();
+    await type('trash-retention', '');
+    await type('version-retention', '');
+    cleanup();
+    vi.mocked(api.trash).mockReturnValue(new Promise<TrashView>(() => undefined));
+    const view = render(TrashScreen, { props: { workspace } });
+    await restore('trash-retention');
+    await restore('version-retention');
+    if (field === 'trash-retention') await type(field, '45');
+    await submit(field);
+    await vi.waitFor(() => {
+      expect(api[method]).toHaveBeenCalledExactlyOnceWith(
+        'ws-1',
+        field === 'trash-retention' ? 45 : null,
+      );
+      expect(drafts()).toHaveLength(1);
+    });
+    expect(drafts()[0]).toContain(
+      `form-draft:${other === 'trash-retention' ? 'trash-retention' : 'trash-version-retention'}:`,
+    );
+    expect(input(other)).toHaveValue('');
+    expect(warnsBeforeUnload()).toBe(true);
+    await view.rerender({ workspace: { ...workspace, name: '같은 공간' } });
+    await type(field, '7');
+    expect(drafts()).toHaveLength(2);
+    await type(field, field === 'trash-retention' ? '45' : '');
+    expect(drafts()).toHaveLength(1);
+    cleanup();
+    vi.mocked(api.trash).mockResolvedValue(initial);
+    await mount();
+    await restore(other);
+    expect(input(other)).toHaveValue('');
+    expect(warnsBeforeUnload()).toBe(true);
+  },
+);
