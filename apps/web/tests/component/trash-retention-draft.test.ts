@@ -384,3 +384,25 @@ it('discards only a selected offer and clears an input that becomes equal to the
   });
   expect(api.setVersionRetention).not.toHaveBeenCalled();
 });
+
+it('preserves both strings when the parent replaces the same workspace with a new object', async () => {
+  const view = await mount();
+  await type('trash-retention', ' 1e- ');
+  await type('version-retention', '');
+  await view.rerender({ workspace: { ...workspace, name: '동일 ID 새 객체' } });
+  expect(input('trash-retention')).toHaveValue(' 1e- ');
+  expect(input('version-retention')).toHaveValue('');
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  expect(api.setTrashRetention).not.toHaveBeenCalled();
+  expect(api.setVersionRetention).not.toHaveBeenCalled();
+  cleanup();
+  await mount();
+  await restore('trash-retention');
+  await restore('version-retention');
+  expect(input('trash-retention')).toHaveValue(' 1e- ');
+  expect(input('version-retention')).toHaveValue('');
+  expect(api.setTrashRetention).not.toHaveBeenCalled();
+  expect(api.setVersionRetention).not.toHaveBeenCalled();
+});
