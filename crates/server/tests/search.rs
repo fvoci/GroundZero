@@ -20,6 +20,11 @@ use fvoci_server::search::{SearchClient, drain, prepare};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+/// 공유 시험 DB의 검색 대기열. 닿지 않는 검색 서비스로 주기 작업을 돌리는 시험은 대기열 행을 DB 전체에서 꺼내(2분 동안
+/// 다시 꺼내지 않음) 보내지 못한다. 그동안 다른 시험의 행이 색인되지 않아 기다리던 시험이 시간 초과로 실패할 수 있다. 그
+/// 시험은 `write`, 나머지 시험은 `read`를 쥔다(#158).
+static SHARED_QUEUE: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
 /// Meilisearch를 쓰는 상태. `cargo xtask test`가 테스트용 주소와 키를 넣는다.
 async fn search_state() -> AppState {
     let url = std::env::var("FVOCI_TEST_SEARCH_URL").expect("run via `cargo xtask test`");
@@ -166,6 +171,7 @@ async fn private_item(app: &Router, admin: &TestUser, ws: &str, key: &str) -> Va
 
 #[tokio::test]
 async fn search_returns_only_what_each_person_can_see() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -331,6 +337,7 @@ async fn search_returns_only_what_each_person_can_see() {
 
 #[tokio::test]
 async fn trashed_content_leaves_the_index_and_returns_on_restore() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -429,6 +436,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
 
 #[tokio::test]
 async fn an_unreachable_search_service_falls_back_to_titles() {
+    let _queue = SHARED_QUEUE.write().await;
     let state = fvoci_server::app::build_state(config_with(&[
         ("FVOCI_SEARCH_URL", "http://127.0.0.1:9"),
         ("FVOCI_SEARCH_KEY", "unused-test-key"),
@@ -452,6 +460,7 @@ async fn an_unreachable_search_service_falls_back_to_titles() {
 
 #[tokio::test]
 async fn file_names_are_searchable_by_people_who_can_see_the_file() {
+    let _queue = SHARED_QUEUE.read().await;
     use sha2::{Digest, Sha256};
     let state = search_state().await;
     let app = common::app(&state);
@@ -605,6 +614,7 @@ fn pdf(text: &str) -> Vec<u8> {
 
 #[tokio::test]
 async fn filters_narrow_results_and_attachment_text_is_searchable() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -782,6 +792,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
 /// 제목만이면 본문 낱말로는 찾지 않는다. 검색 서비스가 없을 때의 제목 검색도 작성자 조건을 따른다.
 #[tokio::test]
 async fn author_and_title_only_narrow_results_without_widening_access() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -892,6 +903,7 @@ async fn author_and_title_only_narrow_results_without_widening_access() {
 /// 항목 기록(D-39 자료 검색): 제목·메모·칸의 글자로 찾고, 그 항목을 볼 수 있는 사람에게만 보인다.
 #[tokio::test]
 async fn item_records_are_searchable_by_people_who_see_the_item() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -1039,6 +1051,7 @@ async fn fake_search() -> (String, Fake) {
 /// 보낸다. 실패·취소는 다시 보낸다. 전체 DB를 꺼내는 작업이라 이 시험만의 DB를 쓴다.
 #[tokio::test]
 async fn pending_index_tasks_are_tracked_until_they_succeed() {
+    let _queue = SHARED_QUEUE.read().await;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let mut admin = <sqlx::PgConnection as sqlx::Connection>::connect(&admin_url)
         .await
@@ -1200,6 +1213,7 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
 /// 표를 잠그고 전체 대기열을 꺼내므로 이 시험만의 DB를 쓴다.
 #[tokio::test]
 async fn drain_does_not_send_a_row_whose_generation_changed_after_the_claim() {
+    let _queue = SHARED_QUEUE.read().await;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let mut admin = <sqlx::PgConnection as sqlx::Connection>::connect(&admin_url)
         .await
@@ -1325,6 +1339,7 @@ async fn around_today(state: &AppState, user: &TestUser) -> (String, String) {
 /// 다른 모듈·위키 문서를 빼는지도 본다(감사 델타 SD8).
 #[tokio::test]
 async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -1423,6 +1438,7 @@ async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
 /// Meilisearch 경로의 항목 날짜가 옛 날짜로 남았다(대체 경로는 지금 날짜). 이제 다시 색인한다.
 #[tokio::test]
 async fn changing_an_item_profile_reindexes_its_day() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -1495,6 +1511,7 @@ async fn changing_an_item_profile_reindexes_its_day() {
 /// 있는데 시험이 없어, 한쪽이 바뀌어도 시험이 통과했다. 두 경로에서 같은 날짜 필터로 확인한다.
 #[tokio::test]
 async fn record_dates_follow_the_occurred_day_then_the_change_day() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -1597,6 +1614,7 @@ async fn doc_changed_at(app: &Router, user: &TestUser, ws: &str, title: &str, at
 /// 모르는 시간대는 400이다.
 #[tokio::test]
 async fn search_dates_use_the_viewers_day_boundaries() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let plain = plain_app();
@@ -1777,6 +1795,7 @@ async fn search_dates_use_the_viewers_day_boundaries() {
 /// 일정은 뉴욕의 달력에서 10-20이다).
 #[tokio::test]
 async fn date_only_values_keep_their_day_and_timed_events_follow_the_viewer() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let plain = plain_app();
@@ -1903,6 +1922,7 @@ async fn date_only_values_keep_their_day_and_timed_events_follow_the_viewer() {
 /// (최종 접근 확인은 지금처럼 서버가 한다, P-14).
 #[tokio::test]
 async fn an_author_filter_finds_results_beyond_the_old_candidate_window() {
+    let _queue = SHARED_QUEUE.read().await;
     const DECOYS: usize = 320;
     let state = search_state().await;
     let app = common::app(&state);
@@ -1988,6 +2008,7 @@ async fn an_author_filter_finds_results_beyond_the_old_candidate_window() {
 /// 들어간다(시간 기록의 날 경계와 같은 `app_local_instant`, 감사 S21).
 #[tokio::test]
 async fn a_day_with_a_repeated_midnight_starts_at_the_first_one() {
+    let _queue = SHARED_QUEUE.read().await;
     let state = search_state().await;
     let app = common::app(&state);
     let plain = plain_app();

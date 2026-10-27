@@ -16,7 +16,10 @@ use time::Date;
 /// 열을 쥔 채 DB 전체의 반복 회차 맞추기를 돌리는 시험끼리는 차례로 돈다. 함께 돌면 한쪽 작업이 앞 항목들의 열을 쥐고
 /// 다른 쪽이 쥔 열에서 기다리고, 다른 쪽 작업(잠금 시간 300ms)은 그 항목마다 시간 초과를 기다려 반복이 쌓일수록
 /// 길어졌다(W9: 항목 58개에서 17초). 그동안 열 순서 시험은 자기 열에서 기다리는 작업을 보지 못하고 실패했다.
-static LANE_TICK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// 그 작업은 규칙이 있는 모든 반복을 맞추므로(회차 상한까지 따라잡기 포함) 반복을 만드는 다른 시험과도 겹치지 않게 한다.
+/// 작업을 돌리는 시험은 `write`, 나머지 시험은 `read`를 쥔다(#158). 예: 따라잡기 상한 시험이 회차 51개를 세기 전에 작업이
+/// 그 반복을 더 따라잡으면 수가 달라진다.
+static LANE_TICK: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
 
 /// 상한(`app_system_recurrence_tick_ids`)을 본 뒤 다른 시험이 반복을 만들거나 회차를 지우면 뒤 반복의 몫이 모자라
 /// 그 반복이 FV001 경고로 건너뛴다(작업 프로세스는 다음 주기에 다시 한다, D-88). 시험은 회차 맞추기를 한 번만 부르므로
@@ -133,6 +136,7 @@ fn day(d: Date) -> String {
 
 #[tokio::test]
 async fn rules_expand_with_skips_counts_and_limits() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let admin = login(&state, "admin").await;
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
@@ -204,6 +208,7 @@ async fn rules_expand_with_skips_counts_and_limits() {
 
 #[tokio::test]
 async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -372,6 +377,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
 
 #[tokio::test]
 async fn catch_up_is_capped_per_request_and_archived_items_refuse() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -445,6 +451,7 @@ async fn catch_up_is_capped_per_request_and_archived_items_refuse() {
 
 #[tokio::test]
 async fn repeating_events_keep_their_wall_clock_across_daylight_saving() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -511,6 +518,7 @@ async fn repeating_events_keep_their_wall_clock_across_daylight_saving() {
 
 #[tokio::test]
 async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -603,6 +611,7 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
 /// 시각에 한 번만. 보는 사람의 시간대가 달라도 회차 시점은 같다.
 #[tokio::test]
 async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_ones() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -733,6 +742,7 @@ async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_o
 /// 같이 400으로 받지 않는다. 시간대만 바꿔 첫 회차 날짜가 밀리는 경우도 같다.
 #[tokio::test]
 async fn moving_a_repeating_event_past_its_until_is_refused() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -841,6 +851,7 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
 /// 규칙만 보므로 그사이 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 같은 요청의 재시도다.
 #[tokio::test]
 async fn event_rule_saves_from_a_stale_rule_conflict() {
+    let _tick = LANE_TICK.read().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -921,7 +932,7 @@ async fn event_rule_saves_from_a_stale_rule_conflict() {
 /// 주기까지 빠졌다. 작업은 이제 항목의 세 열을 같은 순서로 먼저 잡는다.
 #[tokio::test]
 async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves() {
-    let _serial = LANE_TICK.lock().await;
+    let _serial = LANE_TICK.write().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -1040,7 +1051,7 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
 /// 반복만 경고하고 건너뛴다.
 #[tokio::test]
 async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
-    let _serial = LANE_TICK.lock().await;
+    let _serial = LANE_TICK.write().await;
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
