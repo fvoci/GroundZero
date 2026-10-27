@@ -2028,7 +2028,19 @@ async fn session_alive(db: &Db, peer: &Peer) -> Option<bool> {
         Ok::<Option<UserId>, AppError>(user)
     }
     .await;
-    session.ok().map(|user| user == Some(peer.user))
+    match session {
+        Ok(user) => Some(user == Some(peer.user)),
+        Err(err) => {
+            // R2 A: 알 수 없으면 연결을 닫는다. 닫힌 까닭(DB 오류)을 기한 초과와 구분해 로그에 남긴다.
+            tracing::warn!(
+                event = "collab.session_check_failed",
+                error_code = err.code(),
+                detail = crate::logging::safe_error(&err),
+                "could not confirm the live editing session"
+            );
+            None
+        }
+    }
 }
 
 /// 세션이 살아 있고 문서를 실시간으로 열 수 있는지.
@@ -2067,7 +2079,16 @@ pub(super) async fn observe_access(db: &Db, doc: DocumentId, peer: &Peer) -> Acc
     .await;
     let (access, snapshot) = match access {
         Ok(observed) => observed,
-        Err(_) => return PeerAccess::Unknown.into(),
+        Err(err) => {
+            tracing::warn!(
+                event = "collab.access_check_failed",
+                document = %doc.0,
+                error_code = err.code(),
+                detail = crate::logging::safe_error(&err),
+                "could not confirm live editing access"
+            );
+            return PeerAccess::Unknown.into();
+        }
     };
     let access = match access {
         Ok(a) => PeerAccess::Allowed {
@@ -2075,7 +2096,16 @@ pub(super) async fn observe_access(db: &Db, doc: DocumentId, peer: &Peer) -> Acc
         },
         Err(AppError::NotFound | AppError::Forbidden) => PeerAccess::Denied,
         Err(AppError::Conflict(_)) => PeerAccess::RealtimeOff,
-        Err(_) => PeerAccess::Unknown,
+        Err(err) => {
+            tracing::warn!(
+                event = "collab.access_check_failed",
+                document = %doc.0,
+                error_code = err.code(),
+                detail = crate::logging::safe_error(&err),
+                "could not confirm live editing access"
+            );
+            PeerAccess::Unknown
+        }
     };
     AccessCheck {
         access,
