@@ -74,10 +74,12 @@ afterEach(() => {
   me.userId = '';
 });
 
+// 화면이 크다(업무 보드·달력·기록·첨부 등). 역할 질의는 기다리는 동안 DOM 전체의 접근성 이름을 매번 계산해 부하가 높은
+// 전체 실행에서 5초 한도 가까이 갔다(R5 확인). 같은 요소(그 제목의 제목 요소, 그 이름의 양식 선택지)를 선택자로 찾는다.
 async function mount(itemId = 'item-a', title = `서버 항목 ${itemId}`) {
   const view = render(ItemScreen, { workspace, itemId, workspaces: [workspace] });
-  await screen.findByRole('heading', { name: title });
-  await screen.findByRole('option', { name: /선택할 양식/ });
+  await screen.findByText(title, { selector: 'h1, h2, h3, h4, h5, h6' });
+  await screen.findByText(/선택할 양식/, { selector: 'option' });
   return view;
 }
 
@@ -87,7 +89,11 @@ function warnsBeforeUnload(): void {
   expect(unload.defaultPrevented).toBe(true);
 }
 
-it('restores an item document title, template and failed request ID only for its account and item', async () => {
+/**
+ * 계정 A가 item-a에서 문서 제목·양식을 넣고 만들기를 눌렀는데 응답을 잃었다. 화면을 닫고 그 만들기 요청을 돌려준다.
+ * 마운트 횟수를 시험마다 둘로 줄이려고(부하가 높은 전체 실행에서 마운트 넷이 5초 한도를 넘었다) 공통 준비로 둔다.
+ */
+async function failItemDocumentCreation() {
   const create = vi
     .spyOn(api, 'createItemDocument')
     .mockRejectedValue(new NetworkError('lost response'));
@@ -99,7 +105,7 @@ it('restores an item document title, template and failed request ID only for its
     target: { value: 'template-chosen' },
   });
   warnsBeforeUnload();
-  await fireEvent.click(screen.getByRole('button', { name: m.modules_create_document() }));
+  await fireEvent.click(screen.getByText(m.modules_create_document(), { selector: 'button' }));
   await screen.findByRole('alert');
   expect(create).toHaveBeenCalledOnce();
   const original = create.mock.calls[0];
@@ -112,31 +118,54 @@ it('restores an item document title, template and failed request ID only for its
   ]);
   expect(original?.[1]).toBeTruthy();
   first.unmount();
+  return { create, original };
+}
 
-  const otherTarget = await mount('item-b');
+/** 계정 A가 남긴 브라우저 저장값(다른 항목·계정을 거쳐도 그대로여야 아래 시험에서 되살린다). */
+function accountAStorage(): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('fvoci:restore-account-a:'))
+      .sort()
+      .map((key) => [key, localStorage.getItem(key)]),
+  );
+}
+
+it('does not offer a failed item document creation on another item', async () => {
+  await failItemDocumentCreation();
+  const kept = accountAStorage();
+  expect(Object.keys(kept).length).toBeGreaterThan(0);
+  await mount('item-b');
   expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
   expect(screen.getByLabelText(m.modules_new_document_title())).toHaveValue('');
   expect(screen.getByLabelText(m.documents_template_label())).toHaveValue('');
-  otherTarget.unmount();
+  expect(accountAStorage()).toEqual(kept);
+});
+
+it('does not offer or show a failed item document creation to another account', async () => {
+  await failItemDocumentCreation();
+  const kept = accountAStorage();
   me.userId = 'restore-account-b';
-  const otherAccount = await mount();
+  await mount();
   expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
   expect(screen.getByLabelText(m.modules_new_document_title())).toHaveValue('');
   expect(document.body).not.toHaveTextContent('문서 초안 日本語');
-  otherAccount.unmount();
+  expect(accountAStorage()).toEqual(kept);
+});
 
-  me.userId = 'restore-account-a';
+it('restores an item document title, template and failed request ID only for its account and item', async () => {
+  const { create, original } = await failItemDocumentCreation();
   await mount();
   await screen.findByTestId('form-draft-offer');
   expect(screen.getByLabelText(m.modules_new_document_title())).toHaveValue('');
   expect(screen.getByLabelText(m.documents_template_label())).toHaveValue('');
   expect(create).toHaveBeenCalledOnce();
-  await fireEvent.click(screen.getByRole('button', { name: m.common_draft_restore() }));
+  await fireEvent.click(screen.getByText(m.common_draft_restore(), { selector: 'button' }));
   expect(screen.getByLabelText(m.modules_new_document_title())).toHaveValue('문서 초안 日本語');
   expect(screen.getByLabelText(m.documents_template_label())).toHaveValue('template-chosen');
   expect(create).toHaveBeenCalledOnce();
   warnsBeforeUnload();
-  await fireEvent.click(screen.getByRole('button', { name: m.modules_create_document() }));
+  await fireEvent.click(screen.getByText(m.modules_create_document(), { selector: 'button' }));
   await waitFor(() => {
     expect(create).toHaveBeenCalledTimes(2);
   });
