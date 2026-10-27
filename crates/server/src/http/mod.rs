@@ -5,7 +5,7 @@ pub mod cache;
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::extract::{DefaultBodyLimit, MatchedPath, Request, State};
+use axum::extract::{DefaultBodyLimit, FromRef, MatchedPath, Request, State};
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -97,10 +97,20 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+/// 공개 원점 문자열(`scheme://host[:port]`). Origin 검사는 미들웨어 상태에서 `FromRef`로 꺼낸다.
+#[derive(Debug, Clone)]
+pub struct PublicOrigin(pub String);
+
+impl FromRef<AppState> for PublicOrigin {
+    fn from_ref(state: &AppState) -> Self {
+        Self(state.config.public_origin())
+    }
+}
+
 /// 상태를 바꾸는 요청은 브라우저의 `Origin`이 공개 원점과 같아야 한다 (CSRF 방지).
 /// SameSite=Lax 쿠키만으로는 JSON API의 교차 출처 요청을 다 막지 못한다.
 async fn require_same_origin(
-    State(state): State<AppState>,
+    State(public): State<PublicOrigin>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -113,7 +123,7 @@ async fn require_same_origin(
             .headers()
             .get(header::ORIGIN)
             .and_then(|v| v.to_str().ok());
-        if origin != Some(state.config.public_origin().as_str()) {
+        if origin != Some(public.0.as_str()) {
             let mut response = (
                 StatusCode::FORBIDDEN,
                 Json(ErrorBody {

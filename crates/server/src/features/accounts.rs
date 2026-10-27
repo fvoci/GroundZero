@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{FromRequestParts, Query, State};
+use axum::extract::{FromRef, FromRequestParts, Query, State};
 use axum::http::header::COOKIE;
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, StatusCode};
@@ -511,15 +511,37 @@ pub async fn logout(
     Ok((jar, Json(LogoutResponse { redirect_to })).into_response())
 }
 
+/// 세션으로 요청한 사용자를 정하는 데 필요한 상태. 추출기는 처리기의 상태에서 `FromRef`로 꺼낸다.
+#[derive(Debug, Clone)]
+pub struct SessionState {
+    pub db: Db,
+    /// 세션 쿠키 이름(https 공개 원점이면 `__Host-` 이름).
+    pub cookie_name: &'static str,
+}
+
+impl FromRef<AppState> for SessionState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            cookie_name: session_cookie_name(&state.config),
+        }
+    }
+}
+
 /// 요청한 사용자. 세션 쿠키가 없거나, 중복이거나, 만료되면 401.
 #[derive(Debug, Clone, Copy)]
 pub struct CurrentUser(pub UserId);
 
-impl FromRequestParts<AppState> for CurrentUser {
+impl<S> FromRequestParts<S> for CurrentUser
+where
+    S: Send + Sync,
+    SessionState: FromRef<S>,
+{
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
-        let token = single_cookie(&parts.headers, session_cookie_name(&state.config))
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
+        let state = SessionState::from_ref(state);
+        let token = single_cookie(&parts.headers, state.cookie_name)
             .map_err(|()| AppError::Unauthorized)?
             .ok_or(AppError::Unauthorized)?;
         let mut tx = state.db.begin_anonymous().await?;
@@ -544,10 +566,14 @@ pub const EXPECTED_USER_HEADER: &str = "x-fvoci-expected-user";
 #[derive(Debug, Clone, Copy)]
 pub struct ExpectedUser(pub UserId);
 
-impl FromRequestParts<AppState> for ExpectedUser {
+impl<S> FromRequestParts<S> for ExpectedUser
+where
+    S: Send + Sync,
+    SessionState: FromRef<S>,
+{
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
         let CurrentUser(user) = CurrentUser::from_request_parts(parts, state).await?;
         let mut values = parts.headers.get_all(EXPECTED_USER_HEADER).iter();
         let (Some(value), None) = (values.next(), values.next()) else {
