@@ -247,6 +247,14 @@
     // Capture the selected version before discarding resets the reactive conflict.
     draft.leave.request(() => {
       fill(current);
+      // 버리기가 폼과 함께 수정 이력도 비웠다. 서버 내용(새 판)의 이력을 다시 읽는다.
+      const userId = me.userId;
+      void api
+        .timeEntryRevisions(current.id)
+        .then((h) => {
+          if (me.userId === userId && base?.id === current.id) history = h;
+        })
+        .catch(() => undefined);
     });
   }
 
@@ -414,8 +422,14 @@
           })}{/if}
       </Dialog.Description>
     </Dialog.Header>
+    <!-- 저장·삭제하는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 기준 판을 옮기지
+         않은 다음 저장이 자기 저장과 409로 부딪친다. -->
     {#each draft.offers as offer (offer.key)}
-      <div class="flex flex-wrap items-center gap-2" data-testid="time-entry-draft-offer">
+      <fieldset
+        class="flex flex-wrap items-center gap-2"
+        disabled={busy}
+        data-testid="time-entry-draft-offer"
+      >
         <p>{m.common_draft_available()}</p>
         <Button
           size="sm"
@@ -430,205 +444,209 @@
             draft.discard(offer);
           }}>{m.common_draft_discard()}</Button
         >
-      </div>
+      </fieldset>
     {/each}
     {#if form !== undefined && base !== undefined}
       {@const f = form}
       {@const running = base.ended_at === null}
-      <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)}>
-        <div class="flex flex-col gap-1">
-          <Label for="time-edit-start">{m.time_start()}</Label>
-          <Input
-            id="time-edit-start"
-            type="datetime-local"
-            bind:value={f.start}
-            required
-            oninput={() => {
-              missing = undefined;
-              startChoice = undefined;
-              unchosen.start = false;
-            }}
-            aria-invalid={missing === 'start' || startInvalid}
-            aria-describedby={describedBy(
-              missing === 'start' && 'time-edit-start-error',
-              startOptions.length === 2 && 'time-edit-start-repeated-legend',
-              startInvalid && 'time-edit-start-repeated-error',
-            )}
-          />
-          {#if missing === 'start'}
-            <p id="time-edit-start-error" class="text-xs text-destructive" role="alert">
-              {m.events_missing_time({ zone: editZone })}
-            </p>
-          {/if}
-          {#if startOptions.length === 2}
-            <RepeatedTimeChoice
+      <fieldset class="min-w-0" disabled={busy}>
+        <form class="grid gap-3 sm:grid-cols-2" onsubmit={(e) => void save(e)}>
+          <div class="flex flex-col gap-1">
+            <Label for="time-edit-start">{m.time_start()}</Label>
+            <Input
               id="time-edit-start"
-              field={m.time_start()}
-              zone={editZone}
-              options={startOptions}
-              chosen={startChoice}
-              invalid={startInvalid}
-              attempt={validationAttempt}
-              onchoose={(instant: string) => {
-                startChoice = instant;
+              type="datetime-local"
+              bind:value={f.start}
+              required
+              oninput={() => {
+                missing = undefined;
+                startChoice = undefined;
                 unchosen.start = false;
               }}
+              aria-invalid={missing === 'start' || startInvalid}
+              aria-describedby={describedBy(
+                missing === 'start' && 'time-edit-start-error',
+                startOptions.length === 2 && 'time-edit-start-repeated-legend',
+                startInvalid && 'time-edit-start-repeated-error',
+              )}
             />
-          {/if}
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="time-edit-end">{m.time_end()}</Label>
-          <Input
-            id="time-edit-end"
-            type="datetime-local"
-            bind:value={f.end}
-            disabled={running}
-            required={!running}
-            oninput={() => {
-              missing = undefined;
-              endChoice = undefined;
-              unchosen.end = false;
-            }}
-            aria-invalid={missing === 'end' || endInvalid}
-            aria-describedby={describedBy(
-              missing === 'end' && 'time-edit-end-error',
-              endOptions.length === 2 && 'time-edit-end-repeated-legend',
-              endInvalid && 'time-edit-end-repeated-error',
-            )}
-          />
-          {#if missing === 'end'}
-            <p id="time-edit-end-error" class="text-xs text-destructive" role="alert">
-              {m.events_missing_time({ zone: editZone })}
-            </p>
-          {/if}
-          {#if endOptions.length === 2}
-            <RepeatedTimeChoice
+            {#if missing === 'start'}
+              <p id="time-edit-start-error" class="text-xs text-destructive" role="alert">
+                {m.events_missing_time({ zone: editZone })}
+              </p>
+            {/if}
+            {#if startOptions.length === 2}
+              <RepeatedTimeChoice
+                id="time-edit-start"
+                field={m.time_start()}
+                zone={editZone}
+                options={startOptions}
+                chosen={startChoice}
+                invalid={startInvalid}
+                attempt={validationAttempt}
+                onchoose={(instant: string) => {
+                  startChoice = instant;
+                  unchosen.start = false;
+                }}
+              />
+            {/if}
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="time-edit-end">{m.time_end()}</Label>
+            <Input
               id="time-edit-end"
-              field={m.time_end()}
-              zone={editZone}
-              options={endOptions}
-              chosen={endChoice}
-              invalid={endInvalid}
-              attempt={validationAttempt}
-              onchoose={(instant: string) => {
-                endChoice = instant;
+              type="datetime-local"
+              bind:value={f.end}
+              disabled={running}
+              required={!running}
+              oninput={() => {
+                missing = undefined;
+                endChoice = undefined;
                 unchosen.end = false;
               }}
+              aria-invalid={missing === 'end' || endInvalid}
+              aria-describedby={describedBy(
+                missing === 'end' && 'time-edit-end-error',
+                endOptions.length === 2 && 'time-edit-end-repeated-legend',
+                endInvalid && 'time-edit-end-repeated-error',
+              )}
             />
-          {/if}
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="time-edit-paused">{m.time_paused_minutes()}</Label>
-          <Input
-            id="time-edit-paused"
-            inputmode="numeric"
-            bind:value={f.pausedMinutes}
-            disabled={running}
-          />
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-sm font-medium" id="time-edit-kind-label">{m.time_kind()}</span>
-          <Select.Root
-            type="single"
-            value={f.kind}
-            onValueChange={(v: string) => {
-              const k = TIME_KINDS.find((x) => x === v);
-              if (k !== undefined) f.kind = k;
-            }}
-          >
-            <Select.Trigger aria-labelledby="time-edit-kind-label"
-              >{TIME_KIND_LABEL[f.kind]}</Select.Trigger
+            {#if missing === 'end'}
+              <p id="time-edit-end-error" class="text-xs text-destructive" role="alert">
+                {m.events_missing_time({ zone: editZone })}
+              </p>
+            {/if}
+            {#if endOptions.length === 2}
+              <RepeatedTimeChoice
+                id="time-edit-end"
+                field={m.time_end()}
+                zone={editZone}
+                options={endOptions}
+                chosen={endChoice}
+                invalid={endInvalid}
+                attempt={validationAttempt}
+                onchoose={(instant: string) => {
+                  endChoice = instant;
+                  unchosen.end = false;
+                }}
+              />
+            {/if}
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="time-edit-paused">{m.time_paused_minutes()}</Label>
+            <Input
+              id="time-edit-paused"
+              inputmode="numeric"
+              bind:value={f.pausedMinutes}
+              disabled={running}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-medium" id="time-edit-kind-label">{m.time_kind()}</span>
+            <Select.Root
+              type="single"
+              value={f.kind}
+              onValueChange={(v: string) => {
+                const k = TIME_KINDS.find((x) => x === v);
+                if (k !== undefined) f.kind = k;
+              }}
             >
-            <Select.Content>
-              {#each TIME_KINDS as k (k)}
-                <Select.Item value={k} label={TIME_KIND_LABEL[k]}>{TIME_KIND_LABEL[k]}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-        </div>
-        <div class="flex flex-col gap-1 sm:col-span-2">
-          <Label for="time-edit-memo">{m.time_memo()}</Label>
-          <Input id="time-edit-memo" bind:value={f.memo} maxlength={2000} />
-        </div>
-        <div class="flex flex-col gap-2 sm:col-span-2">
-          <span class="text-sm font-medium">{m.time_target()}</span>
-          {#if f.target !== null}
-            <div class="flex items-center gap-2 text-sm">
-              <span>{f.target.label}</span>
-              <Button size="sm" variant="ghost" onclick={() => (f.target = null)}
-                >{m.time_unlink()}</Button
+              <Select.Trigger aria-labelledby="time-edit-kind-label"
+                >{TIME_KIND_LABEL[f.kind]}</Select.Trigger
+              >
+              <Select.Content>
+                {#each TIME_KINDS as k (k)}
+                  <Select.Item value={k} label={TIME_KIND_LABEL[k]}
+                    >{TIME_KIND_LABEL[k]}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div class="flex flex-col gap-1 sm:col-span-2">
+            <Label for="time-edit-memo">{m.time_memo()}</Label>
+            <Input id="time-edit-memo" bind:value={f.memo} maxlength={2000} />
+          </div>
+          <div class="flex flex-col gap-2 sm:col-span-2">
+            <span class="text-sm font-medium">{m.time_target()}</span>
+            {#if f.target !== null}
+              <div class="flex items-center gap-2 text-sm">
+                <span>{f.target.label}</span>
+                <Button size="sm" variant="ghost" onclick={() => (f.target = null)}
+                  >{m.time_unlink()}</Button
+                >
+              </div>
+            {:else}
+              <span class="text-sm text-muted-foreground">{m.time_none()}</span>
+            {/if}
+            <TargetPicker
+              idPrefix="time-edit"
+              onpick={(t: { kind: TimeTargetKind; id: string; label: string }) => {
+                f.target = t;
+              }}
+            />
+          </div>
+          {#if error !== undefined}
+            <p role="alert" class="text-sm text-destructive sm:col-span-2">{error}</p>
+          {/if}
+          {#if conflict !== undefined}
+            {@const current = conflict}
+            <div class="flex flex-col gap-2 rounded border p-2 sm:col-span-2">
+              <p>
+                {wallTime(current.started_at, editZone)} – {current.ended_at === null
+                  ? m.time_in_progress()
+                  : wallTime(current.ended_at, editZone)}
+              </p>
+              <p>
+                {m.time_paused_minutes()}: {current.paused_seconds / 60} · {TIME_KIND_LABEL[
+                  current.kind
+                ]}
+              </p>
+              <p class="whitespace-pre-wrap break-words">{current.memo}</p>
+              <p>{m.time_target()}: {current.target?.label ?? m.time_none()}</p>
+              <Button
+                variant="outline"
+                onclick={() => {
+                  applyCurrent(current);
+                }}>{m.time_use_current()}</Button
               >
             </div>
-          {:else}
-            <span class="text-sm text-muted-foreground">{m.time_none()}</span>
           {/if}
-          <TargetPicker
-            idPrefix="time-edit"
-            onpick={(t: { kind: TimeTargetKind; id: string; label: string }) => {
-              f.target = t;
-            }}
-          />
-        </div>
-        {#if error !== undefined}
-          <p role="alert" class="text-sm text-destructive sm:col-span-2">{error}</p>
-        {/if}
-        {#if conflict !== undefined}
-          {@const current = conflict}
-          <div class="flex flex-col gap-2 rounded border p-2 sm:col-span-2">
-            <p>
-              {wallTime(current.started_at, editZone)} – {current.ended_at === null
-                ? m.time_in_progress()
-                : wallTime(current.ended_at, editZone)}
-            </p>
-            <p>
-              {m.time_paused_minutes()}: {current.paused_seconds / 60} · {TIME_KIND_LABEL[
-                current.kind
-              ]}
-            </p>
-            <p class="whitespace-pre-wrap break-words">{current.memo}</p>
-            <p>{m.time_target()}: {current.target?.label ?? m.time_none()}</p>
-            <Button
-              variant="outline"
-              onclick={() => {
-                applyCurrent(current);
-              }}>{m.time_use_current()}</Button
+          <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
+            <Button type="submit" disabled={busy || !draft.active || draft.blocked}
+              >{m.common_save()}</Button
             >
+            {#if confirmDelete}
+              <span id="time-delete-question" class="text-sm">{m.time_delete_confirm()}</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                data-confirm-go="time-delete"
+                aria-describedby="time-delete-question"
+                onclick={() => void remove()}>{m.time_delete()}</Button
+              >
+              <Button
+                size="sm"
+                variant="ghost"
+                onclick={() => {
+                  confirmDelete = false;
+                  void focusConfirmStart('time-delete');
+                }}>{m.common_cancel()}</Button
+              >
+            {:else}
+              <Button
+                size="sm"
+                variant="outline"
+                data-confirm="time-delete"
+                onclick={() => {
+                  confirmDelete = true;
+                  void focusConfirm('time-delete');
+                }}>{m.time_delete_entry()}</Button
+              >
+            {/if}
           </div>
-        {/if}
-        <div class="flex flex-wrap items-center gap-2 sm:col-span-2">
-          <Button type="submit" disabled={busy || !draft.active || draft.blocked}
-            >{m.common_save()}</Button
-          >
-          {#if confirmDelete}
-            <span id="time-delete-question" class="text-sm">{m.time_delete_confirm()}</span>
-            <Button
-              size="sm"
-              variant="destructive"
-              data-confirm-go="time-delete"
-              aria-describedby="time-delete-question"
-              onclick={() => void remove()}>{m.time_delete()}</Button
-            >
-            <Button
-              size="sm"
-              variant="ghost"
-              onclick={() => {
-                confirmDelete = false;
-                void focusConfirmStart('time-delete');
-              }}>{m.common_cancel()}</Button
-            >
-          {:else}
-            <Button
-              size="sm"
-              variant="outline"
-              data-confirm="time-delete"
-              onclick={() => {
-                confirmDelete = true;
-                void focusConfirm('time-delete');
-              }}>{m.time_delete_entry()}</Button
-            >
-          {/if}
-        </div>
-      </form>
+        </form>
+      </fieldset>
       {#if history.length > 0}
         <section class="flex flex-col gap-1 border-t pt-2" aria-labelledby="time-history-heading">
           <h3 id="time-history-heading" class="text-sm font-semibold">

@@ -41,7 +41,7 @@
 
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
-  // 작업자 B: 활동(D-119). 업무 보기 탭과 별개인 항목 활동 섹션.
+  // 활동(D-119). 업무 보기 탭과 별개인 항목 활동 섹션.
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
   interface Props {
@@ -53,7 +53,7 @@
   }
 
   const { workspace, itemId, workspaces, taskId }: Props = $props();
-  // 작업자 A: 같은 항목 안 보기·상세 경로 변경도 업무 화면에 즉시 전달한다(D-121).
+  // 같은 항목 안 보기·상세 경로 변경도 업무 화면에 즉시 전달한다(D-121).
   const taskRoute = $derived(
     router.route.name === 'item' && router.route.itemId === itemId ? router.route : undefined,
   );
@@ -208,7 +208,7 @@
     };
   });
 
-  // 작업자 C: 접근 등급은 서버 app_access 결과를 그대로 쓴다(D-113). 보관은 등급이 아니라 아래 canEdit에서 본다.
+  // 접근 등급은 서버 app_access 결과를 그대로 쓴다(D-113). 보관은 등급이 아니라 아래 canEdit에서 본다.
   const moduleArchived = $derived(mod?.archived === true);
   const shownItem = $derived(item);
   // 보관된 항목과 보관된 모듈의 항목은 읽기 전용이다(서버도 쓰기를 거부한다: app_item_archived 55000). 등급(app_grade_item)은 보관을
@@ -561,12 +561,12 @@
     {/if}
 
     {#if mod !== undefined}
-      <!-- 작업자 D: 항목은 내 합계만 보며 시작 설정은 없다(D-117). -->
+      <!-- 항목은 내 합계만 보며 시작 설정은 없다(D-117). -->
       <ItemTimePanel itemId={current.id} />
     {/if}
 
     <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />
-    <!-- 작업자 B: 활동(D-119) -->
+    <!-- 활동(D-119) -->
     <ItemActivityTab itemId={current.id} workspaceId={workspace.id} />
 
     <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
@@ -645,6 +645,7 @@
     <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
     <ItemEvents
       item={view}
+      locked={moduleArchived}
       version={listVersion}
       onchanged={() => {
         calendarVersion += 1;
@@ -654,6 +655,7 @@
       {workspace}
       scope={{ itemId: current.id }}
       item={view}
+      locked={moduleArchived || view.archived}
       embedded
       version={calendarVersion}
       onchanged={() => {

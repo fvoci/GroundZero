@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 
 import { type Api, expect, str, test, unique } from './fixtures';
 
-// 열은 항목의 상태 정의 이름이다(D-116). 새 항목은 서버가 심는 기본 세 상태(todo·in_progress·done)로 시작한다.
+// 열은 항목의 상태 정의 이름이다(D-116). 새 항목은 서버가 심는 기본 세 상태 `할 일`·`진행 중`·`완료`(범주 todo·doing·done)로 시작한다.
 const lane = (page: Page, status: string) => page.locator(`section[aria-label="${status} 열"]`);
 const card = (scope: Page | Locator, title: string) =>
   scope.locator('[data-task-card]').filter({ hasText: title });

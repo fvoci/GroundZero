@@ -5,70 +5,8 @@
 // 직접 저장·관계 저장·만들기를 눌러야 서버로 간다(중복 저장·생성 없음). 응답을 흉내 내지 않는다. 다시 읽기의 문서 응답을 잠시
 // 붙잡아 두는 것(지연 뒤 성공 경로)과 이전 문서 안의 관찰용 기록기(fetch 호출 기록·상태 표본, 동작은 바꾸지 않음)만 쓴다. 실패·취소
 // 경로는 account-switch-failed-reload.spec.ts가 본다.
-import { appendFileSync } from 'node:fs';
-
-import type { Page, TestInfo } from '@playwright/test';
-
-import {
-  expect,
-  list,
-  listField,
-  logIn,
-  num,
-  recordSensitive,
-  str,
-  test,
-  testUser,
-  unique,
-} from './fixtures';
-
-/** 이 브라우저에 남은 이 사용자의 폼 입력 키. */
-async function draftKeys(page: Page, userId: string): Promise<string[]> {
-  return page.evaluate(
-    (prefix) => Object.keys(window.localStorage).filter((k) => k.startsWith(prefix)),
-    `fvoci:${userId}:-:form-draft:`,
-  );
-}
-
-/** 사용자 메뉴로 로그아웃하고(제공자 세션도 끝난다) 다른 계정으로 로그인한다. 인증 화면은 trace 밖이다. */
-async function switchTo(page: Page, username: 'test-user' | 'test-user-2'): Promise<string> {
-  await page.goto('/');
-  await page.getByTestId('user-menu').click();
-  await page.getByRole('menuitem', { name: '로그아웃' }).click();
-  await expect(page.getByRole('link', { name: '로그인' })).toBeVisible();
-  await logIn(page, testUser(username));
-  recordSensitive((await page.context().cookies()).map((c) => c.value));
-  return str(await (await page.request.get('/api/me')).json(), 'id');
-}
-
-/**
- * 다른 탭에서 계정을 바꾼 뒤 이 창으로 돌아온다. `arm`은 돌아온 뒤 기대하는 상태를 `timeout` 안에 기다리는 약속을 만든다
- * (이벤트를 놓치지 않게 탭 전환 전에 만든다). 탭 전환(bringToFront)이 focus·visibilitychange를 내지 않는 헤드리스 환경이면
- * focus 이벤트를 직접 낸다. 그 뒤의 확인 요청(/api/me)·계정 비교·안전 상태·다시 읽기는 모두 실제 코드다. 어느 쪽이었는지
- * 기록한다.
- */
-async function returnToWindow(
-  page: Page,
-  testInfo: TestInfo,
-  arm: (timeout: number) => Promise<boolean>,
-): Promise<void> {
-  const note = (text: string): void => {
-    testInfo.annotations.push({ type: 'focus', description: text });
-    appendFileSync(testInfo.outputPath('focus-path.txt'), `${text}\n`);
-  };
-  const natural = arm(5_000);
-  await page.bringToFront();
-  if (await natural) {
-    note('bringToFront fired a detection event (focus or visibilitychange)');
-    return;
-  }
-  note('headless: window focus dispatched programmatically (not a real tab switch)');
-  const forced = arm(15_000);
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('focus'));
-  });
-  expect(await forced, 'detection after a dispatched focus event').toBe(true);
-}
+import { draftKeys, returnToWindow, switchTo } from './account-switch-helpers';
+import { expect, list, listField, num, str, test, unique } from './fixtures';
 
 test('unsaved task input survives A→B→A account switches, interrupted reloads and real reloads, for the first account only', async ({
   signIn,

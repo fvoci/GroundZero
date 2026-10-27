@@ -1,5 +1,5 @@
 {
-  "events_until_before_start": "일정 시작일이 반복 끝 날짜보다 뒤입니다. 반복 끝을 시작일 당일 또는 그 이후로 바꾸거나 일정 시작일을 앞당겨 주세요.",
+  "events_until_before_start": "반복 끝 날짜가 시작일보다 앞섭니다. 반복 끝을 시작일 당일 또는 그 이후로 바꾸거나 시작일을 앞당겨 주세요.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "events_load_failed": "달력을 불러오지 못했습니다.",
   "events_calendar_embedded": "달력 · {title}",

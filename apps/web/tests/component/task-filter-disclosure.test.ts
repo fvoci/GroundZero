@@ -38,7 +38,7 @@ function task(id: string, title: string, priority: TaskView['priority']): TaskVi
     reference: `KED-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority,
     start_date: null,
     due_date: null,
@@ -64,7 +64,7 @@ describe('hidden condition count', () => {
   it('counts the folded filters and a changed sort, not the visible search text', () => {
     expect(hiddenConditionCount({ ...EMPTY_FILTER, text: '자료' }, 'position')).toBe(0);
     expect(
-      hiddenConditionCount({ ...EMPTY_FILTER, status: 'done', dueFrom: '2026-10-01' }, 'due'),
+      hiddenConditionCount({ ...EMPTY_FILTER, status: '완료', dueFrom: '2026-10-01' }, 'due'),
     ).toBe(3);
   });
 });

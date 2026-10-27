@@ -22,6 +22,8 @@ afterEach(async () => {
 });
 
 it('the header has no start or target controls without a timer', async () => {
+  // beforeEach의 timer.load() 호출을 지워 아래 대기가 위젯 자신의 읽기를 기다리게 한다(F-15).
+  vi.mocked(api.currentTimer).mockClear();
   render(TimerWidget);
   await waitFor(() => {
     expect(api.currentTimer).toHaveBeenCalled();

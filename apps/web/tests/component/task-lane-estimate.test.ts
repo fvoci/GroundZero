@@ -61,15 +61,15 @@ function task(id: string, title: string, status: TaskStatus, estimate: number | 
 }
 
 const list = [
-  task('a', '자료 정리', 'todo', 30),
-  task('b', 'API 연결', 'todo', 90),
-  task('c', '문서 검토', 'todo', null),
-  task('d', '배포 점검', 'in_progress', null),
+  task('a', '자료 정리', '할 일', 30),
+  task('b', 'API 연결', '할 일', 90),
+  task('c', '문서 검토', '할 일', null),
+  task('d', '배포 점검', '진행 중', null),
 ];
 
 describe('lane estimate helper', () => {
   it('adds estimates and counts the cards without one', () => {
-    expect(laneEstimate(list.filter((t) => t.status === 'todo'))).toEqual({
+    expect(laneEstimate(list.filter((t) => t.status === '할 일'))).toEqual({
       minutes: 120,
       missing: 1,
       count: 3,
@@ -97,15 +97,15 @@ describe('lane estimate in the board', () => {
   it('shows the total in hours and minutes, the cards without an estimate, and nothing for an empty column', async () => {
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByText('자료 정리');
-    expect(estimateOf('todo')).toBe('예상 2시간 · 예상 없음 1장');
-    expect(estimateOf('in_progress')).toBe('예상 시간 없음');
-    expect(estimateOf('done')).toBeNull();
+    expect(estimateOf('할 일')).toBe('예상 2시간 · 예상 없음 1장');
+    expect(estimateOf('진행 중')).toBe('예상 시간 없음');
+    expect(estimateOf('완료')).toBeNull();
     expect(screen.getByText(/열 머리의 예상은 카드에 적은 예상 시간을 더한 값입니다/)).toBeTruthy();
     // 빈 열은 비어 있다고 글로 말한다(카드가 있는 열에는 없다).
-    expect(document.querySelector('[data-lane-empty="done"]')?.textContent.trim()).toBe(
+    expect(document.querySelector('[data-lane-empty="완료"]')?.textContent.trim()).toBe(
       '카드 없음',
     );
-    expect(document.querySelector('[data-lane-empty="todo"]')).toBeNull();
+    expect(document.querySelector('[data-lane-empty="할 일"]')).toBeNull();
   });
 
   it('says it counts the shown cards when filtered, and gives the whole column too', async () => {
@@ -115,8 +115,8 @@ describe('lane estimate in the board', () => {
     );
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByText('자료 정리');
-    expect(estimateOf('todo')).toBe('보이는 카드 예상 30분 · 열 전체 2시간');
-    expect(document.querySelector('[data-lane-empty="in_progress"]')?.textContent.trim()).toBe(
+    expect(estimateOf('할 일')).toBe('보이는 카드 예상 30분 · 열 전체 2시간');
+    expect(document.querySelector('[data-lane-empty="진행 중"]')?.textContent.trim()).toBe(
       '거르기에 맞는 카드 없음',
     );
   });

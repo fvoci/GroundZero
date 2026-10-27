@@ -21,9 +21,11 @@
     version?: number;
     /** 여기서 일정을 만들거나 고치거나 지웠다(같은 화면의 달력이 다시 읽게). */
     onchanged?: () => void;
+    /** 항목의 모듈이 보관됐다. 항목 등급은 보관을 반영하지 않으므로(D-113) 일정 추가·고치기를 감춘다. */
+    locked?: boolean;
   }
 
-  const { item, version = 0, onchanged }: Props = $props();
+  const { item, version = 0, onchanged, locked = false }: Props = $props();
 
   let events = $state<EventView[]>([]);
   // 목록을 한 번이라도 받았는지. 받기 전에는 "일정이 없습니다" 대신 불러오는 중이라고 보인다.
@@ -34,7 +36,10 @@
   // 같은 입력의 재시도는 같은 요청 id로(중복 생성 방지), 고친 입력이나 새로 연 폼은 새 id.
   const createKey = new RetryKey();
   const zone = localTimeZone();
-  const canWrite = $derived(item.access !== 'read' && !item.archived);
+  const canWrite = $derived(item.access !== 'read' && !item.archived && !locked);
+  // 새 일정을 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면
+  // 새 요청 id로 두 번째 일정을 만든다.
+  let creating = $state(false);
 
   // 읽기가 겹치면(달력 변경·여기서의 저장) 마지막으로 보낸 읽기의 결과만 남긴다(늦게 온 옛 결과가 새 목록을 덮지 않게).
   let readSeq = 0;
@@ -67,12 +72,18 @@
     const itemId = item.id;
     const user = me.userId;
     const requestId = savedRequestId ?? createKey.for({ item: itemId, input });
-    await api.createEvent(itemId, requestId, input);
-    if (item.id !== itemId || me.userId !== user) return false;
-    createKey.done(requestId);
-    onchanged?.();
-    await reload();
-    return true;
+    // 폼은 이 함수가 끝난 뒤에 결과를 반영하므로 다시 읽기까지 잠가 둔다.
+    creating = true;
+    try {
+      await api.createEvent(itemId, requestId, input);
+      if (item.id !== itemId || me.userId !== user) return false;
+      createKey.done(requestId);
+      onchanged?.();
+      await reload();
+      return true;
+    } finally {
+      creating = false;
+    }
   }
 
   let returnTo: string | undefined;
@@ -112,7 +123,7 @@
   {/if}
   {#if adding}
     {#key item.id}
-      <div class="rounded-md border p-3">
+      <fieldset class="min-w-0 rounded-md border p-3" disabled={creating}>
         <EventForm
           idPrefix="event-new"
           draftName={`event-new:${item.id}`}
@@ -124,7 +135,7 @@
           }}
           oncancel={() => (adding = false)}
         />
-      </div>
+      </fieldset>
     {/key}
   {/if}
   <ul class="flex flex-col gap-1">
@@ -156,6 +167,7 @@
 
 <EventDialog
   eventId={openId}
+  locked={!canWrite}
   onclose={() => (openId = undefined)}
   returnFocus={() =>
     returnTo === undefined

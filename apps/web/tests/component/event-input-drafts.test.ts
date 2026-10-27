@@ -318,6 +318,25 @@ it('suppresses account-reload warnings only when the event and recurrence inputs
   });
 });
 
+// F-14(R5 B): 위 시험의 나머지 반쪽. 입력을 저장소에 남기지 못했으면 계정 전환 다시 읽기 경고를 남긴다.
+it('keeps the account-reload warning when the event inputs cannot be stored', async () => {
+  vi.spyOn(api, 'event').mockResolvedValue(event);
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('quota');
+  });
+  mountEvent();
+  await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
+    target: { value: 'bad count' },
+  });
+  accountSafety.switching = true;
+  await waitFor(() => {
+    expect(screen.getByLabelText(m.events_interval())).toHaveValue('bad count');
+  });
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+});
+
 it('keeps the current event until another-target discard is explicitly approved', async () => {
   vi.spyOn(api, 'event').mockImplementation((id) => Promise.resolve({ ...event, id, title: id }));
   const view = mountEvent();

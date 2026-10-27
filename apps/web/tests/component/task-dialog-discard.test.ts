@@ -33,7 +33,7 @@ function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView 
     reference: id === 't1' ? 'KED-1' : 'KED-2',
     title: id === 't1' ? '옛 제목' : '다른 업무',
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,

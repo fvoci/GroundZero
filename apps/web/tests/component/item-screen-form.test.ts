@@ -282,7 +282,7 @@ function task(id: string, title: string): TaskView {
     reference: `DEV-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,

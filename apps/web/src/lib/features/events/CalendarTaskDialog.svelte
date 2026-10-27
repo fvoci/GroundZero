@@ -54,11 +54,15 @@
     item: string;
     retry: typeof retry;
   }
+  // 항목 목록을 읽으며 자동으로 고른 항목. 사용자가 고친 것이 아니므로 수정 판단의 기준값이다.
+  let autoItem = $state('');
   function reset(): void {
     date = activeDay ?? '';
     title = '';
+    // 모듈이 그대로면 목록을 다시 읽지 않으므로 자동으로 고른 항목으로 돌린다.
+    if (pickedModule !== (moduleId ?? '')) autoItem = '';
     pickedModule = moduleId ?? '';
-    pickedItem = item?.id ?? '';
+    pickedItem = item?.id ?? autoItem;
     retry = null;
     error = undefined;
     accountBlocked = false;
@@ -96,7 +100,7 @@
       title !== '' ||
       date !== (activeDay ?? '') ||
       pickedModule !== (moduleId ?? '') ||
-      pickedItem !== (item?.id ?? ''),
+      pickedItem !== (item?.id ?? autoItem),
     busy: () => busy,
   });
   onMount(draft.attach);
@@ -142,7 +146,8 @@
       .then((list) => {
         if (cancelled) return;
         items = list.filter(writable);
-        if (!items.some((i) => i.id === pickedItem)) pickedItem = items[0]?.id ?? '';
+        autoItem = items[0]?.id ?? '';
+        if (!items.some((i) => i.id === pickedItem)) pickedItem = autoItem;
       })
       .catch((e: unknown) => {
         if (!cancelled) loadError = errorText(e, m.events_task_targets_failed());

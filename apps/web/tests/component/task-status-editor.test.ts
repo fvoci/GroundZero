@@ -69,7 +69,7 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
     archived: false,
     onchanged: changed,
   });
-  await fireEvent.click(screen.getByRole('button', { name: 'todo 수정' }));
+  await fireEvent.click(screen.getByRole('button', { name: '할 일 수정' }));
   await fireEvent.input(screen.getByLabelText('상태 이름'), { target: { value: '검토' } });
   await fireEvent.input(screen.getByLabelText('색 (#rrggbb)'), { target: { value: '#abcdef' } });
   await fireEvent.change(screen.getByLabelText('범주'), { target: { value: 'doing' } });
@@ -113,7 +113,7 @@ it('requires another status before deletion and sends its id', async () => {
     archived: false,
     onchanged: () => Promise.resolve(),
   });
-  await fireEvent.click(screen.getByRole('button', { name: 'todo 삭제' }));
+  await fireEvent.click(screen.getByRole('button', { name: '할 일 삭제' }));
   await fireEvent.click(screen.getByRole('button', { name: '업무를 옮기고 삭제' }));
   expect(remove).not.toHaveBeenCalled();
   await fireEvent.change(screen.getByLabelText('업무를 옮길 상태'), {
@@ -142,7 +142,7 @@ it('rejects an empty position instead of saving 0', async () => {
     archived: false,
     onchanged: vi.fn(),
   });
-  await fireEvent.click(screen.getByRole('button', { name: 'todo 수정' }));
+  await fireEvent.click(screen.getByRole('button', { name: '할 일 수정' }));
   await fireEvent.input(screen.getByLabelText('순서'), { target: { value: '   ' } });
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
   expect(screen.getByRole('status')).toHaveTextContent('이름과 순서를 확인하세요');

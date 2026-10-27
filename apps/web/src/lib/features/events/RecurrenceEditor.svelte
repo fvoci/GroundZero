@@ -5,7 +5,7 @@
   import { onDestroy, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { parseRuleDraft, type RuleDraft } from './input-drafts';
+  import { parseRuleDraft, untilBeforeStart, type RuleDraft } from './input-drafts';
   import { ApiError, FREQUENCIES } from '$lib/api/client';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
@@ -182,11 +182,7 @@
     } catch (e: unknown) {
       if (attempt !== undefined && !draft.isOwner(attempt)) return;
       // #76: 반복 끝이 첫 회차보다 앞서면 반복 끝 칸 옆에 구체 이유를 보인다.
-      if (
-        e instanceof ApiError &&
-        e.code === 'bad_request' &&
-        e.message === 'until must not be before the first occurrence'
-      ) {
+      if (untilBeforeStart(e)) {
         localUntilError = m.events_until_before_start();
         return;
       }

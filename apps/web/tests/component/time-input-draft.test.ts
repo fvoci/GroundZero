@@ -5,10 +5,13 @@ import { api, ApiError, NetworkError, type TimeEntryView } from '$lib/api/client
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
+import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 const entry: TimeEntryView = {
   id: 'entry-a',
@@ -235,6 +238,34 @@ it('requires confirmation before applying conflict values and uses their new bas
   expect(update.mock.calls[1]?.[1]).toBe(8);
 });
 
+// F-7(R5 B): "서버 내용 적용"은 버리기 확인을 거쳐 폼을 비운 뒤 서버 기록으로 다시 채운다. 비울 때 지운 수정 이력을
+// 다시 읽지 않아 이력이 사라졌다.
+it('reloads the revision history after applying the server values', async () => {
+  const current = { ...entry, memo: 'server value', version: 8 };
+  vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({ kind: 'conflict', current });
+  const revisions = vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([
+    {
+      started_at: entry.started_at,
+      ended_at: entry.ended_at,
+      paused_seconds: 0,
+      kind: 'work',
+      memo: 'older memo',
+      changed_at: '2026-11-01T07:00:00Z',
+    },
+  ]);
+  render(TimeEntryDialog, props);
+  await screen.findByRole('heading', { name: m.time_history_heading() });
+  await memo('my value');
+  await submit();
+  await fireEvent.click(await screen.findByRole('button', { name: m.time_use_current() }));
+  await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
+  expect(screen.getByLabelText(m.time_memo())).toHaveValue('server value');
+  expect(
+    await screen.findByRole('heading', { name: m.time_history_heading() }),
+  ).toBeInTheDocument();
+  expect(revisions).toHaveBeenCalledTimes(2);
+});
+
 it('guards route changes and clears the current draft only after approved discard', async () => {
   render(TimeEntryDialog, props);
   await memo('unsaved');
@@ -264,8 +295,24 @@ it('retains input and leave warnings when storage fails', async () => {
   expect(event.defaultPrevented).toBe(true);
 });
 
+// 확인 필요 2(R5 B): 시간 기록은 조직 인자가 없는 본인 기록이고(D-117) 초안 키는 사용자별·탭별이다(D-27, 공통
+// `form-draft.ts`). 조직 A에서 쓰다 만 수동 기록이 조직 B에서 제안되지 않았다. 수동 기록에는 조직 범위 값이 없다.
+it('offers an unfinished manual entry in another organization of the same user', async () => {
+  render(TimeScreen);
+  await memo('manual across organizations');
+  cleanup();
+  org.load(
+    'user-a',
+    [TEST_ORGANIZATION, { ...TEST_ORGANIZATION, id: 'org-2', name: '둘째' }],
+    'org-2',
+  );
+  render(TimeScreen);
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(screen.getByLabelText(m.time_memo())).toHaveValue('manual across organizations');
+});
+
 it('successful manual save removes only its own draft and retains another tab offer', async () => {
-  const name = 'time-manual:org-1';
+  const name = 'time-manual';
   const key = formDraftTabKey(name);
   if (key === undefined) throw new Error('missing draft key');
   const sibling = `${key}:sibling`;
@@ -302,7 +349,9 @@ it.each([new NetworkError('offline'), new ApiError(403, 'forbidden', 'forbidden'
   },
 );
 
-it('ignores a late same-account save when the input changed during the request', async () => {
+// 저장 중에는 입력이 잠긴다(F-8, `save-input-lock.test.ts`). 잠금을 지나 입력이 바뀐 경우(UI로는 생기지 않는다)에도
+// 옛 스냅숏의 결과로 새 입력을 덮지 않고 그 입력을 초안에 남기는지 지키는 방어 시험이다.
+it('keeps input that changed past the save lock instead of applying the older snapshot', async () => {
   let finish: ((value: Awaited<ReturnType<typeof api.updateTimeEntry>>) => void) | undefined;
   vi.spyOn(api, 'updateTimeEntry').mockReturnValue(
     new Promise((resolve) => {

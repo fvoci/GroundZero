@@ -38,6 +38,11 @@
     item?: ItemView | undefined;
     /** 날짜 칸에서 업무를 만들었다(같은 화면의 업무 목록이 다시 읽게). */
     ontaskcreated?: () => void;
+    /**
+     * 범위의 항목이나 모듈이 보관됐다. 등급은 보관을 반영하지 않으므로(D-113) 업무 만들기와 일정 고치기를 감춘다
+     * (서버도 55000으로 거부한다).
+     */
+    locked?: boolean;
   }
 
   const {
@@ -48,13 +53,15 @@
     onchanged,
     item,
     ontaskcreated,
+    locked = false,
   }: Props = $props();
 
   // 날짜 칸에서 업무 만들기(D-31·D-80). 항목 범위면 그 항목(쓸 수 있을 때만), 모듈·워크스페이스 범위면 창에서 고른다.
   const canCreate = $derived(
-    scope?.itemId === undefined
-      ? true
-      : item !== undefined && item.access !== 'read' && !item.archived && !item.is_template,
+    !locked &&
+      (scope?.itemId === undefined
+        ? true
+        : item !== undefined && item.access !== 'read' && !item.archived && !item.is_template),
   );
   let createDay = $state<string | undefined>(undefined);
   let root = $state<HTMLElement | undefined>(undefined);
@@ -395,6 +402,7 @@
 
 <EventDialog
   eventId={openEvent}
+  {locked}
   occurrence={openOccurrence}
   onclose={() => (openEvent = undefined)}
   onchanged={() => {

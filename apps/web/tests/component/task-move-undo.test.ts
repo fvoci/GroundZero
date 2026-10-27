@@ -27,7 +27,7 @@ const item: ItemView = {
   ends_on: null,
 };
 
-function task(id: string, title: string, status: TaskStatus = 'todo', version = 1): TaskView {
+function task(id: string, title: string, status: TaskStatus = '할 일', version = 1): TaskView {
   return {
     id,
     item_id: 'i1',
@@ -78,7 +78,7 @@ describe('kanban undo', () => {
     await tick();
   };
   const start = [task('a', 'API 연결'), task('b', '문서 검토')];
-  const movedA = task('a', 'API 연결', 'in_progress', 2);
+  const movedA = task('a', 'API 연결', '진행 중', 2);
   const moved = [task('b', '문서 검토'), movedA];
 
   function lists(...answers: (TaskView[] | Promise<TaskView[]>)[]): MockInstance<typeof api.tasks> {
@@ -115,7 +115,7 @@ describe('kanban undo', () => {
     const move = vi
       .spyOn(api, 'moveTask')
       .mockResolvedValueOnce({ ...movedA, checklist: [] })
-      .mockResolvedValueOnce({ ...task('a', 'API 연결', 'todo', 3), checklist: [] });
+      .mockResolvedValueOnce({ ...task('a', 'API 연결', '할 일', 3), checklist: [] });
     await mount();
     await moveRight('a');
     await flush();
@@ -126,9 +126,9 @@ describe('kanban undo', () => {
     await flush();
     // 보내기 전에 서버를 다시 읽고, 원래 자리(할 일, 문서 검토 앞)로 보낸다.
     expect(read).toHaveBeenCalledTimes(4);
-    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', 'todo', 'b', 2);
-    expect(laneOf('a')).toBe('todo');
-    expect(liveText()).toContain('API 연결: 되돌렸습니다(todo).');
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', '할 일', 'b', 2);
+    expect(laneOf('a')).toBe('할 일');
+    expect(liveText()).toContain('API 연결: 되돌렸습니다(할 일).');
     expect(undoButton()).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(document.activeElement).toBe(card('a'));
@@ -139,7 +139,7 @@ describe('kanban undo', () => {
     const b = task('b', '문서 검토');
     const c = task('c', '회의 준비');
     const savedB = { ...b, move_version: 2 };
-    const savedC = { ...c, status: 'in_progress', move_version: 2 };
+    const savedC = { ...c, status: '진행 중', move_version: 2 };
     let finishOld: (tasks: TaskView[]) => void = () => undefined;
     const oldRead = new Promise<TaskView[]>((resolve) => {
       finishOld = resolve;
@@ -159,7 +159,7 @@ describe('kanban undo', () => {
     await flush();
     await fireEvent.click(screen.getByRole('button', { name: '회의 준비 이동 되돌리기' }));
     await flush();
-    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'c', 'todo', 'b', 2);
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'c', '할 일', 'b', 2);
   });
 
   it('undo goes back before the card that was next on the server, not on the optimistic screen', async () => {
@@ -180,7 +180,7 @@ describe('kanban undo', () => {
     await mount();
     await fireEvent.keyDown(card('b'), { key: 'ArrowDown', altKey: true });
     await tick();
-    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'b', 'todo', null, undefined);
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'b', '할 일', null, undefined);
     await moveRight('a');
     await flush();
     expect(undoButton()).not.toBeNull();
@@ -190,7 +190,7 @@ describe('kanban undo', () => {
     if (button === null) throw new Error('undo');
     await fireEvent.click(button);
     await flush();
-    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', 'todo', 'b', 2);
+    expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', '할 일', 'b', 2);
   });
 
   it('does not offer undo while the result is unknown', async () => {
@@ -219,7 +219,7 @@ describe('kanban undo', () => {
   });
 
   it('does not move back when the card changed elsewhere after the move', async () => {
-    const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', 'done', 3)];
+    const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', '완료', 3)];
     lists(start, moved, elsewhere);
     const move = vi.spyOn(api, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
     await mount();
@@ -230,7 +230,7 @@ describe('kanban undo', () => {
     await fireEvent.click(button);
     await flush();
     expect(move).toHaveBeenCalledTimes(1);
-    expect(laneOf('a')).toBe('done');
+    expect(laneOf('a')).toBe('완료');
     expect(screen.getByRole('alert').textContent).toContain('되돌리지 않았습니다');
   });
 
@@ -252,7 +252,7 @@ describe('kanban undo', () => {
     if (button === null) throw new Error('undo');
     await fireEvent.click(button);
     await flush();
-    expect(move.mock.calls[1]).toEqual([expect.any(String), 'a', 'todo', 'b', 2]);
+    expect(move.mock.calls[1]).toEqual([expect.any(String), 'a', '할 일', 'b', 2]);
     expect(screen.getByRole('alert').textContent).toContain('되돌리지 않았습니다');
     expect(liveText()).not.toContain('되돌렸습니다');
     await flush(20000);

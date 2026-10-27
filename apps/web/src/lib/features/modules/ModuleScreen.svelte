@@ -290,15 +290,19 @@
   onkeep={settingsDraft.leave.keep}
   ondiscard={settingsDraft.discardAndLeave}
 />
+<!-- 템플릿에서 만드는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면
+     새 요청 id로 두 번째 항목을 만든다. -->
 {#each mod === undefined ? [] : templateDraft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      templateDraft.restore(entry);
-    }}
-    ondiscard={() => {
-      templateDraft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={templateBusy}>
+    <FormDraftOffer
+      onrestore={() => {
+        templateDraft.restore(entry);
+      }}
+      ondiscard={() => {
+        templateDraft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={templateDraft.leave.open}
@@ -395,26 +399,28 @@
         />
         <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
         {#if templates.length > 0 || templateTitle !== '' || templateId !== ''}
-          <form
-            class="flex flex-wrap items-end gap-2"
-            aria-label={m.modules_from_template()}
-            onsubmit={(e: SubmitEvent) => {
-              e.preventDefault();
-              void fromTemplate(current.id);
-            }}
-          >
-            <div class="flex flex-col gap-1">
-              <Label for="template-source">{m.modules_template()}</Label>
-              <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
-                {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
-              </NativeSelect>
-            </div>
-            <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
-              <Label for="template-title">{m.modules_template_item_title()}</Label>
-              <Input id="template-title" bind:value={templateTitle} maxlength={200} />
-            </div>
-            <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
-          </form>
+          <fieldset class="min-w-0" disabled={templateBusy}>
+            <form
+              class="flex flex-wrap items-end gap-2"
+              aria-label={m.modules_from_template()}
+              onsubmit={(e: SubmitEvent) => {
+                e.preventDefault();
+                void fromTemplate(current.id);
+              }}
+            >
+              <div class="flex flex-col gap-1">
+                <Label for="template-source">{m.modules_template()}</Label>
+                <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
+                  {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+                </NativeSelect>
+              </div>
+              <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
+                <Label for="template-title">{m.modules_template_item_title()}</Label>
+                <Input id="template-title" bind:value={templateTitle} maxlength={200} />
+              </div>
+              <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
+            </form>
+          </fieldset>
           {#if templateError !== undefined}
             <p class="text-sm text-destructive" role="alert">{templateError}</p>
           {/if}
@@ -423,7 +429,12 @@
     {/if}
 
     <div class="rounded-md border bg-card p-2 @md:p-3">
-      <CalendarScreen {workspace} scope={{ moduleId: current.id }} embedded />
+      <CalendarScreen
+        {workspace}
+        scope={{ moduleId: current.id }}
+        locked={current.archived}
+        embedded
+      />
     </div>
 
     {#if isAdmin}
