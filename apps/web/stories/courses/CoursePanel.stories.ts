@@ -64,15 +64,6 @@ export const RestoreDraft: Story = {
     await expect(canvas.getByLabelText(m.courses_duration())).toHaveValue('12:xx');
   },
 };
-export const RestoreDraftDark: Story = { ...RestoreDraft, globals: { theme: 'dark' } };
-export const RestoreDraftNarrow: Story = {
-  ...RestoreDraft,
-  globals: { viewport: { value: 'narrow375' } },
-};
-export const RestoreDraftLarge: Story = {
-  ...RestoreDraft,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
-};
 
 /** 읽기 전용·보관 항목: 진도 단추는 없고, 내 메모·날짜는 저장 단추 없는 읽기 전용(readonly) 칸으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
 export const ReadOnly: Story = {
@@ -91,8 +82,4 @@ export const ReadOnly: Story = {
     await expect(canvas.getByLabelText(m.courses_my_note())).toHaveAttribute('readonly');
     await expect(canvas.queryByRole('button', { name: m.common_save() })).toBeNull();
   },
-};
-export const ReadOnlyNarrowDark: Story = {
-  ...ReadOnly,
-  globals: { theme: 'dark', viewport: { value: 'narrow375' } },
 };

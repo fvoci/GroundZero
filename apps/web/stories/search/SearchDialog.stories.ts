@@ -146,9 +146,7 @@ export const EscapeReturnsFocus: Story = {
   },
 };
 
-export const Dark: Story = { ...Opened, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...Opened, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...Opened,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

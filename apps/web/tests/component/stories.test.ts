@@ -64,6 +64,45 @@ it('runs every story file on disk', () => {
   ).toEqual(onDisk);
 });
 
+// 스토리 기준(D-108 개정 2026-10-27, #150): 어려운 조건(375px·어두움·200% 글꼴)은 한 파일에 합친 스토리 하나로만 둔다.
+// 밝음·어두움·375px·글꼴을 따로 만든 변형(`Dark`·`Narrow375`·`Zoom200` 등)은 두지 않고, `$lib/ui` 부품은 합친 스토리도
+// 만들지 않는다(대비는 theme-contrast 시험, 넘침·잘림·초점은 브라우저 시험이 맡는다). 조건은 스토리가 고른 전역값으로 본다.
+describe('story conditions', () => {
+  type Condition = 'base' | 'combined' | 'partial';
+
+  function conditionOf(globals: Record<string, unknown>): Condition {
+    const viewport = globals['viewport'];
+    const viewportValue =
+      typeof viewport === 'object' && viewport !== null && 'value' in viewport
+        ? String(viewport.value)
+        : '';
+    const dark = globals['theme'] === 'dark';
+    const large = Number(globals['fontScale'] ?? 100) > 100;
+    const narrow = viewportValue.startsWith('narrow');
+    const hard = [dark, large, narrow].filter(Boolean).length;
+    if (hard === 0) return 'base';
+    const exact = dark && Number(globals['fontScale']) === 200 && viewportValue === 'narrow375';
+    return exact ? 'combined' : 'partial';
+  }
+
+  for (const [path, module] of Object.entries(modules)) {
+    const file = path.replace('../../stories/', '');
+    it(`${file} has at most one combined-condition story and no partial variants`, () => {
+      const kinds = Object.entries(composeStories(module)).map(
+        ([name, Story]) => [name, conditionOf(Story.globals)] as const,
+      );
+      expect(
+        kinds.filter(([, kind]) => kind === 'partial').map(([name]) => name),
+        'stories that set only some of dark·375px·200% (use the one combined story)',
+      ).toEqual([]);
+      const combined = kinds.filter(([, kind]) => kind === 'combined').map(([name]) => name);
+      expect(combined.length, `combined stories: ${combined.join(', ')}`).toBeLessThanOrEqual(
+        file.startsWith('ui/') ? 0 : 1,
+      );
+    });
+  }
+});
+
 for (const [path, module] of Object.entries(modules)) {
   describe(path.replace('../../stories/', ''), () => {
     for (const [name, Story] of Object.entries(composeStories(module))) {

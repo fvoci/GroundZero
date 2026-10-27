@@ -226,22 +226,10 @@ export const DesktopCollapsed: Story = {
   },
 };
 
-/** 좁은 화면(375px): 사이드바는 서랍이다. 머리글의 단추로 열면 모듈 목록이 보인다. */
-export const Narrow375: Story = {
-  globals: { viewport: { value: 'narrow375', isRotated: false } },
+/** 좁은 화면(375px)·어두움·200% 글꼴: 사이드바는 서랍이다. 머리글의 단추로 열면 모듈 목록이 보인다. */
+export const NarrowDarkLargeText: Story = {
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375', isRotated: false } },
   play: async ({ canvasElement }) => {
     await expect(await moduleLinks(await sidebar(canvasElement))).toHaveLength(MODULES.length);
   },
-};
-
-/** 500px: 아직 모바일 폭(768px 미만)이라 서랍이다. */
-export const Narrow500: Story = {
-  ...Narrow375,
-  globals: { viewport: { value: 'narrow500', isRotated: false } },
-};
-
-export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
-export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
-export const BrandNarrowLargeText: Story = {
-  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

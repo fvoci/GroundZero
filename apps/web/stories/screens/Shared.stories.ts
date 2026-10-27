@@ -38,9 +38,7 @@ export const NoOrganization: Story = {
     return cleanup;
   },
 };
-export const Dark: Story = { ...Documents, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...Documents, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...Documents,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

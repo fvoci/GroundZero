@@ -37,6 +37,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const BothKinds: Story = {};
-export const Dark: Story = { globals: { theme: 'dark' } };
-export const Narrow375: Story = { globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = { globals: { fontScale: '200', viewport: { value: 'narrow375' } } };
+export const NarrowDarkLargeText: Story = {
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
+};

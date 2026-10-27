@@ -9,7 +9,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Light: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
-export const Dark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
 export const NarrowLargeText: Story = {
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

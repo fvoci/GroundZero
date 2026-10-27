@@ -123,17 +123,8 @@ export const ReadOnly: Story = {
 export const Archived: Story = {
   ...Threads,
   args: { canWrite: false, archived: true },
-  globals: { viewport: { value: 'narrow375' }, fontScale: '200' },
 };
 
-export const BrandLight: Story = {
-  ...Threads,
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
-};
-export const BrandDark: Story = {
-  ...Threads,
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-};
 export const BrandNarrowLargeText: Story = {
   ...Threads,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
@@ -160,16 +151,4 @@ export const RestoreOffer: Story = {
     await expect(canvas.getByTestId('comment-draft-offer')).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: NEW_BOX })).toHaveValue('');
   },
-};
-export const RestoreLight: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
-};
-export const RestoreDark: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-};
-export const RestoreNarrowLargeText: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

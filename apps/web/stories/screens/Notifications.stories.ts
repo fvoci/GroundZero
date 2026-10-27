@@ -72,9 +72,7 @@ export const ReadFailed: Story = {
     await expect(await within(canvasElement).findByRole('alert')).toHaveTextContent('읽음');
   },
 };
-export const Dark: Story = { ...TwoPanes, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...Invitation, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...TwoPanes,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };
