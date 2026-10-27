@@ -54,6 +54,8 @@
     deleteError = undefined;
     try {
       await api.deleteWorkspace(workspace.id, deleteName);
+      // 지운 뒤의 이동을 이탈 경고가 막지 않게 한다.
+      deleteName = '';
       onchanged();
       router.navigate('/trash');
     } catch (e: unknown) {
@@ -112,10 +114,27 @@
     dirty: () => groupName !== '',
     busy: () => grouping,
   });
+  // 삭제 재확인 이름은 저장하지 않는다(R3 A). 화면에 있는 동안만 두고 떠날 때만 경고하며, 사용자·워크스페이스가
+  // 바뀌면 지운다.
+  const deleteDraft = createFormDraft<undefined>({
+    name: () => `members-delete:${workspace.id}`,
+    snapshot: () => undefined,
+    parse: () => undefined,
+    restore: () => undefined,
+    reset: () => {
+      deleteName = '';
+      deleteError = undefined;
+    },
+    dirty: () => false,
+    screenOnly: () => deleteName !== '',
+    busy: () => deleting,
+  });
   onMount(() => {
     const detachInvite = inviteDraft.attach();
     const detachGroup = groupDraft.attach();
+    const detachDelete = deleteDraft.attach();
     return () => {
+      detachDelete();
       detachGroup();
       detachInvite();
     };
@@ -619,4 +638,9 @@
   open={groupDraft.leave.open}
   onkeep={groupDraft.leave.keep}
   ondiscard={groupDraft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={deleteDraft.leave.open}
+  onkeep={deleteDraft.leave.keep}
+  ondiscard={deleteDraft.discardAndLeave}
 />

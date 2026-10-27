@@ -23,6 +23,11 @@ interface DraftOptions<T> {
   /** Clear visible input when its owner or target changes. */
   reset: () => void;
   dirty: () => boolean;
+  /**
+   * Secret input (API keys, delete confirmations) that must never be stored. It only counts toward the
+   * leave warning while on screen, so `snapshot`/`restore` never carry it (R3 A, D-96).
+   */
+  screenOnly?: () => boolean;
   busy?: () => boolean;
 }
 
@@ -77,8 +82,10 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     disposed = true;
   });
 
+  const held = (): boolean => options.screenOnly?.() === true;
+
   const leave = createLeaveGuard({
-    dirty: () => current() && options.dirty(),
+    dirty: () => current() && (options.dirty() || held()),
     busy: () => current() && options.busy?.() === true,
     identity: () => session,
     onAsk: persist,
@@ -220,7 +227,12 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return leave.attach({
       beforeUnload: () => {
         persist();
-        return owned() && options.dirty() && (!accountSwitching() || !kept);
+        // An account-switch reload must not be blocked by input that is never kept: that would leave
+        // the previous account's secret on screen under the new session (D-96).
+        return (
+          owned() &&
+          ((options.dirty() && (!accountSwitching() || !kept)) || (held() && !accountSwitching()))
+        );
       },
     });
   }
