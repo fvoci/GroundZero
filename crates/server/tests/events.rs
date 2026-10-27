@@ -552,3 +552,109 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
         Some(&admin), None).await;
     assert_eq!(r.status, StatusCode::NOT_FOUND);
 }
+
+/// D-113: 보관은 등급 위의 쓰기 금지다. 보관된 항목이나 보관된 모듈의 항목 아래 일정은 등급 판정에서 읽기로 내려오고
+/// (`app_grade_under_item`) 고치기는 거절된다. 웹은 쓰기 UI를 `access`로만 정하므로(따로 계산하지 않는다), 단건·목록·달력
+/// 응답이 모두 같은 `access`를 내야 한다.
+#[tokio::test]
+async fn events_under_an_archived_item_or_module_are_read_only() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보관 일정").await;
+    let open = module_item(&app, &admin, &ws, "OPN", true).await;
+    let archived_item = module_item(&app, &admin, &ws, "AIT", true).await;
+    let archived_module = module_item(&app, &admin, &ws, "AMD", true).await;
+    let mut events = Vec::new();
+    for (item, title) in [
+        (&open, "열린 일정"),
+        (&archived_item, "보관된 항목의 일정"),
+        (&archived_module, "보관된 모듈의 일정"),
+    ] {
+        let body = timed(
+            title,
+            "2026-11-10T10:00:00+09:00",
+            "2026-11-10T11:00:00+09:00",
+            "Asia/Seoul",
+        );
+        let (status, event) = create(&app, &admin, item, body).await;
+        assert_eq!(status, StatusCode::CREATED, "{event:?}");
+        assert_eq!(event["access"], "owner", "{event:?}");
+        events.push(event);
+    }
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!(
+            "/api/items/{}/archived",
+            archived_item["id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!(
+            "/api/modules/{}/archived",
+            archived_module["module_id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+
+    let (status, cal) = calendar(&app, &admin, &ws, "2026-11-01", "2026-11-30", "Asia/Seoul").await;
+    assert_eq!(status, StatusCode::OK, "{cal:?}");
+    for (item, event, access, edit_status) in [
+        (&open, &events[0], "owner", StatusCode::OK),
+        (&archived_item, &events[1], "read", StatusCode::CONFLICT),
+        (&archived_module, &events[2], "read", StatusCode::CONFLICT),
+    ] {
+        let id = event["id"].as_str().unwrap();
+        let single = send(
+            &app,
+            Method::GET,
+            &format!("/api/events/{id}"),
+            Some(&admin),
+            None,
+        )
+        .await;
+        assert_eq!(single.status, StatusCode::OK, "{:?}", single.json);
+        assert_eq!(single.json["access"], access, "single {:?}", single.json);
+        let list = send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{}/events", item["id"].as_str().unwrap()),
+            Some(&admin),
+            None,
+        )
+        .await;
+        assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+        let listed = list.json.as_array().unwrap();
+        assert_eq!(listed.len(), 1, "{listed:?}");
+        assert_eq!(listed[0]["access"], access, "list {listed:?}");
+        let on_calendar = cal["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["id"] == event["id"])
+            .unwrap_or_else(|| panic!("{id} missing from the calendar: {cal:?}"));
+        assert_eq!(on_calendar["access"], access, "calendar {on_calendar:?}");
+        let edit = send(
+            &app,
+            Method::PUT,
+            &format!("/api/events/{id}"),
+            Some(&admin),
+            Some(json!({ "base_version": single.json["version"], "kind": "meeting", "title": "고친 제목",
+                "description": "", "all_day": false, "start_date": null, "end_date": null,
+                "starts_at": "2026-11-10T10:00:00+09:00", "ends_at": "2026-11-10T11:30:00+09:00",
+                "timezone": "Asia/Seoul" })),
+        )
+        .await;
+        assert_eq!(edit.status, edit_status, "{id}: {:?}", edit.json);
+    }
+}
