@@ -107,7 +107,11 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         println!("==> compose down");
         compose.down(&sh)
     };
-    compose::with_interrupt(cleanup.and(result))
+    // 원래 기동·시험 오류를 먼저 돌려주고, 정리 실패도 버리지 않고 알린다(supabase_stack·browser와 같은 방식).
+    if let Err(err) = &cleanup {
+        eprintln!("cleanup of {} failed: {err:#}", compose.project());
+    }
+    compose::with_interrupt(result.and(cleanup))
 }
 
 fn print_recovery(compose: &Compose) {
