@@ -651,85 +651,91 @@
         >
       {/if}
     </div>
+    <!-- 이 파일의 폼은 모두 저장하는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 저장을 버리게 하고,
+         만들기는 다시 내면 새 요청 id로 하나 더 만들며, 판이 있는 고치기는 기준 판을 못 옮겨 자기 저장과 409로 부딪친다. -->
     {#each detailsDraft.offers as offer (offer.key)}
-      <FormDraftOffer
-        onrestore={() => {
-          detailsDraft.restore(offer);
-        }}
-        ondiscard={() => {
-          detailsDraft.discard(offer);
-        }}
-      />
+      <fieldset class="contents" disabled={savingDetails}>
+        <FormDraftOffer
+          onrestore={() => {
+            detailsDraft.restore(offer);
+          }}
+          ondiscard={() => {
+            detailsDraft.discard(offer);
+          }}
+        />
+      </fieldset>
     {/each}
     {#if editing}
-      <form
-        class="grid gap-2 @xl:grid-cols-2"
-        onsubmit={(e: SubmitEvent) => {
-          e.preventDefault();
-          if (details.url.trim() !== '' && !isWebUrl(details.url.trim())) {
-            error = m.courses_url_invalid();
-            return;
-          }
-          // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
-          if (savingDetails) return;
-          if (!c.can_write) return;
-          const attempt = detailsDraft.capture();
-          if (attempt === undefined) return;
-          savingDetails = true;
-          // 보낸 입력. 응답을 기다리는 사이 더 고친 칸이 있으면 닫지 않는다(보내지 않은 입력이 사라지지 않게).
-          const sent = { ...details };
-          const session = editSession;
-          void run(
-            () =>
-              api.setCourseDetails(itemId, {
-                subject: sent.subject,
-                instructor: sent.instructor,
-                platform: sent.platform,
-                url: sent.url,
-                textbook: sent.textbook,
-                starts_on: orNull(sent.starts_on),
-                expires_on: orNull(sent.expires_on),
-                target_on: orNull(sent.target_on),
-              }),
-            m.courses_details_saved(),
-            () => detailsDraft.isOwner(attempt),
-          ).then((ok) => {
-            if (!detailsDraft.isOwner(attempt)) return;
-            savingDetails = false;
-            if (
-              ok &&
-              session === editSession &&
-              detailKeys.every((key) => details[key] === sent[key]) &&
-              detailsDraft.complete(attempt)
-            )
-              editing = false;
-          });
-        }}
-      >
-        {#each [['subject', m.courses_subject()], ['instructor', m.courses_instructor()], ['platform', m.courses_platform()], ['url', m.courses_url()], ['textbook', m.courses_textbook()]] as const as [key, label] (key)}
-          <div class="flex flex-col gap-1">
-            <Label for={`course-${key}`}>{label}</Label>
-            <Input id={`course-${key}`} bind:value={details[key]} maxlength={400} />
-          </div>
-        {/each}
-        {#each [['starts_on', m.courses_starts_on()], ['expires_on', m.courses_expires_on()], ['target_on', m.courses_target_on()]] as const as [key, label] (key)}
-          <div class="flex flex-col gap-1">
-            <Label for={`course-${key}`}>{label}</Label>
-            <Input id={`course-${key}`} type="date" bind:value={details[key]} />
-          </div>
-        {/each}
-        <div class="flex gap-2 @xl:col-span-2">
-          <Button type="submit" disabled={savingDetails}>{m.common_save()}</Button>
-          <Button
-            variant="ghost"
-            onclick={() => {
-              detailsDraft.leave.request(() => {
+      <fieldset class="min-w-0" disabled={savingDetails}>
+        <form
+          class="grid gap-2 @xl:grid-cols-2"
+          onsubmit={(e: SubmitEvent) => {
+            e.preventDefault();
+            if (details.url.trim() !== '' && !isWebUrl(details.url.trim())) {
+              error = m.courses_url_invalid();
+              return;
+            }
+            // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
+            if (savingDetails) return;
+            if (!c.can_write) return;
+            const attempt = detailsDraft.capture();
+            if (attempt === undefined) return;
+            savingDetails = true;
+            // 보낸 입력. 응답을 기다리는 사이 더 고친 칸이 있으면 닫지 않는다(보내지 않은 입력이 사라지지 않게).
+            const sent = { ...details };
+            const session = editSession;
+            void run(
+              () =>
+                api.setCourseDetails(itemId, {
+                  subject: sent.subject,
+                  instructor: sent.instructor,
+                  platform: sent.platform,
+                  url: sent.url,
+                  textbook: sent.textbook,
+                  starts_on: orNull(sent.starts_on),
+                  expires_on: orNull(sent.expires_on),
+                  target_on: orNull(sent.target_on),
+                }),
+              m.courses_details_saved(),
+              () => detailsDraft.isOwner(attempt),
+            ).then((ok) => {
+              if (!detailsDraft.isOwner(attempt)) return;
+              savingDetails = false;
+              if (
+                ok &&
+                session === editSession &&
+                detailKeys.every((key) => details[key] === sent[key]) &&
+                detailsDraft.complete(attempt)
+              )
                 editing = false;
-              });
-            }}>{m.common_cancel()}</Button
-          >
-        </div>
-      </form>
+            });
+          }}
+        >
+          {#each [['subject', m.courses_subject()], ['instructor', m.courses_instructor()], ['platform', m.courses_platform()], ['url', m.courses_url()], ['textbook', m.courses_textbook()]] as const as [key, label] (key)}
+            <div class="flex flex-col gap-1">
+              <Label for={`course-${key}`}>{label}</Label>
+              <Input id={`course-${key}`} bind:value={details[key]} maxlength={400} />
+            </div>
+          {/each}
+          {#each [['starts_on', m.courses_starts_on()], ['expires_on', m.courses_expires_on()], ['target_on', m.courses_target_on()]] as const as [key, label] (key)}
+            <div class="flex flex-col gap-1">
+              <Label for={`course-${key}`}>{label}</Label>
+              <Input id={`course-${key}`} type="date" bind:value={details[key]} />
+            </div>
+          {/each}
+          <div class="flex gap-2 @xl:col-span-2">
+            <Button type="submit" disabled={savingDetails}>{m.common_save()}</Button>
+            <Button
+              variant="ghost"
+              onclick={() => {
+                detailsDraft.leave.request(() => {
+                  editing = false;
+                });
+              }}>{m.common_cancel()}</Button
+            >
+          </div>
+        </form>
+      </fieldset>
     {:else}
       <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
         {#each [[m.courses_subject(), c.details.subject], [m.courses_instructor(), c.details.instructor], [m.courses_platform(), c.details.platform], [m.courses_textbook(), c.details.textbook], [m.courses_starts_on(), dayText(c.details.starts_on)], [m.courses_expires_on(), dayText(c.details.expires_on)], [m.courses_target_on(), dayText(c.details.target_on)]] as [label, value] (label)}
@@ -954,195 +960,214 @@
           {#if editingEpisode?.id === e.id}
             {@const base = editingEpisode}
             {#each episodeDraft.offers as offer (offer.key)}
-              <FormDraftOffer
-                onrestore={() => {
-                  episodeDraft.restore(offer);
-                }}
-                ondiscard={() => {
-                  episodeDraft.discard(offer);
-                }}
-              />
+              <fieldset class="contents" disabled={savingEpisode}>
+                <FormDraftOffer
+                  onrestore={() => {
+                    episodeDraft.restore(offer);
+                  }}
+                  ondiscard={() => {
+                    episodeDraft.discard(offer);
+                  }}
+                />
+              </fieldset>
             {/each}
-            <form
-              class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
-              aria-label={m.courses_episode_form({ number: e.number })}
-              onsubmit={(ev: SubmitEvent) => {
-                ev.preventDefault();
-                void saveEpisode(base);
-              }}
-            >
-              <div class="flex flex-col gap-1">
-                <Label for={`ep-number-${e.id}`}>{m.courses_number()}</Label>
-                <Input id={`ep-number-${e.id}`} inputmode="numeric" bind:value={shared.number} />
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-3">
-                <Label for={`ep-title-${e.id}`}>{m.courses_new_title()}</Label>
-                <Input id={`ep-title-${e.id}`} bind:value={shared.title} maxlength={300} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`ep-chapter-${e.id}`}>{m.courses_chapter()}</Label>
-                <Input id={`ep-chapter-${e.id}`} bind:value={shared.chapter} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`ep-duration-${e.id}`}>{m.courses_duration()}</Label>
-                <Input
-                  id={`ep-duration-${e.id}`}
-                  bind:value={shared.duration}
-                  placeholder="12:30"
-                />
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-2">
-                <Label for={`ep-planned-${e.id}`}>{m.courses_planned()}</Label>
-                <Input id={`ep-planned-${e.id}`} type="date" bind:value={shared.planned_on} />
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-4">
-                <Label for={`ep-url-${e.id}`}>{m.courses_episode_url()}</Label>
-                <Input id={`ep-url-${e.id}`} type="url" bind:value={shared.url} maxlength={2000} />
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-4">
-                <Label for={`ep-materials-${e.id}`}>{m.courses_materials()}</Label>
-                <Textarea
-                  id={`ep-materials-${e.id}`}
-                  class="min-h-20"
-                  bind:value={shared.materials}
-                />
-              </div>
-              <div class="flex gap-2 @xl:col-span-4">
-                <Button type="submit" size="sm" disabled={savingEpisode}>{m.common_save()}</Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() => {
-                    episodeDraft.leave.request(() => {
-                      editingEpisode = undefined;
-                    });
-                  }}>{m.common_cancel()}</Button
-                >
-              </div>
-            </form>
+            <fieldset class="min-w-0" disabled={savingEpisode}>
+              <form
+                class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
+                aria-label={m.courses_episode_form({ number: e.number })}
+                onsubmit={(ev: SubmitEvent) => {
+                  ev.preventDefault();
+                  void saveEpisode(base);
+                }}
+              >
+                <div class="flex flex-col gap-1">
+                  <Label for={`ep-number-${e.id}`}>{m.courses_number()}</Label>
+                  <Input id={`ep-number-${e.id}`} inputmode="numeric" bind:value={shared.number} />
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-3">
+                  <Label for={`ep-title-${e.id}`}>{m.courses_new_title()}</Label>
+                  <Input id={`ep-title-${e.id}`} bind:value={shared.title} maxlength={300} />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`ep-chapter-${e.id}`}>{m.courses_chapter()}</Label>
+                  <Input id={`ep-chapter-${e.id}`} bind:value={shared.chapter} />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`ep-duration-${e.id}`}>{m.courses_duration()}</Label>
+                  <Input
+                    id={`ep-duration-${e.id}`}
+                    bind:value={shared.duration}
+                    placeholder="12:30"
+                  />
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-2">
+                  <Label for={`ep-planned-${e.id}`}>{m.courses_planned()}</Label>
+                  <Input id={`ep-planned-${e.id}`} type="date" bind:value={shared.planned_on} />
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-4">
+                  <Label for={`ep-url-${e.id}`}>{m.courses_episode_url()}</Label>
+                  <Input
+                    id={`ep-url-${e.id}`}
+                    type="url"
+                    bind:value={shared.url}
+                    maxlength={2000}
+                  />
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-4">
+                  <Label for={`ep-materials-${e.id}`}>{m.courses_materials()}</Label>
+                  <Textarea
+                    id={`ep-materials-${e.id}`}
+                    class="min-h-20"
+                    bind:value={shared.materials}
+                  />
+                </div>
+                <div class="flex gap-2 @xl:col-span-4">
+                  <Button type="submit" size="sm" disabled={savingEpisode}>{m.common_save()}</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => {
+                      episodeDraft.leave.request(() => {
+                        editingEpisode = undefined;
+                      });
+                    }}>{m.common_cancel()}</Button
+                  >
+                </div>
+              </form>
+            </fieldset>
           {/if}
           {#if openEpisode === e.id && c.can_write}
             {#each mineDraft.offers as offer (offer.key)}
-              <FormDraftOffer
-                onrestore={() => {
-                  mineDraft.restore(offer);
-                }}
-                ondiscard={() => {
-                  mineDraft.discard(offer);
-                }}
-              />
-            {/each}
-            <form
-              class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
-              onsubmit={(ev: SubmitEvent) => {
-                ev.preventDefault();
-                void saveMine(e);
-              }}
-            >
-              <div class="flex flex-col gap-1">
-                <Label for={`mine-planned-${e.id}`}>{m.courses_my_planned()}</Label>
-                <Input id={`mine-planned-${e.id}`} type="date" bind:value={mine.planned_on} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`mine-position-${e.id}`}>{m.courses_last_position()}</Label>
-                <Input
-                  id={`mine-position-${e.id}`}
-                  bind:value={mine.position}
-                  placeholder="12:30"
-                  oninput={() => (positionError = undefined)}
-                  aria-invalid={positionError !== undefined}
-                  aria-describedby={positionError === undefined
-                    ? undefined
-                    : `mine-position-error-${e.id}`}
+              <fieldset class="contents" disabled={savingMine}>
+                <FormDraftOffer
+                  onrestore={() => {
+                    mineDraft.restore(offer);
+                  }}
+                  ondiscard={() => {
+                    mineDraft.discard(offer);
+                  }}
                 />
-                {#if positionError !== undefined}
-                  <p
-                    id={`mine-position-error-${e.id}`}
-                    class="text-xs text-destructive"
-                    role="alert"
-                  >
-                    {positionError}
-                  </p>
-                {/if}
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-3">
-                <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
-                <Textarea id={`mine-note-${e.id}`} class="min-h-20" bind:value={mine.note} />
-              </div>
-              <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
-            </form>
+              </fieldset>
+            {/each}
+            <fieldset class="min-w-0" disabled={savingMine}>
+              <form
+                class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
+                onsubmit={(ev: SubmitEvent) => {
+                  ev.preventDefault();
+                  void saveMine(e);
+                }}
+              >
+                <div class="flex flex-col gap-1">
+                  <Label for={`mine-planned-${e.id}`}>{m.courses_my_planned()}</Label>
+                  <Input id={`mine-planned-${e.id}`} type="date" bind:value={mine.planned_on} />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`mine-position-${e.id}`}>{m.courses_last_position()}</Label>
+                  <Input
+                    id={`mine-position-${e.id}`}
+                    bind:value={mine.position}
+                    placeholder="12:30"
+                    oninput={() => (positionError = undefined)}
+                    aria-invalid={positionError !== undefined}
+                    aria-describedby={positionError === undefined
+                      ? undefined
+                      : `mine-position-error-${e.id}`}
+                  />
+                  {#if positionError !== undefined}
+                    <p
+                      id={`mine-position-error-${e.id}`}
+                      class="text-xs text-destructive"
+                      role="alert"
+                    >
+                      {positionError}
+                    </p>
+                  {/if}
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-3">
+                  <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
+                  <Textarea id={`mine-note-${e.id}`} class="min-h-20" bind:value={mine.note} />
+                </div>
+                <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
+              </form>
+            </fieldset>
           {/if}
         </li>
       {/each}
     </ol>
 
     {#if c.can_write}
+      <!-- 회차 추가와 CSV 가져오기는 같은 `adding`을 쓴다. 한쪽을 보내는 동안 두 폼을 함께 잠근다. -->
       {#each newDraft.offers as offer (offer.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            newDraft.restore(offer);
-          }}
-          ondiscard={() => {
-            newDraft.discard(offer);
-          }}
-        />
+        <fieldset class="contents" disabled={adding}>
+          <FormDraftOffer
+            onrestore={() => {
+              newDraft.restore(offer);
+            }}
+            ondiscard={() => {
+              newDraft.discard(offer);
+            }}
+          />
+        </fieldset>
       {/each}
-      <form
-        class="flex flex-wrap items-end gap-2"
-        onsubmit={(ev: SubmitEvent) => {
-          ev.preventDefault();
-          const seconds = parseDuration(newEpisode.duration);
-          if (newEpisode.title.trim() === '' || seconds === null) {
-            error = m.courses_new_invalid();
-            return;
-          }
-          const row = {
-            title: newEpisode.title.trim(),
-            chapter: newEpisode.chapter.trim(),
-            duration_seconds: seconds,
-            planned_on: orNull(newEpisode.planned_on),
-          };
-          if (adding) return;
-          const payload = JSON.stringify(row);
-          if (payload !== newPayload) {
-            newPayload = payload;
-            newId = newRequestId();
-          }
-          const attempt = newDraft.capture();
-          if (attempt === undefined) return;
-          const requestId = newId;
-          adding = true;
-          void addEpisodes([row], [requestId], () => newDraft.isOwner(attempt))
-            .then((ok) => {
-              if (ok) newDraft.complete(attempt);
-            })
-            .finally(() => {
-              if (newDraft.isOwner(attempt)) adding = false;
-            });
-        }}
-      >
-        <!-- 최소 폭 12rem은 200% 글꼴의 375px에서 화면보다 넓어지므로 컨테이너 폭을 넘지 않게 한다(D-110). -->
-        <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
-          <Label for="episode-title">{m.courses_new_title()}</Label>
-          <Input id="episode-title" bind:value={newEpisode.title} maxlength={300} />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="episode-chapter">{m.courses_chapter()}</Label>
-          <Input id="episode-chapter" bind:value={newEpisode.chapter} />
-        </div>
-        <div class="flex w-24 flex-col gap-1">
-          <Label for="episode-duration">{m.courses_duration()}</Label>
-          <Input id="episode-duration" bind:value={newEpisode.duration} placeholder="12:30" />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="episode-planned">{m.courses_planned()}</Label>
-          <Input id="episode-planned" type="date" bind:value={newEpisode.planned_on} />
-        </div>
-        <Button type="submit">{m.courses_add_episode()}</Button>
-      </form>
+      <fieldset class="min-w-0" disabled={adding}>
+        <form
+          class="flex flex-wrap items-end gap-2"
+          onsubmit={(ev: SubmitEvent) => {
+            ev.preventDefault();
+            const seconds = parseDuration(newEpisode.duration);
+            if (newEpisode.title.trim() === '' || seconds === null) {
+              error = m.courses_new_invalid();
+              return;
+            }
+            const row = {
+              title: newEpisode.title.trim(),
+              chapter: newEpisode.chapter.trim(),
+              duration_seconds: seconds,
+              planned_on: orNull(newEpisode.planned_on),
+            };
+            if (adding) return;
+            const payload = JSON.stringify(row);
+            if (payload !== newPayload) {
+              newPayload = payload;
+              newId = newRequestId();
+            }
+            const attempt = newDraft.capture();
+            if (attempt === undefined) return;
+            const requestId = newId;
+            adding = true;
+            void addEpisodes([row], [requestId], () => newDraft.isOwner(attempt))
+              .then((ok) => {
+                if (ok) newDraft.complete(attempt);
+              })
+              .finally(() => {
+                if (newDraft.isOwner(attempt)) adding = false;
+              });
+          }}
+        >
+          <!-- 최소 폭 12rem은 200% 글꼴의 375px에서 화면보다 넓어지므로 컨테이너 폭을 넘지 않게 한다(D-110). -->
+          <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
+            <Label for="episode-title">{m.courses_new_title()}</Label>
+            <Input id="episode-title" bind:value={newEpisode.title} maxlength={300} />
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="episode-chapter">{m.courses_chapter()}</Label>
+            <Input id="episode-chapter" bind:value={newEpisode.chapter} />
+          </div>
+          <div class="flex w-24 flex-col gap-1">
+            <Label for="episode-duration">{m.courses_duration()}</Label>
+            <Input id="episode-duration" bind:value={newEpisode.duration} placeholder="12:30" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="episode-planned">{m.courses_planned()}</Label>
+            <Input id="episode-planned" type="date" bind:value={newEpisode.planned_on} />
+          </div>
+          <Button type="submit">{m.courses_add_episode()}</Button>
+        </form>
+      </fieldset>
       <details class="text-sm">
         <summary class="cursor-pointer">{m.courses_csv_summary()}</summary>
-        <div class="flex flex-col gap-2 pt-2">
+        <fieldset class="flex min-w-0 flex-col gap-2 pt-2" disabled={adding}>
           {#each csvDraft.offers as offer (offer.key)}
             <FormDraftOffer
               onrestore={() => {
@@ -1198,7 +1223,7 @@
               }}>{m.courses_csv_add()}</Button
             >
           </div>
-        </div>
+        </fieldset>
       </details>
     {/if}
   </section>

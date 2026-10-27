@@ -224,15 +224,19 @@
       <Dialog.Description>{m.tasks_status_description()}</Dialog.Description>
     </Dialog.Header>
     <form class="flex flex-col gap-3" onsubmit={(e) => void save(e)}>
+      <!-- 저장하는 동안 되살리기도 입력과 함께 잠근다(D-97). 그사이 바뀐 입력은 성공(목록 다시 읽기·닫기)을 버리게 하고,
+           만들기는 이름을 바꿔 다시 내면 상태가 하나 더 생긴다. -->
       {#each draft.offers as entry (entry.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            draft.restore(entry);
-          }}
-          ondiscard={() => {
-            draft.discard(entry);
-          }}
-        />
+        <fieldset class="contents" disabled={busy}>
+          <FormDraftOffer
+            onrestore={() => {
+              draft.restore(entry);
+            }}
+            ondiscard={() => {
+              draft.discard(entry);
+            }}
+          />
+        </fieldset>
       {/each}
       <fieldset disabled={busy} class="flex flex-col gap-3">
         {#if removing}

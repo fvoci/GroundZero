@@ -394,43 +394,50 @@
         <p class="text-sm text-muted-foreground">
           {m.members_invite_hint()}
         </p>
+        <!-- 초대·그룹 만들기는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공 안내와 실패 알림을
+             숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
         {#each inviteDraft.offers as offer (offer.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              inviteDraft.restore(offer);
-            }}
-            ondiscard={() => {
-              inviteDraft.discard(offer);
-            }}
-          />
-        {/each}
-        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
-          <div class="flex min-w-60 flex-1 flex-col gap-1">
-            <Label for="invite-email">{m.members_email()}</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              bind:value={inviteEmail}
-              autocomplete="off"
-              required
-              aria-invalid={inviteError !== undefined}
-              aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
+          <fieldset class="contents" disabled={inviting}>
+            <FormDraftOffer
+              onrestore={() => {
+                inviteDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                inviteDraft.discard(offer);
+              }}
             />
-          </div>
-          <RoleSelect
-            value={inviteRole}
-            label={m.members_invite_role()}
-            onchange={(r: Role) => (inviteRole = r)}
-          />
-          <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
-            >{m.members_invite()}</Button
-          >
-          {#if inviteError !== undefined}
-            <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
-              {inviteError}
-            </p>
-          {/if}
-        </form>
+          </fieldset>
+        {/each}
+        <fieldset class="min-w-0" disabled={inviting}>
+          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
+            <div class="flex min-w-60 flex-1 flex-col gap-1">
+              <Label for="invite-email">{m.members_email()}</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                bind:value={inviteEmail}
+                autocomplete="off"
+                required
+                aria-invalid={inviteError !== undefined}
+                aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
+              />
+            </div>
+            <RoleSelect
+              value={inviteRole}
+              label={m.members_invite_role()}
+              disabled={inviting}
+              onchange={(r: Role) => (inviteRole = r)}
+            />
+            <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
+              >{m.members_invite()}</Button
+            >
+            {#if inviteError !== undefined}
+              <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
+                {inviteError}
+              </p>
+            {/if}
+          </form>
+        </fieldset>
         {#if invitations.length > 0}
           <ul class="flex flex-col gap-1" data-testid="invitation-list">
             {#each invitations as inv (inv.id)}
@@ -503,36 +510,40 @@
       {/each}
       {#if isAdmin}
         {#each groupDraft.offers as offer (offer.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              groupDraft.restore(offer);
-            }}
-            ondiscard={() => {
-              groupDraft.discard(offer);
-            }}
-          />
-        {/each}
-        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void createGroup(e)}>
-          <div class="flex flex-1 flex-col gap-1">
-            <Label for="group-name">{m.members_new_group_name()}</Label>
-            <Input
-              id="group-name"
-              bind:value={groupName}
-              maxlength={200}
-              autocomplete="off"
-              aria-invalid={groupError !== undefined}
-              aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
+          <fieldset class="contents" disabled={grouping}>
+            <FormDraftOffer
+              onrestore={() => {
+                groupDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                groupDraft.discard(offer);
+              }}
             />
-          </div>
-          <Button type="submit" disabled={grouping || groupName.trim() === ''}
-            >{m.members_create_group()}</Button
-          >
-          {#if groupError !== undefined}
-            <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
-              {groupError}
-            </p>
-          {/if}
-        </form>
+          </fieldset>
+        {/each}
+        <fieldset class="min-w-0" disabled={grouping}>
+          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void createGroup(e)}>
+            <div class="flex flex-1 flex-col gap-1">
+              <Label for="group-name">{m.members_new_group_name()}</Label>
+              <Input
+                id="group-name"
+                bind:value={groupName}
+                maxlength={200}
+                autocomplete="off"
+                aria-invalid={groupError !== undefined}
+                aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
+              />
+            </div>
+            <Button type="submit" disabled={grouping || groupName.trim() === ''}
+              >{m.members_create_group()}</Button
+            >
+            {#if groupError !== undefined}
+              <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
+                {groupError}
+              </p>
+            {/if}
+          </form>
+        </fieldset>
       {/if}
     </section>
 

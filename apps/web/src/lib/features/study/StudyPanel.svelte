@@ -594,38 +594,49 @@
     </div>
 
     {#if p.overdue.length > 0 && current.can_write}
+      <!-- 이 파일의 폼은 모두 저장하는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 저장을 버리게 하고,
+           만들기는 다시 내면 새 요청 id로 하나 더 만들며, 판이 있는 고치기는 기준 판을 못 옮겨 자기 저장과 409로 부딪친다. -->
       {#each replanDraft.offers as offer (offer.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            replanDraft.restore(offer);
-          }}
-          ondiscard={() => {
-            replanDraft.discard(offer);
-          }}
-        />
+        <fieldset class="contents" disabled={replanning}>
+          <FormDraftOffer
+            onrestore={() => {
+              replanDraft.restore(offer);
+            }}
+            ondiscard={() => {
+              replanDraft.discard(offer);
+            }}
+          />
+        </fieldset>
       {/each}
-      <form
-        class="flex flex-wrap items-end gap-2 rounded-md border p-2 text-sm"
-        aria-label={m.study_replan_form()}
-        novalidate
-        onsubmit={(e: SubmitEvent) => {
-          e.preventDefault();
-          void reschedule(p.overdue);
-        }}
-      >
-        <span>{m.study_replan_intro({ count: p.overdue.length })}</span>
-        <div class="flex flex-col gap-1">
-          <Label for="study-replan-start">{m.study_start_date()}</Label>
-          <Input id="study-replan-start" type="date" bind:value={replanStart} class="w-40" />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="study-replan-per">{m.study_per_day()}</Label>
-          <Input id="study-replan-per" inputmode="numeric" bind:value={replanPerDay} class="w-20" />
-        </div>
-        <Button type="submit" size="sm" variant="outline" disabled={replanning}
-          >{m.study_replan()}</Button
+      <fieldset class="min-w-0" disabled={replanning}>
+        <form
+          class="flex flex-wrap items-end gap-2 rounded-md border p-2 text-sm"
+          aria-label={m.study_replan_form()}
+          novalidate
+          onsubmit={(e: SubmitEvent) => {
+            e.preventDefault();
+            void reschedule(p.overdue);
+          }}
         >
-      </form>
+          <span>{m.study_replan_intro({ count: p.overdue.length })}</span>
+          <div class="flex flex-col gap-1">
+            <Label for="study-replan-start">{m.study_start_date()}</Label>
+            <Input id="study-replan-start" type="date" bind:value={replanStart} class="w-40" />
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="study-replan-per">{m.study_per_day()}</Label>
+            <Input
+              id="study-replan-per"
+              inputmode="numeric"
+              bind:value={replanPerDay}
+              class="w-20"
+            />
+          </div>
+          <Button type="submit" size="sm" variant="outline" disabled={replanning}
+            >{m.study_replan()}</Button
+          >
+        </form>
+      </fieldset>
     {/if}
 
     <ol class="flex flex-col gap-1" data-testid="study-units">
@@ -729,102 +740,123 @@
           {#if editingUnit?.id === u.id}
             {@const base = editingUnit}
             {#each unitDraft.offers as offer (offer.key)}
-              <FormDraftOffer
-                onrestore={() => {
-                  unitDraft.restore(offer);
-                }}
-                ondiscard={() => {
-                  unitDraft.discard(offer);
-                }}
-              />
-            {/each}
-            <form
-              class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
-              aria-label={m.study_unit_form({ title: u.title })}
-              novalidate
-              onsubmit={(e: SubmitEvent) => {
-                e.preventDefault();
-                void saveUnit(base);
-              }}
-            >
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-number-${u.id}`}>{m.study_number()}</Label>
-                <Input id={`unit-number-${u.id}`} inputmode="numeric" bind:value={shared.number} />
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-3">
-                <Label for={`unit-title-${u.id}`}>{m.study_new_title()}</Label>
-                <Input id={`unit-title-${u.id}`} bind:value={shared.title} maxlength={300} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-chapter-${u.id}`}>{m.study_chapter()}</Label>
-                <Input id={`unit-chapter-${u.id}`} bind:value={shared.chapter} maxlength={300} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-amount-${u.id}`}>{m.study_amount()}</Label>
-                <Input id={`unit-amount-${u.id}`} inputmode="numeric" bind:value={shared.amount} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-kind-${u.id}`}>{m.study_unit()}</Label>
-                <NativeSelect id={`unit-kind-${u.id}`} class="w-full" bind:value={shared.unit}>
-                  {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
-                </NativeSelect>
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-shared-planned-${u.id}`}>{m.study_planned()}</Label>
-                <Input
-                  id={`unit-shared-planned-${u.id}`}
-                  type="date"
-                  bind:value={shared.planned_on}
+              <fieldset class="contents" disabled={savingUnit}>
+                <FormDraftOffer
+                  onrestore={() => {
+                    unitDraft.restore(offer);
+                  }}
+                  ondiscard={() => {
+                    unitDraft.discard(offer);
+                  }}
                 />
-              </div>
-              <div class="flex gap-2 @xl:col-span-4">
-                <Button type="submit" size="sm" disabled={savingUnit}>{m.common_save()}</Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() => {
-                    unitDraft.leave.request(() => {
-                      editingUnit = undefined;
-                    });
-                  }}>{m.common_cancel()}</Button
-                >
-              </div>
-            </form>
+              </fieldset>
+            {/each}
+            <fieldset class="min-w-0" disabled={savingUnit}>
+              <form
+                class="grid gap-2 border-t pt-2 @xl:grid-cols-4"
+                aria-label={m.study_unit_form({ title: u.title })}
+                novalidate
+                onsubmit={(e: SubmitEvent) => {
+                  e.preventDefault();
+                  void saveUnit(base);
+                }}
+              >
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-number-${u.id}`}>{m.study_number()}</Label>
+                  <Input
+                    id={`unit-number-${u.id}`}
+                    inputmode="numeric"
+                    bind:value={shared.number}
+                  />
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-3">
+                  <Label for={`unit-title-${u.id}`}>{m.study_new_title()}</Label>
+                  <Input id={`unit-title-${u.id}`} bind:value={shared.title} maxlength={300} />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-chapter-${u.id}`}>{m.study_chapter()}</Label>
+                  <Input id={`unit-chapter-${u.id}`} bind:value={shared.chapter} maxlength={300} />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-amount-${u.id}`}>{m.study_amount()}</Label>
+                  <Input
+                    id={`unit-amount-${u.id}`}
+                    inputmode="numeric"
+                    bind:value={shared.amount}
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-kind-${u.id}`}>{m.study_unit()}</Label>
+                  <NativeSelect id={`unit-kind-${u.id}`} class="w-full" bind:value={shared.unit}>
+                    {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option
+                      >{/each}
+                  </NativeSelect>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-shared-planned-${u.id}`}>{m.study_planned()}</Label>
+                  <Input
+                    id={`unit-shared-planned-${u.id}`}
+                    type="date"
+                    bind:value={shared.planned_on}
+                  />
+                </div>
+                <div class="flex gap-2 @xl:col-span-4">
+                  <Button type="submit" size="sm" disabled={savingUnit}>{m.common_save()}</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => {
+                      unitDraft.leave.request(() => {
+                        editingUnit = undefined;
+                      });
+                    }}>{m.common_cancel()}</Button
+                  >
+                </div>
+              </form>
+            </fieldset>
           {/if}
           {#if openUnit === u.id && current.can_write}
             {#each mineDraft.offers as offer (offer.key)}
-              <FormDraftOffer
-                onrestore={() => {
-                  mineDraft.restore(offer);
-                }}
-                ondiscard={() => {
-                  mineDraft.discard(offer);
-                }}
-              />
+              <fieldset class="contents" disabled={savingMine}>
+                <FormDraftOffer
+                  onrestore={() => {
+                    mineDraft.restore(offer);
+                  }}
+                  ondiscard={() => {
+                    mineDraft.discard(offer);
+                  }}
+                />
+              </fieldset>
             {/each}
-            <form
-              class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
-              onsubmit={(e: SubmitEvent) => {
-                e.preventDefault();
-                void saveMine(u);
-              }}
-            >
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-done-${u.id}`}
-                  >{m.study_done_amount({ unit: unitLabel(u.unit) })}</Label
-                >
-                <Input id={`unit-done-${u.id}`} inputmode="numeric" bind:value={mine.done_amount} />
-              </div>
-              <div class="flex flex-col gap-1">
-                <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
-                <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
-              </div>
-              <div class="flex flex-col gap-1 @xl:col-span-3">
-                <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
-                <Textarea id={`unit-note-${u.id}`} rows={2} bind:value={mine.note} />
-              </div>
-              <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
-            </form>
+            <fieldset class="min-w-0" disabled={savingMine}>
+              <form
+                class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
+                onsubmit={(e: SubmitEvent) => {
+                  e.preventDefault();
+                  void saveMine(u);
+                }}
+              >
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-done-${u.id}`}
+                    >{m.study_done_amount({ unit: unitLabel(u.unit) })}</Label
+                  >
+                  <Input
+                    id={`unit-done-${u.id}`}
+                    inputmode="numeric"
+                    bind:value={mine.done_amount}
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
+                  <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
+                </div>
+                <div class="flex flex-col gap-1 @xl:col-span-3">
+                  <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
+                  <Textarea id={`unit-note-${u.id}`} rows={2} bind:value={mine.note} />
+                </div>
+                <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
+              </form>
+            </fieldset>
           {/if}
         </li>
       {:else}
@@ -834,40 +866,44 @@
 
     {#if current.can_write}
       {#each newDraft.offers as offer (offer.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            newDraft.restore(offer);
-          }}
-          ondiscard={() => {
-            newDraft.discard(offer);
-          }}
-        />
+        <fieldset class="contents" disabled={adding}>
+          <FormDraftOffer
+            onrestore={() => {
+              newDraft.restore(offer);
+            }}
+            ondiscard={() => {
+              newDraft.discard(offer);
+            }}
+          />
+        </fieldset>
       {/each}
-      <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addUnit(e)} novalidate>
-        <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
-          <Label for="study-unit-title">{m.study_new_title()}</Label>
-          <Input id="study-unit-title" bind:value={draft.title} maxlength={300} />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="study-unit-chapter">{m.study_chapter()}</Label>
-          <Input id="study-unit-chapter" bind:value={draft.chapter} maxlength={300} />
-        </div>
-        <div class="flex w-24 flex-col gap-1">
-          <Label for="study-unit-amount">{m.study_amount()}</Label>
-          <Input id="study-unit-amount" inputmode="numeric" bind:value={draft.amount} />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="study-unit-kind">{m.study_unit()}</Label>
-          <NativeSelect id="study-unit-kind" class="w-full" bind:value={draft.unit}>
-            {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
-          </NativeSelect>
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="study-unit-planned">{m.study_planned()}</Label>
-          <Input id="study-unit-planned" type="date" bind:value={draft.planned_on} />
-        </div>
-        <Button type="submit">{m.study_add_unit()}</Button>
-      </form>
+      <fieldset class="min-w-0" disabled={adding}>
+        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addUnit(e)} novalidate>
+          <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
+            <Label for="study-unit-title">{m.study_new_title()}</Label>
+            <Input id="study-unit-title" bind:value={draft.title} maxlength={300} />
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="study-unit-chapter">{m.study_chapter()}</Label>
+            <Input id="study-unit-chapter" bind:value={draft.chapter} maxlength={300} />
+          </div>
+          <div class="flex w-24 flex-col gap-1">
+            <Label for="study-unit-amount">{m.study_amount()}</Label>
+            <Input id="study-unit-amount" inputmode="numeric" bind:value={draft.amount} />
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="study-unit-kind">{m.study_unit()}</Label>
+            <NativeSelect id="study-unit-kind" class="w-full" bind:value={draft.unit}>
+              {#each STUDY_UNIT_KINDS as k (k)}<option value={k}>{unitLabel(k)}</option>{/each}
+            </NativeSelect>
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="study-unit-planned">{m.study_planned()}</Label>
+            <Input id="study-unit-planned" type="date" bind:value={draft.planned_on} />
+          </div>
+          <Button type="submit">{m.study_add_unit()}</Button>
+        </form>
+      </fieldset>
     {/if}
 
     {#if participants.length > 0}
