@@ -3345,8 +3345,15 @@ async fn delayed_move_commit_reply_does_not_extend_source_or_admit_destination_i
     move_commit_reply_race(true).await;
 }
 
-/// `commit_race_setup`이 준비한 경합: 이동 요청이 새 자리의 나무 잠금(`hold`)을 기다리고, 편집자(1초 재확인)의 앞선
-/// 편집은 옮기기 전 체크포인트가 리비전으로 남겼다. 풀의 COMMIT 장벽은 `proxy.commit_gate`.
+/// 커밋 응답 지연 경합 fixture의 재확인 주기 T(`FVOCI_COLLAB_RECHECK_SECS`). 시험의 단언은 모두 T에 상대적이다: source
+/// 근거는 마지막 source 확인 + T에 만료하고(커밋 가시 뒤 T+100ms를 기다린 편집은 저장되지 않는다), 거부된 이동은 T 안에
+/// 끝나며 닫힘은 T+250ms 안에 온다. 서버는 검사를 주기의 절반에 시작하므로 한 재확인의 DB 예산은 T/2다. 1초(예산
+/// 0.5초)는 CI의 Supavisor session 풀러에서 재확인이 늦어 4503으로 닫혔다(run 40401267035). 3초(예산 1.5초)는 풀러를
+/// 거친 새 연결(수백 ms)과 4코어 러너의 스케줄링 지연을 덮고도 남는다. 제품 설정 범위(1~3600초)는 그대로다.
+const COMMIT_RACE_RECHECK: Duration = Duration::from_secs(3);
+
+/// `commit_race_setup`이 준비한 경합: 이동 요청이 새 자리의 나무 잠금(`hold`)을 기다리고, 편집자(재확인 주기
+/// `COMMIT_RACE_RECHECK`)의 앞선 편집은 옮기기 전 체크포인트가 리비전으로 남겼다. 풀의 COMMIT 장벽은 `proxy.commit_gate`.
 struct CommitRace {
     _fixture: tokio::sync::MutexGuard<'static, ()>,
     proxy: DbProxy,
@@ -3404,8 +3411,8 @@ async fn move_commit_reply_race(destination_writable: bool) {
         "the database commit must already be visible"
     );
     let closed_early = if destination_writable {
-        // 모든 source 확인은 이 DB 커밋보다 앞선다. 그 최대 1초 TTL이 지난 뒤에도 destination 연결은 살아 있다.
-        tokio::time::sleep(Duration::from_millis(1100)).await;
+        // 모든 source 확인은 이 DB 커밋보다 앞선다. 그 최대 T TTL이 지난 뒤에도 destination 연결은 살아 있다.
+        tokio::time::sleep(COMMIT_RACE_RECHECK + Duration::from_millis(100)).await;
         editor
             .read_by_server("after the source TTL elapsed past the commit")
             .await;
@@ -3418,10 +3425,13 @@ async fn move_commit_reply_race(destination_writable: bool) {
         editor.read_by_server("after the post-commit input").await;
         None
     } else {
-        tokio::time::timeout(Duration::from_millis(1250), editor.closed())
-            .await
-            .ok()
-            .flatten()
+        tokio::time::timeout(
+            COMMIT_RACE_RECHECK + Duration::from_millis(250),
+            editor.closed(),
+        )
+        .await
+        .ok()
+        .flatten()
     };
     let held_response = !moving.is_finished();
     gate.release.send(true).unwrap();
@@ -3441,7 +3451,7 @@ async fn move_commit_reply_race(destination_writable: bool) {
     state.db.close().await;
     if !destination_writable {
         assert!(
-            move_elapsed < Duration::from_secs(1),
+            move_elapsed < COMMIT_RACE_RECHECK,
             "denied move must finish within the original source grant TTL: {:?}",
             move_elapsed
         );
@@ -3464,7 +3474,7 @@ async fn move_commit_reply_race(destination_writable: bool) {
 }
 
 /// CI(run 40401267035, Supavisor session 풀러)에서 위 경합 시험이 커밋 전 `read_by_server`의 Ping 송신에서 BrokenPipe로
-/// 끝났다: 서버가 먼저 닫은 것이다. 재확인 응답 하나가 재확인 주기(1초)보다 늦으면 서버는 그 기한에 연결을 4503으로
+/// 끝났다: 서버가 먼저 닫은 것이다. 재확인 응답 하나가 재확인 주기(`COMMIT_RACE_RECHECK`)보다 늦으면 서버는 그 기한에 연결을 4503으로
 /// 닫는다(R2 A: Unknown 상태에서 연결·권한을 유지하지 않는다). 그러면 대기열의 미확인 편집은 유효한 쓰기 근거가 없어
 /// 커밋 뒤에도 넣지 않고 확인하지 않으며(브라우저 초안이 지닌다, D-99) 이동은 그대로 끝난다. 같은 신호를 결정적으로
 /// 재현해 종료 코드와 그 결과를 고정한다. 확인받은 편집은 잃지 않는다.
@@ -3485,14 +3495,22 @@ async fn a_recheck_reply_later_than_its_period_while_the_move_waits_closes_the_e
         ..
     } = commit_race_setup(true).await;
     let gate = proxy.commit_gate.as_ref().unwrap();
-    // 다음 재확인(독립 감시 0.5초 주기 또는 이동 대기 중의 방 재확인)의 응답을 주기보다 길게 붙잡는다.
-    gate.stall_access_ms
-        .store(1_500, std::sync::atomic::Ordering::Release);
+    // 다음 재확인(독립 감시 T/2 주기 또는 이동 대기 중의 방 재확인)의 응답을 주기 T보다 길게 붙잡는다: 어느 기한보다도
+    // 늦어 4503 경로가 결정적이다.
+    let stall = COMMIT_RACE_RECHECK + Duration::from_millis(500);
+    gate.stall_access_ms.store(
+        u64::try_from(stall.as_millis()).unwrap(),
+        std::sync::atomic::Ordering::Release,
+    );
     editor.try_paragraph("재확인이 늦는 동안 보낸 편집").await;
-    let closed = tokio::time::timeout(Duration::from_secs(5), editor.closed())
-        .await
-        .ok()
-        .flatten();
+    // 붙잡힐 재확인은 늦어도 T/2 뒤에 시작하고 그 연결의 기한은 그로부터 T 안에 온다.
+    let closed = tokio::time::timeout(
+        COMMIT_RACE_RECHECK * 2 + Duration::from_secs(1),
+        editor.closed(),
+    )
+    .await
+    .ok()
+    .flatten();
     let acknowledged_before_commit = acked(&editor);
     hold.rollback().await.unwrap();
     tokio::time::timeout(Duration::from_secs(10), gate.committed.notified())
@@ -3529,8 +3547,12 @@ async fn a_recheck_reply_later_than_its_period_while_the_move_waits_closes_the_e
 async fn commit_race_setup(destination_writable: bool) -> CommitRace {
     let _fixture = POST_MOVE_FIXTURES.lock().await;
     let mut proxy = DbProxy::holding_move_commit().await;
-    let mut state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let recheck_secs = COMMIT_RACE_RECHECK.as_secs().to_string();
+    let mut state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        recheck_secs.as_str(),
+    )]))
+    .unwrap();
     // 준비와 최종 조회도 같은 풀로 한다. COMMIT 장벽은 실제 이동 실행 연결만 멈춘다.
     state.db =
         fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(proxy.url.clone()))
@@ -3572,7 +3594,7 @@ async fn commit_race_setup(destination_writable: bool) -> CommitRace {
     let mut editor = connect(addr, Some(&writer), &id, true).await.unwrap();
     editor.paragraph("응답 지연 전 확인 편집").await;
     // 이 편집은 이동 명령보다 먼저 방에 들어가야 한다(옮기기 전 체크포인트가 리비전으로 남기고 그때 확인한다). 필요한
-    // 사건은 그것뿐이라 주기 저장(3초)의 확인을 기다리지 않는다: 1초 재확인 연결이 느린 DB(풀러·CI)에 노출되는 시간을
+    // 사건은 그것뿐이라 주기 저장(3초)의 확인을 기다리지 않는다: 짧은 재확인 주기의 연결이 느린 DB(풀러·CI)에 노출되는 시간을
     // 줄인다. 체크포인트의 확인은 아래 경합 시험이 커밋 전 퐁 앞에서 받는다.
     editor
         .read_by_server("after the edit before the race")
