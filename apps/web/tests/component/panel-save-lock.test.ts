@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView, EpisodeView, StudyPlanView, StudyUnitView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
@@ -36,14 +36,24 @@ afterEach(() => {
   me.userId = '';
 });
 
-function held<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function held<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+} {
   let resolve: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((ok) => {
+  let reject: ((error: unknown) => void) | undefined;
+  const promise = new Promise<T>((ok, fail) => {
     resolve = ok;
+    reject = fail;
   });
-  if (resolve === undefined) throw new Error('promise');
-  return { promise, resolve };
+  if (resolve === undefined || reject === undefined) throw new Error('promise');
+  return { promise, resolve, reject };
 }
+
+// D4-F-1: 잠금은 저장이 끝나면 풀려야 한다. 붙잡은 요청을 연결 실패로 풀어(폼이 남고, 해제가 소유자 조건을 거치는
+// 경로) 제안·입력이 다시 쓸 수 있는지 본다. 해제 경로를 하나 빠뜨리면 폼이 영구히 잠긴다.
+const offline = (): NetworkError => new NetworkError('offline');
 
 /** 같은 사용자의 다른 탭이 남긴 초안(이 탭에는 되살리기 제안으로 보인다). */
 function otherTabDraft(name: string, input: unknown): void {
@@ -55,13 +65,17 @@ function otherTabDraft(name: string, input: unknown): void {
   });
 }
 
-/** 보이는 모든 초안 제안의 되살리기·버리기 단추가 잠겼는지. */
-function expectOffersLocked(count: number): void {
+function offerButtons(count: number): HTMLElement[] {
   const restore = screen.getAllByRole('button', { name: m.common_draft_restore() });
   const discard = screen.getAllByRole('button', { name: m.common_draft_discard() });
   expect(restore).toHaveLength(count);
   expect(discard).toHaveLength(count);
-  for (const b of [...restore, ...discard]) expect(b).toBeDisabled();
+  return [...restore, ...discard];
+}
+
+/** 보이는 모든 초안 제안의 되살리기·버리기 단추가 잠겼는지. */
+function expectOffersLocked(count: number): void {
+  for (const b of offerButtons(count)) expect(b).toBeDisabled();
 }
 
 function field(id: string): HTMLElement {
@@ -69,6 +83,18 @@ function field(id: string): HTMLElement {
   if (el === null) throw new Error(id);
   return el;
 }
+
+/** 저장이 끝난 뒤 제안과 대표 입력이 모두 다시 쓸 수 있는지. */
+async function expectReleased(count: number, ...inputs: (() => HTMLElement)[]): Promise<void> {
+  await waitFor(() => {
+    for (const b of offerButtons(count)) expect(b).not.toBeDisabled();
+    for (const input of inputs) expect(input()).not.toBeDisabled();
+  });
+}
+const byId =
+  (id: string): (() => HTMLElement) =>
+  () =>
+    field(id);
 
 function formOf(id: string): HTMLFormElement {
   const form = field(id).closest('form');
@@ -152,6 +178,8 @@ describe('course panel', () => {
     });
     expectOffersLocked(1);
     expect(field('course-subject')).toBeDisabled();
+    save.reject(offline());
+    await expectReleased(1, byId('course-subject'));
   });
 
   it('locks the versioned episode form and its offer while saving', async () => {
@@ -171,6 +199,8 @@ describe('course panel', () => {
     });
     expectOffersLocked(1);
     expect(field('ep-title-e1')).toBeDisabled();
+    save.reject(offline());
+    await expectReleased(1, byId('ep-title-e1'));
   });
 
   it('locks my episode notes and their offer while saving', async () => {
@@ -193,6 +223,8 @@ describe('course panel', () => {
     });
     expectOffersLocked(1);
     expect(field('mine-note-e1')).toBeDisabled();
+    save.reject(offline());
+    await expectReleased(1, byId('mine-note-e1'));
   });
 
   it('locks the new episode form, the CSV import and both offers while adding', async () => {
@@ -222,6 +254,8 @@ describe('course panel', () => {
     expectOffersLocked(2);
     expect(field('episode-title')).toBeDisabled();
     expect(field('episodes-csv')).toBeDisabled();
+    add.reject(offline());
+    await expectReleased(2, byId('episode-title'), byId('episodes-csv'));
   });
 
   it('locks the CSV text and the new episode form while importing', async () => {
@@ -238,6 +272,8 @@ describe('course panel', () => {
     expectOffersLocked(1);
     expect(field('episodes-csv')).toBeDisabled();
     expect(field('episode-title')).toBeDisabled();
+    add.reject(offline());
+    await expectReleased(1, byId('episodes-csv'), byId('episode-title'));
   });
 });
 
@@ -284,6 +320,8 @@ describe('study panel', () => {
     expectOffersLocked(1);
     expect(field('study-unit-title')).toBeDisabled();
     expect(field('study-unit-kind')).toBeDisabled();
+    add.reject(offline());
+    await expectReleased(1, byId('study-unit-title'), byId('study-unit-kind'));
   });
 
   it('locks the versioned unit form and its offer while saving', async () => {
@@ -311,6 +349,8 @@ describe('study panel', () => {
     expectOffersLocked(1);
     expect(field('unit-title-u1')).toBeDisabled();
     expect(field('unit-kind-u1')).toBeDisabled();
+    save.reject(offline());
+    await expectReleased(1, byId('unit-title-u1'), byId('unit-kind-u1'));
   });
 
   it('locks my unit progress and its offer while saving', async () => {
@@ -331,6 +371,8 @@ describe('study panel', () => {
     });
     expectOffersLocked(1);
     expect(field('unit-note-u1')).toBeDisabled();
+    save.reject(offline());
+    await expectReleased(1, byId('unit-note-u1'));
   });
 
   it('locks the replan form and its offer while rescheduling', async () => {
@@ -344,6 +386,8 @@ describe('study panel', () => {
     });
     expectOffersLocked(1);
     expect(field('study-replan-per')).toBeDisabled();
+    replan.reject(offline());
+    await expectReleased(1, byId('study-replan-per'));
   });
 });
 
@@ -375,9 +419,12 @@ describe('document actions', () => {
     });
     expectOffersLocked(1);
     expect(field('share-email')).toBeDisabled();
-    expect(await opens(screen.getByRole('button', { name: m.documents_share_permission() }))).toBe(
-      false,
-    );
+    const permission = (): HTMLElement =>
+      screen.getByRole('button', { name: m.documents_share_permission() });
+    expect(await opens(permission())).toBe(false);
+    share.reject(offline());
+    await expectReleased(1, byId('share-email'), permission);
+    expect(await opens(permission())).toBe(true);
   });
 
   it('locks the copy form, its target select and its offer while copying', async () => {
@@ -399,9 +446,15 @@ describe('document actions', () => {
     });
     expectOffersLocked(1);
     expect(field('copy-title')).toBeDisabled();
-    const target = document.querySelector<HTMLElement>('[aria-labelledby="copy-target-label"]');
-    if (target === null) throw new Error('copy target');
-    expect(await opens(target)).toBe(false);
+    const target = (): HTMLElement => {
+      const el = document.querySelector<HTMLElement>('[aria-labelledby="copy-target-label"]');
+      if (el === null) throw new Error('copy target');
+      return el;
+    };
+    expect(await opens(target())).toBe(false);
+    copy.reject(offline());
+    await expectReleased(1, byId('copy-title'), target);
+    expect(await opens(target())).toBe(true);
   });
 });
 
@@ -453,8 +506,12 @@ describe('members screen', () => {
     });
     expectOffersLocked(1);
     expect(field('invite-email')).toBeDisabled();
-    const role = screen.getByRole('button', { name: new RegExp(`^${m.members_invite_role()}`) });
-    expect(await opens(role)).toBe(false);
+    const role = (): HTMLElement =>
+      screen.getByRole('button', { name: new RegExp(`^${m.members_invite_role()}`) });
+    expect(await opens(role())).toBe(false);
+    invite.reject(offline());
+    await expectReleased(1, byId('invite-email'), role);
+    expect(await opens(role())).toBe(true);
   });
 
   it('locks the new group form and its offer while creating', async () => {
@@ -471,6 +528,8 @@ describe('members screen', () => {
     });
     expectOffersLocked(1);
     expect(field('group-name')).toBeDisabled();
+    create.reject(offline());
+    await expectReleased(1, byId('group-name'));
   });
 });
 
@@ -500,5 +559,7 @@ describe('task status editor', () => {
     });
     expectOffersLocked(1);
     expect(screen.getByLabelText(m.tasks_status_name())).toBeDisabled();
+    create.reject(offline());
+    await expectReleased(1, () => screen.getByLabelText(m.tasks_status_name()));
   });
 });
