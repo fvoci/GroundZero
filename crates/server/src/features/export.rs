@@ -8,7 +8,9 @@
 //! `FVOCI_EXPORT_CONCURRENCY`(기본 2)로 제한한다. Markdown 변환은 편집기의 변환기를 쓰고 서버에 두 번째
 //! 변환기를 두지 않는다.
 
+use std::fmt::Write as _;
 use std::io::Write;
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Path, State};
@@ -113,7 +115,7 @@ fn disposition(name: &str) -> String {
         if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
             encoded.push(b as char);
         } else {
-            encoded.push_str(&format!("%{b:02X}"));
+            let _ignored = write!(encoded, "%{b:02X}");
         }
     }
     format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
@@ -246,9 +248,7 @@ fn stream_zip(
 
 /// 반출 자리. 모자라면 409(잠시 뒤 다시).
 fn export_permit(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
-    state
-        .export_permits
-        .clone()
+    Arc::clone(&state.export_permits)
         .try_acquire_owned()
         .map_err(|_| AppError::Conflict("other exports are running; try again shortly".into()))
 }

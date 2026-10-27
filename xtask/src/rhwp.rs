@@ -4,6 +4,7 @@
 //! 두고, 브라우저에 들어가는 크레이트의 고지(`deploy/rhwp/THIRD_PARTY_NOTICES.txt`)를 만든다. 이 고지 파일 첫 줄의
 //! 입력 해시가 지금 입력과 같은지는 `cargo xtask check`가 본다.
 
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -107,14 +108,15 @@ fn write_notices(root: &Path, out: &Path, hash: &str) -> Result<()> {
     rows.sort();
     rows.dedup();
     let mut text = notices_header(hash);
-    text.push_str(&format!(
+    let _ignored = write!(
+        text,
         "Rust crates compiled into the HWP/HWPX preview WebAssembly (rhwp, D-76): {}\n\n",
         rows.len()
-    ));
+    );
     for (name, version, license, repository) in &rows {
-        text.push_str(&format!("---- {name} {version} ----\nLicense: {license}\n"));
+        let _ignored = write!(text, "---- {name} {version} ----\nLicense: {license}\n");
         if !repository.is_empty() {
-            text.push_str(&format!("Source: {repository}\n"));
+            let _ignored = writeln!(text, "Source: {repository}");
         }
         text.push('\n');
         let dir: PathBuf = notices.join(format!("{name}-{version}"));
@@ -128,7 +130,7 @@ fn write_notices(root: &Path, out: &Path, hash: &str) -> Result<()> {
         for file in files {
             let body = String::from_utf8_lossy(&fs::read(&file)?).replace("\r\n", "\n");
             let name = file.file_name().unwrap_or_default().to_string_lossy();
-            text.push_str(&format!("[{name}]\n{}\n\n", body.trim_end()));
+            let _ignored = write!(text, "[{name}]\n{}\n\n", body.trim_end());
         }
     }
     let upstream = notices.join("rhwp-THIRD_PARTY_LICENSES.md");

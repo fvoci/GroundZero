@@ -5,6 +5,7 @@
 //! 색인은 백그라운드 작업이 반영하므로 바로 직전의 변경은 조금 늦게 보일 수 있다.
 
 use std::collections::HashSet;
+use std::fmt::Write as _;
 
 use axum::Json;
 use axum::extract::{Query, State};
@@ -171,14 +172,14 @@ async fn day_bounds(tx: &mut UserTx, f: &mut Filters, tz: Option<&str>) -> Resul
 fn meili_filters(f: &Filters) -> String {
     let mut out = String::new();
     if let Some(m) = f.module {
-        out.push_str(&format!(" AND module_id = \"{m}\""));
+        let _ignored = write!(out, " AND module_id = \"{m}\"");
     }
     if let Some(c) = f.status_category {
         // 범주는 고정 낱말 셋 가운데 하나다(D-116). 상태 이름으로는 거르지 않는다.
-        out.push_str(&format!(" AND status_category = \"{c}\""));
+        let _ignored = write!(out, " AND status_category = \"{c}\"");
     }
     if let Some(a) = f.assignee {
-        out.push_str(&format!(" AND assignee_ids = \"{a}\""));
+        let _ignored = write!(out, " AND assignee_ids = \"{a}\"");
     }
     // 한 문서에는 `at`(실제 시각)·`date`(날짜만) 가운데 하나만 있다. 대체 경로와 같은 조건.
     let mut at = Vec::new();
@@ -192,14 +193,15 @@ fn meili_filters(f: &Filters) -> String {
         date.push(format!("date <= {}", day_number(d)));
     }
     if !at.is_empty() {
-        out.push_str(&format!(
+        let _ignored = write!(
+            out,
             " AND (({}) OR ({}))",
             at.join(" AND "),
             date.join(" AND ")
-        ));
+        );
     }
     if let Some(a) = f.author {
-        out.push_str(&format!(" AND created_by = \"{a}\""));
+        let _ignored = write!(out, " AND created_by = \"{a}\"");
     }
     out
 }

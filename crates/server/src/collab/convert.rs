@@ -16,7 +16,7 @@ use yrs::{Any, Map as _, Number, Out, ReadTxn, Text, TransactionMut, XmlFragment
 pub const FRAGMENT: &str = "default";
 
 /// JSON 본문(`{"type":"doc","content":[...]}`)을 비어 있는 조각에 쓴다.
-pub fn write_doc(txn: &mut TransactionMut, fragment: &XmlFragmentRef, doc: &Value) {
+pub fn write_doc(txn: &mut TransactionMut<'_>, fragment: &XmlFragmentRef, doc: &Value) {
     write_children(txn, fragment, content(doc));
 }
 
@@ -37,7 +37,7 @@ fn content(node: &Value) -> &[Value] {
         .map_or(&[], Vec::as_slice)
 }
 
-fn write_children<F: XmlFragment>(txn: &mut TransactionMut, parent: &F, nodes: &[Value]) {
+fn write_children<F: XmlFragment>(txn: &mut TransactionMut<'_>, parent: &F, nodes: &[Value]) {
     let mut i = 0;
     while i < nodes.len() {
         if nodes[i].get("type").and_then(Value::as_str) == Some("text") {
@@ -297,7 +297,7 @@ fn from_any(any: &Any) -> Value {
         Any::Number(Number::Float(f)) => {
             // 브라우저가 정수를 실수로 보낸 경우(예: 2.0)도 JSON에서는 정수로 둔다.
             if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 {
-                #[allow(
+                #[expect(
                     clippy::cast_possible_truncation,
                     reason = "checked: integral and within 2^53"
                 )]
