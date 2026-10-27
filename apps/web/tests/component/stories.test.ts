@@ -107,6 +107,18 @@ describe('story conditions', () => {
   }
 });
 
+// `$lib/ui` 부품은 부품마다 기본 스토리 하나만 둔다(D-108 개정 2026-10-27, #150). prop·내용·상태를 달리한 변형은 두지 않고
+// 대비는 theme-contrast 시험이, 넘침·잘림·초점은 브라우저 시험(e2e)이 단언한다.
+describe('ui part stories', () => {
+  for (const [path, module] of Object.entries(modules)) {
+    const file = path.replace('../../stories/', '');
+    if (!file.startsWith('ui/')) continue;
+    it(`${file} has exactly one story, Default`, () => {
+      expect(Object.keys(composeStories(module))).toEqual(['Default']);
+    });
+  }
+});
+
 for (const [path, module] of Object.entries(modules)) {
   describe(path.replace('../../stories/', ''), () => {
     for (const [name, Story] of Object.entries(composeStories(module))) {
