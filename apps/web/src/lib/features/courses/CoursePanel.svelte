@@ -889,7 +889,7 @@
                 (timer.entry?.target?.kind === 'episode' && timer.entry.target.id === e.id)}
               onclick={() => void startEpisode(e.id)}
               >{timer.entry?.target?.kind === 'episode' && timer.entry.target.id === e.id
-                ? m.time_in_progress()
+                ? m.time_recording()
                 : m.courses_track()}</Button
             >
             {#if c.can_write}

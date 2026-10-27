@@ -680,7 +680,7 @@
                 (timer.entry?.target?.kind === 'study_unit' && timer.entry.target.id === u.id)}
               onclick={() => void startUnit(u.id)}
               >{timer.entry?.target?.kind === 'study_unit' && timer.entry.target.id === u.id
-                ? m.time_in_progress()
+                ? m.time_recording()
                 : m.study_track()}</Button
             >
             {#if current.can_write}

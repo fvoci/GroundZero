@@ -46,7 +46,7 @@
   {#if org.currentId === undefined}
     <span>{m.app_organization_required()}</span>
   {:else if timer.entry !== null}
-    <span>{m.time_in_progress()}</span>
+    <span>{m.time_recording()}</span>
     <span class="hidden max-w-40 truncate text-muted-foreground sm:inline" title={label}
       >{label}</span
     >
