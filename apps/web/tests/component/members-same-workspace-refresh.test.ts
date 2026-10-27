@@ -127,6 +127,22 @@ describe('members screen after a refresh of the same workspace', () => {
     expect(api.members).toHaveBeenCalledTimes(2);
   });
 
+  it('starts over when only the user changes on the same workspace', async () => {
+    vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    await submit(await screen.findByLabelText('이메일'), 'kim@lab.example');
+    await screen.findByText(m.members_invited({ email: 'kim@lab.example' }));
+    expect(api.members).toHaveBeenCalledTimes(2);
+
+    // 같은 워크스페이스에서 사용자만 바뀌었다(다른 탭의 계정 전환). 앞 사용자의 화면을 두지 않고 다시 읽는다.
+    me.userId = 'u2';
+    await waitFor(() => {
+      expect(api.members).toHaveBeenCalledTimes(3);
+    });
+    expect(api.members).toHaveBeenLastCalledWith('ws-1');
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
   it('still starts over for another workspace', async () => {
     vi.spyOn(api, 'invite').mockResolvedValue(invitation);
     const view = render(MembersScreen, {

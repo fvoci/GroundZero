@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
 import { stopKeepingDrafts } from '$lib/features/common/leave-guard.svelte';
-import { PRELOAD_RELOAD_KEY, watchPreloadErrors } from '$lib/features/common/preload-reload';
+import {
+  PRELOAD_RELOAD_KEY,
+  PRELOAD_RELOAD_SETTLE_MS,
+  watchPreloadErrors,
+} from '$lib/features/common/preload-reload';
 import { newVersion } from '$lib/features/feedback/feedback.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { watchNewVersion } from '$lib/features/feedback/new-version';
@@ -13,7 +17,7 @@ import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { TEST_STATUSES } from './fixtures/task-statuses';
 
-// 새 버전 배포 뒤 옛 청크를 못 읽을 때(`vite:preloadError`): 한 번만 다시 읽고(취소), 다시 읽은 뒤에 또 나거나 미저장
+// 새 버전 배포 뒤 옛 청크를 못 읽을 때(`vite:preloadError`): 실패 묶음마다 한 번 다시 읽고(취소), 다시 읽어 뜬 직후 또 나거나 미저장
 // 입력을 초안으로 남기지 못하면 다시 읽지 않고 배너를 띄운다(D-27·D-96·D-82). Storybook 미리보기는
 // preload-reload-storybook.test.ts.
 
@@ -52,6 +56,7 @@ afterEach(() => {
   stop = undefined;
   stopKeepingDrafts();
   newVersion.times = 0;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
@@ -59,7 +64,7 @@ afterEach(() => {
 });
 
 describe('watchPreloadErrors', () => {
-  it('cancels the error and reloads once, marking this tab', () => {
+  it('cancels the first failure and reloads, writing the marker', () => {
     const storage = memoryStorage();
     const reload = vi.fn();
     const onStale = vi.fn();
@@ -73,13 +78,43 @@ describe('watchPreloadErrors', () => {
     expect(onStale).not.toHaveBeenCalled();
   });
 
-  it('does not reload again after a reload already happened in this tab', () => {
+  it('does not reload again for a failure soon after the reloaded page started', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const storage = memoryStorage();
+    // 표지를 쓴 때는 오래전이어도(느린 회선) 시간은 새 페이지가 뜬 때부터 잰다.
+    storage.setItem(PRELOAD_RELOAD_KEY, '2026-10-27T00:00:00.000Z');
+    const reload = vi.fn();
+    const onStale = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload, onStale });
+    vi.advanceTimersByTime(PRELOAD_RELOAD_SETTLE_MS - 1);
+    // 같은 실패 묶음: 취소하지 않아 오류가 import한 곳에 그대로 간다.
+    expect(preloadError()).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    expect(onStale).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads once more for a later deploy after the reloaded page stayed up', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const storage = memoryStorage();
     storage.setItem(PRELOAD_RELOAD_KEY, '2026-10-27T00:00:00.000Z');
     const reload = vi.fn();
     const onStale = vi.fn();
     stop = watchPreloadErrors({ storage: () => storage, reload, onStale });
-    // 취소하지 않아 오류가 import한 곳에 그대로 간다.
+    vi.advanceTimersByTime(PRELOAD_RELOAD_SETTLE_MS);
+    expect(storage.getItem(PRELOAD_RELOAD_KEY)).toBeNull();
+    expect(preloadError()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(onStale).not.toHaveBeenCalled();
+  });
+
+  it('does not reload when the marker cannot be read', () => {
+    const reload = vi.fn();
+    const onStale = vi.fn();
+    const storage = memoryStorage();
+    storage.getItem = () => {
+      throw new DOMException('denied', 'SecurityError');
+    };
+    stop = watchPreloadErrors({ storage: () => storage, reload, onStale });
     expect(preloadError()).toBe(false);
     expect(reload).not.toHaveBeenCalled();
     expect(onStale).toHaveBeenCalledTimes(1);
@@ -191,10 +226,23 @@ describe('app: watchNewVersion keeps drafts before reloading', () => {
     expect(unload.defaultPrevented).toBe(true);
   });
 
-  it('shows the banner instead of reloading twice, and the banner closes', async () => {
+  it('reloads once more for a later deploy after the reloaded page stayed up', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const reload = vi.fn();
+    const storage = memoryStorage();
+    storage.setItem(PRELOAD_RELOAD_KEY, '2026-10-27T00:00:00.000Z');
+    stop = watchNewVersion({ storage: () => storage, reload });
+    vi.advanceTimersByTime(PRELOAD_RELOAD_SETTLE_MS);
+    expect(preloadError()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(newVersion.times).toBe(0);
+  });
+
+  it('shows the banner instead of reloading again soon after the reloaded page started, and the banner closes', async () => {
     render(FeedbackHost, { reload: vi.fn() });
     const reload = vi.fn();
     const storage = memoryStorage();
+    // 방금 다시 읽은 페이지(표지가 있다). 창 안이라 같은 실패 묶음이다.
     storage.setItem(PRELOAD_RELOAD_KEY, '2026-10-27T00:00:00.000Z');
     stop = watchNewVersion({ storage: () => storage, reload });
     expect(preloadError()).toBe(false);
