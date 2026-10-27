@@ -283,7 +283,6 @@ async fn module_archive_first_rechecks_add_edit_resolve_but_allows_own_delete() 
         "55000",
     )
     .await;
-    // D-106: 본인 댓글 회수는 보관 중에도 된다.
     rows(
         &w.state,
         &w.owner,
@@ -291,4 +290,16 @@ async fn module_archive_first_rechecks_add_edit_resolve_but_allows_own_delete() 
         &[comment],
     )
     .await;
+    // D-106: 본인 댓글 회수는 보관 중에도 된다. 답글이 없는 댓글은 행이 사라지고, 답글이 있으면 "지운 댓글"로 남는다.
+    let left = rows(
+        &w.state,
+        &w.owner,
+        "SELECT deleted_at FROM fvoci.comments WHERE id=$1",
+        &[comment],
+    )
+    .await;
+    assert!(
+        left.is_empty() || !left[0]["deleted_at"].is_null(),
+        "own comment was not withdrawn: {left:?}"
+    );
 }
