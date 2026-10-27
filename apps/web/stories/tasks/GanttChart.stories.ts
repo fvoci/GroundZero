@@ -80,11 +80,6 @@ export const LongNames: Story = {
   },
 };
 
-/** 375px 휴대 폭: 이름 칸이 줄고(최소 8rem) 날짜 칸은 가로 스크롤 안에 남는다. 주 머리글은 짧게 쓴다. */
-export const Narrow: Story = {
-  globals: { viewport: { value: 'narrow375', isRotated: false } },
-};
-
 /**
  * 기간 경계: 표시 기간(최대 400일)보다 늦게 시작하는 업무는 막대 대신 개수로 알리고, 그 경계를 넘어 끝나는 업무는
  * 끝이 잘린다(잘린 쪽 연결선은 숨기고 개수를 알린다). 날짜 없는 업무도 개수로 알린다.
@@ -163,21 +158,7 @@ export const SavePending: Story = {
     await expect(args.reschedule).toHaveBeenCalledTimes(1);
   },
 };
-export const LightDesktop: Story = {
-  globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop', isRotated: false } },
-};
-export const DarkDesktop: Story = {
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop', isRotated: false } },
-};
-export const Light375: Story = {
-  globals: { theme: 'light', fontScale: '100', viewport: { value: 'narrow375', isRotated: false } },
-};
-export const Dark375: Story = {
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'narrow375', isRotated: false } },
-};
-export const Font200: Story = {
-  globals: { theme: 'light', fontScale: '200', viewport: { value: 'desktop', isRotated: false } },
-};
+/** 375px 휴대 폭: 이름 칸이 줄고(최소 8rem) 날짜 칸은 가로 스크롤 안에 남는다. 주 머리글은 짧게 쓴다. */
 export const Dark375Font200: Story = {
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375', isRotated: false } },
 };

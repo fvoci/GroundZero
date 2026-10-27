@@ -165,13 +165,3 @@ export const CalendarView: Story = {
     await expect(canvas.queryByTestId('item-list')).toBeNull();
   },
 };
-
-export const CalendarViewDark: Story = { ...CalendarView, globals: { theme: 'dark' } };
-export const CalendarViewNarrow375: Story = {
-  ...CalendarView,
-  globals: { viewport: { value: 'narrow375' } },
-};
-export const CalendarViewZoom200: Story = {
-  ...CalendarView,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
-};

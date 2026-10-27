@@ -16,7 +16,8 @@ import { setUpTime } from '../time/setup';
 
 // 항목 화면(src/lib/features/modules/ItemScreen.svelte)의 묶음(D-121, 사용자 R7 A): 종류별 첫 묶음(연구 문헌, 스터디 계획,
 // 강의 회차, 취미 활동) 하나 뒤에 공통 업무·문서·일정·기록. 고른 묶음만 마운트한다. 묶음 단추는 좁은 화면에서 줄바꿈한다.
-// 묶음마다 밝음·어두움·375px·200% story를 둔다(D-108). 서버 함수는 합성 데이터로 답한다(preview.ts의 요청 차단).
+// 묶음마다 기본 story를 두고, 어려운 조건(375px·어두움·200% 글꼴)을 합친 story는 하나만 둔다(D-108 개정 2026-10-27).
+// 서버 함수는 합성 데이터로 답한다(preview.ts의 요청 차단).
 
 function moduleOf(kind: ModuleKind) {
   const found = ONE_PER_KIND.find((mod) => mod.kind === kind);
@@ -158,55 +159,24 @@ function groupStory({ kind, group }: Args, globals: Story['globals'] = {}): Stor
   };
 }
 
-const DARK: Story['globals'] = { theme: 'dark' };
-const NARROW: Story['globals'] = { viewport: { value: 'narrow375' } };
-const ZOOM: Story['globals'] = { fontScale: '200', viewport: { value: 'narrow375' } };
+const NARROW_DARK_LARGE_TEXT: Story['globals'] = {
+  theme: 'dark',
+  fontScale: '200',
+  viewport: { value: 'narrow375' },
+};
 
 export const ProjectTasks = groupStory({ kind: 'project', group: 'tasks' });
-export const ProjectTasksDark = groupStory({ kind: 'project', group: 'tasks' }, DARK);
-export const ProjectTasksNarrow375 = groupStory({ kind: 'project', group: 'tasks' }, NARROW);
-export const ProjectTasksZoom200 = groupStory({ kind: 'project', group: 'tasks' }, ZOOM);
-
+export const ProjectTasksNarrowDarkLargeText = groupStory(
+  { kind: 'project', group: 'tasks' },
+  NARROW_DARK_LARGE_TEXT,
+);
 export const ProjectDocs = groupStory({ kind: 'project', group: 'docs' });
-export const ProjectDocsDark = groupStory({ kind: 'project', group: 'docs' }, DARK);
-export const ProjectDocsNarrow375 = groupStory({ kind: 'project', group: 'docs' }, NARROW);
-export const ProjectDocsZoom200 = groupStory({ kind: 'project', group: 'docs' }, ZOOM);
-
 export const ProjectEvents = groupStory({ kind: 'project', group: 'events' });
-export const ProjectEventsDark = groupStory({ kind: 'project', group: 'events' }, DARK);
-export const ProjectEventsNarrow375 = groupStory({ kind: 'project', group: 'events' }, NARROW);
-export const ProjectEventsZoom200 = groupStory({ kind: 'project', group: 'events' }, ZOOM);
-
 export const ProjectRecords = groupStory({ kind: 'project', group: 'records' });
-export const ProjectRecordsDark = groupStory({ kind: 'project', group: 'records' }, DARK);
-export const ProjectRecordsNarrow375 = groupStory({ kind: 'project', group: 'records' }, NARROW);
-export const ProjectRecordsZoom200 = groupStory({ kind: 'project', group: 'records' }, ZOOM);
-
 export const ResearchReferences = groupStory({ kind: 'research', group: 'references' });
-export const ResearchReferencesDark = groupStory({ kind: 'research', group: 'references' }, DARK);
-export const ResearchReferencesNarrow375 = groupStory(
-  { kind: 'research', group: 'references' },
-  NARROW,
-);
-export const ResearchReferencesZoom200 = groupStory(
-  { kind: 'research', group: 'references' },
-  ZOOM,
-);
-
 export const StudyPlan = groupStory({ kind: 'study', group: 'plan' });
-export const StudyPlanDark = groupStory({ kind: 'study', group: 'plan' }, DARK);
-export const StudyPlanNarrow375 = groupStory({ kind: 'study', group: 'plan' }, NARROW);
-export const StudyPlanZoom200 = groupStory({ kind: 'study', group: 'plan' }, ZOOM);
-
 export const CourseEpisodes = groupStory({ kind: 'course', group: 'episodes' });
-export const CourseEpisodesDark = groupStory({ kind: 'course', group: 'episodes' }, DARK);
-export const CourseEpisodesNarrow375 = groupStory({ kind: 'course', group: 'episodes' }, NARROW);
-export const CourseEpisodesZoom200 = groupStory({ kind: 'course', group: 'episodes' }, ZOOM);
-
 export const HobbyActivities = groupStory({ kind: 'hobby', group: 'activities' });
-export const HobbyActivitiesDark = groupStory({ kind: 'hobby', group: 'activities' }, DARK);
-export const HobbyActivitiesNarrow375 = groupStory({ kind: 'hobby', group: 'activities' }, NARROW);
-export const HobbyActivitiesZoom200 = groupStory({ kind: 'hobby', group: 'activities' }, ZOOM);
 
 /** 묶음 단추를 키보드로 고른다(Tab으로 닿고 Enter로 연다). 고른 묶음만 남는다. */
 export const SwitchWithKeyboard: Story = {

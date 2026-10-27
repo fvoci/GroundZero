@@ -41,9 +41,7 @@ export const Workspaces: Story = {
     await expect(group?.querySelector('h3')?.textContent).toContain('날짜 없음');
   },
 };
-export const Dark: Story = { ...Workspaces, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...Workspaces, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...Workspaces,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

@@ -50,15 +50,3 @@ export const NarrowDark200: Story = {
   ...Reentered,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };
-export const Dark: Story = {
-  ...Reentered,
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop' } },
-};
-export const Narrow: Story = {
-  ...Reentered,
-  globals: { theme: 'light', fontScale: '100', viewport: { value: 'narrow375' } },
-};
-export const LargeText: Story = {
-  ...Reentered,
-  globals: { theme: 'light', fontScale: '200', viewport: { value: 'desktop' } },
-};

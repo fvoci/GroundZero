@@ -47,10 +47,6 @@ export const DraftAvailable: Story = {
     });
   },
 };
-export const DraftAvailableDark: Story = {
-  ...DraftAvailable,
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop' } },
-};
 export const DraftAvailableNarrow200: Story = {
   ...DraftAvailable,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },

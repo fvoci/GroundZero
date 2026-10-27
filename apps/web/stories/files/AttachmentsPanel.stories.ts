@@ -18,13 +18,10 @@ type Story = StoryObj<typeof meta>;
 const copyDisabled = (): void => {
   spyOn(api, 'documentFiles').mockResolvedValue([{ ...ACCESS_FILE, can_download: false }]);
 };
-export const Owner: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
-export const WriterCopyDisabled: Story = {
-  beforeEach: copyDisabled,
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-};
-export const ReadOnlyNarrow: Story = {
+export const Owner: Story = {};
+export const WriterCopyDisabled: Story = { beforeEach: copyDisabled };
+export const ReadOnlyNarrowDarkLargeText: Story = {
   args: { canWrite: false },
   beforeEach: copyDisabled,
-  globals: { theme: 'light', viewport: { value: 'narrow375' }, fontScale: '200' },
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

@@ -23,7 +23,7 @@ const meta = {
 } satisfies Meta<typeof DocumentScreen>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Owner: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
+export const Owner: Story = {};
 export const Writer: Story = {
   beforeEach: () => {
     spyOn(api, 'document').mockResolvedValue({
@@ -34,7 +34,6 @@ export const Writer: Story = {
       can_export: false,
     });
   },
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
 };
 export const ReadOnly: Story = {
   beforeEach: () => {
@@ -47,5 +46,8 @@ export const ReadOnly: Story = {
       can_export: false,
     });
   },
-  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+export const ReadOnlyNarrowDarkLargeText: Story = {
+  ...ReadOnly,
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

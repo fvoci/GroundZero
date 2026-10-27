@@ -61,14 +61,6 @@ export const Restored: Story = {
     await expect(canvas.getByLabelText('항목 1 내용')).toHaveValue('미리보기에서 고친 항목');
   },
 };
-export const Light: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
-};
-export const Dark: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-};
 export const NarrowLargeText: Story = {
   ...RestoreOffer,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },

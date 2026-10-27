@@ -22,7 +22,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Owner: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
+export const Owner: Story = {};
 export const WriterCopyDisabled: Story = {
   args: {
     doc: {
@@ -33,7 +33,6 @@ export const WriterCopyDisabled: Story = {
       can_export: false,
     },
   },
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
 };
 export const ReadOnly: Story = {
   args: {
@@ -46,7 +45,6 @@ export const ReadOnly: Story = {
       can_export: false,
     },
   },
-  globals: { theme: 'light', viewport: { value: 'narrow375' }, fontScale: '200' },
 };
 export const OrganizationLinksDisabled: Story = {
   // 조직 정책은 문서의 워크스페이스(ws-1)가 어느 조직인지 알아야 닿는다(R5 B 최종 FB-1).
@@ -71,7 +69,6 @@ export const OrganizationLinksDisabled: Story = {
     await expect(await screen.findByText('조직이 공개 링크를 껐습니다.')).toBeInTheDocument();
     await expect(screen.queryByRole('button', { name: '공개 링크 만들기' })).toBeNull();
   },
-  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };
 /** 보관된 항목의 문서를 연 워크스페이스 관리자: 등급은 read지만 공유·공개 링크·설정을 넓히는 변경까지 할 수 있다(D-113 ⑯). */
 export const ArchivedItemAdmin: Story = {
@@ -89,7 +86,6 @@ export const ArchivedItemAdmin: Story = {
     await expect(await screen.findByLabelText('이메일')).toBeEnabled();
     await expect(screen.getByRole('button', { name: '공개 링크 만들기' })).toBeInTheDocument();
   },
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
 };
 export const ArchivedItemAdminNarrowDark: Story = {
   ...ArchivedItemAdmin,

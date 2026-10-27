@@ -123,9 +123,7 @@ export const NoOrganization: Story = {
     await expect(within(canvasElement).queryByRole('heading')).toBeNull();
   },
 };
-export const Dark: Story = { ...DataRich, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...DataRich, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...DataRich,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };
