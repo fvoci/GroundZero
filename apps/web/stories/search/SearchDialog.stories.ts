@@ -29,7 +29,7 @@ function story(overrides: Partial<ScreenApi> = {}): () => () => void {
 
 const screen = within(document.body);
 // 열 때 첫 칸으로 초점 옮기기는 실제 브라우저의 초점 처리에 기대므로 jsdom 재사용(tests/component/stories.test.ts)에서는
-// 확인하지 않는다(ui/Dialog.stories.ts와 같다).
+// 확인하지 않는다.
 const inBrowser = !navigator.userAgent.includes('jsdom');
 
 async function openAndType(query: string): Promise<HTMLElement> {

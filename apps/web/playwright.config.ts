@@ -53,6 +53,7 @@ export default defineConfig({
         'layout.spec.ts',
         'layout-control.spec.ts',
         'gantt.spec.ts',
+        'ui-dialog.spec.ts',
       ],
       use: {
         ...devices['Desktop Chrome'],
