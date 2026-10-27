@@ -47,7 +47,8 @@
   let editBase = $state(0);
   // 편집을 열거나 취소할 때마다 오른다. 저장을 기다리는 동안 취소하고 다시 연 편집을 앞선 저장이 닫지 않게 한다.
   let editSession = 0;
-  // 편집을 연 때의 리더. 고를 수 있는 사람 목록에 없어도 입력의 리더 이름을 보인다.
+  // 편집을 연 때의 리더, 그 뒤 고른 리더. 고를 수 있는 사람 목록에 없어도(못 읽음·되살린 초안) 입력의 리더 이름을
+  // 보이도록 초안에도 남긴다.
   let editLeader = $state<PersonRefView | null>(null);
   // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
   let conflict = $state<ItemProfileView | undefined>(undefined);
@@ -82,7 +83,7 @@
   let busy = $state(false);
   const draft = createFormDraft({
     name: () => `item-profile:${item.id}:${kind}`,
-    snapshot: () => ({ form, base: editBase, baseline }),
+    snapshot: () => ({ form, base: editBase, baseline, leader: editLeader }),
     parse: (raw) => {
       if (
         !object(raw) ||
@@ -91,6 +92,13 @@
         typeof raw.baseline !== 'string'
       )
         return undefined;
+      // 리더 이름이 없는 초안(이전 형식)은 이름 없이 되살린다.
+      const leader =
+        object(raw.leader) &&
+        typeof raw.leader.user_id === 'string' &&
+        typeof raw.leader.display_name === 'string'
+          ? { user_id: raw.leader.user_id, display_name: raw.leader.display_name }
+          : null;
       const value = raw.form;
       const status = ITEM_STATUSES.find((candidate) => candidate === value.status);
       if (
@@ -117,14 +125,24 @@
         },
         base: raw.base,
         baseline: raw.baseline,
+        leader,
       };
     },
     restore: (value) => {
       form = value.form;
       editBase = value.base;
       baseline = value.baseline;
+      editLeader = value.leader;
       editing = true;
       editSession += 1;
+      // 편집 열기(startEdit)처럼 고를 수 있는 사람을 읽는다. 그사이 편집을 닫거나 새로 열었으면 버린다.
+      const session = editSession;
+      void api
+        .assignable(item.id)
+        .then((list) => {
+          if (session === editSession) people = list;
+        })
+        .catch(() => undefined);
     },
     reset: () => {
       editing = false;
@@ -378,6 +396,9 @@
             value={form.leader === '' ? 'none' : form.leader}
             onValueChange={(v: string) => {
               form.leader = v === 'none' ? '' : v;
+              const picked = people.find((p) => p.user_id === v);
+              if (picked !== undefined)
+                editLeader = { user_id: picked.user_id, display_name: picked.display_name };
             }}
           >
             <Select.Trigger class="w-48" aria-labelledby="item-leader-label"
