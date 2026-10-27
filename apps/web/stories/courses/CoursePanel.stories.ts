@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, spyOn, userEvent, within } from 'storybook/test';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import { storeFormDraft } from '$lib/features/common/form-draft';
-import { newRequestId } from '$lib/api/client';
+import { api, newRequestId } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import MainFrame from '../fixtures/MainFrame.svelte';
+import { course } from '../time/fixtures';
 import { setUpTime } from '../time/setup';
 const meta = {
   globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
@@ -71,4 +72,25 @@ export const RestoreDraftNarrow: Story = {
 export const RestoreDraftLarge: Story = {
   ...RestoreDraft,
   globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+};
+
+/** 읽기 전용: 진도 단추와 내 메모·날짜 없이 시간 측정만 보인다(D-20 ⑧). */
+export const ReadOnly: Story = {
+  beforeEach: () => {
+    spyOn(api, 'course').mockResolvedValue({ ...course, can_write: false });
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: m.courses_track_aria({ number: 1 }) });
+    await expect(
+      canvas.queryByRole('button', { name: m.courses_mark_done_aria({ number: 1 }) }),
+    ).toBeNull();
+    await expect(
+      canvas.queryByRole('button', { name: m.courses_notes_aria({ number: 1 }) }),
+    ).toBeNull();
+  },
+};
+export const ReadOnlyNarrowDark: Story = {
+  ...ReadOnly,
+  globals: { theme: 'dark', viewport: { value: 'narrow375' } },
 };

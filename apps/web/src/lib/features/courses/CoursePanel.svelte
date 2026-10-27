@@ -387,6 +387,7 @@
   }
 
   function setStatus(e: EpisodeView, next: EpisodeStatus): void {
+    if (!course?.can_write) return;
     void run(
       async () => {
         const fresh = await freshMine(e);
@@ -848,34 +849,37 @@
             >
           </div>
           <div class="flex flex-wrap gap-1">
-            {#if e.mine.status !== 'done'}
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label={m.courses_mark_done_aria({ number: e.number })}
-                onclick={() => {
-                  setStatus(e, 'done');
-                }}>{m.courses_mark_done()}</Button
-              >
-            {:else}
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={m.courses_rewatch_aria({ number: e.number })}
-                onclick={() => {
-                  setStatus(e, 'in_progress');
-                }}>{m.courses_rewatch()}</Button
-              >
-            {/if}
-            {#if e.mine.status === 'not_started'}
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-label={m.courses_watching_aria({ number: e.number })}
-                onclick={() => {
-                  setStatus(e, 'in_progress');
-                }}>{m.courses_watching()}</Button
-              >
+            <!-- 진도는 쓸 수 있는 사람만 남긴다. 읽기 전용은 본인 진도도 남기지 못한다(D-20 ⑧, 서버도 거절). -->
+            {#if c.can_write}
+              {#if e.mine.status !== 'done'}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={m.courses_mark_done_aria({ number: e.number })}
+                  onclick={() => {
+                    setStatus(e, 'done');
+                  }}>{m.courses_mark_done()}</Button
+                >
+              {:else}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={m.courses_rewatch_aria({ number: e.number })}
+                  onclick={() => {
+                    setStatus(e, 'in_progress');
+                  }}>{m.courses_rewatch()}</Button
+                >
+              {/if}
+              {#if e.mine.status === 'not_started'}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={m.courses_watching_aria({ number: e.number })}
+                  onclick={() => {
+                    setStatus(e, 'in_progress');
+                  }}>{m.courses_watching()}</Button
+                >
+              {/if}
             {/if}
             <Button
               size="sm"
@@ -888,16 +892,16 @@
                 ? m.time_in_progress()
                 : m.courses_track()}</Button
             >
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-expanded={openEpisode === e.id}
-              aria-label={m.courses_notes_aria({ number: e.number })}
-              onclick={() => {
-                open(e);
-              }}>{m.courses_notes()}</Button
-            >
             {#if c.can_write}
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-expanded={openEpisode === e.id}
+                aria-label={m.courses_notes_aria({ number: e.number })}
+                onclick={() => {
+                  open(e);
+                }}>{m.courses_notes()}</Button
+              >
               <Button
                 size="sm"
                 variant="ghost"
@@ -1017,7 +1021,7 @@
               </div>
             </form>
           {/if}
-          {#if openEpisode === e.id}
+          {#if openEpisode === e.id && c.can_write}
             {#each mineDraft.offers as offer (offer.key)}
               <FormDraftOffer
                 onrestore={() => {
