@@ -16,7 +16,7 @@ import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
-import { router } from '$lib/router.svelte';
+import { itemPath, router } from '$lib/router.svelte';
 import { ACCESS_FILE } from '../../stories/fixtures/access';
 
 // D2-F-5(R5 2차): F-16·F-8 처분 (1)은 저장 중 입력과 **초안 되살리기**를 잠근다. 다른 탭에서 남긴 초안을 저장 중에
@@ -149,14 +149,15 @@ describe('draft offers while a create request is in flight', () => {
     request.resolve({ item_id: 'copied', skipped_documents: 0 });
     // 일반 완료는 토스트이고 새 항목 열기는 그 동작 단추다(D-82).
     await waitFor(() => {
-      expect(done).toHaveBeenCalledWith(
-        m.modules_copy_done(),
-        'item-copy:copied',
-        expect.objectContaining({
-          action: expect.objectContaining({ label: m.modules_copy_open() }),
-        }),
-      );
+      expect(done).toHaveBeenCalledOnce();
     });
+    const [message, key, options] = done.mock.calls[0] ?? [];
+    expect(message).toBe(m.modules_copy_done());
+    expect(key).toBe('item-copy:copied');
+    expect(options?.action?.label).toBe(m.modules_copy_open());
+    const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
+    options?.action?.onClick();
+    expect(navigate).toHaveBeenCalledWith(itemPath(item.workspace_id, 'copied'));
     expect(screen.getByRole('button', { name: m.common_draft_restore() })).not.toBeDisabled();
   });
 

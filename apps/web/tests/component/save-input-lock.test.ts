@@ -14,7 +14,7 @@ import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
-import { router } from '$lib/router.svelte';
+import { itemPath, router } from '$lib/router.svelte';
 
 // F-16·F-8(R5 B): 저장 요청이 가는 동안 입력과 초안 되살리기가 열려 있으면, 그사이 고친 입력 때문에 같은 사용자의
 // 성공 응답을 버렸다. 만들기는 고친 입력으로 다시 내면 새 요청 id로 두 번째 항목·일정이 생겼고, 고치기는 기준 판을
@@ -106,14 +106,15 @@ describe('creating while a request is in flight', () => {
     request.resolve({ item_id: 'copied', skipped_documents: 0 });
     // 일반 완료는 토스트이고 새 항목 열기는 그 동작 단추다(D-82).
     await waitFor(() => {
-      expect(done).toHaveBeenCalledWith(
-        m.modules_copy_done(),
-        'item-copy:copied',
-        expect.objectContaining({
-          action: expect.objectContaining({ label: m.modules_copy_open() }),
-        }),
-      );
+      expect(done).toHaveBeenCalledOnce();
     });
+    const [message, key, options] = done.mock.calls[0] ?? [];
+    expect(message).toBe(m.modules_copy_done());
+    expect(key).toBe('item-copy:copied');
+    expect(options?.action?.label).toBe(m.modules_copy_open());
+    const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
+    options?.action?.onClick();
+    expect(navigate).toHaveBeenCalledWith(itemPath(item.workspace_id, 'copied'));
     expect(screen.queryByLabelText(m.modules_copy_new_title())).toBeNull();
     expect(copy).toHaveBeenCalledOnce();
   });
