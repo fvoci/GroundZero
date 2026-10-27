@@ -184,6 +184,36 @@
     };
   });
 
+  // 워크스페이스·모듈 달력의 일정 응답에는 보관 값이 없다. 일정을 열 때 그 항목(워크스페이스 범위면 모듈도)의 보관 여부를
+  // 읽어 쓰기를 감춘다(D-113: 보관은 등급 위의 쓰기 금지, 서버도 55000으로 거부한다). 확인하기 전에는 감추고, 읽지 못하면
+  // 드러내 서버의 거절(409)과 입력 보존에 맡긴다. 항목 범위는 부르는 쪽의 `locked`가 이미 정확하다. 모듈 범위의 모듈
+  // 보관도 `locked`에 들어 있다.
+  let eventLocked = $state(false);
+  let lockSeq = 0;
+  async function archivedTarget(itemId: string): Promise<boolean> {
+    const target = await api.item(itemId);
+    if (target.archived) return true;
+    if (scope?.moduleId !== undefined) return false;
+    const mod =
+      modules.find((x) => x.id === target.module_id) ?? (await api.module(target.module_id));
+    return mod.archived;
+  }
+  function checkLock(itemId: string): void {
+    const mine = ++lockSeq;
+    if (scope?.itemId !== undefined) {
+      eventLocked = false;
+      return;
+    }
+    eventLocked = true;
+    archivedTarget(itemId)
+      .then((archived) => {
+        if (mine === lockSeq) eventLocked = archived;
+      })
+      .catch(() => {
+        if (mine === lockSeq) eventLocked = false;
+      });
+  }
+
   function open(entry: CalendarEntry, key: string): void {
     returnTo = key;
     if (entry.kind === 'task')
@@ -195,6 +225,7 @@
       );
     else if (entry.kind === 'date') router.navigate(itemPath(workspace.id, entry.date.item_id));
     else {
+      checkLock(entry.event.item_id);
       openEvent = entry.event.id;
       openOccurrence = entry.event.recurrence === null ? undefined : entry.occurrence;
     }
@@ -402,7 +433,7 @@
 
 <EventDialog
   eventId={openEvent}
-  {locked}
+  locked={locked || eventLocked}
   occurrence={openOccurrence}
   onclose={() => (openEvent = undefined)}
   onchanged={() => {
