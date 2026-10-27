@@ -327,6 +327,7 @@
   "documents_link_remove": "Remove link",
   "documents_link_open": "Open",
   "documents_link_invalid": "Enter an https:// or mailto: address",
+  "documents_link_select_text": "Select the text for the saved link address, then press the link button.",
   "documents_placeholder_empty": "Write, or press / to insert a block",
   "documents_placeholder_block": "Press / to insert a block",
   "documents_placeholder_heading": "Heading",

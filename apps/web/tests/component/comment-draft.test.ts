@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, NetworkError, type CommentView } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 const props = { target: { kind: 'document' as const, id: 'doc-1' }, canWrite: true };
@@ -158,6 +159,48 @@ describe('comment drafts', () => {
     view.unmount();
     render(CommentsPanel, { props });
     expect(await screen.findByTestId('comment-draft-offer')).toHaveTextContent('더 쓴 입력');
+  });
+
+  // R5 F-11: 쓸 수 없는 동안은 되살리기 대신 읽기 전용 안내와 버리기만 보인다. 입력은 버리기 전까지 남는다.
+  it('offers only discard with a read-only notice while comments cannot be written', async () => {
+    vi.mocked(api.comments).mockResolvedValue([comment('c1')]);
+    const edit = vi.spyOn(api, 'editComment').mockRejectedValue(new NetworkError('offline'));
+    const first = render(CommentsPanel, { props });
+    await fireEvent.input(screen.getByLabelText(/새 댓글/), {
+      target: { value: '읽기 전용 입력' },
+    });
+    const root = (await screen.findByText('원댓글 c1')).closest('li');
+    if (root === null) throw new Error('comment root');
+    await fireEvent.click(within(root).getByRole('button', { name: '고치기' }));
+    await fireEvent.input(screen.getByLabelText('댓글 고치기'), {
+      target: { value: '고친 원댓글' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(edit).toHaveBeenCalledTimes(1);
+    });
+    first.unmount();
+    const view = render(CommentsPanel, { props: { ...props, canWrite: false } });
+    const offer = await screen.findByTestId('comment-draft-offer');
+    const editOffer = await screen.findByTestId('comment-edit-draft-offer');
+    for (const box of [offer, editOffer]) {
+      expect(within(box).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+      expect(box).toHaveTextContent(m.common_draft_read_only());
+      expect(within(box).getByRole('button', { name: m.common_draft_discard() })).toBeEnabled();
+    }
+    await view.rerender({ ...props, canWrite: true });
+    expect(
+      within(screen.getByTestId('comment-draft-offer')).getByRole('button', {
+        name: m.common_draft_restore(),
+      }),
+    ).toBeInTheDocument();
+    await view.rerender({ ...props, canWrite: false });
+    await fireEvent.click(
+      within(screen.getByTestId('comment-draft-offer')).getByRole('button', {
+        name: m.common_draft_discard(),
+      }),
+    );
+    expect(screen.queryByTestId('comment-draft-offer')).toBeNull();
   });
 
   it('still posts and reports unsaved input when browser storage is unavailable', async () => {

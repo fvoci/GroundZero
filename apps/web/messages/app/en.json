@@ -55,6 +55,5 @@
   "app_nav_organization_role_admin": "Organization admin",
   "app_nav_organization_role_member": "Organization member",
   "app_nav_my_tasks": "My tasks",
-  "app_organization_required": "This screen is scoped to the current organization. Choose one at the top of the sidebar.",
-  "app_organization_pick": "Choose organization"
+  "app_organization_required": "This screen is scoped to the current organization. Choose one at the top of the sidebar."
 }

@@ -113,6 +113,7 @@
   <div data-testid={root === undefined ? 'comment-draft-offer' : 'comment-reply-draft-offer'}>
     <p class="text-sm whitespace-pre-wrap">{offer.value.input.text}</p>
     <FormDraftOffer
+      restorable={writable && !accountSwitching()}
       onrestore={() => {
         draft.restore(offer);
       }}

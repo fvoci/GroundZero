@@ -1,9 +1,9 @@
 <script lang="ts">
   // 댓글(D-27, D-20). 서버가 쓰기를 허용한 대상에만 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
   import type { CommentTarget, CommentView } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { api } from '$lib/api/client';
   import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
-  import { errorText } from '$lib/api/errors';
+  import { errorText, isArchivedRejection } from '$lib/api/errors';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -119,13 +119,9 @@
       return true;
     } catch (e: unknown) {
       if (!current()) return false;
-      error =
-        e instanceof ApiError &&
-        e.status === 409 &&
-        e.code === 'invalid_state' &&
-        /archived/i.test(e.message)
-          ? m.comments_archived()
-          : errorText(e, m.comments_action_failed());
+      error = isArchivedRejection(e)
+        ? m.common_error_archived()
+        : errorText(e, m.comments_action_failed());
       return false;
     } finally {
       if (current()) busy = false;

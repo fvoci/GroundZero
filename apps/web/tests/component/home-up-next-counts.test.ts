@@ -1,16 +1,15 @@
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CalendarView, HomeTaskView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
-import { beforeEach as beforeHome } from 'vitest';
-
-beforeHome(homeExtras);
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { myTasksView } from '../../stories/fixtures/personal';
+
+beforeEach(homeExtras);
 
 // 감사 W23: Up Next는 서버가 묶음마다 50개까지 주고 묶음별 전체 수(`up_next_counts`)를 함께 준다. 화면은 목록의
 // 길이가 아니라 그 수를 보이고, 잘렸으면 알린다.

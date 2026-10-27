@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 function handlers() {
@@ -163,10 +164,18 @@ describe('checklist drafts', () => {
     expect(screen.queryByLabelText('새 항목')).toBeNull();
     expect(onunsaved).toHaveBeenLastCalledWith(true);
     view.unmount();
-    render(ChecklistForm, { ...base, ...h });
-    expect(await screen.findByTestId('checklist-new-item-draft-offer')).toHaveTextContent(
-      '권한 철회 전 입력',
-    );
+    const next = render(ChecklistForm, { ...base, ...h, canEdit: false });
+    // R5 F-11: 고칠 수 없는 동안은 되살리기 대신 읽기 전용 안내와 버리기만 보인다.
+    const offer = await screen.findByTestId('checklist-new-item-draft-offer');
+    expect(offer).toHaveTextContent('권한 철회 전 입력');
+    expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    expect(offer).toHaveTextContent(m.common_draft_read_only());
+    await next.rerender({ ...base, ...h });
+    expect(
+      within(screen.getByTestId('checklist-new-item-draft-offer')).getByRole('button', {
+        name: m.common_draft_restore(),
+      }),
+    ).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: '남긴 입력 버리기' }));
     expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
     expect(h.onadd).not.toHaveBeenCalled();

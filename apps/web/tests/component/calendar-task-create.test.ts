@@ -9,6 +9,7 @@ import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
 import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/event-user';
 
 // 달력의 날짜에서 업무 만들기: 대상(항목)을 분명히 하고, 만들기 뒤 마감일을 넣으며, 날짜만 실패하면 다시 만들지 않는다.
 const workspace: Workspace = {
@@ -292,4 +293,3 @@ describe('creating a task from a calendar day', () => {
     );
   });
 });
-import './fixtures/event-user';

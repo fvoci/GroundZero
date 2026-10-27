@@ -8,6 +8,7 @@ import { m } from '$lib/paraglide/messages.js';
 import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
+import './fixtures/authenticated';
 
 vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
@@ -296,4 +297,3 @@ it('restores all profile text and the original base only for the original accoun
     );
   });
 });
-import './fixtures/authenticated';

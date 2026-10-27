@@ -62,11 +62,9 @@ export const Board: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByTestId('task-board');
-    await expect(within(lane(canvasElement, 'todo')).getAllByRole('listitem')).toHaveLength(4);
-    await expect(within(lane(canvasElement, 'in_progress')).getAllByRole('listitem')).toHaveLength(
-      2,
-    );
-    await expect(within(lane(canvasElement, 'done')).getAllByRole('listitem')).toHaveLength(1);
+    await expect(within(lane(canvasElement, '할 일')).getAllByRole('listitem')).toHaveLength(4);
+    await expect(within(lane(canvasElement, '진행 중')).getAllByRole('listitem')).toHaveLength(2);
+    await expect(within(lane(canvasElement, '완료')).getAllByRole('listitem')).toHaveLength(1);
   },
 };
 
@@ -128,7 +126,7 @@ export const MoveSaved: Story = {
     await moveFirstRight(canvasElement);
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: /되돌리기/ })).toBeInTheDocument();
-    await expect(within(lane(canvasElement, 'done')).getByText(FIRST.title)).toBeInTheDocument();
+    await expect(within(lane(canvasElement, '완료')).getByText(FIRST.title)).toBeInTheDocument();
     await expectFocusOnFirst(canvasElement);
   },
 };
@@ -159,9 +157,7 @@ export const SaveFailed: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: '다시 시도' })).toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: '그대로 두기' })).toBeInTheDocument();
-    await expect(
-      within(lane(canvasElement, 'in_progress')).getByText(FIRST.title),
-    ).toBeInTheDocument();
+    await expect(within(lane(canvasElement, '진행 중')).getByText(FIRST.title)).toBeInTheDocument();
   },
 };
 
@@ -216,7 +212,7 @@ export const ManySameTitle: Story = {
           ...FIRST,
           id: `${FIRST.id}-${String(i)}`,
           reference: `DEVU-${String(100 + i)}`,
-          status: 'todo' as const,
+          status: '할 일',
         })),
       ),
   }),

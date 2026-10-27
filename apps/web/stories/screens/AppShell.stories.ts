@@ -89,7 +89,7 @@ export const NewWorkspace: Story = {
       modules: () => Promise.resolve([]),
       wikiDocuments: () => Promise.resolve([]),
       home: () => Promise.resolve(emptyHomeView()),
-      // 작업자 B: 홈의 내 업무는 날짜 없음까지 포함하는 별도 계약이다.
+      // 홈의 내 업무는 날짜 없음까지 포함하는 별도 계약이다.
       myTasks: () =>
         Promise.resolve({
           counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 },

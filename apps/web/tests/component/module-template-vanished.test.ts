@@ -6,6 +6,7 @@ import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -95,4 +96,3 @@ describe('create from template after the picked template leaves the list', () =>
     expect(await screen.findByRole('alert')).toHaveTextContent('템플릿과 새 항목 제목을 고르세요.');
   });
 });
-import './fixtures/authenticated';
