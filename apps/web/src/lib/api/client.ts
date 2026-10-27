@@ -1,5 +1,5 @@
 // API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
-// 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md#api-contract).
+// 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — D-09 docs/decisions/delivery.md#d-09).
 import type {
   AuthInfo,
   Group,

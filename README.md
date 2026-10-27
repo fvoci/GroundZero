@@ -1,7 +1,8 @@
 # fvoci
 
 통합 작업·지식·학습 관리 앱. 제품 원칙과 제안의 상태, 공통 규칙은 [결정 기록](docs/decisions.md)과
-[AGENTS.md](AGENTS.md)를 읽는다. 달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
+[AGENTS.md](AGENTS.md)를 읽는다. 변경 종류별로 읽을 곳과 돌릴 검사는 AGENTS.md가 가리키는 `.agents/skills/`에 있다.
+달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
 [제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은
 역사 기록이다. 과거 실행·감사 기록은 필요한 SHA만 확인하며, 현재 정책이나 검증 완료로 해석하지 않는다.
 
@@ -28,6 +29,7 @@
 | DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                                    |
 | 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`                         |
 | 이 체크아웃의 Compose 자원 정리                                                    | `cargo xtask down`                                                                        |
+| 여러 워크트리에서 나란히 작업(데우기·동시 빌드·정리·시험 격리)                     | [병렬 워크트리 안내](docs/parallel-worktrees.md)                                          |
 | UI 컴포넌트 상태 보기(Storybook, D-108) / 정적 빌드                                | `pnpm --filter @fvoci/web run storybook` / `pnpm --filter @fvoci/web run build-storybook` |
 | OpenAPI 계약 재생성                                                                | `cargo xtask openapi` 후 `pnpm run generate:api`                                          |
 | 라이선스 검사만                                                                    | `cargo xtask licenses`                                                                    |

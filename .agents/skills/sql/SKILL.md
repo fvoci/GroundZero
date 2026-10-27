@@ -9,7 +9,7 @@ description: fvoci 기준 SQL(crates/server/migrations/202610250001_initial_stat
 
 - 결정 기록: 바꾸려는 영역의 `docs/decisions/<주제>.md` 하나(맨 위 "현재 규칙 요약"). 접근·조직 경계는 `access.md`(D-111~D-115), id·멱등·기준 마이그레이션은 `database.md`(D-88·D-100), 나머지 번호는 `docs/decisions.md` 색인에서 찾는다.
 - `crates/server/migrations/202610250001_initial_state.sql`: 머리말 주석과 바꾸려는 함수의 `CREATE FUNCTION` 본문. 접근 등급은 `app_access(kind, id)`(none|read|write|owner) 하나이고, 새 행 id는 앱이 주는 `p_ids`에서 `app_id(p_ids, n)`으로 꺼내며 가변 개수는 짝이 되는 `*_ids` 함수가 센다.
-- 호출부: `crates/server/src/features/*.rs`(`rg -F 'app_<이름>('`)와 `crates/server/tests/`(같은 주제의 시험, 공통 헬퍼 `common/mod.rs`, 앱 역할 직접 호출 헬퍼 `sql_support/mod.rs`).
+- 호출부: `crates/server/src/features/*.rs`(`rg -F 'app_<이름>('`)와 `crates/server/tests/`. 시험은 주제별로 `tests/it/<주제>.rs`(실행 파일 하나 `it/main.rs`)에 있고, 공유 DB 전체를 보는 작업을 부르는 시험만 `tests/` 바로 아래 각자의 실행 파일이다(`it/main.rs` 머리 주석). 공통 헬퍼는 `tests/common/mod.rs`, 앱 역할 직접 호출 헬퍼는 `tests/sql_support/mod.rs`, 기준 번호·체크섬 시험은 `tests/it/migration_baseline.rs`.
 
 ## 바꿀 때 지킬 것
 
@@ -19,6 +19,5 @@ description: fvoci 기준 SQL(crates/server/migrations/202610250001_initial_stat
 
 ## 돌릴 검사
 
-- 설치 확인: 격리 Postgres(`docker compose -p <고유 이름> -f deploy/compose.test.yaml up -d postgres`)에 `cargo run -p fvoci-server -- db bootstrap`과 `db migrate`를 적용한다. 끝나면 그 프로젝트만 `down --volumes`로 정리한다.
-- `cargo xtask check`(fmt·clippy·단위 시험·OpenAPI 대조·웹 검사), `cargo xtask test`(격리 통합 시험). 로그인·Supabase 경로를 건드렸으면 `cargo xtask test --oidc`, `cargo xtask test --supabase`.
+- `cargo xtask check`(fmt·clippy·단위 시험·OpenAPI 대조·웹 검사), `cargo xtask test`(격리 통합 시험). `cargo xtask test`는 이 체크아웃의 격리 Compose(tmpfs DB)에 운영자 절차와 같은 `db bootstrap` → `db migrate`로 기준 SQL을 설치한 뒤 시험을 돌린다(`xtask/src/compose.rs` `prepare_database`). PostgreSQL 18은 CI `oidc` job이 본다. 로그인·Supabase 경로를 건드렸으면 `cargo xtask test --oidc`, `cargo xtask test --supabase --session-pooler --oidc`.
 - 보고에는 명령·대상 SHA·PASS/FAIL/NOT RUN과 SQL 파일 sha256·`fvoci._sqlx_migrations` 체크섬을 적는다(D-42). 검사를 끄거나 건너뛰어 통과시키지 않는다.

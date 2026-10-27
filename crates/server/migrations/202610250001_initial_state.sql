@@ -1,4 +1,4 @@
--- GroundZero 새 설치 기준(2026-10-25 오버홀 1단계, D-126). 역할·스키마는 먼저 db bootstrap으로 준비한다.
+-- GroundZero 새 설치 기준(오버홀 '달리는 아비시니안' 1단계, D-126·D-131). 역할·스키마는 먼저 db bootstrap으로 준비한다.
 -- PostgreSQL 17 이상에서 환경 공통 SQL을 쓴다(D-100: docs/decisions/database.md#d-100).
 -- 기존 개발·시험 DB는 대상·백업·삭제 승인을 거쳐 재생성한다(D-107: docs/decisions/database.md#d-107).
 -- 비교용 과거 기준 SQL: 355fe26407b91b5b560a4f13dd34981f74c0ee6f의
