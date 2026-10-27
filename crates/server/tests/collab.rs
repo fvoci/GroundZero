@@ -3654,7 +3654,13 @@ async fn a_recheck_reply_later_than_its_period_while_the_move_waits_closes_the_e
         u64::try_from(stall.as_millis()).unwrap(),
         std::sync::atomic::Ordering::Release,
     );
-    editor.try_paragraph("재확인이 늦는 동안 보낸 편집").await;
+    // 편집이 방 대기열(붙잡힌 이동 명령 뒤)에 들어간 것을 퐁으로 확인한다. 퐁은 소켓 읽기에서 오고 DB 재확인을 기다리지
+    // 않으며, 기한은 마지막 성공 확인 + T(지금부터 T/2 넘게 남음)라 그 전에 닫히지 않는다. 그래야 아래의 "저장·확인되지
+    // 않음"이 서버가 받은 편집을 버린 결과다(받기 전에 닫혀 공허하게 통과하지 않는다).
+    editor.paragraph("재확인이 늦는 동안 보낸 편집").await;
+    editor
+        .read_by_server("after the edit sent before the stalled recheck closes the connection")
+        .await;
     // 붙잡힐 재확인은 늦어도 T/2 뒤에 시작하고 그 연결의 기한은 그로부터 T 안에 온다.
     let closed = tokio::time::timeout(
         COMMIT_RACE_RECHECK * 2 + Duration::from_secs(1),
