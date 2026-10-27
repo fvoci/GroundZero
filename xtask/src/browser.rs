@@ -12,11 +12,14 @@
 //! - `files/`: 서버 파일 저장소. `--keep`으로 남긴 DB의 첨부 행이 가리키므로 실행마다 같은 곳을 쓰고 지우지 않는다.
 //! - `artifacts/`: 공개 폴더. 실행을 시작할 때 비운다. `e2e/publish.ts`가 이번 실행의 원시 출력 중 검사를 통과한
 //!   파일만 옮기고 마지막에 `SAFE_TO_UPLOAD`를 쓴다. 표시가 없으면 올리지 않는다.
-//! - `run.lock`: 같은 체크아웃의 실행을 한 번에 하나로 묶는 운영체제 파일 잠금(#130). 위 경로와 Compose 프로젝트는
-//!   체크아웃마다 하나라서, 나중 실행은 무엇을 지우거나 띄우기 전에 실패한다. 잠금은 프로세스가 끝나면(강제 종료 포함)
-//!   풀리므로 파일이 남아 있어도 지울 필요가 없다. 다른 워크트리는 경로가 달라 함께 돌 수 있다.
+//! - `run.lock`: 같은 체크아웃의 실행을 한 번에 하나로 묶는 운영체제 파일 잠금([`Compose::lock_run`], #130). 위 경로와
+//!   Compose 프로젝트는 체크아웃마다 하나라서, 나중 실행은 무엇을 지우거나 띄우기 전에 실패한다. 잠금은 프로세스가
+//!   끝나면(강제 종료 포함) 풀리므로 파일이 남아 있어도 지울 필요가 없다. 다른 워크트리는 경로가 달라 함께 돌 수 있다.
+//!
+//! SIGINT·SIGTERM·SIGHUP을 받으면 진행 중인 단계를 실패로 끝내고 위 4의 정리를 그대로 한다([`compose::watch_interrupts`],
+//! #93). 정리 경로를 못 지나는 강제 종료 뒤에는 시작할 때 출력한 명령으로 이 실행의 컨테이너만 멈춘다.
 
-use std::fs::{File, OpenOptions, TryLockError};
+use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::Path;
@@ -32,9 +35,11 @@ use crate::compose::{self, Compose, DbUrls, Env};
 const SERVICES: &[&str] = &["postgres", "keycloak"];
 
 pub fn run(root: &Path, keep: bool, playwright_args: &[String]) -> Result<()> {
+    let compose = Compose::new(root, Env::Browser).with_profile("oidc");
+    // 공개 폴더 비우기·빌드·Compose보다 먼저 잡고 정리까지 쥔다(`target/browser/run.lock`).
+    let _lock = compose.lock_run()?;
+    compose::watch_interrupts()?;
     let out = root.join("target/browser");
-    // 공개 폴더 비우기·빌드·Compose보다 먼저 잡고 정리까지 쥔다.
-    let _lock = RunLock::acquire(&out)?;
     let artifacts = out.join("artifacts");
     // 지난 실행의 공개 표시·파일이 이번 결과로 올라가지 않게 무엇보다 먼저 비운다(원시 출력은 지우지 않는다).
     if artifacts.exists() {
@@ -46,9 +51,12 @@ pub fn run(root: &Path, keep: bool, playwright_args: &[String]) -> Result<()> {
     let files = out.join("files");
     println!("==> raw output {}", raw.display());
 
-    let compose = Compose::new(root, Env::Browser).with_profile("oidc");
     let sh = compose.shell()?;
     println!("==> compose up ({})", compose.project());
+    println!(
+        "==> if this run is killed, stop only its containers (tmpfs DB is lost) from the repository root: {}",
+        compose.recovery_command()
+    );
     let tested = compose
         .up_services(&sh, SERVICES)
         .and_then(|()| run_against(root, &compose, &raw, &files, playwright_args));
@@ -81,11 +89,15 @@ pub fn run(root: &Path, keep: bool, playwright_args: &[String]) -> Result<()> {
     .into_iter()
     .filter_map(|(step, outcome)| outcome.err().map(|e| format!("{step}: {e:#}")))
     .collect();
-    if errors.is_empty() {
+    compose::with_interrupt(if errors.is_empty() {
         Ok(())
     } else {
-        bail!("{} (raw output {})", errors.join("; "), raw.display())
-    }
+        Err(anyhow!(
+            "{} (raw output {})",
+            errors.join("; "),
+            raw.display()
+        ))
+    })
 }
 
 fn run_against(
@@ -101,10 +113,12 @@ fn run_against(
     let urls = DbUrls::local(pg);
     compose::prepare_database(&sh, &urls)?;
 
+    compose::check_interrupt()?;
     println!("==> build web and server");
     cmd!(sh, "pnpm --filter @fvoci/web run build").run()?;
     cmd!(sh, "cargo build --package fvoci-server --locked").run()?;
 
+    compose::check_interrupt()?;
     let port = free_port()?;
     let origin = format!("http://127.0.0.1:{port}");
     let issuer = format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM);
@@ -138,45 +152,6 @@ fn with_shutdown(primary: Result<()>, shutdown: Result<()>) -> Result<()> {
         )),
         (Err(primary), Ok(())) => Err(primary),
         (Ok(()), shutdown) => shutdown,
-    }
-}
-
-/// 같은 체크아웃의 실행을 직렬화하는 `target/browser/run.lock`. 놓을 때 명시적으로 풀고, 프로세스가 끝나면 운영체제가 푼다.
-/// 지운 경로를 다른 실행이 새로 만들어 따로 잠그는 경쟁이 생기므로 파일은 지우지 않는다.
-#[derive(Debug)]
-struct RunLock(File);
-
-impl RunLock {
-    fn acquire(out: &Path) -> Result<Self> {
-        std::fs::create_dir_all(out).with_context(|| format!("create {}", out.display()))?;
-        let path = out.join("run.lock");
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
-            .with_context(|| format!("open {}", path.display()))?;
-        match file.try_lock() {
-            Ok(()) => Ok(Self(file)),
-            Err(TryLockError::WouldBlock) => bail!(
-                "another `cargo xtask browser` run in this checkout holds {}; wait for it to finish",
-                path.display()
-            ),
-            Err(TryLockError::Error(e)) => {
-                Err(e).with_context(|| format!("lock {}", path.display()))
-            }
-        }
-    }
-}
-
-/// 닫기만 하면 같은 파일 서술자를 물려받은 프로세스(exec 전의 fork 자식 등)가 닫을 때까지 잠금이 남는다.
-/// 잠금은 공유된 열린 파일 설명에 걸리므로 여기서 풀면 사본이 남아 있어도 바로 풀린다.
-impl Drop for RunLock {
-    fn drop(&mut self) {
-        if let Err(e) = self.0.unlock() {
-            eprintln!("unlock target/browser/run.lock: {e}");
-        }
     }
 }
 
@@ -279,123 +254,37 @@ fn healthz(addr: SocketAddr) -> std::io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead, BufReader};
-    use std::path::PathBuf;
-
     use super::*;
-
-    /// 시험마다 저장소 `target` 아래 새 폴더를 쓴다. 실제 `target/browser`는 건드리지 않는다.
-    fn scratch() -> Result<PathBuf> {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .context("repository root")?
-            .join("target/browser-lock-tests")
-            .join(uuid::Uuid::now_v7().to_string());
-        std::fs::create_dir_all(&dir)?;
-        Ok(dir)
-    }
-
-    fn assert_held<T: std::fmt::Debug>(acquired: Result<T>) {
-        let error = acquired.expect_err("the lock is held elsewhere");
-        assert!(
-            format!("{error:#}").contains("another `cargo xtask browser` run"),
-            "{error:#}"
-        );
-    }
+    use crate::compose::tests::{assert_held, scratch_root};
 
     /// 나중 실행은 지난 공개 표시·원시 출력·파일 저장소를 건드리기 전에 실패하고, 풀린 뒤에는 다시 돈다.
     #[test]
     fn held_lock_rejects_run_before_touching_outputs() -> Result<()> {
-        let root = scratch()?;
+        let root = scratch_root()?;
         let out = root.join("target/browser");
         let sentinel = out.join("artifacts/SAFE_TO_UPLOAD");
         std::fs::create_dir_all(sentinel.parent().context("artifacts")?)?;
         std::fs::write(&sentinel, "earlier run")?;
 
-        let holder = RunLock::acquire(&out)?;
+        let compose = Compose::new(&root, Env::Browser);
+        let holder = compose.lock_run()?;
         // 잠금이 막지 못하면 공개 폴더를 지운 뒤 Compose 파일이 없는 가짜 체크아웃에서 실패한다.
-        assert_held(run(&root, false, &[]));
+        assert_held(run(&root, false, &[]), "browser");
         assert_eq!(std::fs::read_to_string(&sentinel)?, "earlier run");
         assert!(!out.join("runs").exists());
         assert!(!out.join("files").exists());
-        assert_held(RunLock::acquire(&out));
+        assert_held(compose.lock_run(), "browser");
 
         // 정상으로 놓은 뒤, 그리고 잠근 채 오류로 빠져나간 뒤에도 다시 잡을 수 있다.
         drop(holder);
         let failed = (|| -> Result<()> {
-            let _lock = RunLock::acquire(&out)?;
+            let _lock = compose.lock_run()?;
             bail!("deliberate failure")
         })();
         assert!(failed.is_err());
-        drop(RunLock::acquire(&out)?);
+        drop(compose.lock_run()?);
         assert!(out.join("run.lock").exists());
         std::fs::remove_dir_all(&root)?;
-        Ok(())
-    }
-
-    /// 다른 시험이 띄운 자식이 exec 전에 물려받은 서술자 사본을 `try_clone`(같은 열린 파일 설명)으로 흉내 낸다.
-    /// 사본이 아직 열려 있어도 잠금을 놓은 즉시 다음 실행이 잡을 수 있어야 한다.
-    #[test]
-    fn dropped_lock_is_released_while_a_shared_descriptor_stays_open() -> Result<()> {
-        let root = scratch()?;
-        let out = root.join("target/browser");
-        let holder = RunLock::acquire(&out)?;
-        let inherited = holder.0.try_clone()?;
-        drop(holder);
-        let next = RunLock::acquire(&out);
-        drop(inherited);
-        drop(next?);
-        std::fs::remove_dir_all(&root)?;
-        Ok(())
-    }
-
-    const HOLDER_ENV: &str = "FVOCI_BROWSER_LOCK_TEST_HOLDER";
-    const HOLDER_READY: &str = "browser-lock-held";
-
-    /// 다른 프로세스가 강제로 끝나면(Drop 없이) 운영체제가 잠금을 푼다. 남은 `run.lock` 파일은 실행을 막지 않는다.
-    #[test]
-    fn lock_is_released_when_holder_process_is_killed() -> Result<()> {
-        let root = scratch()?;
-        let out = root.join("target/browser");
-        let mut holder = Command::new(std::env::current_exe()?)
-            .args([
-                "browser::tests::hold_lock_until_killed",
-                "--exact",
-                "--ignored",
-                "--nocapture",
-            ])
-            .env(HOLDER_ENV, &out)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
-        let stdout = holder.stdout.take().context("holder stdout")?;
-        let ready = BufReader::new(stdout)
-            .lines()
-            .map_while(std::result::Result::ok)
-            .any(|line| line.contains(HOLDER_READY));
-        let while_held = RunLock::acquire(&out);
-        holder.kill()?;
-        holder.wait()?;
-
-        assert!(ready, "holder process did not take the lock");
-        assert_held(while_held);
-        drop(RunLock::acquire(&out)?);
-        std::fs::remove_dir_all(&root)?;
-        Ok(())
-    }
-
-    /// 위 시험이 띄우는 다른 프로세스. 환경 변수가 없으면 아무것도 하지 않는다.
-    #[test]
-    #[ignore = "helper process for lock_is_released_when_holder_process_is_killed"]
-    fn hold_lock_until_killed() -> Result<()> {
-        let Some(out) = std::env::var_os(HOLDER_ENV) else {
-            return Ok(());
-        };
-        let _lock = RunLock::acquire(Path::new(&out))?;
-        println!("{HOLDER_READY}");
-        std::io::stdout().flush()?;
-        std::thread::sleep(Duration::from_secs(60));
         Ok(())
     }
 

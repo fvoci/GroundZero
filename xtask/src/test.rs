@@ -3,6 +3,12 @@
 //! OIDC 테스트(`oidc_` 접두어)는 실제 Keycloak이 필요하다. `--oidc` 없이는 `--skip oidc_`로 제외하고
 //! "NOT RUN"을 출력한다. S3 저장소 테스트(`s3_`)도 시험용 SeaweedFS가 없으면(외부 서비스 모드에서 주소를 주지 않음)
 //! 같은 방식으로 제외한다. 제외는 명령 선택이며 통과로 간주하지 않는다.
+//!
+//! 시험 Compose 프로젝트는 체크아웃마다 하나라서(`--supabase`도 검색·S3에 같은 프로젝트를 쓴다) 같은 체크아웃의 실행은
+//! `target/test/run.lock`으로 한 번에 하나씩 돈다(#130). 잠그지 않으면 나중 실행이 앞 실행의 DB에 `db bootstrap`·
+//! `db migrate`·시험을 겹쳐 돌리고, 먼저 끝난 쪽의 `down`이 다른 쪽 DB를 지운다. SIGINT·SIGTERM·SIGHUP을 받으면 진행 중인
+//! 단계를 실패로 끝내고 실패와 같은 정리를 한다(#93, [`compose::watch_interrupts`]). `--external-services`는 Compose를
+//! 쓰지 않으므로 잠그지 않는다.
 
 use std::path::Path;
 
@@ -52,11 +58,14 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
     if oidc {
         compose = compose.with_profile("oidc");
     }
+    let _lock = compose.lock_run()?;
+    compose::watch_interrupts()?;
     let sh = compose.shell()?;
     println!("==> compose up ({})", compose.project());
-    compose.up(&sh)?;
+    print_recovery(&compose);
 
-    let result = (|| -> Result<()> {
+    // 기동이 중간에 실패하거나 중단돼도 일부 뜬 컨테이너를 아래에서 정리한다.
+    let result = compose.up(&sh).and_then(|()| {
         let pg_port = compose.host_port(&sh, "postgres", 5432)?;
         println!("==> postgres on 127.0.0.1:{pg_port}");
         let urls = DbUrls::local(pg_port);
@@ -84,30 +93,51 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         } else {
             None
         };
+        compose::check_interrupt()?;
         run_tests(&sh, oidc, true, false)
-    })();
+    });
 
-    if keep {
+    let cleanup = if keep {
         println!(
             "==> containers kept (project {}); run `cargo xtask down` later",
             compose.project()
         );
+        Ok(())
     } else {
         println!("==> compose down");
-        compose.down(&sh)?;
-    }
-    result
+        compose.down(&sh)
+    };
+    compose::with_interrupt(cleanup.and(result))
+}
+
+fn print_recovery(compose: &Compose) {
+    println!(
+        "==> if this run is killed, stop only its containers (tmpfs DBs are lost) from the repository root: {}",
+        compose.recovery_command()
+    );
 }
 
 /// 셀프호스트 Supabase(공식 구성의 db·rest·supavisor, D-88)를 DB로 두고 같은 통합 테스트를 돌린다. 검색·S3(·Keycloak)은
 /// 시험 Compose에서 PostgreSQL만 빼고 띄운다. 관리자는 superuser가 아닌 `postgres`다. `session_pooler`면 앱 역할
 /// 연결을 Supavisor의 session 모드로 바꿔 한 번 더 돌린다(마이그레이션·관리·고정 자료 연결은 직접).
 pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -> Result<()> {
-    let supabase = Supabase::new(root)?;
     let mut services = Compose::new(root, Env::Test);
     if oidc {
         services = services.with_profile("oidc");
     }
+    let _lock = services.lock_run()?;
+    compose::watch_interrupts()?;
+    compose::with_interrupt(supabase_stack(root, &services, keep, oidc, session_pooler))
+}
+
+fn supabase_stack(
+    root: &Path,
+    services: &Compose,
+    keep: bool,
+    oidc: bool,
+    session_pooler: bool,
+) -> Result<()> {
+    let supabase = Supabase::new(root)?;
     let sh = services.shell()?;
     let mut wanted = vec!["meilisearch", "seaweedfs"];
     if oidc {
@@ -124,6 +154,7 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
         services.project(),
         supabase.project()
     );
+    print_recovery(services);
     let result = services
         .up_services(&sh, &wanted)
         .and_then(|()| {
@@ -161,10 +192,12 @@ pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -
             // CI 러너는 4코어라 그대로다.
             let _threads = sh.push_env("RUST_TEST_THREADS", "4");
             {
+                compose::check_interrupt()?;
                 println!("==> integration tests, direct connection");
                 let _app = sh.push_env("DATABASE_URL", &urls.app);
                 run_tests(&sh, oidc, true, true)?;
             }
+            compose::check_interrupt()?;
             if session_pooler {
                 let pooler = supabase.host_port(&sh, "supavisor", 5432)?;
                 println!("==> integration tests, app role through the Supavisor session pooler on 127.0.0.1:{pooler}");
@@ -249,4 +282,25 @@ fn push_s3_credentials(sh: &Shell) -> [xshell::PushEnv<'_>; 3] {
         sh.push_env("FVOCI_TEST_S3_ACCESS_KEY", compose::S3_TEST_ACCESS_KEY),
         sh.push_env("FVOCI_TEST_S3_SECRET_KEY", compose::S3_TEST_SECRET_KEY),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compose::tests::{assert_held, scratch_root};
+
+    /// 같은 체크아웃의 시험 실행(기본·`--supabase`)은 앞 실행이 잠금을 쥐는 동안 Compose를 건드리기 전에 실패한다.
+    /// 잠금이 막지 못하면 Compose 파일이 없는 가짜 체크아웃에서 `docker compose` 오류로 실패한다.
+    #[test]
+    fn held_lock_rejects_test_runs_before_compose() -> Result<()> {
+        let root = scratch_root()?;
+        let holder = Compose::new(&root, Env::Test).lock_run()?;
+        assert_held(run(&root, false, false, false), "test");
+        assert_held(run(&root, true, true, false), "test");
+        assert_held(run_supabase(&root, false, false, false), "test");
+        drop(holder);
+        drop(Compose::new(&root, Env::Test).lock_run()?);
+        std::fs::remove_dir_all(&root)?;
+        Ok(())
+    }
 }
