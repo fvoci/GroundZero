@@ -655,52 +655,60 @@
         {/each}
       </ul>
       {#if canManage}
+        <!-- 공유·복제는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공(공유 저장·복제본으로 이동)과
+             실패 알림을 숨기고, 복제는 다시 내면 새 요청 id로 두 번째 사본을 만든다. bits-ui Select는 조상 fieldset의
+             disabled를 보지 않으므로 따로 잠근다. -->
         {#each shareDraft.offers as offer (offer.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              shareDraft.restore(offer);
-            }}
-            ondiscard={() => {
-              shareDraft.discard(offer);
-            }}
-          />
-        {/each}
-        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
-          <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
-            <Label for="share-email">{m.documents_email()}</Label>
-            <Input
-              id="share-email"
-              type="email"
-              bind:value={shareEmail}
-              autocomplete="off"
-              required
+          <fieldset class="contents" disabled={sharing}>
+            <FormDraftOffer
+              onrestore={() => {
+                shareDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                shareDraft.discard(offer);
+              }}
             />
-          </div>
-          <Select.Root
-            type="single"
-            value={sharePermission}
-            onValueChange={(v: string) => {
-              sharePermission = v === 'write' ? 'write' : 'read';
-            }}
-          >
-            <Select.Trigger class="w-24" aria-label={m.documents_share_permission()}
-              >{sharePermission === 'write'
-                ? m.documents_permission_write()
-                : m.documents_permission_read()}</Select.Trigger
+          </fieldset>
+        {/each}
+        <fieldset class="min-w-0" disabled={sharing}>
+          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
+            <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
+              <Label for="share-email">{m.documents_email()}</Label>
+              <Input
+                id="share-email"
+                type="email"
+                bind:value={shareEmail}
+                autocomplete="off"
+                required
+              />
+            </div>
+            <Select.Root
+              type="single"
+              disabled={sharing}
+              value={sharePermission}
+              onValueChange={(v: string) => {
+                sharePermission = v === 'write' ? 'write' : 'read';
+              }}
             >
-            <Select.Content>
-              <Select.Item value="read" label={m.documents_permission_read()}
-                >{m.documents_permission_read()}</Select.Item
+              <Select.Trigger class="w-24" aria-label={m.documents_share_permission()}
+                >{sharePermission === 'write'
+                  ? m.documents_permission_write()
+                  : m.documents_permission_read()}</Select.Trigger
               >
-              <Select.Item value="write" label={m.documents_permission_write()}
-                >{m.documents_permission_write()}</Select.Item
-              >
-            </Select.Content>
-          </Select.Root>
-          <Button type="submit" disabled={sharing || shareEmail.trim() === ''}
-            >{m.documents_share()}</Button
-          >
-        </form>
+              <Select.Content>
+                <Select.Item value="read" label={m.documents_permission_read()}
+                  >{m.documents_permission_read()}</Select.Item
+                >
+                <Select.Item value="write" label={m.documents_permission_write()}
+                  >{m.documents_permission_write()}</Select.Item
+                >
+              </Select.Content>
+            </Select.Root>
+            <Button type="submit" disabled={sharing || shareEmail.trim() === ''}
+              >{m.documents_share()}</Button
+            >
+          </form>
+        </fieldset>
       {/if}
       <div class="flex flex-col gap-2 border-t pt-3">
         {#if doc.placement !== 'personal'}
@@ -841,59 +849,65 @@
         </Dialog.Description>
       </Dialog.Header>
       {#each copyDraft.offers as offer (offer.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            copyDraft.restore(offer);
-          }}
-          ondiscard={() => {
-            copyDraft.discard(offer);
-          }}
-        />
-      {/each}
-      <form class="flex flex-col gap-3" onsubmit={(e) => void submitCopy(e)}>
-        <div class="flex flex-col gap-1">
-          <Label for="copy-title">{m.documents_new_title()}</Label>
-          <Input id="copy-title" bind:value={copyTitle} maxlength={200} required />
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-sm font-medium" id="copy-target-label">{m.documents_copy_target()}</span
-          >
-          <Select.Root
-            type="single"
-            value={copyTarget}
-            onValueChange={(v: string) => {
-              // 보낼 때 대상·제목이 달라졌으면 새 요청 ID를 만든다.
-              copyTarget = v;
+        <fieldset class="contents" disabled={copying}>
+          <FormDraftOffer
+            onrestore={() => {
+              copyDraft.restore(offer);
             }}
-          >
-            <Select.Trigger aria-labelledby="copy-target-label"
-              >{targetLabel(copyTarget)}</Select.Trigger
+            ondiscard={() => {
+              copyDraft.discard(offer);
+            }}
+          />
+        </fieldset>
+      {/each}
+      <fieldset class="min-w-0" disabled={copying}>
+        <form class="flex flex-col gap-3" onsubmit={(e) => void submitCopy(e)}>
+          <div class="flex flex-col gap-1">
+            <Label for="copy-title">{m.documents_new_title()}</Label>
+            <Input id="copy-title" bind:value={copyTitle} maxlength={200} required />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-medium" id="copy-target-label"
+              >{m.documents_copy_target()}</span
             >
-            <Select.Content>
-              <Select.Item value="personal" label={m.documents_my_notes()}
-                >{m.documents_my_notes()}</Select.Item
+            <Select.Root
+              type="single"
+              disabled={copying}
+              value={copyTarget}
+              onValueChange={(v: string) => {
+                // 보낼 때 대상·제목이 달라졌으면 새 요청 ID를 만든다.
+                copyTarget = v;
+              }}
+            >
+              <Select.Trigger aria-labelledby="copy-target-label"
+                >{targetLabel(copyTarget)}</Select.Trigger
               >
-              {#each writable as w (w.id)}
-                <Select.Item value={w.id} label={workspaceLabel(w, workspaces)}
-                  >{m.documents_wiki({ workspace: workspaceLabel(w, workspaces) })}</Select.Item
+              <Select.Content>
+                <Select.Item value="personal" label={m.documents_my_notes()}
+                  >{m.documents_my_notes()}</Select.Item
                 >
-              {/each}
-            </Select.Content>
-          </Select.Root>
-        </div>
-        <Dialog.Footer>
-          <Button
-            variant="ghost"
-            type="button"
-            onclick={() => {
-              open(undefined);
-            }}>{m.common_cancel()}</Button
-          >
-          <Button type="submit" disabled={copying || copyTitle.trim() === ''}
-            >{m.documents_copy()}</Button
-          >
-        </Dialog.Footer>
-      </form>
+                {#each writable as w (w.id)}
+                  <Select.Item value={w.id} label={workspaceLabel(w, workspaces)}
+                    >{m.documents_wiki({ workspace: workspaceLabel(w, workspaces) })}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <Dialog.Footer>
+            <Button
+              variant="ghost"
+              type="button"
+              onclick={() => {
+                open(undefined);
+              }}>{m.common_cancel()}</Button
+            >
+            <Button type="submit" disabled={copying || copyTitle.trim() === ''}
+              >{m.documents_copy()}</Button
+            >
+          </Dialog.Footer>
+        </form>
+      </fieldset>
     {:else if panel === 'move'}
       <Dialog.Header>
         <Dialog.Title>{m.documents_move_title()}</Dialog.Title>
