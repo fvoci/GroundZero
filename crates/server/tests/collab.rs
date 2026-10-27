@@ -3417,10 +3417,16 @@ async fn the_commit_gate_proxy_delivers_each_message_in_one_write() {
         .await
         .unwrap()
         .unwrap();
+    // 지키려는 성질은 "잘린 메시지가 없다"다. 실행이 멈춰 두 메시지가 한 수신에 함께 담기는 것(`Some(2)`)은 허용한다:
+    // 실제 인증에서는 클라이언트가 응답을 기다려 겹치지 않고, 그것을 실패로 보면 분할과 무관한 거짓 실패가 된다.
+    assert!(
+        deliveries.iter().all(Option::is_some),
+        "a delivery ended inside a message (None = a split message): {deliveries:?}"
+    );
     assert_eq!(
-        deliveries,
-        vec![Some(1), Some(1)],
-        "each delivery must hold whole messages (None = a split message), in order: startup, SASL"
+        deliveries.iter().flatten().sum::<usize>(),
+        2,
+        "the startup and SASL messages must both arrive: {deliveries:?}"
     );
 }
 
@@ -3655,8 +3661,9 @@ async fn a_recheck_reply_later_than_its_period_while_the_move_waits_closes_the_e
         std::sync::atomic::Ordering::Release,
     );
     // 편집이 방 대기열(붙잡힌 이동 명령 뒤)에 들어간 것을 퐁으로 확인한다. 퐁은 소켓 읽기에서 오고 DB 재확인을 기다리지
-    // 않으며, 기한은 마지막 성공 확인 + T(지금부터 T/2 넘게 남음)라 그 전에 닫히지 않는다. 그래야 아래의 "저장·확인되지
-    // 않음"이 서버가 받은 편집을 버린 결과다(받기 전에 닫혀 공허하게 통과하지 않는다).
+    // 않는다. 기한은 제때 끝난 마지막 확인의 시작 + T이고 감시는 그 시작 + T/2에 다음 확인을 시작하므로, 지금부터 기한까지는
+    // T/2에서 진행 중인 확인의 경과 시간을 뺀 것 이상 남는다(T=3초면 약 1.5초에서 DB 지연을 뺀 값, 퐁 왕복은 수 ms). 그래야
+    // 아래의 "저장·확인되지 않음"이 서버가 받은 편집을 버린 결과다(받기 전에 닫혀 공허하게 통과하지 않는다).
     editor.paragraph("재확인이 늦는 동안 보낸 편집").await;
     editor
         .read_by_server("after the edit sent before the stalled recheck closes the connection")
