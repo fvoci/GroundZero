@@ -19,7 +19,7 @@
   import type { EventUnit } from './conflict';
   import { mergeEventInput, sameUnit, trimLikeServer } from './conflict';
   import EventForm from './EventForm.svelte';
-  import RecurrenceEditor from './RecurrenceEditor.svelte';
+  import RecurrenceEditor, { untilBeforeStart } from './RecurrenceEditor.svelte';
   import { describeRule, describeWhen, KIND_LABEL } from './labels';
   import { localTimeZone } from './time';
   import { me } from '$lib/me.svelte';
@@ -176,13 +176,7 @@
     try {
       return await request;
     } catch (e: unknown) {
-      if (
-        e instanceof ApiError &&
-        e.code === 'bad_request' &&
-        e.message === 'until must not be before the first occurrence'
-      ) {
-        untilError = m.events_until_before_start();
-      }
+      if (untilBeforeStart(e)) untilError = m.events_until_before_start();
       throw e;
     } finally {
       if (mine === shown) pending -= 1;
