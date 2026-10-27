@@ -128,15 +128,19 @@
   }
 </script>
 
+<!-- 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 복제를 버리게 하고, 다시 내면 새 요청 id로
+     두 번째 사본을 만든다. -->
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      draft.restore(entry);
-    }}
-    ondiscard={() => {
-      draft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}
@@ -150,37 +154,39 @@
       <Button size="sm" variant="outline" onclick={() => void start()}>{m.modules_copy()}</Button>
     </div>
   {:else}
-    <form
-      class="flex flex-wrap items-end gap-2 rounded-md border p-2"
-      onsubmit={(e) => void submit(e)}
-      aria-label={m.modules_copy_form()}
-    >
-      <div class="flex flex-col gap-1">
-        <Label for="copy-target">{m.modules_copy_module()}</Label>
-        <NativeSelect id="copy-target" class="w-full" bind:value={target}>
-          {#each targets as mod (mod.id)}<option value={mod.id}>{mod.name} ({mod.key})</option
-            >{/each}
-        </NativeSelect>
-      </div>
-      <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
-        <Label for="copy-title">{m.modules_copy_new_title()}</Label>
-        <Input id="copy-title" bind:value={title} maxlength={200} />
-      </div>
-      <div class="flex items-center gap-2 pb-2">
-        <Checkbox id="copy-reset" bind:checked={reset} />
-        <Label for="copy-reset">{m.modules_copy_reset()}</Label>
-      </div>
-      <Button type="submit" size="sm">{m.modules_copy()}</Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onclick={() => {
-          draft.leave.request(() => (open = false));
-        }}>{m.common_cancel()}</Button
+    <fieldset class="min-w-0" disabled={busy}>
+      <form
+        class="flex flex-wrap items-end gap-2 rounded-md border p-2"
+        onsubmit={(e) => void submit(e)}
+        aria-label={m.modules_copy_form()}
       >
-      <p class="w-full text-muted-foreground">{m.modules_copy_hint()}</p>
-    </form>
+        <div class="flex flex-col gap-1">
+          <Label for="copy-target">{m.modules_copy_module()}</Label>
+          <NativeSelect id="copy-target" class="w-full" bind:value={target}>
+            {#each targets as mod (mod.id)}<option value={mod.id}>{mod.name} ({mod.key})</option
+              >{/each}
+          </NativeSelect>
+        </div>
+        <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
+          <Label for="copy-title">{m.modules_copy_new_title()}</Label>
+          <Input id="copy-title" bind:value={title} maxlength={200} />
+        </div>
+        <div class="flex items-center gap-2 pb-2">
+          <Checkbox id="copy-reset" bind:checked={reset} />
+          <Label for="copy-reset">{m.modules_copy_reset()}</Label>
+        </div>
+        <Button type="submit" size="sm">{m.modules_copy()}</Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onclick={() => {
+            draft.leave.request(() => (open = false));
+          }}>{m.common_cancel()}</Button
+        >
+        <p class="w-full text-muted-foreground">{m.modules_copy_hint()}</p>
+      </form>
+    </fieldset>
   {/if}
   {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
   <div role="status" class="empty:hidden">

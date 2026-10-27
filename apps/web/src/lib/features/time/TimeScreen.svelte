@@ -250,7 +250,7 @@
       manualBusy = true;
       await api.addTimeEntry(requestId, entry);
       if (!manualDraft.isOwner(attempt)) return;
-      // Keep any input typed while the request was in flight.
+      // 입력은 보내는 동안 잠겨 있다. 그래도 바뀌었으면 지우지 않고 남긴다.
       if (manualDraft.isCurrent(attempt)) {
         cleanManual = { ...manual, memo: '' };
         manualDraft.complete(attempt);
@@ -259,7 +259,8 @@
       notifyDone(manualStatus);
       reloadKey += 1;
     } catch (e: unknown) {
-      if (attempt === undefined || manualDraft.isCurrent(attempt))
+      // 같은 사용자의 실패는 입력이 바뀌었어도 알린다(계정이 바뀌었으면 숨긴다).
+      if (attempt === undefined || manualDraft.isOwner(attempt))
         manualError = errorText(e, m.time_manual_failed());
     } finally {
       if (attempt !== undefined && manualDraft.isOwner(attempt)) manualBusy = false;
@@ -411,8 +412,13 @@
     <section class="flex flex-col gap-2" aria-labelledby="time-manual-heading">
       <h2 id="time-manual-heading" class="text-lg font-semibold">{m.time_manual_heading()}</h2>
       <p class="text-sm text-muted-foreground">{m.settings_time_zone()}: {manualZone}</p>
+      <!-- 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력이 결과(성공·실패) 알림을 가리지 않게 한다. -->
       {#each manualDraft.offers as offer (offer.key)}
-        <div class="flex flex-wrap items-center gap-2" data-testid="time-manual-draft-offer">
+        <fieldset
+          class="flex flex-wrap items-center gap-2"
+          disabled={manualBusy}
+          data-testid="time-manual-draft-offer"
+        >
           <p>{m.common_draft_available()}</p>
           <Button
             size="sm"
@@ -427,82 +433,86 @@
               manualDraft.discard(offer);
             }}>{m.common_draft_discard()}</Button
           >
-        </div>
+        </fieldset>
       {/each}
-      <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addManual(e)}>
-        <div class="flex flex-col gap-1">
-          <Label for="time-manual-day">{m.time_date()}</Label>
-          <!-- 없는 시각인지는 날짜와 시각을 함께 보고 정하므로 날짜만 바꿔도 칸 옆 오류를 지운다. -->
-          <Input
-            id="time-manual-day"
-            type="date"
-            bind:value={manual.day}
-            required
-            oninput={() => (manualMissing = undefined)}
-          />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="time-manual-start">{m.time_start()}</Label>
-          <Input
-            id="time-manual-start"
-            type="time"
-            bind:value={manual.start}
-            required
-            oninput={() => (manualMissing = undefined)}
-            aria-invalid={manualMissing === 'start'}
-            aria-describedby={manualMissing === 'start' ? 'time-manual-start-error' : undefined}
-          />
-          {#if manualMissing === 'start'}
-            <p id="time-manual-start-error" class="text-xs text-destructive" role="alert">
-              {m.events_missing_time({ zone: manualZone })}
-            </p>
-          {/if}
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="time-manual-end">{m.time_end()}</Label>
-          <Input
-            id="time-manual-end"
-            type="time"
-            bind:value={manual.end}
-            required
-            oninput={() => (manualMissing = undefined)}
-            aria-invalid={manualMissing === 'end'}
-            aria-describedby={manualMissing === 'end' ? 'time-manual-end-error' : undefined}
-          />
-          {#if manualMissing === 'end'}
-            <p id="time-manual-end-error" class="text-xs text-destructive" role="alert">
-              {m.events_missing_time({ zone: manualZone })}
-            </p>
-          {/if}
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-sm font-medium" id="time-manual-kind-label">{m.time_kind()}</span>
-          <Select.Root
-            type="single"
-            value={manual.kind}
-            onValueChange={(v: string) => {
-              const k = TIME_KINDS.find((x) => x === v);
-              if (k !== undefined) manual.kind = k;
-            }}
-          >
-            <Select.Trigger aria-labelledby="time-manual-kind-label"
-              >{TIME_KIND_LABEL[manual.kind]}</Select.Trigger
+      <fieldset class="min-w-0" disabled={manualBusy}>
+        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addManual(e)}>
+          <div class="flex flex-col gap-1">
+            <Label for="time-manual-day">{m.time_date()}</Label>
+            <!-- 없는 시각인지는 날짜와 시각을 함께 보고 정하므로 날짜만 바꿔도 칸 옆 오류를 지운다. -->
+            <Input
+              id="time-manual-day"
+              type="date"
+              bind:value={manual.day}
+              required
+              oninput={() => (manualMissing = undefined)}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="time-manual-start">{m.time_start()}</Label>
+            <Input
+              id="time-manual-start"
+              type="time"
+              bind:value={manual.start}
+              required
+              oninput={() => (manualMissing = undefined)}
+              aria-invalid={manualMissing === 'start'}
+              aria-describedby={manualMissing === 'start' ? 'time-manual-start-error' : undefined}
+            />
+            {#if manualMissing === 'start'}
+              <p id="time-manual-start-error" class="text-xs text-destructive" role="alert">
+                {m.events_missing_time({ zone: manualZone })}
+              </p>
+            {/if}
+          </div>
+          <div class="flex flex-col gap-1">
+            <Label for="time-manual-end">{m.time_end()}</Label>
+            <Input
+              id="time-manual-end"
+              type="time"
+              bind:value={manual.end}
+              required
+              oninput={() => (manualMissing = undefined)}
+              aria-invalid={manualMissing === 'end'}
+              aria-describedby={manualMissing === 'end' ? 'time-manual-end-error' : undefined}
+            />
+            {#if manualMissing === 'end'}
+              <p id="time-manual-end-error" class="text-xs text-destructive" role="alert">
+                {m.events_missing_time({ zone: manualZone })}
+              </p>
+            {/if}
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-medium" id="time-manual-kind-label">{m.time_kind()}</span>
+            <Select.Root
+              type="single"
+              value={manual.kind}
+              onValueChange={(v: string) => {
+                const k = TIME_KINDS.find((x) => x === v);
+                if (k !== undefined) manual.kind = k;
+              }}
             >
-            <Select.Content>
-              {#each TIME_KINDS as k (k)}
-                <Select.Item value={k} label={TIME_KIND_LABEL[k]}>{TIME_KIND_LABEL[k]}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-        </div>
-        <div class="flex flex-1 flex-col gap-1">
-          <Label for="time-manual-memo">{m.time_memo()}</Label>
-          <Input id="time-manual-memo" bind:value={manual.memo} maxlength={2000} />
-        </div>
-        <Button type="submit" disabled={manualBusy || !manualDraft.active || manualDraft.blocked}
-          >{m.time_add_entry()}</Button
-        >
-      </form>
+              <Select.Trigger aria-labelledby="time-manual-kind-label"
+                >{TIME_KIND_LABEL[manual.kind]}</Select.Trigger
+              >
+              <Select.Content>
+                {#each TIME_KINDS as k (k)}
+                  <Select.Item value={k} label={TIME_KIND_LABEL[k]}
+                    >{TIME_KIND_LABEL[k]}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <div class="flex flex-1 flex-col gap-1">
+            <Label for="time-manual-memo">{m.time_memo()}</Label>
+            <Input id="time-manual-memo" bind:value={manual.memo} maxlength={2000} />
+          </div>
+          <Button type="submit" disabled={manualBusy || !manualDraft.active || manualDraft.blocked}
+            >{m.time_add_entry()}</Button
+          >
+        </form>
+      </fieldset>
       {#if manualError !== undefined}
         <p role="alert" class="text-sm text-destructive">{manualError}</p>
       {/if}

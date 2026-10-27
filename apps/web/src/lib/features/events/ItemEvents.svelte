@@ -35,6 +35,9 @@
   const createKey = new RetryKey();
   const zone = localTimeZone();
   const canWrite = $derived(item.access !== 'read' && !item.archived);
+  // 새 일정을 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면
+  // 새 요청 id로 두 번째 일정을 만든다.
+  let creating = $state(false);
 
   // 읽기가 겹치면(달력 변경·여기서의 저장) 마지막으로 보낸 읽기의 결과만 남긴다(늦게 온 옛 결과가 새 목록을 덮지 않게).
   let readSeq = 0;
@@ -67,12 +70,18 @@
     const itemId = item.id;
     const user = me.userId;
     const requestId = savedRequestId ?? createKey.for({ item: itemId, input });
-    await api.createEvent(itemId, requestId, input);
-    if (item.id !== itemId || me.userId !== user) return false;
-    createKey.done(requestId);
-    onchanged?.();
-    await reload();
-    return true;
+    // 폼은 이 함수가 끝난 뒤에 결과를 반영하므로 다시 읽기까지 잠가 둔다.
+    creating = true;
+    try {
+      await api.createEvent(itemId, requestId, input);
+      if (item.id !== itemId || me.userId !== user) return false;
+      createKey.done(requestId);
+      onchanged?.();
+      await reload();
+      return true;
+    } finally {
+      creating = false;
+    }
   }
 
   let returnTo: string | undefined;
@@ -112,7 +121,7 @@
   {/if}
   {#if adding}
     {#key item.id}
-      <div class="rounded-md border p-3">
+      <fieldset class="min-w-0 rounded-md border p-3" disabled={creating}>
         <EventForm
           idPrefix="event-new"
           draftName={`event-new:${item.id}`}
@@ -124,7 +133,7 @@
           }}
           oncancel={() => (adding = false)}
         />
-      </div>
+      </fieldset>
     {/key}
   {/if}
   <ul class="flex flex-col gap-1">
