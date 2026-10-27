@@ -194,3 +194,62 @@ fn recovery_command_names_only_this_project() {
         "{command}"
     );
 }
+
+/// 체크아웃 경로에 공백이 있어도 안내 명령의 경로는 인자 하나로 인용되고 이 프로젝트만 가리킨다(CodeRabbit CR-10).
+#[test]
+fn recovery_command_quotes_paths_with_spaces() {
+    let root = Path::new("/work/Ground Zero");
+    let supabase = Supabase {
+        root: root.to_path_buf(),
+        upstream: root.join("target/supabase").join(REVISION).join("docker"),
+        project: compose::project_name(root, Env::Supabase),
+    };
+    let command = supabase.recovery_command();
+    let upstream = format!("/work/Ground Zero/target/supabase/{REVISION}/docker");
+    assert_eq!(
+        command,
+        format!(
+            "docker compose --project-name {project} --project-directory '{upstream}' \
+             --env-file '/work/Ground Zero/deploy/supabase/test.env' \
+             --file '{upstream}/docker-compose.yml' \
+             --file '/work/Ground Zero/deploy/supabase/compose.test.yaml' down --remove-orphans",
+            project = supabase.project()
+        )
+    );
+    assert!(!command.contains(&compose::project_name(root, Env::Test)));
+}
+
+#[test]
+fn shell_quote_keeps_one_argument_for_posix_shells() {
+    assert_eq!(shell_quote("--project-name"), "--project-name");
+    assert_eq!(
+        shell_quote("/work/GroundZero/a.yml"),
+        "/work/GroundZero/a.yml"
+    );
+    assert_eq!(shell_quote(""), "''");
+    assert_eq!(shell_quote("a b"), "'a b'");
+    assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    assert_eq!(shell_quote("$(x)`y`"), "'$(x)`y`'");
+}
+
+/// 인용한 명령을 실제 POSIX 셸이 원래 인자 그대로 나눠 읽는다.
+#[test]
+#[cfg(unix)]
+fn shell_quote_round_trips_through_sh() -> Result<()> {
+    let args = [
+        "/work/Ground Zero/x",
+        "it's",
+        "$HOME `id` \"q\"",
+        "",
+        "plain",
+    ];
+    let quoted: Vec<String> = args.iter().map(|a| shell_quote(a)).collect();
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("printf '%s\\n' {}", quoted.join(" ")))
+        .output()?;
+    assert!(output.status.success());
+    let lines: Vec<&str> = std::str::from_utf8(&output.stdout)?.lines().collect();
+    assert_eq!(lines, args);
+    Ok(())
+}
