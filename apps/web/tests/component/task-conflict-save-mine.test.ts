@@ -12,6 +12,7 @@ import type {
 } from '$lib/api/client';
 import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
 import { formatDay } from '$lib/display';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { clashRows } from '$lib/features/tasks/labels';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
@@ -23,9 +24,19 @@ import { describeRule } from '$lib/features/events/labels';
 // 업무 저장 충돌(409) 뒤 "내 입력으로 다시 저장"(실제 브라우저 점검에서 찾음): 전에는 내 폼 전체를 새 판 번호로 보내,
 // 내가 고치지 않은 칸(다른 사람이 바꾼 제목 등)을 옛 값으로 조용히 되돌렸다. 이제 최신 판 위에 내가 고친 칸만 올리고,
 // 같은 칸을 다른 사람도 다른 값으로 바꿨으면 양쪽 값을 보이고 덮어쓸지 묻는다(D-94).
+let done: MockInstance<typeof feedback.notifyDone>;
 beforeEach(() => {
   me.userId = 'user-a';
+  done = vi.spyOn(feedback, 'notifyDone');
 });
+
+/** 업무 저장이 끝났다는 완료 토스트가 뜨고 화면 안 완료 문구는 없다(D-82). */
+async function expectSavedToast(): Promise<void> {
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+  });
+  expect(screen.queryByText('저장했습니다.')).toBeNull();
+}
 afterEach(() => {
   me.userId = '';
   vi.restoreAllMocks();
@@ -175,7 +186,7 @@ describe('saving my input after a task conflict', () => {
     );
     expect(screen.queryByRole('alertdialog')).toBeNull();
     // 저장한 판으로 다시 채워 화면이 저장된 내용을 보인다.
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    await expectSavedToast();
     expect(field('task-title').value).toBe('새 제목');
     expect(field('task-description').value).toBe('B 설명');
     expect(screen.queryByRole('button', { name: '내 입력으로 다시 저장' })).toBeNull();
@@ -264,7 +275,7 @@ describe('saving my input after a task conflict', () => {
     );
     // 날짜는 최신 판 그대로라 후속 업무 미리보기를 묻지 않는다(옛 날짜로 되돌리는 재배치를 제안하지 않는다).
     expect(preview).not.toHaveBeenCalled();
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    await expectSavedToast();
     expect(field('task-title').value).toBe('내 제목');
     expect(field('task-tags').value).toBe('서버');
     expect(field('task-estimate').value).toBe('45');
@@ -316,7 +327,7 @@ describe('saving my input after a task conflict', () => {
       { ...unchanged, title: '세 번째 제목', status: '진행 중', description: 'B 설명' },
       [],
     );
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    await expectSavedToast();
   });
 
   it('keeps my input when saving again fails', async () => {

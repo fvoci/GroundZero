@@ -33,8 +33,12 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
   await expect(card(lane(page, '진행 중'), title)).toBeVisible();
   await expect.poll(() => serverStatus(api, task)).toBe('진행 중');
 
-  // 되돌리기.
-  await page.getByRole('button', { name: `${title} 이동 되돌리기` }).click();
+  // 되돌리기: 이동 완료 토스트의 동작 단추다(D-82).
+  await page
+    .locator('[data-sonner-toast]')
+    .filter({ hasText: title })
+    .getByRole('button', { name: '되돌리기' })
+    .click();
   await expect(card(lane(page, '할 일'), title)).toBeVisible();
   await expect.poll(() => serverStatus(api, task)).toBe('할 일');
 

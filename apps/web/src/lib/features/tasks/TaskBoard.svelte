@@ -49,7 +49,7 @@
   import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { dismissDone, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay, formatInstant } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
@@ -574,6 +574,8 @@
   /**
    * 방금 확정된 이동의 되돌리기(마지막 하나만). 결과를 모르는 이동에는 내놓지 않는다. 다시 읽은 목록에서 그 카드가 이
    * 이동의 결과(열·바로 뒤 업무·판)와 다르면(다른 사람이 옮기거나 고침) 거둔다. 시간이 지나도 저절로 없애지 않는다.
+   * 이동 완료 토스트의 동작 단추로 내놓는다(D-82, 토스트는 단추가 있으면 닫을 때까지 남는다). 이동 완료 토스트는 key 하나를
+   * 써서 키보드로 거듭 옮겨도 쌓이지 않는다.
    */
   interface UndoOffer {
     id: string;
@@ -585,14 +587,23 @@
     moveVersion: number;
   }
   let undoOffer = $state<UndoOffer | undefined>(undefined);
-  function offerUndo(
-    id: string,
-    title: string,
-    from: MoveOrigin,
-    to: BoardMove,
-    moveVersion: number,
-  ): void {
-    undoOffer = { id, title, from, to, moveVersion };
+  const BOARD_MOVE = 'board-move';
+  function offerUndo(offer: UndoOffer, message: string): void {
+    undoOffer = offer;
+    notifyDone(message, BOARD_MOVE, {
+      action: { label: m.tasks_undo(), onClick: () => void undoMove() },
+    });
+  }
+  /** 되돌리기 없는 이동 완료. 같은 key라 앞 토스트(다른 카드의 되돌리기 포함)를 바꾸므로 그 되돌리기도 거둔다. */
+  function moveDone(message: string): void {
+    undoOffer = undefined;
+    notifyDone(message, BOARD_MOVE);
+  }
+  /** 되돌리기를 거둔다. 그 단추를 단 토스트도 내린다. */
+  function withdrawUndo(): void {
+    if (undoOffer === undefined) return;
+    undoOffer = undefined;
+    dismissDone(BOARD_MOVE);
   }
   /** 이 목록에서도 되돌리기가 맞는지(그 카드가 이 이동의 결과 그대로인지). */
   const undoStillFits = (server: readonly TaskView[], u: UndoOffer): boolean =>
@@ -601,8 +612,15 @@
 
   async function undoMove(): Promise<void> {
     const u = undoOffer;
-    if (u === undefined || busy(u.id)) return;
-    undoOffer = undefined;
+    if (u === undefined) return;
+    // 토스트 단추는 누르면 토스트가 닫힌다. 지금 보내지 않으면 다시 누를 수 있게 되돌리기를 다시 내놓는다.
+    if (busy(u.id)) {
+      // 누른 단추의 토스트가 닫힌 뒤에 띄운다(같은 틱이면 닫히는 토스트에 합쳐져 함께 사라진다).
+      await tick();
+      offerUndo(u, m.tasks_undo_offer({ title: u.title }));
+      return;
+    }
+    withdrawUndo();
     status = m.tasks_move_checking({ title: u.title });
     let server: TaskView[];
     try {
@@ -610,7 +628,7 @@
     } catch {
       if (!alive) return;
       // 지금 상태를 모르면 보내지 않는다. 다시 누를 수 있게 둔다.
-      undoOffer = u;
+      offerUndo(u, m.tasks_undo_offer({ title: u.title }));
       status = m.tasks_undo_read_failed({ title: u.title });
       return;
     }
@@ -663,6 +681,8 @@
     return () => {
       alive = false;
       for (const id of Object.keys(timers)) clearTimers(id);
+      // 떠난 보드의 되돌리기 단추가 토스트에 남지 않게 한다.
+      withdrawUndo();
     };
   });
   $effect(() => {
@@ -672,7 +692,7 @@
       for (const id of Object.keys(timers)) clearTimers(id);
       pending = {};
       confirmed = [];
-      undoOffer = undefined;
+      withdrawUndo();
       moveConflict = undefined;
     });
   });
@@ -686,7 +706,7 @@
       settleUnknown(server);
       confirmed = server;
       tasks = overlaid(server);
-      if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) undoOffer = undefined;
+      if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) withdrawUndo();
       error = undefined;
     } catch (e: unknown) {
       if (alive && mine === reloadSeq) error = errorText(e, m.tasks_load_failed());
@@ -1020,8 +1040,6 @@
   let ganttAsk = $state<GanttAsk | undefined>(undefined);
   let ganttBusy = $state(false);
   let ganttNotice = $state<string | undefined>(undefined);
-  // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(오류가 아니다, 날짜를 지어내지 않는다).
-  let ganttInfo = $state('');
   const datesText = (start: string | null, due: string | null): string =>
     start !== null && due !== null && start !== due ? `${start}~${due}` : (due ?? start ?? '');
 
@@ -1030,7 +1048,6 @@
     dates: { start_date: string | null; due_date: string | null },
   ): Promise<void> {
     ganttNotice = undefined;
-    ganttInfo = '';
     try {
       const fresh = await api.task(t.id);
       if (fresh.start_date !== t.start_date || fresh.due_date !== t.due_date) {
@@ -1134,9 +1151,14 @@
             title: t.title,
             dates: datesText(input.start_date, input.due_date),
           });
-    notifyDone(noShiftNeeded ? `${savedText} ${m.tasks_gantt_no_shifts()}` : savedText);
-    ganttInfo = undatedText(undated);
-    status = [savedText, ganttInfo].filter((s) => s !== '').join(' ');
+    // 일반 완료는 토스트다(D-82). 날짜가 없어 옮기지 않은 후속 업무 안내(오류가 아니다, 날짜를 지어내지 않는다)도 그
+    // 문구에 붙인다.
+    notifyDone(
+      [savedText, noShiftNeeded ? m.tasks_gantt_no_shifts() : '', undatedText(undated)]
+        .filter((s) => s !== '')
+        .join(' '),
+      'gantt-save',
+    );
     await reload();
     return 'saved';
   }
@@ -1238,7 +1260,7 @@
     const origin = originOf(confirmed, id);
     if (origin === undefined) return false;
     // 같은 카드를 다시 옮기면 앞선 이동의 되돌리기는 더 이상 맞지 않는다.
-    if (undoOffer?.id === id) undoOffer = undefined;
+    if (undoOffer?.id === id) withdrawUndo();
     clearTimers(id);
     const seq = ++moveSeq;
     pending = {
@@ -1292,9 +1314,16 @@
       await reload();
       if (!alive || seq !== moveSeq) return true;
       clearMoveNotice();
-      status =
-        undo === undefined ? movedMessage(how, title, plan.status) : undo.done(title, plan.status);
-      if (undo === undefined) offerUndo(id, title, origin, plan, saved.move_version);
+      // 일반 완료는 토스트다(D-82). 알림 영역의 "저장 중" 글은 비운다.
+      status = '';
+      if (undo === undefined) {
+        offerUndo(
+          { id, title, from: origin, to: plan, moveVersion: saved.move_version },
+          movedMessage(how, title, plan.status),
+        );
+      } else {
+        moveDone(undo.done(title, plan.status));
+      }
       return true;
     } catch (e: unknown) {
       if (!current(id, seq)) return false;
@@ -1361,10 +1390,21 @@
     if (verdict === 'applied') {
       finish(id);
       clearMoveNotice();
-      status = m.tasks_move_confirmed({ title: p.title, status: p.plan.status });
+      status = '';
+      const message = m.tasks_move_confirmed({ title: p.title, status: p.plan.status });
       const confirmed = server.find((t) => t.id === id);
       if (p.undoable && confirmed !== undefined)
-        offerUndo(id, p.title, p.origin, p.plan, confirmed.move_version);
+        offerUndo(
+          {
+            id,
+            title: p.title,
+            from: p.origin,
+            to: p.plan,
+            moveVersion: confirmed.move_version,
+          },
+          message,
+        );
+      else moveDone(message);
     } else if (stillInFlight) {
       patch(id, seq, { phase: 'slow' });
       status = m.tasks_move_slow({ title: p.title });
@@ -1425,7 +1465,8 @@
     finish(id);
     if (verdict === 'applied') {
       clearMoveNotice();
-      status = m.tasks_move_confirmed({ title: p.title, status: p.plan.status });
+      status = '';
+      moveDone(m.tasks_move_confirmed({ title: p.title, status: p.plan.status }));
     } else {
       moveNotice =
         verdict === 'gone' ? m.tasks_move_error_gone() : m.tasks_move_changed({ title: p.title });
@@ -1897,18 +1938,6 @@
       >
     </div>
   {/if}
-  {#if undoOffer !== undefined}
-    {@const offer = undoOffer}
-    <div class="flex flex-wrap items-center gap-2 text-sm" data-move-undo>
-      <span>{m.tasks_undo_offer({ title: offer.title })}</span>
-      <Button
-        size="sm"
-        variant="outline"
-        aria-label={m.tasks_undo_label({ title: offer.title })}
-        onclick={() => void undoMove()}>{m.tasks_undo()}</Button
-      >
-    </div>
-  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
   {/if}
@@ -2179,9 +2208,6 @@
   {:else if view === 'gantt'}
     {#if ganttNotice !== undefined}
       <p role="alert" class="text-sm text-destructive">{ganttNotice}</p>
-    {/if}
-    {#if ganttInfo !== ''}
-      <p class="text-sm text-muted-foreground" data-testid="gantt-undated-notice">{ganttInfo}</p>
     {/if}
     <GanttChart tasks={shown} onopen={open} reschedule={canWrite ? reschedule : undefined} />
   {:else if view === 'calendar'}

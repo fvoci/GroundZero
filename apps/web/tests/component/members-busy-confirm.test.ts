@@ -3,8 +3,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
 
@@ -103,7 +105,8 @@ describe('members screen', () => {
     expect(screen.getByRole('button', { name: '초대' })).toBeDisabled();
   });
 
-  it('completion notice changes inside a status region that is always present', async () => {
+  // 일반 완료는 토스트다(D-82). 화면 안 완료 문구(상태 영역)를 두지 않는다.
+  it('reports a sent invitation once as a toast, not in the page', async () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
@@ -113,18 +116,43 @@ describe('members screen', () => {
       role: 'member',
       expires_at: '2026-11-01T00:00:00Z',
     });
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
 
-    const status = screen.getByRole('status');
-    expect(status.textContent).toBe('');
     const input = await screen.findByLabelText('이메일');
     await fireEvent.input(input, { target: { value: 'kim@lab.example' } });
     const form = input.closest('form');
     if (form === null) throw new Error('form');
     await fireEvent.submit(form);
     await waitFor(() => {
-      expect(status.textContent).toContain('kim@lab.example');
+      expect(done).toHaveBeenCalledOnce();
     });
+    expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
+  });
+
+  it('reports an accepted ownership once as a toast, not in the page', async () => {
+    vi.spyOn(api, 'members').mockResolvedValue({
+      ...view,
+      i_am_owner: false,
+      pending_owner: 'u1',
+    });
+    vi.spyOn(api, 'groups').mockResolvedValue([]);
+    vi.spyOn(api, 'invitations').mockResolvedValue([]);
+    vi.spyOn(api, 'acceptOwnership').mockResolvedValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: m.members_accept_ownership() }),
+    );
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith(m.members_became_owner());
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(m.members_became_owner())).toBeNull();
   });
 });
 

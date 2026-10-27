@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import {
   connection,
+  dismissDone,
   notifyDone,
   notifyError,
   auth,
@@ -47,6 +48,33 @@ describe('user feedback (D-82)', () => {
     expect(document.querySelector('[data-close-button]')).not.toBeNull();
     await fireEvent.click(action);
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  // 칸반 이동: 되돌리기 단추가 달린 완료를 같은 key의 단추 없는 완료(되돌림)로 고치면 앞 단추가 남지 않는다. 토스트
+  // 라이브러리는 같은 id를 고칠 때 앞 값에 합치므로 notifyDone이 앞 토스트를 내리고 새로 띄운다.
+  it('drops the earlier action when the same key is updated without one', async () => {
+    render(FeedbackHost);
+    notifyDone('옮겼습니다.', 'board-move-test', {
+      action: { label: '되돌리기', onClick: () => undefined },
+    });
+    await screen.findByRole('button', { name: '되돌리기' });
+    notifyDone('되돌렸습니다.', 'board-move-test');
+    await screen.findByText('되돌렸습니다.');
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '되돌리기' })).toBeNull();
+    });
+  });
+
+  it('takes a completion toast down by its key', async () => {
+    render(FeedbackHost);
+    notifyDone('옮겼습니다.', 'dismiss-test', {
+      action: { label: '되돌리기', onClick: () => undefined },
+    });
+    await screen.findByRole('button', { name: '되돌리기' });
+    dismissDone('dismiss-test');
+    await waitFor(() => {
+      expect(screen.queryByText('옮겼습니다.')).toBeNull();
+    });
   });
 
   it('shows a connection banner until the server answers again', async () => {

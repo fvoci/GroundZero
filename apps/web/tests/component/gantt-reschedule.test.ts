@@ -148,11 +148,15 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
+    // 일반 완료는 토스트 한 번이고 알림 영역 등 화면 안 완료 문구는 없다(D-82).
     await waitFor(() => {
       expect(done).toHaveBeenCalledWith(
         expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+        'gantt-save',
       );
     });
+    expect(done).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/일정을 바꿨습니다/)).toBeNull();
     expect(preview).toHaveBeenCalledWith('a', '2026-10-21', '2026-10-23');
     expect(update.mock.calls[0]?.[2]).toBe(1);
     expect(update.mock.calls[0]?.[3]).toMatchObject({
@@ -235,6 +239,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(done).toHaveBeenCalledWith(
         expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+        'gantt-save',
       );
     });
     await waitFor(() => {

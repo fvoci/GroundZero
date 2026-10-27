@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, NetworkError } from '$lib/api/client';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
 import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
@@ -265,5 +266,29 @@ describe('template pickers while a document is being created', () => {
     });
     expect(screen.getByLabelText(m.workspaces_new_doc_title())).toBeEnabled();
     expect(create).toHaveBeenCalledOnce();
+  });
+});
+
+// D-82: 일반 완료는 토스트다. 반복 규칙 저장의 완료를 낭독용 영역(sr-only role="status")에 또 두지 않는다.
+describe('recurrence rule save completion', () => {
+  it('reports a saved rule once as a toast, not in the page', async () => {
+    const done = vi.spyOn(feedback, 'notifyDone');
+    const onsave = vi.fn(() => Promise.resolve());
+    render(RecurrenceEditor, {
+      idPrefix: 'rule',
+      rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
+      canEdit: true,
+      zoneNote: 'UTC',
+      onsave,
+      draftName: 'rule-toast',
+    });
+    await fireEvent.input(screen.getByLabelText(m.events_interval()), { target: { value: '2' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith(m.common_saved());
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(m.common_saved())).toBeNull();
   });
 });

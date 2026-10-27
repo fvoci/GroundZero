@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
 import { api, parseTask } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { formOf } from '$lib/features/tasks/form';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -89,6 +90,7 @@ describe('custom task status names survive a save of other fields', () => {
         task: { ...current, title: input.title, version: 2 },
       });
     });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount(current);
     const title = await screen.findByDisplayValue('검토 중인 업무');
     await fireEvent.input(title, { target: { value: '검토 끝낸 업무' } });
@@ -98,6 +100,11 @@ describe('custom task status names survive a save of other fields', () => {
     });
     expect(sent[0]?.status).toBe('review');
     expect(sent[0]?.title).toBe('검토 끝낸 업무');
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    // 일반 완료는 토스트 한 번이고 화면 안 완료 문구는 없다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+    expect(screen.queryByText('저장했습니다.')).toBeNull();
   });
 });

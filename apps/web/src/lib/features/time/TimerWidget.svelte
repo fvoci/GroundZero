@@ -11,7 +11,6 @@
   import { clockText, TIME_KIND_LABEL } from './format';
   import { timer } from './timer.svelte';
 
-  let status = $state('');
   let error = $state<string | undefined>(undefined);
   let busy = $state(false);
 
@@ -26,7 +25,6 @@
     error = undefined;
     try {
       await action();
-      status = done;
       notifyDone(done);
     } catch (e: unknown) {
       error = errorText(e, m.time_timer_change_failed());
@@ -62,7 +60,6 @@
         )}>{m.time_stop()}</Button
     >
   {/if}
-  <span class="sr-only" role="status">{status}</span>
   {#if error !== undefined}
     <span role="alert" class="text-destructive">{error}</span>
   {/if}

@@ -6,6 +6,7 @@
 
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -34,7 +35,6 @@
   let invitations = $state<Invitation[]>([]);
   let groups = $state<Group[]>([]);
   let error = $state<string | undefined>(undefined);
-  let notice = $state<string | undefined>(undefined);
   let inviteEmail = $state('');
   let inviteRole = $state<Role>('member');
   let groupName = $state('');
@@ -152,12 +152,12 @@
     const email = inviteEmail;
     const role = inviteRole;
     inviteError = undefined;
-    notice = undefined;
     inviting = true;
     try {
       await api.invite(wsId, email, role);
       if (!inviteDraft.isOwner(attempt)) return;
-      if (inviteDraft.complete(attempt)) notice = m.members_invited({ email });
+      // 일반 완료는 토스트다(D-82).
+      if (inviteDraft.complete(attempt)) notifyDone(m.members_invited({ email }));
       await load(wsId);
       if (inviteDraft.isOwner(attempt)) onchanged();
     } catch (e: unknown) {
@@ -239,7 +239,6 @@
     done?: string,
     fail?: (text: string) => void,
   ): Promise<boolean> {
-    notice = undefined;
     try {
       await action();
     } catch (e: unknown) {
@@ -254,7 +253,7 @@
       else fail(text);
       return false;
     }
-    if (done !== undefined) notice = done;
+    if (done !== undefined) notifyDone(done);
     await load();
     onchanged();
     return true;
@@ -277,7 +276,6 @@
     invitations = [];
     inviting = false;
     grouping = false;
-    notice = undefined;
     error = undefined;
     loadError = undefined;
     void load(id);
@@ -309,8 +307,6 @@
       {error}
     </p>
   {/if}
-  <!-- 완료 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
-  <p role="status" class="text-sm text-muted-foreground empty:sr-only">{notice ?? ''}</p>
 
   {#if view === undefined}
     <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->

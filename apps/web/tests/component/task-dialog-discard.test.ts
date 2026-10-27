@@ -1,5 +1,6 @@
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
@@ -9,6 +10,7 @@ import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { itemTaskPath, router } from '$lib/router.svelte';
 import { me } from '$lib/me.svelte';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { storeFormDraft } from '$lib/features/common/form-draft';
 import { formOf } from '$lib/features/tasks/form';
@@ -19,9 +21,18 @@ import { formOf } from '$lib/features/tasks/form';
 afterEach(() => {
   vi.restoreAllMocks();
 });
+let done: MockInstance<typeof feedback.notifyDone>;
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
+  done = vi.spyOn(feedback, 'notifyDone');
 });
+
+/** 업무 저장이 끝났다는 완료 토스트를 기다린다(D-82: 화면 안 완료 문구는 없다). */
+async function savedToast(): Promise<void> {
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+  });
+}
 
 function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView {
   return {
@@ -570,7 +581,7 @@ describe('closing the task dialog with unsaved input', () => {
     const save = document.getElementById('task-save');
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
-    await screen.findByText('저장했습니다.');
+    await savedToast();
     // 저장이 끝나 다시 닫을 수 있게 된 뒤(닫기 단추가 돌아온다).
     await waitFor(() => {
       expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
@@ -601,7 +612,7 @@ describe('closing the task dialog with unsaved input', () => {
     ])
       expect(field(id).disabled, id).toBe(true);
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
-    await screen.findByText('저장했습니다.');
+    await savedToast();
     await waitFor(() => {
       expect(field('task-title').disabled).toBe(false);
     });
@@ -625,7 +636,7 @@ describe('closing the task dialog with unsaved input', () => {
     expect(back).not.toHaveBeenCalled();
     expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
-    await screen.findByText('저장했습니다.');
+    await savedToast();
     await waitFor(() => {
       expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
     });
@@ -747,7 +758,7 @@ describe('opening another task from the dialog with unsaved input', () => {
     expect(confirmBox()).toBeNull();
     expect(navigate).not.toHaveBeenCalled();
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
-    await screen.findByText('저장했습니다.');
+    await savedToast();
   });
 });
 

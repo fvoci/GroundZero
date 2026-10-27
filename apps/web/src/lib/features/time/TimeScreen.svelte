@@ -120,7 +120,6 @@
   let manualError = $state<string | undefined>(undefined);
   /** 그 시간대에 없는 시각을 넣은 칸(칸 옆에 알린다, D-82). */
   let manualMissing = $state<'start' | 'end' | undefined>(undefined);
-  let manualStatus = $state('');
 
   interface ManualDraft {
     form: Manual;
@@ -139,7 +138,6 @@
     manualZone = zone;
     manualError = undefined;
     manualMissing = undefined;
-    manualStatus = '';
     manualBusy = false;
   }
   const manualDraft = createFormDraft<ManualDraft>({
@@ -257,8 +255,7 @@
         cleanManual = { ...manual, memo: '' };
         manualDraft.complete(attempt);
       }
-      manualStatus = m.time_manual_added();
-      notifyDone(manualStatus);
+      notifyDone(m.time_manual_added());
       reloadKey += 1;
     } catch (e: unknown) {
       // 같은 사용자의 실패는 입력이 바뀌었어도 알린다(계정이 바뀌었으면 숨긴다).
@@ -520,7 +517,6 @@
       {#if manualError !== undefined}
         <p role="alert" class="text-sm text-destructive">{manualError}</p>
       {/if}
-      <p class="sr-only" aria-live="polite">{manualStatus}</p>
     </section>
   </section>
 

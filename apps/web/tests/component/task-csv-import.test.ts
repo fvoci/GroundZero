@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskStatusDefinition } from '@fvoci/api-client';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import type { TaskRow } from '$lib/features/tasks/csv';
 import type { RowProgress } from '$lib/features/tasks/csv-import';
@@ -16,6 +18,17 @@ import { router } from '$lib/router.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { restoreImport } from '$lib/features/tasks/csv-import';
 import { TEST_ORGANIZATION } from './fixtures/organization';
+
+// 등록을 마치면 완료 토스트로 알린다(D-82). 화면 안(알림 영역 포함) 완료 문구는 없다.
+let done: MockInstance<typeof feedback.notifyDone>;
+beforeEach(() => {
+  done = vi.spyOn(feedback, 'notifyDone');
+});
+function expectImported(count: number): void {
+  const text = m.tasks_csv_imported({ count });
+  expect(done).toHaveBeenLastCalledWith(text);
+  expect(screen.queryByText(text)).toBeNull();
+}
 
 const statuses: TaskStatusDefinition[] = [
   { id: 'review', name: '검토 대기', color: '', position: 0, category: 'doing', task_count: 0 },
@@ -423,7 +436,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(server.create.mock.calls[1]?.[5]).not.toHaveProperty('status');
     expect(server.tasks.get('t2')?.status).toBe('검토 대기');
     expect(server.made).toEqual(['t1', 't2']);
-    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(2);
   });
 
   // 가운데 줄이 거절되면 거기서 멈추고 앞 줄의 결과는 남는다(제목만 있는 업무는 없다). 다시 누르면 남은 줄만 보내고, 넣은
@@ -448,7 +461,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(server.made).toEqual(['t1', 't2', 't3']);
     expect(server.tasks.get('t1')?.description).toBe('팀원이 고침');
     expect(server.update).not.toHaveBeenCalled();
-    expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(3);
   });
 
   // 응답을 잃은 만들기(서버에는 반영됨)를 다시 누르면 같은 요청 id로 보내 그 업무를 돌려받는다. 둘이 되지 않는다.
@@ -467,7 +480,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(server.titles()).toEqual(['B', 'C']);
     expect(server.create.mock.calls[0]?.[2]).toBe(firstB);
     expect(server.made).toEqual(['t1', 't2', 't3']);
-    expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(3);
   });
 
   // 거절된 줄만 고쳐 다시 누르면 고치지 않은 줄은 건너뛰고, 고친 줄은 같은 요청 id로 고친 내용을 만든다(거절된 만들기는
@@ -486,7 +499,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(lastB?.[2]).toBe(firstB);
     expect(server.made).toEqual(['t1', 't2', 't3']);
     expect(server.tasks.get('t2')?.start_date).toBe('2026-10-02');
-    expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(3);
   });
 
   // 응답을 잃은 줄을 고쳐 다시 누르면 같은 요청 id라 서버는 처음(고치기 전) 업무를 돌려준다. 같은 업무를 또 만들지 않고,
@@ -509,7 +522,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     await pressImport(onimported, 3);
     expect(server.titles()).toEqual(['C']);
     expect(server.made).toEqual(['t1', 't2', 't3']);
-    expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(3);
   });
 
   // 응답을 잃은 줄의 업무(보드에는 보인다)를 지우면 같은 요청 id의 만들기가 409 `task_deleted`다. 다음 누름은 새 id로 한
@@ -531,7 +544,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(ids[1]).toBe(ids[0]);
     expect(ids[2]).not.toBe(ids[0]);
     expect(server.made).toEqual(['t1', 't2']);
-    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(1);
   });
 
   // CodeRabbit #98: 응답을 잃은 줄을 다시 보낼 때 항목을 잠시 볼 수 없으면(404) 요청 id를 지킨다. 볼 수 있게 된 뒤 다시
@@ -553,7 +566,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     const ids = server.create.mock.calls.filter((c) => c[3] === 'A').map((c) => c[2]);
     expect(ids).toEqual([ids[0], ids[0], ids[0]]);
     expect(server.made).toEqual(['t1', 't2']);
-    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(2);
   });
 
   // CodeRabbit #98(`291bf60`): 서버는 제목 앞뒤 공백을 지워 저장한다(validate_title). CSV 읽기(`csvRecords`)도 따옴표 안의
@@ -571,7 +584,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(server.made).toEqual(['t1']);
     expect(server.tasks.get('t1')?.title).toBe('회의');
     expect(screen.queryByText(/이 줄 내용과 다릅니다/)).not.toBeInTheDocument();
-    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(1);
   });
 });
 
@@ -605,7 +618,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     await pressImport(onimported, 2);
     expect(server.made).toEqual(['t1', 't2', 't3']);
     expect(server.tasks.get('t2')?.description).toBe('둘째 주');
-    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(2);
   });
 
   it('creates an identical row again after the text is cleared', async () => {
@@ -622,7 +635,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     expect(server.create).toHaveBeenCalledTimes(3);
     expect(firstIds).not.toContain(server.create.mock.calls.at(-1)?.[2]);
     expect(server.made).toEqual(['t1', 't2']);
-    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(1);
   });
 
   // 등록하는 동안 글자를 지워도 그 등록은 끝까지 간다. 그때 진행 상태를 버리면 실패 뒤 같은 글자로 다시 누를 때(안내는
@@ -647,7 +660,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     await setText('A\nB\nC');
     await pressImport(onimported, 2);
     expect(server.made).toEqual(['t1', 't2', 't3']);
-    expect(screen.getByText('업무 3개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(3);
   });
 
   // 검토: 등록하는 동안 글자를 지운 뒤 그 등록이 성공하면 끝난 묶음의 진행 상태를 버린다(새 묶음). 남기면 다음에 같은
@@ -667,12 +680,12 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     await waitFor(() => {
       expect(onimported).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(2);
     await setText('청소');
     expect(screen.queryByText(resumeHint)).not.toBeInTheDocument();
     await pressImport(onimported, 2);
     expect(server.made).toEqual(['t1', 't2', 't3']);
-    expect(screen.getByText('업무 1개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(1);
   });
 
   // 지우지 않고 새 글자를 붙여 넣은 경우: 지난 줄과 겹치는 줄이 없으면 새 묶음이다.
@@ -687,7 +700,7 @@ describe('TaskCsvImport new batch after a failure (review)', () => {
     expect(screen.queryByText(resumeHint)).not.toBeInTheDocument();
     await pressImport(onimported, 2);
     expect(server.made).toEqual(['t1', 't2', 't3']);
-    expect(screen.getByText('업무 2개를 등록했습니다.')).toBeInTheDocument();
+    expectImported(2);
   });
 
   // 지우지 않고 붙여 넣은 글자에 다 넣은 줄과 같은 줄이 있으면 이어서 넣는다. 건너뛸 줄을 누르기 전에 보여 준다.

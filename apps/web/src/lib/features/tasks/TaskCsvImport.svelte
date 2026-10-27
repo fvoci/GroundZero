@@ -217,8 +217,9 @@
         done += 1;
         status = m.tasks_csv_progress({ done, total: result.rows.length });
       }
-      status = m.tasks_csv_imported({ count: done });
-      notifyDone(status);
+      // 일반 완료는 토스트다(D-82). 진행 글("n/n")은 비운다.
+      status = '';
+      notifyDone(m.tasks_csv_imported({ count: done }));
       // 등록하는 동안 글자를 고쳤으면 그 글자와 진행 상태를 남긴다(다시 누르면 고친 줄만 넣는다). 등록하는 동안 글자를
       // 모두 지웠으면 새 묶음을 바란 것이므로 끝난 묶음의 진행 상태를 버린다(남기면 같은 줄을 다시 넣어도 건너뛴다).
       if (text === source || text.trim() === '') {

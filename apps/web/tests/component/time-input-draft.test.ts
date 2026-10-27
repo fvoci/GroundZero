@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { api, ApiError, NetworkError, type TimeEntryView } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
@@ -418,4 +419,18 @@ it('keeps manual timezone visible and sends the restored wall time in that timez
     expect(add).toHaveBeenCalledTimes(2);
   });
   expect(add.mock.calls[1]).toEqual(first);
+});
+
+// D-82: 일반 완료는 토스트다. 직접 더한 기록의 완료를 낭독용 영역(sr-only)에 또 두지 않는다.
+it('reports an added manual entry once as a toast, not in the page', async () => {
+  vi.spyOn(api, 'addTimeEntry').mockResolvedValue(entry);
+  const done = vi.spyOn(feedback, 'notifyDone');
+  render(TimeScreen);
+  await memo('save this');
+  await submit();
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledOnce();
+  });
+  expect(done).toHaveBeenCalledWith(m.time_manual_added());
+  expect(screen.queryByText(m.time_manual_added())).toBeNull();
 });
