@@ -615,6 +615,8 @@
     if (u === undefined) return;
     // 토스트 단추는 누르면 토스트가 닫힌다. 지금 보내지 않으면 다시 누를 수 있게 되돌리기를 다시 내놓는다.
     if (busy(u.id)) {
+      // 누른 단추의 토스트가 닫힌 뒤에 띄운다(같은 틱이면 닫히는 토스트에 합쳐져 함께 사라진다).
+      await tick();
       offerUndo(u, m.tasks_undo_offer({ title: u.title }));
       return;
     }
