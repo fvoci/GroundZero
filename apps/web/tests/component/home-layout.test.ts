@@ -1,15 +1,14 @@
 import type { Workspace } from '@fvoci/api-client';
 import { render, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CalendarView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
-import { beforeEach as beforeHome } from 'vitest';
-
-beforeHome(homeExtras);
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(homeExtras);
 
 afterEach(() => {
   vi.restoreAllMocks();
