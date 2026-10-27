@@ -9,9 +9,9 @@
   import { untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import { org } from '$lib/org.svelte';
-  import { router } from '$lib/router.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
@@ -64,9 +64,8 @@
   const reserved = $derived(offers.some((entry) => entry.key === importTabKey(loadedKey)));
   let controller: AbortController | undefined;
   let generation = 0;
-  let leaving = $state(false);
-  let proceed: (() => void) | undefined;
-  let allowLeave = false;
+  // 마지막 저장이 이 탭에 남았는지. 계정 전환으로 다시 읽을 때 남았으면 막지 않는다(D-96).
+  let kept = $state(true);
   let expanded = $state(true);
 
   $effect(() => {
@@ -110,7 +109,8 @@
   });
 
   function persistImport(key: string, source: string, rows: RowProgress[]): void {
-    if (!saveImport(key, source, rows)) return;
+    kept = saveImport(key, source, rows);
+    if (!kept) return;
     if (restoredSource !== undefined && restoredSource !== importTabKey(key))
       removeImportDraft(restoredSource);
     restoredSource = undefined;
@@ -125,21 +125,13 @@
     persistImport(loadedKey, text, progress);
   }
 
-  $effect(() => {
-    const previous = router.guard;
-    const guard = (next: () => void): boolean => {
-      if (!allowLeave && (busy || text.trim() !== '')) {
-        proceed = next;
-        leaving = true;
-        return false;
-      }
-      return previous?.(next) ?? true;
-    };
-    router.guard = guard;
-    return () => {
-      if (router.guard === guard) router.guard = previous;
-    };
-  });
+  // 공통 이탈 가드(D-125). 등록하는 중도 묻는다(`busy`로 넘기면 확인 없이 막기만 해 떠날 수 없다). 떠나기로 해도 입력과
+  // 줄별 진행 상태는 이 탭에 남고(요청 id 포함), 돌아오면 되살려 같은 요청으로 이어 간다. 지우는 것은 제안의 버리기뿐이다.
+  const unsaved = (): boolean => me.userId === editingUser && (busy || text.trim() !== '');
+  const leave = createLeaveGuard({ dirty: unsaved, identity: () => loadedKey });
+  $effect(() =>
+    leave.attach({ beforeUnload: () => unsaved() && (!accountSwitching() || !kept) }),
+  );
 
   const parsed = $derived(
     text.trim() === '' ? undefined : parseTasksCsv(text, assignable, statuses),
@@ -266,31 +258,14 @@
   }
 </script>
 
-<svelte:window
-  onbeforeunload={(e: BeforeUnloadEvent) => {
-    if (busy || text.trim() !== '') {
-      e.preventDefault();
-    }
-  }}
-/>
-
 <DiscardChangesConfirm
-  open={leaving}
+  open={leave.open}
   description={m.tasks_csv_leave_description()}
   confirmLabel={m.tasks_csv_leave()}
-  onkeep={() => {
-    leaving = false;
-    proceed = undefined;
-  }}
+  onkeep={leave.keep}
   ondiscard={() => {
     controller?.abort();
-    leaving = false;
-    allowLeave = true;
-    persistImport(loadedKey, '', []);
-    const next = proceed;
-    proceed = undefined;
-    next?.();
-    allowLeave = false;
+    leave.discard();
   }}
 />
 
