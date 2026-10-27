@@ -237,7 +237,9 @@
       mineBase = base;
     },
     reset: resetMine,
-    dirty: () => openEpisode !== undefined && JSON.stringify(mine) !== mineBase,
+    // 쓸 수 없으면(읽기 전용·보관) 폼은 읽기만 하므로 고친 것으로 치지 않는다(이탈 확인 없음, D3B-F-2 확인 필요 2).
+    dirty: () =>
+      course?.can_write === true && openEpisode !== undefined && JSON.stringify(mine) !== mineBase,
     busy: () => savingMine,
   });
   const newDraft = createFormDraft({
@@ -329,7 +331,7 @@
     Promise.all([api.course(id), api.courseParticipants(id, today)])
       .then(([c, p]) => {
         if (mine !== seq) return;
-        course = c;
+        setCourse(c);
         participants = p;
         error = undefined;
       })
@@ -337,6 +339,16 @@
         if (mine === seq) error = errorText(e, m.courses_load_failed());
       });
   });
+
+  /**
+   * 다시 읽은 강좌를 넣는다. 그사이 쓸 수 없게 됐으면(역할 강등·보관) 연 내 진도 폼을 같은 갱신에서 닫는다. 폼 이름이
+   * 먼저 바뀌어야 form-draft가 쓸 수 없어 깨끗해진 폼으로 이 탭의 남긴 입력을 지우지 않는다(다시 열면 남긴 입력으로
+   * 고르게 하고, 쓸 수 있을 때 되살린다).
+   */
+  function setCourse(next: CourseView): void {
+    if (course?.can_write === true && !next.can_write) openEpisode = undefined;
+    course = next;
+  }
 
   /** 처리하고 다시 읽는다. 성공하면 true(실패하면 오류를 보이고 false). */
   async function run(
@@ -521,7 +533,7 @@
       return false;
     }
     if (!stillOwner()) return true;
-    course = now;
+    setCourse(now);
     const latest = now.episodes.find((x) => x.id === base.id);
     if (latest === undefined) {
       error = m.common_error_not_found();
@@ -572,7 +584,7 @@
       return false;
     }
     if (!stillOwner()) return false;
-    course = after;
+    setCourse(after);
     reloadKey += 1;
     const now = courseProgress(after.episodes, today, after.details.target_on).percentByCount;
     // 목차가 늘면 진행률이 바뀐다는 것을 알린다(D-37).
@@ -898,16 +910,17 @@
                 ? m.time_recording()
                 : m.courses_track()}</Button
             >
+            <!-- 내 메모·위치는 쓸 수 없어도 볼 수 있다(남기기만 막는다, D3B-F-2). -->
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={openEpisode === e.id}
+              aria-label={m.courses_notes_aria({ number: e.number })}
+              onclick={() => {
+                open(e);
+              }}>{m.courses_notes()}</Button
+            >
             {#if c.can_write}
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-expanded={openEpisode === e.id}
-                aria-label={m.courses_notes_aria({ number: e.number })}
-                onclick={() => {
-                  open(e);
-                }}>{m.courses_notes()}</Button
-              >
               <Button
                 size="sm"
                 variant="ghost"
@@ -1037,20 +1050,23 @@
               </form>
             </fieldset>
           {/if}
-          {#if openEpisode === e.id && c.can_write}
-            {#each mineDraft.offers as offer (offer.key)}
-              <fieldset class="contents" disabled={savingMine}>
-                <FormDraftOffer
-                  onrestore={() => {
-                    mineDraft.restore(offer);
-                  }}
-                  ondiscard={() => {
-                    mineDraft.discard(offer);
-                  }}
-                />
-              </fieldset>
-            {/each}
-            <fieldset class="min-w-0" disabled={savingMine}>
+          {#if openEpisode === e.id}
+            <!-- 쓸 수 없으면 저장 없이 읽기만 한다. 남긴 입력은 지우지 않고 쓸 수 있을 때 고르게 한다. -->
+            {#if c.can_write}
+              {#each mineDraft.offers as offer (offer.key)}
+                <fieldset class="contents" disabled={savingMine}>
+                  <FormDraftOffer
+                    onrestore={() => {
+                      mineDraft.restore(offer);
+                    }}
+                    ondiscard={() => {
+                      mineDraft.discard(offer);
+                    }}
+                  />
+                </fieldset>
+              {/each}
+            {/if}
+            <fieldset class="min-w-0" disabled={savingMine || !c.can_write}>
               <form
                 class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
                 onsubmit={(ev: SubmitEvent) => {
@@ -1088,7 +1104,9 @@
                   <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
                   <Textarea id={`mine-note-${e.id}`} class="min-h-20" bind:value={mine.note} />
                 </div>
-                <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
+                {#if c.can_write}
+                  <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
+                {/if}
               </form>
             </fieldset>
           {/if}

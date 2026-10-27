@@ -218,7 +218,9 @@
       mineBase = base;
     },
     reset: resetMine,
-    dirty: () => openUnit !== undefined && JSON.stringify(mine) !== mineBase,
+    // 쓸 수 없으면(읽기 전용·보관) 폼은 읽기만 하므로 고친 것으로 치지 않는다(이탈 확인 없음, D3B-F-2 확인 필요 2).
+    dirty: () =>
+      plan?.can_write === true && openUnit !== undefined && JSON.stringify(mine) !== mineBase,
     busy: () => savingMine,
   });
   // 재배치 시작일·하루 단위 수는 조회가 아니라 작업 설정이라 다른 학습 폼처럼 남긴다(⑱).
@@ -289,6 +291,7 @@
         savingUnit = false;
         savingMine = false;
         adding = false;
+        replanning = false;
       }
     });
     let cancelled = false;
@@ -296,7 +299,7 @@
     Promise.all([api.studyPlan(id), api.studyParticipants(id, today)])
       .then(([p, list]) => {
         if (cancelled) return;
-        plan = p;
+        setPlan(p);
         participants = list;
       })
       .catch((e: unknown) => {
@@ -318,6 +321,16 @@
       error = errorText(e, m.study_action_failed());
       return false;
     }
+  }
+
+  /**
+   * 다시 읽은 계획을 넣는다. 그사이 쓸 수 없게 됐으면(역할 강등·보관) 연 내 진도 폼을 같은 갱신에서 닫는다. 폼 이름이
+   * 먼저 바뀌어야 form-draft가 쓸 수 없어 깨끗해진 폼으로 이 탭의 남긴 입력을 지우지 않는다(다시 열면 남긴 입력으로
+   * 고르게 하고, 쓸 수 있을 때 되살린다).
+   */
+  function setPlan(next: StudyPlanView): void {
+    if (plan?.can_write === true && !next.can_write) openUnit = undefined;
+    plan = next;
   }
 
   /** 서버의 지금 내 진도. 다른 탭·기기에서 바꾼 메모·분량·상태를 옛 화면 값으로 덮지 않게 바꾸기 직전에 읽는다. */
@@ -452,7 +465,7 @@
       return false;
     }
     if (!stillOwner()) return true;
-    plan = now;
+    setPlan(now);
     const latest = now.units.find((x) => x.id === base.id);
     if (latest === undefined) {
       error = m.common_error_not_found();
@@ -674,15 +687,16 @@
                   >
                 {/if}
               {/each}
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-expanded={openUnit === u.id}
-                onclick={() => {
-                  openMine(u);
-                }}>{m.study_mine()}</Button
-              >
             {/if}
+            <!-- 내 분량·메모는 쓸 수 없어도 볼 수 있다(남기기만 막는다, D3B-F-2). -->
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={openUnit === u.id}
+              onclick={() => {
+                openMine(u);
+              }}>{m.study_mine()}</Button
+            >
             <Button
               size="sm"
               variant="ghost"
@@ -815,20 +829,23 @@
               </form>
             </fieldset>
           {/if}
-          {#if openUnit === u.id && current.can_write}
-            {#each mineDraft.offers as offer (offer.key)}
-              <fieldset class="contents" disabled={savingMine}>
-                <FormDraftOffer
-                  onrestore={() => {
-                    mineDraft.restore(offer);
-                  }}
-                  ondiscard={() => {
-                    mineDraft.discard(offer);
-                  }}
-                />
-              </fieldset>
-            {/each}
-            <fieldset class="min-w-0" disabled={savingMine}>
+          {#if openUnit === u.id}
+            <!-- 쓸 수 없으면 저장 없이 읽기만 한다. 남긴 입력은 지우지 않고 쓸 수 있을 때 고르게 한다. -->
+            {#if current.can_write}
+              {#each mineDraft.offers as offer (offer.key)}
+                <fieldset class="contents" disabled={savingMine}>
+                  <FormDraftOffer
+                    onrestore={() => {
+                      mineDraft.restore(offer);
+                    }}
+                    ondiscard={() => {
+                      mineDraft.discard(offer);
+                    }}
+                  />
+                </fieldset>
+              {/each}
+            {/if}
+            <fieldset class="min-w-0" disabled={savingMine || !current.can_write}>
               <form
                 class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
                 onsubmit={(e: SubmitEvent) => {
@@ -854,7 +871,9 @@
                   <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
                   <Textarea id={`unit-note-${u.id}`} rows={2} bind:value={mine.note} />
                 </div>
-                <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
+                {#if current.can_write}
+                  <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
+                {/if}
               </form>
             </fieldset>
           {/if}
