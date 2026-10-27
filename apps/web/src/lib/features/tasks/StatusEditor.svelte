@@ -1,5 +1,4 @@
 <script lang="ts">
-  const editingUser = untrack(() => me.userId);
   import { onMount, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import type { StatusCategory, TaskStatusDefinition } from '@fvoci/api-client';
@@ -15,6 +14,7 @@
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
+  const editingUser = untrack(() => me.userId);
   const {
     itemId,
     statuses,

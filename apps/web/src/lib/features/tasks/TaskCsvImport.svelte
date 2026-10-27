@@ -1,6 +1,4 @@
 <script lang="ts">
-  const editingUser = untrack(() => me.userId);
-  import { me } from '$lib/me.svelte';
   // 업무 CSV 일괄 등록(D-39). 한 줄씩 기존 업무 만들기 API로 넣는다(같은 검증과 권한). 한 줄은 모든 칸을 실은 요청
   // 하나라(D-105) 서버가 한 트랜잭션에서 확인·저장하고, 거절된 줄은 아무것도 남기지 않는다. 줄마다 진행 상태를 기억해
   // 두어(csv-import.ts) 중간에 실패해도 다시 누르면 다 넣은 줄은 건너뛰고 나머지를 같은 요청 id로 보낸다(응답을 잃은 줄이
@@ -9,6 +7,7 @@
   import type { AssigneeView } from '$lib/api/client';
   import type { TaskStatusDefinition } from '@fvoci/api-client';
   import { untrack } from 'svelte';
+  import { me } from '$lib/me.svelte';
   import { org } from '$lib/org.svelte';
   import { router } from '$lib/router.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -44,6 +43,7 @@
   }
 
   const { itemId, statuses, onimported }: Props = $props();
+  const editingUser = untrack(() => me.userId);
 
   let text = $state('');
   let assignable = $state<AssigneeView[]>([]);
