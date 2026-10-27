@@ -145,8 +145,12 @@ fn removal(config: &Config, name: &'static str) -> Cookie<'static> {
     c
 }
 
+/// 같은 이름의 쿠키가 둘 이상 왔다(쿠키 주입 방지로 거부한다).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DuplicateCookie;
+
 /// 이름이 정확히 한 번 나온 쿠키 값. 없으면 `Ok(None)`, 둘 이상이면 오류.
-fn single_cookie(headers: &HeaderMap, name: &str) -> Result<Option<String>, ()> {
+fn single_cookie(headers: &HeaderMap, name: &str) -> Result<Option<String>, DuplicateCookie> {
     let mut found: Option<String> = None;
     for header in headers.get_all(COOKIE) {
         let Ok(raw) = header.to_str() else { continue };
@@ -156,7 +160,7 @@ fn single_cookie(headers: &HeaderMap, name: &str) -> Result<Option<String>, ()> 
             };
             if k == name {
                 if found.is_some() {
-                    return Err(());
+                    return Err(DuplicateCookie);
                 }
                 found = Some(v.to_owned());
             }
@@ -386,7 +390,7 @@ pub async fn callback(
         )));
     }
     let secret = single_cookie(&headers, login_cookie_name(&state.config))
-        .map_err(|()| AppError::BadRequest("duplicate login cookie".into()))?;
+        .map_err(|DuplicateCookie| AppError::BadRequest("duplicate login cookie".into()))?;
     let (Some(code), Some(returned_state), Some(secret)) = (query.code, query.state, secret) else {
         return Err(AppError::BadRequest("missing login state".into()));
     };
@@ -542,7 +546,7 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
         let state = SessionState::from_ref(state);
         let token = single_cookie(&parts.headers, state.cookie_name)
-            .map_err(|()| AppError::Unauthorized)?
+            .map_err(|DuplicateCookie| AppError::Unauthorized)?
             .ok_or(AppError::Unauthorized)?;
         let mut tx = state.db.begin_anonymous().await?;
         let user: Option<UserId> = sqlx::query_scalar("SELECT app_session_user($1)")
@@ -793,7 +797,10 @@ mod tests {
             Ok(Some("x".to_owned()))
         );
         headers.append(COOKIE, HeaderValue::from_static("fvoci_session=y"));
-        assert_eq!(single_cookie(&headers, "fvoci_session"), Err(()));
+        assert_eq!(
+            single_cookie(&headers, "fvoci_session"),
+            Err(DuplicateCookie)
+        );
         assert_eq!(single_cookie(&HeaderMap::new(), "fvoci_session"), Ok(None));
     }
 }
