@@ -246,11 +246,13 @@ describe('item profile status line', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('ignores the previous edit’s late error after cancel and a new edit', async () => {
+  // FC-8: 저장하는 동안 취소는 잠겨 있다(D-97). jsdom은 비활성 단추에도 click을 보내므로 "저장 중 취소 뒤 늦은 오류"는
+  // 브라우저에서 닿지 않는 경로였다. 닿는 경로는 늦은 실패가 열린 폼에 남고, 풀린 뒤의 취소·새 편집이 그 오류를 지우는 것이다.
+  it('keeps cancel locked while saving and clears the late error on cancel and a new edit', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
     vi.spyOn(api, 'assignable').mockResolvedValue([]);
     let fail: (e: Error) => void = () => undefined;
-    vi.spyOn(api, 'setItemProfile').mockImplementation(
+    const save = vi.spyOn(api, 'setItemProfile').mockImplementation(
       () =>
         new Promise((_resolve, reject) => {
           fail = reject;
@@ -259,11 +261,20 @@ describe('item profile status line', () => {
     render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
-    await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledOnce();
+    });
+    expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
     await act(() => {
       fail(new Error('late failure'));
     });
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '취소' })).not.toBeDisabled();
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    // 고친 칸이 없으므로 묻지 않고 닫는다.
+    expect(screen.queryByRole('button', { name: m.common_discard_confirm() })).toBeNull();
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

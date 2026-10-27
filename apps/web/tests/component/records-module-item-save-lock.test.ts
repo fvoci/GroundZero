@@ -3,9 +3,10 @@ import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemView, RecordKindView, RecordView } from '$lib/api/client';
+import type { DocumentView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
@@ -13,6 +14,8 @@ import { emptyForm } from '$lib/features/records/records';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { itemDocumentPath, router } from '$lib/router.svelte';
+import { ACCESS_DOCUMENT } from '../../stories/fixtures/access';
 import { openItemGroup, resetRoute } from './fixtures/item-groups';
 
 // R5 2차 delta 2묶음 훑기(코디네이터 2026-10-27)의 같은 부류: 저장을 기다리는 동안 입력·되살리기 제안이 열려 있어
@@ -90,6 +93,26 @@ function expectOfferLocked(): void {
   expect(screen.getByRole('button', { name: m.common_draft_discard() })).toBeDisabled();
 }
 
+// FC-13(D4-F-1과 같은 부류): 붙잡은 요청을 끝내 풀지 않으면 잠금 해제와 성공 반영을 보지 않는다. 요청을 성공으로 풀어
+// 한 번만 보냈는지, 결과가 반영됐는지, 다른 탭 제안과 입력이 다시 쓸 수 있는지 본다.
+function held<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((ok) => {
+    resolve = ok;
+  });
+  if (resolve === undefined) throw new Error('promise');
+  return { promise, resolve };
+}
+
+/** 저장이 끝난 뒤 다른 탭 제안과 대표 입력이 다시 쓸 수 있는지. */
+async function expectReleased(...inputs: (() => HTMLElement)[]): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: m.common_draft_restore() })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: m.common_draft_discard() })).not.toBeDisabled();
+    for (const input of inputs) expect(input()).not.toBeDisabled();
+  });
+}
+
 describe('records panel while a record is saved', () => {
   const risk: RecordKindView = {
     kind: 'risk',
@@ -140,13 +163,15 @@ describe('records panel while a record is saved', () => {
   it('locks the editor and the offer while a new record is created', async () => {
     recordServer([]);
     otherTabRecord('new');
-    const create = vi.spyOn(api, 'createRecord').mockReturnValue(new Promise(() => undefined));
+    const request = held<string>();
+    const create = vi.spyOn(api, 'createRecord').mockReturnValue(request.promise);
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(RecordsPanel, { item, kind: 'project', canWrite: true });
     await fireEvent.click(
       await screen.findByRole('button', { name: m.records_new_kind({ label: '위험' }) }),
     );
     const title = screen.getByLabelText<HTMLInputElement>(m.records_title());
-    await fireEvent.input(title, { target: { value: '새 위험' } });
+    await fireEvent.input(title, { target: { value: '추가한 위험' } });
     await fireEvent.click(
       screen.getByRole('button', { name: m.records_add_kind({ label: '위험' }) }),
     );
@@ -157,12 +182,30 @@ describe('records panel while a record is saved', () => {
     expect(title).toBeDisabled();
     expect(screen.getByLabelText(m.records_body())).toBeDisabled();
     expectOfferLocked();
+
+    vi.mocked(api.itemRecords).mockResolvedValue([
+      { ...record, id: 'r-new', title: '추가한 위험' },
+    ]);
+    request.resolve('r-new');
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.records_added({ label: '위험' }));
+    });
+    expect(create).toHaveBeenCalledOnce();
+    expect(await screen.findByText('추가한 위험')).toBeInTheDocument();
+    expect(screen.queryByLabelText(m.records_title())).toBeNull();
+    // 다른 탭 제안은 그 편집기를 열 때 보인다. 다시 열어 잠금이 풀렸는지 본다.
+    await fireEvent.click(
+      screen.getByRole('button', { name: m.records_new_kind({ label: '위험' }) }),
+    );
+    await expectReleased(() => screen.getByLabelText(m.records_title()));
   });
 
   it('locks the editor and the offer while a record edit is saved', async () => {
     recordServer([record]);
     otherTabRecord('r1');
-    const update = vi.spyOn(api, 'updateRecord').mockReturnValue(new Promise(() => undefined));
+    const request = held<number>();
+    const update = vi.spyOn(api, 'updateRecord').mockReturnValue(request.promise);
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(RecordsPanel, { item, kind: 'project', canWrite: true });
     await screen.findByText('일정 지연');
     await fireEvent.click(screen.getByRole('button', { name: m.records_edit() }));
@@ -175,6 +218,28 @@ describe('records panel while a record is saved', () => {
 
     expect(title).toBeDisabled();
     expectOfferLocked();
+
+    // 저장한 판(4)을 다시 읽어 다음 고치기의 기준 판으로 쓴다.
+    vi.mocked(api.itemRecords).mockResolvedValue([
+      { ...record, title: '일정 지연(고침)', version: 4 },
+    ]);
+    request.resolve(4);
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.records_updated({ label: '위험' }));
+    });
+    expect(update).toHaveBeenCalledOnce();
+    expect(update.mock.calls[0]?.[1]).toBe(3);
+    expect(await screen.findByText('일정 지연(고침)')).toBeInTheDocument();
+    expect(screen.queryByLabelText(m.records_title())).toBeNull();
+    // 다시 열면 다른 탭 제안과 입력이 풀려 있고, 다음 저장은 옮긴 기준 판(4)으로 나간다.
+    update.mockResolvedValue(5);
+    await fireEvent.click(screen.getByRole('button', { name: m.records_edit() }));
+    await expectReleased(() => screen.getByLabelText(m.records_title()));
+    await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]?.[1]).toBe(4);
   });
 });
 
@@ -189,7 +254,9 @@ describe('module settings while they are saved', () => {
     vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
     vi.spyOn(api, 'module').mockResolvedValue(mod);
     vi.spyOn(api, 'items').mockResolvedValue([]);
-    const update = vi.spyOn(api, 'updateModule').mockReturnValue(new Promise(() => undefined));
+    const request = held<Module>();
+    const update = vi.spyOn(api, 'updateModule').mockReturnValue(request.promise);
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(ModuleScreen, { workspace, moduleId: mod.id });
     const name = await screen.findByLabelText<HTMLInputElement>(m.modules_name());
     await fireEvent.input(name, { target: { value: '새 이름' } });
@@ -200,6 +267,14 @@ describe('module settings while they are saved', () => {
 
     expect(name).toBeDisabled();
     expectOfferLocked();
+
+    request.resolve({ ...mod, name: '새 이름' });
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.common_saved());
+    });
+    expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(mod.id, '새 이름', mod.key);
+    await expectReleased(() => screen.getByLabelText(m.modules_name()));
   });
 });
 
@@ -212,9 +287,8 @@ describe('item document template while the document is created', () => {
     vi.spyOn(api, 'documentTemplates').mockResolvedValue([
       { id: 't-1', title: '회의록 양식', reference: 'WIKI-1', personal: false },
     ]);
-    const create = vi
-      .spyOn(api, 'createItemDocument')
-      .mockReturnValue(new Promise(() => undefined));
+    const request = held<DocumentView>();
+    const create = vi.spyOn(api, 'createItemDocument').mockReturnValue(request.promise);
     render(ItemScreen, { workspace, itemId: item.id, workspaces: [workspace] });
     await openItemGroup('문서');
     const picker = await screen.findByLabelText(m.documents_template_label());
@@ -227,5 +301,17 @@ describe('item document template while the document is created', () => {
     });
 
     expect(picker).toBeDisabled();
+
+    // 만든 문서로 옮겨 간다. 경로 이동은 붙잡아 이 화면에서 잠금이 풀리는지 본다.
+    const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
+    request.resolve({ ...ACCESS_DOCUMENT, id: 'd-new', title: '새 문서' });
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(itemDocumentPath(workspace.id, item.id, 'd-new'));
+    });
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[2]).toBe('새 문서');
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.documents_template_label())).not.toBeDisabled();
+    });
   });
 });

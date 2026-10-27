@@ -74,7 +74,7 @@ export const RestoreDraftLarge: Story = {
   globals: { fontScale: '200', viewport: { value: 'narrow375' } },
 };
 
-/** 읽기 전용·보관 항목: 진도 단추는 없고, 내 메모·날짜는 저장 단추 없는 비활성 폼으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
+/** 읽기 전용·보관 항목: 진도 단추는 없고, 내 메모·날짜는 저장 단추 없는 읽기 전용(readonly) 칸으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
 export const ReadOnly: Story = {
   beforeEach: () => {
     spyOn(api, 'course').mockResolvedValue({ ...course, can_write: false });

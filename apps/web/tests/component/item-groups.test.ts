@@ -11,7 +11,14 @@ import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { org } from '$lib/org.svelte';
 import { me } from '$lib/me.svelte';
-import { itemDocumentPath, itemPath, itemViewPath, modulePath, router } from '$lib/router.svelte';
+import {
+  itemDocumentPath,
+  itemPath,
+  itemTaskPath,
+  itemViewPath,
+  modulePath,
+  router,
+} from '$lib/router.svelte';
 import { scopedKey } from '$lib/storage';
 import './fixtures/authenticated';
 
@@ -23,6 +30,7 @@ import './fixtures/authenticated';
 const ws = '11111111-1111-1111-1111-111111111111';
 const itemId = '22222222-2222-2222-2222-222222222222';
 const otherItemId = '55555555-5555-5555-5555-555555555555';
+const taskId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const moduleId = '44444444-4444-4444-4444-444444444444';
 
 const workspace: Workspace = {
@@ -336,6 +344,20 @@ describe('item screen groups and unsaved input', () => {
     await fireEvent.click(groupLink('문서'));
     expect(screen.getByLabelText<HTMLInputElement>('새 문서 제목').value).toBe('');
     expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+  });
+
+  // FC-11: 업무 상세 경로(`/tasks/board/t/:taskId`)도 같은 항목 화면 안이다(staysOnItem). 머리 폼은 마운트된 채라
+  // 묻지 않고 입력이 남는다.
+  it('keeps the header input unasked when opening a task detail of the same item', async () => {
+    await openItem('project', `${itemPath(ws, itemId)}/docs`);
+    const title = screen.getByLabelText<HTMLInputElement>('제목');
+    await fireEvent.input(title, { target: { value: '고친 제목' } });
+
+    router.navigate(itemTaskPath(ws, itemId, taskId));
+
+    await pathIs(itemTaskPath(ws, itemId, taskId));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByLabelText<HTMLInputElement>('제목').value).toBe('고친 제목');
   });
 
   it('asks about the header input when leaving for another item', async () => {
