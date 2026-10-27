@@ -114,6 +114,12 @@ export const NoOrganization: Story = {
     return cleanup;
   },
   play: async ({ canvasElement }) => {
+    // 조직을 고르라는 안내가 먼저 보여야 제목의 부재가 뜻이 있다(빈 화면이어도 통과하지 않게, R5 B 최종 FC-18).
+    await expect(
+      await within(canvasElement).findByText(
+        '이 화면은 현재 조직 범위입니다. 사이드바 위에서 조직을 고르세요.',
+      ),
+    ).toBeInTheDocument();
     await expect(within(canvasElement).queryByRole('heading')).toBeNull();
   },
 };
