@@ -54,3 +54,18 @@ it('uses the title when there is one and the general sentence for unknown kinds'
     m.home_activity_other({ who: '가람', target: '보고서' }),
   );
 });
+
+// 서버는 담당 해제 활동에 까닭을 남긴다(`detail.reason`, SQL app_drop_unseen_assignees). 멤버를 내보내 풀린 담당
+// (`app_remove_member_internal`의 'remove')만 그 문장이고, 다른 까닭(역할 변경·그룹 삭제 등)이나 까닭이 없으면 보통의
+// 담당 해제다(R5 B 최종 FC-20).
+it('tells a member removal apart from other unassignments', () => {
+  const unassign = { ...base, kind: 'unassign', detail: { title: '보고서' } };
+  expect(activityText({ ...unassign, detail: { title: '보고서', reason: 'remove' } })).toBe(
+    m.home_activity_member_removed({ who: '가람', target: '보고서' }),
+  );
+  for (const reason of ['role_change', 'group_deleted', 'organization_left'])
+    expect(activityText({ ...unassign, detail: { title: '보고서', reason } })).toBe(
+      m.home_activity_unassign({ who: '가람', target: '보고서' }),
+    );
+  expect(activityText(unassign)).toBe(m.home_activity_unassign({ who: '가람', target: '보고서' }));
+});

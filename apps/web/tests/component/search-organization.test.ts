@@ -64,6 +64,17 @@ it('shows organization scope and uses workspace_id only to narrow it', async () 
 it('does not search without an organization and discards an old organization response', async () => {
   const second = { ...TEST_ORGANIZATION, id: 'org-2', name: '다른 조직' };
   org.load('user-a', [TEST_ORGANIZATION, second], TEST_ORGANIZATION.id);
+  // 두 조직의 결과를 구별되게 둬, 옛 조직 응답이 늦게 와도 새 조직 결과를 덮지 않는지 본다(R5 B 최종 FC-16).
+  const found = (title: string): SearchResultView => ({
+    kind: 'document',
+    id: title,
+    title,
+    reference: null,
+    workspace_id: 'ws1',
+    item_id: null,
+    document_id: null,
+    snippet: null,
+  });
   let finish: (results: SearchResultView[]) => void = () => undefined;
   const search = vi
     .spyOn(api, 'search')
@@ -73,7 +84,7 @@ it('does not search without an organization and discards an old organization res
           finish = resolve;
         }),
     )
-    .mockResolvedValue([]);
+    .mockResolvedValue([found('다른 조직의 계획')]);
   render(SearchDialog, { open: true, memberOf: () => true });
   await fireEvent.input(await screen.findByRole('searchbox'), { target: { value: '계획' } });
   await waitFor(() => {
@@ -83,7 +94,11 @@ it('does not search without an organization and discards an old organization res
   await waitFor(() => {
     expect(search).toHaveBeenLastCalledWith(second.id, '계획', null, {});
   });
-  finish([]);
+  expect(await screen.findByText('다른 조직의 계획')).toBeVisible();
+  finish([found('옛 조직의 계획')]);
+  await new Promise((r) => setTimeout(r, 0));
+  expect(screen.queryByText('옛 조직의 계획')).toBeNull();
+  expect(screen.getByText('다른 조직의 계획')).toBeVisible();
   org.reset();
   expect(await screen.findByText(m.app_organization_required())).toBeVisible();
   expect(screen.getByRole('searchbox')).toBeDisabled();

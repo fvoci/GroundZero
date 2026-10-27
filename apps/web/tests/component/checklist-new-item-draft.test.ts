@@ -143,9 +143,9 @@ describe('checklist drafts', () => {
     expect(Object.keys(localStorage).filter((key) => key.includes('user-b'))).toEqual([]);
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: 'B 입력' } });
     resolve();
-    await waitFor(() => {
-      expect(screen.getByLabelText('새 항목')).toHaveValue('B 입력');
-    });
+    // A의 늦은 성공 처리가 끝난 뒤를 본다(첫 동기 검사는 처리 전에 이미 참이다, R5 B 최종 FC-17).
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByLabelText('새 항목')).toHaveValue('B 입력');
     me.userId = 'user-a';
     expect(await screen.findByTestId('checklist-new-item-draft-offer')).toHaveTextContent('A 입력');
     await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
