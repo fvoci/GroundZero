@@ -304,6 +304,16 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         StatusCode::FORBIDDEN,
         "CSV cannot be viewed inline, so it is a download"
     );
+    let writer_listed = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{doc_id}/files"),
+        Some(&writer),
+        None,
+    )
+    .await;
+    assert_eq!(writer_listed.json[0]["can_write"], true);
+    assert_eq!(writer_listed.json[0]["can_download"], false);
     assert_eq!(
         download(&app, &writer, &format!("/api/files/{file_id}/content"))
             .await
