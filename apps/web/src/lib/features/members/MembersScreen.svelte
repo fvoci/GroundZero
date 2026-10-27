@@ -54,10 +54,13 @@
     deleteError = undefined;
     try {
       await api.deleteWorkspace(workspace.id, deleteName);
-      // 지운 뒤의 이동을 이탈 경고가 막지 않게 한다.
+      // 지운 뒤의 이동을 이탈 경고가 막지 않게 한다. 삭제 이름의 가드는 아직 `deleting`(busy)이라 묻지 않고 막으므로
+      // 그 가드는 건너뛰고(`proceed`), 다른 입력 칸의 가드는 그대로 거친다(R5 delta F-1).
       deleteName = '';
       onchanged();
-      router.navigate('/trash');
+      deleteDraft.leave.proceed(() => {
+        router.navigate('/trash');
+      });
     } catch (e: unknown) {
       deleteError = errorText(e, m.members_delete_failed());
     } finally {

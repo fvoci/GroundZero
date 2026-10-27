@@ -113,8 +113,10 @@ describe('workspace delete confirmation name', () => {
   });
 
   it('does not warn when the delete succeeds and leaves the screen', async () => {
-    vi.spyOn(api, 'deleteWorkspace').mockResolvedValue('2026-11-26T00:00:00Z');
-    const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
+    // R5 delta F-1: 실제 라우터로 이동을 본다(navigate를 바꿔 끼우면 가드를 거치지 않아 막힌 이동을 놓쳤다).
+    window.history.replaceState(null, '', '/w/ws-1/members');
+    router.path = '/w/ws-1/members';
+    const deleted = vi.spyOn(api, 'deleteWorkspace').mockResolvedValue('2026-11-26T00:00:00Z');
     render(MembersScreen, { props });
     const input = await nameInput();
     await type(input, workspace.name);
@@ -122,10 +124,15 @@ describe('workspace delete confirmation name', () => {
     if (form === null) throw new Error('form');
     await fireEvent.submit(form);
     await vi.waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith('/trash');
+      expect(deleted).toHaveBeenCalledOnce();
     });
+    await vi.waitFor(() => {
+      expect(router.path).toBe('/trash');
+    });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(input).toHaveValue('');
     expect(unload()).toBe(false);
+    router.navigate('/');
   });
 
   it('keeps the name and the warning when the delete fails', async () => {
