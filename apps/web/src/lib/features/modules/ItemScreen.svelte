@@ -22,6 +22,7 @@
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+  import { readConfig } from '$lib/features/tasks/filters';
   import ItemEvents from '$lib/features/events/ItemEvents.svelte';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import TemplatePicker from '$lib/features/documents/TemplatePicker.svelte';
@@ -150,17 +151,44 @@
       if (route === undefined && chosen !== undefined && available.includes(chosen.group)) return;
       const start = available.find((g) => g === memory.group) ?? ITEM_GROUP_DEFAULT[kind];
       chosen = { group: start, view: lastView };
-      if (route !== undefined) router.replace(itemGroupPath(workspace.id, id, start, lastView));
+      if (route === undefined) return;
+      if (start !== 'tasks') {
+        router.replace(itemGroupPath(workspace.id, id, start));
+        return;
+      }
+      // 업무 묶음의 보기는 주소에 없으니 저장한 기본 보기 › 세션 순으로 정해 주소에 넣는다.
+      const at = router.path;
+      const mine = loadSeq;
+      void taskEntryView(id, lastView).then((view) => {
+        if (router.path !== at || !stillOn(id, mine)) return;
+        router.replace(itemGroupPath(workspace.id, id, 'tasks', view));
+      });
     });
   });
 
-  function selectGroup(next: ItemGroupName): void {
-    const view = chosen?.view ?? 'board';
-    const path = itemGroupPath(workspace.id, currentItemId, next, view);
+  /**
+   * 주소에 보기가 없이 업무 묶음에 들어갈 때(뿌리 경로·묶음 전환)의 업무 보기. 묶음 선택에는 저장한 보기가 없지만 업무 묶음
+   * 안의 보기는 URL > 저장한 보기 > 세션이다(D-121 개정 2026-10-27). 기본으로 표시한 저장 보기가 하나면 그 보기(업무 보드가
+   * 처음 열 때 고르는 규칙과 같다), 아니면 이 탭에서 마지막으로 본 보기, 없으면 보드다. 못 읽으면 세션 순으로 넘어간다.
+   */
+  async function taskEntryView(id: string, session: TaskViewName): Promise<TaskViewName> {
+    const views = await api.savedViews(id).catch(() => []);
+    const defaults = views.filter((v) => v.config.default === true);
+    const saved = defaults.length === 1 ? defaults[0] : undefined;
+    return saved === undefined ? session : readConfig(saved.config).view;
+  }
+
+  async function selectGroup(next: ItemGroupName): Promise<void> {
+    const id = currentItemId;
+    const mine = loadSeq;
+    const last = chosen?.view ?? 'board';
+    const view = next === 'tasks' ? await taskEntryView(id, last) : last;
+    if (!stillOn(id, mine)) return;
+    const path = itemGroupPath(workspace.id, id, next, view);
     router.navigate(path);
     if (router.path !== path) return;
     chosen = { group: next, view };
-    remember(currentItemId, chosen);
+    remember(id, chosen);
   }
   // 머리(정보·프로필·복제)는 묶음과 상관없이 마운트된 채다. 같은 항목 안에서 묶음·업무 보기만 바뀌면 그 입력은 남으므로
   // 묻지 않는다. 다른 항목·화면으로 가면 지금처럼 묻는다(코디네이터 지시 2026-10-27).
@@ -621,7 +649,7 @@
           href: itemGroupPath(workspace.id, current.id, g, chosen?.view),
         }))}
         current={group}
-        onselect={selectGroup}
+        onselect={(g) => void selectGroup(g)}
       />
       <div class="flex flex-col gap-6" data-item-group={group}>
         {#if group === 'references' || group === 'activities'}

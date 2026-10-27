@@ -3,7 +3,7 @@ import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemView } from '$lib/api/client';
+import type { ItemView, SavedViewView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
@@ -70,11 +70,28 @@ function itemOf(id: string): ItemView {
 }
 
 /** 묶음 안 패널의 나머지 요청은 끝나지 않게 둔다. 이 시험은 어느 묶음이 마운트되는지만 본다. */
-function server(kind: ModuleKind): void {
+function server(kind: ModuleKind, views: SavedViewView[] = []): void {
   vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
   vi.spyOn(api, 'item').mockImplementation((id: string) => Promise.resolve(itemOf(id)));
   vi.spyOn(api, 'module').mockResolvedValue(moduleOf(kind));
   vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
+  vi.spyOn(api, 'savedViews').mockResolvedValue(views);
+}
+
+/** 기본으로 표시한 저장 보기(업무 묶음 안의 보기·필터·정렬). */
+function savedDefault(view: 'list' | 'calendar'): SavedViewView {
+  return {
+    id: '66666666-6666-6666-6666-666666666666',
+    name: '내 기본 보기',
+    config: { view, sort: 'position', filter: {}, default: true },
+    version: 1,
+  };
+}
+
+async function pathIs(path: string): Promise<void> {
+  await waitFor(() => {
+    expect(window.location.pathname).toBe(path);
+  });
 }
 
 function goTo(path: string): void {
@@ -106,8 +123,12 @@ afterEach(() => {
   goTo('/');
 });
 
-async function openItem(kind: ModuleKind, path = itemPath(ws, itemId)): Promise<void> {
-  server(kind);
+async function openItem(
+  kind: ModuleKind,
+  path = itemPath(ws, itemId),
+  views: SavedViewView[] = [],
+): Promise<void> {
+  server(kind, views);
   goTo(path);
   render(ItemScreen, { props: { workspace, itemId, workspaces: [workspace] } });
   await screen.findByRole('navigation', { name: '항목 묶음' });
@@ -118,7 +139,7 @@ describe('item screen groups', () => {
     const before = window.history.length;
     await openItem('project');
 
-    expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'board'));
+    await pathIs(itemViewPath(ws, itemId, 'board'));
     expect(window.history.length).toBe(before);
     expect(groupLink('업무')).toHaveAttribute('aria-current', 'page');
     expect(
@@ -167,13 +188,46 @@ describe('item screen groups', () => {
     sessionStorage.setItem(groupKey(), JSON.stringify({ group: 'plan', view: 'board' }));
     await openItem('project');
 
-    expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'board'));
+    await pathIs(itemViewPath(ws, itemId, 'board'));
   });
 
   it('replaces a group path of another kind with the kind default', async () => {
     await openItem('project', `${itemPath(ws, itemId)}/references`);
 
-    expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'board'));
+    await pathIs(itemViewPath(ws, itemId, 'board'));
+  });
+
+  // 묶음 선택에는 저장한 보기가 없지만 업무 묶음 안의 보기는 URL > 저장한 보기 > 세션이다(D-121 개정 2026-10-27).
+  it('opens the tasks group on the saved default view over the session view', async () => {
+    sessionStorage.setItem(groupKey(), JSON.stringify({ group: 'tasks', view: 'gantt' }));
+    await openItem('project', itemPath(ws, itemId), [savedDefault('list')]);
+
+    await pathIs(itemViewPath(ws, itemId, 'list'));
+  });
+
+  it('opens the tasks group on the session view when there is no saved default view', async () => {
+    sessionStorage.setItem(groupKey(), JSON.stringify({ group: 'tasks', view: 'gantt' }));
+    await openItem('project');
+
+    await pathIs(itemViewPath(ws, itemId, 'gantt'));
+  });
+
+  it('keeps a view given in the address over the saved default view', async () => {
+    await openItem('project', itemViewPath(ws, itemId, 'calendar'), [savedDefault('list')]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'calendar'));
+    expect(screen.getByRole('button', { name: '달력' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('switches into the tasks group on the saved default view', async () => {
+    await openItem('project', `${itemPath(ws, itemId)}/docs`, [savedDefault('list')]);
+    const before = window.history.length;
+
+    await fireEvent.click(groupLink('업무'));
+
+    await pathIs(itemViewPath(ws, itemId, 'list'));
+    expect(window.history.length).toBe(before + 1);
   });
 
   it('switches groups with pushState, mounts only the chosen one and remembers it', async () => {
@@ -203,7 +257,7 @@ describe('item screen groups', () => {
     await fireEvent.click(groupLink('문서'));
     await fireEvent.click(groupLink('업무'));
 
-    expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'gantt'));
+    await pathIs(itemViewPath(ws, itemId, 'gantt'));
   });
 
   it('follows the address when popstate changes the group', async () => {
@@ -238,7 +292,8 @@ describe('item screen groups and unsaved input', () => {
 
     // 같은 항목 안의 업무 보기 전환도 같은 규칙이다.
     await fireEvent.click(groupLink('업무'));
-    await fireEvent.click(screen.getByRole('button', { name: '목록' }));
+    await pathIs(itemViewPath(ws, itemId, 'board'));
+    await fireEvent.click(await screen.findByRole('button', { name: '목록' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'list'));
     expect(screen.getByLabelText<HTMLInputElement>('제목').value).toBe('고친 제목');
@@ -426,6 +481,6 @@ describe('item group memory scope', () => {
     expect(org.currentId).toBe('org-1');
     await openItem('project');
 
-    expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'board'));
+    await pathIs(itemViewPath(ws, itemId, 'board'));
   });
 });
