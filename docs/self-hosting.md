@@ -288,7 +288,7 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --no-log-pre
 한계:
 
 - 앱과 Keycloak은 이 컴퓨터(`127.0.0.1`)에서만 듣고 http다. `FVOCI_LISTEN`·`KEYCLOAK_LISTEN`을 `0.0.0.0`으로 넓히지 않는다. 렐름은 `sslRequired: external`이라 사설망에서도 http를 받고, Keycloak은 앞단 프록시를 전제로 `X-Forwarded-*` 머리글을 믿는다.
-- 브라우저가 `*.localhost`를 이 컴퓨터이자 안전한 주소로 다뤄야 한다. Keycloak은 http에서도 `Secure` 쿠키를 쓰기 때문이다. 확인한 것은 Chromium 계열(Chrome·Edge)이다([직접 써 보기 7절](try-it.md)). 다른 브라우저에서 로그인 화면이 되풀이되면 Chromium 계열로 연다.
+- 브라우저가 `*.localhost`를 이 컴퓨터이자 안전한 주소로 다뤄야 한다. Keycloak은 http에서도 `Secure` 쿠키를 쓰기 때문이다. 확인한 것은 Chromium 계열 브라우저다([직접 써 보기 7절](try-it.md)). 다른 브라우저에서 로그인 화면이 되풀이되면 Chromium 계열로 연다.
 - 포트를 바꾸면 `KEYCLOAK_LISTEN`·`KEYCLOAK_URL`·`FVOCI_OIDC_ISSUER`의 포트와 `KEYCLOAK_PORT`를 모두 같은 값으로 둔다. `auth.localhost` 이름은 이 Compose 네트워크 안에서만 통한다.
 - 렐름 틀과 `admin` 계정은 Keycloak DB가 비어 있을 때 한 번만 만들어진다. 그 뒤 `.env`의 주소나 `KEYCLOAK_ADMIN_PASSWORD`를 바꿔도 Keycloak에는 반영되지 않으므로 관리 콘솔에서 고친다.
 - 메일 서버를 설정하지 않았으므로 Keycloak의 비밀번호 재설정 메일은 가지 않는다. 비밀번호를 잊으면 관리 콘솔에서 다시 정한다.
