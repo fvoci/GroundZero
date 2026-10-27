@@ -230,7 +230,7 @@ impl Lease {
             // 먼저 끝나도 아직 유효한 source 증거를 버리거나 닫힌 연결을 되살리지 않는다.
             let check = Check {
                 started,
-                snapshot: snapshot.clone(),
+                snapshot: Arc::clone(&snapshot),
             };
             let recorded = can_write && now < started + self.period;
             if recorded {
@@ -251,7 +251,7 @@ impl Lease {
             } else if state.can_write && !can_write {
                 state.closed = Some(Closed {
                     reason: CloseReason::AccessLost,
-                    snapshot: Some(snapshot.clone()),
+                    snapshot: Some(Arc::clone(&snapshot)),
                 });
             } else if state
                 .check

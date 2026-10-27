@@ -9,6 +9,7 @@
 //! 각 패키지가 함께 배포하는 LICENSE·NOTICE·COPYING 파일을 그대로 싣고, 그런 파일이 없으면 SPDX 원문을 부록에 싣는다.
 
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -82,31 +83,30 @@ fn render(root: &Path) -> Result<String> {
             let Some(license) = spdx::license_id(id) else {
                 continue;
             };
-            out.push_str(&format!(
-                "---- {id} ----\n\n{}\n\n",
-                normalize(license.text())
-            ));
+            let _ignored = write!(out, "---- {id} ----\n\n{}\n\n", normalize(license.text()));
         }
     }
     Ok(out)
 }
 
 fn section(out: &mut String, title: &str, packages: &[Package], missing: &mut BTreeSet<String>) {
-    out.push_str(&format!(
+    let _ignored = write!(
+        out,
         "==================== {title}: {} ====================\n\n",
         packages.len()
-    ));
+    );
     for p in packages {
-        out.push_str(&format!("---- {} {} ----\n", p.name, p.version));
-        out.push_str(&format!("License: {}\n", p.license));
+        let _ignored = writeln!(out, "---- {} {} ----", p.name, p.version);
+        let _ignored = writeln!(out, "License: {}", p.license);
         if !p.repository.is_empty() {
-            out.push_str(&format!("Source: {}\n", p.repository));
+            let _ignored = writeln!(out, "Source: {}", p.repository);
         }
         if spdx_ids(&p.license).iter().any(|id| id.starts_with("MPL-")) {
-            out.push_str(&format!(
-                "Source code of this version (MPL-2.0 section 3.2): {}\n",
+            let _ignored = writeln!(
+                out,
+                "Source code of this version (MPL-2.0 section 3.2): {}",
                 p.archive
-            ));
+            );
         }
         out.push('\n');
         if p.texts.is_empty() {
@@ -114,7 +114,7 @@ fn section(out: &mut String, title: &str, packages: &[Package], missing: &mut BT
             missing.extend(spdx_ids(&p.license));
         }
         for (file, text) in &p.texts {
-            out.push_str(&format!("[{file}]\n{}\n\n", text));
+            let _ignored = write!(out, "[{file}]\n{text}\n\n");
         }
     }
 }
@@ -262,20 +262,22 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
             FONTS.len()
         );
     }
-    out.push_str(&format!(
+    let _ignored = write!(
+        out,
         "==================== Fonts (web bundle): {} ====================\n\n",
         FONTS.len()
-    ));
+    );
     for font in FONTS {
-        out.push_str(&format!(
+        let _ignored = write!(
+            out,
             "---- {} ({}) ----\nLicense: OFL-1.1\nSource: {}\nSHA-256: {}\n{}\nLicense text: [{}] below\n\n",
             font.name, font.file, font.source, font.sha256, font.notice, font.license_file
-        ));
+        );
     }
     for license in &licenses {
         let text =
             fs::read_to_string(dir.join(license)).with_context(|| format!("read {license}"))?;
-        out.push_str(&format!("[{license}]\n{}\n\n", normalize(&text)));
+        let _ignored = write!(out, "[{license}]\n{}\n\n", normalize(&text));
     }
     Ok(())
 }

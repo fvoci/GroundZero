@@ -86,7 +86,9 @@ async fn target(
     .await
     .map_err(AppError::from_db_function)?;
     tx.commit().await?;
-    let next = activity.last().filter(|_| activity.len() == limit as usize);
+    let next = activity
+        .last()
+        .filter(|_| i32::try_from(activity.len()).is_ok_and(|n| n == limit));
     let (next_before, next_before_id) = (next.map(|a| a.created_at), next.map(|a| a.id));
     Ok(Json(ActivityPage {
         activity,
