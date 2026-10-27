@@ -485,9 +485,11 @@
             {/if}
           </div>
           <div class="flex flex-col gap-1">
+            <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 보내는 중에는 따로 잠근다. -->
             <span class="text-sm font-medium" id="time-manual-kind-label">{m.time_kind()}</span>
             <Select.Root
               type="single"
+              disabled={manualBusy}
               value={manual.kind}
               onValueChange={(v: string) => {
                 const k = TIME_KINDS.find((x) => x === v);
