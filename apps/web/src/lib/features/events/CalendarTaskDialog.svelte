@@ -236,15 +236,18 @@
       onsubmit={(e) => void submit(e)}
       novalidate
     >
+      <!-- 저장하는 동안 초안을 되살리면 생긴 업무를 버리고 새 요청 ID로 하나 더 만들었다(D2-F-1). 입력과 함께 잠근다. -->
       {#each draft.offers as offer (offer.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            draft.restore(offer);
-          }}
-          ondiscard={() => {
-            draft.discard(offer);
-          }}
-        />
+        <fieldset class="contents" disabled={busy}>
+          <FormDraftOffer
+            onrestore={() => {
+              draft.restore(offer);
+            }}
+            ondiscard={() => {
+              draft.discard(offer);
+            }}
+          />
+        </fieldset>
       {/each}
       {#if item !== undefined}
         <p class="text-sm">{m.events_task_in_item({ title: item.title })}</p>
