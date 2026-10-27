@@ -1771,6 +1771,41 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
 
 ALTER FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
+-- 공간(위키 p_workspace 또는 항목 p_item)에 템플릿으로 새 문서를 만들 때의 본문(D-27·D-114·D-115). 읽을 수 있는 템플릿이어야
+-- 하고, 템플릿 예외는 allow_copy만 넘는다: 공간 문서 템플릿은 복제처럼 같은 조직 공간에서만 쓰고 원본에 복제 감사를 남긴다.
+-- 개인 노트 대상은 이 함수를 거치지 않는다. 새 id 1: 원본 감사.
+CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_kind   text := CASE WHEN p_item IS NULL THEN 'workspace' ELSE 'item' END;
+    v_target uuid := coalesce(p_item, p_workspace);
+    v_src    documents%ROWTYPE;
+  BEGIN
+    SELECT * INTO v_src FROM documents WHERE id = p_template AND is_template AND deleted_at IS NULL;
+    IF v_src.id IS NULL OR app_access('document', p_template) = 'none' THEN
+      RAISE EXCEPTION 'template not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF (p_workspace IS NULL) = (p_item IS NULL) THEN
+      RAISE EXCEPTION 'choose a workspace or an item' USING ERRCODE = '22023';
+    END IF;
+    IF app_access(v_kind, v_target) = 'none' THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_src.workspace_id IS NOT NULL
+       AND app_target_organization('document', p_template) IS DISTINCT FROM app_target_organization(v_kind, v_target) THEN
+      RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
+    END IF;
+    PERFORM app_audit_document(app_id(p_ids, 1), p_template, 'copy',
+                               jsonb_build_object('target', 'workspace', 'template', true));
+    RETURN v_src.body;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+
 -- D-115: allow_copy가 꺼진 문서는 소유 권한 외 누구도(수정 권한 포함) 내보내거나 첨부를 내려받지 못한다.
 CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -13253,6 +13288,9 @@ REVOKE ALL ON FUNCTION fvoci.app_task_series_bound(p_series uuid) FROM PUBLIC;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_tasks_move_version() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) TO fvoci_app;
