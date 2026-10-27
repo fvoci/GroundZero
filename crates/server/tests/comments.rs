@@ -24,13 +24,17 @@ async fn comment(app: &Router, user: &TestUser, body: Value) -> (StatusCode, Val
     (r.status, r.json)
 }
 
+/// 내 알림. 초대 알림(`invite`, D-118)은 add_member의 가입 흐름이 남긴 것이라 댓글·기한 알림 시험의 대상이 아니므로 뺀다.
 async fn notes(app: &Router, user: &TestUser) -> Vec<Value> {
     send(app, Method::GET, "/api/me/notifications", Some(user), None)
         .await
         .json
         .as_array()
         .unwrap()
-        .clone()
+        .iter()
+        .filter(|n| n["kind"] != "invite")
+        .cloned()
+        .collect()
 }
 
 #[tokio::test]
@@ -39,8 +43,8 @@ async fn comments_threads_and_notifications_follow_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "댓글").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "회의록").await;
     let doc_id = doc["id"].as_str().unwrap();
@@ -54,10 +58,20 @@ async fn comments_threads_and_notifications_follow_access() {
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
 
-    // 독자도 댓글을 단다. 볼 수 없는 사람은 404.
+    // 읽기 전용은 댓글을 포함해 쓰지 않는다(D-20·D-112: 42501 → 403). 볼 수 없는 사람은 404. 관리자가 첫 댓글을 단다.
+    assert_eq!(
+        comment(
+            &app,
+            &reader,
+            json!({ "document_id": doc_id, "body": "안건 2는 다음 주로" })
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     let (status, first) = comment(
         &app,
-        &reader,
+        &admin,
         json!({ "document_id": doc_id, "body": "안건 2는 다음 주로" }),
     )
     .await;
@@ -74,21 +88,18 @@ async fn comments_threads_and_notifications_follow_access() {
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        comment(
-            &app,
-            &reader,
-            json!({ "document_id": doc_id, "body": "  " })
-        )
-        .await
-        .0,
+        comment(&app, &admin, json!({ "document_id": doc_id, "body": "  " }))
+            .await
+            .0,
         StatusCode::BAD_REQUEST
     );
     // 문서를 만든 사람에게 댓글 알림(자기 댓글은 알리지 않음).
     let n = notes(&app, &writer).await;
     assert_eq!(n[0]["kind"], "comment");
     assert_eq!(n[0]["excerpt"], "안건 2는 다음 주로");
-    assert_eq!(n[0]["actor_name"], "reader");
+    assert_eq!(n[0]["actor_name"], "admin");
     assert_eq!(n[0]["document_id"], doc["id"]);
+    assert!(notes(&app, &admin).await.is_empty());
     assert!(notes(&app, &reader).await.is_empty());
 
     // 답글은 한 단계. 스레드 참여자에게 답글 알림.
@@ -109,14 +120,15 @@ async fn comments_threads_and_notifications_follow_access() {
         .0,
         StatusCode::BAD_REQUEST
     );
-    assert_eq!(notes(&app, &reader).await[0]["kind"], "reply");
+    assert_eq!(notes(&app, &admin).await[0]["kind"], "reply");
+    assert!(notes(&app, &reader).await.is_empty());
 
-    // 목록: 첫 댓글 다음 답글. 권한 표시.
+    // 목록: 첫 댓글 다음 답글. 권한 표시는 쓴 사람 기준이고 읽기 전용도 목록은 본다.
     let list = send(
         &app,
         Method::GET,
         &format!("/api/documents/{doc_id}/comments"),
-        Some(&reader),
+        Some(&admin),
         None,
     )
     .await;
@@ -126,6 +138,22 @@ async fn comments_threads_and_notifications_follow_access() {
     assert_eq!(list[1]["parent_id"], first_id.as_str());
     assert_eq!(list[0]["can_edit"], true);
     assert_eq!(list[1]["can_edit"], false);
+    let seen_by_reader = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{doc_id}/comments"),
+        Some(&reader),
+        None,
+    )
+    .await;
+    assert_eq!(
+        seen_by_reader.status,
+        StatusCode::OK,
+        "{:?}",
+        seen_by_reader.json
+    );
+    assert_eq!(seen_by_reader.json.as_array().unwrap().len(), 2);
+    assert_eq!(seen_by_reader.json[0]["can_edit"], false);
     assert_eq!(
         send(
             &app,
@@ -139,7 +167,7 @@ async fn comments_threads_and_notifications_follow_access() {
         StatusCode::NOT_FOUND
     );
 
-    // 고치기는 쓴 사람만. 해결은 스레드를 연 사람이나 쓸 수 있는 사람.
+    // 고치기는 쓴 사람만. 해결은 쓸 수 있는 사람(읽기 전용은 스레드를 열 수도 해결할 수도 없다, D-20).
     let uri = format!("/api/comments/{first_id}");
     assert_eq!(
         send(
@@ -158,7 +186,7 @@ async fn comments_threads_and_notifications_follow_access() {
             &app,
             Method::PUT,
             &uri,
-            Some(&reader),
+            Some(&admin),
             Some(json!({ "body": "안건 2는 다다음 주로" }))
         )
         .await
@@ -171,6 +199,18 @@ async fn comments_threads_and_notifications_follow_access() {
             Method::POST,
             &format!("{uri}/resolve"),
             Some(&reader),
+            Some(json!({ "resolved": true }))
+        )
+        .await
+        .status,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(
+            &app,
+            Method::POST,
+            &format!("{uri}/resolve"),
+            Some(&writer),
             Some(json!({ "resolved": true }))
         )
         .await
@@ -254,13 +294,24 @@ async fn comments_threads_and_notifications_follow_access() {
     let today = time::OffsetDateTime::now_utc().date();
     let tomorrow = today.next_day().unwrap();
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "보고서", "description": "", "status": "todo", "priority": task["priority"],
+        "base_version": task["version"], "title": "보고서", "description": "", "status": "할 일", "priority": task["priority"],
         "start_date": null, "due_date": tomorrow.to_string(), "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    // 읽기 전용은 업무 댓글도 쓰지 못한다(D-20). 관리자의 댓글이 담당자(writer)에게 알림으로 간다.
+    assert_eq!(
+        comment(
+            &app,
+            &reader,
+            json!({ "task_id": task["id"], "body": "자료 첨부했어요" })
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     let (status, _) = comment(
         &app,
-        &reader,
+        &admin,
         json!({ "task_id": task["id"], "body": "자료 첨부했어요" }),
     )
     .await;
@@ -327,7 +378,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     let admin = login(&state, "admin").await;
     let old = create_workspace(&app, &admin, "옛 공간").await;
     let new = create_workspace(&app, &admin, "새 공간").await;
-    let (member, _) = add_member(&app, &state, &admin, &old, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &old, "member", "member").await;
     let doc = create_doc(&app, &admin, &old, "옮길 문서").await;
     let doc_id = doc["id"].as_str().unwrap().to_owned();
     let open = send(
@@ -381,15 +432,20 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
         Some(json!({ "target_workspace_id": new })),
     )
     .await;
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
-    let moved = send(
-        &app,
-        Method::POST,
-        &format!("/api/documents/{doc_id}/move"),
-        Some(&admin),
-        Some(json!({ "target_workspace_id": new, "acknowledged": ack })),
-    )
-    .await;
+    let moved = if preview.status.is_success() {
+        preview
+    } else {
+        // D-114: 확인은 사용자 id와 이동 전후 등급을 담은 변화 전체에 대해 한다.
+        let ack = json!({ "changes": preview.json["changes"] });
+        send(
+            &app,
+            Method::POST,
+            &format!("/api/documents/{doc_id}/move"),
+            Some(&admin),
+            Some(json!({ "target_workspace_id": new, "acknowledged": ack })),
+        )
+        .await
+    };
     assert!(moved.status.is_success(), "{:?}", moved.json);
     let gone = send(
         &app,
@@ -443,7 +499,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     );
 
     // 업무를 만든 사람이 담당자이기도 하면 댓글 알림은 한 번.
-    let (other, _) = add_member(&app, &state, &admin, &new, "other", "writer").await;
+    let (other, _) = add_member(&app, &state, &admin, &new, "other", "member").await;
     let module = send(
         &app,
         Method::POST,
@@ -482,7 +538,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     .await
     .json;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "내 업무", "description": "", "status": "todo", "priority": task["priority"],
+        "base_version": task["version"], "title": "내 업무", "description": "", "status": "할 일", "priority": task["priority"],
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [admin.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -550,7 +606,7 @@ async fn comments_in_an_archived_item_are_not_edited_or_resolved() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 댓글").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (_, item, task) = item_task(&app, &admin, &ws, "ARC").await;
     let (status, created) = comment(
         &app,
@@ -611,13 +667,13 @@ async fn due_notices_skip_tasks_in_an_archived_module() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 모듈 기한").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (m, _, task) = item_task(&app, &admin, &ws, "DUE").await;
     let task_id = task["id"].as_str().unwrap().to_owned();
     // 마감은 아직 멀다(다른 시험의 작업 실행이 먼저 알리지 않게).
     let later = time::OffsetDateTime::now_utc().date() + time::Duration::days(20);
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "보고서", "description": "", "status": "todo",
+        "base_version": task["version"], "title": "보고서", "description": "", "status": "할 일",
         "priority": task["priority"], "start_date": null, "due_date": later.to_string(), "estimate_minutes": null,
         "tags": [], "milestone": false, "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -655,7 +711,7 @@ async fn task_comments_follow_the_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "업무 댓글").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let m = send(
         &app,
         Method::POST,
@@ -745,8 +801,8 @@ async fn archived_items_let_authors_delete_only_their_own_comments() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 댓글 지우기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
     let outsider = login(&state, "outsider").await;
     let (module, item, task) = item_task(&app, &admin, &ws, "ARD").await;
     let mut ids = Vec::new();

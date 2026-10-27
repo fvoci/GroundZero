@@ -161,7 +161,7 @@ async fn dependencies_stay_in_one_item_reject_cycles_and_follow_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "선행").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "DEP").await;
     let other = module_item(&app, &admin, &ws, "OTH").await;
@@ -243,7 +243,7 @@ async fn moving_a_predecessor_previews_impact_and_shifts_only_approved_successor
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "재배치").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "SCH").await;
     let a = dated(&app, &admin, &item, "설계", "2026-10-01", "2026-10-05").await;
     let b = dated(&app, &admin, &item, "구현", "2026-10-06", "2026-10-08").await;
@@ -464,7 +464,7 @@ async fn existing_links_are_finish_to_start_and_stale_link_edits_conflict() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "관계 종류").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "KIND").await;
     let a = task(&app, &admin, &item, "A").await;
@@ -577,7 +577,7 @@ async fn changing_a_link_previews_causes_and_moves_approved_tasks_in_one_transac
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "관계 재배치").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "LNK").await;
     let a = dated(&app, &admin, &item, "설계", "2026-10-01", "2026-10-05").await;
     let b = dated(&app, &admin, &item, "구현", "2026-10-06", "2026-10-07").await;
@@ -824,7 +824,7 @@ async fn two_approvals_of_the_same_preview_save_once() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "동시 승인").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "TWO").await;
     let a = dated(&app, &admin, &item, "A", "2026-10-01", "2026-10-05").await;
     let b = dated(&app, &admin, &item, "B", "2026-10-06", "2026-10-07").await;
@@ -1302,7 +1302,7 @@ async fn link_edits_from_a_stale_view_conflict_instead_of_overwriting() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "관계 기준").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "BAS").await;
     let a = task(&app, &admin, &item, "A").await;
     let b = task(&app, &admin, &item, "B").await;

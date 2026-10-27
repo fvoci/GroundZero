@@ -21,8 +21,8 @@ use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
-    members, modules, public_links, records, recurrence, references, revisions, saved_views,
-    schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
+    members, modules, organizations, public_links, records, recurrence, references, revisions,
+    saved_views, schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -257,6 +257,7 @@ async fn api_not_found() -> AppError {
         workspaces::delete,
         workspaces::set_realtime,
         workspaces::deleted,
+        organizations::invite,
         workspaces::restore,
         workspaces::purge,
         documents::list_wiki,
@@ -307,8 +308,6 @@ async fn api_not_found() -> AppError {
         time_tracking::delete,
         time_tracking::revisions,
         time_tracking::summary,
-        time_tracking::set_sharing,
-        time_tracking::get_sharing,
         time_tracking::task_time,
         time_tracking::item_time,
         home::home,
@@ -437,6 +436,7 @@ async fn api_not_found() -> AppError {
         members::Invitation,
         members::ReceivedInvitation,
         members::Accepted,
+        members::InvitationTarget,
         members::OfferOwnership,
         members::Group,
         members::CreateGroup,
@@ -468,11 +468,11 @@ async fn api_not_found() -> AppError {
         documents::MoveTarget,
         documents::MoveDocument,
         documents::MovePreview,
+        documents::MoveAccessChange,
         documents::MoveConflict,
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        tasks::TaskStatus,
         tasks::TaskPriority,
         tasks::Assignee,
         tasks::ChecklistItem,
@@ -526,6 +526,7 @@ async fn api_not_found() -> AppError {
         time_tracking::Target,
         time_tracking::TimeEntry,
         time_tracking::StartTimer,
+        time_tracking::StartedTimer,
         time_tracking::TimerAction,
         time_tracking::TimerActionInput,
         time_tracking::EntryInput,
@@ -535,8 +536,6 @@ async fn api_not_found() -> AppError {
         time_tracking::TimeEntryRevision,
         time_tracking::SummaryGroup,
         time_tracking::TimeSummaryRow,
-        time_tracking::SetSharing,
-        time_tracking::Sharing,
         time_tracking::TaskTime,
         time_tracking::ItemTime,
         time_tracking::ItemTimeKind,
@@ -548,6 +547,9 @@ async fn api_not_found() -> AppError {
         home::MarkKind,
         home::MarkedTarget,
         home::Home,
+        organizations::OrgRole,
+        organizations::InviteOrganization,
+        organizations::OrganizationInvitation,
         home::UpNextCounts,
         home::SetMark,
         home::MarkState,
@@ -706,6 +708,10 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
+        .route(
+            "/organizations/{organization_id}/invitations",
+            post(organizations::invite),
+        )
         .route("/auth-info", get(accounts::auth_info))
         .route(
             "/workspaces",
@@ -900,10 +906,6 @@ pub fn router(state: AppState) -> Router {
             get(time_tracking::revisions),
         )
         .route("/me/time-summary", get(time_tracking::summary))
-        .route(
-            "/workspaces/{workspace_id}/time-sharing",
-            get(time_tracking::get_sharing).put(time_tracking::set_sharing),
-        )
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
         .route("/items/{item_id}/time", get(time_tracking::item_time))
         .route("/me/home", get(home::home))

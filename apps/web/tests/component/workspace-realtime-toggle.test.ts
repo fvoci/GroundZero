@@ -10,7 +10,14 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 const LABEL = '실시간 공동 편집(문서를 여럿이 동시에 고침)';
 
 function workspaceWith(realtime: boolean): Workspace {
-  return { id: 'ws-1', name: '공간', role: 'admin', is_owner: true, realtime_enabled: realtime };
+  return {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '공간',
+    role: 'admin',
+    is_owner: true,
+    realtime_enabled: realtime,
+  };
 }
 
 function checkbox(): HTMLInputElement {

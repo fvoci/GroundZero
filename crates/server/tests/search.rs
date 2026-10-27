@@ -44,6 +44,35 @@ fn client(state: &AppState) -> &SearchClient {
     state.search.as_ref().unwrap()
 }
 
+// D-111·D-112: 검색 대기열 전용 DB에서는 조직도 같은 DB에 준비한다.
+async fn fresh_workspace(app: &Router, user: &TestUser, db: &sqlx::PgPool, name: &str) -> String {
+    let mut tx = db.begin().await.unwrap();
+    sqlx::query("INSERT INTO fvoci.server_admins (user_id) VALUES ($1)")
+        .bind(user.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
+        .bind(user.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let organization: Uuid =
+        sqlx::query_scalar("SELECT fvoci.app_create_organization($1, $2, $3, $4)")
+            .bind(Uuid::now_v7())
+            .bind(name)
+            .bind(user.id.0)
+            .bind((0..3).map(|_| Uuid::now_v7()).collect::<Vec<_>>())
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    let r = send(app, Method::POST, "/api/workspaces", Some(user),
+        Some(json!({ "request_id": new_request_id(), "organization_id": organization, "name": name }))).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    r.json["id"].as_str().unwrap().to_owned()
+}
+
 async fn search(app: &Router, user: &TestUser, q: &str) -> Value {
     let r = send(
         app,
@@ -139,7 +168,7 @@ async fn search_returns_only_what_each_person_can_see() {
     let tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "검색").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let other_ws = create_workspace(&app, &outsider, "남의 공간").await;
 
@@ -609,7 +638,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let report = new_task(format!("{tok} 보고서")).await;
     new_task(format!("{tok} 기획")).await;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", report["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "done",
+        "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "완료",
         "priority": "none", "start_date": null, "due_date": "2026-11-05", "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [admin.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -645,7 +674,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     // 업무를 고친 내용(상태·담당·기한)이 색인에 반영될 때까지 기다린다(제목만으로는 알 수 없다).
     let report = format!("{tok} 보고서");
     for filter in [
-        "status=done",
+        "status=%EC%99%84%EB%A3%8C",
         "assignee=me",
         "from=2026-11-01&to=2026-11-30",
     ] {
@@ -659,6 +688,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         .await,
         [format!("{tok} 기획"), format!("{tok} 보고서")]
     );
+    // 상태는 항목별 정의의 이름이다(D-116): 모르는 이름은 400이 아니라 빈 결과다.
     let r = send(
         &app,
         Method::GET,
@@ -667,7 +697,8 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert!(found(format!("{tok}&status=late")).await.is_empty());
     let r = send(
         &app,
         Method::GET,
@@ -716,7 +747,14 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
     let plain_app = common::app(&plain);
     assert_eq!(
-        titles(&search(&plain_app, &admin, &format!("{tok}&status=done")).await),
+        titles(
+            &search(
+                &plain_app,
+                &admin,
+                &format!("{tok}&status=%EC%99%84%EB%A3%8C")
+            )
+            .await
+        ),
         [format!("{tok} 보고서")]
     );
     assert_eq!(
@@ -735,7 +773,7 @@ async fn author_and_title_only_narrow_results_without_widening_access() {
     let body_tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "작성자 검색").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let mine = create_doc(&app, &admin, &ws, &format!("{tok} 관리자 문서")).await;
     let saved = send(
         &app,
@@ -842,7 +880,7 @@ async fn item_records_are_searchable_by_people_who_see_the_item() {
     let field_tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "기록 검색").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let module = send(
         &app,
         Method::POST,
@@ -1040,7 +1078,7 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     };
 
     let admin_user = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin_user, "색인 작업").await;
+    let ws = fresh_workspace(&app, &admin_user, &owner, "색인 작업").await;
     let doc = common::create_doc(&app, &admin_user, &ws, "처음 제목").await;
     let id = doc["id"].as_str().unwrap().to_owned();
 
@@ -1167,7 +1205,7 @@ async fn drain_does_not_send_a_row_whose_generation_changed_after_the_claim() {
     fake.lock().unwrap().new_status = "succeeded".into();
 
     let user = login(&state, "admin").await;
-    let ws = create_workspace(&app, &user, "세대 재확인").await;
+    let ws = fresh_workspace(&app, &user, &owner, "세대 재확인").await;
     while drain(&state.db, &search, None).await.unwrap() > 0 {}
     let doc = common::create_doc(&app, &user, &ws, "세대가 바뀔 문서").await;
     let id = doc["id"].as_str().unwrap().to_owned();
@@ -1274,7 +1312,7 @@ async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
     let tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "공유 모듈").await;
-    let (reader, email) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, email) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let module = send(
         &app,
         Method::POST,
@@ -1306,12 +1344,14 @@ async fn a_document_shared_out_of_a_private_item_does_not_reveal_the_item() {
     .await;
     assert_eq!(doc.status, StatusCode::CREATED, "{:?}", doc.json);
     let doc_id = doc.json["id"].as_str().unwrap().to_owned();
+    // D-114: 개별 공유 행에 문서의 조직을 명시한다.
+    let organization = common::organization_of_workspace(&ws).await;
     let shared = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": email, "permission": "read" })),
+        Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
     assert!(shared.status.is_success(), "{:?}", shared.json);
@@ -1751,7 +1791,7 @@ async fn date_only_values_keep_their_day_and_timed_events_follow_the_viewer() {
     .await
     .json;
     let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", task["id"].as_str().unwrap()), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": due, "description": "", "status": "todo",
+        "base_version": task["version"], "title": due, "description": "", "status": "할 일",
         "priority": "none", "start_date": null, "due_date": "2026-10-21", "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
@@ -1846,9 +1886,9 @@ async fn an_author_filter_finds_results_beyond_the_old_candidate_window() {
     let tok = token();
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "작성자 창").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (decoy, _) = add_member(&app, &state, &admin, &ws, "decoy", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (decoy, _) = add_member(&app, &state, &admin, &ws, "decoy", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let target = format!("{tok} 대상 문서");
     let target_id = create_doc(&app, &writer, &ws, &target).await["id"]
         .as_str()

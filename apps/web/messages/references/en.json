@@ -19,6 +19,7 @@
   "references_notifications_empty": "No notifications.",
   "references_notifications_unread": "Unread",
   "references_notification_someone": "Someone",
+  "references_notification_invite": "{who} invited you. {target}",
   "references_notification_mention": "{who} mentioned you in {target}",
   "references_notification_comment": "{who} commented on {target}",
   "references_notification_reply": "{who} replied to a comment on {target}",

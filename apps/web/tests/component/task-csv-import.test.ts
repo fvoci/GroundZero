@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
-import { api, ApiError, NetworkError } from '$lib/api/client';
+import { api, ApiError, NetworkError, TASK_STATUSES } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
 import type { TaskRow } from '$lib/features/tasks/csv';
 import type { RowProgress } from '$lib/features/tasks/csv-import';
@@ -95,7 +95,9 @@ function fakeServer() {
             ? {}
             : {
                 description: fields.description,
-                status: fields.status,
+                // 가짜 서버: 상태 이름이 기본 세 이름이 아니면 todo 열로(1단계 소비자의 범주 대응과 같은 효과).
+                status: TASK_STATUSES.find((s) => s === fields.status) ?? 'todo',
+                status_name: fields.status,
                 priority: fields.priority,
                 start_date: fields.start_date,
                 due_date: fields.due_date,

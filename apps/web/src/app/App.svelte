@@ -346,7 +346,7 @@
             <DeletedWorkspaces onchanged={() => void reloadWorkspaces()} />
           </div>
         {:else if route.name === 'time'}
-          <TimeScreen workspaces={signedIn.workspaces} />
+          <TimeScreen />
         {:else if route.name === 'shared'}
           <SharedScreen />
         {:else if route.name === 'standalone-document'}

@@ -55,10 +55,10 @@ async fn private_items_open_to_their_members_only() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 멤버").await;
-    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
-    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
-    let (viewer, _) = add_member(&app, &state, &admin, &ws, "viewer", "reader").await;
-    let (grouped, _) = add_member(&app, &state, &admin, &ws, "grouped", "writer").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "member").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "member").await;
+    let (viewer, _) = add_member(&app, &state, &admin, &ws, "viewer", "readonly").await;
+    let (grouped, _) = add_member(&app, &state, &admin, &ws, "grouped", "member").await;
     let outsider = login(&state, "outsider").await;
     let m = module(&app, &admin, &ws, "project", "PRJ").await;
     let it = item(&app, &owner, &m, "비공개 프로젝트").await;
@@ -174,7 +174,7 @@ async fn private_items_open_to_their_members_only() {
     );
     // 업무 담당으로 지정.
     let assigned = send(&app, Method::PUT, &format!("/api/tasks/{}", task.json["id"].as_str().unwrap()), Some(&owner), Some(json!({
-        "base_version": task.json["version"], "title": "함께 할 일", "description": "", "status": "todo", "priority": "none",
+        "base_version": task.json["version"], "title": "함께 할 일", "description": "", "status": "할 일", "priority": "none",
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [mate.id.0] }))).await;
     assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);
@@ -266,7 +266,7 @@ async fn profile_fields_follow_the_module_kind() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 정보").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let research = module(&app, &admin, &ws, "research", "RES").await;
     let hobby = module(&app, &admin, &ws, "hobby", "HOB").await;
     let r = item(&app, &admin, &research, "학습 동기 연구").await;
@@ -379,9 +379,9 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 복제").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let p1 = module(&app, &admin, &ws, "project", "ONE").await;
     let p2 = module(&app, &admin, &ws, "project", "TWO").await;
     let research = module(&app, &admin, &ws, "research", "RES").await;
@@ -418,7 +418,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     let b = task("구현", None).await;
     let b_id = b["id"].as_str().unwrap().to_owned();
     let done = send(&app, Method::PUT, &format!("/api/tasks/{a_id}"), Some(&writer), Some(json!({
-        "base_version": a["version"], "title": "설계", "description": "", "status": "done", "priority": "high",
+        "base_version": a["version"], "title": "설계", "description": "", "status": "완료", "priority": "high",
         "start_date": null, "due_date": "2026-11-01", "estimate_minutes": 120, "tags": ["ux"], "milestone": false,
         "assignee_ids": [writer.id.0] }))).await;
     assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
@@ -561,7 +561,9 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         na["reference"].as_str().unwrap().starts_with("TWO-"),
         "{na:?}"
     );
-    assert_eq!(na["status"], "todo");
+    assert_eq!(na["status"], "할 일");
+    // D-116: 새로 시작하는 사본은 상태 이름과 범주를 함께 초기화한다.
+    assert_eq!(na["status_category"], "todo");
     assert!(na["due_date"].is_null());
     assert_eq!(na["priority"], "high");
     assert_eq!(na["estimate_minutes"], 120);
@@ -615,7 +617,8 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         .find(|t| t["title"] == "설계")
         .unwrap()
         .clone();
-    assert_eq!(design["status"], "done");
+    assert_eq!(design["status"], "완료");
+    assert_eq!(design["status_category"], "done");
     assert_eq!(design["due_date"], "2026-11-01");
 
     // 템플릿 표시는 쓸 수 있는 사람이, 목록에 보인다.
@@ -671,8 +674,8 @@ async fn group_changes_and_leaving_end_item_roles() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "그룹 정리").await;
-    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
-    let (grouped, email) = add_member(&app, &state, &admin, &ws, "grouped", "writer").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "member").await;
+    let (grouped, email) = add_member(&app, &state, &admin, &ws, "grouped", "member").await;
     let m = module(&app, &admin, &ws, "project", "GRP").await;
     let it = item(&app, &owner, &m, "비공개").await;
     let item_uri = format!("/api/items/{it}");
@@ -738,7 +741,7 @@ async fn group_changes_and_leaving_end_item_roles() {
         assert_eq!(p.status, StatusCode::NO_CONTENT, "{:?}", p.json);
         let t = send(&app, Method::GET, &task_uri, Some(&owner), None).await;
         let a = send(&app, Method::PUT, &task_uri, Some(&owner), Some(json!({
-            "base_version": t.json["version"], "title": "할 일", "description": "", "status": "todo",
+            "base_version": t.json["version"], "title": "할 일", "description": "", "status": "할 일",
             "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [],
             "milestone": false, "assignee_ids": [grouped.id.0] }))).await;
         assert_eq!(a.status, StatusCode::OK, "{:?}", a.json);
@@ -778,8 +781,13 @@ async fn group_changes_and_leaving_end_item_roles() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
+    // D-114: 같은 이름이 아니라 그룹 구성원의 id와 이동 후 등급으로 접근 유지를 검사한다.
     assert!(
-        !preview.json["loses"].to_string().contains("grouped"),
+        preview.json["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["user_id"] != json!(grouped.id.0) || row["to_grade"] == "write"),
         "{:?}",
         preview.json
     );
@@ -842,7 +850,7 @@ async fn group_changes_and_leaving_end_item_roles() {
         Method::POST,
         &format!("/api/workspaces/{ws}/invitations"),
         Some(&admin),
-        Some(json!({ "email": email, "role": "writer" })),
+        Some(json!({ "email": email, "role": "member" })),
     )
     .await;
     let accepted = send(
@@ -966,8 +974,8 @@ async fn stale_profile_saves_are_refused_with_the_latest() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "정보 판").await;
-    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "writer").await;
-    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "writer").await;
+    let (owner, _) = add_member(&app, &state, &admin, &ws, "owner", "member").await;
+    let (mate, _) = add_member(&app, &state, &admin, &ws, "mate", "member").await;
     let m = module(&app, &admin, &ws, "research", "PVER").await;
     let it = item(&app, &owner, &m, "연구").await;
     let uri = format!("/api/items/{it}/profile");

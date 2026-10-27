@@ -52,7 +52,7 @@
   // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
   const restrictOnly = $derived(!isOwner && doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
-  const writable = $derived(workspaces.filter((w) => w.role !== 'reader'));
+  const writable = $derived(workspaces.filter((w) => w.role !== 'readonly'));
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function fail(e: unknown): void {
@@ -443,8 +443,9 @@
       </Dialog.Header>
       <ul class="flex flex-col gap-1" data-testid="share-list">
         {#each shares as s (s.id)}
+          {@const recipient = s.email ?? s.display_name}
           <li class="flex flex-wrap items-center gap-2 text-sm">
-            <span>{s.email}</span>
+            <span>{recipient}</span>
             <span class="text-muted-foreground"
               >{s.permission === 'write'
                 ? m.documents_permission_write()
@@ -453,7 +454,7 @@
             {#if asking?.kind === 'share' && asking.id === s.id}
               <span class="ml-auto flex flex-wrap items-center gap-1">
                 <span id="share-revoke-warning"
-                  >{m.documents_unshare_confirm({ email: s.email })}</span
+                  >{m.documents_unshare_confirm({ email: recipient })}</span
                 >
                 <Button
                   size="sm"
@@ -724,15 +725,32 @@
         </Select.Root>
       </div>
       {#if preview !== undefined}
+        {@const gains = preview.changes
+          .filter((c) => c.change === 'gain')
+          .map((c) => c.display_name)}
+        {@const loses = preview.changes
+          .filter((c) => c.change === 'lose')
+          .map((c) => c.display_name)}
+        {@const regraded = preview.changes.filter((c) => c.change === 'change')}
         <div class="grid gap-2 text-sm md:grid-cols-2" data-testid="move-preview">
           <div>
             <h3 class="font-semibold">{m.documents_move_gains()}</h3>
-            <p>{preview.gains.length === 0 ? m.documents_none() : preview.gains.join(', ')}</p>
+            <p>{gains.length === 0 ? m.documents_none() : gains.join(', ')}</p>
           </div>
           <div>
             <h3 class="font-semibold">{m.documents_move_loses()}</h3>
-            <p>{preview.loses.length === 0 ? m.documents_none() : preview.loses.join(', ')}</p>
+            <p>{loses.length === 0 ? m.documents_none() : loses.join(', ')}</p>
           </div>
+          {#if regraded.length > 0}
+            <div class="md:col-span-2">
+              <h3 class="font-semibold">{m.documents_move_changes()}</h3>
+              <p>
+                {regraded
+                  .map((c) => `${c.display_name} (${c.from_grade ?? '—'} → ${c.to_grade ?? '—'})`)
+                  .join(', ')}
+              </p>
+            </div>
+          {/if}
         </div>
         {#if preview.history_moves_with_document}
           <p class="text-sm text-muted-foreground">

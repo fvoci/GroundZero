@@ -23,8 +23,6 @@ describe('time panels', () => {
       .mockResolvedValue({
         estimate_minutes: 60,
         mine_seconds: 1800,
-        shared_seconds: 0,
-        shared_people: 0,
       });
     render(TaskTimePanel, { props: { taskId: 't-1' } });
 

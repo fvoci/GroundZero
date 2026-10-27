@@ -1,8 +1,8 @@
 //! 문서: 위키 문서와 개인 노트, 저장, 공유, 복제, 이동.
 //!
 //! 한 문서 엔진을 쓴다. 문서는 워크스페이스 소유(위키) 또는 사용자 소유(개인 노트) 중 하나다 (D-59).
-//! 접근 판정은 DB 함수 `app_document_access`(owner·write·read·없음) 하나로 하고, RLS와 이 모듈이 같은 함수를
-//! 쓴다(`migrations/202610230001_initial_state.sql`의 `app_document_access`).
+//! 접근 판정은 DB 함수 `app_access`(owner·write·read·없음) 하나로 하고, RLS와 이 모듈이 같은 함수를
+//! 쓴다(`migrations/202610250001_initial_state.sql`의 `app_access`).
 //!
 //! 저장 경계 (D-62): 본문은 Tiptap JSON(`schema_version` 1)이며 저장할 때마다 리비전이 하나 늘어난다.
 //! 이것은 JSON 리비전 저장이고 공동 편집이 아니다. CRDT 도입 시 상태 열을 `body` 옆에 추가하며
@@ -28,7 +28,7 @@ use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
 use crate::http::cache;
-use crate::ids::{DocumentId, ItemId, UserId, WorkspaceId};
+use crate::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
@@ -60,20 +60,16 @@ impl Access {
 
 /// 현재 사용자의 권한. 볼 수 없으면 `None`.
 pub async fn access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    let raw: Option<String> = sqlx::query_scalar("SELECT app_document_access($1)")
+    let raw: String = sqlx::query_scalar("SELECT app_access('document', $1)")
         .bind(id)
         .fetch_one(tx.conn())
         .await?;
-    Ok(raw.as_deref().and_then(Access::parse))
+    Ok(Access::parse(&raw))
 }
 
-/// 보관 상한을 뺀 권한. 노출을 줄이는 관리 화면(공유·공개 링크 목록)에만 쓴다.
+/// 공유·공개 링크 관리도 현재 문서 접근 등급을 따른다.
 pub async fn manager_access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    let raw: Option<String> = sqlx::query_scalar("SELECT app_document_base_access($1)")
-        .bind(id)
-        .fetch_one(tx.conn())
-        .await?;
-    Ok(raw.as_deref().and_then(Access::parse))
+    access(tx, id).await
 }
 
 /// 문서 목록 항목.
@@ -395,12 +391,12 @@ pub(crate) struct DocRow {
 /// 참조 문자열은 저장하지 않고 현재 키로 만든다(키가 바뀌어도 번호·id는 그대로, D-18).
 /// 항목 id는 그 항목을 볼 수 있는 사람에게만 준다(공유로만 문서를 보는 사람에게 비공개 항목을 드러내지 않는다).
 const DOC_COLUMNS: &str = "id, workspace_id, \
-    CASE WHEN app_item_access(item_id) IS NOT NULL THEN item_id END AS item_id, \
-    CASE WHEN app_document_access(parent_id) IS NOT NULL THEN parent_id END AS parent_id, placement, \
+    CASE WHEN app_access('item', item_id) <> 'none' THEN item_id END AS item_id, \
+    CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id, placement, \
     app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
-    visibility, allow_copy, coalesce(app_document_base_access(id) = 'owner', false) AS can_manage, \
-    coalesce(app_document_access(id) = 'owner' \
-      OR (app_document_access(id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
+    visibility, allow_copy, coalesce(app_access('document', id) = 'owner', false) AS can_manage, \
+    coalesce(app_access('document', id) = 'owner' \
+      OR (app_access('document', id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
     is_template, app_document_realtime(id) AS realtime, app_document_can_export(id) AS can_export";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
@@ -465,7 +461,7 @@ pub(crate) async fn load_with_access(
 /// 목록 조회 열. `SummaryRow`와 순서가 같다.
 /// 목록 조회 열. `SummaryRow`와 순서가 같다. 부모는 볼 수 있을 때만 준다(아니면 그 문서는 최상위로 보인다).
 pub(crate) const SUMMARY_COLUMNS: &str = "id, app_document_reference(id) AS reference, title, revision, \
-    updated_at, CASE WHEN app_document_access(parent_id) IS NOT NULL THEN parent_id END AS parent_id";
+    updated_at, CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id";
 
 /// 트리 순서. 같은 부모 아래에서 위치, 같으면 번호·만든 순서.
 pub(crate) const TREE_ORDER: &str = "position, number NULLS LAST, created_at, id";
@@ -535,9 +531,15 @@ pub async fn create_wiki(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let role = member_role(&mut tx, ws).await?;
-        if !role.can_write() {
-            return Err(AppError::Forbidden);
+        let grade: String = sqlx::query_scalar("SELECT app_access('workspace', $1)")
+            .bind(ws)
+            .fetch_one(tx.conn())
+            .await?;
+        // 볼 수 없는 워크스페이스는 404(존재를 드러내지 않음), 읽기만 되면 403(D-113).
+        match grade.as_str() {
+            "owner" | "write" => {}
+            "none" => return Err(AppError::NotFound),
+            _ => return Err(AppError::Forbidden),
         }
         let body = initial_body(&mut tx, input.template_id).await?;
         let id: DocumentId =
@@ -549,7 +551,7 @@ pub async fn create_wiki(
                 .bind(body)
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
-                .bind(new_ids(3))
+                .bind(new_ids(4))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
@@ -803,6 +805,12 @@ pub async fn save(
     // 잠그기 전에 권한을 판정한다(읽기 권한만 있으면 잠글 수 없고, 403과 404를 구분해야 한다).
     let access = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
     if !access.can_write() {
+        // 쓸 수 없는 이유(권한 부족 403, 보관된 항목 409)는 SQL이 정한다(D-113·D-106).
+        sqlx::query("SELECT app_require_document($1, 'write')")
+            .bind(id)
+            .execute(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
         return Err(AppError::Forbidden);
     }
     let current = load_for_update(&mut tx, id)
@@ -1042,11 +1050,14 @@ pub async fn set_settings(
 }
 
 /// 공유 항목.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Share {
+    pub organization_id: OrganizationId,
+    pub grantee_user_id: UserId,
+    pub display_name: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
-    pub email: String,
+    pub email: Option<String>,
     /// `read` 또는 `write`.
     pub permission: String,
 }
@@ -1054,6 +1065,7 @@ pub struct Share {
 /// 공유 추가 요청. 같은 이메일이면 권한을 바꾼다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateShare {
+    pub organization_id: Option<OrganizationId>,
     pub email: String,
     /// `read` 또는 `write`.
     pub permission: String,
@@ -1075,23 +1087,15 @@ pub async fn list_shares(
         Some(Access::Owner) => {}
         Some(_) => return Err(AppError::Forbidden),
     }
-    let rows: Vec<(Uuid, String, String)> = sqlx::query_as(
-        "SELECT id, grantee_email, permission FROM document_shares
-         WHERE document_id = $1 ORDER BY created_at",
+    let rows: Vec<Share> = sqlx::query_as(
+        "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission FROM document_shares s
+         JOIN users u ON u.id = s.grantee_user_id WHERE s.document_id = $1 ORDER BY s.created_at",
     )
     .bind(id)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|(id, email, permission)| Share {
-                id,
-                email,
-                permission,
-            })
-            .collect(),
-    ))
+    Ok(Json(rows))
 }
 
 /// 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.
@@ -1107,23 +1111,24 @@ pub async fn create_share(
 ) -> Result<(StatusCode, Json<Share>), AppError> {
     let email = crate::features::members::validate_email(&input.email)?;
     let mut tx = state.db.begin_as(user).await?;
-    let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4)")
+    let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4, $5)")
         .bind(id)
         .bind(&email)
         .bind(&input.permission)
+        .bind(input.organization_id)
         .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
+    let share: Share = sqlx::query_as(
+        "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission
+         FROM document_shares s JOIN users u ON u.id = s.grantee_user_id WHERE s.id = $1",
+    )
+    .bind(share_id)
+    .fetch_one(tx.conn())
+    .await?;
     tx.commit().await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(Share {
-            id: share_id,
-            email,
-            permission: input.permission,
-        }),
-    ))
+    Ok((StatusCode::CREATED, Json(share)))
 }
 
 /// 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.
@@ -1178,7 +1183,7 @@ pub async fn copy(
         .bind(input.request_id)
         .bind(input.target_workspace_id)
         .bind(&title)
-        .bind(new_ids(3))
+        .bind(new_ids(4))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -1210,18 +1215,26 @@ pub struct MoveDocument {
     pub acknowledged: Option<AcknowledgedPreview>,
 }
 
+/// 사용자별 접근 등급 변화. 새 접근이나 회수에서는 한쪽 등급이 없다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct MoveAccessChange {
+    pub change: String,
+    pub user_id: UserId,
+    pub display_name: String,
+    pub from_grade: Option<String>,
+    pub to_grade: Option<String>,
+}
+
 /// 사용자가 확인한 접근 변화.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct AcknowledgedPreview {
-    pub gains: Vec<String>,
-    pub loses: Vec<String>,
+    pub changes: Vec<MoveAccessChange>,
 }
 
 /// 이동 미리보기: 접근이 생기는 사람과 사라지는 사람.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MovePreview {
-    pub gains: Vec<String>,
-    pub loses: Vec<String>,
+    pub changes: Vec<MoveAccessChange>,
     /// 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18).
     pub reference_changes: bool,
     /// 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
@@ -1260,15 +1273,14 @@ async fn preview(
     target: Option<WorkspaceId>,
     item: Option<ItemId>,
 ) -> Result<MovePreview, AppError> {
-    let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT change, display_name FROM app_move_preview($1, $2, $3)")
+    let changes: Vec<MoveAccessChange> =
+        sqlx::query_as("SELECT change, user_id, display_name, from_grade, to_grade FROM app_move_preview($1, $2, $3)")
             .bind(id)
             .bind(target)
             .bind(item)
             .fetch_all(tx.conn())
             .await
             .map_err(AppError::from_db_function)?;
-    let (gains, loses): (Vec<_>, Vec<_>) = rows.into_iter().partition(|(c, _)| c == "gain");
     let keeps_number: bool = sqlx::query_scalar("SELECT app_move_keeps_number($1, $2, $3)")
         .bind(id)
         .bind(target)
@@ -1291,8 +1303,7 @@ async fn preview(
     .fetch_one(tx.conn())
     .await?;
     Ok(MovePreview {
-        gains: gains.into_iter().map(|(_, n)| n).collect(),
-        loses: loses.into_iter().map(|(_, n)| n).collect(),
+        changes,
         reference_changes: !keeps_number,
         active_public_links,
         children_left_behind,
@@ -1442,12 +1453,10 @@ pub(crate) async fn move_in_db(
     // 잠근 뒤 미리보기를 다시 계산해 사용자가 확인한 것과 같을 때만 옮긴다.
     let current = preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
     let confirmed = input.acknowledged.as_ref().is_some_and(|ack| {
-        let mut a = (ack.gains.clone(), ack.loses.clone());
-        let mut b = (current.gains.clone(), current.loses.clone());
-        a.0.sort();
-        a.1.sort();
-        b.0.sort();
-        b.1.sort();
+        let mut a = ack.changes.clone();
+        let mut b = current.changes.clone();
+        a.sort_by_key(|change| change.user_id.0);
+        b.sort_by_key(|change| change.user_id.0);
         a == b
     });
     if !confirmed {

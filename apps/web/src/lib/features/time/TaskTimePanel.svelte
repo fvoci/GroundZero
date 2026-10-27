@@ -96,14 +96,6 @@
           time.estimate_minutes === null ? m.time_none() : durationText(time.estimate_minutes * 60),
         mine: durationText(time.mine_seconds + (runningHere ? timer.seconds : 0)),
       })}
-      {#if time.shared_people > 0}
-        {m.time_task_shared({
-          total: m.time_with_people({
-            total: durationText(time.shared_seconds),
-            count: time.shared_people,
-          }),
-        })}
-      {/if}
     </p>
   {/if}
   {#if loadError !== undefined}

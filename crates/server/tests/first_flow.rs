@@ -25,7 +25,10 @@ async fn workspace_create_is_idempotent_and_listed() {
     let app = common::app(&state);
     let alice = login(&state, "alice").await;
     let request_id = new_request_id();
-    let body = json!({ "request_id": request_id, "name": "  연구실  " });
+    // 워크스페이스는 조직 안에 만든다(D-111).
+    let organization = common::organization_for(&alice).await;
+    let body =
+        json!({ "request_id": request_id, "organization_id": organization, "name": "  연구실  " });
 
     let first = send(
         &app,
@@ -372,18 +375,20 @@ async fn input_validation_and_origin_and_session_failures() {
     )
     .await;
     assert_eq!(bad_body.status, StatusCode::BAD_REQUEST);
+    let organization = common::organization_for(&alice).await;
     let empty_title = send(
         &app,
         Method::POST,
         "/api/workspaces",
         Some(&alice),
-        Some(json!({ "request_id": new_request_id(), "name": "   " })),
+        Some(json!({ "request_id": new_request_id(), "organization_id": organization, "name": "   " })),
     )
     .await;
     assert_eq!(empty_title.status, StatusCode::BAD_REQUEST);
 
     // 교차 출처·Origin 없는 변경 요청은 거부된다.
-    let body = json!({ "request_id": new_request_id(), "name": "x" });
+    let body =
+        json!({ "request_id": new_request_id(), "organization_id": organization, "name": "x" });
     for origin in [None, Some("http://evil.example")] {
         let r = send_with_origin(
             &app,

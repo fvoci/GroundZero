@@ -74,7 +74,7 @@ async fn document_reads_revalidate_only_after_checking_access() {
     let ws = create_workspace(&app, &alice, "캐시").await;
     let doc = create_doc(&app, &alice, &ws, "문서").await;
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
-    let (bob, _) = add_member(&app, &state, &alice, &ws, "bob", "reader").await;
+    let (bob, _) = add_member(&app, &state, &alice, &ws, "bob", "readonly").await;
 
     let first = call(&app, Method::GET, &uri, Some(&alice), &[], None).await;
     assert_eq!(first.status, StatusCode::OK);

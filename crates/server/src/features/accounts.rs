@@ -32,7 +32,7 @@ use tokio::sync::RwLock;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::config::{Config, OidcConfig};
-use crate::db::{Db, new_ids};
+use crate::db::{Db, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
 use crate::ids::UserId;
@@ -306,7 +306,33 @@ pub async fn start_session(
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
+    // 대기 중인 초대 알림(D-118)은 부가 기능이다. 세션은 이미 커밋됐으므로 여기서 실패해도 로그인은 성공이고, 알림은
+    // 초대마다 하나만 생기므로 다음 로그인 때 다시 만든다.
+    if let Err(err) = notify_pending_invitations(db, user).await {
+        tracing::warn!(
+            event = "login.pending_invitations_failed",
+            error_code = err.code(),
+            detail = crate::logging::safe_error(&err),
+            "pending invitation notifications were not created"
+        );
+    }
     Ok((user, token))
+}
+
+/// 로그인한 사용자 앞으로 열린 초대가 있으면 `invite` 알림을 만든다(없으면 아무것도 하지 않는다).
+async fn notify_pending_invitations(db: &Db, user: UserId) -> Result<(), AppError> {
+    let mut tx = db.begin_as(user).await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_pending_invitations_count()"),
+    )
+    .await?;
+    sqlx::query("SELECT app_notify_pending_invitations($1)")
+        .bind(ids)
+        .execute(tx.conn())
+        .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// 운영자가 지정한 초기 관리자(D-51)가 로그인하면 첫 워크스페이스를 만들어 소유자로 둔다. 인스턴스에서 한 번만.
@@ -330,10 +356,10 @@ pub async fn claim_initial_admin(
     }
     let mut tx = db.begin_anonymous().await?;
     let workspace: Option<Uuid> =
-        sqlx::query_scalar("SELECT app_system_claim_initial_workspace($1, $2, $3)")
+        sqlx::query_scalar("SELECT app_system_claim_initial_admin($1, $2, $3)")
             .bind(user)
             .bind(&config.initial_workspace)
-            .bind(new_ids(3))
+            .bind(new_ids(8))
             .fetch_one(tx.conn())
             .await?;
     tx.commit().await?;

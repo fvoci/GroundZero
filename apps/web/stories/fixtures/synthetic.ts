@@ -99,6 +99,7 @@ function day(offset: number | null): string | null {
 export const WORKSPACE: Workspace = {
   id: fixedId(1, 1),
   name: data.workspace,
+  organization_id: fixedId(1, 2),
   role: 'admin',
   is_owner: true,
   realtime_enabled: false,
@@ -469,7 +470,7 @@ export function membersView(): MembersView {
   return {
     members: [
       { ...person('owner'), email: null, role: 'admin', is_owner: true },
-      { ...person('writer'), email: null, role: 'writer', is_owner: false },
+      { ...person('writer'), email: null, role: 'member', is_owner: false },
     ],
     my_role: 'admin',
     i_am_owner: true,

@@ -78,20 +78,42 @@ async fn one_timer_per_user_survives_pause_and_stays_private() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "시간").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
 
     let body =
         json!({ "request_id": new_request_id(), "kind": "study", "memo": "통계", "target": null });
     let (status, timer) = start(&app, &member, body.clone()).await;
     assert_eq!(status, StatusCode::CREATED, "{timer:?}");
     assert_eq!(timer["ended_at"], Value::Null);
-    // 같은 요청 재시도는 같은 기록, 다른 시작은 409(모든 워크스페이스 통틀어 하나).
-    assert_eq!(start(&app, &member, body).await.1["id"], timer["id"]);
+    // 같은 요청 재시도는 같은 기록이고 아무것도 멈추지 않는다. 다른 시작은 409가 아니라 실행 중 기록을 서버가 멈추고 새로
+    // 시작한다(D-117, 모든 워크스페이스 통틀어 하나).
+    let retry = start(&app, &member, body).await.1;
+    assert_eq!(retry["id"], timer["id"]);
+    assert_eq!(retry["stopped_entry_id"], Value::Null, "{retry:?}");
     let other =
         json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
-    assert_eq!(start(&app, &member, other).await.0, StatusCode::CONFLICT);
+    let (status, switched) = start(&app, &member, other).await;
+    assert_eq!(status, StatusCode::CREATED, "{switched:?}");
+    assert_ne!(switched["id"], timer["id"]);
+    assert_eq!(switched["stopped_entry_id"], timer["id"]);
     let cur = send(&app, Method::GET, "/api/me/timer", Some(&member), None).await;
-    assert_eq!(cur.json["id"], timer["id"]);
+    assert_eq!(cur.json["id"], switched["id"]);
+    {
+        let mut tx = state.db.begin_as(member.id).await.unwrap();
+        let ended: bool =
+            sqlx::query_scalar("SELECT ended_at IS NOT NULL FROM time_entries WHERE id = $1::uuid")
+                .bind(timer["id"].as_str().unwrap())
+                .fetch_one(tx.conn())
+                .await
+                .unwrap();
+        assert!(ended, "the switch did not stop the first timer");
+    }
+    // 멈춘 첫 기록은 이어갈 수 없다. 이후는 새 기록으로 계속한다.
+    assert_eq!(
+        act(&app, &member, &timer, "resume").await.0,
+        StatusCode::CONFLICT
+    );
+    let timer = switched;
 
     let (_, paused) = act(&app, &member, &timer, "pause").await;
     assert!(paused["paused_at"].is_string());
@@ -151,7 +173,7 @@ async fn one_timer_per_user_survives_pause_and_stays_private() {
     );
     drop(tx);
 
-    // 동시에 두 타이머를 시작해도 하나만 된다.
+    // 동시에 두 타이머를 시작하면 둘 다 받아들이되(뒤의 시작이 앞의 것을 멈춘다, D-117) 실행 중 기록은 결국 하나다.
     let go = |app: Router, user: TestUser| async move {
         start(
             &app,
@@ -165,11 +187,15 @@ async fn one_timer_per_user_survives_pause_and_stays_private() {
         go(app.clone(), member.clone()),
         go(app.clone(), member.clone())
     );
-    assert_eq!(
-        [a, b].iter().filter(|s| **s == StatusCode::CREATED).count(),
-        1,
-        "{a} {b}"
-    );
+    assert_eq!((a, b), (StatusCode::CREATED, StatusCode::CREATED));
+    let mut tx = state.db.begin_as(member.id).await.unwrap();
+    let running: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM time_entries WHERE user_id = app_user_id() AND ended_at IS NULL AND deleted_at IS NULL",
+    )
+    .fetch_one(tx.conn())
+    .await
+    .unwrap();
+    assert_eq!(running, 1, "exactly one timer keeps running");
 }
 
 #[tokio::test]
@@ -178,7 +204,7 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "집계").await;
-    let (owner_of_private, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (owner_of_private, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
     let task = task_in_public_item(&app, &admin, &ws).await;
 
     // 서울 10-20 23:30 시작(UTC 14:30) 1시간 공부, 10-21 09:00 시작 30분 강의, 10-26 휴식 15분.
@@ -409,132 +435,60 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
     assert_eq!(list.json.as_array().unwrap().len(), 2);
 }
 
+/// 업무 시간 합계는 사람마다 자기 기록만 본다(D-117: 합계 공유 없음). 볼 수 없는 업무는 404.
 #[tokio::test]
-async fn task_totals_include_only_people_who_chose_to_share() {
+async fn task_totals_show_only_the_viewers_own_entries() {
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "공유").await;
-    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let ws = create_workspace(&app, &admin, "합계").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let task = task_in_public_item(&app, &admin, &ws).await;
     let on_task =
         |s: &str, e: &str| manual(s, e, "work", json!({ "kind": "task", "id": task["id"] }));
-    send(
-        &app,
-        Method::POST,
-        "/api/me/time-entries",
-        Some(&admin),
-        Some(on_task("2026-10-21T09:00:00Z", "2026-10-21T10:00:00Z")),
-    )
-    .await;
-    send(
-        &app,
-        Method::POST,
-        "/api/me/time-entries",
-        Some(&sharer),
-        Some(on_task("2026-10-21T09:00:00Z", "2026-10-21T09:30:00Z")),
-    )
-    .await;
-    let r = send(
-        &app,
-        Method::PUT,
-        &format!("/api/workspaces/{ws}/time-sharing"),
-        Some(&sharer),
-        Some(json!({ "enabled": true })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK);
-
+    for (user, from, to) in [
+        (&admin, "2026-10-21T09:00:00Z", "2026-10-21T10:00:00Z"),
+        (&other, "2026-10-21T09:00:00Z", "2026-10-21T09:30:00Z"),
+    ] {
+        let r = send(
+            &app,
+            Method::POST,
+            "/api/me/time-entries",
+            Some(user),
+            Some(on_task(from, to)),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    }
+    // 진행 중인 타이머도 남의 합계에 들어가지 않는다(시작 시각이 드러나지 않게).
+    let r = send(&app, Method::POST, "/api/me/timer", Some(&other),
+                 Some(json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": { "kind": "task", "id": task["id"] } }))).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
     let time = |user: TestUser| {
         let app = app.clone();
         let uri = format!("/api/tasks/{}/time", task["id"].as_str().unwrap());
         async move { send(&app, Method::GET, &uri, Some(&user), None).await }
     };
-    let mine = time(admin.clone()).await.json;
-    assert_eq!(
-        (
-            mine["mine_seconds"].as_i64(),
-            mine["shared_seconds"].as_i64(),
-            mine["shared_people"].as_i64()
-        ),
-        (Some(3600), Some(1800), Some(1))
-    );
-    let seen_by_reader = time(reader.clone()).await.json;
-    assert_eq!(
-        (
-            seen_by_reader["mine_seconds"].as_i64(),
-            seen_by_reader["shared_seconds"].as_i64()
-        ),
-        (Some(0), Some(1800))
-    );
+    let mine = time(admin.clone()).await;
+    assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
+    assert_eq!(mine.json["mine_seconds"], 3600);
+    assert!(mine.json.get("shared_seconds").is_none(), "{:?}", mine.json);
+    assert_eq!(time(other.clone()).await.json["mine_seconds"], 1800);
+    assert_eq!(time(reader.clone()).await.json["mine_seconds"], 0);
     assert_eq!(time(outsider.clone()).await.status, StatusCode::NOT_FOUND);
-
-    // 진행 중인 남의 타이머는 공유 합계에 들어가지 않는다(시작·멈춤 시각이 드러나지 않게).
-    let r = send(&app, Method::POST, "/api/me/timer", Some(&sharer),
-                 Some(json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": { "kind": "task", "id": task["id"] } }))).await;
-    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
-    assert_eq!(time(reader.clone()).await.json["shared_seconds"], 1800);
-
-    let r = send(
-        &app,
-        Method::PUT,
-        &format!("/api/workspaces/{ws}/time-sharing"),
-        Some(&sharer),
-        Some(json!({ "enabled": false })),
-    )
-    .await;
-    assert_eq!(r.json["enabled"], false);
-    assert_eq!(time(reader).await.json["shared_seconds"], 0);
-    assert_eq!(
-        send(
-            &app,
-            Method::PUT,
-            &format!("/api/workspaces/{ws}/time-sharing"),
-            Some(&outsider),
-            Some(json!({ "enabled": true }))
-        )
-        .await
-        .status,
-        StatusCode::NOT_FOUND
-    );
-
-    // 워크스페이스에서 빠지면 공유 선택도 사라진다(다시 들어와도 묻지 않고 공유되지 않음).
-    send(
-        &app,
-        Method::PUT,
-        &format!("/api/workspaces/{ws}/time-sharing"),
-        Some(&sharer),
-        Some(json!({ "enabled": true })),
-    )
-    .await;
-    let r = send(
-        &app,
-        Method::DELETE,
-        &format!("/api/workspaces/{ws}/members/{}", sharer.id.0),
-        Some(&admin),
-        None,
-    )
-    .await;
-    assert!(r.status.is_success(), "{:?}", r.json);
-    let mut tx = state.db.begin_as(sharer.id).await.unwrap();
-    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM time_sharing")
-        .fetch_one(tx.conn())
-        .await
-        .unwrap();
-    assert_eq!(left, 0);
 }
 
-/// 항목의 시간 합계(D-78): 항목과 그 아래 업무의 기록을 종류별로, 내 것과 공유를 켠 사람의 합계만. 취미 종류.
+/// 항목의 시간 합계(D-78·D-117): 항목과 그 아래 업무의 기록을 종류별로, 내 기록만. 취미 종류.
 #[tokio::test]
 async fn item_totals_group_entries_under_the_item_by_kind() {
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 시간").await;
-    let (sharer, _) = add_member(&app, &state, &admin, &ws, "sharer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let task = task_in_public_item(&app, &admin, &ws).await;
     let item = task["item_id"].as_str().unwrap().to_owned();
@@ -596,7 +550,7 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
     )
     .await;
     post(
-        sharer.clone(),
+        other.clone(),
         manual(
             "2026-10-21T09:00:00Z",
             "2026-10-21T09:30:00Z",
@@ -605,18 +559,9 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
         ),
     )
     .await;
-    let r = send(
-        &app,
-        Method::PUT,
-        &format!("/api/workspaces/{ws}/time-sharing"),
-        Some(&sharer),
-        Some(json!({ "enabled": true })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK);
 
     let uri = format!("/api/items/{item}/time");
-    let kinds = |v: &Value| -> Vec<(String, i64, i64, i64)> {
+    let kinds = |v: &Value| -> Vec<(String, i64)> {
         v["kinds"]
             .as_array()
             .unwrap()
@@ -625,8 +570,6 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
                 (
                     k["kind"].as_str().unwrap().to_owned(),
                     k["mine_seconds"].as_i64().unwrap(),
-                    k["shared_seconds"].as_i64().unwrap(),
-                    k["shared_people"].as_i64().unwrap(),
                 )
             })
             .collect()
@@ -637,17 +580,24 @@ async fn item_totals_group_entries_under_the_item_by_kind() {
     assert_eq!(
         kinds(&mine.json),
         vec![
-            ("hobby".to_owned(), 1800, 0, 0),
-            ("study".to_owned(), 1200, 0, 0),
-            ("work".to_owned(), 3600, 1800, 1),
+            ("hobby".to_owned(), 1800),
+            ("study".to_owned(), 1200),
+            ("work".to_owned(), 3600),
         ]
     );
-    // 감사 13번: 공유하지 않은 사람의 기록은 종류도 드러나지 않는다(값이 0인 줄도 없다, D-32).
+    // 남의 기록은 종류도 드러나지 않는다(값이 0인 줄도 없다, D-32). 다른 멤버는 자기 기록만 본다.
+    assert_eq!(
+        kinds(&send(&app, Method::GET, &uri, Some(&other), None).await.json),
+        vec![("work".to_owned(), 1800)]
+    );
     let seen_by_reader = send(&app, Method::GET, &uri, Some(&reader), None).await;
     assert_eq!(
-        kinds(&seen_by_reader.json),
-        vec![("work".to_owned(), 0, 1800, 1)]
+        seen_by_reader.status,
+        StatusCode::OK,
+        "{:?}",
+        seen_by_reader.json
     );
+    assert_eq!(kinds(&seen_by_reader.json), vec![]);
     assert_eq!(
         send(&app, Method::GET, &uri, Some(&outsider), None)
             .await
@@ -667,7 +617,7 @@ async fn a_running_timer_keeps_its_pauses_inside_its_span() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "멈춤 범위").await;
-    let (me, _) = add_member(&app, &state, &admin, &ws, "pauser", "writer").await;
+    let (me, _) = add_member(&app, &state, &admin, &ws, "pauser", "member").await;
     let body =
         json!({ "request_id": new_request_id(), "kind": "work", "memo": "", "target": null });
     let (status, timer) = start(&app, &me, body).await;
@@ -844,38 +794,4 @@ async fn days_start_at_the_first_midnight_and_long_entries_split_within_the_rang
     assert_eq!(week.len(), 7, "{week:?}");
     assert!(week.iter().all(|(_, s)| *s == 86_400), "{week:?}");
     assert_eq!(week[0].0, "2026-03-02");
-}
-
-/// 감사 C33: 합계 공유 설정을 읽는 `GET /api/workspaces/{ws}/time-sharing`에는 시험이 없었다. 사람마다·워크스페이스마다
-/// 따로이고, 멤버가 아니면 404다.
-#[tokio::test]
-async fn time_sharing_reads_back_per_person_and_workspace() {
-    let state = common::state();
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "공유 읽기").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
-    let outsider = login(&state, "outsider").await;
-    let uri = format!("/api/workspaces/{ws}/time-sharing");
-    let read = |user: TestUser| {
-        let app = app.clone();
-        let uri = uri.clone();
-        async move { send(&app, Method::GET, &uri, Some(&user), None).await }
-    };
-    let before = read(member.clone()).await;
-    assert_eq!(before.status, StatusCode::OK, "{:?}", before.json);
-    assert_eq!(before.json["enabled"], false);
-    let on = send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&member),
-        Some(json!({ "enabled": true })),
-    )
-    .await;
-    assert_eq!(on.status, StatusCode::OK, "{:?}", on.json);
-    assert_eq!(read(member.clone()).await.json["enabled"], true);
-    // 다른 사람의 설정은 그대로다.
-    assert_eq!(read(admin.clone()).await.json["enabled"], false);
-    assert_eq!(read(outsider).await.status, StatusCode::NOT_FOUND);
 }

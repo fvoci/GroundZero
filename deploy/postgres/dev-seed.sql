@@ -12,6 +12,7 @@ DECLARE
   v_issuer text := current_setting('fvoci.dev_issuer');
   v_admin uuid;
   v_user uuid;
+  v_org uuid;
   v_ws uuid;
   v_inv uuid;
   v_doc uuid;
@@ -35,15 +36,31 @@ BEGIN
                              'test-user@example.test', true, 'Test User', pg_temp.take(1));
   v_user := app_upsert_user(v_issuer, '00000000-0000-4000-8000-00000000000b',
                             'test-user-2@example.test', true, 'Second User', pg_temp.take(1));
-  -- 초기 관리자(D-51) 경로 그대로: test-user가 첫 워크스페이스의 소유자. 이미 정해져 있으면 그 사람으로 새로 만든다.
+  -- 초기 관리자 경로(D-111): 서버 관리자·조직 관리자와 첫 워크스페이스를 함께 만든다.
   PERFORM set_config('app.user_id', '', true);
-  v_ws := app_system_claim_initial_workspace(v_admin, '개발', pg_temp.take(3));
+  v_ws := app_system_claim_initial_admin(v_admin, '개발', pg_temp.take(8));
   PERFORM set_config('app.user_id', v_admin::text, true);
   IF v_ws IS NULL THEN
-    v_ws := app_create_workspace(pg_temp.take1(), '개발', pg_temp.take(2));
+    SELECT organization_id INTO v_org FROM organization_members
+      WHERE user_id = v_admin ORDER BY organization_id LIMIT 1;
+    IF v_org IS NULL THEN
+      INSERT INTO server_admins (user_id, detail) VALUES (v_admin, jsonb_build_object('seed', 'dev_seed'))
+        ON CONFLICT (user_id) DO NOTHING;
+      v_org := app_create_organization(pg_temp.take1(), '개발', v_admin, pg_temp.take(3));
+    END IF;
+    v_ws := app_create_workspace(pg_temp.take1(), v_org, '개발', pg_temp.take(3));
+  ELSE
+    SELECT organization_id INTO STRICT v_org FROM workspaces WHERE id = v_ws;
+  END IF;
+  -- 워크스페이스 초대를 받기 전에 같은 조직의 멤버여야 한다.
+  IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_user) THEN
+    v_inv := app_invite_organization(v_org, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
+    PERFORM set_config('app.user_id', v_user::text, true);
+    PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
+    PERFORM set_config('app.user_id', v_admin::text, true);
   END IF;
   PERFORM app_set_workspace_realtime(v_ws, true, pg_temp.take(1));
-  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'writer', 7 * 24 * 3600, pg_temp.take(2));
+  v_inv := app_invite(v_ws, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
   v_doc := app_create_wiki_document(v_ws, pg_temp.take1(), '공동 편집 연습', 1, jsonb_build_object(
     'type', 'doc',
     'content', jsonb_build_array(
@@ -53,7 +70,7 @@ BEGIN
         jsonb_build_object('type', 'taskItem', 'attrs', jsonb_build_object('checked', false),
           'content', jsonb_build_array(jsonb_build_object('type', 'paragraph', 'content',
             jsonb_build_array(jsonb_build_object('type', 'text', 'text', '첫 할 일')))))))
-    )), NULL, 10, pg_temp.take(3));
+    )), NULL, 10, pg_temp.take(4));
   PERFORM set_config('app.user_id', v_user::text, true);
   PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
   PERFORM set_config('app.user_id', '', true);

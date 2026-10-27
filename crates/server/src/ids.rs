@@ -28,28 +28,28 @@ id_type!(
     DocumentId
 );
 
+id_type!(
+    /// 조직 내부 ID.
+    OrganizationId
+);
+
 /// 워크스페이스 역할 (D-20).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     Admin,
-    Writer,
-    Reader,
+    Member,
+    Readonly,
 }
 
 impl Role {
     pub fn parse(raw: &str) -> Option<Self> {
         match raw {
             "admin" => Some(Self::Admin),
-            "writer" => Some(Self::Writer),
-            "reader" => Some(Self::Reader),
+            "member" => Some(Self::Member),
+            "readonly" => Some(Self::Readonly),
             _ => None,
         }
-    }
-
-    /// 문서를 만들고 고칠 수 있는지.
-    pub fn can_write(self) -> bool {
-        matches!(self, Self::Admin | Self::Writer)
     }
 }
 id_type!(

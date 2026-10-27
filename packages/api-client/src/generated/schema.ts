@@ -620,7 +620,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 내가 받은 열린 초대(검증된 이메일 기준). */
+        /** 내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준). */
         get: operations["my_invitations"];
         put?: never;
         post?: never;
@@ -1390,7 +1390,7 @@ export interface paths {
         /** 진행 중인 타이머(없으면 null). */
         get: operations["current_timer"];
         put?: never;
-        /** 타이머 시작. 이미 진행 중인 타이머가 있으면 409(사용자당 하나, 모든 워크스페이스 통틀어). */
+        /** 타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다. */
         post: operations["start_timer"];
         delete?: never;
         options?: never;
@@ -1517,6 +1517,22 @@ export interface paths {
         put?: never;
         /** 항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다. */
         post: operations["create_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["invite_organization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2316,24 +2332,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/time-sharing": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 이 워크스페이스의 내 합계 공유 상태(멤버). */
-        get: operations["get_time_sharing"];
-        /** 이 워크스페이스에 내 업무 시간 합계 공유 켜기·끄기(멤버). 기록·메모·시각은 공유하지 않는다. */
-        put: operations["set_time_sharing"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/workspaces/{workspace_id}/trash": {
         parameters: {
             query?: never;
@@ -2515,9 +2513,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description 수락 결과. */
+        /** @description 수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다. */
         Accepted: {
-            workspace_id: components["schemas"]["WorkspaceId"];
+            kind: components["schemas"]["InvitationTarget"];
+            organization_id: components["schemas"]["OrganizationId"];
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
          * @description 문서에 대한 현재 사용자의 권한.
@@ -2526,8 +2526,7 @@ export interface components {
         Access: "owner" | "write" | "read";
         /** @description 사용자가 확인한 접근 변화. */
         AcknowledgedPreview: {
-            gains: string[];
-            loses: string[];
+            changes: components["schemas"]["MoveAccessChange"][];
         };
         /** @description 체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에). */
         AddChecklist: {
@@ -2633,7 +2632,8 @@ export interface components {
             milestone: boolean;
             reference?: string | null;
             start_date?: string | null;
-            status: components["schemas"]["TaskStatus"];
+            status: string;
+            status_category: string;
             title: string;
         };
         /** @description 체크리스트 항목. */
@@ -2793,6 +2793,7 @@ export interface components {
         /** @description 공유 추가 요청. 같은 이메일이면 권한을 바꾼다. */
         CreateShare: {
             email: string;
+            organization_id?: null | components["schemas"]["OrganizationId"];
             /** @description `read` 또는 `write`. */
             permission: string;
         };
@@ -2820,7 +2821,8 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             start_date?: string | null;
-            status?: components["schemas"]["TaskStatus"];
+            /** @description 상태 이름(항목이 정의한 문자열). 비우면 항목의 기본 상태(todo 범주 첫 상태)다(개정 2026-10-26 ⑪: 기본 이름은 서버가 정하지 않는다). */
+            status?: string | null;
             tags?: string[];
             title: string;
         };
@@ -2851,6 +2853,7 @@ export interface components {
         /** @description 워크스페이스 생성 요청. */
         CreateWorkspace: {
             name: string;
+            organization_id: components["schemas"]["OrganizationId"];
             /**
              * Format: uuid
              * @description 클라이언트가 만든 요청 ID. 재시도 중복 방지.
@@ -3228,7 +3231,8 @@ export interface components {
             id: string;
             item_id: components["schemas"]["ItemId"];
             reference?: string | null;
-            status: components["schemas"]["TaskStatus"];
+            status: string;
+            status_category: string;
             title: string;
             workspace_id: components["schemas"]["WorkspaceId"];
         };
@@ -3240,6 +3244,15 @@ export interface components {
             /** Format: uuid */
             id: string;
             role: components["schemas"]["Role"];
+        };
+        /**
+         * @description 초대 대상 종류.
+         * @enum {string}
+         */
+        InvitationTarget: "organization" | "workspace";
+        InviteOrganization: {
+            email: string;
+            role: components["schemas"]["OrgRole"];
         };
         /** @description 모듈 항목 (D-14). 새 항목은 기본 비공개다 (D-20). */
         Item: {
@@ -3361,13 +3374,6 @@ export interface components {
              * @description 내 끝난 기록의 합계(초).
              */
             mine_seconds: number;
-            /** Format: int32 */
-            shared_people: number;
-            /**
-             * Format: int64
-             * @description 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
-             */
-            shared_seconds: number;
         };
         /** @description 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
         LinkBase: {
@@ -3402,6 +3408,7 @@ export interface components {
         MarkRead: {
             /** Format: uuid */
             id?: string | null;
+            organization_id?: null | components["schemas"]["OrganizationId"];
         };
         /** @description 한 대상의 표시 상태. */
         MarkState: {
@@ -3482,6 +3489,14 @@ export interface components {
          * @enum {string}
          */
         ModuleKind: "project" | "research" | "study" | "course" | "hobby";
+        /** @description 사용자별 접근 등급 변화. 새 접근이나 회수에서는 한쪽 등급이 없다. */
+        MoveAccessChange: {
+            change: string;
+            display_name: string;
+            from_grade?: string | null;
+            to_grade?: string | null;
+            user_id: components["schemas"]["UserId"];
+        };
         /**
          * @description 이동의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
          *     - `MovePreview`: 확인한 미리보기가 없거나 지금 계산한 것과 다르다(새 미리보기를 보고 다시 확인한다).
@@ -3513,15 +3528,14 @@ export interface components {
              * @description 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
              */
             active_public_links: number;
+            changes: components["schemas"]["MoveAccessChange"][];
             /**
              * Format: int64
              * @description 원래 자리에 남는 하위 문서 수(내가 볼 수 있는 것). 이동하는 문서의 원래 부모에 붙는다.
              */
             children_left_behind: number;
-            gains: string[];
             /** @description 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
             history_moves_with_document: boolean;
-            loses: string[];
             /** @description 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18). */
             reference_changes: boolean;
         };
@@ -3540,7 +3554,7 @@ export interface components {
             base_move_version?: number | null;
             /** Format: uuid */
             before_id?: string | null;
-            status: components["schemas"]["TaskStatus"];
+            status: string;
         };
         /** @description 내 진도. */
         MyProgress: {
@@ -3660,7 +3674,7 @@ export interface components {
             title: string;
             unit?: string;
         };
-        /** @description 알림. 지금 볼 수 있는 문서에 대한 것만 나온다. */
+        /** @description 알림. invite는 초대 ID만 있고 대상 제목·참조는 없다. */
         Notification: {
             /** @description 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다. */
             actor_name?: string | null;
@@ -3675,19 +3689,22 @@ export interface components {
             /** @description 대상 번호(문서 또는 업무). */
             document_reference?: string | null;
             /** @description 대상 제목(문서 또는 업무). */
-            document_title: string;
+            document_title?: string | null;
             /** @description 기한·만료·복습·마감 알림의 날짜(YYYY-MM-DD). */
             due_date?: string | null;
             /** @description 댓글 첫 부분(최대 140자). */
             excerpt?: string | null;
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            invitation_id?: string | null;
             item_id?: null | components["schemas"]["ItemId"];
             /**
              * @description `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·
              *     `expiry`(강좌 수강권 만료·목표 완료일)·`review`(복습일)·`deadline`(투고 제출·수정 마감, 산출물 마감).
              */
             kind: string;
+            organization_id?: null | components["schemas"]["OrganizationId"];
             read: boolean;
             /** @description 항목 알림의 대상 이름(기록 제목이나 강좌 이름). */
             subject?: string | null;
@@ -3701,6 +3718,24 @@ export interface components {
         /** @description 인계 제안 요청. */
         OfferOwnership: {
             to_user: components["schemas"]["UserId"];
+        };
+        /**
+         * @description 조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 "관리자로 참여" 뒤에만 본다.
+         * @enum {string}
+         */
+        OrgRole: "admin" | "member";
+        /**
+         * Format: uuid
+         * @description 조직 내부 ID.
+         */
+        OrganizationId: string;
+        OrganizationInvitation: {
+            email: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["OrgRole"];
         };
         /** @description 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음). */
         Participant: {
@@ -3805,9 +3840,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             invited_by: string;
+            kind: components["schemas"]["InvitationTarget"];
+            organization_id: components["schemas"]["OrganizationId"];
+            organization_name: string;
             role: components["schemas"]["Role"];
-            workspace_id: components["schemas"]["WorkspaceId"];
-            workspace_name: string;
+            workspace_id?: null | components["schemas"]["WorkspaceId"];
+            workspace_name?: string | null;
         };
         /** @description 항목 기록. */
         Record: {
@@ -3988,7 +4026,7 @@ export interface components {
          * @description 워크스페이스 역할 (D-20).
          * @enum {string}
          */
-        Role: "admin" | "writer" | "reader";
+        Role: "admin" | "member" | "readonly";
         /**
          * @description 문서 저장의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
          *     - `ConflictBody`(`error: "conflict"`, `current`): `base_revision`이 지남.
@@ -4154,10 +4192,6 @@ export interface components {
         SetRole: {
             role: components["schemas"]["Role"];
         };
-        /** @description 합계 공유 켜기·끄기. */
-        SetSharing: {
-            enabled: boolean;
-        };
         /** @description 상위 업무 바꾸기. 없으면 최상위. */
         SetTaskParent: {
             /** Format: uuid */
@@ -4165,6 +4199,7 @@ export interface components {
         };
         /** @description 업무 반복 정하기. `rule`이 없으면 반복을 멈춘다(이미 만든 회차는 남는다). */
         SetTaskRecurrence: {
+            base?: null | components["schemas"]["RecurrenceRule"];
             rule?: null | components["schemas"]["RecurrenceRule"];
             /** @description "오늘"을 정하는 시간대(IANA). 공동 반복은 지정한 시간대를 따른다(D-50). */
             timezone: string;
@@ -4197,9 +4232,12 @@ export interface components {
         };
         /** @description 공유 항목. */
         Share: {
-            email: string;
+            display_name: string;
+            email?: string | null;
+            grantee_user_id: components["schemas"]["UserId"];
             /** Format: uuid */
             id: string;
+            organization_id: components["schemas"]["OrganizationId"];
             /** @description `read` 또는 `write`. */
             permission: string;
         };
@@ -4213,11 +4251,6 @@ export interface components {
             title: string;
             /** Format: date-time */
             updated_at: string;
-        };
-        /** @description 내 합계 공유 상태(워크스페이스별). */
-        Sharing: {
-            enabled: boolean;
-            workspace_id: components["schemas"]["WorkspaceId"];
         };
         /** @description 재배치의 원인 관계: 선행 업무와 관계 종류·지연일. */
         ShiftCause: {
@@ -4254,6 +4287,11 @@ export interface components {
             /** Format: uuid */
             request_id: string;
             target?: null | components["schemas"]["TargetInput"];
+        };
+        /** @description 새 타이머와 자동으로 끝낸 이전 기록. */
+        StartedTimer: components["schemas"]["TimeEntry"] & {
+            /** Format: uuid */
+            stopped_entry_id?: string | null;
         };
         /** @description 함께 하는 사람의 진행 집계(메모·개인 날짜는 없음). */
         StudyParticipant: {
@@ -4380,7 +4418,8 @@ export interface components {
             series?: null | components["schemas"]["TaskSeries"];
             /** @description `YYYY-MM-DD`. 시각 없는 날짜. */
             start_date?: string | null;
-            status: components["schemas"]["TaskStatus"];
+            status: string;
+            status_category: string;
             tags: string[];
             title: string;
             /** Format: date-time */
@@ -4426,11 +4465,6 @@ export interface components {
             rule?: null | components["schemas"]["RecurrenceRule"];
             timezone: string;
         };
-        /**
-         * @description 업무 상태. 완료 시각은 서버가 기록한다.
-         * @enum {string}
-         */
-        TaskStatus: "todo" | "in_progress" | "done";
         /** @description 업무의 예상 시간과 실제 시간. */
         TaskTime: {
             /** Format: int32 */
@@ -4440,13 +4474,6 @@ export interface components {
              * @description 내 기록의 합계(초).
              */
             mine_seconds: number;
-            /** Format: int32 */
-            shared_people: number;
-            /**
-             * Format: int64
-             * @description 이 워크스페이스에 공유를 켠 멤버들의 합계(초, 나도 켰으면 포함).
-             */
-            shared_seconds: number;
         };
         /** @description 시간 기록. */
         TimeEntry: {
@@ -4668,7 +4695,7 @@ export interface components {
             milestone: boolean;
             priority: components["schemas"]["TaskPriority"];
             start_date?: string | null;
-            status: components["schemas"]["TaskStatus"];
+            status: string;
             /**
              * @description 미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이
              *     지났으면 아무것도 바꾸지 않고 409(`shift_conflict`).
@@ -4749,6 +4776,7 @@ export interface components {
             /** @description 현재 사용자가 소유자인지 (D-51). */
             is_owner: boolean;
             name: string;
+            organization_id: components["schemas"]["OrganizationId"];
             /** @description 워크스페이스 문서를 실시간 공동 편집으로 연다(D-27, D-70). 관리자가 켜고 끈다. */
             realtime_enabled: boolean;
             /** @description 현재 사용자의 역할. */
@@ -8580,7 +8608,12 @@ export interface operations {
     };
     notifications: {
         parameters: {
-            query?: never;
+            query?: {
+                organization?: null | components["schemas"]["OrganizationId"];
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8839,7 +8872,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TimeEntry"];
+                    "application/json": components["schemas"]["StartedTimer"];
                 };
             };
             400: {
@@ -9252,6 +9285,63 @@ export interface operations {
             };
         };
     };
+    invite_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteOrganization"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitation"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     revoke_public_link: {
         parameters: {
             query?: never;
@@ -9511,7 +9601,7 @@ export interface operations {
                 kinds?: string | null;
                 /** @description 이 모듈 안의 것만. */
                 module_id?: string | null;
-                /** @description 업무 상태(`todo`·`in_progress`·`done`). 주면 업무만 나온다. */
+                /** @description 업무 상태 이름(1..50자). 주면 업무만 나온다. */
                 status?: string | null;
                 /** @description 담당자(`me` 또는 사용자 id). 주면 업무만 나온다. */
                 assignee?: string | null;
@@ -10233,7 +10323,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["TaskConflict"];
                 };
             };
         };
@@ -10865,6 +10955,14 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11622,68 +11720,6 @@ export interface operations {
                 };
             };
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    get_time_sharing: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Sharing"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    set_time_sharing: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetSharing"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Sharing"];
-                };
-            };
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };

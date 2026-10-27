@@ -1,6 +1,7 @@
 // API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
 // 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md#api-contract).
 import type {
+  Accepted,
   AuthInfo,
   Group,
   Health,
@@ -153,7 +154,7 @@ function rec(value: unknown, what: string): Record<string, unknown> {
 }
 
 function role(value: string): Role {
-  if (value === 'admin' || value === 'writer' || value === 'reader') return value;
+  if (value === 'admin' || value === 'member' || value === 'readonly') return value;
   throw new TypeError(`unknown role ${value}`);
 }
 
@@ -193,6 +194,7 @@ export function parseWorkspace(value: Json): Workspace {
   const o = rec(value, 'workspace');
   return {
     id: str(o, 'id'),
+    organization_id: str(o, 'organization_id'),
     name: str(o, 'name'),
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
@@ -266,13 +268,23 @@ export interface SharedView {
 
 export interface ShareView {
   id: string;
-  email: string;
+  email: string | null;
+  display_name: string;
   permission: 'read' | 'write';
 }
 
+/** 이동 전후의 사용자별 접근 등급 변화(D-114). `gain`이면 from_grade가, `lose`면 to_grade가 null이다. */
+export interface MoveAccessChangeView {
+  /** `gain`·`lose`·`change`(서버 `app_move_preview`). */
+  change: string;
+  user_id: string;
+  display_name: string;
+  from_grade: string | null;
+  to_grade: string | null;
+}
+
 export interface MovePreviewView {
-  gains: string[];
-  loses: string[];
+  changes: MoveAccessChangeView[];
   /** 이전 리비전 기록도 함께 옮겨진다. */
   history_moves_with_document: boolean;
   /** 대상에서 번호가 새로 매겨지는지(같은 모듈 안 이동이면 유지). */
@@ -315,14 +327,29 @@ export function parseSharedView(value: Json): SharedView {
 
 export function parseShareView(value: Json): ShareView {
   const o = rec(value, 'share');
-  return { id: str(o, 'id'), email: str(o, 'email'), permission: permission(str(o, 'permission')) };
+  return {
+    id: str(o, 'id'),
+    email: optStr(o, 'email'),
+    display_name: str(o, 'display_name'),
+    permission: permission(str(o, 'permission')),
+  };
+}
+
+function parseMoveAccessChange(value: Json): MoveAccessChangeView {
+  const o = rec(value, 'move access change');
+  return {
+    change: str(o, 'change'),
+    user_id: str(o, 'user_id'),
+    display_name: str(o, 'display_name'),
+    from_grade: optStr(o, 'from_grade'),
+    to_grade: optStr(o, 'to_grade'),
+  };
 }
 
 export function parseMovePreview(value: Json): MovePreviewView {
   const o = rec(value, 'move preview');
   return {
-    gains: strings(o.gains),
-    loses: strings(o.loses),
+    changes: parseList(o.changes, parseMoveAccessChange),
     history_moves_with_document: bool(o, 'history_moves_with_document'),
     reference_changes: bool(o, 'reference_changes'),
     active_public_links: int(o, 'active_public_links'),
@@ -410,15 +437,32 @@ export function parseInvitation(value: Json): Invitation {
   };
 }
 
+function invitationTarget(value: string): ReceivedInvitation['kind'] {
+  if (value === 'organization' || value === 'workspace') return value;
+  throw new TypeError(`unknown invitation kind ${value}`);
+}
+
 export function parseReceivedInvitation(value: Json): ReceivedInvitation {
   const o = rec(value, 'received invitation');
   return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    organization_name: str(o, 'organization_name'),
     id: str(o, 'id'),
-    workspace_id: str(o, 'workspace_id'),
-    workspace_name: str(o, 'workspace_name'),
+    workspace_id: optStr(o, 'workspace_id'),
+    workspace_name: optStr(o, 'workspace_name'),
     role: role(str(o, 'role')),
     invited_by: str(o, 'invited_by'),
     expires_at: str(o, 'expires_at'),
+  };
+}
+
+export function parseAccepted(value: Json): Accepted {
+  const o = rec(value, 'accepted');
+  return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    workspace_id: optStr(o, 'workspace_id'),
   };
 }
 
@@ -885,8 +929,8 @@ export interface NotificationView {
   kind: string;
   document_id: string | null;
   task_id: string | null;
-  /** 대상(문서 또는 업무) 제목. */
-  document_title: string;
+  /** 대상(문서 또는 업무) 제목. 초대 알림처럼 대상이 없으면 null. */
+  document_title: string | null;
   document_reference: string | null;
   workspace_id: string | null;
   item_id: string | null;
@@ -944,7 +988,7 @@ export function parseNotification(value: Json): NotificationView {
     kind: str(o, 'kind'),
     document_id: optStr(o, 'document_id'),
     task_id: optStr(o, 'task_id'),
-    document_title: str(o, 'document_title'),
+    document_title: optStr(o, 'document_title'),
     document_reference: optStr(o, 'document_reference'),
     workspace_id: optStr(o, 'workspace_id'),
     item_id: optStr(o, 'item_id'),
@@ -1080,6 +1124,8 @@ export interface TaskView {
   title: string;
   description: string;
   status: TaskStatus;
+  /** 서버가 준 상태 이름 그대로(항목 정의, D-116). 화면 열은 `status`(기본 이름이거나 범주로 맞춘 값), 저장 본문은 이 이름이다. 없으면 `status`. */
+  status_name?: string;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1115,7 +1161,8 @@ export interface TaskDetailView extends TaskView {
 export interface TaskInput {
   title: string;
   description: string;
-  status: TaskStatus;
+  /** 상태 이름(항목 정의, D-116). 이 단계 화면은 기본 세 이름만 고르지만, 서버가 준 다른 이름은 그대로 돌려보낸다. */
+  status: string;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1273,10 +1320,34 @@ function parseSchedulePlan(value: Json): SchedulePlanView {
   };
 }
 
-function taskStatus(value: string): TaskStatus {
-  const found = TASK_STATUSES.find((s) => s === value);
-  if (found === undefined) throw new TypeError(`unknown task status ${value}`);
-  return found;
+/**
+ * 새 항목의 기본 상태 이름(SQL `app_seed_task_statuses`, 개정 2026-10-26 ⑪): `할 일`·`진행 중`·`완료`. 이 단계의 화면은 열을
+ * 안쪽 id(`todo`·`in_progress`·`done`)로 다루므로, 서버로 보낼 때 열 id를 이 이름으로 바꾸고 받을 때 이 이름을 열 id로 돌린다.
+ * 다른 이름(사용자 정의 상태)은 그대로 보내고 범주로 열을 정한다. 항목별 상태 정의 화면은 3단계 범위다.
+ */
+export const SEED_STATUS_NAME: Readonly<Record<TaskStatus, string>> = {
+  todo: '할 일',
+  in_progress: '진행 중',
+  done: '완료',
+};
+
+/** 서버에 보낼 상태 이름: 열 id면 기본 상태 이름으로, 그 밖(항목이 정의한 이름)은 그대로. */
+export function toServerStatus(status: string): string {
+  const lane = TASK_STATUSES.find((s) => s === status);
+  return lane === undefined ? status : SEED_STATUS_NAME[lane];
+}
+
+/**
+ * 업무 상태 이름은 항목이 정의한 문자열이다(D-116, 1단계 계약). 이 단계의 화면은 기본 세 이름(`todo`·`in_progress`·`done`)으로
+ * 열을 그리므로, 다른 이름이면 서버가 함께 주는 범주(`status_category`: todo·doing·done)의 열로 보인다. 모르는 값으로
+ * 목록 전체를 버리지 않는다. 저장 본문은 원래 이름(`status_name`)을 돌려보낸다(`formOf`). 항목별 상태 정의 화면은 3단계 범위다.
+ */
+function taskStatus(value: string, category: unknown): TaskStatus {
+  const found = TASK_STATUSES.find((s) => s === value || SEED_STATUS_NAME[s] === value);
+  if (found !== undefined) return found;
+  if (category === 'doing') return 'in_progress';
+  if (category === 'done') return 'done';
+  return 'todo';
 }
 
 function taskPriority(value: string): TaskPriority {
@@ -1301,7 +1372,8 @@ export function parseTask(value: Json): TaskView {
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
     description: str(o, 'description'),
-    status: taskStatus(str(o, 'status')),
+    status: taskStatus(str(o, 'status'), o.status_category),
+    status_name: str(o, 'status'),
     priority: taskPriority(str(o, 'priority')),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
@@ -1480,7 +1552,7 @@ function parseCalendar(value: Json): CalendarView {
         item_id: str(t, 'item_id'),
         reference: optStr(t, 'reference'),
         title: str(t, 'title'),
-        status: taskStatus(str(t, 'status')),
+        status: taskStatus(str(t, 'status'), t.status_category),
         milestone: bool(t, 'milestone'),
         start_date: optStr(t, 'start_date'),
         due_date: optStr(t, 'due_date'),
@@ -1579,14 +1651,12 @@ export interface TimeSummaryRowView {
 export interface TaskTimeView {
   estimate_minutes: number | null;
   mine_seconds: number;
-  shared_seconds: number;
-  shared_people: number;
 }
 
-/** 항목의 시간 합계(D-78). 기록이 있는 종류만. */
+/** 항목의 시간 합계(D-78). 기록이 있는 종류만. 시간 공유(D-117 제거)는 없다. */
 export interface ItemTimeView {
   estimate_minutes: number;
-  kinds: { kind: TimeKind; mine_seconds: number; shared_seconds: number; shared_people: number }[];
+  kinds: { kind: TimeKind; mine_seconds: number }[];
 }
 
 function timeKind(value: string): TimeKind {
@@ -1696,7 +1766,7 @@ function parseHomeTask(value: Json): HomeTaskView {
     workspace_id: str(o, 'workspace_id'),
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
-    status: taskStatus(str(o, 'status')),
+    status: taskStatus(str(o, 'status'), o.status_category),
     due_date: optStr(o, 'due_date'),
     bucket,
   };
@@ -2592,9 +2662,7 @@ export const api = {
   myInvitations: () =>
     expectOk('GET', '/api/invitations', (v) => parseList(v, parseReceivedInvitation)),
   acceptInvitation: (id: string) =>
-    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, (v) =>
-      str(rec(v, 'accepted'), 'workspace_id'),
-    ),
+    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, parseAccepted),
   declineInvitation: (id: string) =>
     expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/decline`, none),
   offerOwnership: (ws: string, toUser: string) =>
@@ -2856,6 +2924,7 @@ export const api = {
   ) =>
     expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
       ...fields,
+      ...(fields?.status === undefined ? {} : { status: toServerStatus(fields.status) }),
       request_id: requestId,
       title,
       parent_id: parentId,
@@ -2896,7 +2965,7 @@ export const api = {
    */
   moveTask: (id: string, status: TaskStatus, beforeId: string | null, baseMoveVersion?: number) =>
     expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
-      status,
+      status: toServerStatus(status),
       before_id: beforeId,
       ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
     }),
@@ -3163,17 +3232,6 @@ export const api = {
           };
         }),
     ),
-  timeSharing: (workspaceId: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/time-sharing`, (v) =>
-      bool(rec(v, 'sharing'), 'enabled'),
-    ),
-  setTimeSharing: (workspaceId: string, enabled: boolean) =>
-    expectOk(
-      'PUT',
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/time-sharing`,
-      (v) => bool(rec(v, 'sharing'), 'enabled'),
-      { enabled },
-    ),
   itemTime: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/time`, (v): ItemTimeView => {
       const o = rec(v, 'item time');
@@ -3185,8 +3243,6 @@ export const api = {
           return {
             kind: timeKind(str(r, 'kind')),
             mine_seconds: int(r, 'mine_seconds'),
-            shared_seconds: int(r, 'shared_seconds'),
-            shared_people: int(r, 'shared_people'),
           };
         }),
       };
@@ -3197,8 +3253,6 @@ export const api = {
       return {
         estimate_minutes: optInt(o, 'estimate_minutes'),
         mine_seconds: int(o, 'mine_seconds'),
-        shared_seconds: int(o, 'shared_seconds'),
-        shared_people: int(o, 'shared_people'),
       };
     }),
   /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
@@ -3262,7 +3316,7 @@ export const api = {
     if (workspaceId !== null) params.set('workspace_id', workspaceId);
     if (filters.kind !== undefined) params.set('kinds', filters.kind);
     if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
-    if (filters.status !== undefined) params.set('status', filters.status);
+    if (filters.status !== undefined) params.set('status', toServerStatus(filters.status));
     if (filters.assignee !== undefined) params.set('assignee', filters.assignee);
     if (filters.from !== undefined) params.set('from', filters.from);
     if (filters.to !== undefined) params.set('to', filters.to);
@@ -3392,10 +3446,10 @@ export const api = {
       {
         target_workspace_id: target.workspaceId,
         target_item_id: target.itemId,
-        acknowledged: { gains: acknowledged.gains, loses: acknowledged.loses },
+        acknowledged: { changes: acknowledged.changes },
       },
     );
-    if (status === 409 && isRecord(json) && 'gains' in json) {
+    if (status === 409 && isRecord(json) && 'changes' in json) {
       return { kind: 'changed', preview: parseMovePreview(json) };
     }
     if (status !== 200) fail(status, json);

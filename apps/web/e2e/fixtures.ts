@@ -105,9 +105,29 @@ export class Api {
     return (await this.request.get(url)).status();
   }
 
+  /**
+   * 격리 browser 환경의 초기 관리자 조직. 1단계 서버에는 조직 목록 API가 없으므로(2단계 D-126), 초기 관리자가 받은 첫
+   * 워크스페이스(`app_system_claim_initial_admin`)의 `organization_id`에서 읽는다. 조직이 여럿이면 임의로 고르지 않고
+   * 준비를 실패시킨다.
+   */
+  async initialOrganization(): Promise<{ id: string }> {
+    const ids = [
+      ...new Set(list(await this.get('/api/workspaces')).map((w) => str(w, 'organization_id'))),
+    ];
+    const id = ids.at(0);
+    expect(ids, 'isolated initial-admin fixture has exactly one organization').toHaveLength(1);
+    if (id === undefined) throw new Error('no organization');
+    return { id };
+  }
+
   async createWorkspace(name: string): Promise<string> {
+    const organization = await this.initialOrganization();
     return str(
-      await this.send('POST', '/api/workspaces', { request_id: crypto.randomUUID(), name }),
+      await this.send('POST', '/api/workspaces', {
+        request_id: crypto.randomUUID(),
+        organization_id: organization.id,
+        name,
+      }),
       'id',
     );
   }
@@ -145,16 +165,45 @@ export class Api {
   }
 
   /** 관리자가 이메일로 초대한다. 받는 사람은 그 이메일이 확인된 계정으로 로그인해 받아들인다. */
-  async invite(workspace: string, email: string, role: 'writer' | 'reader'): Promise<void> {
+  /**
+   * test-user-2는 최초에 조직이 없고, 워크스페이스 초대는 조직 멤버만 수락할 수 있다(D-114). 조직 초대를 만들어(2단계에서
+   * 가져온 경로) 받아들이게 한 뒤에만 공간 초대를 준비한다.
+   */
+  async ensureOrganizationMember(member: Api, email: string): Promise<void> {
+    const organization = await this.initialOrganization();
+    await this.send('POST', `/api/organizations/${organization.id}/invitations`, {
+      email,
+      role: 'member',
+    });
+    const invitation = list(await member.get('/api/invitations')).find(
+      (i) => str(i, 'kind') === 'organization' && str(i, 'organization_id') === organization.id,
+    );
+    const accepted = await member.send(
+      'POST',
+      `/api/invitations/${str(invitation, 'id')}/accept`,
+      {},
+    );
+    expect(str(accepted, 'kind')).toBe('organization');
+    expect(str(accepted, 'organization_id')).toBe(organization.id);
+  }
+
+  async invite(workspace: string, email: string, role: 'member' | 'readonly'): Promise<void> {
     await this.send('POST', `/api/workspaces/${workspace}/invitations`, { email, role });
   }
 
   /** 이 워크스페이스에서 받은 초대를 받아들인다. */
+  /** 이 워크스페이스에서 받은 초대를 받아들인다. */
   async acceptInvitation(workspace: string): Promise<void> {
     const invitation = list(await this.get('/api/invitations')).find(
-      (i) => str(i, 'workspace_id') === workspace,
+      (i) => str(i, 'kind') === 'workspace' && str(i, 'workspace_id') === workspace,
     );
-    await this.send('POST', `/api/invitations/${str(invitation, 'id')}/accept`, {});
+    const accepted = await this.send(
+      'POST',
+      `/api/invitations/${str(invitation, 'id')}/accept`,
+      {},
+    );
+    expect(str(accepted, 'kind')).toBe('workspace');
+    expect(str(accepted, 'workspace_id')).toBe(workspace);
   }
 
   async createTask(item: string, title: string, fields: Record<string, unknown> = {}) {

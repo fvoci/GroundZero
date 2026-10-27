@@ -162,8 +162,8 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "파일").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "자료").await;
     let doc_id = doc["id"].as_str().unwrap();
@@ -282,7 +282,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     assert_eq!(listed.json[0]["name"], "data.csv");
     assert_eq!(listed.json[0]["can_write"], false);
     assert_eq!(listed.json[0]["size"], data.len());
-    // D-20: 내려받기는 고칠 수 있는 사람이나, 소유자가 복제·다운로드를 허용한 문서의 독자만.
+    // D-115: 수정 권한도 소유 권한이 아니면 allow_copy가 있어야 내려받는다.
     assert_eq!(listed.json[0]["can_download"], false);
     assert_eq!(
         download(&app, &reader, &format!("/api/files/{file_id}/content"))
@@ -305,7 +305,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         download(&app, &writer, &format!("/api/files/{file_id}/content"))
             .await
             .0,
-        StatusCode::OK
+        StatusCode::FORBIDDEN
     );
     let allowed = send(
         &app,
@@ -651,7 +651,7 @@ async fn concurrent_starts_and_old_version_cleanup() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "버전 정리").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let doc = create_doc(&app, &admin, &ws, "자료").await;
     let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
                        "name": "v.txt", "size": 3, "content_type": "text/plain" });
@@ -732,7 +732,42 @@ async fn s3_files_round_trip_and_purge_with_the_document() {
     let state = state_with(&pairs);
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "S3 파일").await;
+    // D-111·D-112: 별도 S3 시험 DB의 사용자에게 기본 시험 DB의 조직을 섞지 않는다.
+    let mut fixture =
+        sqlx::PgConnection::connect(fresh.db.migration_url.as_ref().unwrap().expose())
+            .await
+            .unwrap();
+    sqlx::query("INSERT INTO fvoci.server_admins (user_id) VALUES ($1)")
+        .bind(admin.id.0)
+        .execute(&mut fixture)
+        .await
+        .unwrap();
+    let mut tx = fixture.begin().await.unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
+        .bind(admin.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let organization: uuid::Uuid =
+        sqlx::query_scalar("SELECT fvoci.app_create_organization($1, $2, $3, $4)")
+            .bind(uuid::Uuid::now_v7())
+            .bind("S3 조직")
+            .bind(admin.id.0)
+            .bind((0..3).map(|_| uuid::Uuid::now_v7()).collect::<Vec<_>>())
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    fixture.close().await.unwrap();
+    let workspace = send(&app, Method::POST, "/api/workspaces", Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "organization_id": organization, "name": "S3 파일" }))).await;
+    assert_eq!(
+        workspace.status,
+        StatusCode::CREATED,
+        "{:?}",
+        workspace.json
+    );
+    let ws = workspace.json["id"].as_str().unwrap().to_owned();
     let doc = create_doc(&app, &admin, &ws, "자료").await;
     let data = content(5 * MIB + 3, 9);
     let done = upload_all(
@@ -801,7 +836,7 @@ async fn moving_a_document_takes_its_attachments_along() {
     let src = create_workspace(&app, &alice, "첨부 출발").await;
     let dst = create_workspace(&app, &alice, "첨부 도착").await;
     let (src_admin, _) = add_member(&app, &state, &alice, &src, "src-admin", "admin").await;
-    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "writer").await;
+    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "member").await;
     let doc = create_doc(&app, &alice, &src, "첨부 문서").await;
     let doc_id = doc["id"].as_str().unwrap().to_owned();
     let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc_id },
@@ -838,7 +873,8 @@ async fn moving_a_document_takes_its_attachments_along() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::CONFLICT, "{:?}", preview.json);
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 이름 배열 대신 사용자별 등급 변화를 확인한다.
+    let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
         Method::POST,

@@ -14,7 +14,6 @@
     TaskDetailView,
     TaskInput,
     TaskPriority,
-    TaskStatus,
     TaskView,
     PlanBlockedView,
     UndatedTaskView,
@@ -26,6 +25,7 @@
     MAX_LAG_DAYS,
     TASK_PRIORITIES,
     TASK_STATUSES,
+    toServerStatus,
   } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
@@ -65,6 +65,7 @@
     LINK_KIND_MEANING,
     PRIORITY_LABEL,
     STATUS_LABEL,
+    statusLabel,
     assigneeLabels,
     clashRows,
     linkText,
@@ -815,7 +816,10 @@
       <!-- 알림은 문장에만 둔다(안의 덮어쓰기 확인이 따로 알리므로 알림 전체를 두 번 읽지 않게). -->
       <div class="rounded-md border border-amber-500/50 p-3 text-sm">
         <p role="alert">
-          {m.tasks_conflict({ title: latest.title, status: STATUS_LABEL[latest.status] })}
+          {m.tasks_conflict({
+            title: latest.title,
+            status: latest.status_name ?? STATUS_LABEL[latest.status],
+          })}
         </p>
         <div class="mt-2 flex gap-2">
           <Button
@@ -870,16 +874,17 @@
             value={f.status}
             disabled={locked}
             onValueChange={(v: string) => {
-              const s = TASK_STATUSES.find((x) => x === v);
-              if (s !== undefined) f.status = s satisfies TaskStatus;
+              if (TASK_STATUSES.some((s) => toServerStatus(s) === v)) f.status = v;
             }}
           >
             <Select.Trigger aria-labelledby="task-status-label"
-              >{STATUS_LABEL[f.status]}</Select.Trigger
+              >{statusLabel(f.status)}</Select.Trigger
             >
             <Select.Content>
               {#each TASK_STATUSES as s (s)}
-                <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+                <Select.Item value={toServerStatus(s)} label={STATUS_LABEL[s]}
+                  >{STATUS_LABEL[s]}</Select.Item
+                >
               {/each}
             </Select.Content>
           </Select.Root>
@@ -1081,7 +1086,7 @@
               >
               <span class="min-w-0 [overflow-wrap:anywhere]">{sub.title}</span>
               <span class="ml-auto shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                >{STATUS_LABEL[sub.status]}</span
+                >{sub.status_name ?? STATUS_LABEL[sub.status]}</span
               >
             </button>
           {:else}

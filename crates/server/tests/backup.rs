@@ -9,8 +9,7 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, config_with, create_doc, create_workspace, doc_body, fresh_database, new_request_id,
-    send, send_raw,
+    TestUser, config_with, create_doc, doc_body, fresh_database, new_request_id, send, send_raw,
 };
 use fvoci_server::backup;
 use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
@@ -86,7 +85,41 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let owner = session(&state, &subject).await;
 
     // 원본: 워크스페이스·문서(본문)·업무·첨부 파일.
-    let ws = create_workspace(&app, &owner, "백업할 공간").await;
+    // D-111·D-112: 별도 설치의 조직·관리자는 그 설치 DB에만 시드한다.
+    let mut fixture = PgConnection::connect(source.db.migration_url.as_ref().unwrap().expose())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO fvoci.server_admins (user_id) VALUES ($1)")
+        .bind(owner.id.0)
+        .execute(&mut fixture)
+        .await
+        .unwrap();
+    let mut tx = fixture.begin().await.unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
+        .bind(owner.id.0)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let organization: uuid::Uuid =
+        sqlx::query_scalar("SELECT fvoci.app_create_organization($1, $2, $3, $4)")
+            .bind(uuid::Uuid::now_v7())
+            .bind("백업 조직")
+            .bind(owner.id.0)
+            .bind((0..3).map(|_| uuid::Uuid::now_v7()).collect::<Vec<_>>())
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    fixture.close().await.unwrap();
+    let workspace = send(&app, Method::POST, "/api/workspaces", Some(&owner),
+        Some(json!({ "request_id": new_request_id(), "organization_id": organization, "name": "백업할 공간" }))).await;
+    assert_eq!(
+        workspace.status,
+        StatusCode::CREATED,
+        "{:?}",
+        workspace.json
+    );
+    let ws = workspace.json["id"].as_str().unwrap().to_owned();
     let doc = create_doc(&app, &owner, &ws, "회의록").await;
     let doc_id = doc["id"].as_str().unwrap().to_owned();
     let saved = send(

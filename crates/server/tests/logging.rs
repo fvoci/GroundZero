@@ -417,7 +417,7 @@ async fn audit_events_stay_when_the_log_level_is_lowered() {
     let app = common::app(&state);
     let admin = common::login(&state, "audit-admin").await;
     let ws = common::create_workspace(&app, &admin, "감사 로그").await;
-    let (_writer, _) = common::add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (_writer, _) = common::add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = common::create_doc(&app, &admin, &ws, "지울 문서").await;
     let r = common::send(
         &app,

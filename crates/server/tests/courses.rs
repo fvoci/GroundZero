@@ -75,8 +75,8 @@ async fn course_episodes_and_personal_progress() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "강의").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = course(&app, &admin, &ws).await;
 
@@ -185,15 +185,19 @@ async fn course_episodes_and_personal_progress() {
     let today = time::OffsetDateTime::now_utc().date();
     let yesterday = today - time::Duration::days(1);
 
-    // 진도는 사람마다(읽기만 하는 사람도 자기 진도는 남긴다). 다시 보아 완료해도 완료는 한 번.
+    // 진도는 사람마다. 읽기 전용은 자기 진도도 남기지 못한다(개정 2026-10-26 ⑧, D-20). 다시 보아 완료해도 완료는 한 번.
     assert_eq!(
         progress(&app, &reader, &eps[0], json!({ "status": "done" })).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        progress(&app, &writer, &eps[0], json!({ "status": "done" })).await,
         StatusCode::NO_CONTENT
     );
     assert_eq!(
         progress(
             &app,
-            &reader,
+            &writer,
             &eps[0],
             json!({ "status": "in_progress", "last_position_seconds": 300,
                                                         "note": "다시 보기" })
@@ -204,7 +208,7 @@ async fn course_episodes_and_personal_progress() {
     assert_eq!(
         progress(
             &app,
-            &reader,
+            &writer,
             &eps[0],
             json!({ "status": "done", "note": "다시 보기" })
         )
@@ -214,7 +218,7 @@ async fn course_episodes_and_personal_progress() {
     assert_eq!(
         progress(
             &app,
-            &reader,
+            &writer,
             &eps[1],
             json!({ "status": "in_progress", "planned_on": yesterday.to_string() })
         )
@@ -226,10 +230,10 @@ async fn course_episodes_and_personal_progress() {
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        progress(&app, &reader, &eps[1], json!({ "status": "finished" })).await,
+        progress(&app, &writer, &eps[1], json!({ "status": "finished" })).await,
         StatusCode::BAD_REQUEST
     );
-    let mine = get(&app, &reader, &item).await;
+    let mine = get(&app, &writer, &item).await;
     assert_eq!(mine["episodes"][0]["mine"]["status"], "done");
     assert_eq!(mine["episodes"][0]["mine"]["watch_count"], 2);
     assert_eq!(mine["episodes"][0]["mine"]["note"], "다시 보기");
@@ -238,7 +242,7 @@ async fn course_episodes_and_personal_progress() {
         yesterday.to_string()
     );
     // 다른 사람에게는 내 진도·메모가 보이지 않는다.
-    let theirs = get(&app, &writer, &item).await;
+    let theirs = get(&app, &admin, &item).await;
     assert_eq!(theirs["episodes"][0]["mine"]["status"], "not_started");
     assert_eq!(theirs["episodes"][0]["mine"]["note"], "");
 
@@ -257,7 +261,7 @@ async fn course_episodes_and_personal_progress() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|p| p["display_name"] == "reader")
+        .find(|p| p["display_name"] == "member")
         .unwrap()
         .clone();
     assert_eq!(p["done"], 1);
@@ -374,7 +378,7 @@ async fn completion_dates_links_and_participant_visibility() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "강의 리뷰").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = course(&app, &admin, &ws).await;
 
     let bad = json!({ "subject": "", "instructor": "", "platform": "", "url": "javascript:alert(1)",
@@ -477,7 +481,7 @@ async fn completion_dates_links_and_participant_visibility() {
             .map(|p| p["display_name"].as_str().unwrap().to_owned())
             .collect()
     };
-    assert_eq!(names(participants(admin.clone()).await), ["writer"]);
+    assert_eq!(names(participants(admin.clone()).await), ["member"]);
     let r = send(
         &app,
         Method::PUT,
@@ -567,7 +571,7 @@ async fn two_writers_on_the_same_episode_version_do_not_overwrite() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "강의 동시 수정").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = course(&app, &admin, &ws).await;
     let added = send(
         &app,

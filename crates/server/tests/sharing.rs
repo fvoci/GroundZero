@@ -67,12 +67,14 @@ async fn share(
     email: &str,
     permission: &str,
 ) -> Value {
+    // D-114: 개인 노트 공유에도 공통 조직을 명시한다.
+    let organization = common::organization_for(owner).await;
     let r = send(
         app,
         Method::POST,
         &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
         Some(owner),
-        Some(json!({ "email": email, "permission": permission })),
+        Some(json!({ "email": email, "permission": permission, "organization_id": organization })),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
@@ -103,8 +105,8 @@ async fn private_team_document_is_visible_to_creator_admin_and_shares_only() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "비공개").await;
-    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
-    let (other, other_email) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "member").await;
+    let (other, other_email) = add_member(&app, &state, &admin, &ws, "other", "member").await;
     let doc = create_doc(&app, &creator, &ws, "작성자 비공개").await;
 
     // 작성자는 소유 권한이 아니므로 설정을 바꿀 수 없다. 관리자는 바꿀 수 있다.
@@ -148,12 +150,60 @@ async fn private_team_document_is_visible_to_creator_admin_and_shares_only() {
 }
 
 #[tokio::test]
+async fn shares_require_organization_membership_and_respect_readonly_ceiling() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "공유 경계").await;
+    let doc = create_doc(&app, &admin, &ws, "비공개 공유").await;
+    assert_eq!(
+        settings(&app, &admin, &doc, "private", false).await,
+        StatusCode::OK
+    );
+    let organization = common::organization_of_workspace(&ws).await;
+    let email = unique_email("outside");
+    let outsider = login_with_email(&state, "outside", &email, true).await;
+    let (reader, reader_email) =
+        add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
+    // D-20·D-114: 조직 밖 공유와 읽기 전용의 수정 공유는 각각 400이며 접근을 주지 않는다.
+    for recipient in [&email, &reader_email] {
+        let rejected = send(&app, Method::POST,
+            &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
+            Some(&admin), Some(json!({ "email": recipient, "permission": "write", "organization_id": organization }))).await;
+        assert_eq!(
+            rejected.status,
+            StatusCode::BAD_REQUEST,
+            "{:?}",
+            rejected.json
+        );
+    }
+    assert_eq!(get(&app, &outsider, &doc).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(get(&app, &reader, &doc).await.0, StatusCode::NOT_FOUND);
+    let granted = share(&app, &admin, &doc, &reader_email, "read").await;
+    assert_eq!(get(&app, &reader, &doc).await.1["access"], "read");
+    let list = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+    assert_eq!(list.json.as_array().unwrap().len(), 1);
+    assert_eq!(list.json[0]["id"], granted["id"]);
+    assert_eq!(list.json[0]["email"], reader_email);
+    assert_eq!(list.json[0]["display_name"], "readonly");
+}
+
+#[tokio::test]
 async fn share_permissions_and_revocation_take_effect_immediately() {
     let state = common::state();
     let app = common::app(&state);
     let alice = login(&state, "alice").await;
     let bob_email = unique_email("bob");
     let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    common::join_organization(common::organization_for(&alice).await, &bob, "member").await;
     let note = create_note(&app, &alice, "앨리스 노트").await;
     assert_eq!(note["placement"], "personal");
     assert_eq!(note["reference"], Value::Null);
@@ -226,7 +276,13 @@ async fn shared_personal_note_does_not_reach_the_grantees_workspace_admin() {
     let alice = login(&state, "alice").await;
     let boss = login(&state, "boss").await;
     let ws = create_workspace(&app, &boss, "B의 회사").await;
-    let (bob, bob_email) = add_member(&app, &state, &boss, &ws, "bob", "writer").await;
+    let (bob, bob_email) = add_member(&app, &state, &boss, &ws, "bob", "member").await;
+    common::join_organization(
+        common::organization_of_workspace(&ws).await,
+        &alice,
+        "member",
+    )
+    .await;
 
     let note = create_note(&app, &alice, "앨리스 개인 노트").await;
     share(&app, &alice, &note, &bob_email, "write").await;
@@ -263,6 +319,7 @@ async fn copy_requires_permission_and_is_independent() {
     let alice = login(&state, "alice").await;
     let bob_email = unique_email("bob");
     let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    common::join_organization(common::organization_for(&alice).await, &bob, "member").await;
     let note = create_note(&app, &alice, "원본").await;
     let (_, saved) = save(&app, &alice, &note, 1, "원본 내용").await;
     share(&app, &alice, &note, &bob_email, "read").await;
@@ -339,10 +396,11 @@ async fn move_doc(
     )
     .await;
     // 409라도 미리보기가 아니라 상태 오류(예: 팀 문서 → 개인)면 그대로 돌려준다.
-    if preview.status != StatusCode::CONFLICT || preview.json.get("gains").is_none() {
+    if preview.status != StatusCode::CONFLICT || preview.json.get("changes").is_none() {
         return (preview.status, preview.json);
     }
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 확인은 사용자 id와 이동 전후 등급을 포함한 변화 전체에 대해 한다.
+    let ack = json!({ "changes": preview.json["changes"] });
     let r = send(
         app,
         Method::POST,
@@ -361,8 +419,8 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
     let alice = login(&state, "alice").await;
     let src = create_workspace(&app, &alice, "출발").await;
     let dst = create_workspace(&app, &alice, "도착").await;
-    let (src_reader, _) = add_member(&app, &state, &alice, &src, "src-reader", "reader").await;
-    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "writer").await;
+    let (src_reader, _) = add_member(&app, &state, &alice, &src, "src-reader", "readonly").await;
+    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "member").await;
     let doc = create_doc(&app, &alice, &src, "옮길 문서").await;
     assert_eq!(get(&app, &src_reader, &doc).await.0, StatusCode::OK);
 
@@ -376,8 +434,13 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::CONFLICT);
-    assert_eq!(preview.json["loses"], json!(["src-reader"]));
-    assert_eq!(preview.json["gains"], json!(["dst-writer"]));
+    assert_eq!(
+        preview.json["changes"],
+        json!([
+            { "change": "gain", "user_id": dst_writer.id.0, "display_name": "dst-writer", "from_grade": null, "to_grade": "write" },
+            { "change": "lose", "user_id": src_reader.id.0, "display_name": "src-reader", "from_grade": "read", "to_grade": null }
+        ])
+    );
     assert_eq!(preview.json["history_moves_with_document"], true);
 
     // 확인한 미리보기가 지금과 다르면(그사이 멤버가 바뀐 경우 등) 옮기지 않고 새 미리보기를 준다.
@@ -386,7 +449,7 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
         Method::POST,
         &uri,
         Some(&alice),
-        Some(json!({ "target_workspace_id": dst, "acknowledged": { "gains": [], "loses": [] } })),
+        Some(json!({ "target_workspace_id": dst, "acknowledged": { "changes": [] } })),
     )
     .await;
     assert_eq!(stale.status, StatusCode::CONFLICT);
@@ -428,8 +491,10 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
     let app = common::app(&state);
     let alice = login(&state, "alice").await;
     let src = create_workspace(&app, &alice, "출발").await;
-    let (creator, _) = add_member(&app, &state, &alice, &src, "creator", "writer").await;
+    let (creator, _) = add_member(&app, &state, &alice, &src, "creator", "member").await;
     let boss = login(&state, "boss").await;
+    // D-114: 공간 간 이동은 같은 조직 안에서 검증한다.
+    common::join_organization(common::organization_for(&alice).await, &boss, "member").await;
     let dst = create_workspace(&app, &boss, "남의 팀").await;
     let alice_email = unique_email("alice-dst");
     let alice_dst = login_with_email(&state, "alice-dst", &alice_email, true).await;
@@ -440,10 +505,17 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
         Method::POST,
         &format!("/api/workspaces/{dst}/invitations"),
         Some(&boss),
-        Some(json!({ "email": alice_email, "role": "writer" })),
+        Some(json!({ "email": alice_email, "role": "member" })),
     )
     .await;
     let alice_with_email = login_with_email(&state, "alice-src", &alice_email, true).await;
+    // 워크스페이스 초대는 그 조직의 멤버만 수락한다(D-114).
+    common::join_organization(
+        common::organization_of_workspace(&dst).await,
+        &alice_with_email,
+        "member",
+    )
+    .await;
     send(
         &app,
         Method::POST,
@@ -504,12 +576,18 @@ async fn personal_note_moves_into_a_workspace_as_private() {
     let ws = create_workspace(&app, &boss, "팀").await;
     let alice_email = unique_email("alice2");
     let alice2 = login_with_email(&state, "alice2", &alice_email, true).await;
+    common::join_organization(
+        common::organization_of_workspace(&ws).await,
+        &alice2,
+        "member",
+    )
+    .await;
     let inv = send(
         &app,
         Method::POST,
         &format!("/api/workspaces/{ws}/invitations"),
         Some(&boss),
-        Some(json!({ "email": alice_email, "role": "writer" })),
+        Some(json!({ "email": alice_email, "role": "member" })),
     )
     .await;
     send(
@@ -523,7 +601,7 @@ async fn personal_note_moves_into_a_workspace_as_private() {
         None,
     )
     .await;
-    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "member").await;
 
     let note = create_note(&app, &alice2, "개인 → 팀").await;
     let uri = format!("/api/documents/{}/move", note["id"].as_str().unwrap());
@@ -536,7 +614,18 @@ async fn personal_note_moves_into_a_workspace_as_private() {
     )
     .await;
     // 개인 노트는 비공개로 들어가므로 관리자만 새로 볼 수 있다.
-    assert_eq!(preview.json["gains"], json!(["boss"]));
+    let gains: Vec<_> = preview.json["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["change"] == "gain")
+        .collect();
+    assert_eq!(
+        gains,
+        vec![
+            &json!({ "change": "gain", "user_id": boss.id.0, "display_name": "boss", "from_grade": null, "to_grade": "owner" })
+        ]
+    );
     let (status, moved) = move_doc(&app, &alice2, &note, Some(&ws)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(moved["document"]["placement"], "wiki");
@@ -552,9 +641,15 @@ async fn copies_of_private_documents_stay_private() {
     let app = common::app(&state);
     let boss = login(&state, "boss").await;
     let ws = create_workspace(&app, &boss, "팀").await;
-    let (member, member_email) = add_member(&app, &state, &boss, &ws, "member", "writer").await;
-    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "writer").await;
+    let (member, member_email) = add_member(&app, &state, &boss, &ws, "member", "member").await;
+    let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "member").await;
     let outsider = login(&state, "outsider").await;
+    common::join_organization(
+        common::organization_of_workspace(&ws).await,
+        &outsider,
+        "member",
+    )
+    .await;
     let note = create_note(&app, &outsider, "외부 노트").await;
     share(&app, &outsider, &note, &member_email, "read").await;
     settings(&app, &outsider, &note, "private", true).await;
@@ -635,6 +730,8 @@ async fn settings_need_definer_path_and_personal_audit_is_visible_to_owner() {
     drop(tx);
 
     let bob_email = unique_email("bob");
+    let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    common::join_organization(common::organization_for(&alice).await, &bob, "member").await;
     share(&app, &alice, &note, &bob_email, "read").await;
     let mut tx = state.db.begin_as(alice.id).await.unwrap();
     let actions: Vec<String> = sqlx::query_scalar(
@@ -668,8 +765,8 @@ async fn export(
     (r.status, r.json)
 }
 
-/// 문서 한 건 내보내기(D-75): 첨부 내려받기와 같은 권한. 작성자·관리자는 되고, 독자는 소유자가 복제·내려받기를
-/// 허용했을 때만, 볼 수 없는 사람은 404. 고른 저장 리비전의 내용을 주고 내보내기 기록을 남긴다. 개인 노트도 같은
+/// 문서 한 건 내보내기(D-75·D-115): 소유 권한이 있거나 allow_copy가 켜져 있어야 하며 볼 수 없는 사람은 404다.
+/// 고른 저장 리비전의 내용을 주고 내보내기 기록을 남긴다. 개인 노트도 같은
 /// 규칙이며 기록은 노트 소유자의 개인 영역에 남는다.
 #[tokio::test]
 async fn export_follows_download_permission_and_is_audited() {
@@ -677,8 +774,8 @@ async fn export_follows_download_permission_and_is_audited() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "내보내기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "보고서").await;
     assert_eq!(
@@ -694,7 +791,12 @@ async fn export_follows_download_permission_and_is_audited() {
         StatusCode::OK
     );
 
-    let (status, rev) = export(&app, &writer, &doc, 2, "markdown").await;
+    // D-115: 수정 권한도 allow_copy가 꺼져 있으면 내보내지 못한다.
+    assert_eq!(
+        export(&app, &writer, &doc, 2, "markdown").await.0,
+        StatusCode::FORBIDDEN
+    );
+    let (status, rev) = export(&app, &admin, &doc, 2, "markdown").await;
     assert_eq!(status, StatusCode::OK, "{rev:?}");
     assert_eq!(rev["revision"], 2);
     assert!(rev["body"].to_string().contains("첫 저장"), "{rev:?}");
@@ -709,7 +811,7 @@ async fn export_follows_download_permission_and_is_audited() {
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        export(&app, &writer, &doc, 99, "markdown").await.0,
+        export(&app, &admin, &doc, 99, "markdown").await.0,
         StatusCode::NOT_FOUND
     );
     assert!(
@@ -733,6 +835,7 @@ async fn export_follows_download_permission_and_is_audited() {
     let bob_email = unique_email("bob");
     let bob = login_with_email(&state, "bob", &bob_email, true).await;
     let note = create_note(&app, &writer, "개인 노트").await;
+    common::join_organization(common::organization_of_workspace(&ws).await, &bob, "member").await;
     share(&app, &writer, &note, &bob_email, "read").await;
     assert_eq!(
         export(&app, &bob, &note, 1, "markdown").await.0,

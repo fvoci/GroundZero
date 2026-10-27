@@ -49,7 +49,7 @@
     templateId = '';
   });
 
-  const canWrite = $derived(workspace.role !== 'reader');
+  const canWrite = $derived(workspace.role !== 'readonly');
 
   // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
   let realtime = $state(false);

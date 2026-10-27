@@ -18,7 +18,7 @@ async fn documents_start_from_readable_templates() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "템플릿").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
 
     let template = create_doc(&app, &admin, &ws, "회의록 양식").await;
@@ -277,7 +277,7 @@ async fn restoring_a_document_leaves_tasks_and_progress_alone() {
     // 업무 완료, 강의 완료 표시.
     let task_id = task.json["id"].as_str().unwrap().to_owned();
     let done = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
-        "base_version": task.json["version"], "title": "과제", "description": "", "status": "done", "priority": "none",
+        "base_version": task.json["version"], "title": "과제", "description": "", "status": "완료", "priority": "none",
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [] }))).await;
     assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
@@ -321,7 +321,9 @@ async fn restoring_a_document_leaves_tasks_and_progress_alone() {
         None,
     )
     .await;
-    assert_eq!(task_now.json["status"], "done");
+    assert_eq!(task_now.json["status"], "완료");
+    // D-116: 상태 이름과 별개로 집계에 쓰는 범주도 보존한다.
+    assert_eq!(task_now.json["status_category"], "done");
     let course_now = send(
         &app,
         Method::GET,

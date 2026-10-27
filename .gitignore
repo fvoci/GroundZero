@@ -23,3 +23,6 @@ coverage/
 
 # Wrangler 로컬 상태(Storybook 배포 설정 확인 시 생긴다)
 .wrangler/
+
+# 크레이트 디렉터리에서 돌린 시험의 산출물(워크스페이스 루트 target 밖)
+crates/*/target/

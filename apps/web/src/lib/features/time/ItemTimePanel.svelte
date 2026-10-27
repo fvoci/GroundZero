@@ -122,7 +122,7 @@
           <tr
             ><th class="pr-4 font-medium">{m.time_kind()}</th><th class="pr-4 font-medium"
               >{m.time_my_time()}</th
-            ><th class="font-medium">{m.time_shared_total()}</th></tr
+            ></tr
           >
         </thead>
         <tbody>
@@ -130,14 +130,6 @@
             <tr class="border-t">
               <td class="pr-4">{TIME_KIND_LABEL[k.kind]}</td>
               <td class="pr-4">{durationText(k.mine_seconds)}</td>
-              <td
-                >{k.shared_people > 0
-                  ? m.time_with_people({
-                      total: durationText(k.shared_seconds),
-                      count: k.shared_people,
-                    })
-                  : '—'}</td
-              >
             </tr>
           {/each}
         </tbody>

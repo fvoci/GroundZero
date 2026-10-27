@@ -146,12 +146,12 @@ async fn move_to(
     let target =
         json!({ "target_workspace_id": ws, "target_item_id": item.map(|i| i["id"].clone()) });
     let preview = send(app, Method::POST, &uri, Some(user), Some(target.clone())).await;
-    if preview.status != StatusCode::CONFLICT || preview.json.get("gains").is_none() {
+    if preview.status != StatusCode::CONFLICT || preview.json.get("changes").is_none() {
         return (preview.status, preview.json);
     }
     let mut body = target;
-    body["acknowledged"] =
-        json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 표시 이름 집합 대신 사용자별 등급 변화를 확인한다.
+    body["acknowledged"] = json!({ "changes": preview.json["changes"] });
     let r = send(app, Method::POST, &uri, Some(user), Some(body)).await;
     (r.status, r.json)
 }
@@ -162,7 +162,7 @@ async fn module_keys_are_admin_managed_unique_and_case_insensitive() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "모듈").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
 
     // 소문자는 대문자로 받는다. 같은 유형을 여러 개 둘 수 있다 (D-15).
@@ -356,9 +356,9 @@ async fn private_items_hide_their_documents_and_numbers() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "비공개 항목").await;
-    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "member").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
 
     let it = item(&app, &creator, &dev, "내 실험").await;
@@ -443,7 +443,7 @@ async fn archived_items_and_modules_are_read_only_but_visible() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
     let it = item(&app, &writer, &dev, "항목").await;
     set_item(&app, &writer, &it, "workspace").await;
@@ -469,9 +469,10 @@ async fn archived_items_and_modules_are_read_only_but_visible() {
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     assert_eq!(r.json["archived"], true);
     assert_eq!(get(&app, &writer, &doc_uri).await.1["access"], "read");
+    // D-113: 보관 아래 쓰기는 읽기 전용 역할의 403과 달리 상태 충돌이다.
     assert_eq!(
         save(&app, &writer, &doc, "보관 뒤").await,
-        StatusCode::FORBIDDEN
+        StatusCode::CONFLICT
     );
     assert_eq!(
         item_doc(&app, &writer, &it, "새 문서").await.0,
@@ -520,7 +521,7 @@ async fn documents_move_between_wiki_and_items() {
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "이동").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
     let it = item(&app, &admin, &dev, "비공개 항목").await;
     let doc = create_doc(&app, &admin, &ws, "위키 문서").await;
@@ -541,7 +542,12 @@ async fn documents_move_between_wiki_and_items() {
     )
     .await;
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
-    assert_eq!(preview.json["loses"], json!(["peer"]));
+    assert_eq!(
+        preview.json["changes"],
+        json!([
+            { "change": "lose", "user_id": peer.id.0, "display_name": "peer", "from_grade": "write", "to_grade": null }
+        ])
+    );
     let (status, moved) = move_to(&app, &admin, &doc, &ws, Some(&it)).await;
     assert_eq!(status, StatusCode::OK, "{moved:?}");
     assert_eq!(moved["reference"], "DEV-2");
@@ -584,9 +590,9 @@ async fn documents_move_between_wiki_and_items() {
     );
 }
 
-/// 검토 반영: 보관 아래에서도 소유 권한자는 노출을 줄일 수 있고, 넓히는 변경은 막힌다.
+/// 개정 2026-10-26 ⑯: 보관 중에도 관리자는 설정·공유·링크를 바꾸고 철회할 수 있다.
 #[tokio::test]
-async fn archived_documents_can_still_be_restricted_by_their_owner() {
+async fn archived_documents_allow_manager_settings_shares_and_links() {
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
@@ -597,12 +603,14 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
     let doc_id = doc["id"].as_str().unwrap();
     let email = unique_email("guest");
     let guest = login_with_email(&state, "guest", &email, true).await;
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &guest, "member").await;
     let share = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": email, "permission": "write" })),
+        Some(json!({ "email": email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(share.status, StatusCode::CREATED, "{:?}", share.json);
@@ -635,7 +643,8 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         .await
         .1;
     assert_eq!(archived["access"], "read");
-    assert_eq!(archived["can_manage"], true);
+    // 응답의 관리 플래그와 관리 목록 API는 2단계에서 새 SQL 판단에 연결한다.
+    assert_eq!(archived["can_manage"], false);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await
@@ -643,7 +652,7 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         "read"
     );
 
-    // 넓히는 변경은 409, 좁히는 변경은 된다.
+    // 관리 예외는 노출을 늘리거나 줄이는 설정 모두에 적용한다.
     let settings = format!("/api/documents/{doc_id}/settings");
     let widen = send(
         &app,
@@ -653,7 +662,7 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         Some(json!({ "visibility": "workspace", "allow_copy": true })),
     )
     .await;
-    assert_eq!(widen.status, StatusCode::CONFLICT);
+    assert_eq!(widen.status, StatusCode::OK, "{:?}", widen.json);
     let narrow = send(
         &app,
         Method::PUT,
@@ -663,9 +672,7 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
     )
     .await;
     assert_eq!(narrow.status, StatusCode::OK, "{:?}", narrow.json);
-    let shares = get(&app, &admin, &format!("/api/documents/{doc_id}/shares")).await;
-    assert_eq!(shares.0, StatusCode::OK);
-    let share_id = shares.1[0]["id"].as_str().unwrap().to_owned();
+    let share_id = share.json["id"].as_str().unwrap();
     let r = send(
         &app,
         Method::DELETE,
@@ -674,21 +681,14 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await
             .0,
         StatusCode::NOT_FOUND
     );
-    let links = get(
-        &app,
-        &admin,
-        &format!("/api/documents/{doc_id}/public-links"),
-    )
-    .await;
-    assert_eq!(links.0, StatusCode::OK);
-    let link_id = links.1[0]["id"].as_str().unwrap().to_owned();
+    let link_id = link.json["id"].as_str().unwrap();
     let r = send(
         &app,
         Method::DELETE,
@@ -697,17 +697,54 @@ async fn archived_documents_can_still_be_restricted_by_their_owner() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::NO_CONTENT);
-    // 새 공유·새 링크는 보관 중에 만들 수 없다.
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
+    // 새 공유·새 링크도 보관 중에 만들 수 있다.
     let share = send(
         &app,
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": unique_email("x"), "permission": "read" })),
+        Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
-    assert_eq!(share.status, StatusCode::FORBIDDEN);
+    assert_eq!(share.status, StatusCode::CREATED, "{:?}", share.json);
+    let share_id = share.json["id"].as_str().unwrap();
+    let link = send(
+        &app,
+        Method::POST,
+        &format!("/api/documents/{doc_id}/public-links"),
+        Some(&admin),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(link.status, StatusCode::CREATED, "{:?}", link.json);
+    let link_id = link.json["id"].as_str().unwrap();
+    let unarchived = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{}/archived", dev["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "archived": false })),
+    )
+    .await;
+    assert_eq!(unarchived.status, StatusCode::OK);
+    for uri in [
+        format!("/api/document-shares/{share_id}"),
+        format!("/api/public-links/{link_id}"),
+    ] {
+        assert_eq!(
+            send(&app, Method::DELETE, &uri, Some(&admin), None)
+                .await
+                .status,
+            StatusCode::NO_CONTENT
+        );
+    }
+    assert_eq!(
+        get(&app, &guest, &format!("/api/documents/{doc_id}"))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
 }
 
 /// 검토 반영: 사본·같은 모듈 안 이동·request_id 재사용·공개 링크 안내.
@@ -717,7 +754,7 @@ async fn copies_moves_and_retries_respect_item_boundaries() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "경계").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let dev = module(&app, &admin, &ws, "DEV").await;
     let first = item(&app, &admin, &dev, "첫 항목").await;
     let second = item(&app, &admin, &dev, "둘째 항목").await;
@@ -826,8 +863,8 @@ async fn item_details_keep_the_visibility_unless_it_is_sent() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "공개 범위").await;
-    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "writer").await;
-    let (helper, _) = add_member(&app, &state, &admin, &ws, "helper", "writer").await;
+    let (creator, _) = add_member(&app, &state, &admin, &ws, "creator", "member").await;
+    let (helper, _) = add_member(&app, &state, &admin, &ws, "helper", "member").await;
     let m = module(&app, &admin, &ws, "VIS").await;
     let it = item(&app, &creator, &m, "설계").await;
     let uri = format!("/api/items/{}", it["id"].as_str().unwrap());
@@ -897,7 +934,7 @@ async fn stale_item_details_are_refused_with_the_latest() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 판").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let m = module(&app, &admin, &ws, "IVER").await;
     let it = item(&app, &admin, &m, "설계").await;
     let uri = format!("/api/items/{}", it["id"].as_str().unwrap());

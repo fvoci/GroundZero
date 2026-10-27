@@ -46,7 +46,7 @@ describe('time entries at a wall time that does not exist', () => {
       target: null,
       version: 1,
     });
-    render(TimeScreen, { props: { workspaces: [] } });
+    render(TimeScreen);
     const day = await screen.findByLabelText(m.time_date());
     await fireEvent.input(day, { target: { value: '2026-03-08' } });
     await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '02:30' } });
@@ -107,7 +107,7 @@ describe('time entries at a wall time that does not exist', () => {
       target: null,
       version: 1,
     });
-    render(TimeScreen, { props: { workspaces: [] } });
+    render(TimeScreen);
     const day = await screen.findByLabelText(m.time_date());
     await fireEvent.input(day, { target: { value: '2026-03-08' } });
     await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '03:00' } });
@@ -144,7 +144,7 @@ describe('time entries at a wall time that does not exist', () => {
   it('manual entry: changing only the date clears the missing-time error beside the field', async () => {
     // 없는 시각인지는 날짜와 시각을 함께 보고 정하므로, 날짜만 바꿔도 칸 옆 오류를 지운다(다시 저장할 때 다시 본다).
     const add = vi.spyOn(api, 'addTimeEntry').mockRejectedValue(new Error('not expected'));
-    render(TimeScreen, { props: { workspaces: [] } });
+    render(TimeScreen);
     const day = await screen.findByLabelText(m.time_date());
     await fireEvent.input(day, { target: { value: '2026-03-08' } });
     await fireEvent.input(screen.getByLabelText(m.time_start()), { target: { value: '02:30' } });

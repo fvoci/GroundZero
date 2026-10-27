@@ -109,8 +109,8 @@ async fn tasks_share_the_module_sequence_and_follow_item_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "업무").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "DEV").await;
     assert_eq!(item["reference"], "DEV-1");
@@ -172,16 +172,16 @@ async fn tasks_share_the_module_sequence_and_follow_item_access() {
             .0,
         StatusCode::FORBIDDEN
     );
-    let (status, edited) = update(&app, &writer, &current, json!({ "status": "done", "priority": "high", "due_date": "2026-10-31", "tags": ["화면", "화면", " 검토 "] })).await;
+    let (status, edited) = update(&app, &writer, &current, json!({ "status": "완료", "priority": "high", "due_date": "2026-10-31", "tags": ["화면", "화면", " 검토 "] })).await;
     assert_eq!(status, StatusCode::OK, "{edited:?}");
-    assert_eq!(edited["status"], "done");
+    assert_eq!(edited["status"], "완료");
     assert!(
         edited["completed_at"].is_string(),
         "completion time is recorded by the server"
     );
     assert_eq!(edited["due_date"], "2026-10-31");
     assert_eq!(edited["tags"], json!(["화면", "검토"]));
-    let (_, reopened) = update(&app, &writer, &edited, json!({ "status": "todo" })).await;
+    let (_, reopened) = update(&app, &writer, &edited, json!({ "status": "할 일" })).await;
     assert_eq!(reopened["completed_at"], Value::Null);
     assert_eq!(
         update(
@@ -230,7 +230,7 @@ async fn versions_guard_field_edits_but_not_board_moves() {
         Method::PUT,
         &format!("/api/tasks/{}/position", b["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "status": "todo", "before_id": a["id"] })),
+        Some(json!({ "status": "할 일", "before_id": a["id"] })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -262,14 +262,14 @@ async fn versions_guard_field_edits_but_not_board_moves() {
         Method::PUT,
         &format!("/api/tasks/{}/position", a["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "status": "in_progress", "before_id": null })),
+        Some(json!({ "status": "진행 중", "before_id": null })),
     )
     .await
     .json;
-    assert_eq!(moved["status"], "in_progress");
+    assert_eq!(moved["status"], "진행 중");
     let (status, conflict) = update(&app, &admin, &a, json!({ "title": "가 수정" })).await;
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(conflict["current"]["status"], "in_progress");
+    assert_eq!(conflict["current"]["status"], "진행 중");
 }
 
 #[tokio::test]
@@ -278,8 +278,8 @@ async fn assignees_must_see_the_item_and_lose_assignments_with_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "담당").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "DEV").await;
     let t = task(&app, &admin, &item, "배포").await;
@@ -389,7 +389,7 @@ async fn checklists_are_idempotent_and_reader_cannot_toggle() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "체크리스트").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let item = module_item(&app, &admin, &ws, "DEV").await;
     make_public(&app, &admin, &item).await;
     let t = task(&app, &admin, &item, "준비").await;
@@ -560,7 +560,7 @@ async fn demotion_drops_assignments_on_items_the_member_can_no_longer_see() {
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", deputy.id.0),
         Some(&admin),
-        Some(json!({ "role": "writer" })),
+        Some(json!({ "role": "member" })),
     )
     .await;
     assert!(r.status.is_success(), "{:?}", r.json);
@@ -592,7 +592,7 @@ async fn checklist_rename_and_toggle_by_two_people_both_stay() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "체크리스트 동시").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CHK").await;
     make_public(&app, &admin, &item).await;
     let t = task(&app, &admin, &item, "보고서").await;
@@ -719,7 +719,7 @@ async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "조건부 이동").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CMV").await;
     make_public(&app, &admin, &item).await;
     let a = task(&app, &admin, &item, "가").await;
@@ -729,61 +729,61 @@ async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
     assert_eq!(a["move_version"], 0);
 
     // 다른 사람이 먼저 옮기면, 그 전에 읽은 판으로 보낸 이동은 409와 지금 업무를 받고 아무것도 바꾸지 못한다.
-    let (status, _) = move_to(&app, &writer, &id(&a), "in_progress", None, None).await;
+    let (status, _) = move_to(&app, &writer, &id(&a), "진행 중", None, None).await;
     assert_eq!(status, StatusCode::OK);
     let before = board(&app, &admin, &item).await;
-    let (status, conflict) = move_to(&app, &admin, &id(&a), "done", None, Some(0)).await;
+    let (status, conflict) = move_to(&app, &admin, &id(&a), "완료", None, Some(0)).await;
     assert_eq!(status, StatusCode::CONFLICT, "{conflict:?}");
     assert_eq!(conflict["error"], "move_conflict");
-    assert_eq!(conflict["current"]["status"], "in_progress");
+    assert_eq!(conflict["current"]["status"], "진행 중");
     assert_eq!(conflict["current"]["move_version"], 1);
     assert_eq!(board(&app, &admin, &item).await, before);
 
     // 같은 열 안에서 순서만 바뀌어도 이동 판이 오른다(필드 판은 그대로라 상세 편집은 막지 않는다).
-    let (status, reordered) = move_to(&app, &writer, &id(&c), "todo", Some(&id(&b)), None).await;
+    let (status, reordered) = move_to(&app, &writer, &id(&c), "할 일", Some(&id(&b)), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(reordered["move_version"], 1);
     assert_eq!(reordered["version"], c["version"]);
     let before = board(&app, &admin, &item).await;
-    let (status, _) = move_to(&app, &admin, &id(&c), "done", None, Some(0)).await;
+    let (status, _) = move_to(&app, &admin, &id(&c), "완료", None, Some(0)).await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(board(&app, &admin, &item).await, before);
     // 지금 판으로 보내면 옮겨진다.
-    let (status, moved) = move_to(&app, &admin, &id(&c), "done", None, Some(1)).await;
+    let (status, moved) = move_to(&app, &admin, &id(&c), "완료", None, Some(1)).await;
     assert_eq!(status, StatusCode::OK, "{moved:?}");
     assert_eq!(moved["move_version"], 2);
 
     // 응답을 잃은 뒤 같은 판으로 다시 보내면(이미 반영됨) 두 번 옮기지 않고 409다.
-    let (status, first) = move_to(&app, &admin, &id(&b), "in_progress", None, Some(0)).await;
+    let (status, first) = move_to(&app, &admin, &id(&b), "진행 중", None, Some(0)).await;
     assert_eq!(status, StatusCode::OK);
     let after_first = board(&app, &admin, &item).await;
-    let (status, again) = move_to(&app, &admin, &id(&b), "in_progress", None, Some(0)).await;
+    let (status, again) = move_to(&app, &admin, &id(&b), "진행 중", None, Some(0)).await;
     assert_eq!(status, StatusCode::CONFLICT, "{again:?}");
     assert_eq!(again["current"]["move_version"], first["move_version"]);
     assert_eq!(board(&app, &admin, &item).await, after_first);
 
     // 되돌리기: 내 이동 뒤 다른 사람이 같은 열 안에서 순서를 바꿨으면 되돌리지 못한다.
     let mine = first["move_version"].as_i64().unwrap();
-    let (status, _) = move_to(&app, &writer, &id(&b), "in_progress", Some(&id(&a)), None).await;
+    let (status, _) = move_to(&app, &writer, &id(&b), "진행 중", Some(&id(&a)), None).await;
     assert_eq!(status, StatusCode::OK);
-    let (status, _) = move_to(&app, &admin, &id(&b), "todo", None, Some(mine)).await;
+    let (status, _) = move_to(&app, &admin, &id(&b), "할 일", None, Some(mine)).await;
     assert_eq!(status, StatusCode::CONFLICT);
 
     // 필드 고치기로 상태를 바꿔도 이동 판이 오른다(어느 경로로 바뀌었든 같은 판).
     let (_, fresh_a) = get(&app, &admin, &format!("/api/tasks/{}", id(&a))).await;
     let read = fresh_a["move_version"].as_i64().unwrap();
-    let (status, edited) = update(&app, &writer, &fresh_a, json!({ "status": "done" })).await;
+    let (status, edited) = update(&app, &writer, &fresh_a, json!({ "status": "완료" })).await;
     assert_eq!(status, StatusCode::OK, "{edited:?}");
     assert_eq!(edited["move_version"].as_i64().unwrap(), read + 1);
-    let (status, _) = move_to(&app, &admin, &id(&a), "todo", None, Some(read)).await;
+    let (status, _) = move_to(&app, &admin, &id(&a), "할 일", None, Some(read)).await;
     assert_eq!(status, StatusCode::CONFLICT);
 
     // 같은 판으로 동시에 보내면 하나만 옮겨지고 나머지는 409다(비교와 옮기기 사이에 끼지 못한다).
     let base = edited["move_version"].as_i64().unwrap();
     let ta = id(&a);
     let (one, two) = tokio::join!(
-        move_to(&app, &admin, &ta, "todo", None, Some(base)),
-        move_to(&app, &writer, &ta, "in_progress", None, Some(base)),
+        move_to(&app, &admin, &ta, "할 일", None, Some(base)),
+        move_to(&app, &writer, &ta, "진행 중", None, Some(base)),
     );
     let mut statuses = [one.0, two.0];
     statuses.sort_by_key(StatusCode::as_u16);
@@ -791,16 +791,16 @@ async fn conditional_moves_refuse_a_place_changed_since_it_was_read() {
     let (_, now) = get(&app, &admin, &format!("/api/tasks/{ta}")).await;
     assert_eq!(now["move_version"].as_i64().unwrap(), base + 1);
     let winner = if one.0 == StatusCode::OK {
-        "todo"
+        "할 일"
     } else {
-        "in_progress"
+        "진행 중"
     };
     assert_eq!(now["status"], winner);
 
     // 조건 없는 이동은 이전과 같다(판과 상관없이 옮김).
-    let (status, plain) = move_to(&app, &writer, &ta, "done", None, None).await;
+    let (status, plain) = move_to(&app, &writer, &ta, "완료", None, None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(plain["status"], "done");
+    assert_eq!(plain["status"], "완료");
 }
 
 /// 초기화 복제는 모든 열을 "할 일"로 합친다. 원본의 열마다 있던 위치값이 겹치면 그 뒤의 이동이 엉뚱한 자리로 간다
@@ -817,13 +817,13 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
     let _a = task(&app, &admin, &item, "A").await;
     let b = task(&app, &admin, &item, "B").await;
     let _c = task(&app, &admin, &item, "C").await;
-    // 원본: A(todo, 1), B(done, 1), C(todo, 3). 복제가 합치면 A와 B의 위치가 겹친다.
+    // 원본: A(할 일, 1), B(완료, 1), C(할 일, 3). 복제가 합치면 A와 B의 위치가 겹친다.
     let moved = send(
         &app,
         Method::PUT,
         &format!("/api/tasks/{}/position", b["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "status": "done", "before_id": null })),
+        Some(json!({ "status": "완료", "before_id": null })),
     )
     .await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
@@ -835,9 +835,11 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
             )
             .await
             .unwrap();
+            // 상태는 항목별 정의(D-116): 이름과 열 순서는 task_statuses에서 온다.
             let rows: Vec<(String, String, String)> = sqlx::query_as(
-                "SELECT title, status, position::text FROM fvoci.tasks WHERE item_id = $1::uuid \
-                 ORDER BY array_position(ARRAY['todo', 'in_progress', 'done'], status), position, number",
+                "SELECT t.title, s.name, t.position::text FROM fvoci.tasks t \
+                 JOIN fvoci.task_statuses s ON s.id = t.status_id WHERE t.item_id = $1::uuid \
+                 ORDER BY s.position, t.position, t.number",
             )
             .bind(item)
             .fetch_all(&mut conn)
@@ -851,7 +853,7 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
         src.iter()
             .map(|(t, s, p)| format!("{t}:{s}:{p}"))
             .collect::<Vec<_>>(),
-        vec!["A:todo:1", "C:todo:3", "B:done:1"],
+        vec!["A:할 일:1", "C:할 일:3", "B:완료:1"],
         "{src:?}"
     );
 
@@ -887,7 +889,7 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
             .iter()
             .map(|(t, s, _)| format!("{t}:{s}"))
             .collect::<Vec<_>>(),
-        vec!["A:todo", "B:todo", "C:todo"]
+        vec!["A:할 일", "B:할 일", "C:할 일"]
     );
     let mut seen = std::collections::HashSet::new();
     assert!(
@@ -901,7 +903,7 @@ async fn reset_copy_merges_lanes_without_duplicate_positions() {
         Method::PUT,
         &format!("/api/tasks/{}/position", by_title("C")),
         Some(&admin),
-        Some(json!({ "status": "todo", "before_id": cb })),
+        Some(json!({ "status": "할 일", "before_id": cb })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -936,10 +938,10 @@ async fn a_wrong_undo_target_is_saved_as_sent_even_with_a_valid_move_version() {
         let body = json!({ "status": status, "before_id": before, "base_move_version": base });
         async move { send(&app, Method::PUT, &uri, Some(&admin), Some(body)).await }
     };
-    let moved = move_a("in_progress", Value::Null, Value::Null).await;
+    let moved = move_a("진행 중", Value::Null, Value::Null).await;
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
     // 수정 전 웹의 되돌리기: 화면 배열([A, C, B], B의 낙관적 이동이 얹힘)에서 잡은 원점 "C 앞".
-    let back = move_a("todo", c["id"].clone(), moved.json["move_version"].clone()).await;
+    let back = move_a("할 일", c["id"].clone(), moved.json["move_version"].clone()).await;
     assert_eq!(back.status, StatusCode::OK, "{:?}", back.json);
     let (_, list) = get(&app, &admin, &format!("/api/items/{item_id}/tasks")).await;
     let titles: Vec<&str> = list
@@ -979,7 +981,7 @@ async fn task_rows(
 /// 만들기 요청 본문: 제목과 CSV 한 줄이 넣는 모든 칸.
 fn full_create(request_id: &str, title: &str, changes: Value) -> Value {
     let mut body = json!({
-        "request_id": request_id, "title": title, "description": "회의록 정리", "status": "in_progress",
+        "request_id": request_id, "title": title, "description": "회의록 정리", "status": "진행 중",
         "priority": "high", "start_date": "2026-11-02", "due_date": "2026-11-09", "estimate_minutes": 30,
         "tags": ["회의", "보고", "회의"], "assignee_ids": [], "milestone": false,
     });
@@ -997,7 +999,7 @@ async fn a_rejected_create_leaves_no_task_and_no_relations() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "한 번에 만들기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let item = module_item(&app, &admin, &ws, "CSV").await;
     make_public(&app, &admin, &item).await;
@@ -1068,7 +1070,7 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "한 번에 만들기 재시도").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CSV").await;
     make_public(&app, &admin, &item).await;
     let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());
@@ -1083,7 +1085,7 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     let t = &first.json;
     assert_eq!(t["title"], "주간 회의");
     assert_eq!(t["description"], "회의록 정리");
-    assert_eq!(t["status"], "in_progress");
+    assert_eq!(t["status"], "진행 중");
     assert_eq!(t["priority"], "high");
     assert_eq!(t["start_date"], "2026-11-02");
     assert_eq!(t["due_date"], "2026-11-09");
@@ -1104,20 +1106,20 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
         &app,
         &writer,
         &again.json,
-        json!({ "status": "todo", "assignee_ids": [] }),
+        json!({ "status": "할 일", "assignee_ids": [] }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{edited:?}");
     let other = full_create(
         &request_id,
         "다른 제목",
-        json!({ "status": "done", "assignee_ids": [admin.id.0.to_string()] }),
+        json!({ "status": "완료", "assignee_ids": [admin.id.0.to_string()] }),
     );
     let replay = send(&app, Method::POST, &uri, Some(&admin), Some(other)).await;
     assert_eq!(replay.status, StatusCode::CREATED, "{:?}", replay.json);
     assert_eq!(replay.json["id"], t["id"]);
     assert_eq!(replay.json["title"], "주간 회의");
-    assert_eq!(replay.json["status"], "todo");
+    assert_eq!(replay.json["status"], "할 일");
     assert_eq!(replay.json["assignees"], json!([]));
     assert_eq!(replay.json["version"], 2);
     assert_eq!(task_rows(&state, &admin, &item).await.0, 1);
@@ -1128,7 +1130,7 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
         &request_id,
         "보고서",
         json!({
-            "status": "done", "assignee_ids": [writer.id.0.to_string(), admin.id.0.to_string()],
+            "status": "완료", "assignee_ids": [writer.id.0.to_string(), admin.id.0.to_string()],
         }),
     );
     let replies = futures_util::future::join_all(
@@ -1152,8 +1154,8 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     assert_eq!(
         lanes,
         vec![
-            ("주간 회의".to_owned(), "todo".to_owned()),
-            ("보고서".to_owned(), "done".to_owned())
+            ("주간 회의".to_owned(), "할 일".to_owned()),
+            ("보고서".to_owned(), "완료".to_owned())
         ]
     );
 }
@@ -1167,7 +1169,7 @@ async fn a_replay_tells_a_deleted_task_from_a_lost_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "한 번에 만들기 404").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let item = module_item(&app, &admin, &ws, "CSV").await;
     make_public(&app, &admin, &item).await;
     let uri = format!("/api/items/{}/tasks", item["id"].as_str().unwrap());

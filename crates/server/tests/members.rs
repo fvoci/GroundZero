@@ -50,6 +50,7 @@ async fn add_member(
 ) -> TestUser {
     let email = unique_email(label);
     let user = login_with_email(state, label, &email, true).await;
+    common::join_organization(common::organization_of_workspace(ws).await, &user, "member").await;
     let inv = invite(app, admin, ws, &email, role).await;
     assert_eq!(
         accept(app, &user, inv["id"].as_str().unwrap()).await,
@@ -65,7 +66,7 @@ async fn invitation_requires_the_verified_invited_email() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "초대").await;
     let email = unique_email("bob");
-    let inv = invite(&app, &owner, &ws, &email, "writer").await;
+    let inv = invite(&app, &owner, &ws, &email, "member").await;
     let id = inv["id"].as_str().unwrap();
 
     // 다른 이메일, 같은 이메일이지만 미검증: 초대가 보이지 않고 수락할 수 없다(링크만으로 가입 불가).
@@ -79,9 +80,11 @@ async fn invitation_requires_the_verified_invited_email() {
 
     // 대소문자가 달라도 같은 이메일이다. 검증된 대상은 초대를 보고 수락한다.
     let bob = login_with_email(&state, "bob", &email.to_uppercase(), true).await;
+    // 워크스페이스 초대는 조직 멤버만 수락한다(D-114).
+    common::join_organization(common::organization_of_workspace(&ws).await, &bob, "member").await;
     let mine = send(&app, Method::GET, "/api/invitations", Some(&bob), None).await;
     assert_eq!(mine.json[0]["workspace_name"], "초대");
-    assert_eq!(mine.json[0]["role"], "writer");
+    assert_eq!(mine.json[0]["role"], "member");
     assert_eq!(accept(&app, &bob, id).await, StatusCode::OK);
     assert_eq!(
         accept(&app, &bob, id).await,
@@ -95,7 +98,7 @@ async fn invitation_requires_the_verified_invited_email() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|w| w["id"] == ws.as_str() && w["role"] == "writer")
+            .any(|w| w["id"] == ws.as_str() && w["role"] == "member")
     );
     // 작성자는 문서를 만들 수 있다.
     create_doc(&app, &bob, &ws, "밥의 문서").await;
@@ -110,7 +113,7 @@ async fn decline_and_revoke_close_invitations() {
     let email = unique_email("carol");
     let carol = login_with_email(&state, "carol", &email, true).await;
 
-    let inv = invite(&app, &owner, &ws, &email, "reader").await;
+    let inv = invite(&app, &owner, &ws, &email, "readonly").await;
     let id = inv["id"].as_str().unwrap();
     let declined = send(
         &app,
@@ -123,7 +126,7 @@ async fn decline_and_revoke_close_invitations() {
     assert_eq!(declined.status, StatusCode::NO_CONTENT);
     assert_eq!(accept(&app, &carol, id).await, StatusCode::CONFLICT);
 
-    let again = invite(&app, &owner, &ws, &email, "reader").await;
+    let again = invite(&app, &owner, &ws, &email, "readonly").await;
     let again_id = again["id"].as_str().unwrap();
     let pending = send(
         &app,
@@ -152,13 +155,13 @@ async fn roles_are_enforced_and_only_admins_manage_members() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "역할").await;
-    let writer = add_member(&app, &state, &owner, &ws, "writer", "writer").await;
+    let writer = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let doc = create_doc(&app, &writer, &ws, "작성자 문서").await;
 
     // 작성자는 멤버를 관리할 수 없다(403). 비멤버는 404.
     let outsider = login(&state, "outsider").await;
     let path = format!("/api/workspaces/{ws}/members/{}", writer.id.0);
-    let body = json!({ "role": "reader" });
+    let body = json!({ "role": "readonly" });
     assert_eq!(
         send(&app, Method::PUT, &path, Some(&writer), Some(body.clone()))
             .await
@@ -245,7 +248,7 @@ async fn roles_are_enforced_and_only_admins_manage_members() {
     };
     assert!(email_of(&as_admin.json).is_string());
     assert!(email_of(&as_reader.json).is_null());
-    assert_eq!(as_reader.json["my_role"], "reader");
+    assert_eq!(as_reader.json["my_role"], "readonly");
 }
 
 #[tokio::test]
@@ -278,7 +281,7 @@ async fn owner_is_protected_and_ownership_transfer_needs_acceptance() {
         Method::PUT,
         &owner_path,
         Some(&admin2),
-        Some(json!({ "role": "writer" })),
+        Some(json!({ "role": "member" })),
     )
     .await;
     assert_eq!(demote.status, StatusCode::CONFLICT);
@@ -375,7 +378,7 @@ async fn removed_member_loses_access_and_team_documents_remain() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "제거").await;
-    let writer = add_member(&app, &state, &owner, &ws, "leaver", "writer").await;
+    let writer = add_member(&app, &state, &owner, &ws, "leaver", "member").await;
     let doc = create_doc(&app, &writer, &ws, "팀 문서").await;
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
 
@@ -406,7 +409,7 @@ async fn groups_hold_only_workspace_members() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "그룹").await;
-    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
 
     let created = send(
@@ -497,13 +500,13 @@ async fn membership_changes_are_audited() {
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "감사").await;
-    let member = add_member(&app, &state, &owner, &ws, "m", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "m", "member").await;
     send(
         &app,
         Method::PUT,
         &format!("/api/workspaces/{ws}/members/{}", member.id.0),
         Some(&owner),
-        Some(json!({ "role": "reader" })),
+        Some(json!({ "role": "readonly" })),
     )
     .await;
     send(
@@ -665,7 +668,7 @@ async fn adding_a_member_who_is_being_removed_does_not_survive_the_removal() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "내보내기 경합").await;
-    let leaving = add_member(&app, &state, &admin, &ws, "leaving", "writer").await;
+    let leaving = add_member(&app, &state, &admin, &ws, "leaving", "member").await;
     let item = private_item(&app, &admin, &ws, "PRV").await;
     let group = send(
         &app,
@@ -682,7 +685,7 @@ async fn adding_a_member_who_is_being_removed_does_not_survive_the_removal() {
     for target in ["item", "group"] {
         // 매번 다시 넣고 시작한다.
         if target == "group" {
-            let again = add_member(&app, &state, &admin, &ws, "leaving-again", "writer").await;
+            let again = add_member(&app, &state, &admin, &ws, "leaving-again", "member").await;
             run_removal_race(
                 &app, &state, &admin, ws_id, &again, target, &item, &group_id,
             )
@@ -802,7 +805,13 @@ async fn revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance
     let ws = create_workspace(&app, &admin, "철회 경합").await;
     let email = unique_email("invitee");
     let invitee = login_with_email(&state, "invitee", &email, true).await;
-    let inv = invite(&app, &admin, &ws, &email, "writer").await;
+    common::join_organization(
+        common::organization_of_workspace(&ws).await,
+        &invitee,
+        "member",
+    )
+    .await;
+    let inv = invite(&app, &admin, &ws, &email, "member").await;
     let inv_id: uuid::Uuid = inv["id"].as_str().unwrap().parse().unwrap();
 
     let mut t1 = state.db.begin_as(invitee.id).await.unwrap();
@@ -901,7 +910,7 @@ async fn demoting(
         n
     };
     let mut t1 = state.db.begin_as(owner.id).await.unwrap();
-    sqlx::query("SELECT app_set_member_role($1, $2, 'writer', $3)")
+    sqlx::query("SELECT app_set_member_role($1, $2, 'member', $3)")
         .bind(ws_id)
         .bind(admin.id)
         .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
@@ -920,7 +929,7 @@ async fn an_admin_demoted_meanwhile_cannot_add_to_a_group() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "강등 중 그룹").await;
     let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
-    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let group = send(
         &app,
         Method::POST,
@@ -962,7 +971,7 @@ async fn an_admin_demoted_meanwhile_cannot_revoke_an_invitation() {
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "강등 중 철회").await;
     let admin = add_member(&app, &state, &owner, &ws, "admin", "admin").await;
-    let inv = invite(&app, &owner, &ws, &unique_email("invitee"), "writer").await;
+    let inv = invite(&app, &owner, &ws, &unique_email("invitee"), "member").await;
     let inv_id = inv["id"].as_str().unwrap().to_owned();
     let ws_id: uuid::Uuid = ws.parse().unwrap();
 
@@ -995,7 +1004,7 @@ async fn setting_item_members_does_not_deadlock_with_the_workspace_assignee_lock
     let app = common::app(&state);
     let owner = login(&state, "owner").await;
     let ws = create_workspace(&app, &owner, "항목 멤버 잠금 순서").await;
-    let member = add_member(&app, &state, &owner, &ws, "member", "writer").await;
+    let member = add_member(&app, &state, &owner, &ws, "member", "member").await;
     let item = private_item(&app, &owner, &ws, "LKM").await;
 
     let db = owner_pool().await;
@@ -1121,5 +1130,92 @@ async fn only_the_owner_cancels_an_ownership_offer() {
     assert!(
         actions.iter().any(|a| a == "cancel_ownership_offer"),
         "{actions:?}"
+    );
+}
+
+/// 조직·워크스페이스 초대를 함께 표시하고, 공간 초대를 먼저 수락하면 조직에도 가입한다(⑬).
+/// 이후 조직 초대를 수락해도 기존 멤버 역할을 유지한다. 조직 초대 생성은 관리자만 할 수 있다.
+#[tokio::test]
+async fn workspace_invitation_over_http_joins_the_organization_before_its_pending_invitation() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "owner").await;
+    let ws = create_workspace(&app, &owner, "조직 초대").await;
+    let org = common::organization_of_workspace(&ws).await;
+    let email = unique_email("newcomer");
+    let newcomer = login_with_email(&state, "newcomer", &email, true).await;
+    let ws_inv = invite(&app, &owner, &ws, &email, "member").await;
+    let ws_inv_id = ws_inv["id"].as_str().unwrap();
+
+    let org_path = format!("/api/organizations/{org}/invitations");
+    let input = json!({ "email": email, "role": "member" });
+    // 조직을 볼 수 없는 사람에게는 404(존재를 드러내지 않음), 관리자가 아닌 조직 멤버에게는 403 — 2단계 상태 행렬과 같다.
+    let stranger = login(&state, "stranger").await;
+    let r = send(
+        &app,
+        Method::POST,
+        &org_path,
+        Some(&stranger),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);
+    let plain = login(&state, "plain member").await;
+    common::join_organization(org, &plain, "member").await;
+    let r = send(
+        &app,
+        Method::POST,
+        &org_path,
+        Some(&plain),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.json);
+    let r = send(&app, Method::POST, &org_path, Some(&owner), Some(input)).await;
+    assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
+    assert_eq!(r.json["role"], "member");
+    let org_inv_id = r.json["id"].as_str().unwrap().to_owned();
+
+    let mine = send(&app, Method::GET, "/api/invitations", Some(&newcomer), None).await;
+    let listed = mine.json.as_array().unwrap();
+    let org_row = listed
+        .iter()
+        .find(|v| v["id"] == org_inv_id.as_str())
+        .expect("organization invitation listed");
+    assert_eq!(org_row["kind"], "organization");
+    assert_eq!(org_row["organization_id"], json!(org));
+    assert!(org_row["workspace_id"].is_null() && org_row["workspace_name"].is_null());
+    let ws_row = listed
+        .iter()
+        .find(|v| v["id"] == ws_inv_id)
+        .expect("workspace invitation listed");
+    assert_eq!(ws_row["kind"], "workspace");
+    assert_eq!(ws_row["workspace_id"], ws.as_str());
+
+    assert_eq!(accept(&app, &newcomer, ws_inv_id).await, StatusCode::OK);
+    let mut tx = state.db.begin_as(newcomer.id).await.unwrap();
+    let role: String = sqlx::query_scalar("SELECT role FROM app_my_organizations() WHERE id = $1")
+        .bind(org)
+        .fetch_one(tx.conn())
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(role, "member", "공간 초대 수락이 조직 멤버 가입을 포함한다");
+
+    let r = send(
+        &app,
+        Method::POST,
+        &format!("/api/invitations/{org_inv_id}/accept"),
+        Some(&newcomer),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert_eq!(r.json["kind"], "organization");
+    assert_eq!(r.json["organization_id"], json!(org));
+    assert!(r.json["workspace_id"].is_null());
+    assert_eq!(
+        accept(&app, &newcomer, ws_inv_id).await,
+        StatusCode::CONFLICT
     );
 }

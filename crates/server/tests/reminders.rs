@@ -46,13 +46,17 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
     id
 }
 
+/// 내 알림. 초대 알림(`invite`, D-118)은 add_member의 가입 흐름이 남긴 것이라 기한 알림 시험의 대상이 아니므로 뺀다.
 async fn notes(app: &Router, user: &TestUser) -> Vec<Value> {
     send(app, Method::GET, "/api/me/notifications", Some(user), None)
         .await
         .json
         .as_array()
         .unwrap()
-        .clone()
+        .iter()
+        .filter(|n| n["kind"] != "invite")
+        .cloned()
+        .collect()
 }
 
 #[tokio::test]
@@ -61,8 +65,8 @@ async fn item_reminders_reach_people_who_can_see_the_item_once_a_day() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "항목 알림").await;
-    let (learner, _) = add_member(&app, &state, &admin, &ws, "learner", "writer").await;
-    let (coauthor, _) = add_member(&app, &state, &admin, &ws, "coauthor", "writer").await;
+    let (learner, _) = add_member(&app, &state, &admin, &ws, "learner", "member").await;
+    let (coauthor, _) = add_member(&app, &state, &admin, &ws, "coauthor", "member").await;
     let today = time::OffsetDateTime::now_utc().date();
     let week = today.saturating_add(time::Duration::days(7));
     let tomorrow = today.next_day().unwrap();

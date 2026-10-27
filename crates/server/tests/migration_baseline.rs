@@ -43,7 +43,7 @@ async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
     (connection, common::FreshDb { name, db, app_url })
 }
 
-/// 새 설치가 적용하는 마이그레이션 수: 기준 하나와 그 뒤에 새 번호로 더한 것(예: 202610250001 화면 밝기, D-109).
+/// 새 설치가 적용하는 마이그레이션 수: 기준(202610250001, 오버홀 재통합 D-126) 하나와 그 뒤에 새 번호로 더한 것.
 fn migration_count() -> usize {
     sqlx::migrate!("./migrations").migrations.len()
 }

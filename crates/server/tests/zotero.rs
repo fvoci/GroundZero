@@ -80,7 +80,7 @@ async fn zotero_references_import_and_refresh_without_storing_the_key() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "Zotero").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let module = |kind: &str, key: &str| {
         let app = app.clone();
         let admin = admin.clone();

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { NotificationView } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { notificationText } from '$lib/features/references/notification-text';
+import { m } from '$lib/paraglide/messages.js';
 
 const base: NotificationView = {
   id: 'n1',
@@ -24,6 +25,38 @@ const base: NotificationView = {
 
 // 홈은 모든 알림을 "나를 언급했습니다"로 보였다(감사 반영). 알림 화면과 같은 종류별 문장을 쓴다.
 describe('notificationText', () => {
+  it('renders invitations without a document target in both languages', () => {
+    const invite: NotificationView = {
+      ...base,
+      kind: 'invite',
+      document_reference: null,
+      document_title: null,
+      due_date: null,
+      actor_name: '민수',
+      subject: '연구실',
+    };
+    expect(notificationText(invite)).toBe(
+      m.references_notification_invite({ who: '민수', target: '연구실' }),
+    );
+    expect(notificationText({ ...invite, actor_name: null, subject: null }).trim()).toBe(
+      m
+        .references_notification_invite({ who: m.references_notification_someone(), target: '' })
+        .trim(),
+    );
+    expect(notificationText({ ...base, kind: 'invite' })).toBe(
+      m.references_notification_invite({
+        who: m.references_notification_someone(),
+        target: 'TSK-3 보고서',
+      }),
+    );
+    expect(m.references_notification_invite({ who: 'Alex', target: 'Lab' }, { locale: 'en' })).toBe(
+      'Alex invited you. Lab',
+    );
+    expect(
+      m.references_notification_invite({ who: '민수', target: '연구실' }, { locale: 'ko' }),
+    ).toBe('민수님이 초대했습니다. 연구실');
+  });
+
   it('says what kind of notification it is', () => {
     const due = notificationText({ ...base, kind: 'due' });
     expect(due).toContain('TSK-3 보고서');

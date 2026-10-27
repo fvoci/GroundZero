@@ -119,7 +119,8 @@ pub struct Config {
     pub zotero_api_url: Url,
     /// 세션 절대 만료. `FVOCI_SESSION_TTL_SECS`, 기본 43200(12시간).
     pub session_ttl: Duration,
-    /// 실시간 편집 연결의 세션·권한 재확인 간격. `FVOCI_COLLAB_RECHECK_SECS`, 기본 30초(D-70).
+    /// 실시간 편집 연결의 세션·권한 재확인 간격. `FVOCI_COLLAB_RECHECK_SECS`, 1~3600, 기본 30초(운영 기본값,
+    /// docs/self-hosting.md의 `FVOCI_COLLAB_RECHECK_SECS` 설명).
     pub collab_recheck: Duration,
     /// 정적 웹 자산 디렉터리. `FVOCI_WEB_DIR`. 없으면 API만 서빙한다.
     pub web_dir: Option<PathBuf>,
@@ -128,6 +129,10 @@ pub struct Config {
     pub role: RunRole,
     /// 백그라운드 작업 확인 간격. `FVOCI_WORKER_INTERVAL_SECS`, 기본 60, 5~3600.
     pub worker_interval: Duration,
+    /// 감사 기록 보존 일수. 미설정이면 서버 기본 보존 기간이 없다.
+    pub audit_retention_days: Option<i32>,
+    /// 활동 기록 보존 일수. 미설정이면 서버 기본 보존 기간이 없다.
+    pub activity_retention_days: Option<i32>,
     pub search: Option<SearchConfig>,
     /// 파일 저장소.
     pub storage: StorageConfig,
@@ -220,8 +225,15 @@ impl Config {
         };
 
         let session_ttl = Duration::from_secs(parse_or(&lookup, "FVOCI_SESSION_TTL_SECS", 43_200)?);
-        let collab_recheck =
-            Duration::from_secs(parse_or(&lookup, "FVOCI_COLLAB_RECHECK_SECS", 30)?.max(1));
+        // 0은 재확인을 끄는 것과 같아 1로 올리지 않고 거절한다. 상한 3600: 열린 연결에서 권한 철회 확인이 한 시간을
+        // 넘게 늦어지면 D-70 실시간 편집의 연결 중 권한 재확인 취지에 어긋난다(저장 API·재연결은 매번 확인한다).
+        let collab_recheck: u64 = parse_or(&lookup, "FVOCI_COLLAB_RECHECK_SECS", 30)?;
+        if !(1..=3600).contains(&collab_recheck) {
+            return Err(AppError::Config(
+                "FVOCI_COLLAB_RECHECK_SECS must be between 1 and 3600".into(),
+            ));
+        }
+        let collab_recheck = Duration::from_secs(collab_recheck);
         let web_dir = lookup("FVOCI_WEB_DIR")
             .filter(|v| !v.trim().is_empty())
             .map(PathBuf::from);
@@ -363,6 +375,14 @@ impl Config {
             limits,
             role,
             worker_interval: Duration::from_secs(worker_interval),
+            audit_retention_days: retention_days(
+                lookup("FVOCI_AUDIT_RETENTION_DAYS"),
+                "FVOCI_AUDIT_RETENTION_DAYS",
+            )?,
+            activity_retention_days: retention_days(
+                lookup("FVOCI_ACTIVITY_RETENTION_DAYS"),
+                "FVOCI_ACTIVITY_RETENTION_DAYS",
+            )?,
             search,
             storage,
             files,
@@ -410,6 +430,22 @@ impl DbCommandConfig {
     }
 }
 
+fn retention_days(raw: Option<String>, name: &str) -> Result<Option<i32>, AppError> {
+    raw.map(|value| {
+        let days = value
+            .trim()
+            .parse::<i32>()
+            .map_err(|_| AppError::Config(format!("{name} must be between 1 and 3650")))?;
+        if !(1..=3650).contains(&days) {
+            return Err(AppError::Config(format!(
+                "{name} must be between 1 and 3650"
+            )));
+        }
+        Ok(days)
+    })
+    .transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,6 +459,46 @@ mod tests {
                 .iter()
                 .find(|(key, _)| *key == k)
                 .map(|(_, v)| (*v).to_owned())
+        }
+    }
+
+    #[test]
+    fn retention_is_optional_and_bounded() {
+        let cfg = Config::from_lookup(with_db(&[])).unwrap();
+        assert_eq!(cfg.audit_retention_days, None);
+        assert_eq!(cfg.activity_retention_days, None);
+        for key in [
+            "FVOCI_AUDIT_RETENTION_DAYS",
+            "FVOCI_ACTIVITY_RETENTION_DAYS",
+        ] {
+            for value in ["1", "3650", " 30 "] {
+                let cfg = Config::from_lookup(|name| {
+                    if name == key {
+                        Some(value.into())
+                    } else {
+                        with_db(&[])(name)
+                    }
+                })
+                .unwrap();
+                let expected = Some(value.trim().parse::<i32>().unwrap());
+                if key == "FVOCI_AUDIT_RETENTION_DAYS" {
+                    assert_eq!(cfg.audit_retention_days, expected);
+                } else {
+                    assert_eq!(cfg.activity_retention_days, expected);
+                }
+            }
+            for value in ["0", "-1", "3651", "", "abc", "2147483648"] {
+                assert!(
+                    Config::from_lookup(|name| {
+                        if name == key {
+                            Some(value.into())
+                        } else {
+                            with_db(&[])(name)
+                        }
+                    })
+                    .is_err()
+                );
+            }
         }
     }
 
@@ -477,5 +553,34 @@ mod tests {
             assert!(matches!(err, AppError::Config(m) if m.contains("FVOCI_MAX_DOCUMENT_DEPTH")));
         }
         assert!(Config::from_lookup(with_db(&[("FVOCI_MAX_DOCUMENT_DEPTH", "3")])).is_ok());
+    }
+
+    #[test]
+    fn collab_recheck_defaults_to_30_and_accepts_1_to_3600() {
+        let cfg = Config::from_lookup(with_db(&[])).unwrap();
+        assert_eq!(cfg.collab_recheck, Duration::from_secs(30));
+        const EDGES: [(&[(&str, &str)], u64); 2] = [
+            (&[("FVOCI_COLLAB_RECHECK_SECS", "1")], 1),
+            (&[("FVOCI_COLLAB_RECHECK_SECS", "3600")], 3600),
+        ];
+        for (env, secs) in EDGES {
+            let cfg = Config::from_lookup(with_db(env)).unwrap();
+            assert_eq!(cfg.collab_recheck, Duration::from_secs(secs));
+        }
+    }
+
+    /// 0은 예전처럼 1로 올리지 않고 거절한다.
+    #[test]
+    fn rejects_collab_recheck_outside_range() {
+        const BAD: [&[(&str, &str)]; 2] = [
+            &[("FVOCI_COLLAB_RECHECK_SECS", "0")],
+            &[("FVOCI_COLLAB_RECHECK_SECS", "3601")],
+        ];
+        for bad in BAD {
+            let err = Config::from_lookup(with_db(bad)).unwrap_err();
+            assert!(
+                matches!(err, AppError::Config(m) if m.contains("FVOCI_COLLAB_RECHECK_SECS must be between"))
+            );
+        }
     }
 }

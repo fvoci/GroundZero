@@ -24,16 +24,27 @@ async fn functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones(
     let state = common::state();
     let user = login(&state, "ids").await;
     let request = Uuid::parse_str(&new_request_id()).unwrap();
+    // 워크스페이스는 조직 안에 만든다(D-111). 조직이 없으면 P0002가 먼저 나므로 id 검사 전에 준비한다.
+    let organization = common::organization_for(&user).await;
 
-    // 모자람(FV001, 다시 하면 되는 경합)과 잘못된 id(FV002, 서버 버그)를 다른 코드로 낸다.
+    // 모자람(FV001, 다시 하면 되는 경합)과 잘못된 id(FV002, 서버 버그)를 다른 코드로 낸다. 워크스페이스·감사·활동 id 셋.
     for (ids, label, code) in [
         (Vec::new(), "no ids", "FV001"),
-        (vec![Uuid::now_v7()], "one id short", "FV001"),
-        (vec![not_v7(), Uuid::now_v7()], "not UUIDv7", "FV002"),
+        (
+            vec![Uuid::now_v7(), Uuid::now_v7()],
+            "one id short",
+            "FV001",
+        ),
+        (
+            vec![not_v7(), Uuid::now_v7(), Uuid::now_v7()],
+            "not UUIDv7",
+            "FV002",
+        ),
     ] {
         let mut tx = state.db.begin_as(user.id).await.unwrap();
-        let err = sqlx::query_scalar::<_, Uuid>("SELECT app_create_workspace($1, 'ids', $2)")
+        let err = sqlx::query_scalar::<_, Uuid>("SELECT app_create_workspace($1, $2, 'ids', $3)")
             .bind(request)
+            .bind(organization)
             .bind(&ids)
             .fetch_one(tx.conn())
             .await
@@ -57,9 +68,10 @@ async fn functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones(
     .unwrap();
     assert_eq!(made, 0, "a failed call left a workspace behind");
 
-    let ids = fvoci_server::db::new_ids(2);
-    let id: Uuid = sqlx::query_scalar("SELECT app_create_workspace($1, 'ids', $2)")
+    let ids = fvoci_server::db::new_ids(3);
+    let id: Uuid = sqlx::query_scalar("SELECT app_create_workspace($1, $2, 'ids', $3)")
         .bind(request)
+        .bind(organization)
         .bind(&ids)
         .fetch_one(tx.conn())
         .await

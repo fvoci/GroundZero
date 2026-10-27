@@ -54,7 +54,14 @@ async fn restore(
 }
 
 async fn get(app: &Router, user: &TestUser, uri: &str) -> (StatusCode, Value) {
-    let r = send(app, Method::GET, uri, Some(user), None).await;
+    let mut r = send(app, Method::GET, uri, Some(user), None).await;
+    if uri == "/api/me/notifications" {
+        // D-118: 초대 알림을 제외하고 복원으로 언급 알림이 늘지 않는지 검증한다.
+        r.json
+            .as_array_mut()
+            .unwrap()
+            .retain(|row| row["kind"] != "invite");
+    }
     (r.status, r.json)
 }
 
@@ -64,7 +71,7 @@ async fn history_is_listed_and_restore_adds_a_revision_without_erasing_history()
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "기록").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &admin, &ws, "계획").await;
     let v2 = save(&app, &admin, &doc, "첫 안").await;
@@ -137,8 +144,8 @@ async fn restore_follows_save_conflict_and_permission_rules() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "복원 규칙").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let doc = create_doc(&app, &admin, &ws, "문서").await;
     let v2 = save(&app, &admin, &doc, "하나").await;
     let v3 = save(&app, &admin, &v2, "둘").await;
@@ -181,7 +188,7 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "복원 경계").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let stranger = login(&state, "stranger").await;
 
     // 남의 개인 노트, 다른 사람 워크스페이스의 문서: 404.
@@ -227,6 +234,9 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
     // 읽기 공유만 받은 사람: 403.
     let email = unique_email("guest");
     let guest = login_with_email(&state, "guest", &email, true).await;
+    // D-114: 공간 멤버가 아닌 공유 대상도 같은 조직에 속한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &guest, "member").await;
     let doc = create_doc(&app, &admin, &ws, "공유 문서").await;
     let v2 = save(&app, &admin, &doc, "언급 전").await;
     send(
@@ -234,7 +244,7 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
         Method::POST,
         &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "email": email, "permission": "read" })),
+        Some(json!({ "email": email, "permission": "read", "organization_id": organization })),
     )
     .await;
     assert_eq!(
@@ -331,7 +341,7 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
         before
     );
 
-    // 보관된 항목 아래 문서는 읽기 전용이라 복원할 수 없다.
+    // D-113: 보관 아래 쓰기는 소유자도 409이며 보관 해제 전에는 복원하지 못한다.
     let m = send(&app, Method::POST, &format!("/api/workspaces/{ws}/modules"), Some(&admin),
                  Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "개발", "key": "DEV" }))).await.json;
     let item = send(
@@ -372,6 +382,6 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
         )
         .await
         .0,
-        StatusCode::FORBIDDEN
+        StatusCode::CONFLICT
     );
 }

@@ -77,7 +77,7 @@ async fn children_are_created_ordered_and_moved_within_the_tree() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "트리").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let guide = create_doc(&app, &admin, &ws, "안내").await;
     let notes = create_doc(&app, &admin, &ws, "기록").await;
 
@@ -166,8 +166,8 @@ async fn parents_must_be_in_the_same_place_and_hidden_parents_are_not_revealed()
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "같은 자리").await;
     let other = create_workspace(&app, &admin, "다른 자리").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (peer, _) = add_member(&app, &state, &admin, &ws, "peer", "member").await;
     let here = create_doc(&app, &admin, &ws, "여기").await;
     let there = create_doc(&app, &admin, &other, "저기").await;
     let note = send(
@@ -267,7 +267,8 @@ async fn moving_a_parent_elsewhere_leaves_its_children_on_the_old_parent() {
     )
     .await;
     assert_eq!(preview.json["children_left_behind"], 1);
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    // D-114: 사용자 id·등급 변화 전체를 확인한 뒤 이동한다.
+    let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
         Method::POST,
@@ -404,7 +405,7 @@ async fn retries_precision_and_left_behind_order() {
     )
     .await;
     assert_eq!(preview.json["children_left_behind"], 2);
-    let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+    let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
         Method::POST,
@@ -450,7 +451,7 @@ async fn concurrent_moves_creates_and_reparents_do_not_deadlock() {
             Some(json!({ "target_workspace_id": dst })),
         )
         .await;
-        let ack = json!({ "gains": preview.json["gains"], "loses": preview.json["loses"] });
+        let ack = json!({ "changes": preview.json["changes"] });
         let create_uri = format!("/api/workspaces/{dst}/wiki/documents");
         let (moved, reparented, created) = tokio::join!(
             send(

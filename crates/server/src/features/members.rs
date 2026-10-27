@@ -1,7 +1,7 @@
 //! 멤버·초대·역할·소유권 인계·그룹 (D-20, D-25, D-51, D-57).
 //!
 //! 변경은 `app_set_member_role`·`app_respond_invitation` 등의 정의자 함수가 권한 확인·불변식·감사 기록을 한 번에 처리한다.
-//! DB 정의는 `migrations/202610230001_initial_state.sql`에 있다.
+//! DB 정의는 `migrations/202610250001_initial_state.sql`에 있다.
 //! 이 모듈은 입력 검증과 응답 변환만 한다. 함수 오류 코드는 `AppError::from_db_function`이 응답으로 바꾼다.
 
 use axum::Json;
@@ -17,7 +17,7 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
-use crate::ids::{Role, UserId, WorkspaceId};
+use crate::ids::{OrganizationId, Role, UserId, WorkspaceId};
 
 /// 초대 유효 기간(초). 운영 한도로 옮길 수 있게 한곳에 둔다.
 const INVITATION_TTL_SECS: i32 = 14 * 24 * 3600;
@@ -27,8 +27,8 @@ const MAX_EMAIL: usize = 254;
 fn role_str(role: Role) -> &'static str {
     match role {
         Role::Admin => "admin",
-        Role::Writer => "writer",
-        Role::Reader => "reader",
+        Role::Member => "member",
+        Role::Readonly => "readonly",
     }
 }
 
@@ -268,7 +268,7 @@ pub async fn invite(
         .bind(&email)
         .bind(role_str(input.role))
         .bind(INVITATION_TTL_SECS)
-        .bind(new_ids(2))
+        .bind(new_ids(3))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -346,10 +346,13 @@ pub async fn revoke_invitation(
 /// 내가 받은 초대.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ReceivedInvitation {
+    pub kind: InvitationTarget,
+    pub organization_id: OrganizationId,
+    pub organization_name: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
-    pub workspace_id: WorkspaceId,
-    pub workspace_name: String,
+    pub workspace_id: Option<WorkspaceId>,
+    pub workspace_name: Option<String>,
     pub role: Role,
     pub invited_by: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -357,25 +360,52 @@ pub struct ReceivedInvitation {
     pub expires_at: OffsetDateTime,
 }
 
-/// 내가 받은 열린 초대(검증된 이메일 기준).
-#[utoipa::path(get, path = "/api/invitations",
+/// 내가 받은 조직·워크스페이스의 열린 초대(검증된 이메일 기준).
+#[utoipa::path(get, path = "/api/invitations", operation_id = "my_invitations",
     responses((status = 200, body = [ReceivedInvitation]), (status = 401, body = ErrorBody)), tag = "members")]
 pub async fn my_invitations(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<ReceivedInvitation>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<(Uuid, WorkspaceId, String, String, String, OffsetDateTime)> = sqlx::query_as(
-        "SELECT id, workspace_id, workspace_name, role, invited_by_name, expires_at FROM app_my_invitations()",
+    type InvitationRow = (
+        Uuid,
+        OrganizationId,
+        String,
+        Option<WorkspaceId>,
+        Option<String>,
+        String,
+        String,
+        OffsetDateTime,
+    );
+    let rows: Vec<InvitationRow> = sqlx::query_as(
+        "SELECT id, organization_id, organization_name, workspace_id, workspace_name, role, invited_by_name, expires_at FROM app_my_invitations()",
     )
     .fetch_all(tx.conn())
-    .await?;
+    .await
+    .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     rows.into_iter()
         .map(
-            |(id, workspace_id, workspace_name, role, invited_by, expires_at)| {
+            |(
+                id,
+                organization_id,
+                organization_name,
+                workspace_id,
+                workspace_name,
+                role,
+                invited_by,
+                expires_at,
+            )| {
                 Ok(ReceivedInvitation {
+                    kind: if workspace_id.is_some() {
+                        InvitationTarget::Workspace
+                    } else {
+                        InvitationTarget::Organization
+                    },
                     id,
+                    organization_id,
+                    organization_name,
                     workspace_id,
                     workspace_name,
                     role: parse_role(&role)?,
@@ -393,23 +423,53 @@ async fn respond(
     user: UserId,
     id: Uuid,
     accept: bool,
-) -> Result<WorkspaceId, AppError> {
+) -> Result<Accepted, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let ws: WorkspaceId = sqlx::query_scalar("SELECT app_respond_invitation($1, $2, $3)")
+    // 초대 행은 관리자만 직접 읽으므로 수신자용 함수에서 대상 문맥을 확보한다.
+    let context: Option<(OrganizationId, Option<WorkspaceId>)> = sqlx::query_as(
+        "SELECT organization_id, workspace_id FROM app_my_invitations() WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?;
+    let target: Uuid = sqlx::query_scalar("SELECT app_respond_invitation($1, $2, $3)")
         .bind(id)
         .bind(accept)
-        .bind(new_ids(1))
+        // 수락: 워크스페이스 초대면 조직 자동 가입 감사 행까지 최대 2개(개정 2026-10-26 ⑬).
+        .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
+    let (organization_id, workspace_id) = context.ok_or(AppError::NotFound)?;
+    if target != workspace_id.map_or(organization_id.0, |ws| ws.0) {
+        return Err(AppError::Config("invitation target changed".into()));
+    }
     tx.commit().await?;
-    Ok(ws)
+    Ok(Accepted {
+        kind: if workspace_id.is_some() {
+            InvitationTarget::Workspace
+        } else {
+            InvitationTarget::Organization
+        },
+        organization_id,
+        workspace_id,
+    })
 }
 
-/// 수락 결과.
+/// 초대 대상 종류.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InvitationTarget {
+    Organization,
+    Workspace,
+}
+
+/// 수락 결과. 조직 초대의 반환 UUID를 워크스페이스로 해석하지 않는다.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Accepted {
-    pub workspace_id: WorkspaceId,
+    pub kind: InvitationTarget,
+    pub organization_id: OrganizationId,
+    pub workspace_id: Option<WorkspaceId>,
 }
 
 /// 초대 수락.
@@ -422,8 +482,7 @@ pub async fn accept_invitation(
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Accepted>, AppError> {
-    let workspace_id = respond(&state, user, id, true).await?;
-    Ok(Json(Accepted { workspace_id }))
+    Ok(Json(respond(&state, user, id, true).await?))
 }
 
 /// 초대 거절.
@@ -621,10 +680,17 @@ pub async fn add_group_member(
     Path((group, member)): Path<(Uuid, UserId)>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
+    let ids = needed_ids(
+        tx.conn(),
+        sqlx::query_scalar("SELECT app_set_group_member_ids($1, $2, true)")
+            .bind(group)
+            .bind(member),
+    )
+    .await?;
     call(
         &mut tx,
         "SELECT app_set_group_member($1, $2, true, $3)",
-        |q| q.bind(group).bind(member).bind(new_ids(1)),
+        |q| q.bind(group).bind(member).bind(ids),
     )
     .await?;
     tx.commit().await?;

@@ -75,7 +75,7 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
             .unwrap()
     };
     let r = send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
-                 Some(json!({ "base_version": t["version"], "title": "백업 확인", "description": "", "status": "todo",
+                 Some(json!({ "base_version": t["version"], "title": "백업 확인", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": today, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(r.status, StatusCode::OK);

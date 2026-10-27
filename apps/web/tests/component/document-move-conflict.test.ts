@@ -12,8 +12,10 @@ import { router, workspacePath } from '$lib/router.svelte';
 // 실시간 방의 편집을 먼저 리비전으로 남기지 못하면 ErrorBody(`conflict`, 옮기지 않음). 클라이언트는 앞의 것만
 // 다시 확인으로 돌리고 뒤의 것은 일반 오류로 알린다. 화면은 미리보기와 창을 그대로 두어 다시 누르면 된다(감사 C26).
 const preview: MovePreviewView = {
-  gains: ['새 팀'],
-  loses: ['옛 팀'],
+  changes: [
+    { change: 'gain', user_id: 'u-new', display_name: '새 팀', from_grade: null, to_grade: 'read' },
+    { change: 'lose', user_id: 'u-old', display_name: '옛 팀', from_grade: 'read', to_grade: null },
+  ],
   history_moves_with_document: true,
   reference_changes: true,
   active_public_links: 0,
@@ -43,12 +45,22 @@ afterEach(() => {
 
 describe('move conflict responses', () => {
   it('turns changed access (MovePreview) into a changed result with the new preview', async () => {
-    reply(409, { ...preview, gains: ['새 팀', '다른 팀'] });
+    const more = [
+      ...preview.changes,
+      {
+        change: 'gain',
+        user_id: 'u-more',
+        display_name: '다른 팀',
+        from_grade: null,
+        to_grade: 'read',
+      },
+    ];
+    reply(409, { ...preview, changes: more });
     const result = await api.moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview);
     expect(result.kind).toBe('changed');
     expect(result.kind === 'changed' ? result.preview : undefined).toEqual({
       ...preview,
-      gains: ['새 팀', '다른 팀'],
+      changes: more,
     });
   });
 
@@ -91,8 +103,22 @@ const doc: DocumentView = {
 };
 // 문서가 있는 ws-1의 위키는 대상에서 빠지므로 옮길 곳은 ws-2 위키 하나다.
 const workspaces: Workspace[] = [
-  { id: 'ws-1', name: '운영', role: 'writer', is_owner: false, realtime_enabled: true },
-  { id: 'ws-2', name: '개발', role: 'writer', is_owner: false, realtime_enabled: false },
+  {
+    id: 'ws-1',
+    organization_id: 'org-1',
+    name: '운영',
+    role: 'member',
+    is_owner: false,
+    realtime_enabled: true,
+  },
+  {
+    id: 'ws-2',
+    organization_id: 'org-1',
+    name: '개발',
+    role: 'member',
+    is_owner: false,
+    realtime_enabled: false,
+  },
 ];
 
 describe('move panel when the live room is busy', () => {
@@ -139,7 +165,7 @@ describe('move panel when the live room is busy', () => {
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith(workspacePath('ws-2'));
     });
-    const acknowledged = { gains: preview.gains, loses: preview.loses };
+    const acknowledged = { changes: preview.changes };
     expect(bodies).toEqual([
       { target_workspace_id: 'ws-2', target_item_id: null, acknowledged },
       { target_workspace_id: 'ws-2', target_item_id: null, acknowledged },

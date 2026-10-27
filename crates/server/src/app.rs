@@ -60,6 +60,10 @@ pub async fn run(config: Config) -> Result<(), AppError> {
             state.storage.clone(),
             state.collab.clone(),
             interval,
+            worker::Retention {
+                audit_days: state.config.audit_retention_days,
+                activity_days: state.config.activity_retention_days,
+            },
             stopped,
         )
     });

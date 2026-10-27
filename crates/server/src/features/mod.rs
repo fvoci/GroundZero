@@ -13,6 +13,7 @@ pub mod home;
 pub mod item_profile;
 pub mod members;
 pub mod modules;
+pub mod organizations;
 pub mod public_links;
 pub mod records;
 pub mod recurrence;

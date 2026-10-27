@@ -61,9 +61,9 @@ async fn deleted_documents_disappear_and_come_back_with_their_subtree() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "휴지통").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "reader", "reader").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let parent = create_doc(&app, &writer, &ws, "상위").await;
     let child = send(
         &app,
@@ -162,7 +162,7 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "만료").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let it = item(&app, &admin, &ws, "TRS").await;
     let task = send(
         &app,
@@ -320,8 +320,8 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "닫기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
-    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (other, _) = add_member(&app, &state, &admin, &ws, "other", "member").await;
 
     // 공개 링크는 문서를 지우면 닫힌다.
     let public = create_doc(&app, &admin, &ws, "공개").await;
@@ -375,12 +375,15 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
     .json;
     let bob_email = unique_email("bob");
     let bob = login_with_email(&state, "bob", &bob_email, true).await;
+    // D-114: 공간 밖 공유 대상도 같은 조직에 준비한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &bob, "member").await;
     let r = send(
         &app,
         Method::POST,
         &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "email": bob_email, "permission": "write" })),
+        Some(json!({ "email": bob_email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
@@ -536,12 +539,15 @@ async fn purged_repeating_occurrences_are_not_recreated() {
             .await
             .unwrap()
     };
-    send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
-         Some(json!({ "base_version": t["version"], "title": "점검", "description": "", "status": "todo", "priority": "none",
+    let updated = send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
+         Some(json!({ "base_version": t["version"], "title": "점검", "description": "", "status": "할 일", "priority": "none",
                       "start_date": null, "due_date": yesterday, "estimate_minutes": null, "tags": [], "assignee_ids": [],
                       "milestone": false }))).await;
-    send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
-         Some(json!({ "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
+    // D-125: 반복 규칙 편집의 기준은 기존 규칙이며 최초 설정은 null이다.
+    let recurrence = send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
+         Some(json!({ "base": null, "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
+    assert_eq!(recurrence.status, StatusCode::OK, "{:?}", recurrence.json);
     let tasks = send(
         &app,
         Method::GET,
@@ -602,7 +608,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "모듈 휴지통").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "writer").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let post = |user: &TestUser, uri: String, body: Value| {
         let app = app.clone();
         let user = user.clone();
@@ -705,10 +711,13 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let shared_uri = format!("/api/documents/{}", shared_doc["id"].as_str().unwrap());
     let carol_email = unique_email("carol");
     let carol = login_with_email(&state, "carol", &carol_email, true).await;
+    // D-114: 모듈 밖 공유도 조직 경계 안에서만 허용한다.
+    let organization = common::organization_of_workspace(&ws).await;
+    common::join_organization(organization, &carol, "member").await;
     let r = post(
         &admin,
         format!("{shared_uri}/shares"),
-        json!({ "email": carol_email, "permission": "write" }),
+        json!({ "email": carol_email, "permission": "write", "organization_id": organization }),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
@@ -1275,14 +1284,14 @@ async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
     let admin = login(&state, "admin").await;
     let w1 = create_workspace(&app, &admin, "옮기기 전").await;
     let w2 = create_workspace(&app, &admin, "옮긴 뒤").await;
-    let (writer, email) = add_member(&app, &state, &admin, &w1, "author", "writer").await;
+    let (writer, email) = add_member(&app, &state, &admin, &w1, "author", "member").await;
     // 쓴 사람은 옮겨 갈 워크스페이스에도 있다(읽기만).
     let inv = send(
         &app,
         Method::POST,
         &format!("/api/workspaces/{w2}/invitations"),
         Some(&admin),
-        Some(json!({ "email": email, "role": "reader" })),
+        Some(json!({ "email": email, "role": "readonly" })),
     )
     .await;
     let accepted = send(
@@ -1362,14 +1371,14 @@ async fn trashed_items_keep_assignees_who_did_not_lose_access() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "휴지통 담당자").await;
-    let (keep, _) = add_member(&app, &state, &admin, &ws, "keeper", "writer").await;
-    let (gone, _) = add_member(&app, &state, &admin, &ws, "leaver", "writer").await;
+    let (keep, _) = add_member(&app, &state, &admin, &ws, "keeper", "member").await;
+    let (gone, _) = add_member(&app, &state, &admin, &ws, "leaver", "member").await;
     let it = item(&app, &admin, &ws, "TAS").await;
     let item_id = it["id"].as_str().unwrap();
     let task = new_task(&app, &admin, item_id, "담당 업무", None).await;
     let task_id = task["id"].as_str().unwrap();
     let assigned = send(&app, Method::PUT, &format!("/api/tasks/{task_id}"), Some(&admin), Some(json!({
-        "base_version": task["version"], "title": "담당 업무", "description": "", "status": "todo", "priority": "none",
+        "base_version": task["version"], "title": "담당 업무", "description": "", "status": "할 일", "priority": "none",
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [keep.id.0, gone.id.0] }))).await;
     assert_eq!(assigned.status, StatusCode::OK, "{:?}", assigned.json);
@@ -1508,9 +1517,10 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     // 비공개 설정은 문서 소유 권한자(여기서는 관리자)가 한다.
     let author = admin.clone();
     let (helper, helper_email) =
-        add_member(&app, &state, &admin, &ws, "doc-helper", "writer").await;
+        add_member(&app, &state, &admin, &ws, "doc-helper", "member").await;
     let doc = create_doc(&app, &author, &ws, "비공개 문서").await;
     let doc_id = doc["id"].as_str().unwrap();
+    let organization = common::organization_of_workspace(&ws).await;
     let private = send(
         &app,
         Method::PUT,
@@ -1525,7 +1535,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&author),
-        Some(json!({ "email": helper_email, "permission": "write" })),
+        Some(json!({ "email": helper_email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(shared.status, StatusCode::CREATED, "{:?}", shared.json);
@@ -1586,7 +1596,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&author),
-        Some(json!({ "email": helper_email, "permission": "write" })),
+        Some(json!({ "email": helper_email, "permission": "write", "organization_id": organization })),
     )
     .await;
     assert_eq!(reshared.status, StatusCode::CREATED, "{:?}", reshared.json);
@@ -1614,7 +1624,7 @@ async fn personal_trash_lists_and_purges_only_the_owners_notes() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "개인 휴지통").await;
-    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "writer").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let note = |user: &TestUser, title: &str| {
         let app = app.clone();
         let user = user.clone();

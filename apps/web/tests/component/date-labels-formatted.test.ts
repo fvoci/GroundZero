@@ -170,8 +170,9 @@ describe('dates inside localized text', () => {
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
     const workspace: Workspace = {
       id: 'ws-1',
+      organization_id: 'org-1',
       name: 'Space',
-      role: 'writer',
+      role: 'member',
       is_owner: false,
       realtime_enabled: false,
     };
