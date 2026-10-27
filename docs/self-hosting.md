@@ -241,3 +241,55 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --no-log-pre
 - 실시간 공동 편집(D-70)은 워크스페이스마다 관리자가 워크스페이스 설정에서 켠다(기본 꺼짐). 켜면 문서 화면이 웹소켓(`/api/documents/{id}/collab`)으로 붙으므로 역방향 프록시가 웹소켓 업그레이드(`Upgrade`·`Connection` 헤더)를 앱으로 넘겨야 한다(Caddy는 기본으로 넘김, nginx는 `proxy_http_version 1.1`과 두 헤더 설정). 앱은 브라우저의 `Origin`이 `FVOCI_PUBLIC_URL`과 같을 때만 연결을 받는다. 편집 방은 앱 프로세스 안에 있으므로 앱은 한 개만 띄운다. 연결된 사람의 권한은 `FVOCI_COLLAB_RECHECK_SECS`(기본 30초, 1~3600초. 범위 밖이면 앱이 시작하지 않는다)마다 다시 확인한다. 꺼진 워크스페이스는 저장할 때 리비전으로 남고, 동시에 고치면 충돌을 알리고 내 초안을 지킨다(D-53).
 - 앱 한 프로세스가 API와 백그라운드 작업을 함께 한다(`FVOCI_ROLE=all`). 작업은 확인 간격(기본 60초)마다 저장소 정리와 검색 색인 반영을 하고, 휴지통 만료와 이전 파일 버전 정리는 매시간, 반복 업무 회차는 15분마다, 업무 기한·항목 알림은 매시간 한다. 감사로그·활동 기록의 만료 삭제도 같은 주기다. 보존 기간은 조직 값이 상한이며 조직·워크스페이스 설정이 모두 있으면 최솟값, 한쪽만 있으면 그 값을 따른다. 워크스페이스의 조직 상한 초과 설정은 400으로 거절한다(D-124). 둘 다 없으면 서버 설정 `FVOCI_AUDIT_RETENTION_DAYS`·`FVOCI_ACTIVITY_RETENTION_DAYS`를 쓴다(미설정 시 각각 730일·365일, 설정 시 1~3650일, 빈 값은 시작 오류). 기본 Compose도 두 환경 변수가 미설정이면 감사 730일·활동 365일을 서버에 전달하며, 명시한 값은 그대로 전달한다. 작업은 `all`·`worker` 역할 프로세스만 한다(기본 Compose는 `all` 고정). `FVOCI_ROLE=api`로 띄운 프로세스는 이 작업을 하나도 하지 않는다(알림도 만들지 않는다).
 - 지우기: `docker compose --env-file .env -f deploy/compose.selfhost.yaml down`은 데이터를 남긴다. `down -v`는 모든 볼륨(데이터)을 지운다.
+
+## 10. 개인용: 한 컴퓨터에서 혼자 쓰기(D-129)
+
+`--profile personal`은 4절의 Keycloak을 PostgreSQL·로컬 파일 저장과 함께 이 컴퓨터에서만 띄운다. 로그인은 그대로 OIDC다(자체 비밀번호 로그인 없음, D-45·X-09). 앱은 `http://localhost:8080`, Keycloak은 `http://auth.localhost:8081`이다. Keycloak 컨테이너가 Compose 네트워크 안에서 `auth.localhost`라는 이름을 갖고 공개 포트와 같은 포트로 들으므로, 브라우저와 앱 컨테이너가 같은 발급자 주소로 닿는다. 다른 기기에서 열거나 여럿이 쓰려면 1~4절의 운영 설치를 따른다.
+
+1. `.env`를 만든다. 비밀 값은 임의로 채우며 화면에 나오지 않는다. 마지막 숫자가 `0`이면 `change-me`가 남지 않았다.
+
+   ```bash
+   cp deploy/selfhost.env.example .env && chmod 600 .env && perl -pi -e 's/=change-me\S*/my $v = `openssl rand -hex 32`; chomp $v; "=$v"/ge; s{^FVOCI_PUBLIC_URL=.*}{FVOCI_PUBLIC_URL=http://localhost:8080}; s{^FVOCI_OIDC_ISSUER=.*}{FVOCI_OIDC_ISSUER=http://auth.localhost:8081/realms/fvoci}; s{^KEYCLOAK_URL=.*}{KEYCLOAK_URL=http://auth.localhost:8081}' .env && grep -c '^[^#].*change-me' .env
+   ```
+
+2. 띄운다. 처음에는 빈 `pgdata`여야 Keycloak 전용 DB가 만들어진다(4절).
+
+   ```bash
+   docker compose --env-file .env -f deploy/compose.selfhost.yaml --profile personal up -d --build --wait
+   ```
+
+3. 관리자를 지정한다(D-51). 처음 로그인한 사람을 자동으로 관리자로 만들지 않으므로, 내 계정을 만들고 그 OIDC subject를 직접 적는다.
+   1. <http://auth.localhost:8081/admin>에 계정 `admin`, 비밀번호 `.env`의 `KEYCLOAK_ADMIN_PASSWORD`로 들어가 렐름 **fvoci**(`master`가 아니다)를 고른다.
+   2. **Users → Create new user**에서 사용자 이름·이메일을 넣고 **Email verified**를 켠다. **Credentials → Set password**에서 비밀번호를 정하고 **Temporary**를 끈다.
+   3. 그 사용자의 **Details**의 **ID**가 subject다. `.env`의 `FVOCI_INITIAL_ADMIN_SUBJECT=`에 넣고 앱만 다시 만든다.
+
+      ```bash
+      docker compose --env-file .env -f deploy/compose.selfhost.yaml --profile personal up -d --wait app
+      ```
+
+   4. <http://localhost:8080>에서 그 계정으로 로그인하면 서버 관리자가 되고 `FVOCI_INITIAL_WORKSPACE`(기본 `fvoci`) 워크스페이스의 소유자가 된다(인스턴스에서 한 번).
+
+4. 백업은 앱의 CLI로 만들고 서버 밖으로 꺼낸다. 복구는 5절을 그대로 따른다(새로 설치한 빈 DB, 같은 릴리스).
+
+   ```bash
+   docker compose --env-file .env -f deploy/compose.selfhost.yaml --profile personal exec app fvoci-server backup create /backups/$(date +%F)
+   ```
+
+   ```bash
+   docker compose --env-file .env -f deploy/compose.selfhost.yaml --profile personal cp app:/backups/$(date +%F) ./$(date +%F)
+   ```
+
+5. 멈춘다. `stop`과 `down`은 볼륨(`fvoci_pgdata`·`fvoci_meilidata`·`fvoci_files`·`fvoci_backups`)을 남긴다. `down -v`는 모든 데이터를 지운다. 다시 띄울 때는 2단계 명령을 쓴다.
+
+   ```bash
+   docker compose --env-file .env -f deploy/compose.selfhost.yaml --profile personal down
+   ```
+
+한계:
+
+- 앱과 Keycloak은 이 컴퓨터(`127.0.0.1`)에서만 듣고 http다. `FVOCI_LISTEN`·`KEYCLOAK_LISTEN`을 `0.0.0.0`으로 넓히지 않는다. 렐름은 `sslRequired: external`이라 사설망에서도 http를 받고, Keycloak은 앞단 프록시를 전제로 `X-Forwarded-*` 머리글을 믿는다.
+- 브라우저가 `*.localhost`를 이 컴퓨터이자 안전한 주소로 다뤄야 한다. Keycloak은 http에서도 `Secure` 쿠키를 쓰기 때문이다. 확인한 것은 Chromium 계열(Chrome·Edge)이다([직접 써 보기 7절](try-it.md)). 다른 브라우저에서 로그인 화면이 되풀이되면 Chromium 계열로 연다.
+- 포트를 바꾸면 `KEYCLOAK_LISTEN`·`KEYCLOAK_URL`·`FVOCI_OIDC_ISSUER`의 포트와 `KEYCLOAK_PORT`를 모두 같은 값으로 둔다. `auth.localhost` 이름은 이 Compose 네트워크 안에서만 통한다.
+- 렐름 틀과 `admin` 계정은 Keycloak DB가 비어 있을 때 한 번만 만들어진다. 그 뒤 `.env`의 주소나 `KEYCLOAK_ADMIN_PASSWORD`를 바꿔도 Keycloak에는 반영되지 않으므로 관리 콘솔에서 고친다.
+- 메일 서버를 설정하지 않았으므로 Keycloak의 비밀번호 재설정 메일은 가지 않는다. 비밀번호를 잊으면 관리 콘솔에서 다시 정한다.
+- `backup create`는 fvoci DB와 첨부 파일만 담는다. Keycloak 사용자는 같은 PostgreSQL의 별도 DB(`keycloak`)에 있어 백업에 들어 있지 않다. fvoci는 발급자와 subject로 사람을 알아보므로, 새로 설치한 곳에 복구하면 Keycloak에서 새로 만든 사용자는 subject가 달라 복구된 계정과 이어지지 않는다.
