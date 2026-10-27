@@ -7142,6 +7142,11 @@ CREATE FUNCTION fvoci.app_plan_units(p_item uuid, p_entries jsonb) RETURNS integ
     IF app_access('item', p_item) = 'read' THEN
       RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
     END IF;
+    -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
+    PERFORM app_lock_item(p_item);
+    IF app_item_archived(p_item) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
     IF jsonb_typeof(p_entries) <> 'array' OR jsonb_array_length(p_entries) > 1000 THEN
       RAISE EXCEPTION 'give at most 1000 entries' USING ERRCODE = '22023';
     END IF;
@@ -8410,6 +8415,11 @@ CREATE FUNCTION fvoci.app_set_episode_progress(p_episode uuid, p_status text, p_
     IF app_access('item', v_item) = 'read' THEN
       RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
     END IF;
+    -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
+    PERFORM app_lock_item(v_item);
+    IF app_item_archived(v_item) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
+    END IF;
     IF p_status NOT IN ('not_started', 'in_progress', 'done') THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
     END IF;
@@ -9100,6 +9110,11 @@ CREATE FUNCTION fvoci.app_set_unit_progress(p_unit uuid, p_status text, p_done i
     -- 개정 2026-10-26(⑧, D-20): 읽기 전용은 본인 진도도 남기지 못한다.
     IF app_access('item', v_item) = 'read' THEN
       RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
+    END IF;
+    -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
+    PERFORM app_lock_item(v_item);
+    IF app_item_archived(v_item) THEN
+      RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
     IF p_status NOT IN ('not_started', 'in_progress', 'done') THEN
       RAISE EXCEPTION 'invalid status' USING ERRCODE = '22023';
