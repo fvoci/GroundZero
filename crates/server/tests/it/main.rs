@@ -58,6 +58,7 @@ mod progress_privacy;
 mod public_links;
 mod references;
 mod restore_lock_order;
+mod restore_measure;
 mod revisions;
 mod saved_views;
 mod schedule;
