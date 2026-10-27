@@ -1066,7 +1066,7 @@
                 </fieldset>
               {/each}
             {/if}
-            <fieldset class="min-w-0" disabled={savingMine || !c.can_write}>
+            <fieldset class="min-w-0" disabled={savingMine}>
               <form
                 class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
                 onsubmit={(ev: SubmitEvent) => {
@@ -1076,13 +1076,19 @@
               >
                 <div class="flex flex-col gap-1">
                   <Label for={`mine-planned-${e.id}`}>{m.courses_my_planned()}</Label>
-                  <Input id={`mine-planned-${e.id}`} type="date" bind:value={mine.planned_on} />
+                  {#if c.can_write}
+                    <Input id={`mine-planned-${e.id}`} type="date" bind:value={mine.planned_on} />
+                  {:else}
+                    <!-- 날짜 칸은 readonly여도 달력이 열리는 브라우저가 있어 읽을 글로 보인다. -->
+                    <Input id={`mine-planned-${e.id}`} readonly value={dayText(mine.planned_on)} />
+                  {/if}
                 </div>
                 <div class="flex flex-col gap-1">
                   <Label for={`mine-position-${e.id}`}>{m.courses_last_position()}</Label>
                   <Input
                     id={`mine-position-${e.id}`}
                     bind:value={mine.position}
+                    readonly={!c.can_write}
                     placeholder="12:30"
                     oninput={() => (positionError = undefined)}
                     aria-invalid={positionError !== undefined}
@@ -1102,7 +1108,12 @@
                 </div>
                 <div class="flex flex-col gap-1 @xl:col-span-3">
                   <Label for={`mine-note-${e.id}`}>{m.courses_my_note()}</Label>
-                  <Textarea id={`mine-note-${e.id}`} class="min-h-20" bind:value={mine.note} />
+                  <Textarea
+                    id={`mine-note-${e.id}`}
+                    class="min-h-20"
+                    readonly={!c.can_write}
+                    bind:value={mine.note}
+                  />
                 </div>
                 {#if c.can_write}
                   <div><Button type="submit" size="sm">{m.common_save()}</Button></div>

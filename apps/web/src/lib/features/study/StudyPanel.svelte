@@ -845,7 +845,7 @@
                 </fieldset>
               {/each}
             {/if}
-            <fieldset class="min-w-0" disabled={savingMine || !current.can_write}>
+            <fieldset class="min-w-0" disabled={savingMine}>
               <form
                 class="grid gap-2 border-t pt-2 @xl:grid-cols-3"
                 onsubmit={(e: SubmitEvent) => {
@@ -860,16 +860,31 @@
                   <Input
                     id={`unit-done-${u.id}`}
                     inputmode="numeric"
+                    readonly={!current.can_write}
                     bind:value={mine.done_amount}
                   />
                 </div>
                 <div class="flex flex-col gap-1">
                   <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
-                  <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
+                  {#if current.can_write}
+                    <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
+                  {:else}
+                    <!-- 날짜 칸은 readonly여도 달력이 열리는 브라우저가 있어 읽을 글로 보인다. -->
+                    <Input
+                      id={`unit-plan-${u.id}`}
+                      readonly
+                      value={mine.planned_on === '' ? '' : formatDay(mine.planned_on)}
+                    />
+                  {/if}
                 </div>
                 <div class="flex flex-col gap-1 @xl:col-span-3">
                   <Label for={`unit-note-${u.id}`}>{m.study_note()}</Label>
-                  <Textarea id={`unit-note-${u.id}`} rows={2} bind:value={mine.note} />
+                  <Textarea
+                    id={`unit-note-${u.id}`}
+                    rows={2}
+                    readonly={!current.can_write}
+                    bind:value={mine.note}
+                  />
                 </div>
                 {#if current.can_write}
                   <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
