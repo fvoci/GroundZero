@@ -594,6 +594,11 @@
       action: { label: m.tasks_undo(), onClick: () => void undoMove() },
     });
   }
+  /** 되돌리기 없는 이동 완료. 같은 key라 앞 토스트(다른 카드의 되돌리기 포함)를 바꾸므로 그 되돌리기도 거둔다. */
+  function moveDone(message: string): void {
+    undoOffer = undefined;
+    notifyDone(message, BOARD_MOVE);
+  }
   /** 되돌리기를 거둔다. 그 단추를 단 토스트도 내린다. */
   function withdrawUndo(): void {
     if (undoOffer === undefined) return;
@@ -1315,7 +1320,7 @@
           movedMessage(how, title, plan.status),
         );
       } else {
-        notifyDone(undo.done(title, plan.status), BOARD_MOVE);
+        moveDone(undo.done(title, plan.status));
       }
       return true;
     } catch (e: unknown) {
@@ -1397,7 +1402,7 @@
           },
           message,
         );
-      else notifyDone(message, BOARD_MOVE);
+      else moveDone(message);
     } else if (stillInFlight) {
       patch(id, seq, { phase: 'slow' });
       status = m.tasks_move_slow({ title: p.title });
@@ -1459,7 +1464,7 @@
     if (verdict === 'applied') {
       clearMoveNotice();
       status = '';
-      notifyDone(m.tasks_move_confirmed({ title: p.title, status: p.plan.status }), BOARD_MOVE);
+      moveDone(m.tasks_move_confirmed({ title: p.title, status: p.plan.status }));
     } else {
       moveNotice =
         verdict === 'gone' ? m.tasks_move_error_gone() : m.tasks_move_changed({ title: p.title });
