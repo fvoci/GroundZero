@@ -144,31 +144,39 @@
           <h2 id={`my-tasks-${w.workspace_id}`} class="font-semibold">
             {w.workspace_name} · {w.tasks.length}
           </h2>
-          <ul class="flex flex-col divide-y rounded border">
-            {#each [...w.tasks].sort(compareTasks) as t (t.id)}
-              {@const path = itemTaskPath(w.workspace_id, t.item_id, t.id)}
-              <li>
-                <a
-                  href={path}
-                  class="flex flex-wrap items-center gap-2 px-3 py-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  onclick={(e) => {
-                    go(e, path);
-                  }}
-                >
-                  {#if t.reference !== null}
-                    <span class="font-mono text-xs text-muted-foreground">{t.reference}</span>
-                  {/if}
-                  <span class="min-w-0 flex-1 truncate">{t.title}</span>
-                  <span class="text-xs text-muted-foreground">{bucketLabel(t.bucket)}</span>
-                  {#if t.due_date != null}
-                    <time datetime={t.due_date} class="text-xs text-muted-foreground"
-                      >{formatDay(t.due_date)}</time
-                    >
-                  {/if}
-                </a>
-              </li>
-            {/each}
-          </ul>
+          <!-- 워크스페이스 안에서도 요약과 같은 날짜 묶음(제목과 수)으로 나눈다. 기한 없는 업무는 "날짜 없음" 묶음이다. -->
+          {#each BUCKETS as b (b)}
+            {@const tasks = w.tasks.filter((t) => t.bucket === b).sort(compareTasks)}
+            {#if tasks.length > 0}
+              <section class="flex flex-col gap-1">
+                <h3 class="text-sm font-semibold">{bucketLabel(b)} {tasks.length}</h3>
+                <ul class="flex flex-col divide-y rounded border">
+                  {#each tasks as t (t.id)}
+                    {@const path = itemTaskPath(w.workspace_id, t.item_id, t.id)}
+                    <li>
+                      <a
+                        href={path}
+                        class="flex flex-wrap items-center gap-2 px-3 py-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        onclick={(e) => {
+                          go(e, path);
+                        }}
+                      >
+                        {#if t.reference !== null}
+                          <span class="font-mono text-xs text-muted-foreground">{t.reference}</span>
+                        {/if}
+                        <span class="min-w-0 flex-1 truncate">{t.title}</span>
+                        {#if t.due_date != null}
+                          <time datetime={t.due_date} class="text-xs text-muted-foreground"
+                            >{formatDay(t.due_date)}</time
+                          >
+                        {/if}
+                      </a>
+                    </li>
+                  {/each}
+                </ul>
+              </section>
+            {/if}
+          {/each}
         </section>
       {/each}
     {/if}
