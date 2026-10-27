@@ -7,7 +7,9 @@ import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-dra
 import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import ModulesSection from '$lib/features/modules/ModulesSection.svelte';
+import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
 import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -168,5 +170,45 @@ describe('recurrence editor while a save is in flight', () => {
     expect(interval).toBeDisabled();
     expect(await opens('rule-freq-label')).toBe(false);
     expectOfferLocked();
+  });
+});
+
+// 새 노트·위키 문서의 템플릿 선택은 CreateForm 밖에 있지만 그 초안의 `draftContext`다. 만드는 동안 바꾸면 스냅숏이
+// 달라져 성공을 버리고, 다시 내면 새 요청 id로 두 번째 문서가 생긴다.
+describe('template pickers while a document is being created', () => {
+  const template = { id: 't-1', title: '회의록 양식', reference: 'WIKI-1', personal: false };
+
+  it('locks the note template while the note is created', async () => {
+    vi.spyOn(api, 'myNotes').mockResolvedValue([]);
+    vi.spyOn(api, 'documentTemplates').mockResolvedValue([template]);
+    const create = vi.spyOn(api, 'createNote').mockReturnValue(new Promise(() => undefined));
+    render(NotesScreen);
+    const picker = await screen.findByLabelText(m.documents_template_label());
+    await fireEvent.input(screen.getByLabelText(m.notes_new_title_label()), {
+      target: { value: '새 노트' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: m.notes_create() }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledOnce();
+    });
+    expect(picker).toBeDisabled();
+  });
+
+  it('locks the wiki template while the document is created', async () => {
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'documentTemplates').mockResolvedValue([template]);
+    const create = vi
+      .spyOn(api, 'createWikiDocument')
+      .mockReturnValue(new Promise(() => undefined));
+    render(WorkspaceScreen, { workspace });
+    const picker = await screen.findByLabelText(m.documents_template_label());
+    await fireEvent.input(screen.getByLabelText(m.workspaces_new_doc_title()), {
+      target: { value: '새 문서' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: m.workspaces_create_doc() }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledOnce();
+    });
+    expect(picker).toBeDisabled();
   });
 });

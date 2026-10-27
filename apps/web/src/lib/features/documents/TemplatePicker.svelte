@@ -9,9 +9,11 @@
     workspaceId: string | null;
     id: string;
     value?: string;
+    /** 이 값을 든 만들기 요청이 가는 동안 잠근다(바꾸면 그 요청의 결과를 버리게 된다). */
+    disabled?: boolean;
   }
 
-  let { workspaceId, id, value = $bindable('') }: Props = $props();
+  let { workspaceId, id, value = $bindable(''), disabled = false }: Props = $props();
 
   let templates = $state<
     { id: string; title: string; reference: string | null; personal: boolean }[]
@@ -42,7 +44,7 @@
 {#if templates.length > 0}
   <div class="flex flex-col gap-1 text-sm">
     <label for={id} class="font-medium">{m.documents_template_label()}</label>
-    <NativeSelect {id} class="w-full" bind:value>
+    <NativeSelect {id} class="w-full" bind:value {disabled}>
       <option value="">{m.documents_template_blank()}</option>
       {#each templates as t (t.id)}
         <option value={t.id}
