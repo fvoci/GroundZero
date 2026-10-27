@@ -83,7 +83,7 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
   await waitFor(() => {
     expect(screen.getByRole('alert')).toHaveTextContent(
-      `${m.tasks_status_failed()} ${m.comments_archived()}`,
+      `${m.tasks_status_failed()} ${m.common_error_archived()}`,
     );
   });
   expect(screen.getByRole('alert')).not.toHaveTextContent('archived');

@@ -1,5 +1,5 @@
 import type { Workspace } from '@fvoci/api-client';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
@@ -8,6 +8,7 @@ import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
 import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
 import { org } from '$lib/org.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { ACCESS_DOCUMENT, ACCESS_FILE } from '../../stories/fixtures/access';
 import { comment } from '../../stories/fixtures/comments';
@@ -73,7 +74,9 @@ describe('server access and archived comments (D-20·D-106·D-113)', () => {
 
   it('keeps the input on an archived 409 and explains the archived state', async () => {
     vi.spyOn(api, 'comments').mockResolvedValue([]);
-    vi.spyOn(api, 'addComment').mockRejectedValue(new ApiError(409, 'invalid_state', 'archived'));
+    vi.spyOn(api, 'addComment').mockRejectedValue(
+      new ApiError(409, 'invalid_state', 'the item is archived'),
+    );
     render(CommentsPanel, { props: { target: { kind: 'document', id: 'd1' }, canWrite: true } });
     const box = screen.getByRole('textbox');
     await fireEvent.input(box, { target: { value: '보존할 입력' } });
@@ -181,6 +184,31 @@ describe('organization public links and allow_copy', () => {
       expect(screen.queryByRole('link', { name: ACCESS_FILE.name }) !== null).toBe(allowCopy);
       // 미리보기 권한과 다운로드 권한을 섞지 않는다.
       expect(screen.getByRole('link', { name: /미리 보기|미리보기/ })).toBeInTheDocument();
+      // 옛 판도 같은 규칙이다: 버전 기록을 열어 v1 내려받기 링크를 본다.
+      const version = {
+        size: 512,
+        sha256: '0'.repeat(64),
+        content_type: 'application/pdf',
+        note: '',
+        uploaded_by: 'u1',
+        uploaded_by_name: '가람',
+        created_at: '2026-10-25T00:00:00Z',
+      };
+      vi.spyOn(api, 'file').mockResolvedValue({
+        file: { ...ACCESS_FILE, current_version: 2 },
+        versions: [
+          { ...version, version: 2 },
+          { ...version, version: 1 },
+        ],
+      });
+      await fireEvent.click(
+        screen.getByRole('button', { name: m.files_versions_aria({ name: ACCESS_FILE.name }) }),
+      );
+      const list = await screen.findByRole('list', {
+        name: m.files_version_list_aria({ name: ACCESS_FILE.name }),
+      });
+      expect(within(list).getByText('v1')).toBeInTheDocument();
+      expect(within(list).queryByRole('link', { name: 'v1' }) !== null).toBe(allowCopy);
     },
   );
 });
