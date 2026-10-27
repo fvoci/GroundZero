@@ -1,20 +1,3 @@
-<script module lang="ts">
-  import { ApiError } from '$lib/api/client';
-
-  /**
-   * 반복 끝이 첫 회차보다 앞설 때 서버(반복 저장 SQL 함수의 RAISE EXCEPTION)가 400 본문에 싣는 문구. 계약의 오류 코드가
-   * 아니라 문구로 판별하므로 `event-until-message.test.ts`가 서버 마이그레이션에 이 문구가 그대로 있는지 확인한다.
-   */
-  export const UNTIL_BEFORE_START_MESSAGE = 'until must not be before the first occurrence';
-
-  /** 반복 끝을 시작일보다 앞에 두어 서버가 거절했는지(일정·업무 반복 공통). */
-  export function untilBeforeStart(e: unknown): boolean {
-    return (
-      e instanceof ApiError && e.code === 'bad_request' && e.message === UNTIL_BEFORE_START_MESSAGE
-    );
-  }
-</script>
-
 <script lang="ts">
   // 반복 규칙 입력(업무·일정 공통, D-31). 단순한 규칙만: 매일·매주(요일)·매달·매년, 간격, 끝(없음·날짜·횟수).
   // 없는 날(31일·2월 29일)은 건너뛴다. 저장하면 이미 만든 회차는 바뀌지 않는다.
@@ -22,8 +5,8 @@
   import { onDestroy, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { parseRuleDraft, type RuleDraft } from './input-drafts';
-  import { FREQUENCIES } from '$lib/api/client';
+  import { parseRuleDraft, untilBeforeStart, type RuleDraft } from './input-drafts';
+  import { ApiError, FREQUENCIES } from '$lib/api/client';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';

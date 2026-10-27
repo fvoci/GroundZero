@@ -1,4 +1,5 @@
 import {
+  ApiError,
   EVENT_KINDS,
   FREQUENCIES,
   parseEvent,
@@ -7,6 +8,19 @@ import {
   type Frequency,
   type RecurrenceRule,
 } from '$lib/api/client';
+
+/**
+ * 반복 끝이 첫 회차보다 앞설 때 서버(반복 저장 SQL 함수의 RAISE EXCEPTION)가 400 본문에 싣는 문구. 계약의 오류 코드가
+ * 아니라 문구로 판별하므로 `event-until-message.test.ts`가 서버 마이그레이션에 이 문구가 그대로 있는지 확인한다.
+ */
+export const UNTIL_BEFORE_START_MESSAGE = 'until must not be before the first occurrence';
+
+/** 반복 끝을 시작일보다 앞에 두어 서버가 거절했는지(일정·업무 반복 공통). */
+export function untilBeforeStart(e: unknown): boolean {
+  return (
+    e instanceof ApiError && e.code === 'bad_request' && e.message === UNTIL_BEFORE_START_MESSAGE
+  );
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

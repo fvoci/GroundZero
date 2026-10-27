@@ -19,7 +19,8 @@
   import type { EventUnit } from './conflict';
   import { mergeEventInput, sameUnit, trimLikeServer } from './conflict';
   import EventForm from './EventForm.svelte';
-  import RecurrenceEditor, { untilBeforeStart } from './RecurrenceEditor.svelte';
+  import RecurrenceEditor from './RecurrenceEditor.svelte';
+  import { untilBeforeStart } from './input-drafts';
   import { describeRule, describeWhen, KIND_LABEL } from './labels';
   import { localTimeZone } from './time';
   import { me } from '$lib/me.svelte';
