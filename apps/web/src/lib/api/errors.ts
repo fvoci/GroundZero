@@ -7,14 +7,28 @@ import { getLocale } from '$lib/paraglide/runtime.js';
 
 import { ApiError, NetworkError } from './client';
 
-/**
- * 보관된 항목·모듈에 대한 거절(SQL 55000 → 409 `invalid_state`)의 서버 고정 문구. 따로 오류 코드가 없어 이 문구로 가린다.
- * `tests/component/archived-error.test.ts`가 마이그레이션에 이 문구들이 그대로 있는지 본다.
- */
+// 계약에 따로 오류 코드가 없는 거절은 서버 본문의 고정 문구(마이그레이션 SQL의 RAISE EXCEPTION)로 가린다. 그 문구는 모두
+// 여기에 두고 `MATCHED_SERVER_MESSAGES`에 SQLSTATE와 함께 적는다. `tests/component/server-messages.test.ts`가 마이그레이션에
+// 문구와 SQLSTATE가 그대로 있는지 본다.
+
+/** 보관된 항목·모듈에 대한 거절(SQL 55000 → 409 `invalid_state`). */
 export const ARCHIVED_MESSAGES: readonly string[] = [
   'the item is archived',
   'the module is archived',
   'the target item is archived',
+];
+
+/** 같은 이름의 업무 상태가 이미 있다(SQL 55000 → 409 `invalid_state`). */
+export const STATUS_NAME_EXISTS_MESSAGE = 'a status with this name exists';
+
+/** 반복 끝이 첫 회차보다 앞선다(SQL 22023 → 400 `bad_request`, 일정·업무 반복 공통). */
+export const UNTIL_BEFORE_START_MESSAGE = 'until must not be before the first occurrence';
+
+/** 웹이 판별하는 서버 문구와 그 SQLSTATE 전부. */
+export const MATCHED_SERVER_MESSAGES: readonly { message: string; sqlstate: string }[] = [
+  ...ARCHIVED_MESSAGES.map((message) => ({ message, sqlstate: '55000' })),
+  { message: STATUS_NAME_EXISTS_MESSAGE, sqlstate: '55000' },
+  { message: UNTIL_BEFORE_START_MESSAGE, sqlstate: '22023' },
 ];
 
 /** 보관 때문에 거절된 쓰기인지. */
@@ -23,6 +37,24 @@ export function isArchivedRejection(error: unknown): boolean {
     error instanceof ApiError &&
     error.code === 'invalid_state' &&
     ARCHIVED_MESSAGES.includes(error.message)
+  );
+}
+
+/** 상태 이름이 겹쳐 거절됐는지. */
+export function statusNameExists(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === 'invalid_state' &&
+    error.message === STATUS_NAME_EXISTS_MESSAGE
+  );
+}
+
+/** 반복 끝을 시작일보다 앞에 두어 서버가 거절했는지. */
+export function untilBeforeStart(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === 'bad_request' &&
+    error.message === UNTIL_BEFORE_START_MESSAGE
   );
 }
 

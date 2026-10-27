@@ -7,7 +7,7 @@
 
   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
   import { api, ApiError, RuleConflict } from '$lib/api/client';
-  import { errorText } from '$lib/api/errors';
+  import { errorText, untilBeforeStart } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
@@ -20,7 +20,6 @@
   import { mergeEventInput, sameUnit, trimLikeServer } from './conflict';
   import EventForm from './EventForm.svelte';
   import RecurrenceEditor from './RecurrenceEditor.svelte';
-  import { untilBeforeStart } from './input-drafts';
   import { describeRule, describeWhen, KIND_LABEL } from './labels';
   import { localTimeZone } from './time';
   import { me } from '$lib/me.svelte';

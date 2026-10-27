@@ -2,8 +2,8 @@
   import { onMount, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import type { StatusCategory, TaskStatusDefinition } from '@fvoci/api-client';
-  import { api, ApiError } from '$lib/api/client';
-  import { errorText } from '$lib/api/errors';
+  import { api } from '$lib/api/client';
+  import { errorText, statusNameExists } from '$lib/api/errors';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -158,12 +158,9 @@
       notifyDone(m.common_saved());
     } catch (e: unknown) {
       // 서버 설명은 영어 진단이라 그대로 붙이지 않는다(D-81). 이름 중복만 따로 알린다(서버는 409 invalid_state로 거절).
-      error =
-        e instanceof ApiError &&
-        e.code === 'invalid_state' &&
-        e.message === 'a status with this name exists'
-          ? m.tasks_status_name_exists()
-          : errorText(e, m.tasks_status_failed());
+      error = statusNameExists(e)
+        ? m.tasks_status_name_exists()
+        : errorText(e, m.tasks_status_failed());
     } finally {
       busy = false;
     }
