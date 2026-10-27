@@ -1,3 +1,4 @@
+import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '$lib/api/client';
@@ -11,6 +12,17 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 import { ACCESS_DOCUMENT, ACCESS_FILE } from '../../stories/fixtures/access';
 import { comment } from '../../stories/fixtures/comments';
 import { TASK_ITEM, PROJECT_MODULE } from '../../stories/fixtures/synthetic';
+import { TEST_ORGANIZATION } from './fixtures/organization';
+
+const ACCESS_WORKSPACE: Workspace = {
+  access: 'owner',
+  id: 'ws-1',
+  name: '운영',
+  organization_id: TEST_ORGANIZATION.id,
+  role: 'admin',
+  is_owner: true,
+  realtime_enabled: false,
+};
 
 beforeEach(async () => {
   me.userId = 'u1';
@@ -107,13 +119,52 @@ describe('organization public links and allow_copy', () => {
       vi.spyOn(api, 'shares').mockResolvedValue([]);
       vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
       vi.spyOn(api, 'document').mockResolvedValue(ACCESS_DOCUMENT);
-      render(DocumentActions, { doc: ACCESS_DOCUMENT, workspaces: [], onchanged: () => undefined });
+      render(DocumentActions, {
+        doc: ACCESS_DOCUMENT,
+        workspaces: [ACCESS_WORKSPACE],
+        onchanged: () => undefined,
+      });
       await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
       await screen.findByTestId('public-link-list');
       expect(screen.queryByRole('button', { name: '공개 링크 만들기' }) !== null).toBe(enabled);
       if (!enabled) expect(screen.getByText('조직이 공개 링크를 껐습니다.')).toBeInTheDocument();
     },
   );
+
+  // R5 P2 F-5·C-3: 공개 링크 정책은 지금 고른 조직이 아니라 문서가 속한 워크스페이스의 조직 것이다. 개인 노트에는 조직
+  // 정책이 없다(SQL `app_create_public_link`는 workspace_id가 없는 문서에 조직 설정을 보지 않는다).
+  it('applies the policy of the document organization and none to a personal note', async () => {
+    const other = { ...TEST_ORGANIZATION, id: 'org-2', public_links_enabled: false };
+    org.load('u1', [{ ...TEST_ORGANIZATION, public_links_enabled: false }, other], null);
+    expect(org.currentId).toBeUndefined();
+    vi.spyOn(api, 'shares').mockResolvedValue([]);
+    vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
+    const personal = { ...ACCESS_DOCUMENT, workspace_id: null };
+    vi.spyOn(api, 'document').mockResolvedValue(personal);
+    const view = render(DocumentActions, {
+      doc: personal,
+      workspaces: [ACCESS_WORKSPACE],
+      onchanged: () => undefined,
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await screen.findByTestId('public-link-list');
+    expect(screen.getByRole('button', { name: '공개 링크 만들기' })).toBeInTheDocument();
+    expect(screen.queryByText('조직이 공개 링크를 껐습니다.')).toBeNull();
+    view.unmount();
+
+    // 문서의 조직(org-1)은 켰고 지금 고른 조직(org-2)은 껐다: 문서 조직을 따른다.
+    org.load('u1', [TEST_ORGANIZATION, other], other.id);
+    vi.mocked(api.document).mockResolvedValue(ACCESS_DOCUMENT);
+    render(DocumentActions, {
+      doc: ACCESS_DOCUMENT,
+      workspaces: [ACCESS_WORKSPACE],
+      onchanged: () => undefined,
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await screen.findByTestId('public-link-list');
+    expect(screen.getByRole('button', { name: '공개 링크 만들기' })).toBeInTheDocument();
+    expect(screen.queryByText('조직이 공개 링크를 껐습니다.')).toBeNull();
+  });
 
   it.each([true, false])(
     'gates downloads, including old versions, with allowCopy=%s',

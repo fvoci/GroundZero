@@ -57,7 +57,13 @@
   // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
   const restrictOnly = $derived(!isOwner && doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
-  const publicLinksEnabled = $derived(org.current?.public_links_enabled === true);
+  // 공개 링크 정책은 문서가 속한 워크스페이스의 조직 것이다(지금 고른 조직이 아니다). 개인 노트에는 조직 정책이 없다
+  // (SQL `app_create_public_link`). 그 조직을 알 수 없으면 숨기지 않고 서버의 거절(409)을 그대로 알린다.
+  const publicLinksEnabled = $derived.by(() => {
+    if (doc.workspace_id === null) return true;
+    const organizationId = workspaces.find((w) => w.id === doc.workspace_id)?.organization_id;
+    return org.organizations.find((o) => o.id === organizationId)?.public_links_enabled !== false;
+  });
   // 쓰기 대상은 서버 접근 등급(`Workspace.access`)으로만 고른다(D-113). 조직 밖 이동·복제는 제외한다(D-114).
   const writable = $derived(
     workspaces.filter((w) => w.organization_id === org.currentId && w.access !== 'read'),
