@@ -22,7 +22,7 @@
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import { me } from '$lib/me.svelte';
   import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
-  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
@@ -67,7 +67,7 @@
   });
   onMount(() =>
     commentsLeave.attach({
-      beforeUnload: () => commentsUnsaved && (!accountSwitching() || !commentsKept),
+      beforeUnload: () => commentsUnsaved && (!leavingWithDrafts() || !commentsKept),
     }),
   );
   // 목차가 읽는 본문 영역.
