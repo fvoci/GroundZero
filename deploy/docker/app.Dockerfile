@@ -10,7 +10,17 @@ COPY xtask ./xtask
 # (`dev`)다. 하나만 넣거나 형식이 틀리면 컴파일이 멈춘다(crates/server/src/build_info.rs).
 ARG FVOCI_RELEASE_VERSION=
 ARG FVOCI_SOURCE_SHA=
-RUN cargo build --release --locked --package fvoci-server
+# cargo 레지스트리·git·target은 BuildKit 캐시 마운트에 둔다(이 빌드 호스트에만 남고 이미지 층에 들어가지 않는다). 그래서
+# 바이너리는 같은 RUN에서 /out으로 꺼낸다. COPY한 소스는 컨텍스트의 수정 시각을 그대로 가지므로, 다른 체크아웃이 남긴
+# target보다 시각이 이르면 cargo가 바뀐 소스를 최신으로 볼 수 있다. 작업공간 소스의 시각을 지금으로 바꿔 작업공간 crate는
+# 늘 다시 빌드하고 외부 crate만 캐시를 쓴다.
+ARG TARGETPLATFORM
+RUN --mount=type=cache,id=fvoci-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=fvoci-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=fvoci-release-target-${TARGETPLATFORM},target=/src/target,sharing=locked \
+    find crates xtask -exec touch {} + \
+ && cargo build --release --locked --package fvoci-server \
+ && mkdir /out && cp target/release/fvoci-server /out/fvoci-server
 
 # HWP·HWPX 미리보기 WASM(D-76). 앱 도구 모음(위 server-build)과 따로, 고정한 rhwp 커밋·잠금 파일·기능·도구 판으로 만든다.
 # 입력(deploy/rhwp)이 같으면 이 단계의 캐시를 그대로 쓴다. 판은 deploy/rhwp/inputs.env와 같아야 한다(build.sh가 확인).
@@ -40,7 +50,9 @@ COPY contracts ./contracts
 # HWP·HWPX 미리보기 WASM은 public/rhwp/<입력 해시>/로 들어가 웹 빌드와 함께 나간다(미리보기를 열 때만 불러옴).
 COPY --from=rhwp-build /out/web ./apps/web/public/rhwp
 # 해시 자원(서체·번들)에 br·gzip 사본을 더한다(D-86, `/rhwp`와 같은 방식). 원본은 그대로다.
-RUN pnpm install --frozen-lockfile && pnpm --filter @fvoci/web run build \
+# pnpm 저장소는 BuildKit 캐시 마운트에 둔다(이미지 층에 들어가지 않는다). node_modules는 이 RUN 안에서 쓰므로 층에 둔다.
+RUN --mount=type=cache,id=fvoci-pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir /pnpm/store && pnpm --filter @fvoci/web run build \
  && find apps/web/dist/assets -type f -size +1k \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.otf' -o -name '*.ttf' \) \
       -exec gzip -9 -k -n {} + -exec brotli -q 11 -k {} +
 
@@ -50,7 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && useradd --system --uid 10001 --create-home fvoci \
  # 파일 저장소·백업 볼륨이 앱 사용자 소유로 만들어지도록 미리 둔다(이름 있는 볼륨은 처음에 이 소유를 따른다).
  && mkdir -p /data/files /backups && chown fvoci:fvoci /data/files /backups && chmod 0700 /data/files /backups
-COPY --from=server-build /src/target/release/fvoci-server /usr/local/bin/fvoci-server
+COPY --from=server-build /out/fvoci-server /usr/local/bin/fvoci-server
 COPY --from=web-build /src/apps/web/dist /srv/fvoci/web
 # 제3자 고지(D-60, D-68). `cargo xtask notices`가 서버 바이너리와 웹 번들에 든 패키지로 만들고 `cargo xtask check`가
 # 최신 여부를 확인한다. 이미지 안 문서 위치와 웹(/THIRD_PARTY_NOTICES.txt) 두 곳에 둔다.
