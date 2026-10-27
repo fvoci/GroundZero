@@ -552,3 +552,124 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
         Some(&admin), None).await;
     assert_eq!(r.status, StatusCode::NOT_FOUND);
 }
+
+/// D-113: 보관은 등급 위의 쓰기 금지다. 달력·목록·단건의 일정은 그 항목이나 모듈이 보관됐는지(`archived`)를 실어, 웹이
+/// 쓰기 등급(`access`)만 보고 고치기 UI를 보이다가 서버의 거절(409)을 받지 않게 한다.
+#[tokio::test]
+async fn events_report_whether_their_item_or_module_is_archived() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "보관 일정").await;
+    let open = module_item(&app, &admin, &ws, "OPN", true).await;
+    let archived_item = module_item(&app, &admin, &ws, "AIT", true).await;
+    let archived_module = module_item(&app, &admin, &ws, "AMD", true).await;
+    let mut events = Vec::new();
+    for (item, title) in [
+        (&open, "열린 일정"),
+        (&archived_item, "보관된 항목의 일정"),
+        (&archived_module, "보관된 모듈의 일정"),
+    ] {
+        let body = timed(
+            title,
+            "2026-11-10T10:00:00+09:00",
+            "2026-11-10T11:00:00+09:00",
+            "Asia/Seoul",
+        );
+        let (status, event) = create(&app, &admin, item, body).await;
+        assert_eq!(status, StatusCode::CREATED, "{event:?}");
+        assert_eq!(event["archived"], false, "{event:?}");
+        events.push(event);
+    }
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!(
+            "/api/items/{}/archived",
+            archived_item["id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!(
+            "/api/modules/{}/archived",
+            archived_module["module_id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+
+    let (status, cal) = calendar(&app, &admin, &ws, "2026-11-01", "2026-11-30", "Asia/Seoul").await;
+    assert_eq!(status, StatusCode::OK, "{cal:?}");
+    for (item, event, archived) in [
+        (&open, &events[0], false),
+        (&archived_item, &events[1], true),
+        (&archived_module, &events[2], true),
+    ] {
+        let id = event["id"].as_str().unwrap();
+        let single = send(
+            &app,
+            Method::GET,
+            &format!("/api/events/{id}"),
+            Some(&admin),
+            None,
+        )
+        .await;
+        assert_eq!(single.status, StatusCode::OK, "{:?}", single.json);
+        assert_eq!(
+            single.json["archived"], archived,
+            "single {:?}",
+            single.json
+        );
+        let list = send(
+            &app,
+            Method::GET,
+            &format!("/api/items/{}/events", item["id"].as_str().unwrap()),
+            Some(&admin),
+            None,
+        )
+        .await;
+        assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+        let listed = list.json.as_array().unwrap();
+        assert_eq!(listed.len(), 1, "{listed:?}");
+        assert_eq!(listed[0]["archived"], archived, "list {listed:?}");
+        let on_calendar = cal["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["id"] == event["id"])
+            .unwrap_or_else(|| panic!("{id} missing from the calendar: {cal:?}"));
+        assert_eq!(
+            on_calendar["archived"], archived,
+            "calendar {on_calendar:?}"
+        );
+        // 보관되면 등급 판정도 쓰기를 읽기로 낮춘다(`app_grade_under_item`). `archived`는 그 까닭이 등급이 아니라 보관임을
+        // 알린다. 보관된 일정 고치기는 서버가 거절한다.
+        let access = if archived { "read" } else { "owner" };
+        assert_eq!(single.json["access"], access, "{:?}", single.json);
+        let edit = send(
+            &app,
+            Method::PUT,
+            &format!("/api/events/{id}"),
+            Some(&admin),
+            Some(json!({ "base_version": single.json["version"], "kind": "meeting", "title": "고친 제목",
+                "description": "", "all_day": false, "start_date": null, "end_date": null,
+                "starts_at": "2026-11-10T10:00:00+09:00", "ends_at": "2026-11-10T11:30:00+09:00",
+                "timezone": "Asia/Seoul" })),
+        )
+        .await;
+        let expected = if archived {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::OK
+        };
+        assert_eq!(edit.status, expected, "{id}: {:?}", edit.json);
+    }
+}

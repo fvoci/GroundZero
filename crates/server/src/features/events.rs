@@ -87,6 +87,10 @@ pub struct Event {
     pub excluded_dates: Vec<String>,
     pub version: i32,
     pub access: Access,
+    /// 일정의 항목 또는 그 모듈이 보관됐는지. D-113: 보관은 등급 위의 쓰기 금지다. 보관되면 고치기·지우기는 거절되고(409
+    /// `invalid_state`) `access`도 쓰기 등급 대신 read로 온다. 이 값은 그 까닭이 등급이 아니라 보관임을 알리며, 웹은 이
+    /// 값으로 쓰기 UI를 감춘다.
+    pub archived: bool,
 }
 
 /// 일정 내용(만들기·고치기 공통).
@@ -231,12 +235,17 @@ struct EventRow {
     excluded_dates: Vec<Date>,
     version: i32,
     access: String,
+    archived: bool,
 }
 
+/// `archived`는 `app_item_archived`와 같은 판정(항목 또는 그 모듈의 `archived_at`)이다. 그 함수는 앱 역할에 열려 있지
+/// 않아, 일정을 볼 수 있는 사람에게 RLS로 보이는 항목·모듈 행에서 직접 본다.
 const EVENT_SELECT: &str =
     "SELECT e.id, e.item_id, e.workspace_id, e.kind, e.title, e.description, e.all_day,
         e.start_date, e.end_date, e.starts_at, e.ends_at, e.timezone, e.recurrence, e.excluded_dates, e.version,
-        app_access('event', e.id) AS access
+        app_access('event', e.id) AS access,
+        EXISTS (SELECT 1 FROM items i JOIN modules m ON m.id = i.module_id
+                WHERE i.id = e.item_id AND (i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL)) AS archived
  FROM events e";
 
 const EVENT_ORDER: &str =
@@ -265,6 +274,7 @@ fn to_event(row: EventRow) -> Result<Event, AppError> {
             .collect(),
         version: row.version,
         access: Access::parse_present(&row.access)?,
+        archived: row.archived,
     })
 }
 

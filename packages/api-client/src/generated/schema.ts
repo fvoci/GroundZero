@@ -3427,6 +3427,12 @@ export interface components {
             access: components["schemas"]["Access"];
             /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
             all_day: boolean;
+            /**
+             * @description 일정의 항목 또는 그 모듈이 보관됐는지. D-113: 보관은 등급 위의 쓰기 금지다. 보관되면 고치기·지우기는 거절되고(409
+             *     `invalid_state`) `access`도 쓰기 등급 대신 read로 온다. 이 값은 그 까닭이 등급이 아니라 보관임을 알리며, 웹은 이
+             *     값으로 쓰기 UI를 감춘다.
+             */
+            archived: boolean;
             description: string;
             end_date?: string | null;
             /** Format: date-time */
