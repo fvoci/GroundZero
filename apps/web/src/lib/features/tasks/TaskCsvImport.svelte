@@ -132,7 +132,7 @@
   $effect(() => leave.attach({ beforeUnload: () => unsaved() && (!leavingWithDrafts() || !kept) }));
 
   const parsed = $derived(
-    text.trim() === '' ? undefined : parseTasksCsv(text, assignable, statuses),
+    text.trim() === '' ? undefined : parseTasksCsv(text, assignable, statuses, me.maxTitleChars),
   );
   // 지난 등록에 이어서 넣는다는 안내. 건너뛸 줄이 없으면 비운다.
   const resume = $derived.by(() => {
