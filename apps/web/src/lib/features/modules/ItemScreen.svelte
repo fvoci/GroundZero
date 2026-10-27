@@ -649,7 +649,7 @@
           href: itemGroupPath(workspace.id, current.id, g, chosen?.view),
         }))}
         current={group}
-        onselect={(g) => void selectGroup(g)}
+        onselect={(g: ItemGroupName) => void selectGroup(g)}
       />
       <div class="flex flex-col gap-6" data-item-group={group}>
         {#if group === 'references' || group === 'activities'}
