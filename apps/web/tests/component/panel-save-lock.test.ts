@@ -335,7 +335,7 @@ describe('study panel', () => {
 
   it('locks the replan form and its offer while rescheduling', async () => {
     otherTabDraft('study:i1:replan', { start: '2026-11-01', perDay: '3' });
-    const replan = held<undefined>();
+    const replan = held<number>();
     vi.spyOn(api, 'planStudyUnits').mockReturnValue(replan.promise);
     render(StudyPanel, { itemId: 'i1' });
     await fireEvent.submit(await screen.findByRole('form', { name: m.study_replan_form() }));
