@@ -12,7 +12,7 @@ import {
   type StoredFormDraft,
   writeFormDraftAt,
 } from './form-draft';
-import { createLeaveGuard } from './leave-guard.svelte';
+import { createLeaveGuard, leavingWithDrafts } from './leave-guard.svelte';
 
 interface DraftOptions<T> {
   /** Stable form kind and container/parent ID; undefined disables preservation. */
@@ -231,8 +231,9 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       beforeUnload: () => {
         persist();
         // Screen-only input has no stored copy, so it is never "kept": it warns during an account
-        // switch too. Cancelling leaves the hidden safety state with the input only in memory (D-96).
-        return owned() && ((options.dirty() && (!accountSwitching() || !kept)) || held());
+        // switch or a new-version reload too. Cancelling leaves the hidden safety state with the input
+        // only in memory (D-96).
+        return owned() && ((options.dirty() && (!leavingWithDrafts() || !kept)) || held());
       },
     });
   }

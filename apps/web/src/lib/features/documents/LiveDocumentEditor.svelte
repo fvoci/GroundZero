@@ -10,7 +10,7 @@
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import {
     accountSwitching,
     markAccountSwitch,
@@ -348,7 +348,7 @@
       beforeUnload: () => {
         if (handedOff || !hasPending()) return false;
         const kept = keepDraft();
-        return !accountSwitching() || !kept;
+        return !leavingWithDrafts() || !kept;
       },
     });
   });

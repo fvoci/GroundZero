@@ -3,6 +3,7 @@ import { mount } from 'svelte';
 import { browserLocale } from '$lib/display';
 import { applyDocFont, storedDocFont } from '$lib/doc-font';
 import { keepFocusAcrossLocks } from '$lib/features/common/lock-focus';
+import { watchNewVersion } from '$lib/features/feedback/new-version';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { applyTheme, followSystemTheme, storedTheme } from '$lib/theme.svelte';
 
@@ -26,5 +27,7 @@ applyTheme(storedTheme());
 followSystemTheme();
 // 저장 중 잠금(fieldset disabled)이 풀리면 Enter로 제출한 입력에 초점을 되돌린다(R5 2차 delta 4묶음 확인 필요 1).
 keepFocusAcrossLocks();
+// 새 버전이 배포되어 옛 청크를 못 읽으면 입력을 초안으로 남기고 한 번만 다시 읽는다(남기지 못하면 배너).
+watchNewVersion();
 
 mount(App, { target });

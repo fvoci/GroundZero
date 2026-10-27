@@ -16,6 +16,7 @@
     auth,
     accountSafety,
     connection,
+    newVersion,
     switchAccount,
     onAccountSwitch,
     watchConnection,
@@ -48,6 +49,8 @@
   $effect(() => {
     if (!connection.lost) connectionDismissed = false;
   });
+  // 닫은 뒤 다시 옛 청크를 못 읽으면 다시 보인다.
+  let versionDismissed = $state(0);
 
   $effect(() => watchConnection());
   // 화면(문서의 배경 저장 등)이 계정이 바뀐 것을 알면 아래 확인과 같게 다시 읽는다.
@@ -149,6 +152,19 @@
     >
       {m.common_connection_lost()}
       <Button variant="ghost" size="sm" onclick={() => (connectionDismissed = true)}
+        >{m.common_close()}</Button
+      >
+    </div>
+  {/if}
+</div>
+<div role="status" aria-live="polite" class="empty:hidden">
+  {#if newVersion.times > versionDismissed && !accountSafety.switching}
+    <div
+      class="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b bg-secondary px-4 py-2 text-sm text-secondary-foreground"
+      data-testid="new-version-banner"
+    >
+      {m.feedback_new_version()}
+      <Button variant="ghost" size="sm" onclick={() => (versionDismissed = newVersion.times)}
         >{m.common_close()}</Button
       >
     </div>

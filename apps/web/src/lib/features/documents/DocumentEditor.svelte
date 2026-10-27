@@ -23,7 +23,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { router, standalonePath } from '$lib/router.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -500,10 +500,10 @@
     const detach = leaveGuard.attach({
       beforeUnload: () => {
         if (!isDirty()) return false;
-        // 다른 계정으로 바뀌어 다시 읽을 때는 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
+        // 다른 계정으로 바뀌었거나 새 버전 배포로 다시 읽을 때는(`leavingWithDrafts`) 지금 입력을 앞 계정의 초안으로 남길 수 있으면 막지 않는다. 남기지
         // 못하면(저장소를 쓸 수 없음) 보통 떠나기처럼 경고한다(남아도 저장은 계정 확인에서 막힌다).
         const kept =
-          accountSwitching() &&
+          leavingWithDrafts() &&
           !reservedDraft &&
           storeDraft(server.id, {
             baseRevision: server.revision,
