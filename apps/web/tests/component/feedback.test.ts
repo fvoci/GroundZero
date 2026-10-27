@@ -40,13 +40,33 @@ describe('user feedback (D-82)', () => {
   });
 
   // FC-1: 복제의 "새 항목 열기"처럼 완료 토스트에 동작 단추 하나를 붙인다. 닫을 때까지 남고 닫기 단추로 닫는다.
+  // RB-4: 토스트 라이브러리의 기본 지속 시간(4초)을 넉넉히 넘긴 뒤에도 남아 있어야 키보드·낭독기 사용자가 닿는다.
   it('adds one action button to a completion toast and keeps it until closed', async () => {
+    vi.useFakeTimers();
     const onClick = vi.fn();
     render(FeedbackHost);
     notifyDone('복제했습니다.', 'copy', { action: { label: '새 항목 열기', onClick } });
-    const action = await screen.findByRole('button', { name: '새 항목 열기' });
-    expect(document.querySelector('[data-close-button]')).not.toBeNull();
-    await fireEvent.click(action);
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '새 항목 열기' })).toBeInTheDocument();
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    const action = screen.getByRole('button', { name: '새 항목 열기' });
+    expect(screen.getByText('복제했습니다.')).toBeInTheDocument();
+    const close = action.closest('[data-sonner-toast]')?.querySelector('[data-close-button]');
+    if (!(close instanceof HTMLElement)) throw new Error('close button');
+    await fireEvent.click(close);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => {
+      expect(screen.queryByText('복제했습니다.')).toBeNull();
+    });
+    expect(screen.queryByRole('button', { name: '새 항목 열기' })).toBeNull();
+    expect(onClick).not.toHaveBeenCalled();
+
+    notifyDone('복제했습니다.', 'copy-again', { action: { label: '새 항목 열기', onClick } });
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '새 항목 열기' })).toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '새 항목 열기' }));
     expect(onClick).toHaveBeenCalledOnce();
   });
 

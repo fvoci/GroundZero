@@ -310,11 +310,13 @@
   }
 </script>
 
+<!-- 설정 폼은 관리자에게만 그린다. 아니면 되살려도 보이지 않는 입력만 채워지므로 안내와 버리기만 둔다(FC-2). -->
 {#each mod === undefined ? [] : settingsDraft.offers as entry (entry.key)}
   <fieldset class="contents" disabled={savingSettings}>
     <FormDraftOffer
+      restorable={isAdmin && !accountSwitching()}
       onrestore={() => {
-        settingsDraft.restore(entry);
+        if (isAdmin && !accountSwitching()) settingsDraft.restore(entry);
       }}
       ondiscard={() => {
         settingsDraft.discard(entry);

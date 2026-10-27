@@ -119,6 +119,25 @@ describe('creating while a request is in flight', () => {
     expect(copy).toHaveBeenCalledOnce();
   });
 
+  // RB-3: 토스트는 닫을 때까지 남고 ItemCopy는 다른 항목으로 옮겨도 다시 쓰인다. 새 항목 열기는 복제한 워크스페이스로 간다.
+  it('opens the copy in the workspace it was copied in after the item changes', async () => {
+    vi.spyOn(api, 'modules').mockResolvedValue([mod]);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    vi.spyOn(api, 'copyItem').mockResolvedValue({ item_id: 'copied', skipped_documents: 0 });
+    const view = render(ItemCopy, { item, module: mod });
+    await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
+    await screen.findByLabelText(m.modules_copy_new_title());
+    await fireEvent.click(screen.getByRole('button', { name: m.modules_copy() }));
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    const other = { ...item, id: 'other', workspace_id: 'ws-b', module_id: 'mod-b' };
+    await view.rerender({ item: other, module: { ...mod, id: 'mod-b', workspace_id: 'ws-b' } });
+    const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
+    done.mock.calls[0]?.[2]?.action?.onClick();
+    expect(navigate).toHaveBeenCalledWith(itemPath(workspace.id, 'copied'));
+  });
+
   it('locks the template form and opens the created item once it succeeds', async () => {
     vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
     vi.spyOn(api, 'module').mockResolvedValue(mod);

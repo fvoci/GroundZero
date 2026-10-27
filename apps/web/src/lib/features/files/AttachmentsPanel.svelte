@@ -102,6 +102,14 @@
     dirty: () => renaming !== undefined && renaming.name !== renaming.baseline,
   });
   onMount(renameDraft.attach);
+  /** 이름 바꾸기 단추와 같이 그 파일의 서버 `can_write`로 정한다(D-113). 패널의 `canWrite`는 새 파일 붙이기다. */
+  function renamable(input: RenameDraft | null): boolean {
+    return (
+      input !== null &&
+      files.find((f) => f.id === input.id)?.can_write === true &&
+      !accountSwitching()
+    );
+  }
   let renameIdentity: string | undefined;
   $effect(() => {
     const identity = JSON.stringify([me.userId, target.kind, target.id]);
@@ -266,9 +274,9 @@
   </p>
   {#each renameDraft.offers as offer (offer.key)}
     <FormDraftOffer
-      restorable={canWrite && !accountSwitching()}
+      restorable={renamable(offer.value.input)}
       onrestore={() => {
-        if (canWrite && !accountSwitching()) renameDraft.restore(offer);
+        if (renamable(offer.value.input)) renameDraft.restore(offer);
       }}
       ondiscard={() => {
         renameDraft.discard(offer);
@@ -282,7 +290,7 @@
       {#each files as f (f.id)}
         <li class="flex flex-col gap-1 rounded-md border p-2 text-sm">
           <div class="flex flex-wrap items-center gap-2">
-            {#if renaming?.id === f.id}
+            {#if f.can_write && renaming?.id === f.id}
               <form
                 class="flex flex-1 flex-wrap gap-2"
                 onsubmit={(e: SubmitEvent) => {
