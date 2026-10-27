@@ -2,6 +2,19 @@ import type { Activity } from '@fvoci/api-client';
 import { m } from '$lib/paraglide/messages.js';
 import { itemPath, itemTaskPath, pathFor } from '$lib/router.svelte';
 
+// 서버 `activity_target_kind_check`의 대상 종류. 대상 이름이 없을 때 쓴다(모르는 종류는 항목).
+const TARGET_LABEL: Record<string, () => string> = {
+  workspace: m.home_activity_target_workspace,
+  module: m.home_activity_target_module,
+  item: m.home_activity_target_item,
+  document: m.home_activity_target_document,
+  task: m.home_activity_target_task,
+  event: m.home_activity_target_event,
+  file: m.home_activity_target_file,
+  record: m.home_activity_target_record,
+};
+
+/** 서버 `activity_kind_check`의 종류마다 문구를 고른다. 모르는 종류는 일반 문구다. */
 export function activityText(activity: Activity): string {
   const who = activity.actor_name ?? m.references_notification_someone();
   const detail: unknown = activity.detail;
@@ -13,12 +26,7 @@ export function activityText(activity: Activity): string {
       ? detail.title
       : '';
   const target =
-    title ||
-    (activity.target_kind === 'task'
-      ? m.references_kind_task()
-      : activity.target_kind === 'document'
-        ? m.references_kind_document()
-        : m.references_kind_item());
+    title || (TARGET_LABEL[activity.target_kind] ?? m.home_activity_target_item)();
   switch (activity.kind) {
     case 'comment':
       return m.home_activity_comment({ who, target });
@@ -41,8 +49,8 @@ export function activityText(activity: Activity): string {
       return m.home_activity_create({ who, target });
     case 'move':
       return m.home_activity_move({ who, target });
-    case 'detach':
-      return m.home_activity_detach({ who, target });
+    case 'unshare':
+      return m.home_activity_unshare({ who, target });
     default:
       return m.home_activity_other({ who, target });
   }
