@@ -2,6 +2,7 @@
 
 mod browser;
 mod check;
+mod ci_plan;
 mod compose;
 mod dev;
 mod i18n;
@@ -39,6 +40,15 @@ enum Command {
         /// 라이선스 검사를 뺀다. CI는 라이선스를 따로 job(`cargo xtask licenses`)으로 돌려 결과를 나눠 보인다.
         #[arg(long)]
         skip_licenses: bool,
+        /// 문서 서식 검사(`pnpm format:check`)만 돌리고 나머지 단계는 건너뜀으로 보인다. CI가 문서 전용 PR에 쓴다(#146).
+        #[arg(long)]
+        docs_only: bool,
+    },
+    /// CI가 이번 실행에서 돌 job을 변경 경로로 정한다(#146·#155). `changes` job이 부른다.
+    CiPlan {
+        /// `$GITHUB_EVENT_NAME`. `pull_request`만 변경 경로로 좁히고 나머지는 전체를 돈다.
+        #[arg(long)]
+        event: String,
     },
     /// 테스트용 Compose를 띄우고 통합 테스트까지 실행한 뒤 정리한다.
     Test {
@@ -137,7 +147,11 @@ fn main() -> Result<()> {
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))
         }
-        Command::Check { skip_licenses } => check::run(&root, skip_licenses),
+        Command::Check {
+            skip_licenses,
+            docs_only,
+        } => check::run(&root, skip_licenses, docs_only),
+        Command::CiPlan { event } => ci_plan::run(&root, &event),
         Command::Test {
             keep,
             oidc,

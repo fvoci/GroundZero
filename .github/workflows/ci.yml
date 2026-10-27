@@ -19,7 +19,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # 변경 경로로 이번 실행이 돌 job을 정한다(#146·#155, 판별과 경로 표는 xtask/src/ci_plan.rs). PR만 좁히고 push(main)는
+  # 전체를 돈다. 건너뛴 job은 결론이 skipped로만 보이므로 사유는 이 job의 실행 요약과 알림에 남는다.
+  # 아래 job은 출력이 'false'일 때만 건너뛴다. 이 job이 실패하면 출력이 비어 모두 돌고, 이 job은 실패로 남는다.
+  # PR 병합 커밋을 첫 부모(기준 브랜치)와 비교하므로 깊이 2로 받는다. git이 체크아웃 소유자와 같은 사용자로 돌도록
+  # 컨테이너가 아니라 호스트 러너에서 돈다(툴체인은 rust-toolchain.toml).
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      docs_only: ${{ steps.plan.outputs.docs_only }}
+      licenses: ${{ steps.plan.outputs.licenses }}
+      integration: ${{ steps.plan.outputs.integration }}
+      browser: ${{ steps.plan.outputs.browser }}
+      oidc: ${{ steps.plan.outputs.oidc }}
+      supabase: ${{ steps.plan.outputs.supabase }}
+      rhwp: ${{ steps.plan.outputs.rhwp }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - id: plan
+        run: cargo xtask ci-plan --event "$GITHUB_EVENT_NAME"
+
+  # 문서 전용 PR이면 서식 검사만 돌고 나머지 단계는 SKIP으로 남는다(#146).
   check:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
@@ -31,10 +57,15 @@ jobs:
       - run: corepack enable pnpm && rustc -V && node -v && corepack --version && pnpm -v
       - run: pnpm install --frozen-lockfile
       # 라이선스는 아래 licenses job이 따로 보인다(D-60 승인 대기 중 실패가 다른 검사 결과를 가리지 않게).
-      - run: cargo xtask check --skip-licenses
+      - if: needs.changes.outputs.docs_only != 'true'
+        run: cargo xtask check --skip-licenses
+      - if: needs.changes.outputs.docs_only == 'true'
+        run: cargo xtask check --skip-licenses --docs-only
 
   # 의존성 라이선스(D-60). 허용 목록 밖이면 실패로 그대로 보인다. 다른 job은 이 결과를 기다리지 않는다.
   licenses:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.licenses != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     container:
@@ -46,6 +77,8 @@ jobs:
       - run: cargo xtask licenses
 
   integration:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.integration != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
@@ -86,6 +119,8 @@ jobs:
   # 프로젝트명에 실행 번호·재시도 번호를 넣어 실행마다 컨테이너·네트워크·볼륨을 분리하고, 결과와 상관없이 지운다.
   # Docker 소켓은 테스트 컨테이너에 넘기지 않는다(체크아웃만 마운트).
   oidc:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.oidc != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -115,6 +150,8 @@ jobs:
   # 127.0.0.1 포트) 같은 통합 테스트를 직접 연결과 Supavisor session 모드로 두 번 돈다. 호스트의 Docker 포트를 쓰므로
   # base 이미지 컨테이너가 아니라 러너에서 돈다(툴체인은 rust-toolchain.toml).
   supabase:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.supabase != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -124,6 +161,8 @@ jobs:
 
   # 실제 API·DB·OIDC를 쓰는 Chromium 회귀. 브라우저/서비스 생명주기는 로컬과 같은 xtask가 소유한다.
   browser:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.browser != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -162,6 +201,8 @@ jobs:
   # 그래프만 cargo-deny로 검사한다(취약점·회수·라이선스, 예외는 deploy/rhwp/deny.toml의 HWP 용도 승인분만).
   # 입력(deploy/rhwp의 네 파일)이 같으면 앞서 만든 결과를 다시 쓴다. 고지 파일이 그 결과와 같은지도 본다.
   rhwp:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.rhwp != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:

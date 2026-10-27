@@ -7,9 +7,13 @@ use xshell::{Shell, cmd};
 
 type Step<'a> = Box<dyn Fn(&Shell) -> Result<()> + 'a>;
 
+/// 문서 변경이 영향을 주는 유일한 단계(Prettier가 `docs/**`·Markdown을 본다).
+const DOCS_STEP: &str = "pnpm format:check";
+
 /// 검사 단계. 실패해도 나머지를 계속 돌리고 마지막에 모아서 실패시킨다.
 /// `skip_licenses`면 라이선스 단계를 뺀다(CI는 `cargo xtask licenses`를 따로 job으로 돌린다).
-pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
+/// `docs_only`면 문서 서식 단계만 돌리고 나머지는 단계마다 SKIP으로 보인다(문서 전용 PR, #146).
+pub fn run(root: &Path, skip_licenses: bool, docs_only: bool) -> Result<()> {
     let sh = Shell::new()?;
     sh.change_dir(root);
     let mut failed: Vec<&str> = Vec::new();
@@ -43,7 +47,7 @@ pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
             Box::new(|_| crate::openapi::run(root, true)),
         ),
         (
-            "pnpm format:check",
+            DOCS_STEP,
             Box::new(|sh| Ok(cmd!(sh, "pnpm run format:check").run()?)),
         ),
         (
@@ -86,6 +90,10 @@ pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
     }
 
     for (name, step) in &steps {
+        if docs_only && *name != DOCS_STEP {
+            println!("SKIP {name} (--docs-only)");
+            continue;
+        }
         println!("==> {name}");
         if let Err(err) = step(&sh) {
             eprintln!("FAIL {name}: {err:#}");
@@ -95,7 +103,10 @@ pub fn run(root: &Path, skip_licenses: bool) -> Result<()> {
         }
     }
 
-    if failed.is_empty() {
+    if failed.is_empty() && docs_only {
+        println!("{DOCS_STEP} passed; other checks skipped (--docs-only)");
+        Ok(())
+    } else if failed.is_empty() {
         println!("all checks passed");
         Ok(())
     } else {
