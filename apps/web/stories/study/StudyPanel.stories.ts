@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, spyOn, userEvent, within } from 'storybook/test';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { storeFormDraft } from '$lib/features/common/form-draft';
-import { newRequestId } from '$lib/api/client';
+import { api, newRequestId } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import MainFrame from '../fixtures/MainFrame.svelte';
+import { study } from '../time/fixtures';
 import { setUpTime } from '../time/setup';
 const meta = {
   globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
@@ -70,4 +71,21 @@ export const RestoreDraftNarrow: Story = {
 export const RestoreDraftLarge: Story = {
   ...RestoreDraft,
   globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+};
+
+/** 읽기 전용: 상태 단추·내 분량 폼·다시 배정 없이 시간 측정만 보인다(D-20 ⑧). */
+export const ReadOnly: Story = {
+  beforeEach: () => {
+    spyOn(api, 'studyPlan').mockResolvedValue({ ...study, can_write: false });
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('button', { name: m.study_track_aria({ title: '연습 문제' }) });
+    await expect(canvas.queryByRole('button', { name: m.study_mine() })).toBeNull();
+    await expect(canvas.queryByRole('form', { name: m.study_replan_form() })).toBeNull();
+  },
+};
+export const ReadOnlyNarrowDark: Story = {
+  ...ReadOnly,
+  globals: { theme: 'dark', viewport: { value: 'narrow375' } },
 };

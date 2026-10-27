@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 
+import { m } from '$lib/paraglide/messages.js';
+
 import DiscardHost from '../fixtures/DiscardHost.svelte';
 import { pressEscape } from '../fixtures/keys';
 
@@ -88,4 +90,31 @@ export const BrandDark: Story = {
 export const BrandNarrowLargeText: Story = {
   ...OpenAnother,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};
+
+/** 실시간 문서를 떠날 때: 서버에 반영되지 않은 편집은 초안으로 남는다고 알리고 "떠나기"로 이동한다(D-27 개정 2026-10-27, #141 R8 A). */
+export const LiveDocumentLeave: Story = {
+  args: {
+    description: m.documents_live_leave_description(),
+    confirmLabel: m.documents_live_leave(),
+  },
+  play: async ({ canvasElement }) => {
+    const dialog = await editAndAsk(canvasElement);
+    await expect(dialog).toHaveTextContent(m.documents_live_leave_description());
+    await expect(
+      within(dialog).getByRole('button', { name: m.documents_live_leave() }),
+    ).toBeVisible();
+  },
+};
+/** 초안을 남기지 못했을 때(저장 공간 부족 등): 떠나면 사라진다고 알린다. 어두운 화면·375px·200% 글꼴. */
+export const LiveDocumentLeaveLost: Story = {
+  args: {
+    description: m.documents_live_leave_lost_description(),
+    confirmLabel: m.documents_live_leave(),
+  },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
+  play: async ({ canvasElement }) => {
+    const dialog = await editAndAsk(canvasElement);
+    await expect(dialog).toHaveTextContent(m.documents_live_leave_lost_description());
+  },
 };

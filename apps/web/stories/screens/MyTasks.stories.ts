@@ -34,9 +34,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Workspaces: Story = {
   play: async ({ canvasElement }) => {
-    await expect(
-      await within(canvasElement).findByText('날짜 없는 내 업무 · Undated task'),
-    ).toBeInTheDocument();
+    const canvas = within(canvasElement);
+    const task = await canvas.findByText('날짜 없는 내 업무 · Undated task');
+    // 워크스페이스 안의 "날짜 없음" 묶음 제목 아래에 있다(D-120).
+    const group = task.closest('section');
+    await expect(group?.querySelector('h3')?.textContent).toContain('날짜 없음');
   },
 };
 export const Dark: Story = { ...Workspaces, globals: { theme: 'dark' } };

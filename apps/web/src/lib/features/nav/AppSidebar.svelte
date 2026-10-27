@@ -1,6 +1,6 @@
 <script lang="ts">
-  // 앱 사이드바. 위: 검색. 개인 영역(모든 워크스페이스에 걸친 내 것)과 현재 워크스페이스 영역(바꾸기,
-  // 위키 트리, 모듈, 달력·멤버·휴지통·감사 기록)을 나눈다. 아래: 계정 메뉴(표시 설정·내려받기·로그아웃).
+  // 앱 사이드바. 맨 위: 조직 › 워크스페이스 전환기(D-121)와 검색. 개인 영역(모든 워크스페이스에 걸친 내 것)과 현재
+  // 워크스페이스 영역(위키 트리, 모듈, 달력·멤버·휴지통·감사 기록)을 나눈다. 아래: 계정 메뉴(표시 설정·내려받기·로그아웃).
   // 목록은 서버가 권한으로 거른 것만 그린다. 데스크톱은 아이콘 막대로 접히고, 모바일은 서랍으로 열고 이동하면 닫힌다.
   import type { Workspace } from '@fvoci/api-client';
   import BookOpen from '@lucide/svelte/icons/book-open';
@@ -230,12 +230,123 @@
 
 <Sidebar.Root collapsible="icon">
   <Sidebar.Header>
-    <div class="flex items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:hidden">
-      <span class="text-base font-semibold">fvoci</span>
+    <!-- 사이드바 맨 위에 조직 › 워크스페이스 전환기(D-111·D-121). 조직은 사용자가 고르고 서버는 기본 조직을 정하지 않는다.
+         모바일 서랍의 닫기 단추는 같은 줄 끝에 둔다. -->
+    <div class="flex items-start gap-1">
+      <Sidebar.Menu class="min-w-0 flex-1">
+        <Sidebar.MenuItem>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Sidebar.MenuButton
+                  {...props}
+                  size="lg"
+                  tooltipContent={org.current?.name ?? m.app_nav_organization_choose()}
+                  aria-label={`${m.app_nav_organization_switch()}: ${org.current?.name ?? m.app_nav_organization_choose()}`}
+                  data-testid="organization-switcher"
+                  class="border border-sidebar-border bg-sidebar"
+                >
+                  <Building2 aria-hidden="true" />
+                  {#if org.current !== undefined}
+                    <span class="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden"
+                      >{org.current.name}</span
+                    >
+                  {:else}
+                    <span class="min-w-0 flex-1 truncate text-muted-foreground"
+                      >{m.app_nav_organization_choose()}</span
+                    >
+                  {/if}
+                  <ChevronsUpDown class="ml-auto" aria-hidden="true" />
+                </Sidebar.MenuButton>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content
+              align="start"
+              class="w-(--bits-dropdown-menu-anchor-width) min-w-56 max-w-[calc(100vw-2rem)]"
+            >
+              <DropdownMenu.Label>{m.app_nav_organization_switch()}</DropdownMenu.Label>
+              {#if org.organizations.length === 0}
+                <p class="px-2 py-1.5 text-sm text-muted-foreground">
+                  {m.app_nav_organization_none()}
+                </p>
+              {/if}
+              {#each org.organizations as o (o.id)}
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    chooseOrganization(o.id);
+                  }}
+                  aria-current={o.id === org.currentId ? 'true' : undefined}
+                  class={o.id === org.currentId ? 'font-medium' : ''}
+                >
+                  <span class="min-w-0 flex-1 truncate">{o.name}</span>
+                  <span class="text-xs text-muted-foreground"
+                    >{o.role === 'admin'
+                      ? m.app_nav_organization_role_admin()
+                      : m.app_nav_organization_role_member()}</span
+                  >
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </Sidebar.MenuItem>
+        <Sidebar.MenuItem>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Sidebar.MenuButton
+                  {...props}
+                  size="lg"
+                  tooltipContent={shown?.name ?? m.app_nav_workspace_choose()}
+                  aria-label={`${m.app_nav_workspace_switch()}: ${shown?.name ?? m.app_nav_workspace_choose()}`}
+                  data-testid="workspace-switcher"
+                  class="border border-sidebar-border bg-sidebar"
+                >
+                  {#if shown !== undefined}
+                    <span
+                      class="flex min-w-0 flex-1 overflow-hidden group-data-[collapsible=icon]:hidden"
+                      ><WorkspaceBadge workspace={shown} all={workspaces} /></span
+                    >
+                  {:else}
+                    <span class="min-w-0 flex-1 truncate text-muted-foreground"
+                      >{m.app_nav_workspace_choose()}</span
+                    >
+                  {/if}
+                  <ChevronsUpDown class="ml-auto" aria-hidden="true" />
+                </Sidebar.MenuButton>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content
+              align="start"
+              class="w-(--bits-dropdown-menu-anchor-width) min-w-56 max-w-[calc(100vw-2rem)]"
+            >
+              <DropdownMenu.Label>{m.app_nav_workspace_switch()}</DropdownMenu.Label>
+              {#each inOrganization as ws (ws.id)}
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    router.navigate(workspacePath(ws.id));
+                  }}
+                  aria-current={ws.id === shown?.id ? 'true' : undefined}
+                  class={ws.id === shown?.id ? 'font-medium' : ''}
+                >
+                  <WorkspaceBadge workspace={ws} all={inOrganization} />
+                </DropdownMenu.Item>
+              {/each}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                onSelect={() => {
+                  router.navigate('/');
+                }}
+              >
+                <Plus aria-hidden="true" />{m.app_nav_workspace_manage()}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+        </Sidebar.MenuItem>
+      </Sidebar.Menu>
       {#if sidebar.isMobile}
         <button
           type="button"
-          class="flex size-8 items-center justify-center rounded-md hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
+          class="flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-none"
           aria-label={m.app_nav_close()}
           onclick={() => {
             sidebar.setOpenMobile(false);
@@ -274,132 +385,12 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
-    <Sidebar.Separator />
+    {#if shown !== undefined}
+      <Sidebar.Separator />
 
-    <!-- 조직 › 워크스페이스 전환기(D-111·D-121). 조직은 사용자가 고르고 서버는 기본 조직을 정하지 않는다. -->
-    <Sidebar.Group>
-      <Sidebar.GroupLabel>{m.app_nav_organization()}</Sidebar.GroupLabel>
-      <Sidebar.GroupContent>
-        <Sidebar.Menu>
-          <Sidebar.MenuItem>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <Sidebar.MenuButton
-                    {...props}
-                    size="lg"
-                    tooltipContent={org.current?.name ?? m.app_nav_organization_choose()}
-                    aria-label={`${m.app_nav_organization_switch()}: ${org.current?.name ?? m.app_nav_organization_choose()}`}
-                    data-testid="organization-switcher"
-                    class="border border-sidebar-border bg-sidebar"
-                  >
-                    <Building2 aria-hidden="true" />
-                    {#if org.current !== undefined}
-                      <span class="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden"
-                        >{org.current.name}</span
-                      >
-                    {:else}
-                      <span class="min-w-0 flex-1 truncate text-muted-foreground"
-                        >{m.app_nav_organization_choose()}</span
-                      >
-                    {/if}
-                    <ChevronsUpDown class="ml-auto" aria-hidden="true" />
-                  </Sidebar.MenuButton>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content
-                align="start"
-                class="w-(--bits-dropdown-menu-anchor-width) min-w-56 max-w-[calc(100vw-2rem)]"
-              >
-                <DropdownMenu.Label>{m.app_nav_organization_switch()}</DropdownMenu.Label>
-                {#if org.organizations.length === 0}
-                  <p class="px-2 py-1.5 text-sm text-muted-foreground">
-                    {m.app_nav_organization_none()}
-                  </p>
-                {/if}
-                {#each org.organizations as o (o.id)}
-                  <DropdownMenu.Item
-                    onSelect={() => {
-                      chooseOrganization(o.id);
-                    }}
-                    aria-current={o.id === org.currentId ? 'true' : undefined}
-                    class={o.id === org.currentId ? 'font-medium' : ''}
-                  >
-                    <span class="min-w-0 flex-1 truncate">{o.name}</span>
-                    <span class="text-xs text-muted-foreground"
-                      >{o.role === 'admin'
-                        ? m.app_nav_organization_role_admin()
-                        : m.app_nav_organization_role_member()}</span
-                    >
-                  </DropdownMenu.Item>
-                {/each}
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-      </Sidebar.GroupContent>
-    </Sidebar.Group>
-
-    <Sidebar.Group>
-      <Sidebar.GroupLabel>{m.app_nav_workspaces()}</Sidebar.GroupLabel>
-      <Sidebar.GroupContent class="flex flex-col gap-1">
-        <Sidebar.Menu>
-          <Sidebar.MenuItem>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <Sidebar.MenuButton
-                    {...props}
-                    size="lg"
-                    tooltipContent={shown?.name ?? m.app_nav_workspace_choose()}
-                    aria-label={`${m.app_nav_workspace_switch()}: ${shown?.name ?? m.app_nav_workspace_choose()}`}
-                    data-testid="workspace-switcher"
-                    class="border border-sidebar-border bg-sidebar"
-                  >
-                    {#if shown !== undefined}
-                      <span
-                        class="flex min-w-0 flex-1 overflow-hidden group-data-[collapsible=icon]:hidden"
-                        ><WorkspaceBadge workspace={shown} all={workspaces} /></span
-                      >
-                    {:else}
-                      <span class="min-w-0 flex-1 truncate text-muted-foreground"
-                        >{m.app_nav_workspace_choose()}</span
-                      >
-                    {/if}
-                    <ChevronsUpDown class="ml-auto" aria-hidden="true" />
-                  </Sidebar.MenuButton>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content
-                align="start"
-                class="w-(--bits-dropdown-menu-anchor-width) min-w-56 max-w-[calc(100vw-2rem)]"
-              >
-                <DropdownMenu.Label>{m.app_nav_workspace_switch()}</DropdownMenu.Label>
-                {#each inOrganization as ws (ws.id)}
-                  <DropdownMenu.Item
-                    onSelect={() => {
-                      router.navigate(workspacePath(ws.id));
-                    }}
-                    aria-current={ws.id === shown?.id ? 'true' : undefined}
-                    class={ws.id === shown?.id ? 'font-medium' : ''}
-                  >
-                    <WorkspaceBadge workspace={ws} all={inOrganization} />
-                  </DropdownMenu.Item>
-                {/each}
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item
-                  onSelect={() => {
-                    router.navigate('/');
-                  }}
-                >
-                  <Plus aria-hidden="true" />{m.app_nav_workspace_manage()}
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-          </Sidebar.MenuItem>
-        </Sidebar.Menu>
-
-        {#if shown !== undefined}
+      <Sidebar.Group>
+        <Sidebar.GroupLabel>{m.app_nav_workspaces()}</Sidebar.GroupLabel>
+        <Sidebar.GroupContent class="flex flex-col gap-1">
           <Sidebar.Menu>
             <Sidebar.MenuItem>
               <Sidebar.MenuButton isActive={inShown('workspace')} tooltipContent={m.app_nav_wiki()}>
@@ -472,9 +463,9 @@
               <NavLink {item} />
             {/each}
           </Sidebar.Menu>
-        {/if}
-      </Sidebar.GroupContent>
-    </Sidebar.Group>
+        </Sidebar.GroupContent>
+      </Sidebar.Group>
+    {/if}
 
     {#if shown !== undefined}
       <Sidebar.Group class="group-data-[collapsible=icon]:hidden">

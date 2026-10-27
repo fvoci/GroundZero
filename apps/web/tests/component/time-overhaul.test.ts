@@ -9,6 +9,7 @@ import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { timer } from '$lib/features/time/timer.svelte';
 import { m } from '$lib/paraglide/messages.js';
+import { setLocale } from '$lib/paraglide/runtime.js';
 import { course, running, study } from '../../stories/time/fixtures';
 
 beforeEach(async () => {
@@ -99,4 +100,12 @@ it('a study unit starts study time and reports server failures inline', async ()
     id: 'unit-1',
   });
   expect(await screen.findByRole('alert')).toHaveTextContent(m.time_start_failed());
+});
+it('the header says "recording", not the in-progress label of entry rows (D-117)', async () => {
+  await setLocale('ko', { reload: false });
+  vi.mocked(api.currentTimer).mockResolvedValue(running);
+  render(TimerWidget);
+  expect(await screen.findByText('기록 중')).toBeInTheDocument();
+  expect(screen.queryByText('진행 중')).toBeNull();
+  expect(m.time_recording({}, { locale: 'en' })).toBe('Recording');
 });

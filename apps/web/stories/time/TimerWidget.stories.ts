@@ -22,6 +22,8 @@ export const Running: Story = {
   beforeEach: () => setUpTime(true),
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('button', { name: '종료' });
+    // 머리글은 "기록 중" 표시와 멈춤만(D-117).
+    await expect(within(canvasElement).getByText('기록 중')).toBeInTheDocument();
   },
 };
 export const StopFailed: Story = {

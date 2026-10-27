@@ -97,6 +97,24 @@ describe('organization summaries', () => {
     expect(screen.getByRole('heading', { name: '연구실 · 3' })).toBeVisible();
   });
 
+  it('puts undated tasks under a "날짜 없음" heading inside their workspace (D-120)', async () => {
+    vi.mocked(api.myTasks).mockResolvedValue(mine);
+    render(MyTasksScreen);
+    const section = (await screen.findByRole('heading', { name: '연구실 · 3' })).closest('section');
+    if (section === null) throw new Error('workspace section');
+    // 요약과 같은 묶음 제목(이름과 수)을 날짜 순서대로, 업무가 있는 묶음만 둔다.
+    const headings = within(section)
+      .getAllByRole('heading', { level: 3 })
+      .map((h) => h.textContent.trim());
+    expect(headings).toEqual(['오늘 2', '날짜 없음 1']);
+    const undated = within(section)
+      .getByRole('heading', { name: '날짜 없음 1' })
+      .closest('section');
+    if (undated === null) throw new Error('undated group');
+    expect(within(undated).getByRole('link', { name: /날짜 없음 업무/ })).toBeVisible();
+    expect(within(undated).queryByRole('link', { name: /오늘 먼저/ })).toBeNull();
+  });
+
   it('reloads on organization change and discards a late task response', async () => {
     org.load('user-a', [TEST_ORGANIZATION, second], TEST_ORGANIZATION.id);
     let finish: (value: MyTasksView) => void = () => undefined;

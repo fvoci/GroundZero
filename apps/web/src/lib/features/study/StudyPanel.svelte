@@ -245,7 +245,7 @@
       error = m.study_per_day_invalid();
       return;
     }
-    if (replanning) return;
+    if (replanning || !plan?.can_write) return;
     const attempt = replanDraft.capture();
     if (attempt === undefined) return;
     const start = replanStart;
@@ -327,6 +327,7 @@
   }
 
   function setStatus(u: StudyUnitView, next: EpisodeStatus): void {
+    if (!plan?.can_write) return;
     void run(
       async () => {
         const fresh = await freshMine(u);
@@ -592,7 +593,7 @@
       </div>
     </div>
 
-    {#if p.overdue.length > 0}
+    {#if p.overdue.length > 0 && current.can_write}
       {#each replanDraft.offers as offer (offer.key)}
         <FormDraftOffer
           onrestore={() => {
@@ -649,25 +650,28 @@
             <span class="ml-auto">{statusLabel(u.mine.status)}</span>
           </div>
           <div class="flex flex-wrap gap-1">
-            {#each ['not_started', 'in_progress', 'done'] as const as s (s)}
-              {#if u.mine.status !== s}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() => {
-                    setStatus(u, s);
-                  }}>{statusLabel(s)}</Button
-                >
-              {/if}
-            {/each}
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-expanded={openUnit === u.id}
-              onclick={() => {
-                openMine(u);
-              }}>{m.study_mine()}</Button
-            >
+            <!-- 진도는 쓸 수 있는 사람만 남긴다. 읽기 전용은 본인 진도도 남기지 못한다(D-20 ⑧, 서버도 거절). -->
+            {#if current.can_write}
+              {#each ['not_started', 'in_progress', 'done'] as const as s (s)}
+                {#if u.mine.status !== s}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => {
+                      setStatus(u, s);
+                    }}>{statusLabel(s)}</Button
+                  >
+                {/if}
+              {/each}
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-expanded={openUnit === u.id}
+                onclick={() => {
+                  openMine(u);
+                }}>{m.study_mine()}</Button
+              >
+            {/if}
             <Button
               size="sm"
               variant="ghost"
@@ -676,7 +680,7 @@
                 (timer.entry?.target?.kind === 'study_unit' && timer.entry.target.id === u.id)}
               onclick={() => void startUnit(u.id)}
               >{timer.entry?.target?.kind === 'study_unit' && timer.entry.target.id === u.id
-                ? m.time_in_progress()
+                ? m.time_recording()
                 : m.study_track()}</Button
             >
             {#if current.can_write}
@@ -787,7 +791,7 @@
               </div>
             </form>
           {/if}
-          {#if openUnit === u.id}
+          {#if openUnit === u.id && current.can_write}
             {#each mineDraft.offers as offer (offer.key)}
               <FormDraftOffer
                 onrestore={() => {

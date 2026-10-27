@@ -61,6 +61,7 @@
   "time_history_heading": "수정 이력(고치기 전 값)",
   "time_history_entry": "{changed}에 고침: {start} ~ {end} · {kind}",
   "time_in_progress": "진행 중",
+  "time_recording": "기록 중",
   "time_load_failed": "시간 기록을 불러오지 못했습니다.",
   "time_manual_added": "기록을 더했습니다.",
   "time_manual_failed": "기록을 더하지 못했습니다.",

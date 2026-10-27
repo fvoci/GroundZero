@@ -37,6 +37,11 @@
     oncancel?: (() => void) | undefined;
     /** 연 때와 다르게 고친 칸이 있는지 바뀔 때마다 알린다. */
     onunsaved?: ((unsaved: boolean) => void) | undefined;
+    /**
+     * 부모가 저장하는 동안 잠근다. 부모의 fieldset이 입력 칸은 잠그지만 bits-ui Select는 조상 fieldset을 보지 않고 자기
+     * disabled만 보므로 따로 받는다(R5 delta2 확인 필요 1).
+     */
+    disabled?: boolean;
   }
 
   const {
@@ -51,6 +56,7 @@
     onrestorebase,
     onsaved,
     ondraftkept,
+    disabled = false,
   }: Props = $props();
 
   /** 오늘(사용자 시간대, D-81). */
@@ -270,17 +276,16 @@
 
   // 고친 칸은 서버에 저장될 모양으로 견준다: 서버가 떼는 앞뒤 공백만 바뀐 것은 수정이 아니다(D-97 구현 해석, 업무 폼
   // `edited`와 같다). 수정이 있으면 초안에는 원문과 잠시 숨긴 날짜·시각을 그대로 남긴다(D-27). 부모는 반복 입력과 함께
-  // 이탈을 확인한다.
+  // 이탈을 확인한다. 시간대는 종일 일정에도 보내고 서버가 저장·정렬에 쓰므로 늘 견준다(D2-F-2).
   const unsaved = $derived(
     f.kind !== base.kind ||
       trimLikeServer(f.title) !== trimLikeServer(base.title) ||
       trimLikeServer(f.description) !== trimLikeServer(base.description) ||
       f.allDay !== base.allDay ||
+      f.timezone.trim() !== base.timezone ||
       (f.allDay
         ? f.startDate !== base.startDate || f.endDate !== base.endDate
-        : f.startWall !== base.startWall ||
-          f.endWall !== base.endWall ||
-          f.timezone.trim() !== base.timezone) ||
+        : f.startWall !== base.startWall || f.endWall !== base.endWall) ||
       startChoice !== undefined ||
       endChoice !== undefined,
   );
@@ -319,6 +324,7 @@
     <span class="text-sm font-medium" id={`${idPrefix}-kind-label`}>{m.events_kind()}</span>
     <Select.Root
       type="single"
+      disabled={busy || disabled}
       value={f.kind}
       onValueChange={(v: string) => {
         const k = EVENT_KINDS.find((x) => x === v);

@@ -61,6 +61,7 @@
   "time_history_heading": "Edit history (previous values)",
   "time_history_entry": "Edited {changed}: {start} – {end} · {kind}",
   "time_in_progress": "In progress",
+  "time_recording": "Recording",
   "time_load_failed": "Couldn't load time entries.",
   "time_manual_added": "Entry added.",
   "time_manual_failed": "Couldn't add the entry.",

@@ -186,3 +186,26 @@ describe('organization switch and the leave confirmation', () => {
     expect(screen.getByRole('link', { name: /읽지 않은 알림 3개/ })).toBeInTheDocument();
   });
 });
+
+describe('the sidebar layout (D-121)', () => {
+  it('puts the organization › workspace switcher at the very top, before the brand, search and personal menu', async () => {
+    router.navigate(`/w/${WS1}`);
+    render(App);
+    const organization = await screen.findByTestId('organization-switcher');
+    const workspace = await screen.findByTestId('workspace-switcher');
+    const before = (a: Element, b: Element): boolean =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const sidebar = organization.closest('[data-sidebar="sidebar"]');
+    if (sidebar === null) throw new Error('sidebar');
+    const brand = Array.from(sidebar.querySelectorAll('span')).find(
+      (s) => s.textContent === 'fvoci',
+    );
+    expect(before(organization, workspace)).toBe(true);
+    expect(before(workspace, screen.getByTestId('search-open'))).toBe(true);
+    expect(before(workspace, screen.getByRole('link', { name: '홈' }))).toBe(true);
+    if (brand !== undefined) expect(before(workspace, brand)).toBe(true);
+    // 전환기보다 앞에 오는 상호작용 요소가 없다(모바일 서랍의 닫기 단추만 예외).
+    const first = sidebar.querySelector('button, a');
+    expect(first === organization || first?.getAttribute('aria-label') === '메뉴 닫기').toBe(true);
+  });
+});

@@ -5,10 +5,10 @@
   import { onDestroy, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { parseRuleDraft, untilBeforeStart, type RuleDraft } from './input-drafts';
+  import { parseRuleDraft, type RuleDraft } from './input-drafts';
   import { ApiError, FREQUENCIES } from '$lib/api/client';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
-  import { errorText } from '$lib/api/errors';
+  import { errorText, untilBeforeStart } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -30,6 +30,8 @@
     ondraftkept?: (value: boolean) => void;
     onsaving?: (value: boolean) => void;
     untilError?: string | undefined;
+    /** 부모가 저장하는 동안 잠근다(반복 Select, 아래 주석). */
+    disabled?: boolean;
   }
 
   const {
@@ -43,6 +45,7 @@
     onunsaved,
     ondraftkept,
     onsaving,
+    disabled = false,
   }: Props = $props();
 
   const FREQ_LABEL: Record<Frequency | 'none', string> = {
@@ -225,10 +228,10 @@
           <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}
             >{m.events_frequency()}</span
           >
-          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 따로 잠근다. -->
+          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 이 편집기의 저장(busy)과 부모의 저장(disabled)으로 따로 잠근다. -->
           <Select.Root
             type="single"
-            disabled={busy}
+            disabled={busy || disabled}
             value={f.freq}
             onValueChange={(v: string) => {
               const found = FREQUENCIES.find((x) => x === v);

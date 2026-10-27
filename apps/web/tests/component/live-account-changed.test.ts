@@ -198,13 +198,14 @@ describe('leaving the live editor with edits the server has not got', () => {
     return event;
   }
 
-  it('keeps unconfirmed body edits as a draft, or blocks leaving when it cannot', async () => {
+  it('keeps unconfirmed body edits as a draft and warns, also when it cannot keep them', async () => {
     me.userId = 'user-a';
     render(LiveDocumentEditor, { props: { initial: doc } });
     await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
     opened.at(-1)?.session.document.getText('t').insert(0, '확인받지 못한 문장');
 
-    expect(unload().defaultPrevented).toBe(false);
+    // 반영되지 않은 편집이 있으면 다른 폼처럼 경고한다(D-27 개정 2026-10-27, #141 R8 A). 초안은 그대로 남긴다.
+    expect(unload().defaultPrevented).toBe(true);
     expect(drafts('user-a').length).toBeGreaterThan(0);
 
     window.localStorage.clear();

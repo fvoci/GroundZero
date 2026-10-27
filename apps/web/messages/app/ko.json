@@ -48,7 +48,6 @@
   "app_nav_close": "메뉴 닫기",
   "app_nav_account": "계정 메뉴",
   "app_nav_unread": "읽지 않은 알림 {count}개",
-  "app_nav_organization": "조직",
   "app_nav_organization_switch": "조직 바꾸기",
   "app_nav_organization_choose": "조직을 고르세요",
   "app_nav_organization_none": "속한 조직이 없습니다. 초대를 받으면 알림함에 보입니다.",

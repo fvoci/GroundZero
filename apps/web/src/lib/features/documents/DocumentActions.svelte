@@ -54,8 +54,10 @@
   let error = $state<string | undefined>(undefined);
 
   const isOwner = $derived(doc.access === 'owner');
-  // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
-  const restrictOnly = $derived(!isOwner && doc.can_manage);
+  // 공유·공개 링크·설정은 서버의 관리 판단(`can_manage`)을 따른다. 보관된 항목의 문서는 등급이 read로 낮아져도
+  // 워크스페이스 관리자는 보관 해제 없이 넓히는 변경까지 할 수 있다(D-113 ⑯, SQL `app_document_can_manage`).
+  // 템플릿 지정과 이동은 owner 등급만이다.
+  const canManage = $derived(isOwner || doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
   // 공개 링크 정책은 문서가 속한 워크스페이스의 조직 것이다(지금 고른 조직이 아니다). 개인 노트에는 조직 정책이 없다
   // (SQL `app_create_public_link`). 그 조직을 알 수 없으면 숨기지 않고 서버의 거절(409)을 그대로 알린다.
@@ -544,7 +546,7 @@
   {:else if doc.visibility === 'private'}
     <span class="rounded border px-1.5 text-sm text-muted-foreground">{m.documents_private()}</span>
   {/if}
-  {#if isOwner || doc.can_manage}
+  {#if canManage}
     <Button
       size="sm"
       variant="outline"
@@ -652,11 +654,7 @@
           <li class="text-sm text-muted-foreground">{m.documents_share_empty()}</li>
         {/each}
       </ul>
-      {#if restrictOnly}
-        <p class="text-sm text-muted-foreground" role="note">
-          {m.documents_restrict_only()}
-        </p>
-      {:else}
+      {#if canManage}
         {#each shareDraft.offers as offer (offer.key)}
           <FormDraftOffer
             onrestore={() => {
@@ -709,7 +707,7 @@
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-private"
-              disabled={settingsBusy || (restrictOnly && doc.visibility === 'private')}
+              disabled={settingsBusy}
               checked={doc.visibility === 'private'}
               onCheckedChange={(v) =>
                 void setSettings({ visibility: v === true ? 'private' : 'workspace' })}
@@ -720,7 +718,7 @@
         <div class="flex items-center gap-2">
           <Checkbox
             id="doc-allow-copy"
-            disabled={settingsBusy || (restrictOnly && !doc.allow_copy)}
+            disabled={settingsBusy}
             checked={doc.allow_copy}
             onCheckedChange={(v) => void setSettings({ allow_copy: v === true })}
           />
@@ -811,7 +809,7 @@
             </li>
           {/each}
         </ul>
-        {#if isOwner && publicLinksEnabled}
+        {#if canManage && publicLinksEnabled}
           <div class="flex flex-wrap items-center gap-2">
             <Select.Root
               type="single"
