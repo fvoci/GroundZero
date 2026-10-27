@@ -26,6 +26,7 @@ import {
   switchAccount,
 } from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
+import { me } from '$lib/me.svelte';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {
@@ -187,6 +188,17 @@ export function parseMe(value: Json): Me {
     week_start: typeof o.week_start === 'string' ? o.week_start : '',
     hour_cycle: typeof o.hour_cycle === 'string' ? o.hour_cycle : '',
     theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'system',
+    limits: parseInputLimits(rec(o.limits, 'me.limits')),
+  };
+}
+
+/** 서버 입력 한도(#79). 계약상 필수이며 네 칸 모두 정수다. */
+function parseInputLimits(o: Record<string, unknown>): Me['limits'] {
+  return {
+    max_title_chars: int(o, 'max_title_chars'),
+    max_document_bytes: int(o, 'max_document_bytes'),
+    max_references_per_document: int(o, 'max_references_per_document'),
+    max_document_depth: int(o, 'max_document_depth'),
   };
 }
 
@@ -199,6 +211,7 @@ export function parseWorkspace(value: Json): Workspace {
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
     realtime_enabled: bool(o, 'realtime_enabled'),
+    access: access(str(o, 'access')),
   };
 }
 
@@ -423,6 +436,7 @@ export function parseMembersView(value: Json): MembersView {
     members,
     my_role: role(str(o, 'my_role')),
     i_am_owner: bool(o, 'i_am_owner'),
+    can_manage_members: bool(o, 'can_manage_members'),
     pending_owner: optStr(o, 'pending_owner'),
   };
 }
@@ -437,6 +451,7 @@ export function parseInvitation(value: Json): Invitation {
   };
 }
 
+/** 초대 대상 종류. 조직 초대는 워크스페이스 칸이 null이다(D-112·D-118). */
 function invitationTarget(value: string): ReceivedInvitation['kind'] {
   if (value === 'organization' || value === 'workspace') return value;
   throw new TypeError(`unknown invitation kind ${value}`);
@@ -514,6 +529,7 @@ export function parseModule(value: Json): Module {
     archived: bool(o, 'archived'),
     icon: str(o, 'icon'),
     description: str(o, 'description'),
+    access: access(str(o, 'access')),
   };
 }
 
@@ -643,7 +659,8 @@ export type RecordFieldType =
   | 'tags'
   | 'person'
   | 'people'
-  | 'course';
+  | 'course'
+  | 'episode';
 
 const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
   'text',
@@ -656,6 +673,7 @@ const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
   'person',
   'people',
   'course',
+  'episode',
 ];
 
 export interface ChoiceView {
@@ -2219,7 +2237,8 @@ export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file' | 'reco
 export interface SearchFilters {
   kind?: SearchKind;
   moduleId?: string;
-  status?: TaskStatus;
+  /** 업무 상태 범주(D-116). 상태 이름이 아니라 범주로 거르며, 주면 업무만 나온다. */
+  statusCategory?: 'todo' | 'doing' | 'done';
   /** `me` 또는 사용자 id. */
   assignee?: string;
   from?: string;
@@ -2278,7 +2297,7 @@ export interface MoveTargetInput {
 const none = (): undefined => undefined;
 
 /**
- * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리(문서 저장·내 노트 만들기). 서버는 세션의 사용자와 비교만 하고
+ * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리. 서버는 세션의 사용자와 비교만 하고
  * 권한은 세션으로만 정한다.
  */
 const EXPECTED_USER = 'x-fvoci-expected-user';
@@ -2292,10 +2311,15 @@ async function request(
   let response: Response;
   const expiriesAtStart = sessionExpiries();
   try {
+    const headers = new Headers(extra);
+    if (method !== 'GET' && method !== 'HEAD' && me.userId !== '' && !headers.has(EXPECTED_USER)) {
+      headers.set(EXPECTED_USER, me.userId);
+    }
+    if (body !== undefined) headers.set('Content-Type', 'application/json');
     const init: RequestInit = {
       method,
       credentials: 'same-origin',
-      headers: body === undefined ? extra : { ...extra, 'Content-Type': 'application/json' },
+      headers,
     };
     if (body !== undefined) init.body = JSON.stringify(body);
     response = await fetch(path, init);
@@ -3316,7 +3340,7 @@ export const api = {
     if (workspaceId !== null) params.set('workspace_id', workspaceId);
     if (filters.kind !== undefined) params.set('kinds', filters.kind);
     if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
-    if (filters.status !== undefined) params.set('status', toServerStatus(filters.status));
+    if (filters.statusCategory !== undefined) params.set('status_category', filters.statusCategory);
     if (filters.assignee !== undefined) params.set('assignee', filters.assignee);
     if (filters.from !== undefined) params.set('from', filters.from);
     if (filters.to !== undefined) params.set('to', filters.to);

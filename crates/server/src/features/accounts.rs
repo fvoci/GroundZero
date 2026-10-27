@@ -35,7 +35,7 @@ use crate::config::{Config, OidcConfig};
 use crate::db::{Db, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
-use crate::ids::UserId;
+use crate::ids::{OrganizationId, UserId};
 use uuid::Uuid;
 
 /// http 공개 원점(개발·테스트)의 세션 쿠키 이름.
@@ -206,7 +206,7 @@ fn client_for(
 }
 
 /// 로그인 시작: 제공자 인증 화면으로 보낸다.
-#[utoipa::path(get, path = "/auth/login", params(LoginQuery),
+#[utoipa::path(get, path = "/auth/login", params(LoginQuery), security(),
     responses((status = 303, description = "제공자 로그인 화면으로 이동")), tag = "auth")]
 pub async fn login(
     State(state): State<AppState>,
@@ -367,7 +367,7 @@ pub async fn claim_initial_admin(
 }
 
 /// 제공자 콜백: 상태 확인, 코드 교환, ID 토큰 검증, 세션 발급.
-#[utoipa::path(get, path = "/auth/callback", params(CallbackQuery),
+#[utoipa::path(get, path = "/auth/callback", params(CallbackQuery), security(),
     responses((status = 303, description = "로그인 완료 후 원래 경로로 이동"),
               (status = 400, description = "상태 불일치·만료", body = ErrorBody)), tag = "auth")]
 pub async fn callback(
@@ -476,7 +476,7 @@ pub struct LogoutResponse {
 }
 
 /// 로그아웃: 서버 세션 삭제 + 제공자 로그아웃 URL.
-#[utoipa::path(post, path = "/auth/logout",
+#[utoipa::path(post, path = "/auth/logout", security(),
     responses((status = 200, description = "세션 삭제됨", body = LogoutResponse)), tag = "auth")]
 pub async fn logout(
     State(state): State<AppState>,
@@ -574,6 +574,30 @@ pub fn check_expected_user(user: UserId, raw: Option<&str>, name: &str) -> Resul
     }
 }
 
+/// 웹 입력 미리 검사에 쓰는 서버 설정. 글자 수는 Unicode 코드 포인트 기준이며 서버가 최종 검증한다.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct InputLimits {
+    /// 제목·이름 상한(`FVOCI_MAX_TITLE_CHARS`). 업무 CSV의 각 행에도 적용된다.
+    pub max_title_chars: usize,
+    /// 문서 본문 JSON 직렬화 크기 상한(바이트).
+    pub max_document_bytes: usize,
+    /// 문서 하나의 참조 노드 수 상한.
+    pub max_references_per_document: usize,
+    /// 문서 트리 최대 깊이(최상위 = 1).
+    pub max_document_depth: usize,
+}
+
+impl From<crate::config::Limits> for InputLimits {
+    fn from(limits: crate::config::Limits) -> Self {
+        Self {
+            max_title_chars: limits.max_title_chars,
+            max_document_bytes: limits.max_document_bytes,
+            max_references_per_document: limits.max_references_per_document,
+            max_document_depth: limits.max_document_depth,
+        }
+    }
+}
+
 /// 현재 사용자 정보.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Me {
@@ -590,6 +614,10 @@ pub struct Me {
     pub hour_cycle: String,
     /// 화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`.
     pub theme: String,
+    /// 마지막으로 고른 조직. 미설정이면 null이며 현재 소속 여부는 조직 목록에서 확인한다.
+    pub last_organization_id: Option<OrganizationId>,
+    /// 서버 입력 상한. 강의 회차 제목의 고정 한도(300자)는 이 설정과 별개다.
+    pub limits: InputLimits,
 }
 
 /// 현재 로그인한 사용자.
@@ -608,11 +636,12 @@ pub async fn me(
         String,
         String,
         String,
+        Option<OrganizationId>,
     );
-    let (display_name, email, time_zone, locale, week_start, hour_cycle, theme): MeRow =
+    let (display_name, email, time_zone, locale, week_start, hour_cycle, theme, last_organization_id): MeRow =
         sqlx::query_as(
             "SELECT u.display_name, u.email, coalesce(s.time_zone, ''), coalesce(s.locale, ''),
-                coalesce(s.week_start, ''), coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system')
+                coalesce(s.week_start, ''), coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system'), s.last_organization_id
          FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1",
         )
         .bind(user)
@@ -629,10 +658,12 @@ pub async fn me(
         week_start,
         hour_cycle,
         theme,
+        last_organization_id,
+        limits: state.config.limits.into(),
     }))
 }
 
-/// 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.
+/// 내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MySettings {
     /// IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다.
@@ -650,10 +681,23 @@ pub struct MySettings {
     /// `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`).
     #[serde(default)]
     pub theme: Option<String>,
+    /// 마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다.
+    #[serde(default, deserialize_with = "deserialize_last_organization")]
+    #[schema(value_type = Option<String>, format = Uuid, nullable = true)]
+    pub last_organization_id: Option<Option<OrganizationId>>,
 }
 
-/// 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
-/// 모르는 값이면 400.
+fn deserialize_last_organization<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<OrganizationId>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<OrganizationId>::deserialize(deserializer).map(Some)
+}
+
+/// 내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.
+/// 모르는 설정 값이나 소속하지 않은 조직이면 400.
 #[utoipa::path(put, path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
 pub async fn set_settings(
@@ -671,6 +715,13 @@ pub async fn set_settings(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
+    if let Some(organization) = input.last_organization_id {
+        sqlx::query("SELECT app_set_last_organization($1)")
+            .bind(organization)
+            .execute(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+    }
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -681,7 +732,7 @@ pub struct AuthInfo {
     pub oidc_enabled: bool,
 }
 
-#[utoipa::path(get, path = "/api/auth-info", responses((status = 200, body = AuthInfo)), tag = "auth")]
+#[utoipa::path(get, path = "/api/auth-info", security(), responses((status = 200, body = AuthInfo)), tag = "auth")]
 pub async fn auth_info(State(state): State<AppState>) -> Json<AuthInfo> {
     Json(AuthInfo {
         oidc_enabled: state.oidc.is_some(),

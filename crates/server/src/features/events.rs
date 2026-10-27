@@ -21,7 +21,7 @@ use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::tasks::{format_date, parse_date, validate_text};
-use crate::features::workspaces::{member_role, validate_title};
+use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::ids::{ItemId, WorkspaceId};
 
@@ -264,8 +264,7 @@ fn to_event(row: EventRow) -> Result<Event, AppError> {
             .filter_map(|d| format_date(Some(d)))
             .collect(),
         version: row.version,
-        access: Access::parse(&row.access)
-            .ok_or_else(|| AppError::Config(format!("unknown access {}", row.access)))?,
+        access: Access::parse_present(&row.access)?,
     })
 }
 
@@ -592,7 +591,7 @@ pub async fn calendar(
     }
     let tz = range.tz.trim();
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     // 보는 사람의 시간대: 브라우저가 아는 이름만(일정 시간대와 같은 규칙).
     sqlx::query("SELECT app_check_timezone($1)")
         .bind(tz)

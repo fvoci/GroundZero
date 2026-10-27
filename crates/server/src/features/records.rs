@@ -46,6 +46,8 @@ pub enum FieldType {
     People,
     /// 이 워크스페이스의 강좌(강의 모듈 항목) 하나(D-36 강좌 연결).
     Course,
+    /// 이 강좌(기록이 붙은 강의 모듈 항목)의 회차 하나(회차 id, D-123 질문·복습).
+    Episode,
 }
 
 /// 고를 수 있는 값.
@@ -128,7 +130,9 @@ const ATTACH: [ChoiceDef; 1] = [c("other", "첨부")];
     reason = "one declarative table of every record kind; splitting it would scatter the schema"
 )]
 pub fn record_kinds() -> Vec<RecordKindDef> {
-    use FieldType::{Course, Date as Day, LongText, Number, People, Person, Tags, Text, Url};
+    use FieldType::{
+        Course, Date as Day, Episode, LongText, Number, People, Person, Tags, Text, Url,
+    };
     use ModuleKind::{Hobby, Project, Research, Study};
     vec![
         // D-33 프로젝트: 산출물·완료 기준·위험·문제 기록, 회고.
@@ -443,6 +447,36 @@ pub fn record_kinds() -> Vec<RecordKindDef> {
             ],
             &[],
         ),
+        // D-123 강의: 회차의 질문(답변·상태)과 복습(다음 복습일·취약 영역·반복 횟수). 복습일 알림은 스터디 복습과 같은
+        // 경로(`app_system_item_reminders`: kind='review'의 occurred_on이 오늘·내일이면 작성자에게 'review' 알림).
+        kind(
+            "question",
+            "질문",
+            ModuleKind::Course,
+            Some("질문한 날"),
+            vec![
+                f("episode", "회차", Episode),
+                f("answer", "답변", LongText),
+                choice(
+                    "state",
+                    "상태",
+                    &[c("open", "미해결"), c("answered", "답변됨")],
+                ),
+            ],
+            &ATTACH,
+        ),
+        kind(
+            "review",
+            "복습",
+            ModuleKind::Course,
+            Some("다음 복습일"),
+            vec![
+                f("episode", "회차", Episode),
+                f("weakness", "취약 영역", LongText),
+                f("rounds", "반복 횟수", Number),
+            ],
+            &[],
+        ),
         // D-38 취미: 재료·장비(보유·필요·준비), 장비 설정·사용 기록, 활동(날짜·시간·참여자·결과), 결과물·회고.
         kind(
             "supply",
@@ -636,6 +670,7 @@ fn normalize_fields(
     fields: Map<String, Value>,
     people: &mut Vec<Uuid>,
     courses: &mut Vec<Uuid>,
+    episodes: &mut Vec<Uuid>,
 ) -> Result<Value, AppError> {
     let mut out = Map::new();
     for (key, value) in fields {
@@ -736,6 +771,11 @@ fn normalize_fields(
                 courses.push(id);
                 Some(Value::String(id.to_string()))
             }
+            FieldType::Episode => {
+                let id = uuid_value(&value, &key)?;
+                episodes.push(id);
+                Some(Value::String(id.to_string()))
+            }
         };
         if let Some(v) = normalized {
             out.insert(key, v);
@@ -744,19 +784,22 @@ fn normalize_fields(
     Ok(Value::Object(out))
 }
 
-/// 칸마다 사람·강좌 id를 모은다. 정의와 맞지 않는 칸은 건너뛴다(그 칸의 확인은 `normalize_fields`가 한다).
+/// 칸에 든 참조 id(사람·강좌·회차).
+type FieldIds = (Vec<Uuid>, Vec<Uuid>, Vec<Uuid>);
+
+/// 칸마다 사람·강좌·회차 id를 모은다. 정의와 맞지 않는 칸은 건너뛴다(그 칸의 확인은 `normalize_fields`가 한다).
 fn ids_by_field(
     def: &RecordKindDef,
     fields: &Map<String, Value>,
-) -> std::collections::HashMap<String, (Vec<Uuid>, Vec<Uuid>)> {
+) -> std::collections::HashMap<String, FieldIds> {
     fields
         .iter()
         .filter_map(|(key, value)| {
-            let (mut people, mut courses) = (Vec::new(), Vec::new());
+            let (mut people, mut courses, mut episodes) = (Vec::new(), Vec::new(), Vec::new());
             let one = Map::from_iter([(key.clone(), value.clone())]);
-            normalize_fields(def, one, &mut people, &mut courses)
+            normalize_fields(def, one, &mut people, &mut courses, &mut episodes)
                 .ok()
-                .map(|_| (key.clone(), (people, courses)))
+                .map(|_| (key.clone(), (people, courses, episodes)))
         })
         .collect()
 }
@@ -792,8 +835,9 @@ pub(crate) async fn validate(
     }
     let mut people = Vec::new();
     let mut courses = Vec::new();
+    let mut episodes = Vec::new();
     let by_field = kept.map(|_| ids_by_field(def, &fields));
-    let fields = normalize_fields(def, fields, &mut people, &mut courses)?;
+    let fields = normalize_fields(def, fields, &mut people, &mut courses, &mut episodes)?;
     if let (Some(kept), Some(now)) = (kept, by_field) {
         // 같은 칸에 그대로 남은 id만 다시 확인하지 않는다. 다른 칸에 있던 id를 옮겨 넣으면(출석에 남은 나간 사람을
         // 진행자로 등) 새로 넣는 것이라 확인한다(리뷰). 저장된 칸이 지금 정의와 맞지 않으면(정의가 바뀜) 그 칸에 남은
@@ -801,10 +845,13 @@ pub(crate) async fn validate(
         let before = ids_by_field(def, kept);
         people.clear();
         courses.clear();
-        for (key, (p, c)) in now {
-            let (kept_people, kept_courses) = before.get(&key).cloned().unwrap_or_default();
+        episodes.clear();
+        for (key, (p, c, e)) in now {
+            let (kept_people, kept_courses, kept_episodes) =
+                before.get(&key).cloned().unwrap_or_default();
             people.extend(p.into_iter().filter(|id| !kept_people.contains(id)));
             courses.extend(c.into_iter().filter(|id| !kept_courses.contains(id)));
+            episodes.extend(e.into_iter().filter(|id| !kept_episodes.contains(id)));
         }
     }
     if !people.is_empty() {
@@ -836,6 +883,22 @@ pub(crate) async fn validate(
             return Err(bad(
                 "the course must be a course item you can see in this workspace",
             ));
+        }
+    }
+    if !episodes.is_empty() {
+        // 회차는 이 기록이 붙는 강좌(항목)의 회차여야 한다(D-123). 다른 강좌의 회차 id는 거절한다.
+        let mut unique = episodes.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        let found: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM course_episodes WHERE id = ANY($1) AND item_id = $2",
+        )
+        .bind(&unique)
+        .bind(item)
+        .fetch_one(tx.conn())
+        .await?;
+        if usize::try_from(found).unwrap_or_default() != unique.len() {
+            return Err(bad("the episode must be an episode of this course item"));
         }
     }
     if files.len() > 50 {
@@ -881,13 +944,7 @@ pub async fn list(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Record>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let access: String = sqlx::query_scalar("SELECT app_access('item', $1)")
-        .bind(item)
-        .fetch_one(tx.conn())
-        .await?;
-    if access == "none" {
-        return Err(AppError::NotFound);
-    }
+    crate::access::require_visible(&mut tx, crate::access::Kind::Item, item).await?;
     let rows: Vec<RecordRow> = sqlx::query_as(
         "SELECT r.id, r.kind, r.title, r.occurred_on, r.body, r.fields, r.created_by,
                 (SELECT u.display_name FROM users u WHERE u.id = r.created_by), r.updated_at, r.version,
@@ -920,43 +977,42 @@ pub async fn list(
             available,
         });
     }
-    Ok(Json(
-        rows.into_iter()
-            .map(
-                |(
+    rows.into_iter()
+        .map(
+            |(
+                id,
+                kind,
+                title,
+                occurred_on,
+                body,
+                fields,
+                created_by,
+                name,
+                updated_at,
+                version,
+                access,
+                mine,
+            )| {
+                let grade = crate::access::Grade::parse_present(&access)?;
+                Ok(Record {
                     id,
                     kind,
                     title,
                     occurred_on,
                     body,
                     fields,
+                    files: by_record.remove(&id).unwrap_or_default(),
                     created_by,
-                    name,
+                    created_by_name: name,
                     updated_at,
                     version,
-                    access,
-                    mine,
-                )| {
-                    Record {
-                        id,
-                        kind,
-                        title,
-                        occurred_on,
-                        body,
-                        fields,
-                        files: by_record.remove(&id).unwrap_or_default(),
-                        created_by,
-                        created_by_name: name,
-                        updated_at,
-                        version,
-                        can_edit: matches!(access.as_str(), "owner" | "write"),
-                        can_delete: matches!(access.as_str(), "owner" | "write")
-                            && (mine || access == "owner"),
-                    }
-                },
-            )
-            .collect(),
-    ))
+                    can_edit: grade.can_write(),
+                    can_delete: grade.can_write() && (mine || grade.is_owner()),
+                })
+            },
+        )
+        .collect::<Result<Vec<_>, AppError>>()
+        .map(Json)
 }
 
 /// 기록 만들기(항목에 쓸 수 있는 사람). 같은 요청 id면 같은 기록.
@@ -1086,7 +1142,11 @@ mod tests {
     #[test]
     fn kinds_are_unique_and_choices_are_set() {
         let kinds = record_kinds();
-        let mut names: Vec<&str> = kinds.iter().map(|k| k.kind).collect();
+        // 종류 이름은 모듈 안에서 유일하다(`review`는 스터디·강의 양쪽에 있다, D-36·D-123).
+        let mut names: Vec<String> = kinds
+            .iter()
+            .map(|k| format!("{:?}/{}", k.module_kind, k.kind))
+            .collect();
         names.sort_unstable();
         let before = names.len();
         names.dedup();
@@ -1110,12 +1170,14 @@ mod tests {
         let reference = kinds.iter().find(|k| k.kind == "reference").unwrap();
         let mut people = Vec::new();
         let mut courses = Vec::new();
+        let mut episodes = Vec::new();
         let input: Map<String, Value> = serde_json::from_value(serde_json::json!({
             "authors": " Kim, Lee ", "year": 2024, "url": "https://doi.org/10.1/x",
             "read_status": "reading", "tags": ["동기", "동기", " "], "summary": ""
         }))
         .unwrap();
-        let out = normalize_fields(reference, input, &mut people, &mut courses).unwrap();
+        let out =
+            normalize_fields(reference, input, &mut people, &mut courses, &mut episodes).unwrap();
         assert_eq!(out["authors"], "Kim, Lee");
         assert_eq!(out["tags"], serde_json::json!(["동기"]));
         assert!(out.get("summary").is_none());
@@ -1126,7 +1188,9 @@ mod tests {
             serde_json::json!({ "color": "blue" }),
         ] {
             let map: Map<String, Value> = serde_json::from_value(bad_input).unwrap();
-            assert!(normalize_fields(reference, map, &mut people, &mut courses).is_err());
+            assert!(
+                normalize_fields(reference, map, &mut people, &mut courses, &mut episodes).is_err()
+            );
         }
     }
 }

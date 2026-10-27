@@ -16,6 +16,14 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+// `/api/me` 계약의 서버 입력 한도(#79): 필수 칸이라 계정 응답 mock에도 넣는다(서버 기본값).
+const limits = {
+  max_title_chars: 200,
+  max_document_bytes: 2_000_000,
+  max_references_per_document: 500,
+  max_document_depth: 10,
+};
+
 const doc: DocumentView = {
   id: 'doc-1',
   workspace_id: 'ws-1',
@@ -92,7 +100,7 @@ describe('account switch reload and the unsaved-edit warning', () => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id: 'u2', display_name: '다른 사람', email: null })
+          ? json(200, { id: 'u2', display_name: '다른 사람', email: null, limits })
           : json(404, { error: 'not_found' }),
       ),
     );
@@ -140,7 +148,7 @@ describe('account switch reload and the unsaved-edit warning', () => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id: 'u2', display_name: '다른 사람', email: null })
+          ? json(200, { id: 'u2', display_name: '다른 사람', email: null, limits })
           : json(404, { error: 'not_found' }),
       ),
     );

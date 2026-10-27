@@ -512,6 +512,8 @@ async fn archived_items_and_modules_are_read_only_but_visible() {
     );
     let (_, list) = get(&app, &writer, &format!("/api/workspaces/{ws}/modules")).await;
     assert_eq!(list[0]["archived"], true, "archived modules stay listed");
+    // 모듈의 접근 등급은 워크스페이스 등급이다(D-113). 보관은 `archived`로 따로 나가고 등급을 낮추지 않는다.
+    assert_eq!(list[0]["access"], "write");
 }
 
 #[tokio::test]
@@ -643,8 +645,7 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
         .await
         .1;
     assert_eq!(archived["access"], "read");
-    // 응답의 관리 플래그와 관리 목록 API는 2단계에서 새 SQL 판단에 연결한다.
-    assert_eq!(archived["can_manage"], false);
+    assert_eq!(archived["can_manage"], true);
     assert_eq!(
         get(&app, &guest, &format!("/api/documents/{doc_id}"))
             .await

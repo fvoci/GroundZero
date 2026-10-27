@@ -226,3 +226,181 @@ async fn zotero_references_import_and_refresh_without_storing_the_key() {
     owner.close().await;
     assert_eq!(stored, 0);
 }
+
+/// #83: 재가져오기가 읽은 판 뒤에 다른 사람이 저장하면 SQL 판 검사에서 전체 요청을 거절한다.
+#[tokio::test]
+async fn zotero_refresh_rejects_a_concurrent_edit_without_overwriting_it() {
+    use sqlx::Connection;
+    use std::time::Duration;
+
+    let url = fake_zotero().await;
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_ZOTERO_API_URL", &url)])).unwrap();
+    let app = common::app(&state);
+    let admin = login(&state, "importer").await;
+    let ws = create_workspace(&app, &admin, "Zotero 충돌").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "writer", "member").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "research", "name": "문헌", "key": "ZCF" })),
+    ).await;
+    assert_eq!(module.status, StatusCode::CREATED, "{}", module.json);
+    let module = module.json["id"].as_str().unwrap();
+    let created = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{module}/items"),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "문헌 충돌" })),
+    )
+    .await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.json);
+    let item = created.json["id"].as_str().unwrap();
+    let opened = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{item}"),
+        Some(&admin),
+        Some(json!({ "base_version": 1, "title": "문헌 충돌", "description": "", "visibility": "workspace" })),
+    ).await;
+    assert_eq!(opened.status, StatusCode::OK, "{}", opened.json);
+    let import_uri = format!("/api/items/{item}/zotero/import");
+    let import_body = json!({ "api_key": KEY, "library_type": "user", "library_id": "7" });
+    let imported = send(
+        &app,
+        Method::POST,
+        &import_uri,
+        Some(&admin),
+        Some(import_body.clone()),
+    )
+    .await;
+    assert_eq!(imported.status, StatusCode::OK, "{}", imported.json);
+    assert_eq!(
+        imported.json,
+        json!({ "created": 1, "updated": 0, "skipped": 1 })
+    );
+    let records_uri = format!("/api/items/{item}/records");
+    let before = send(&app, Method::GET, &records_uri, Some(&writer), None).await;
+    assert_eq!(before.status, StatusCode::OK, "{}", before.json);
+    let record = &before.json[0];
+    let id: uuid::Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    let version = i32::try_from(record["version"].as_i64().unwrap()).unwrap();
+    assert_eq!(record["fields"]["authors"], "Kim, M");
+
+    // 앱 역할에는 표 UPDATE 권한이 없어 FOR UPDATE는 표 소유 역할 연결로 잡는다. 셀프호스트 Supabase의 시험 관리자는
+    // superuser가 아니라 item_records를 읽지 못하고 fvoci_app으로 SET ROLE도 못 하므로, 먼저 저장하는 "다른 사용자"의
+    // 변경은 같은 트랜잭션에서 app.user_id만 바꿔 정의자 함수 app_update_record로 한다(정의자 함수는 호출 역할과
+    // 무관하게 소유자로 실행되므로 앱 역할 호출과 같은 검사·결과다). 재가져오기 요청 자체는 실제 앱 역할로 서버를 거친다.
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let mut lock_conn = sqlx::PgConnection::connect(&owner_url).await.unwrap();
+    let mut held = lock_conn.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *held)
+        .await
+        .unwrap();
+    let locked: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM fvoci.item_records WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_one(&mut *held)
+            .await
+            .unwrap();
+    assert_eq!(locked, id);
+
+    let request = tokio::spawn({
+        let app = app.clone();
+        let admin = admin.clone();
+        async move {
+            send(
+                &app,
+                Method::POST,
+                &import_uri,
+                Some(&admin),
+                Some(import_body),
+            )
+            .await
+        }
+    });
+    let mut watcher = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+    // 고정 지연으로 경쟁을 추측하지 않는다. app_update_record 호출이 이 연결의 행 잠금에서
+    // 대기한다는 증거가 있어야 진행한다(이 호출 전 서버가 기존 fields와 version을 읽는다).
+    let waiting = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let blocked: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+                 WHERE $1 = ANY(pg_blocking_pids(pid))
+                   AND query LIKE 'SELECT app_update_record(%')",
+            )
+            .bind(holder)
+            .fetch_one(&mut watcher)
+            .await
+            .unwrap();
+            if blocked {
+                return true;
+            }
+            if request.is_finished() {
+                return false;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+    if !matches!(waiting, Ok(true)) {
+        request.abort();
+    }
+    assert!(
+        matches!(waiting, Ok(true)),
+        "재가져오기가 app_update_record에서 잠금을 기다려야 한다"
+    );
+
+    sqlx::query("SET LOCAL search_path TO fvoci, pg_temp")
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(writer.id.0.to_string())
+        .execute(&mut *held)
+        .await
+        .unwrap();
+    let acting: uuid::Uuid = sqlx::query_scalar("SELECT app_user_id()")
+        .fetch_one(&mut *held)
+        .await
+        .unwrap();
+    assert_eq!(acting, writer.id.0, "the first save must act as the writer");
+    let mut latest_fields = record["fields"].clone();
+    latest_fields["summary"] = json!("다른 사용자의 최신 요약");
+    let latest_version: i32 =
+        sqlx::query_scalar("SELECT app_update_record($1, $2, $3, NULL, $4, $5, '[]'::jsonb)")
+            .bind(id)
+            .bind(version)
+            .bind("다른 사용자의 제목")
+            .bind("다른 사용자의 메모")
+            .bind(&latest_fields)
+            .fetch_one(&mut *held)
+            .await
+            .unwrap();
+    assert_eq!(latest_version, version + 1);
+    held.commit().await.unwrap();
+
+    let refreshed = tokio::time::timeout(Duration::from_secs(10), request)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(refreshed.status, StatusCode::CONFLICT, "{}", refreshed.json);
+    assert_eq!(refreshed.json["error"], "invalid_state");
+    assert_eq!(refreshed.json["message"], "the record changed; reload it");
+    let after = send(&app, Method::GET, &records_uri, Some(&writer), None).await;
+    assert_eq!(after.status, StatusCode::OK, "{}", after.json);
+    assert_eq!(after.json.as_array().unwrap().len(), 1);
+    let saved = &after.json[0];
+    assert_eq!(saved["id"], record["id"]);
+    assert_eq!(saved["version"], latest_version);
+    assert_eq!(saved["title"], "다른 사용자의 제목");
+    assert_eq!(saved["body"], "다른 사용자의 메모");
+    // 재가져오기 대역 응답의 Park, M을 포함해 어느 칸도 부분 저장되지 않는다.
+    assert_eq!(saved["fields"], latest_fields);
+    assert_eq!(saved["fields"]["authors"], "Kim, M");
+}

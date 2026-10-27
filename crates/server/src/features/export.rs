@@ -22,9 +22,8 @@ use tokio::sync::mpsc;
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::search_text::plain_text;
-use crate::features::workspaces::member_role;
 use crate::http::AppState;
-use crate::ids::{DocumentId, Role, WorkspaceId};
+use crate::ids::{DocumentId, WorkspaceId};
 use crate::storage::Storage;
 
 /// 응답으로 보내는 조각 크기.
@@ -383,9 +382,7 @@ pub async fn workspace(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    if member_role(&mut tx, ws).await? != Role::Admin {
-        return Err(AppError::Forbidden);
-    }
+    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let permit = export_permit(&state)?;
     // 실시간으로 편집 중인 문서는 본문(마지막 리비전)이 뒤처져 있을 수 있다. 읽기 전에 열린 방을 리비전으로 남긴다.
     let docs: Vec<uuid::Uuid> = sqlx::query_scalar(
@@ -401,9 +398,7 @@ pub async fn workspace(
         .snapshot_documents(&docs.into_iter().map(DocumentId).collect())
         .await;
     let mut tx = state.db.begin_as(user).await?;
-    if member_role(&mut tx, ws).await? != Role::Admin {
-        return Err(AppError::Forbidden);
-    }
+    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let data: Value = sqlx::query_scalar(WORKSPACE_JSON)
         .bind(ws)
         .fetch_one(tx.conn())

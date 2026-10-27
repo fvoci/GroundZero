@@ -215,8 +215,8 @@ pub struct ExportRequest {
     pub format: ExportFormat,
 }
 
-/// 저장된 리비전 하나를 내보낸다(D-75). 첨부 내려받기와 같은 권한(고칠 수 있거나, 볼 수 있고 소유자가 복제·내려받기를
-/// 허용)이 있어야 하고 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+/// 저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야
+/// 하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
 /// 내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/revisions/{revision}/export", operation_id = "export_revision",
     params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),

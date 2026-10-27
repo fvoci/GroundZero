@@ -21,10 +21,10 @@ use uuid::Uuid;
 
 use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::tasks::{
-    DATE_YEARS, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, format_date, load_detail,
-    parse_date,
+    DATE_YEARS, EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail,
+    format_date, load_detail, parse_date,
 };
 use crate::http::AppState;
 use crate::ids::UserId;
@@ -825,7 +825,8 @@ pub(crate) async fn link_conflict(
 /// 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
 /// - `TaskConflict`(`error: "shift_conflict"` 또는 `"link_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게
 ///   됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.
-/// - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
+/// - `ErrorBody`(`current` 없음): 기대 사용자 불일치(`account_changed`), 보관된 항목,
+///   동시 변경 재시도(40001·40P01), 새 id 부족(FV001, `invalid_state`).
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(untagged)]
 pub enum PredecessorConflict {
@@ -839,16 +840,17 @@ pub enum PredecessorConflict {
 /// 지금과 다르면 409 `link_conflict`, 승인 목록의 기준 버전이 지났거나 지금 다시 계산한 계획과 다르면 409
 /// `shift_conflict`(둘 다 아무것도 바꾸지 않음).
 #[utoipa::path(put, path = "/api/tasks/{task_id}/predecessors/{predecessor_id}", operation_id = "add_predecessor",
-    params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid)),
+    params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
     request_body = SetPredecessor,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
               (status = 409, body = PredecessorConflict,
-               description = "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
+               description = "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
     tag = "tasks")]
 pub async fn add_predecessor(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
     Json(input): Json<SetPredecessor>,
 ) -> Result<Response, AppError> {
@@ -916,12 +918,13 @@ pub async fn add_predecessor(
 
 /// 선행 업무 지우기(후속 업무 쓰기 권한). 관계를 지우면 제약이 줄 뿐이라 옮길 것이 없다.
 #[utoipa::path(delete, path = "/api/tasks/{task_id}/predecessors/{predecessor_id}", operation_id = "remove_predecessor",
-    params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = TaskDetail), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ErrorBody)), tag = "tasks")]
+    params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
+    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn remove_predecessor(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<TaskDetail>, AppError> {
     let mut tx = state.db.begin_as(user).await?;

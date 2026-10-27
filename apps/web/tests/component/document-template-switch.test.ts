@@ -19,6 +19,7 @@ function workspace(id: string): Workspace {
     organization_id: 'org-1',
     name: `공간 ${id}`,
     role: 'member',
+    access: 'write',
     is_owner: false,
     realtime_enabled: false,
   };
@@ -62,6 +63,7 @@ function item(id: string, ws: string): ItemView {
 
 function module(ws: string): Module {
   return {
+    access: 'owner',
     id: `m-${ws}`,
     workspace_id: ws,
     kind: 'project',

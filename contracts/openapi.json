@@ -26,7 +26,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/api/checklist-items/{item_id}": {
@@ -40,6 +41,16 @@
           {
             "name": "item_id",
             "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
             "required": true,
             "schema": {
               "type": "string",
@@ -90,6 +101,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       },
@@ -108,11 +129,31 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -126,6 +167,16 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
             "content": {
               "application/json": {
                 "schema": {
@@ -589,7 +640,7 @@
           {
             "name": "x-fvoci-expected-user",
             "in": "header",
-            "description": "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다",
+            "description": "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다",
             "required": true,
             "schema": {
               "type": "string",
@@ -727,6 +778,103 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/{document_id}/activity": {
+      "get": {
+        "tags": [
+          "activity"
+        ],
+        "operationId": "document_activity",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -1390,7 +1538,7 @@
         "tags": [
           "documents"
         ],
-        "summary": "저장된 리비전 하나를 내보낸다(D-75). 첨부 내려받기와 같은 권한(고칠 수 있거나, 볼 수 있고 소유자가 복제·내려받기를\n허용)이 있어야 하고 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일\n내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.",
+        "summary": "저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야\n하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일\n내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.",
         "operationId": "export_revision",
         "parameters": [
           {
@@ -3128,6 +3276,103 @@
         }
       }
     },
+    "/api/items/{item_id}/activity": {
+      "get": {
+        "tags": [
+          "activity"
+        ],
+        "operationId": "item_activity",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/archived": {
       "put": {
         "tags": [
@@ -4249,6 +4494,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -4258,6 +4513,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -4283,7 +4548,355 @@
             }
           },
           "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/statuses": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "항목의 상태 목록(볼 수 있는 사람).",
+        "operationId": "list_task_statuses",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskStatus"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상태 만들기(항목 소유 권한). 이름 중복은 409, 30개 상한은 400, 보관된 항목은 409.",
+        "operationId": "create_task_status",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTaskStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/statuses/{status_id}": {
+      "put": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상태 고치기(항목 소유 권한). 범주를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다.",
+        "operationId": "update_task_status",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "상태 지우기(항목 소유 권한). 업무가 있으면 `move_to`로 옮길 열이 필요하고(400), 마지막 상태는 지울 수 없다(409).",
+        "operationId": "delete_task_status",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "move_to",
+            "in": "query",
+            "description": "이 열의 업무를 옮길 같은 항목의 상태. 업무가 있으면 필수.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedTaskStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 마지막 상태 삭제·보관·동시 변경",
             "content": {
               "application/json": {
                 "schema": {
@@ -4604,6 +5217,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -4658,7 +5281,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "account_changed: 기대 사용자 불일치; task_deleted: 같은 요청으로 만든 업무가 휴지통에 있음; invalid_state: 보관·동시 변경",
             "content": {
               "application/json": {
                 "schema": {
@@ -5015,6 +5638,81 @@
         }
       }
     },
+    "/api/me/activity": {
+      "get": {
+        "tags": [
+          "activity"
+        ],
+        "operationId": "my_recent_activity",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Activity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/audit": {
       "get": {
         "tags": [
@@ -5199,15 +5897,26 @@
         "tags": [
           "home"
         ],
-        "summary": "홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다.",
+        "summary": "홈(로그인한 사람). 현재 조직에서 볼 수 있는 것만 모은다.",
         "operationId": "home",
         "parameters": [
           {
             "name": "tz",
             "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/OrganizationId"
             }
           }
         ],
@@ -5223,6 +5932,16 @@
             }
           },
           "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -5387,7 +6106,7 @@
           {
             "name": "x-fvoci-expected-user",
             "in": "header",
-            "description": "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다",
+            "description": "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다",
             "required": true,
             "schema": {
               "type": "string",
@@ -5452,26 +6171,11 @@
     "/api/me/notifications": {
       "get": {
         "tags": [
-          "references"
+          "notifications"
         ],
         "summary": "내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다.",
-        "operationId": "notifications",
+        "operationId": "list_my_notifications",
         "parameters": [
-          {
-            "name": "organization",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/OrganizationId"
-                }
-              ]
-            }
-          },
           {
             "name": "limit",
             "in": "query",
@@ -5507,6 +6211,14 @@
               ],
               "format": "uuid"
             }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
           }
         ],
         "responses": {
@@ -5515,15 +6227,32 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Notification"
-                  }
+                  "$ref": "#/components/schemas/NotificationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
           },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -5539,10 +6268,20 @@
     "/api/me/notifications/read": {
       "post": {
         "tags": [
-          "references"
+          "notifications"
         ],
         "summary": "알림 읽음 표시. 내 알림만 바뀐다.",
-        "operationId": "mark_read",
+        "operationId": "mark_my_notifications_read",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5554,8 +6293,129 @@
           "required": true
         },
         "responses": {
-          "204": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkedNotifications"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "my_notification_unread_count",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/organizations": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다.",
+        "operationId": "list_my_organizations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationSummary"
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "",
@@ -5575,7 +6435,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.\n모르는 값이면 400.",
+        "summary": "내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.\n모르는 설정 값이나 소속하지 않은 조직이면 400.",
         "operationId": "set_my_settings",
         "requestBody": {
           "content": {
@@ -5619,8 +6479,18 @@
         "tags": [
           "documents"
         ],
-        "summary": "나에게 공유된 문서(검증된 이메일 기준).",
+        "summary": "나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만.",
         "operationId": "shared_with_me",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -5635,7 +6505,99 @@
               }
             }
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks": {
+      "get": {
+        "tags": [
+          "home"
+        ],
+        "operationId": "my_tasks",
+        "parameters": [
+          {
+            "name": "today",
+            "in": "query",
+            "description": "YYYY-MM-DD. 없으면 저장된 사용자 시간대의 오늘(미설정은 UTC).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyTasks"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -5868,7 +6830,7 @@
         "tags": [
           "time"
         ],
-        "summary": "타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다.",
+        "summary": "타이머 시작. 다른 대상의 기록은 자동으로 끝내며 같은 대상은 명시한 선택을 따른다.",
         "operationId": "start_timer",
         "requestBody": {
           "content": {
@@ -5912,7 +6874,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "같은 대상 실행 중: timer_running, 그 밖의 상태 충돌: invalid_state",
             "content": {
               "application/json": {
                 "schema": {
@@ -6462,7 +7424,111 @@
         }
       }
     },
+    "/api/organizations/{organization_id}": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "조직 하나. 멤버가 아니면 404.",
+        "operationId": "get_organization",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "description": "조직 id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/organizations/{organization_id}/invitations": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "조직 초대 목록은 전용 함수가 없으므로 접근 등급과 invitations_select RLS를 쓴다.\n철회는 기존 DELETE /api/invitations/{invitation_id}가 조직 초대도 처리한다.",
+        "operationId": "organization_invitations",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationInvitation"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "organizations"
@@ -6508,6 +7574,563 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/members": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "organization_members",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationMember"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/members/{user_id}": {
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "set_organization_member",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetOrganizationRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "remove_organization_member",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/members/{user_id}/removal-preview": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "organization_member_removal_preview",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationRemovalPreview"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/settings": {
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "set_organization_settings",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationSettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/workspaces": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "organization_workspaces",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrganizationWorkspace"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "join_workspace_as_admin",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "조직 관리자가 워크스페이스 멤버에게 소유권 인계를 제안한다.",
+        "operationId": "offer_organization_workspace_ownership",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfferOwnership"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "조직 관리자가 보존 기간 안의 삭제된 워크스페이스를 복원한다.",
+        "operationId": "restore_organization_workspace",
+        "parameters": [
+          {
+            "name": "organization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
           },
           "403": {
             "description": "",
@@ -6625,7 +8248,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/api/record-kinds": {
@@ -6947,9 +8571,9 @@
             }
           },
           {
-            "name": "status",
+            "name": "status_category",
             "in": "query",
-            "description": "업무 상태 이름(1..50자). 주면 업무만 나온다.",
+            "description": "업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400.",
             "required": false,
             "schema": {
               "type": [
@@ -7029,6 +8653,14 @@
                 "null"
               ]
             }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
           }
         ],
         "responses": {
@@ -7056,6 +8688,120 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/server/admins": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "server_admins",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerAdmin"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/server/organizations": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "server_organizations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerOrganization"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "create_organization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedOrganization"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
             "description": "",
             "content": {
               "application/json": {
@@ -7297,6 +9043,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -7351,11 +9107,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "conflict·shift_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskConflict"
+                  "$ref": "#/components/schemas/TaskWriteConflict"
                 }
               }
             }
@@ -7377,6 +9133,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -7386,6 +9152,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Trashed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -7411,6 +9187,103 @@
             }
           },
           "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/activity": {
+      "get": {
+        "tags": [
+          "activity"
+        ],
+        "operationId": "task_activity",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -7484,6 +9357,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -7529,6 +9412,16 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
             "content": {
               "application/json": {
                 "schema": {
@@ -7601,6 +9494,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -7653,6 +9556,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -7668,6 +9581,16 @@
           {
             "name": "task_id",
             "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
             "required": true,
             "schema": {
               "type": "string",
@@ -7727,11 +9650,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "move_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskConflict"
+                  "$ref": "#/components/schemas/TaskWriteConflict"
                 }
               }
             }
@@ -7760,6 +9683,16 @@
           {
             "name": "predecessor_id",
             "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
             "required": true,
             "schema": {
               "type": "string",
@@ -7819,7 +9752,7 @@
             }
           },
           "409": {
-            "description": "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)",
+            "description": "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7854,6 +9787,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -7863,6 +9806,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TaskDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -7888,7 +9841,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경",
             "content": {
               "application/json": {
                 "schema": {
@@ -7987,6 +9940,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -8041,11 +10004,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "rule_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskConflict"
+                  "$ref": "#/components/schemas/TaskWriteConflict"
                 }
               }
             }
@@ -8471,7 +10434,7 @@
           {
             "name": "x-fvoci-expected-user",
             "in": "header",
-            "description": "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다",
+            "description": "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다",
             "required": true,
             "schema": {
               "type": "string",
@@ -9571,6 +11534,143 @@
         }
       }
     },
+    "/api/workspaces/{workspace_id}/limits": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "관리자가 편집하는 설정값만 반환한다(실효 한도는 계산하지 않는다).",
+        "operationId": "workspace_limits",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLimits"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "operationId": "set_workspace_limits",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WorkspaceId"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationLimits"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationLimits"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{workspace_id}/members": {
       "get": {
         "tags": [
@@ -10531,7 +12631,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/auth/login": {
@@ -10559,7 +12660,8 @@
           "303": {
             "description": "제공자 로그인 화면으로 이동"
           }
-        }
+        },
+        "security": []
       }
     },
     "/auth/logout": {
@@ -10580,7 +12682,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/healthz": {
@@ -10611,7 +12714,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     }
   },
@@ -10645,11 +12749,11 @@
       },
       "Access": {
         "type": "string",
-        "description": "문서에 대한 현재 사용자의 권한.",
+        "description": "볼 수 있는 대상에 대한 등급. 볼 수 없으면(`none`) `Option`의 `None`이다. 응답에서는 `access` 칸으로 나간다.",
         "enum": [
-          "owner",
+          "read",
           "write",
-          "read"
+          "owner"
         ]
       },
       "AcknowledgedPreview": {
@@ -10664,6 +12768,94 @@
             "items": {
               "$ref": "#/components/schemas/MoveAccessChange"
             }
+          }
+        }
+      },
+      "Activity": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "target_kind",
+          "target_id",
+          "detail",
+          "created_at"
+        ],
+        "properties": {
+          "actor_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "actor_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detail": {},
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_kind": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "최근 활동에는 포함하고 대상별 활동에는 없다(SQL 반환 계약)."
+          }
+        }
+      },
+      "ActivityPage": {
+        "type": "object",
+        "required": [
+          "activity"
+        ],
+        "properties": {
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            }
+          },
+          "next_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "next_before_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -11457,6 +13649,26 @@
           }
         }
       },
+      "CreateOrganization": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "name",
+          "first_admin_user_id"
+        ],
+        "properties": {
+          "first_admin_user_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "CreatePublicLink": {
         "type": "object",
         "description": "공개 링크 생성 요청.",
@@ -11665,6 +13877,17 @@
           }
         }
       },
+      "CreatedOrganization": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          }
+        }
+      },
       "CreatedPublicLink": {
         "type": "object",
         "description": "만든 링크. `url`은 이때 한 번만 받을 수 있다.",
@@ -11698,6 +13921,19 @@
         "properties": {
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "DeletedTaskStatus": {
+        "type": "object",
+        "description": "삭제 결과: 옮긴 업무 수.",
+        "required": [
+          "moved"
+        ],
+        "properties": {
+          "moved": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -11776,11 +14012,11 @@
           },
           "can_export": {
             "type": "boolean",
-            "description": "이 사람이 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙: 고칠 수 있거나, 볼 수 있고 복제·내려받기 허용."
+            "description": "이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서\n문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다."
           },
           "can_manage": {
             "type": "boolean",
-            "description": "공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.\n보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다."
+            "description": "공유·공개 링크·설정을 관리할 수 있는지.\n보관된 항목 아래 문서는 `access`가 `read`여도 워크스페이스 관리자·소유자는 참이다."
           },
           "id": {
             "$ref": "#/components/schemas/DocumentId"
@@ -12443,7 +14679,8 @@
           "tags",
           "person",
           "people",
-          "course"
+          "course",
+          "episode"
         ]
       },
       "FileDetail": {
@@ -12499,7 +14736,7 @@
         "properties": {
           "can_download": {
             "type": "boolean",
-            "description": "내려받을 수 있는지(D-20: 문서 첨부는 고칠 수 있는 사람, 또는 소유자가 복제·다운로드를 허용한 문서).\n아니어도 안전한 형식은 브라우저 안에서 볼 수 있다."
+            "description": "내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의\n`allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.\n아니어도 안전한 형식은 브라우저 안에서 볼 수 있다."
           },
           "can_write": {
             "type": "boolean",
@@ -12830,6 +15067,38 @@
           },
           "workspace_id": {
             "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "InputLimits": {
+        "type": "object",
+        "description": "웹 입력 미리 검사에 쓰는 서버 설정. 글자 수는 Unicode 코드 포인트 기준이며 서버가 최종 검증한다.",
+        "required": [
+          "max_title_chars",
+          "max_document_bytes",
+          "max_references_per_document",
+          "max_document_depth"
+        ],
+        "properties": {
+          "max_document_bytes": {
+            "type": "integer",
+            "description": "문서 본문 JSON 직렬화 크기 상한(바이트).",
+            "minimum": 0
+          },
+          "max_document_depth": {
+            "type": "integer",
+            "description": "문서 트리 최대 깊이(최상위 = 1).",
+            "minimum": 0
+          },
+          "max_references_per_document": {
+            "type": "integer",
+            "description": "문서 하나의 참조 노드 수 상한.",
+            "minimum": 0
+          },
+          "max_title_chars": {
+            "type": "integer",
+            "description": "제목·이름 상한(`FVOCI_MAX_TITLE_CHARS`). 업무 CSV의 각 행에도 적용된다.",
+            "minimum": 0
           }
         }
       },
@@ -13288,16 +15557,6 @@
               "null"
             ],
             "format": "uuid"
-          },
-          "organization_id": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/OrganizationId"
-              }
-            ]
           }
         }
       },
@@ -13325,6 +15584,18 @@
           "document",
           "task"
         ]
+      },
+      "MarkedNotifications": {
+        "type": "object",
+        "required": [
+          "marked"
+        ],
+        "properties": {
+          "marked": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "MarkedTarget": {
         "type": "object",
@@ -13378,7 +15649,8 @@
           "locale",
           "week_start",
           "hour_cycle",
-          "theme"
+          "theme",
+          "limits"
         ],
         "properties": {
           "display_name": {
@@ -13396,6 +15668,21 @@
           },
           "id": {
             "$ref": "#/components/schemas/UserId"
+          },
+          "last_organization_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OrganizationId",
+                "description": "마지막으로 고른 조직. 미설정이면 null이며 현재 소속 여부는 조직 목록에서 확인한다."
+              }
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/InputLimits",
+            "description": "서버 입력 상한. 강의 회차 제목의 고정 한도(300자)는 이 설정과 별개다."
           },
           "locale": {
             "type": "string",
@@ -13452,9 +15739,14 @@
         "required": [
           "members",
           "my_role",
-          "i_am_owner"
+          "i_am_owner",
+          "can_manage_members"
         ],
         "properties": {
+          "can_manage_members": {
+            "type": "boolean",
+            "description": "초대·역할 변경·내보내기를 할 수 있다(D-113, `app_access('workspace', id)` = owner). 웹은 역할이 아니라 이 칸을 본다."
+          },
           "i_am_owner": {
             "type": "boolean"
           },
@@ -13466,7 +15758,7 @@
           },
           "my_role": {
             "$ref": "#/components/schemas/Role",
-            "description": "현재 사용자의 역할."
+            "description": "현재 사용자의 역할(표시용)."
           },
           "pending_owner": {
             "oneOf": [
@@ -13493,9 +15785,14 @@
           "previous_keys",
           "archived",
           "icon",
-          "description"
+          "description",
+          "access"
         ],
         "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access",
+            "description": "현재 사용자의 접근 등급(D-113, `app_access('module', id)`): read·write·owner."
+          },
           "archived": {
             "type": "boolean",
             "description": "보관됨: 읽기 전용이며 번호·키는 그대로 남는다."
@@ -13795,7 +16092,7 @@
       },
       "MySettings": {
         "type": "object",
-        "description": "내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.",
+        "description": "내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다.",
         "properties": {
           "hour_cycle": {
             "type": [
@@ -13803,6 +16100,14 @@
               "null"
             ],
             "description": "`h12`·`h23`, 빈 문자열이면 지운다."
+          },
+          "last_organization_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다."
           },
           "locale": {
             "type": [
@@ -13831,6 +16136,116 @@
               "null"
             ],
             "description": "`mon`·`sun`, 빈 문자열이면 지운다."
+          }
+        }
+      },
+      "MyTask": {
+        "type": "object",
+        "description": "SQL bucket: overdue, today, upcoming, none(날짜 없음), done.",
+        "required": [
+          "id",
+          "item_id",
+          "title",
+          "status",
+          "status_category",
+          "priority",
+          "bucket",
+          "updated_at"
+        ],
+        "properties": {
+          "bucket": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_category": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MyTaskCounts": {
+        "type": "object",
+        "required": [
+          "overdue",
+          "today",
+          "upcoming",
+          "undated",
+          "done"
+        ],
+        "properties": {
+          "done": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "overdue": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "today": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "undated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "upcoming": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "MyTasks": {
+        "type": "object",
+        "required": [
+          "counts",
+          "workspaces"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/MyTaskCounts"
+          },
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceTasks"
+            }
           }
         }
       },
@@ -14060,6 +16475,24 @@
           }
         }
       },
+      "NewTaskStatus": {
+        "type": "object",
+        "required": [
+          "name",
+          "category"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StatusCategory"
+          },
+          "color": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "Notification": {
         "type": "object",
         "description": "알림. invite는 초대 ID만 있고 대상 제목·참조는 없다.",
@@ -14067,6 +16500,7 @@
           "id",
           "kind",
           "created_at",
+          "detail",
           "read"
         ],
         "properties": {
@@ -14089,6 +16523,7 @@
             "type": "string",
             "format": "date-time"
           },
+          "detail": {},
           "document_id": {
             "oneOf": [
               {
@@ -14166,6 +16601,13 @@
           "read": {
             "type": "boolean"
           },
+          "read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "subject": {
             "type": [
               "string",
@@ -14193,6 +16635,35 @@
           }
         }
       },
+      "NotificationPage": {
+        "type": "object",
+        "description": "목록 끝에서 두 커서가 null이면 더 읽을 페이지가 없다.",
+        "required": [
+          "notifications"
+        ],
+        "properties": {
+          "next_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "next_before_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "notifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            }
+          }
+        }
+      },
       "OfferOwnership": {
         "type": "object",
         "description": "인계 제안 요청.",
@@ -14212,6 +16683,39 @@
           "admin",
           "member"
         ]
+      },
+      "Organization": {
+        "type": "object",
+        "description": "조직 상세(멤버에게). 설정 변경은 관리자만.",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "public_links_enabled",
+          "limits",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/OrganizationLimits"
+          },
+          "name": {
+            "type": "string"
+          },
+          "public_links_enabled": {
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
       },
       "OrganizationId": {
         "type": "string",
@@ -14240,6 +16744,218 @@
           },
           "role": {
             "$ref": "#/components/schemas/OrgRole"
+          }
+        }
+      },
+      "OrganizationLimits": {
+        "type": "object",
+        "description": "조직·워크스페이스의 한도·보존 설정값(D-124). `null`은 해당 단계에서 미설정이라는 뜻이다.",
+        "properties": {
+          "activity_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 1
+          },
+          "audit_retention_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 1
+          },
+          "max_concurrent_uploads": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 1
+          },
+          "max_file_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 1
+          },
+          "max_storage_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "notification_rate_per_hour": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.\n현재 외부 채널은 구현되어 있지 않다.",
+            "minimum": 1
+          }
+        }
+      },
+      "OrganizationMember": {
+        "type": "object",
+        "description": "조직 멤버. 이메일은 SQL이 조직 관리자에게만 돌려준다.",
+        "required": [
+          "user_id",
+          "display_name",
+          "role",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "OrganizationRemovalPreview": {
+        "type": "object",
+        "required": [
+          "workspaces",
+          "shares",
+          "assignments"
+        ],
+        "properties": {
+          "assignments": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "shares": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workspaces": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "OrganizationSettingsPatch": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrganizationLimits"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "public_links_enabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "키 생략은 유지, 한도의 null은 미설정으로 되돌린다. 원본 JSON을 SQL에 전달한다."
+      },
+      "OrganizationSummary": {
+        "type": "object",
+        "description": "내가 속한 조직 한 줄.",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "public_links_enabled",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "public_links_enabled": {
+            "type": "boolean",
+            "description": "비로그인 공개 링크를 쓸 수 있는지(조직 관리자가 끌 수 있다, D-114)."
+          },
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
+          }
+        }
+      },
+      "OrganizationWorkspace": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "owner_id",
+          "owner_name",
+          "member_count",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          },
+          "member_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "my_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "owner_name": {
+            "type": "string"
           }
         }
       },
@@ -14390,7 +17106,7 @@
             "$ref": "#/components/schemas/ErrorBody"
           }
         ],
-        "description": "관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `TaskConflict`(`error: \"shift_conflict\"` 또는 `\"link_conflict\"`, `current`): 승인한 재배치가 그사이 맞지 않게\n  됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.\n- `ErrorBody`(`error: \"invalid_state\"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001)."
+        "description": "관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `TaskConflict`(`error: \"shift_conflict\"` 또는 `\"link_conflict\"`, `current`): 승인한 재배치가 그사이 맞지 않게\n  됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.\n- `ErrorBody`(`current` 없음): 기대 사용자 불일치(`account_changed`), 보관된 항목,\n  동시 변경 재시도(40001·40P01), 새 id 부족(FV001, `invalid_state`)."
       },
       "ProjectedTask": {
         "type": "object",
@@ -15299,6 +18015,56 @@
           }
         }
       },
+      "ServerAdmin": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "ServerOrganization": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "member_count",
+          "workspace_count"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "$ref": "#/components/schemas/OrganizationId"
+          },
+          "member_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "workspace_count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "SetArchived": {
         "type": "object",
         "description": "보관 상태 변경 요청.",
@@ -15456,6 +18222,17 @@
         "properties": {
           "icon": {
             "type": "string"
+          }
+        }
+      },
+      "SetOrganizationRole": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/OrgRole"
           }
         }
       },
@@ -15876,6 +18653,17 @@
           "memo": {
             "type": "string"
           },
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimerStartMode",
+                "description": "같은 대상이 실행 중이면 필수. 생략 시 409 `timer_running`."
+              }
+            ]
+          },
           "request_id": {
             "type": "string",
             "format": "uuid"
@@ -15911,6 +18699,15 @@
           }
         ],
         "description": "새 타이머와 자동으로 끝낸 이전 기록."
+      },
+      "StatusCategory": {
+        "type": "string",
+        "description": "상태 범주. 완료 판정과 기본 열 선택은 범주로 한다.",
+        "enum": [
+          "todo",
+          "doing",
+          "done"
+        ]
       },
       "StudyParticipant": {
         "type": "object",
@@ -16405,6 +19202,44 @@
           }
         }
       },
+      "TaskStatus": {
+        "type": "object",
+        "description": "항목의 상태 한 줄.",
+        "required": [
+          "id",
+          "name",
+          "color",
+          "position",
+          "category",
+          "task_count"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/StatusCategory"
+          },
+          "color": {
+            "type": "string",
+            "description": "색 `#rrggbb`(소문자). 빈 문자열이면 기본."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number",
+            "format": "double",
+            "description": "열 순서(오름차순)."
+          },
+          "task_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "이 열에 있는(지우지 않은) 업무 수."
+          }
+        }
+      },
       "TaskTime": {
         "type": "object",
         "description": "업무의 예상 시간과 실제 시간.",
@@ -16425,6 +19260,19 @@
             "description": "내 기록의 합계(초)."
           }
         }
+      },
+      "TaskWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TaskConflict",
+            "description": "업무·이동·반복 규칙의 기준이 오래됨."
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody",
+            "description": "기대 사용자가 다르거나 현재 상태에서 쓰기를 할 수 없음."
+          }
+        ],
+        "description": "업무 쓰기의 409 본문: 최신 업무를 포함한 충돌 또는 계정 변경 등 일반 오류."
       },
       "TimeEntry": {
         "type": "object",
@@ -16603,6 +19451,14 @@
           }
         }
       },
+      "TimerStartMode": {
+        "type": "string",
+        "description": "같은 대상에서 실행 중인 타이머를 다시 시작할 때의 선택.",
+        "enum": [
+          "continue",
+          "new"
+        ]
+      },
       "Trash": {
         "type": "object",
         "description": "휴지통.",
@@ -16767,6 +19623,18 @@
         ],
         "properties": {
           "planned": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UnreadCount": {
+        "type": "object",
+        "required": [
+          "unread_count"
+        ],
+        "properties": {
+          "unread_count": {
             "type": "integer",
             "format": "int32"
           }
@@ -17054,6 +19922,40 @@
           }
         }
       },
+      "UpdateTaskStatus": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StatusCategory"
+              }
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "UpdateView": {
         "type": "object",
         "description": "기존 보기 고치기. `base_version`이 지났으면 409(`conflict`)와 최신 보기. 같은 `request_id`의 재시도는 이미 반영한\n결과를 돌려준다(마지막 고치기의 요청 id만 알아본다).",
@@ -17233,9 +20135,14 @@
           "name",
           "role",
           "is_owner",
-          "realtime_enabled"
+          "realtime_enabled",
+          "access"
         ],
         "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access",
+            "description": "현재 사용자의 접근 등급(D-113, `app_access('workspace', id)`): read·write·owner. 웹의 쓰기·관리 표시는 역할이\n아니라 이 칸을 본다."
+          },
           "id": {
             "$ref": "#/components/schemas/WorkspaceId"
           },
@@ -17276,6 +20183,28 @@
         "type": "string",
         "format": "uuid",
         "description": "워크스페이스 내부 ID."
+      },
+      "WorkspaceTasks": {
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "workspace_name",
+          "tasks"
+        ],
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyTask"
+            }
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          },
+          "workspace_name": {
+            "type": "string"
+          }
+        }
       },
       "ZoteroCollection": {
         "type": "object",
@@ -17360,8 +20289,30 @@
           }
         }
       }
+    },
+    "securitySchemes": {
+      "session_http": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "fvoci_session",
+        "description": "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTP일 때 이 쿠키만 받는다. HttpOnly·SameSite=Lax이며 Path=/이다. HTTPS 배포에서는 이 이름을 받지 않는다."
+      },
+      "session_https": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-fvoci_session",
+        "description": "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTPS일 때 이 쿠키만 받는다. HttpOnly·Secure·SameSite=Lax이며 Path=/이다."
+      }
     }
   },
+  "security": [
+    {
+      "session_https": []
+    },
+    {
+      "session_http": []
+    }
+  ],
   "tags": [
     {
       "name": "system",

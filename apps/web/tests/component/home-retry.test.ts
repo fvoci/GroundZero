@@ -31,6 +31,7 @@ const workspace: Workspace = {
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };

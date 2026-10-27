@@ -402,3 +402,96 @@ async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
         winner
     );
 }
+
+/// D-113(개정 ⑯)·D-20(⑧): 본인 진도 저장도 쓰기다. 보관된 항목이나 보관된 모듈의 항목에서는 멤버의 스터디 단위 진도
+/// 저장이 409 `invalid_state`("the item is archived", 웹의 보관 문구)이고, 열린 항목에서는 저장된다.
+#[tokio::test]
+async fn unit_progress_is_refused_under_an_archived_item_or_module() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "스터디 진도 보관").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let open_module = module(&app, &admin, &ws, "study", "OPN").await;
+    let archived_module = module(&app, &admin, &ws, "study", "AMD").await;
+    let open = open_item(&app, &admin, &open_module, "열린 스터디").await;
+    let archived_item = open_item(&app, &admin, &open_module, "보관된 스터디").await;
+    let in_archived_module =
+        open_item(&app, &admin, &archived_module, "보관된 모듈의 스터디").await;
+    let mut units = Vec::new();
+    for item in [&open, &archived_item, &in_archived_module] {
+        let added = send(
+            &app,
+            Method::POST,
+            &format!("/api/items/{item}/study/units"),
+            Some(&admin),
+            Some(json!({ "units": [{ "request_id": new_request_id(), "title": "1장", "unit": "pages", "amount": 10 }] })),
+        )
+        .await;
+        assert_eq!(added.json["added"], 1, "{:?}", added.json);
+        units.push(plan(&app, &member, item).await["units"][0].clone());
+    }
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{archived_item}/archived"),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{archived_module}/archived"),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let today = time::OffsetDateTime::now_utc().date().to_string();
+    for (item, unit, archived) in [
+        (&open, &units[0], false),
+        (&archived_item, &units[1], true),
+        (&in_archived_module, &units[2], true),
+    ] {
+        let saved = send(
+            &app,
+            Method::PUT,
+            &format!("/api/study-units/{}/progress", unit["id"].as_str().unwrap()),
+            Some(&member),
+            Some(json!({ "status": "done", "done_amount": 10, "today": today })),
+        )
+        .await;
+        // 밀린 단위의 내 계획일 재배치도 본인 진도 행을 쓴다(`app_plan_units`).
+        let planned = send(
+            &app,
+            Method::PUT,
+            &format!("/api/items/{item}/study/plan"),
+            Some(&member),
+            Some(json!({ "entries": [{ "unit_id": unit["id"], "planned_on": today }] })),
+        )
+        .await;
+        if archived {
+            assert_eq!(
+                (saved.status, planned.status),
+                (StatusCode::CONFLICT, StatusCode::CONFLICT),
+                "{unit}: progress {:?}, plan {:?}",
+                saved.json,
+                planned.json
+            );
+            for r in [&saved, &planned] {
+                assert_eq!(r.json["error"], "invalid_state", "{:?}", r.json);
+                assert_eq!(r.json["message"], "the item is archived", "{:?}", r.json);
+            }
+        } else {
+            assert_eq!(
+                saved.status,
+                StatusCode::NO_CONTENT,
+                "{unit}: {:?}",
+                saved.json
+            );
+            assert_eq!(planned.status, StatusCode::OK, "{unit}: {:?}", planned.json);
+        }
+    }
+}

@@ -13,11 +13,13 @@ const workspace: Workspace = {
   organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
 
 const view: MembersView = {
+  can_manage_members: true,
   members: [
     {
       user_id: 'u1',

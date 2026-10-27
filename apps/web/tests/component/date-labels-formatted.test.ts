@@ -173,6 +173,7 @@ describe('dates inside localized text', () => {
       organization_id: 'org-1',
       name: 'Space',
       role: 'member',
+      access: 'write',
       is_owner: false,
       realtime_enabled: false,
     };

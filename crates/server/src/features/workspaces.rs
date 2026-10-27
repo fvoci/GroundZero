@@ -9,6 +9,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::access::Grade;
 use crate::db::{UserTx, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
@@ -27,7 +28,20 @@ pub struct Workspace {
     pub is_owner: bool,
     /// 워크스페이스 문서를 실시간 공동 편집으로 연다(D-27, D-70). 관리자가 켜고 끈다.
     pub realtime_enabled: bool,
+    /// 현재 사용자의 접근 등급(D-113, `app_access('workspace', id)`): read·write·owner. 웹의 쓰기·관리 표시는 역할이
+    /// 아니라 이 칸을 본다.
+    pub access: Grade,
 }
+
+type WorkspaceRow = (
+    WorkspaceId,
+    OrganizationId,
+    String,
+    String,
+    bool,
+    bool,
+    String,
+);
 
 /// 워크스페이스 생성 요청.
 #[derive(Debug, Deserialize, ToSchema)]
@@ -70,14 +84,7 @@ pub async fn member_role(tx: &mut UserTx, ws: WorkspaceId) -> Result<Role, AppEr
 }
 
 fn row_to_workspace(
-    (id, organization_id, name, role, is_owner, realtime_enabled): (
-        WorkspaceId,
-        OrganizationId,
-        String,
-        String,
-        bool,
-        bool,
-    ),
+    (id, organization_id, name, role, is_owner, realtime_enabled, access): WorkspaceRow,
 ) -> Result<Workspace, AppError> {
     let role = Role::parse(&role)
         .ok_or_else(|| AppError::Config(format!("unknown role in database: {role}")))?;
@@ -88,6 +95,7 @@ fn row_to_workspace(
         role,
         is_owner,
         realtime_enabled,
+        access: Grade::parse_present(&access)?,
     })
 }
 
@@ -99,8 +107,9 @@ pub async fn list(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<Workspace>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<(WorkspaceId, OrganizationId, String, String, bool, bool)> = sqlx::query_as(
-        "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled
+    let rows: Vec<WorkspaceRow> = sqlx::query_as(
+        "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled,
+                app_access('workspace', w.id)
          FROM workspaces w JOIN workspace_members m ON m.workspace_id = w.id
          WHERE m.user_id = app_user_id()
          ORDER BY w.created_at, w.id",
@@ -133,8 +142,10 @@ pub async fn create(
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let row: (WorkspaceId, OrganizationId, String, String, bool, bool) = sqlx::query_as(
-        "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled FROM workspaces w
+    let row: WorkspaceRow = sqlx::query_as(
+        "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id, w.realtime_enabled,
+                app_access('workspace', w.id)
+         FROM workspaces w
          JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = app_user_id()
          WHERE w.id = $1",
     )

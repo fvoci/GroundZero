@@ -157,6 +157,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["document_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/backlinks": {
         parameters: {
             query?: never;
@@ -350,8 +366,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 저장된 리비전 하나를 내보낸다(D-75). 첨부 내려받기와 같은 권한(고칠 수 있거나, 볼 수 있고 소유자가 복제·내려받기를
-         *     허용)이 있어야 하고 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야
+         *     하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
          *     내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
          */
         post: operations["export_revision"];
@@ -703,6 +719,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["item_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/archived": {
         parameters: {
             query?: never;
@@ -952,6 +984,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/statuses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 항목의 상태 목록(볼 수 있는 사람). */
+        get: operations["list_task_statuses"];
+        put?: never;
+        /** 상태 만들기(항목 소유 권한). 이름 중복은 409, 30개 상한은 400, 보관된 항목은 409. */
+        post: operations["create_task_status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/statuses/{status_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 상태 고치기(항목 소유 권한). 범주를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다. */
+        put: operations["update_task_status"];
+        post?: never;
+        /** 상태 지우기(항목 소유 권한). 업무가 있으면 `move_to`로 옮길 열이 필요하고(400), 마지막 상태는 지울 수 없다(409). */
+        delete: operations["delete_task_status"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/study": {
         parameters: {
             query?: never;
@@ -1130,6 +1198,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_recent_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/audit": {
         parameters: {
             query?: never;
@@ -1222,7 +1306,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 홈(로그인한 사람). 모든 워크스페이스에서 볼 수 있는 것만 모은다. */
+        /** 홈(로그인한 사람). 현재 조직에서 볼 수 있는 것만 모은다. */
         get: operations["home"];
         put?: never;
         post?: never;
@@ -1279,7 +1363,7 @@ export interface paths {
             cookie?: never;
         };
         /** 내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다. */
-        get: operations["notifications"];
+        get: operations["list_my_notifications"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1298,7 +1382,40 @@ export interface paths {
         get?: never;
         put?: never;
         /** 알림 읽음 표시. 내 알림만 바뀐다. */
-        post: operations["mark_read"];
+        post: operations["mark_my_notifications_read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_notification_unread_count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다. */
+        get: operations["list_my_organizations"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1314,8 +1431,8 @@ export interface paths {
         };
         get?: never;
         /**
-         * 내 표시 설정 바꾸기(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 표시만 바꾸고 저장된 일정 시각·날짜는 그대로다.
-         *     모르는 값이면 400.
+         * 내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.
+         *     모르는 설정 값이나 소속하지 않은 조직이면 400.
          */
         put: operations["set_my_settings"];
         post?: never;
@@ -1332,8 +1449,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 나에게 공유된 문서(검증된 이메일 기준). */
+        /** 나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만. */
         get: operations["shared_with_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_tasks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1390,7 +1523,7 @@ export interface paths {
         /** 진행 중인 타이머(없으면 null). */
         get: operations["current_timer"];
         put?: never;
-        /** 타이머 시작. 진행 중인 타이머가 있으면 끝내고 새 기록을 시작한다. */
+        /** 타이머 시작. 다른 대상의 기록은 자동으로 끝내며 같은 대상은 명시한 선택을 따른다. */
         post: operations["start_timer"];
         delete?: never;
         options?: never;
@@ -1523,7 +1656,124 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/organizations/{organization_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 조직 하나. 멤버가 아니면 404. */
+        get: operations["get_organization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/organizations/{organization_id}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 조직 초대 목록은 전용 함수가 없으므로 접근 등급과 invitations_select RLS를 쓴다.
+         *     철회는 기존 DELETE /api/invitations/{invitation_id}가 조직 초대도 처리한다.
+         */
+        get: operations["organization_invitations"];
+        put?: never;
+        post: operations["invite_organization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["organization_members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_organization_member"];
+        post?: never;
+        delete: operations["remove_organization_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/members/{user_id}/removal-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["organization_member_removal_preview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_organization_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["organization_workspaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin": {
         parameters: {
             query?: never;
             header?: never;
@@ -1532,7 +1782,41 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["invite_organization"];
+        post: operations["join_workspace_as_admin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 조직 관리자가 워크스페이스 멤버에게 소유권 인계를 제안한다. */
+        post: operations["offer_organization_workspace_ownership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 조직 관리자가 보존 기간 안의 삭제된 워크스페이스를 복원한다. */
+        post: operations["restore_organization_workspace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1659,6 +1943,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/server/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["server_admins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["server_organizations"];
+        put?: never;
+        post: operations["create_organization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/study-units/{unit_id}": {
         parameters: {
             query?: never;
@@ -1708,6 +2024,22 @@ export interface paths {
         post?: never;
         /** 업무 지우기(하위 업무까지, 쓰기 권한). */
         delete: operations["trash_task"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["task_activity"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2224,6 +2556,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspaces/{workspace_id}/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 관리자가 편집하는 설정값만 반환한다(실효 한도는 계산하지 않는다). */
+        get: operations["workspace_limits"];
+        put: operations["set_workspace_limits"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{workspace_id}/members": {
         parameters: {
             query?: never;
@@ -2520,13 +2869,41 @@ export interface components {
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
         /**
-         * @description 문서에 대한 현재 사용자의 권한.
+         * @description 볼 수 있는 대상에 대한 등급. 볼 수 없으면(`none`) `Option`의 `None`이다. 응답에서는 `access` 칸으로 나간다.
          * @enum {string}
          */
-        Access: "owner" | "write" | "read";
+        Access: "read" | "write" | "owner";
         /** @description 사용자가 확인한 접근 변화. */
         AcknowledgedPreview: {
             changes: components["schemas"]["MoveAccessChange"][];
+        };
+        Activity: {
+            /** Format: uuid */
+            actor_id?: string | null;
+            actor_name?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            detail: unknown;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            item_id?: string | null;
+            kind: string;
+            /** Format: uuid */
+            target_id: string;
+            target_kind: string;
+            /**
+             * Format: uuid
+             * @description 최근 활동에는 포함하고 대상별 활동에는 없다(SQL 반환 계약).
+             */
+            workspace_id?: string | null;
+        };
+        ActivityPage: {
+            activity: components["schemas"]["Activity"][];
+            /** Format: date-time */
+            next_before?: string | null;
+            /** Format: uuid */
+            next_before_id?: string | null;
         };
         /** @description 체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에). */
         AddChecklist: {
@@ -2782,6 +3159,12 @@ export interface components {
             /** Format: uuid */
             request_id: string;
         };
+        CreateOrganization: {
+            first_admin_user_id: components["schemas"]["UserId"];
+            name: string;
+            /** Format: uuid */
+            request_id: string;
+        };
         /** @description 공개 링크 생성 요청. */
         CreatePublicLink: {
             /**
@@ -2860,6 +3243,9 @@ export interface components {
              */
             request_id: string;
         };
+        CreatedOrganization: {
+            id: components["schemas"]["OrganizationId"];
+        };
         /** @description 만든 링크. `url`은 이때 한 번만 받을 수 있다. */
         CreatedPublicLink: {
             /** Format: date-time */
@@ -2871,6 +3257,11 @@ export interface components {
         /** @description 워크스페이스 지우기 확인. 이름을 그대로 다시 입력한다. */
         DeleteWorkspace: {
             name: string;
+        };
+        /** @description 삭제 결과: 옮긴 업무 수. */
+        DeletedTaskStatus: {
+            /** Format: int32 */
+            moved: number;
         };
         /** @description 내가 소유한 지운 워크스페이스. */
         DeletedWorkspace: {
@@ -2895,11 +3286,14 @@ export interface components {
             can_delete: boolean;
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
-            /** @description 이 사람이 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙: 고칠 수 있거나, 볼 수 있고 복제·내려받기 허용. */
+            /**
+             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
+             *     문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
+             */
             can_export: boolean;
             /**
-             * @description 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
-             *     보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
+             * @description 공유·공개 링크·설정을 관리할 수 있는지.
+             *     보관된 항목 아래 문서는 `access`가 `read`여도 워크스페이스 관리자·소유자는 참이다.
              */
             can_manage: boolean;
             id: components["schemas"]["DocumentId"];
@@ -3117,7 +3511,7 @@ export interface components {
          * @description 칸의 형식.
          * @enum {string}
          */
-        FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course";
+        FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course" | "episode";
         /** @description 파일과 모든 버전(최신 먼저). */
         FileDetail: {
             file: components["schemas"]["FileView"];
@@ -3136,7 +3530,8 @@ export interface components {
         /** @description 첨부 파일. */
         FileView: {
             /**
-             * @description 내려받을 수 있는지(D-20: 문서 첨부는 고칠 수 있는 사람, 또는 소유자가 복제·다운로드를 허용한 문서).
+             * @description 내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의
+             *     `allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.
              *     아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
              */
             can_download: boolean;
@@ -3235,6 +3630,17 @@ export interface components {
             status_category: string;
             title: string;
             workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 웹 입력 미리 검사에 쓰는 서버 설정. 글자 수는 Unicode 코드 포인트 기준이며 서버가 최종 검증한다. */
+        InputLimits: {
+            /** @description 문서 본문 JSON 직렬화 크기 상한(바이트). */
+            max_document_bytes: number;
+            /** @description 문서 트리 최대 깊이(최상위 = 1). */
+            max_document_depth: number;
+            /** @description 문서 하나의 참조 노드 수 상한. */
+            max_references_per_document: number;
+            /** @description 제목·이름 상한(`FVOCI_MAX_TITLE_CHARS`). 업무 CSV의 각 행에도 적용된다. */
+            max_title_chars: number;
         };
         /** @description 관리자가 보는 초대. */
         Invitation: {
@@ -3408,7 +3814,6 @@ export interface components {
         MarkRead: {
             /** Format: uuid */
             id?: string | null;
-            organization_id?: null | components["schemas"]["OrganizationId"];
         };
         /** @description 한 대상의 표시 상태. */
         MarkState: {
@@ -3420,6 +3825,10 @@ export interface components {
          * @enum {string}
          */
         MarkTarget: "item" | "document" | "task";
+        MarkedNotifications: {
+            /** Format: int32 */
+            marked: number;
+        };
         /** @description 표시한 대상(지금 볼 수 있는 것만). */
         MarkedTarget: {
             /** Format: uuid */
@@ -3436,6 +3845,9 @@ export interface components {
             /** @description 시각 표시(D-81): `h12`·`h23`, 비었으면 아직 고르지 않음. */
             hour_cycle: string;
             id: components["schemas"]["UserId"];
+            last_organization_id?: null | components["schemas"]["OrganizationId"];
+            /** @description 서버 입력 상한. 강의 회차 제목의 고정 한도(300자)는 이 설정과 별개다. */
+            limits: components["schemas"]["InputLimits"];
             /** @description 표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음. */
             locale: string;
             /** @description 화면 밝기(D-109): `system`(기본, 운영체제 설정을 따름)·`light`·`dark`. */
@@ -3456,14 +3868,18 @@ export interface components {
         };
         /** @description 멤버 화면 데이터. */
         MembersView: {
+            /** @description 초대·역할 변경·내보내기를 할 수 있다(D-113, `app_access('workspace', id)` = owner). 웹은 역할이 아니라 이 칸을 본다. */
+            can_manage_members: boolean;
             i_am_owner: boolean;
             members: components["schemas"]["Member"][];
-            /** @description 현재 사용자의 역할. */
+            /** @description 현재 사용자의 역할(표시용). */
             my_role: components["schemas"]["Role"];
             pending_owner?: null | components["schemas"]["UserId"];
         };
         /** @description 모듈 인스턴스. */
         Module: {
+            /** @description 현재 사용자의 접근 등급(D-113, `app_access('module', id)`): read·write·owner. */
+            access: components["schemas"]["Access"];
             /** @description 보관됨: 읽기 전용이며 번호·키는 그대로 남는다. */
             archived: boolean;
             /** @description 설명(관리자가 쓰는 글, 없으면 빈 문자열). */
@@ -3580,10 +3996,15 @@ export interface components {
              */
             watch_count: number;
         };
-        /** @description 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다. */
+        /** @description 내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다. */
         MySettings: {
             /** @description `h12`·`h23`, 빈 문자열이면 지운다. */
             hour_cycle?: string | null;
+            /**
+             * Format: uuid
+             * @description 마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다.
+             */
+            last_organization_id?: string | null;
             /** @description `ko`·`en`, 빈 문자열이면 지운다. */
             locale?: string | null;
             /** @description `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`). */
@@ -3592,6 +4013,38 @@ export interface components {
             time_zone?: string | null;
             /** @description `mon`·`sun`, 빈 문자열이면 지운다. */
             week_start?: string | null;
+        };
+        /** @description SQL bucket: overdue, today, upcoming, none(날짜 없음), done. */
+        MyTask: {
+            bucket: string;
+            due_date?: string | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            priority: string;
+            reference?: string | null;
+            start_date?: string | null;
+            status: string;
+            status_category: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MyTaskCounts: {
+            /** Format: int32 */
+            done: number;
+            /** Format: int32 */
+            overdue: number;
+            /** Format: int32 */
+            today: number;
+            /** Format: int32 */
+            undated: number;
+            /** Format: int32 */
+            upcoming: number;
+        };
+        MyTasks: {
+            counts: components["schemas"]["MyTaskCounts"];
+            workspaces: components["schemas"]["WorkspaceTasks"][];
         };
         /** @description 내 진행. */
         MyUnitProgress: {
@@ -3674,6 +4127,11 @@ export interface components {
             title: string;
             unit?: string;
         };
+        NewTaskStatus: {
+            category: components["schemas"]["StatusCategory"];
+            color?: string;
+            name: string;
+        };
         /** @description 알림. invite는 초대 ID만 있고 대상 제목·참조는 없다. */
         Notification: {
             /** @description 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다. */
@@ -3685,6 +4143,7 @@ export interface components {
             comment_id?: string | null;
             /** Format: date-time */
             created_at: string;
+            detail: unknown;
             document_id?: null | components["schemas"]["DocumentId"];
             /** @description 대상 번호(문서 또는 업무). */
             document_reference?: string | null;
@@ -3706,6 +4165,8 @@ export interface components {
             kind: string;
             organization_id?: null | components["schemas"]["OrganizationId"];
             read: boolean;
+            /** Format: date-time */
+            read_at?: string | null;
             /** @description 항목 알림의 대상 이름(기록 제목이나 강좌 이름). */
             subject?: string | null;
             /**
@@ -3714,6 +4175,14 @@ export interface components {
              */
             task_id?: string | null;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
+        };
+        /** @description 목록 끝에서 두 커서가 null이면 더 읽을 페이지가 없다. */
+        NotificationPage: {
+            /** Format: date-time */
+            next_before?: string | null;
+            /** Format: uuid */
+            next_before_id?: string | null;
+            notifications: components["schemas"]["Notification"][];
         };
         /** @description 인계 제안 요청. */
         OfferOwnership: {
@@ -3724,6 +4193,16 @@ export interface components {
          * @enum {string}
          */
         OrgRole: "admin" | "member";
+        /** @description 조직 상세(멤버에게). 설정 변경은 관리자만. */
+        Organization: {
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["OrganizationId"];
+            limits: components["schemas"]["OrganizationLimits"];
+            name: string;
+            public_links_enabled: boolean;
+            role: components["schemas"]["OrgRole"];
+        };
         /**
          * Format: uuid
          * @description 조직 내부 ID.
@@ -3736,6 +4215,70 @@ export interface components {
             /** Format: uuid */
             id: string;
             role: components["schemas"]["OrgRole"];
+        };
+        /** @description 조직·워크스페이스의 한도·보존 설정값(D-124). `null`은 해당 단계에서 미설정이라는 뜻이다. */
+        OrganizationLimits: {
+            /** Format: int32 */
+            activity_retention_days?: number | null;
+            /** Format: int32 */
+            audit_retention_days?: number | null;
+            /** Format: int32 */
+            max_concurrent_uploads?: number | null;
+            /** Format: int64 */
+            max_file_bytes?: number | null;
+            /** Format: int64 */
+            max_storage_bytes?: number | null;
+            /**
+             * Format: int32
+             * @description 이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.
+             *     현재 외부 채널은 구현되어 있지 않다.
+             */
+            notification_rate_per_hour?: number | null;
+        };
+        /** @description 조직 멤버. 이메일은 SQL이 조직 관리자에게만 돌려준다. */
+        OrganizationMember: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            email?: string | null;
+            role: components["schemas"]["OrgRole"];
+            user_id: components["schemas"]["UserId"];
+        };
+        OrganizationRemovalPreview: {
+            /** Format: int32 */
+            assignments: number;
+            /** Format: int32 */
+            shares: number;
+            /** Format: int32 */
+            workspaces: number;
+        };
+        /** @description 키 생략은 유지, 한도의 null은 미설정으로 되돌린다. 원본 JSON을 SQL에 전달한다. */
+        OrganizationSettingsPatch: components["schemas"]["OrganizationLimits"] & {
+            name?: string;
+            public_links_enabled?: boolean | null;
+        };
+        /** @description 내가 속한 조직 한 줄. */
+        OrganizationSummary: {
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["OrganizationId"];
+            name: string;
+            /** @description 비로그인 공개 링크를 쓸 수 있는지(조직 관리자가 끌 수 있다, D-114). */
+            public_links_enabled: boolean;
+            role: components["schemas"]["OrgRole"];
+        };
+        OrganizationWorkspace: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            deleted_at?: string | null;
+            id: components["schemas"]["WorkspaceId"];
+            /** Format: int32 */
+            member_count: number;
+            my_role?: null | components["schemas"]["Role"];
+            name: string;
+            owner_id: components["schemas"]["UserId"];
+            owner_name: string;
         };
         /** @description 함께 수강하는 사람의 진도 집계(메모·위치·시간은 없음). */
         Participant: {
@@ -3789,7 +4332,8 @@ export interface components {
          * @description 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
          *     - `TaskConflict`(`error: "shift_conflict"` 또는 `"link_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게
          *       됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.
-         *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 보관된 항목, 동시 변경 재시도(40001·40P01), 새 id 부족(FV001).
+         *     - `ErrorBody`(`current` 없음): 기대 사용자 불일치(`account_changed`), 보관된 항목,
+         *       동시 변경 재시도(40001·40P01), 새 id 부족(FV001, `invalid_state`).
          */
         PredecessorConflict: components["schemas"]["TaskConflict"] | components["schemas"]["ErrorBody"];
         /** @description 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다. */
@@ -4094,6 +4638,22 @@ export interface components {
             /** Format: uuid */
             workspace_id?: string | null;
         };
+        ServerAdmin: {
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            user_id: components["schemas"]["UserId"];
+        };
+        ServerOrganization: {
+            /** Format: date-time */
+            created_at: string;
+            id: components["schemas"]["OrganizationId"];
+            /** Format: int32 */
+            member_count: number;
+            name: string;
+            /** Format: int32 */
+            workspace_count: number;
+        };
         /** @description 보관 상태 변경 요청. */
         SetArchived: {
             archived: boolean;
@@ -4143,6 +4703,9 @@ export interface components {
         /** @description 모듈 아이콘(관리자). */
         SetModuleIcon: {
             icon: string;
+        };
+        SetOrganizationRole: {
+            role: components["schemas"]["OrgRole"];
         };
         /** @description 부모·순서 바꾸기 요청. `parent_id`가 없으면 최상위, `before_id`가 있으면 그 형제 바로 앞, 없으면 맨 끝. */
         SetParent: {
@@ -4284,6 +4847,7 @@ export interface components {
         StartTimer: {
             kind: components["schemas"]["TimeKind"];
             memo: string;
+            mode?: null | components["schemas"]["TimerStartMode"];
             /** Format: uuid */
             request_id: string;
             target?: null | components["schemas"]["TargetInput"];
@@ -4293,6 +4857,11 @@ export interface components {
             /** Format: uuid */
             stopped_entry_id?: string | null;
         };
+        /**
+         * @description 상태 범주. 완료 판정과 기본 열 선택은 범주로 한다.
+         * @enum {string}
+         */
+        StatusCategory: "todo" | "doing" | "done";
         /** @description 함께 하는 사람의 진행 집계(메모·개인 날짜는 없음). */
         StudyParticipant: {
             display_name: string;
@@ -4465,6 +5034,25 @@ export interface components {
             rule?: null | components["schemas"]["RecurrenceRule"];
             timezone: string;
         };
+        /** @description 항목의 상태 한 줄. */
+        TaskStatus: {
+            category: components["schemas"]["StatusCategory"];
+            /** @description 색 `#rrggbb`(소문자). 빈 문자열이면 기본. */
+            color: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: double
+             * @description 열 순서(오름차순).
+             */
+            position: number;
+            /**
+             * Format: int32
+             * @description 이 열에 있는(지우지 않은) 업무 수.
+             */
+            task_count: number;
+        };
         /** @description 업무의 예상 시간과 실제 시간. */
         TaskTime: {
             /** Format: int32 */
@@ -4475,6 +5063,8 @@ export interface components {
              */
             mine_seconds: number;
         };
+        /** @description 업무 쓰기의 409 본문: 최신 업무를 포함한 충돌 또는 계정 변경 등 일반 오류. */
+        TaskWriteConflict: components["schemas"]["TaskConflict"] | components["schemas"]["ErrorBody"];
         /** @description 시간 기록. */
         TimeEntry: {
             /**
@@ -4544,6 +5134,11 @@ export interface components {
         TimerActionInput: {
             action: components["schemas"]["TimerAction"];
         };
+        /**
+         * @description 같은 대상에서 실행 중인 타이머를 다시 시작할 때의 선택.
+         * @enum {string}
+         */
+        TimerStartMode: "continue" | "new";
         /** @description 휴지통. */
         Trash: {
             entries: components["schemas"]["TrashEntry"][];
@@ -4607,6 +5202,10 @@ export interface components {
         UnitsPlanned: {
             /** Format: int32 */
             planned: number;
+        };
+        UnreadCount: {
+            /** Format: int32 */
+            unread_count: number;
         };
         /** @description Up Next 묶음마다의 전체 수. */
         UpNextCounts: {
@@ -4704,6 +5303,13 @@ export interface components {
             tags: string[];
             title: string;
         };
+        UpdateTaskStatus: {
+            category?: null | components["schemas"]["StatusCategory"];
+            color?: string | null;
+            name?: string | null;
+            /** Format: double */
+            position?: number | null;
+        };
         /**
          * @description 기존 보기 고치기. `base_version`이 지났으면 409(`conflict`)와 최신 보기. 같은 `request_id`의 재시도는 이미 반영한
          *     결과를 돌려준다(마지막 고치기의 요청 id만 알아본다).
@@ -4772,6 +5378,11 @@ export interface components {
         };
         /** @description 워크스페이스 요약. */
         Workspace: {
+            /**
+             * @description 현재 사용자의 접근 등급(D-113, `app_access('workspace', id)`): read·write·owner. 웹의 쓰기·관리 표시는 역할이
+             *     아니라 이 칸을 본다.
+             */
+            access: components["schemas"]["Access"];
             id: components["schemas"]["WorkspaceId"];
             /** @description 현재 사용자가 소유자인지 (D-51). */
             is_owner: boolean;
@@ -4792,6 +5403,11 @@ export interface components {
          * @description 워크스페이스 내부 ID.
          */
         WorkspaceId: string;
+        WorkspaceTasks: {
+            tasks: components["schemas"]["MyTask"][];
+            workspace_id: components["schemas"]["WorkspaceId"];
+            workspace_name: string;
+        };
         /** @description 컬렉션. */
         ZoteroCollection: {
             key: string;
@@ -4854,7 +5470,10 @@ export interface operations {
     update_checklist_item: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 item_id: string;
             };
@@ -4896,12 +5515,24 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     delete_checklist_item: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 item_id: string;
             };
@@ -4915,6 +5546,14 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4924,6 +5563,15 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5238,7 +5886,7 @@ export interface operations {
             header: {
                 /** @description 단건 조회의 강한 ETag. 다르면 412 */
                 "If-Match"?: string | null;
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path: {
@@ -5341,6 +5989,55 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    document_activity: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6999,6 +7696,55 @@ export interface operations {
             };
         };
     };
+    item_activity: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     archive_item: {
         parameters: {
             query?: never;
@@ -7765,7 +8511,10 @@ export interface operations {
     sync_item_recurrences: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 item_id: string;
             };
@@ -7779,6 +8528,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncResult"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {
@@ -7797,6 +8554,228 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_task_statuses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStatus"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_task_status: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewTaskStatus"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStatus"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    update_task_status: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
+            path: {
+                item_id: string;
+                status_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskStatus"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStatus"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_task_status: {
+        parameters: {
+            query?: {
+                /** @description 이 열의 업무를 옮길 같은 항목의 상태. 업무가 있으면 필수. */
+                move_to?: string | null;
+            };
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
+            path: {
+                item_id: string;
+                status_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedTaskStatus"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 마지막 상태 삭제·보관·동시 변경 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8005,7 +8984,10 @@ export interface operations {
     create_task: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 item_id: string;
             };
@@ -8049,6 +9031,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; task_deleted: 같은 요청으로 만든 업무가 휴지통에 있음; invalid_state: 보관·동시 변경 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8305,6 +9288,52 @@ export interface operations {
             };
         };
     };
+    my_recent_activity: {
+        parameters: {
+            query: {
+                limit?: number | null;
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Activity"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     my_audit: {
         parameters: {
             query?: {
@@ -8438,7 +9467,8 @@ export interface operations {
     home: {
         parameters: {
             query: {
-                tz: string;
+                tz?: string | null;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;
@@ -8455,6 +9485,14 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8559,7 +9597,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path?: never;
@@ -8606,13 +9644,13 @@ export interface operations {
             };
         };
     };
-    notifications: {
+    list_my_notifications: {
         parameters: {
-            query?: {
-                organization?: null | components["schemas"]["OrganizationId"];
+            query: {
                 limit?: number | null;
                 before?: string | null;
                 before_id?: string | null;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;
@@ -8625,7 +9663,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Notification"][];
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             401: {
@@ -8636,11 +9682,21 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
-    mark_read: {
+    mark_my_notifications_read: {
         parameters: {
-            query?: never;
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8651,11 +9707,101 @@ export interface operations {
             };
         };
         responses: {
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MarkedNotifications"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_notification_unread_count: {
+        parameters: {
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCount"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_my_organizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSummary"][];
+                };
             };
             401: {
                 headers: {
@@ -8706,7 +9852,9 @@ export interface operations {
     };
     shared_with_me: {
         parameters: {
-            query?: never;
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8721,7 +9869,70 @@ export interface operations {
                     "application/json": components["schemas"]["SharedDocument"][];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_tasks: {
+        parameters: {
+            query: {
+                /** @description YYYY-MM-DD. 없으면 저장된 사용자 시간대의 오늘(미설정은 UTC). */
+                today?: string | null;
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyTasks"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8891,6 +10102,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description 같은 대상 실행 중: timer_running, 그 밖의 상태 충돌: invalid_state */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9285,6 +10497,81 @@ export interface operations {
             };
         };
     };
+    get_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 조직 id */
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_invitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInvitation"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     invite_organization: {
         parameters: {
             query?: never;
@@ -9315,6 +10602,389 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMember"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_organization_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                user_id: components["schemas"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetOrganizationRole"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    remove_organization_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                user_id: components["schemas"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_member_removal_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                user_id: components["schemas"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationRemovalPreview"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_organization_settings: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-fvoci-expected-user": components["schemas"]["UserId"];
+            };
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationSettingsPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    organization_workspaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationWorkspace"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    join_workspace_as_admin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    offer_organization_workspace_ownership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferOwnership"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    restore_organization_workspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: components["schemas"]["OrganizationId"];
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             403: {
                 headers: {
@@ -9601,8 +11271,8 @@ export interface operations {
                 kinds?: string | null;
                 /** @description 이 모듈 안의 것만. */
                 module_id?: string | null;
-                /** @description 업무 상태 이름(1..50자). 주면 업무만 나온다. */
-                status?: string | null;
+                /** @description 업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400. */
+                status_category?: string | null;
                 /** @description 담당자(`me` 또는 사용자 id). 주면 업무만 나온다. */
                 assignee?: string | null;
                 /**
@@ -9618,6 +11288,7 @@ export interface operations {
                 author?: string | null;
                 /** @description `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다). */
                 title_only?: boolean | null;
+                organization_id: components["schemas"]["OrganizationId"];
             };
             header?: never;
             path?: never;
@@ -9642,6 +11313,99 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    server_admins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerAdmin"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    server_organizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerOrganization"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    create_organization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganization"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedOrganization"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9812,7 +11576,10 @@ export interface operations {
     update_task: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
             };
@@ -9856,12 +11623,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description conflict·shift_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskConflict"];
+                    "application/json": components["schemas"]["TaskWriteConflict"];
                 };
             };
         };
@@ -9869,7 +11637,10 @@ export interface operations {
     trash_task: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
             };
@@ -9883,6 +11654,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Trashed"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {
@@ -9901,7 +11680,57 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    task_activity: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                before?: string | null;
+                before_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9943,7 +11772,10 @@ export interface operations {
     add_checklist: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
             };
@@ -9987,6 +11819,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     task_comments: {
@@ -10021,7 +11862,10 @@ export interface operations {
     set_task_parent: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
             };
@@ -10065,12 +11909,24 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     move_task: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
             };
@@ -10114,12 +11970,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description move_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskConflict"];
+                    "application/json": components["schemas"]["TaskWriteConflict"];
                 };
             };
         };
@@ -10127,7 +11984,10 @@ export interface operations {
     add_predecessor: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
                 predecessor_id: string;
@@ -10172,7 +12032,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description `shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
+            /** @description `shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -10186,7 +12046,10 @@ export interface operations {
     remove_predecessor: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
                 predecessor_id: string;
@@ -10201,6 +12064,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {
@@ -10219,6 +12090,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경 */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -10274,7 +12146,10 @@ export interface operations {
     set_task_recurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
             path: {
                 task_id: string;
             };
@@ -10318,12 +12193,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description rule_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskConflict"];
+                    "application/json": components["schemas"]["TaskWriteConflict"];
                 };
             };
         };
@@ -10618,7 +12494,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 이 값을 읽지 않는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path?: never;
@@ -11347,6 +13223,102 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    workspace_limits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationLimits"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_workspace_limits: {
+        parameters: {
+            query?: never;
+            header: {
+                "x-fvoci-expected-user": components["schemas"]["UserId"];
+            };
+            path: {
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationLimits"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationLimits"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {

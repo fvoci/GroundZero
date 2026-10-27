@@ -16,6 +16,7 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     name: '공간',
     role: 'member',
+    access: 'write',
     is_owner: false,
     realtime_enabled: false,
   },

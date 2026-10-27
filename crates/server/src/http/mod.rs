@@ -19,11 +19,14 @@ use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
 use crate::db::Db;
 use crate::error::{AppError, ErrorBody};
+// personal scope (2단계 B)
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
     members, modules, organizations, public_links, records, recurrence, references, revisions,
-    saved_views, schedule, search_api, study, tasks, time_tracking, trash, workspaces, zotero,
+    saved_views, schedule, search_api, study, task_statuses, tasks, time_tracking, trash,
+    workspaces, zotero,
 };
+use crate::features::{activity, notifications};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -58,6 +61,7 @@ pub struct Health {
 #[utoipa::path(
     get,
     path = "/healthz",
+    security(),
     responses(
         (status = 200, description = "모두 정상", body = Health),
         (status = 503, description = "데이터베이스 연결 실패", body = Health),
@@ -244,6 +248,8 @@ async fn api_not_found() -> AppError {
 #[derive(Debug, OpenApi)]
 #[openapi(
     info(title = "fvoci API", version = "0.1.0"),
+    modifiers(&SessionSecurity),
+    security(("session_https" = []), ("session_http" = [])),
     paths(
         healthz,
         accounts::login,
@@ -257,16 +263,38 @@ async fn api_not_found() -> AppError {
         workspaces::delete,
         workspaces::set_realtime,
         workspaces::deleted,
-        organizations::invite,
         workspaces::restore,
         workspaces::purge,
+        organizations::list_mine,
+        organizations::get,
+        // 상태 정의 (2단계 코디네이터)
+        task_statuses::list,
+        task_statuses::create,
+        task_statuses::update,
+        task_statuses::delete,
+        // organizations (2단계 A)
+        organizations::members,
+        organizations::set_member,
+        organizations::removal_preview,
+        organizations::remove_member,
+        organizations::invite,
+        organizations::invitations,
+        organizations::set_settings,
+        organizations::workspace_limits,
+        organizations::set_workspace_limits,
+        organizations::workspaces,
+        organizations::join_as_admin,
+        organizations::restore_workspace,
+        organizations::offer_workspace_ownership,
+        organizations::server_organizations,
+        organizations::create,
+        organizations::server_admins,
         documents::list_wiki,
         documents::create_wiki,
         documents::get,
         documents::save,
         documents::my_notes,
         documents::create_note,
-        documents::shared_with_me,
         documents::set_settings,
         documents::list_shares,
         documents::create_share,
@@ -310,7 +338,18 @@ async fn api_not_found() -> AppError {
         time_tracking::summary,
         time_tracking::task_time,
         time_tracking::item_time,
+        // personal scope (2단계 B)
         home::home,
+        home::my_tasks,
+        documents::shared_with_me,
+        search_api::search,
+        notifications::notifications,
+        notifications::unread_count,
+        notifications::mark_read,
+        activity::recent,
+        activity::item,
+        activity::document,
+        activity::task,
         home::set_mark,
         home::get_mark,
         trash::trash_document,
@@ -325,7 +364,6 @@ async fn api_not_found() -> AppError {
         trash::purge_my_expired,
         trash::set_retention,
         trash::set_version_retention,
-        search_api::search,
         files::create_upload,
         files::get_upload,
         files::put_part,
@@ -403,8 +441,6 @@ async fn api_not_found() -> AppError {
         references::resolve,
         references::document_backlinks,
         references::item_backlinks,
-        references::notifications,
-        references::mark_read,
         public_links::list,
         public_links::create,
         public_links::revoke,
@@ -444,6 +480,8 @@ async fn api_not_found() -> AppError {
         BuildInfo,
         ErrorBody,
         accounts::Me,
+        // 작업자 D · #79 입력 한도 계약.
+        accounts::InputLimits,
         accounts::MySettings,
         accounts::AuthInfo,
         accounts::LogoutResponse,
@@ -526,6 +564,7 @@ async fn api_not_found() -> AppError {
         time_tracking::Target,
         time_tracking::TimeEntry,
         time_tracking::StartTimer,
+        time_tracking::TimerStartMode,
         time_tracking::StartedTimer,
         time_tracking::TimerAction,
         time_tracking::TimerActionInput,
@@ -548,8 +587,26 @@ async fn api_not_found() -> AppError {
         home::MarkedTarget,
         home::Home,
         organizations::OrgRole,
+        organizations::OrganizationSummary,
+        organizations::OrganizationLimits,
+        organizations::Organization,
+        task_statuses::StatusCategory,
+        task_statuses::TaskStatus,
+        task_statuses::NewTaskStatus,
+        task_statuses::UpdateTaskStatus,
+        task_statuses::DeletedTaskStatus,
+        // organizations (2단계 A)
+        organizations::OrganizationMember,
+        organizations::SetOrganizationRole,
+        organizations::OrganizationRemovalPreview,
         organizations::InviteOrganization,
         organizations::OrganizationInvitation,
+        organizations::OrganizationSettingsPatch,
+        organizations::OrganizationWorkspace,
+        organizations::ServerOrganization,
+        organizations::CreateOrganization,
+        organizations::CreatedOrganization,
+        organizations::ServerAdmin,
         home::UpNextCounts,
         home::SetMark,
         home::MarkState,
@@ -652,8 +709,18 @@ async fn api_not_found() -> AppError {
         references::ResolveReferences,
         references::ResolvedReference,
         references::Backlink,
-        references::Notification,
-        references::MarkRead,
+        // personal scope (2단계 B)
+        notifications::Notification,
+        notifications::NotificationPage,
+        notifications::MarkRead,
+        notifications::MarkedNotifications,
+        notifications::UnreadCount,
+        home::MyTask,
+        home::MyTaskCounts,
+        home::WorkspaceTasks,
+        home::MyTasks,
+        activity::Activity,
+        activity::ActivityPage,
         public_links::PublicLink,
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
@@ -683,6 +750,39 @@ async fn api_not_found() -> AppError {
 )]
 pub struct ApiDoc;
 
+/// Describe the existing session cookies; the configured public URL selects
+/// exactly one cookie name at runtime (see `accounts::session_cookie_name`).
+#[derive(Debug)]
+struct SessionSecurity;
+
+impl utoipa::Modify for SessionSecurity {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+
+        let components = openapi.components.get_or_insert_with(Default::default);
+        for (scheme, cookie, description) in [
+            (
+                "session_https",
+                accounts::SECURE_SESSION_COOKIE,
+                "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTPS일 때 이 쿠키만 받는다. HttpOnly·Secure·SameSite=Lax이며 Path=/이다.",
+            ),
+            (
+                "session_http",
+                accounts::SESSION_COOKIE,
+                "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTP일 때 이 쿠키만 받는다. HttpOnly·SameSite=Lax이며 Path=/이다. HTTPS 배포에서는 이 이름을 받지 않는다.",
+            ),
+        ] {
+            components.add_security_scheme(
+                scheme,
+                SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                    cookie,
+                    description,
+                ))),
+            );
+        }
+    }
+}
+
 /// 라우터를 조립한다.
 /// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
 async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
@@ -708,10 +808,63 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
+        .route("/me/organizations", get(organizations::list_mine))
+        .route("/organizations/{organization_id}", get(organizations::get))
+        // 상태 정의 (2단계 코디네이터)
+        .route(
+            "/items/{item_id}/statuses",
+            get(task_statuses::list).post(task_statuses::create),
+        )
+        .route(
+            "/items/{item_id}/statuses/{status_id}",
+            put(task_statuses::update).delete(task_statuses::delete),
+        )
+        // organizations (2단계 A)
+        .route(
+            "/organizations/{organization_id}/members",
+            get(organizations::members),
+        )
+        .route(
+            "/organizations/{organization_id}/members/{user_id}",
+            put(organizations::set_member).delete(organizations::remove_member),
+        )
+        .route(
+            "/organizations/{organization_id}/members/{user_id}/removal-preview",
+            get(organizations::removal_preview),
+        )
         .route(
             "/organizations/{organization_id}/invitations",
-            post(organizations::invite),
+            get(organizations::invitations).post(organizations::invite),
         )
+        .route(
+            "/organizations/{organization_id}/settings",
+            put(organizations::set_settings),
+        )
+        .route(
+            "/workspaces/{workspace_id}/limits",
+            get(organizations::workspace_limits).put(organizations::set_workspace_limits),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces",
+            get(organizations::workspaces),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin",
+            post(organizations::join_as_admin),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces/{workspace_id}/restore",
+            post(organizations::restore_workspace),
+        )
+        .route(
+            "/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer",
+            post(organizations::offer_workspace_ownership),
+        )
+        .route(
+            "/server/organizations",
+            get(organizations::server_organizations).post(organizations::create),
+        )
+        .route("/server/admins", get(organizations::server_admins))
         .route("/auth-info", get(accounts::auth_info))
         .route(
             "/workspaces",
@@ -818,7 +971,6 @@ pub fn router(state: AppState) -> Router {
             "/me/notes",
             get(documents::my_notes).post(documents::create_note),
         )
-        .route("/me/shared", get(documents::shared_with_me))
         .route(
             "/documents/{document_id}/settings",
             put(documents::set_settings),
@@ -908,7 +1060,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/time-summary", get(time_tracking::summary))
         .route("/tasks/{task_id}/time", get(time_tracking::task_time))
         .route("/items/{item_id}/time", get(time_tracking::item_time))
-        .route("/me/home", get(home::home))
         .route(
             "/workspaces/{workspace_id}/trash",
             get(trash::workspace_trash),
@@ -926,7 +1077,6 @@ pub fn router(state: AppState) -> Router {
             put(trash::set_version_retention),
         )
         .route("/me/trash", get(trash::my_trash))
-        .route("/search", get(search_api::search))
         .route("/uploads", post(files::create_upload))
         .route(
             "/uploads/{upload_id}",
@@ -988,6 +1138,21 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/revisions/{revision}/export",
             post(revisions::export),
         )
+        // personal scope (2단계 B)
+        .route("/me/home", get(home::home))
+        .route("/me/tasks", get(home::my_tasks))
+        .route("/me/shared", get(documents::shared_with_me))
+        .route("/search", get(search_api::search))
+        .route("/me/notifications", get(notifications::notifications))
+        .route(
+            "/me/notifications/unread-count",
+            get(notifications::unread_count),
+        )
+        .route("/me/notifications/read", post(notifications::mark_read))
+        .route("/me/activity", get(activity::recent))
+        .route("/items/{item_id}/activity", get(activity::item))
+        .route("/documents/{document_id}/activity", get(activity::document))
+        .route("/tasks/{task_id}/activity", get(activity::task))
         .route("/references/resolve", post(references::resolve))
         .route(
             "/documents/{document_id}/backlinks",
@@ -997,8 +1162,6 @@ pub fn router(state: AppState) -> Router {
             "/items/{item_id}/backlinks",
             get(references::item_backlinks),
         )
-        .route("/me/notifications", get(references::notifications))
-        .route("/me/notifications/read", post(references::mark_read))
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),
@@ -1141,6 +1304,53 @@ mod tests {
 
     use super::ApiDoc;
 
+    #[test]
+    fn session_authentication_is_declared_for_protected_operations() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+        let required = serde_json::json!([{ "session_https": [] }, { "session_http": [] }]);
+        assert_eq!(doc["security"], required);
+        for (scheme, name) in [
+            (
+                "session_https",
+                crate::features::accounts::SECURE_SESSION_COOKIE,
+            ),
+            ("session_http", crate::features::accounts::SESSION_COOKIE),
+        ] {
+            let definition = &doc["components"]["securitySchemes"][scheme];
+            assert_eq!(definition["type"], "apiKey");
+            assert_eq!(definition["in"], "cookie");
+            assert_eq!(definition["name"], name);
+        }
+        // These handlers do not require an existing application session. The
+        // callback still validates its login state, and public links their token.
+        let public = HashSet::from([
+            ("/healthz", "get"),
+            ("/auth/login", "get"),
+            ("/auth/callback", "get"),
+            ("/auth/logout", "post"),
+            ("/api/auth-info", "get"),
+            ("/api/public/{token}", "get"),
+        ]);
+        let mut seen_public = HashSet::new();
+        for (path, item) in doc["paths"].as_object().unwrap() {
+            for method in [
+                "get", "put", "post", "delete", "patch", "head", "options", "trace",
+            ] {
+                let Some(operation) = item.get(method) else {
+                    continue;
+                };
+                let effective = operation.get("security").unwrap_or(&doc["security"]);
+                if public.contains(&(path.as_str(), method)) {
+                    assert_eq!(*effective, serde_json::json!([]), "{method} {path}");
+                    seen_public.insert((path.as_str(), method));
+                } else {
+                    assert_eq!(*effective, required, "{method} {path}");
+                }
+            }
+        }
+        assert_eq!(seen_public, public);
+    }
+
     /// 핸들러 이름이 같으면(예: 두 모듈의 `list`) operationId가 겹쳐 생성 타입이 깨진다. 계약에서 미리 막는다.
     #[test]
     fn operation_ids_are_unique() {
@@ -1157,6 +1367,39 @@ mod tests {
                     "duplicate operationId {id} at {path}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn organization_selection_and_timer_modes_are_typed_contracts() {
+        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
+        let schemas = &doc["components"]["schemas"];
+        let selection = &schemas["MySettings"]["properties"]["last_organization_id"];
+        assert_eq!(selection["format"], "uuid");
+        assert!(
+            selection["type"]
+                .as_array()
+                .is_some_and(|types| types.contains(&serde_json::json!("null")))
+        );
+        assert!(
+            !schemas["MySettings"]["required"]
+                .as_array()
+                .is_some_and(|fields| fields.contains(&serde_json::json!("last_organization_id")))
+        );
+        assert_eq!(
+            schemas["TimerStartMode"]["enum"],
+            serde_json::json!(["continue", "new"])
+        );
+        assert_eq!(
+            doc["paths"]["/api/me/timer"]["post"]["responses"]["409"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/ErrorBody"
+        );
+        for action in ["restore", "ownership-offer"] {
+            let path = format!(
+                "/api/organizations/{{organization_id}}/workspaces/{{workspace_id}}/{action}"
+            );
+            assert!(doc["paths"][path]["post"]["responses"]["204"].is_object());
         }
     }
 

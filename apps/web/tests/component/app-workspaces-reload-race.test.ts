@@ -21,6 +21,12 @@ const me: Me = {
   time_zone: '',
   week_start: '',
   theme: 'system',
+  limits: {
+    max_title_chars: 200,
+    max_document_bytes: 2_000_000,
+    max_references_per_document: 500,
+    max_document_depth: 10,
+  },
 };
 
 function workspace(id: string, name: string, realtime: boolean): Workspace {
@@ -29,6 +35,7 @@ function workspace(id: string, name: string, realtime: boolean): Workspace {
     organization_id: 'org-1',
     name,
     role: 'admin',
+    access: 'owner',
     is_owner: true,
     realtime_enabled: realtime,
   };

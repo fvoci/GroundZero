@@ -164,7 +164,10 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
     let home = send(
         &app,
         Method::GET,
-        "/api/me/home?tz=Asia/Seoul",
+        &format!(
+            "/api/me/home?tz=Asia/Seoul&organization_id={}",
+            common::organization_for(&me).await
+        ),
         Some(&me),
         None,
     )
@@ -234,7 +237,10 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
     let home = send(
         &app,
         Method::GET,
-        "/api/me/home?tz=Asia/Seoul",
+        &format!(
+            "/api/me/home?tz=Asia/Seoul&organization_id={}",
+            common::organization_for(&me).await
+        ),
         Some(&me),
         None,
     )
@@ -244,7 +250,10 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
     let admin_home = send(
         &app,
         Method::GET,
-        "/api/me/home?tz=Asia/Seoul",
+        &format!(
+            "/api/me/home?tz=Asia/Seoul&organization_id={}",
+            common::organization_for(&admin).await
+        ),
         Some(&admin),
         None,
     )
@@ -264,7 +273,10 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
     let home = send(
         &app,
         Method::GET,
-        "/api/me/home?tz=Asia/Seoul",
+        &format!(
+            "/api/me/home?tz=Asia/Seoul&organization_id={}",
+            common::organization_for(&me).await
+        ),
         Some(&me),
         None,
     )
@@ -276,7 +288,10 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
         send(
             &app,
             Method::GET,
-            "/api/me/home?tz=Nowhere/Land",
+            &format!(
+                "/api/me/home?tz=Nowhere/Land&organization_id={}",
+                common::organization_for(&me).await
+            ),
             Some(&me),
             None
         )
@@ -342,7 +357,10 @@ async fn up_next_keeps_today_and_upcoming_behind_a_long_overdue_backlog() {
     let home = send(
         &app,
         Method::GET,
-        "/api/me/home?tz=Asia/Seoul",
+        &format!(
+            "/api/me/home?tz=Asia/Seoul&organization_id={}",
+            common::organization_for(&me).await
+        ),
         Some(&me),
         None,
     )

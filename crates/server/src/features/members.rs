@@ -69,9 +69,11 @@ pub struct Member {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MembersView {
     pub members: Vec<Member>,
-    /// 현재 사용자의 역할.
+    /// 현재 사용자의 역할(표시용).
     pub my_role: Role,
     pub i_am_owner: bool,
+    /// 초대·역할 변경·내보내기를 할 수 있다(D-113, `app_access('workspace', id)` = owner). 웹은 역할이 아니라 이 칸을 본다.
+    pub can_manage_members: bool,
     /// 대기 중인 소유권 인계 수신자.
     pub pending_owner: Option<UserId>,
 }
@@ -87,6 +89,11 @@ pub async fn list_members(
 ) -> Result<Json<MembersView>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let my_role = member_role(&mut tx, ws).await?;
+    // 관리 여부는 접근 등급 하나에서 온다(D-113). 역할로 다시 계산하지 않는다.
+    let can_manage_members =
+        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws)
+            .await?
+            .is_owner();
     let rows: Vec<(UserId, String, Option<String>, String, bool)> = sqlx::query_as(
         "SELECT u.id, u.display_name, u.email, m.role, w.owner_id = u.id
          FROM workspace_members m
@@ -108,14 +115,13 @@ pub async fn list_members(
             .fetch_optional(tx.conn())
             .await?;
     tx.commit().await?;
-    let is_admin = my_role == Role::Admin;
     let members = rows
         .into_iter()
         .map(|(user_id, display_name, email, role, is_owner)| {
             Ok(Member {
                 user_id,
                 display_name,
-                email: if is_admin { email } else { None },
+                email: if can_manage_members { email } else { None },
                 role: parse_role(&role)?,
                 is_owner,
             })
@@ -125,6 +131,7 @@ pub async fn list_members(
         members,
         my_role,
         i_am_owner: owner == user,
+        can_manage_members,
         pending_owner,
     }))
 }
@@ -300,9 +307,7 @@ pub async fn list_invitations(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Invitation>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    if member_role(&mut tx, ws).await? != Role::Admin {
-        return Err(AppError::Forbidden);
-    }
+    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<(Uuid, String, String, OffsetDateTime)> = sqlx::query_as(
         "SELECT id, email, role, expires_at FROM invitations
          WHERE workspace_id = $1 AND closed_at IS NULL AND expires_at > now() ORDER BY created_at",
@@ -473,7 +478,7 @@ pub struct Accepted {
 }
 
 /// 초대 수락.
-#[utoipa::path(post, path = "/api/invitations/{invitation_id}/accept",
+#[utoipa::path(post, path = "/api/invitations/{invitation_id}/accept", operation_id = "accept_invitation",
     params(("invitation_id" = String, Path, format = Uuid)),
     responses((status = 200, body = Accepted), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
@@ -486,7 +491,7 @@ pub async fn accept_invitation(
 }
 
 /// 초대 거절.
-#[utoipa::path(post, path = "/api/invitations/{invitation_id}/decline",
+#[utoipa::path(post, path = "/api/invitations/{invitation_id}/decline", operation_id = "decline_invitation",
     params(("invitation_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn decline_invitation(
@@ -593,7 +598,7 @@ pub async fn list_groups(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Group>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<(Uuid, String, Vec<Uuid>)> = sqlx::query_as(
         "SELECT g.id, g.name, coalesce(array_agg(gm.user_id ORDER BY gm.user_id)
                                        FILTER (WHERE gm.user_id IS NOT NULL), '{}')

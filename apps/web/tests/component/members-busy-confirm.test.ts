@@ -13,11 +13,13 @@ const workspace: Workspace = {
   organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
 
 const view: MembersView = {
+  can_manage_members: true,
   members: [
     {
       user_id: 'u1',
@@ -125,9 +127,9 @@ describe('received invitations', () => {
   it('answers an invitation once even when clicked twice', async () => {
     const inv: ReceivedInvitation = {
       kind: 'workspace',
-      id: 'inv-1',
       organization_id: 'org-1',
-      organization_name: '조직',
+      organization_name: '연구소',
+      id: 'inv-1',
       workspace_id: 'ws-1',
       workspace_name: '연구실',
       invited_by: '관리자',

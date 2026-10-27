@@ -33,6 +33,8 @@ use yrs::{Doc, ReadTxn, Transact, Update};
 /// 자동 정리(`app_system_purge_old_versions`)는 DB 전체를 본다. 그것을 부르는 시험끼리는 차례로 돌아 서로의 정리 대상을
 /// 지우거나 세지 않게 한다.
 static GLOBAL_PURGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// 추가 이동·끄기 경합 fixture는 각자 풀·서버를 사용한다. 공유 시험 DB의 접속 한도를 동시에 소모하지 않는다.
+static POST_MOVE_FIXTURES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 async fn serve(app: Router) -> SocketAddr {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -241,8 +243,11 @@ impl Client {
 
 #[tokio::test]
 async fn live_editing_end_to_end() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -496,8 +501,11 @@ impl Client {
 /// 리비전을 남긴다.
 #[tokio::test]
 async fn live_editing_guards() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -874,8 +882,11 @@ async fn the_live_connection_carries_the_expected_user() {
 /// 요청이 겹쳐도 편집이 남는다. 끈 뒤 저장 API는 그 리비전 위에서만 성공한다(보통 리비전).
 #[tokio::test]
 async fn turning_realtime_off_keeps_live_edits() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -1041,6 +1052,120 @@ async fn turning_realtime_off_keeps_live_edits() {
     assert_eq!(author, w1.id.0);
     assert_eq!(revision_authors(&owner, &a_id, last).await.1, None);
     owner.close().await;
+}
+
+/// 두 번째 OFF 요청이 먼저 읽은 pending 목록을 첫 요청이 저장·OFF한 뒤 처리하는 순서를 재현한다.
+#[tokio::test]
+async fn a_stale_pending_list_after_realtime_off_is_already_saved() {
+    let _fixture = POST_MOVE_FIXTURES.lock().await;
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
+    let app = common::app(&state);
+    let addr = serve(app.clone()).await;
+    let admin = login(&state, "stale-off-admin").await;
+    let outsider = login(&state, "stale-off-outsider").await;
+    let ws = create_workspace(&app, &admin, "stale OFF pending").await;
+    let (writer, _) = add_member(&app, &state, &admin, &ws, "stale-off-writer", "member").await;
+    let document = common::create_doc(&app, &admin, &ws, "stale OFF document").await;
+    let id = document["id"].as_str().unwrap();
+    let realtime_uri = format!("/api/workspaces/{ws}/realtime");
+    let set = |enabled| {
+        send(
+            &app,
+            Method::PUT,
+            &realtime_uri,
+            Some(&admin),
+            Some(json!({"enabled": enabled})),
+        )
+    };
+    assert_eq!(set(true).await.status, StatusCode::NO_CONTENT);
+    let mut editor = connect(addr, Some(&writer), id, true).await.unwrap();
+    editor.paragraph("OFF 전에 저장 확인한 본문").await;
+    assert!(editor.until(acked).await);
+    let demoted = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{ws}/members/{}", writer.id.0),
+        Some(&admin),
+        Some(json!({"role":"readonly"})),
+    )
+    .await;
+    assert_eq!(demoted.status, StatusCode::NO_CONTENT);
+    assert_eq!(editor.closed().await, Some(4403));
+    until_no_room(&state, id).await;
+
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let stale_pending: Vec<fvoci_server::ids::DocumentId> =
+        sqlx::query_scalar("SELECT app_collab_pending($1::uuid)")
+            .bind(&ws)
+            .fetch_all(tx.conn())
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        stale_pending,
+        vec![fvoci_server::ids::DocumentId(
+            uuid::Uuid::parse_str(id).unwrap()
+        )]
+    );
+    assert_eq!(set(false).await.status, StatusCode::NO_CONTENT);
+    let saved = get_doc(&app, &admin, id).await;
+    assert!(
+        saved["body"]
+            .to_string()
+            .contains("OFF 전에 저장 확인한 본문")
+    );
+    assert!(
+        !state
+            .collab
+            .save_pending(
+                &state.db,
+                &state.config.limits,
+                stale_pending[0],
+                outsider.id
+            )
+            .await,
+        "a stale list must not bypass permissions"
+    );
+    assert!(
+        state
+            .collab
+            .save_pending(&state.db, &state.config.limits, stale_pending[0], admin.id)
+            .await,
+        "the second OFF request must accept the already saved pending document"
+    );
+    assert_eq!(
+        get_doc(&app, &admin, id).await["revision"],
+        saved["revision"],
+        "a stale list must not create another revision"
+    );
+
+    // 실제 pending이 남은 OFF 상태는 이미 저장한 것으로 취급하면 안 된다.
+    let mut fixture = common::fixture_conn().await;
+    sqlx::query("UPDATE fvoci.document_collab_states SET pending=true, revision=(SELECT revision FROM fvoci.documents WHERE id=$1::uuid) WHERE document_id=$1::uuid")
+        .bind(id).execute(&mut fixture).await.unwrap();
+    sqlx::Connection::close(fixture).await.unwrap();
+    assert!(
+        !state
+            .collab
+            .save_pending(&state.db, &state.config.limits, stale_pending[0], admin.id)
+            .await,
+        "unsaved pending state must still refuse OFF completion"
+    );
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let pending: Vec<fvoci_server::ids::DocumentId> =
+        sqlx::query_scalar("SELECT app_collab_pending($1::uuid)")
+            .bind(&ws)
+            .fetch_all(tx.conn())
+            .await
+            .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(pending, stale_pending);
+    assert_eq!(get_doc(&app, &admin, id).await["body"], saved["body"]);
+    state.db.close().await;
 }
 
 /// 감사 반영: 다시 붙은 연결의 동기화 답(이미 반영된 지움 기록)은 편집이 아니다. 편집으로 치면 다시 붙을 때마다
@@ -1272,8 +1397,11 @@ async fn live_body_pins_the_file_versions_it_points_to() {
 /// 휴지통에 넣은 직후 방이 닫히며 하는 마지막 저장이 거절될 때 그 참조를 지우지 않는다(되살리면 이미지가 보여야 한다).
 #[tokio::test]
 async fn trashed_document_keeps_live_file_pins() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -2384,8 +2512,11 @@ async fn edits_during_a_restore_are_not_acknowledged_then_dropped() {
 /// 옮기기 전 마지막 리비전으로 남아 다음 일반 저장이 그 편집을 버렸다. 옮기기 전에 열린 방을 리비전으로 남긴다.
 #[tokio::test]
 async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edits() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -2683,19 +2814,45 @@ impl Client {
 
     /// 앞서 보낸 프레임을 서버가 모두 읽어 방의 대기열에 넣을 때까지 기다린다. 서버는 프레임을 차례로 읽고(편집은 방의
     /// 대기열에 넣은 뒤에 다음 프레임을 읽는다) 핑의 퐁은 그다음 읽기에서 보낸다: 퐁이 오면 앞의 편집은 대기열에 있다.
-    async fn read_by_server(&mut self) {
-        self.ws
-            .send(WsMessage::Ping(Default::default()))
-            .await
-            .unwrap();
+    /// `at`은 실패 메시지에 남길 호출 지점(한 시험이 여러 번 부른다).
+    async fn read_by_server(&mut self, at: &str) {
+        if let Err(err) = self.ws.send(WsMessage::Ping(Default::default())).await {
+            // 서버가 먼저 닫았으면(Close 프레임·FIN 뒤 우리 쓰기에 RST) 그 Close 프레임이 수신 버퍼에 남아 있다. 종료
+            // 코드를 읽어 남긴다: 4503(재확인 기한)·4403(권한)·4409(이동) 등 닫은 쪽의 분류가 진단의 출발점이다.
+            let code = self.closing_code().await;
+            panic!("could not ping {at} ({err}): the server closed the connection first ({code})");
+        }
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
         loop {
             match self.next(Duration::from_millis(500)).await {
                 Event::Pong => return,
-                Event::Closed(code) => panic!("the connection closed ({code}) before the pong"),
-                Event::Data | Event::Timeout => {
-                    assert!(tokio::time::Instant::now() < deadline, "no pong");
+                Event::Closed(code) => {
+                    panic!("the connection closed ({code}) before the pong {at}")
                 }
+                Event::Data | Event::Timeout => {
+                    assert!(tokio::time::Instant::now() < deadline, "no pong {at}");
+                }
+            }
+        }
+    }
+
+    /// 수신 버퍼에 남은 프레임을 읽어 Close 프레임의 코드. 없거나 읽기도 실패하면 그 사정.
+    async fn closing_code(&mut self) -> String {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            match tokio::time::timeout_at(deadline, self.ws.next()).await {
+                Ok(Some(Ok(WsMessage::Close(frame)))) => {
+                    return match frame {
+                        Some(frame) => {
+                            format!("close {} {:?}", u16::from(frame.code), frame.reason)
+                        }
+                        None => "close without a code".into(),
+                    };
+                }
+                Ok(Some(Ok(_))) => {}
+                Ok(Some(Err(err))) => return format!("no close frame readable: {err}"),
+                Ok(None) => return "stream ended without a close frame".into(),
+                Err(_) => return "no close frame within 2s".into(),
             }
         }
     }
@@ -2742,9 +2899,23 @@ async fn live_move_race_setup_with_writer(label: &str) -> (TestUser, RaceSetup) 
 
 /// `live_move_race_setup_with_writer`와 같되 권한 재확인 간격(초)을 정한다.
 async fn live_move_race_setup_rechecking(label: &str, recheck_secs: &str) -> (TestUser, RaceSetup) {
-    let state =
+    live_move_race_setup_through(label, recheck_secs, None).await
+}
+
+/// `live_move_race_setup_rechecking`과 같되 `db_url`이 있으면 앱의 풀이 그 주소(시험 프록시)를 거친다.
+async fn live_move_race_setup_through(
+    label: &str,
+    recheck_secs: &str,
+    db_url: Option<&str>,
+) -> (TestUser, RaceSetup) {
+    let mut state =
         fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", recheck_secs)]))
             .unwrap();
+    if let Some(url) = db_url {
+        state.db =
+            fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(url.to_owned()))
+                .unwrap();
+    }
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -2768,6 +2939,929 @@ async fn live_move_race_setup_rechecking(label: &str, recheck_secs: &str) -> (Te
     let mut r = connect(addr, Some(&reader), &id, true).await.unwrap();
     assert!(r.until(|c| c.text().contains("체크포인트 전 문단")).await);
     (writer, (state, app, addr, admin, from, to, id, e, r))
+}
+
+/// 다음 재확인의 응답을 `SLOW_RECHECK_REPLY`만큼 붙잡고, 그 재확인이 세션을 확인한 뒤 응답이 붙잡히기 시작할 때까지
+/// 기다린다. CI 풀러에서 재확인 하나가 옛 예산(0.5초)을 넘긴 일을 결정적으로 만든다.
+async fn slow_next_recheck(proxy: &DbProxy) {
+    let gate = proxy.commit_gate.as_ref().unwrap();
+    gate.stall_access_ms.store(
+        u64::try_from(SLOW_RECHECK_REPLY.as_millis()).unwrap(),
+        std::sync::atomic::Ordering::Release,
+    );
+    tokio::time::timeout(SHORT_RECHECK, gate.stalling.notified())
+        .await
+        .expect("no recheck reached the stalled reply within one period");
+}
+
+/// 로그아웃한 세션의 연결은 다음 재확인에서 4403으로 닫힌다: 재확인 주기 T 안에, 여유 250ms(로컬 소켓 전달·시험
+/// 스케줄링). 바로 앞 재확인 하나가 풀러처럼 늦어도(`SLOW_RECHECK_REPLY`, 예산 T/2 안) 기한 초과(4503)로 바뀌지 않는다.
+#[tokio::test]
+async fn a_logged_out_connection_closes_within_one_recheck_period_despite_a_slow_check() {
+    let proxy = DbProxy::holding_move_commit().await;
+    let (writer, (_state, app, _addr, _admin, _from, _to, _id, mut editor, reader)) =
+        live_move_race_setup_through("짧은 재확인", &short_recheck_secs(), Some(&proxy.url)).await;
+    slow_next_recheck(&proxy).await;
+    let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
+    assert!(logout.status.is_success(), "{:?}", logout.json);
+    let closed =
+        tokio::time::timeout(SHORT_RECHECK + Duration::from_millis(250), editor.closed()).await;
+    reader.close().await;
+    assert_eq!(closed.ok().flatten(), Some(4403));
+}
+
+/// 저장 쿼리가 잠겨 방이 명령을 읽지 못해도, 연결의 권한 기한은 독립적으로 적용된다. 느린 재확인 하나도 그대로 둔다.
+#[tokio::test]
+async fn a_logged_out_connection_closes_within_one_recheck_period_during_a_blocked_room_persist() {
+    let proxy = DbProxy::holding_move_commit().await;
+    let (writer, (_state, app, _addr, admin, from, _to, id, mut editor, reader)) =
+        live_move_race_setup_through(
+            "저장 대기 중 재확인",
+            &short_recheck_secs(),
+            Some(&proxy.url),
+        )
+        .await;
+    assert!(
+        editor.until(acked).await,
+        "initial edit was not acknowledged"
+    );
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
+    let mut hold = owner.begin().await.unwrap();
+    let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut *hold)
+        .await
+        .unwrap();
+    sqlx::query(
+        "SELECT 1 FROM fvoci.document_collab_states WHERE document_id = $1::uuid FOR UPDATE",
+    )
+    .bind(&id)
+    .execute(&mut *hold)
+    .await
+    .unwrap();
+    editor.paragraph("잠긴 저장").await;
+    until_waiting_on_lock("app_system_collab_store", holder).await;
+    slow_next_recheck(&proxy).await;
+    let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
+    assert!(logout.status.is_success(), "{:?}", logout.json);
+    editor
+        .try_paragraph("만료 뒤 적용하면 안 되는 대기 편집")
+        .await;
+    let closed =
+        tokio::time::timeout(SHORT_RECHECK + Duration::from_millis(250), editor.closed()).await;
+    let late_ack = acked(&editor);
+    // 실패해도 시험이 잡은 잠금은 먼저 풀어 다른 시험/표준 정리를 막지 않는다.
+    hold.rollback().await.unwrap();
+    owner.close().await;
+    assert_eq!(
+        closed.ok().flatten(),
+        Some(4403),
+        "room persistence delayed revocation"
+    );
+    assert!(
+        !late_ack,
+        "the expired connection acknowledged its queued edit"
+    );
+    let off = send(
+        &app,
+        Method::PUT,
+        &format!("/api/workspaces/{from}/realtime"),
+        Some(&admin),
+        Some(json!({"enabled":false})),
+    )
+    .await;
+    assert_eq!(off.status, StatusCode::NO_CONTENT, "{:?}", off.json);
+    let saved = get_doc(&app, &admin, &id).await;
+    assert!(saved["body"].to_string().contains("체크포인트 전 문단"));
+    assert!(
+        !saved["body"]
+            .to_string()
+            .contains("만료 뒤 적용하면 안 되는 대기 편집")
+    );
+    reader.close().await;
+}
+
+/// 한 시험 앱의 DB 연결만 중계한다. 다른 시험이나 원본 앱의 DB에는 장애를 주지 않는다.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProxyMode {
+    Running,
+    Stalled,
+    Failed,
+}
+
+struct DbProxy {
+    url: String,
+    mode: tokio::sync::watch::Sender<ProxyMode>,
+    stalled: tokio::sync::mpsc::Receiver<()>,
+    task: tokio::task::JoinHandle<()>,
+    server: Option<tokio::task::JoinHandle<()>>,
+    commit_gate: Option<std::sync::Arc<CommitGate>>,
+}
+
+struct CommitGate {
+    used: std::sync::atomic::AtomicBool,
+    committed: tokio::sync::Notify,
+    release: tokio::sync::watch::Sender<bool>,
+    allowed_checks: std::sync::atomic::AtomicUsize,
+    /// 다음 `app_collab_access` 재확인 한 번의 응답을 이만큼(ms) 붙잡는다. 0이면 붙잡지 않는다. 느린 DB(풀러·CI)
+    /// 에서 재확인이 주기보다 늦는 일을 결정적으로 재현한다.
+    stall_access_ms: std::sync::atomic::AtomicU64,
+    /// `stall_access_ms`가 재확인 응답을 붙잡기 시작했다(그 재확인의 세션 확인은 이미 끝났다).
+    stalling: tokio::sync::Notify,
+}
+
+impl CommitGate {
+    fn new() -> Self {
+        let (release, _) = tokio::sync::watch::channel(false);
+        Self {
+            release,
+            used: std::sync::atomic::AtomicBool::new(false),
+            committed: tokio::sync::Notify::new(),
+            allowed_checks: std::sync::atomic::AtomicUsize::new(0),
+            stall_access_ms: std::sync::atomic::AtomicU64::new(0),
+            stalling: tokio::sync::Notify::new(),
+        }
+    }
+}
+
+impl DbProxy {
+    async fn start() -> Self {
+        Self::start_with_gate(None).await
+    }
+
+    async fn holding_move_commit() -> Self {
+        Self::start_with_gate(Some(std::sync::Arc::new(CommitGate::new()))).await
+    }
+
+    async fn start_with_gate(commit_gate: Option<std::sync::Arc<CommitGate>>) -> Self {
+        let mut url = url::Url::parse(&std::env::var("DATABASE_URL").unwrap()).unwrap();
+        if commit_gate.is_some() {
+            // 이 시험 프록시는 평문 PG 메시지 경계만 읽고 payload를 기록하지 않는다.
+            let query: Vec<(String, String)> = url
+                .query_pairs()
+                .filter(|(key, _)| key != "sslmode")
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect();
+            url.set_query(None);
+            url.query_pairs_mut()
+                .extend_pairs(query)
+                .append_pair("sslmode", "disable")
+                .append_pair("application_name", "collab-commit-race");
+        }
+        let target = (
+            url.host_str().unwrap().to_owned(),
+            url.port().unwrap_or(5432),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        url.set_host(Some("127.0.0.1")).unwrap();
+        url.set_port(Some(listener.local_addr().unwrap().port()))
+            .unwrap();
+        let (mode, receiver) = tokio::sync::watch::channel(ProxyMode::Running);
+        let (stalled, received) = tokio::sync::mpsc::channel(32);
+        let gate = commit_gate.clone();
+        let task = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let (mut incoming, _) = listener.accept().await.unwrap();
+                let mut changes = receiver.clone();
+                let target = target.clone();
+                let stalled = stalled.clone();
+                let gate = gate.clone();
+                connections.spawn(async move {
+                    let mut outgoing = TcpStream::connect(target).await.unwrap();
+                    if gate.is_some() {
+                        incoming.set_nodelay(true).unwrap();
+                        outgoing.set_nodelay(true).unwrap();
+                    }
+                    if *changes.borrow() == ProxyMode::Running {
+                        tokio::select! {
+                            _ = async {
+                                if let Some(gate) = gate {
+                                    forward_move_commit(&mut incoming, &mut outgoing, &gate).await;
+                                } else {
+                                    let _closed = tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await;
+                                }
+                            } => return,
+                            _ = changes.changed() => {},
+                        }
+                    }
+                    if *changes.borrow() == ProxyMode::Stalled {
+                        let _ignored = stalled.send(()).await;
+                        while *changes.borrow_and_update() == ProxyMode::Stalled {
+                            if changes.changed().await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                });
+                while connections.try_join_next().is_some() {}
+            }
+        });
+        Self {
+            url: url.into(),
+            mode,
+            stalled: received,
+            task,
+            server: None,
+            commit_gate,
+        }
+    }
+
+    async fn serve(&mut self, app: Router) -> SocketAddr {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        self.server = Some(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap()
+        }));
+        addr
+    }
+
+    async fn pause(&mut self) {
+        self.mode.send(ProxyMode::Stalled).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), self.stalled.recv())
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    fn fail(&self) {
+        self.mode.send(ProxyMode::Failed).unwrap();
+    }
+}
+
+/// PG message framing: https://www.postgresql.org/docs/current/protocol-message-formats.html
+/// 실제 app_move_document 실행 연결의 COMMIT 응답만 한 번 멈춘다. ReadyForQuery는 그 뒤 순서를 따른다.
+async fn forward_move_commit<C, D>(incoming: C, outgoing: D, gate: &CommitGate)
+where
+    C: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    D: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    let (mut client_read, mut client_write) = tokio::io::split(incoming);
+    let (mut db_read, mut db_write) = tokio::io::split(outgoing);
+    let moving = AtomicBool::new(false);
+    // Execute/CommandComplete 순서로 해당 권한 질의의 결과만 연결한다. 풀에서 재사용된 연결의
+    // 과거 질의나 다른 owner/write 열을 현재 권한 확인으로 세지 않는다.
+    let executions = std::sync::Mutex::new(std::collections::VecDeque::new());
+    let client = async {
+        let mut startup = [0_u8; 4];
+        if client_read.read_exact(&mut startup).await.is_err() {
+            return;
+        }
+        let length = usize::try_from(u32::from_be_bytes(startup)).unwrap();
+        assert!((8..=8192).contains(&length));
+        let mut body = vec![0; length - 4];
+        if client_read.read_exact(&mut body).await.is_err()
+            || db_write.write_all(&framed(&startup, &body)).await.is_err()
+        {
+            return;
+        }
+        let mut statements = std::collections::HashMap::new();
+        let mut portals = std::collections::HashMap::new();
+        loop {
+            let mut header = [0_u8; 5];
+            if client_read.read_exact(&mut header).await.is_err() {
+                break;
+            }
+            let length =
+                usize::try_from(u32::from_be_bytes(header[1..].try_into().unwrap())).unwrap();
+            assert!((4..=4 * 1024 * 1024).contains(&length));
+            let mut body = vec![0; length - 4];
+            if client_read.read_exact(&mut body).await.is_err() {
+                break;
+            }
+            let fields: Vec<&[u8]> = body.split(|byte| *byte == 0).take(2).collect();
+            match header[0] {
+                b'P' => {
+                    let query = fields[1];
+                    let access = query
+                        .windows(b"app_collab_access(".len())
+                        .any(|s| s == b"app_collab_access(");
+                    let move_document = query
+                        .windows(b"FROM app_move_document(".len())
+                        .any(|s| s == b"FROM app_move_document(");
+                    statements.insert(fields[0].to_vec(), (access, move_document));
+                }
+                b'B' => {
+                    portals.insert(
+                        fields[0].to_vec(),
+                        statements.get(fields[1]).copied().unwrap_or_default(),
+                    );
+                }
+                b'E' => {
+                    let (access, move_document) =
+                        portals.get(fields[0]).copied().unwrap_or_default();
+                    if move_document {
+                        moving.store(true, Ordering::Release);
+                    }
+                    executions.lock().unwrap().push_back(access);
+                }
+                b'Q' => executions.lock().unwrap().push_back(false),
+                _ => {}
+            }
+            // 인증/세션 payload를 로그나 산출물에 남기지 않는다.
+            if db_write.write_all(&framed(&header, &body)).await.is_err() {
+                break;
+            }
+        }
+    };
+    let server = async {
+        let mut role_seen = false;
+        let mut permission_committed = false;
+        loop {
+            let mut header = [0_u8; 5];
+            if db_read.read_exact(&mut header).await.is_err() {
+                break;
+            }
+            let length =
+                usize::try_from(u32::from_be_bytes(header[1..].try_into().unwrap())).unwrap();
+            assert!(
+                (4..=4 * 1024 * 1024).contains(&length),
+                "invalid test PG message length"
+            );
+            let mut body = vec![0; length - 4];
+            if db_read.read_exact(&mut body).await.is_err() {
+                break;
+            }
+            if header[0] == b'C' && body == b"COMMIT\0" {
+                if moving.load(Ordering::Acquire) && !gate.used.swap(true, Ordering::AcqRel) {
+                    gate.committed.notify_one();
+                    let mut release = gate.release.subscribe();
+                    while !*release.borrow_and_update() {
+                        if release.changed().await.is_err() {
+                            break;
+                        }
+                    }
+                }
+                permission_committed |= role_seen;
+                role_seen = false;
+            }
+            if header[0] == b'D' && executions.lock().unwrap().front() == Some(&true) {
+                // 재확인 질의의 첫 행을 보내기 전에 붙잡는다: 서버는 응답을 기다리는 동안 그 연결의 기한을 지난다.
+                let stall = gate.stall_access_ms.swap(0, Ordering::AcqRel);
+                if stall > 0 {
+                    gate.stalling.notify_one();
+                    tokio::time::sleep(Duration::from_millis(stall)).await;
+                }
+            }
+            if header[0] == b'D'
+                && gate.used.load(Ordering::Acquire)
+                && executions.lock().unwrap().front() == Some(&true)
+                && body.len() >= 6
+                && body[..2] == [0, 1]
+                && matches!(&body[6..], b"owner" | b"write")
+            {
+                role_seen = true;
+            }
+            if header[0] == b'C' {
+                executions.lock().unwrap().pop_front();
+            } else if header[0] == b'E' {
+                executions.lock().unwrap().clear();
+                role_seen = false;
+            }
+            if client_write
+                .write_all(&framed(&header, &body))
+                .await
+                .is_err()
+            {
+                break;
+            }
+            if header[0] == b'Z' && permission_committed {
+                gate.allowed_checks.fetch_add(1, Ordering::AcqRel);
+                permission_committed = false;
+            }
+        }
+    };
+    tokio::select! { _ = client => {}, _ = server => {} }
+}
+
+/// 메시지 하나(헤더·본문)를 한 버퍼로 잇는다. 프록시는 메시지마다 한 번에 쓴다: nodelay 소켓에 헤더와 본문을 따로 쓰면
+/// 두 세그먼트로 나가고, 수신 한 번을 메시지 하나로 읽는 상대(Supavisor의 인증 단계)는 헤더만 받아 인증을 끝낸다.
+fn framed(header: &[u8], body: &[u8]) -> Vec<u8> {
+    let mut message = Vec::with_capacity(header.len() + body.len());
+    message.extend_from_slice(header);
+    message.extend_from_slice(body);
+    message
+}
+
+/// 쓰기 호출 사이마다 `gap`을 두는 쓰기 쪽. 혼잡한 러너에서 nodelay 소켓의 두 쓰기가 다른 TCP 세그먼트·다른 수신으로
+/// 도착하는 일을 정해진 순서로 만든다.
+struct PacedWriter<T> {
+    inner: T,
+    gap: Duration,
+    pause: Option<std::pin::Pin<Box<tokio::time::Sleep>>>,
+}
+
+impl<T: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for PacedWriter<T> {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().inner).poll_read(cx, buf)
+    }
+}
+
+impl<T: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for PacedWriter<T> {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        use std::future::Future as _;
+        let this = self.get_mut();
+        if let Some(pause) = &mut this.pause {
+            std::task::ready!(pause.as_mut().poll(cx));
+            this.pause = None;
+        }
+        let written = std::task::ready!(std::pin::Pin::new(&mut this.inner).poll_write(cx, buf))?;
+        this.pause = Some(Box::pin(tokio::time::sleep(this.gap)));
+        std::task::Poll::Ready(Ok(written))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+    }
+}
+
+/// 받은 바이트가 PG 메시지 경계에서 끝나는지. `startup`이면 첫 메시지는 종류 바이트가 없는 시작 메시지다. 끝나면 그 안의
+/// 메시지 수.
+fn whole_pg_messages(mut bytes: &[u8], mut startup: bool) -> Option<usize> {
+    let mut count = 0;
+    while !bytes.is_empty() {
+        let header = if startup { 0 } else { 1 };
+        let length = bytes.get(header..header + 4)?;
+        let total = header + usize::try_from(u32::from_be_bytes(length.try_into().ok()?)).ok()?;
+        bytes = bytes.get(total..)?;
+        startup = false;
+        count += 1;
+    }
+    Some(count)
+}
+
+/// CI(run 40435671581, Supavisor 2.9.13 session 풀러)에서 커밋 장벽 프록시를 쓰는 두 시험이 첫 로그인의 인증에서
+/// `08P01 (EAUTHPROTOCOL) protocol violation during authentication`으로 끝났다. Supavisor는 인증 단계에서 소켓이 넘긴
+/// 바이트 한 묶음을 완전한 메시지 하나로 해석하고(`Server.decode_pkt`, 덜 오면 `:incomplete`) 아니면 인증을 끝낸다. 이
+/// 프록시는 nodelay 소켓에 메시지의 헤더와 본문을 따로 썼다: 두 쓰기 사이에 틈이 생기면 헤더만 먼저 도착한다. 풀러처럼
+/// 수신마다 경계를 보는 상대에게 쓰기 사이 틈을 두고 시작·SASL 메시지를 넘겨, 메시지가 한 번에 도착하는지 본다.
+#[tokio::test]
+async fn the_commit_gate_proxy_delivers_each_message_in_one_write() {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_addr = upstream.local_addr().unwrap();
+    let strict = tokio::spawn(async move {
+        let (mut socket, _) = upstream.accept().await.unwrap();
+        let mut deliveries = Vec::new();
+        let mut buf = vec![0_u8; 64 * 1024];
+        loop {
+            let read = socket.read(&mut buf).await.unwrap();
+            if read == 0 {
+                return deliveries;
+            }
+            deliveries.push(whole_pg_messages(&buf[..read], deliveries.is_empty()));
+        }
+    });
+    let front = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let front_addr = front.local_addr().unwrap();
+    let proxy = tokio::spawn(async move {
+        let (mut incoming, _) = front.accept().await.unwrap();
+        let outgoing = TcpStream::connect(upstream_addr).await.unwrap();
+        // 실제 프록시처럼 nodelay: 쓰기마다 바로 세그먼트로 나간다.
+        incoming.set_nodelay(true).unwrap();
+        outgoing.set_nodelay(true).unwrap();
+        let outgoing = PacedWriter {
+            inner: outgoing,
+            gap: Duration::from_millis(50),
+            pause: None,
+        };
+        forward_move_commit(&mut incoming, outgoing, &CommitGate::new()).await;
+    });
+    let mut client = TcpStream::connect(front_addr).await.unwrap();
+    // 클라이언트는 메시지마다 한 번에 쓴다(sqlx와 같다): 시작 메시지, 그다음 SASLInitialResponse.
+    let params = b"user\0fvoci_app\0database\0postgres\0\0";
+    let mut startup = u32::try_from(8 + params.len())
+        .unwrap()
+        .to_be_bytes()
+        .to_vec();
+    startup.extend_from_slice(&196_608_u32.to_be_bytes());
+    startup.extend_from_slice(params);
+    client.write_all(&startup).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let first = b"n,,n=,r=fvoci-test-nonce";
+    let mut sasl = b"SCRAM-SHA-256\0".to_vec();
+    sasl.extend_from_slice(&u32::try_from(first.len()).unwrap().to_be_bytes());
+    sasl.extend_from_slice(first);
+    let mut message = vec![b'p'];
+    message.extend_from_slice(&u32::try_from(4 + sasl.len()).unwrap().to_be_bytes());
+    message.extend_from_slice(&sasl);
+    client.write_all(&message).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    drop(client);
+    tokio::time::timeout(Duration::from_secs(5), proxy)
+        .await
+        .unwrap()
+        .unwrap();
+    let deliveries = tokio::time::timeout(Duration::from_secs(5), strict)
+        .await
+        .unwrap()
+        .unwrap();
+    // 지키려는 성질은 "잘린 메시지가 없다"다. 실행이 멈춰 두 메시지가 한 수신에 함께 담기는 것(`Some(2)`)은 허용한다:
+    // 실제 인증에서는 클라이언트가 응답을 기다려 겹치지 않고, 그것을 실패로 보면 분할과 무관한 거짓 실패가 된다.
+    assert!(
+        deliveries.iter().all(Option::is_some),
+        "a delivery ended inside a message (None = a split message): {deliveries:?}"
+    );
+    assert_eq!(
+        deliveries.iter().flatten().sum::<usize>(),
+        2,
+        "the startup and SASL messages must both arrive: {deliveries:?}"
+    );
+}
+
+impl Drop for DbProxy {
+    fn drop(&mut self) {
+        if let Some(server) = &self.server {
+            server.abort();
+        }
+        self.task.abort();
+    }
+}
+
+/// 유효한 확인은 재확인 주기 T를 넘겨 연결을 유지한다. 이후 해당 풀만 지연/실패해도 다른 연결의 기한은 독립적이다.
+#[tokio::test]
+async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure() {
+    let (writer, (state, app, _addr, _admin, _from, _to, id, editor, mut reader)) =
+        live_move_race_setup_rechecking("독립 DB 재확인", &short_recheck_secs()).await;
+    for pause in [true, false] {
+        let mut proxy = DbProxy::start().await;
+        let mut proxied = state.clone();
+        proxied.db = fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(
+            proxy.url.clone(),
+        ))
+        .unwrap();
+        let addr = proxy.serve(common::app(&proxied)).await;
+        let mut client = connect(addr, Some(&writer), &id, true).await.unwrap();
+        let healthy_until =
+            tokio::time::Instant::now() + SHORT_RECHECK + Duration::from_millis(300);
+        while tokio::time::Instant::now() < healthy_until {
+            assert!(
+                !matches!(
+                    client.next(Duration::from_millis(50)).await,
+                    Event::Closed(_)
+                ),
+                "healthy rechecks closed the connection"
+            );
+        }
+        client.read_by_server("after the healthy window").await;
+        if pause {
+            proxy.pause().await;
+        } else {
+            proxy.fail();
+        }
+        let closed =
+            tokio::time::timeout(SHORT_RECHECK + Duration::from_millis(250), client.closed()).await;
+        proxy.fail();
+        assert_eq!(closed.ok().flatten(), Some(4503), "pause={pause}");
+        // 같은 문서의 원본 풀 연결은 장애를 받지 않았고 계속 살아 있다.
+        reader
+            .read_by_server("on the original pool after the proxied close")
+            .await;
+        assert_eq!(
+            send(
+                &app,
+                Method::GET,
+                &format!("/api/documents/{id}"),
+                Some(&writer),
+                None
+            )
+            .await
+            .status,
+            StatusCode::OK
+        );
+    }
+    editor.close().await;
+    reader.close().await;
+}
+
+#[tokio::test]
+async fn delayed_move_commit_reply_does_not_revoke_valid_source_edits() {
+    move_commit_reply_race(false).await;
+}
+
+#[tokio::test]
+async fn delayed_move_commit_reply_does_not_extend_source_or_admit_destination_input() {
+    move_commit_reply_race(true).await;
+}
+
+/// 권한 철회·재확인을 시험 시간 안에 보려는 연결의 재확인 주기 T(`FVOCI_COLLAB_RECHECK_SECS`). 시간에 묶인 단언은 모두 T에
+/// 상대적이다(예: 커밋 경합의 source 근거는 마지막 source 확인 + T에 만료하고 커밋 가시 뒤 T+100ms를 기다린 편집은 저장되지
+/// 않는다, 거부·로그아웃 뒤 닫힘은 T+250ms 안에 온다). 서버는 검사를 주기의 절반에 시작하므로 한 재확인의 DB 예산은 T/2이고,
+/// 그보다 늦은 재확인은 R2 A대로 연결을 4503으로 닫는다. 1초(예산 0.5초)는 CI의 Supavisor session 풀러에서 재확인이 늦어
+/// 4503으로 닫혔다(run 40401267035). 3초(예산 1.5초)는 풀러를 거친 새 연결(수백 ms)과 4코어 러너의 스케줄링 지연을 덮는다.
+/// 제품 설정 범위(1~3600초)는 그대로다.
+const SHORT_RECHECK: Duration = Duration::from_secs(3);
+
+/// 옛 예산(1초 주기의 0.5초)은 넘고 `SHORT_RECHECK`의 예산(T/2) 안인 재확인 응답 지연. 풀러 지연을 결정적으로 흉내 낸다.
+const SLOW_RECHECK_REPLY: Duration = Duration::from_millis(800);
+
+/// `FVOCI_COLLAB_RECHECK_SECS`에 넣을 `SHORT_RECHECK`(초).
+fn short_recheck_secs() -> String {
+    SHORT_RECHECK.as_secs().to_string()
+}
+
+/// `commit_race_setup`이 준비한 경합: 이동 요청이 새 자리의 나무 잠금(`hold`)을 기다리고, 편집자(재확인 주기
+/// `SHORT_RECHECK`)의 앞선 편집은 옮기기 전 체크포인트가 리비전으로 남겼다. 풀의 COMMIT 장벽은 `proxy.commit_gate`.
+struct CommitRace {
+    _fixture: tokio::sync::MutexGuard<'static, ()>,
+    proxy: DbProxy,
+    state: fvoci_server::http::AppState,
+    original: Router,
+    admin: TestUser,
+    to: String,
+    id: String,
+    editor: Client,
+    owner: sqlx::PgPool,
+    hold: sqlx::Transaction<'static, sqlx::Postgres>,
+    /// 이동 명령은 DB 잠금 전에 source 권한을 강제로 다시 확인한다. 그 확인보다 앞선 하한이다.
+    source_check_bound: tokio::time::Instant,
+    moving: tokio::task::JoinHandle<common::Reply>,
+}
+
+async fn move_commit_reply_race(destination_writable: bool) {
+    let CommitRace {
+        _fixture,
+        proxy,
+        state,
+        original,
+        admin,
+        to,
+        id,
+        mut editor,
+        owner,
+        hold,
+        source_check_bound,
+        moving,
+    } = commit_race_setup(destination_writable).await;
+    editor.paragraph("물리 커밋 전 보존 편집").await;
+    editor
+        .read_by_server("before the move commit, while the move waits on the tree lock")
+        .await;
+    // 옮기기 전 체크포인트가 앞선 편집을 리비전으로 남기고 확인했다(이동이 잠금을 기다리기 전, 퐁보다 앞서 온다). 아래의
+    // "확인하지 않음" 단언이 확인 자체가 오지 않는 경우로 비는 것을 막는다.
+    assert!(
+        !editor.persisted.is_empty(),
+        "the pre-move checkpoint did not acknowledge the earlier edit"
+    );
+    hold.rollback().await.unwrap();
+    let gate = proxy.commit_gate.as_ref().unwrap();
+    tokio::time::timeout(Duration::from_secs(10), gate.committed.notified())
+        .await
+        .unwrap();
+    let visible_workspace: String =
+        sqlx::query_scalar("SELECT workspace_id::text FROM fvoci.documents WHERE id=$1::uuid")
+            .bind(&id)
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert_eq!(
+        visible_workspace, to,
+        "the database commit must already be visible"
+    );
+    let closed_early = if destination_writable {
+        // 모든 source 확인은 이 DB 커밋보다 앞선다. 그 최대 T TTL이 지난 뒤에도 destination 연결은 살아 있다.
+        tokio::time::sleep(SHORT_RECHECK + Duration::from_millis(100)).await;
+        editor
+            .read_by_server("after the source TTL elapsed past the commit")
+            .await;
+        assert!(
+            gate.allowed_checks
+                .load(std::sync::atomic::Ordering::Acquire)
+                > 0
+        );
+        editor.paragraph("물리 커밋 이후 새 입력").await;
+        editor.read_by_server("after the post-commit input").await;
+        None
+    } else {
+        tokio::time::timeout(SHORT_RECHECK + Duration::from_millis(250), editor.closed())
+            .await
+            .ok()
+            .flatten()
+    };
+    let held_response = !moving.is_finished();
+    gate.release.send(true).unwrap();
+    let moved = tokio::time::timeout(Duration::from_secs(10), moving)
+        .await
+        .unwrap()
+        .unwrap();
+    let move_elapsed = source_check_bound.elapsed();
+    let closed = if destination_writable {
+        editor.closed().await
+    } else {
+        closed_early
+    };
+    let acknowledged = acked(&editor);
+    let saved = get_doc(&original, &admin, &id).await;
+    owner.close().await;
+    state.db.close().await;
+    if !destination_writable {
+        assert!(
+            move_elapsed < SHORT_RECHECK,
+            "denied move must finish within the original source grant TTL: {:?}",
+            move_elapsed
+        );
+    }
+    assert!(held_response, "the COMMIT response was not held");
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(closed, Some(if destination_writable { 4409 } else { 4403 }));
+    let body = saved["body"].to_string();
+    assert!(body.contains("응답 지연 전 확인 편집"));
+    assert_eq!(
+        body.contains("물리 커밋 전 보존 편집"),
+        !destination_writable,
+        "destination_writable={destination_writable}, acknowledged={acknowledged}: {saved}"
+    );
+    assert!(
+        !body.contains("물리 커밋 이후 새 입력"),
+        "post-commit input was preserved: {saved}"
+    );
+    assert!(!acknowledged, "the held or rejected edit was acknowledged");
+}
+
+/// CI(run 40401267035, Supavisor session 풀러)에서 위 경합 시험이 커밋 전 `read_by_server`의 Ping 송신에서 BrokenPipe로
+/// 끝났다: 서버가 먼저 닫은 것이다. 재확인 응답 하나가 재확인 주기(`SHORT_RECHECK`)보다 늦으면 서버는 그 기한에 연결을 4503으로
+/// 닫는다(R2 A: Unknown 상태에서 연결·권한을 유지하지 않는다). 그러면 대기열의 미확인 편집은 유효한 쓰기 근거가 없어
+/// 커밋 뒤에도 넣지 않고 확인하지 않으며(브라우저 초안이 지닌다, D-99) 이동은 그대로 끝난다. 같은 신호를 결정적으로
+/// 재현해 종료 코드와 그 결과를 고정한다. 확인받은 편집은 잃지 않는다.
+#[tokio::test]
+async fn a_recheck_reply_later_than_its_period_while_the_move_waits_closes_the_editor_busy() {
+    let CommitRace {
+        _fixture,
+        proxy,
+        state,
+        original,
+        admin,
+        to,
+        id,
+        mut editor,
+        owner,
+        hold,
+        moving,
+        ..
+    } = commit_race_setup(true).await;
+    let gate = proxy.commit_gate.as_ref().unwrap();
+    // 다음 재확인(독립 감시 T/2 주기 또는 이동 대기 중의 방 재확인)의 응답을 주기 T보다 길게 붙잡는다: 어느 기한보다도
+    // 늦어 4503 경로가 결정적이다.
+    let stall = SHORT_RECHECK + Duration::from_millis(500);
+    gate.stall_access_ms.store(
+        u64::try_from(stall.as_millis()).unwrap(),
+        std::sync::atomic::Ordering::Release,
+    );
+    // 편집이 방 대기열(붙잡힌 이동 명령 뒤)에 들어간 것을 퐁으로 확인한다. 퐁은 소켓 읽기에서 오고 DB 재확인을 기다리지
+    // 않는다. 기한은 제때 끝난 마지막 확인의 시작 + T이고 감시는 그 시작 + T/2에 다음 확인을 시작하므로, 지금부터 기한까지는
+    // T/2에서 진행 중인 확인의 경과 시간을 뺀 것 이상 남는다(T=3초면 약 1.5초에서 DB 지연을 뺀 값, 퐁 왕복은 수 ms). 그래야
+    // 아래의 "저장·확인되지 않음"이 서버가 받은 편집을 버린 결과다(받기 전에 닫혀 공허하게 통과하지 않는다).
+    editor.paragraph("재확인이 늦는 동안 보낸 편집").await;
+    editor
+        .read_by_server("after the edit sent before the stalled recheck closes the connection")
+        .await;
+    // 붙잡힐 재확인은 늦어도 T/2 뒤에 시작하고 그 연결의 기한은 그로부터 T 안에 온다.
+    let closed = tokio::time::timeout(SHORT_RECHECK * 2 + Duration::from_secs(1), editor.closed())
+        .await
+        .ok()
+        .flatten();
+    let acknowledged_before_commit = acked(&editor);
+    hold.rollback().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), gate.committed.notified())
+        .await
+        .unwrap();
+    gate.release.send(true).unwrap();
+    let moved = tokio::time::timeout(Duration::from_secs(10), moving)
+        .await
+        .unwrap()
+        .unwrap();
+    let saved = get_doc(&original, &admin, &id).await;
+    owner.close().await;
+    state.db.close().await;
+    assert_eq!(
+        closed,
+        Some(4503),
+        "a recheck later than its period closes busy"
+    );
+    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+    assert_eq!(saved["workspace_id"], to.as_str());
+    let body = saved["body"].to_string();
+    assert!(body.contains("응답 지연 전 확인 편집"), "{saved}");
+    assert!(
+        !body.contains("재확인이 늦는 동안 보낸 편집"),
+        "an edit without a valid write proof was saved: {saved}"
+    );
+    assert!(
+        !acknowledged_before_commit && !acked(&editor),
+        "the dropped edit was acknowledged"
+    );
+}
+
+/// 커밋 응답 지연 경합의 준비. `destination_writable`이면 편집자가 새 자리에서도 쓸 수 있고 그곳 실시간도 켠다.
+async fn commit_race_setup(destination_writable: bool) -> CommitRace {
+    let _fixture = POST_MOVE_FIXTURES.lock().await;
+    let mut proxy = DbProxy::holding_move_commit().await;
+    let recheck_secs = short_recheck_secs();
+    let mut state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        recheck_secs.as_str(),
+    )]))
+    .unwrap();
+    // 준비와 최종 조회도 같은 풀로 한다. COMMIT 장벽은 실제 이동 실행 연결만 멈춘다.
+    state.db =
+        fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(proxy.url.clone()))
+            .unwrap();
+    let original = common::app(&state);
+    let admin = login(&state, "commit-response-admin").await;
+    let from = create_workspace(&original, &admin, "commit response source").await;
+    let to = create_workspace(&original, &admin, "commit response destination").await;
+    let (writer, _) = add_member(
+        &original,
+        &state,
+        &admin,
+        &from,
+        "commit-response-writer",
+        "member",
+    )
+    .await;
+    let doc = common::create_doc(&original, &admin, &from, "commit response race").await;
+    let id = doc["id"].as_str().unwrap().to_owned();
+    if destination_writable {
+        let mut fixture = common::fixture_conn().await;
+        sqlx::query("INSERT INTO fvoci.workspace_members (workspace_id, user_id, role) VALUES ($1::uuid, $2, 'member')")
+            .bind(&to).bind(writer.id.0).execute(&mut fixture).await.unwrap();
+        sqlx::Connection::close(fixture).await.unwrap();
+    }
+    for ws in std::iter::once(&from).chain(destination_writable.then_some(&to)) {
+        let on = send(
+            &original,
+            Method::PUT,
+            &format!("/api/workspaces/{ws}/realtime"),
+            Some(&admin),
+            Some(json!({"enabled":true})),
+        )
+        .await;
+        assert_eq!(on.status, StatusCode::NO_CONTENT, "{:?}", on.json);
+    }
+    let app = original.clone();
+    let addr = proxy.serve(app.clone()).await;
+    let mut editor = connect(addr, Some(&writer), &id, true).await.unwrap();
+    editor.paragraph("응답 지연 전 확인 편집").await;
+    // 이 편집은 이동 명령보다 먼저 방에 들어가야 한다(옮기기 전 체크포인트가 리비전으로 남기고 그때 확인한다). 필요한
+    // 사건은 그것뿐이라 주기 저장(3초)의 확인을 기다리지 않는다: 짧은 재확인 주기의 연결이 느린 DB(풀러·CI)에 노출되는 시간을
+    // 줄인다. 체크포인트의 확인은 아래 경합 시험이 커밋 전 퐁 앞에서 받는다.
+    editor
+        .read_by_server("after the edit before the race")
+        .await;
+    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").unwrap();
+    let owner = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            owner_url
+                .parse::<sqlx::postgres::PgConnectOptions>()
+                .unwrap()
+                .application_name("collab-commit-observer"),
+        )
+        .await
+        .unwrap();
+    let (hold, holder) = hold_tree(&owner, &to).await;
+    let source_check_bound = tokio::time::Instant::now();
+    let moving = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move { move_to(&app, &admin, &id, &to).await }
+    });
+    until_waiting_on_lock("app_lock_move", holder).await;
+    CommitRace {
+        _fixture,
+        proxy,
+        state,
+        original,
+        admin,
+        to,
+        id,
+        editor,
+        owner,
+        hold,
+        source_check_bound,
+        moving,
+    }
 }
 
 /// 이 워크스페이스의 문서 나무 잠금(이동이 새 자리에서 `app_lock_move`로 잡는 것)을 쥔 트랜잭션과 그 연결의 pid.
@@ -2882,6 +3976,140 @@ async fn edits_between_the_checkpoint_and_the_move_are_kept_or_never_acknowledge
     owner.close().await;
 }
 
+/// 커밋 전 큐 편집의 본문 검사를 잠시 멈춘 사이 새 자리의 재확인이 먼저 연결을 닫는 순서를 강제한다.
+#[test]
+fn a_post_commit_access_check_does_not_discard_the_movers_pending_edits() {
+    post_commit_validation_race(PostCommitCheck::Denied);
+}
+
+#[test]
+fn a_session_ending_during_post_commit_validation_still_discards_the_pending_edit() {
+    post_commit_validation_race(PostCommitCheck::SessionEnded);
+}
+
+#[test]
+fn a_move_between_writable_realtime_workspaces_keeps_the_pending_edit() {
+    post_commit_validation_race(PostCommitCheck::Allowed);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PostCommitCheck {
+    Denied,
+    SessionEnded,
+    Allowed,
+}
+
+fn post_commit_validation_race(scenario: PostCommitCheck) {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(1)
+        .build()
+        .unwrap()
+        .block_on(async {
+            let _fixture = POST_MOVE_FIXTURES.lock().await;
+            let (writer, (state, app, _addr, admin, _from, to, id, mut editor, reader)) =
+                live_move_race_setup_rechecking("커밋 뒤 권한 확인 경합", &short_recheck_secs()).await;
+            if scenario == PostCommitCheck::Allowed {
+                let mut fixture = common::fixture_conn().await;
+                sqlx::query("INSERT INTO fvoci.workspace_members (workspace_id, user_id, role) VALUES ($1::uuid, $2, 'member')")
+                    .bind(&to).bind(writer.id.0).execute(&mut fixture).await.unwrap();
+                sqlx::Connection::close(fixture).await.unwrap();
+                let on = send(&app, Method::PUT, &format!("/api/workspaces/{to}/realtime"),
+                    Some(&admin), Some(json!({"enabled":true}))).await;
+                assert_eq!(on.status, StatusCode::NO_CONTENT, "{:?}", on.json);
+            }
+            assert!(
+                editor.until(acked).await,
+                "checkpoint edit was not acknowledged"
+            );
+            let owner_url =
+                std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
+            let owner = sqlx::postgres::PgPoolOptions::new().max_connections(1).connect(&owner_url).await.unwrap();
+            let (hold, holder) = hold_tree(&owner, &to).await;
+            let moving = tokio::spawn({
+                let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+                async move { move_to(&app, &admin, &id, &to).await }
+            });
+            until_waiting_on_lock("app_lock_move", holder).await;
+
+            // 체크포인트 검사는 끝났다. 다음 spawn_blocking 본문 검사만 채널 barrier 뒤에서 기다린다.
+            let (started, entered) = tokio::sync::oneshot::channel();
+            let (release, barrier) = std::sync::mpsc::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                let _ignored = started.send(());
+                let _released = barrier.recv();
+            });
+            entered.await.unwrap();
+            editor.paragraph("이동자가 대리 저장할 커밋 전 편집").await;
+            editor.read_by_server("before the move commit").await;
+            hold.rollback().await.unwrap();
+
+            let early_close = if scenario == PostCommitCheck::Allowed {
+                // 정밀한 source TTL 전후는 주입 시각 unit이 검사한다. 여기서는 양쪽 쓰기/실시간 경로를 검사한다.
+                tokio::time::sleep(Duration::from_millis(600)).await;
+                editor.read_by_server("after the post-commit wait").await;
+                None
+            } else {
+                tokio::time::timeout(SHORT_RECHECK + Duration::from_millis(250), editor.closed()).await.ok().flatten()
+            };
+            let waited_for_validation = !moving.is_finished();
+            let acknowledged_before_release = acked(&editor);
+            if scenario == PostCommitCheck::SessionEnded {
+                let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
+                assert!(logout.status.is_success(), "{:?}", logout.json);
+            }
+            // assertion 실패 전에도 blocking worker를 해제해 런타임 종료를 막지 않는다.
+            release.send(()).unwrap();
+            blocker.await.unwrap();
+            let moved = tokio::time::timeout(Duration::from_secs(10), moving)
+                .await
+                .unwrap()
+                .unwrap();
+            let saved = get_doc(&app, &admin, &id).await;
+            let closed = if scenario == PostCommitCheck::Allowed { editor.closed().await } else { early_close };
+            let (revision, author) = last_revision(&owner, &id).await;
+            let (_, edited_by) = revision_authors(&owner, &id, revision).await;
+            owner.close().await;
+            reader.close().await;
+            state.db.close().await;
+
+            assert_eq!(
+                closed,
+                Some(if scenario == PostCommitCheck::Allowed { 4409 } else { 4403 }),
+                "new-place access check must end the connection"
+            );
+            assert!(
+                waited_for_validation,
+                "the move passed the controlled validation barrier"
+            );
+            assert!(
+                !acknowledged_before_release,
+                "a blocked validation acknowledged the queued edit"
+            );
+            assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
+            assert_eq!(saved["workspace_id"], to);
+            assert!(saved["body"].to_string().contains("체크포인트 전 문단"));
+            assert_eq!(
+                saved["body"]
+                    .to_string()
+                    .contains("이동자가 대리 저장할 커밋 전 편집"),
+                scenario != PostCommitCheck::SessionEnded,
+                "scenario={scenario:?}: {saved}"
+            );
+            match scenario {
+                PostCommitCheck::Denied => {
+                    assert_eq!(author, admin.id.0);
+                    assert_eq!(edited_by, Some(vec![writer.id.0]));
+                },
+                PostCommitCheck::Allowed => {
+                    assert_eq!(author, writer.id.0);
+                    assert_eq!(edited_by, None);
+                },
+                PostCommitCheck::SessionEnded => {},
+            }
+        });
+}
+
 /// #71: 이동이 붙잡혀 있는 동안 대기열에서 기다린 편집은, 이동이 일어나지 않으면(확인한 미리보기가 달라 409) 평소처럼
 /// 받아 다른 연결에 보내고 저장을 확인한다. 연결은 그대로다.
 #[tokio::test]
@@ -2911,7 +4139,8 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
     e.paragraph("체크포인트 뒤 문단").await;
     // 서버가 그 편집을 방의 대기열(붙잡힌 이동 명령 뒤)에 넣은 것을 확인한 뒤 잠금을 푼다. 방은 이동 명령 안에 있어 아직
     // 그 편집을 넣지도 확인하지도 않았다.
-    e.read_by_server().await;
+    e.read_by_server("after the edit behind the held move")
+        .await;
     assert!(
         !acked(&e),
         "the held edit was acknowledged while the move was pending"
@@ -3001,7 +4230,8 @@ async fn a_move_dropped_before_the_room_handles_it_changes_nothing() {
     );
     // 그 뒤에 보낸 편집은 방의 대기열에서 이동 명령 뒤에 기다린다.
     e.paragraph("끊긴 이동 뒤 문단").await;
-    e.read_by_server().await;
+    e.read_by_server("after the edit behind the disconnected move")
+        .await;
     // 방이 이동 명령을 처리하기 전에 요청이 끊긴다. 그다음 방을 놓아 준다.
     drop(moving);
     hold.rollback().await.unwrap();
@@ -3189,8 +4419,11 @@ async fn until_collab_states(owner: &sqlx::PgPool, id: &str, pending: bool, want
 /// 새로 생기지 않는다.
 #[tokio::test]
 async fn a_move_without_a_room_saves_a_live_state_left_pending() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -3385,7 +4618,7 @@ async fn a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on() {
     });
     until_waiting_on_lock("app_lock_move", holder).await;
     e.paragraph("잠금을 기다리는 동안 쓴 문단").await;
-    e.read_by_server().await;
+    e.read_by_server("while the move waits on the lock").await;
     let answered = finishes_within(&request, Duration::from_secs(30)).await;
     hold.rollback().await.unwrap();
     assert!(
@@ -3511,7 +4744,7 @@ async fn an_edit_sent_after_the_session_ended_during_a_move_is_dropped() {
     let logout = send(&app, Method::POST, "/auth/logout", Some(&writer), None).await;
     assert!(logout.status.is_success(), "{:?}", logout.json);
     e.paragraph("세션이 끝난 뒤 문단").await;
-    e.read_by_server().await;
+    e.read_by_server("after the session ended").await;
     hold.rollback().await.unwrap();
     let moved = request.await.unwrap();
     assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
@@ -3719,8 +4952,11 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
 /// 적는다(작성자는 남긴 사람 그대로). 기록 API는 그 이름을 보이고, 이름을 볼 수 없는 사람에게는 null이다.
 #[tokio::test]
 async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
-    let state =
-        fvoci_server::app::build_state(config_with(&[("FVOCI_COLLAB_RECHECK_SECS", "1")])).unwrap();
+    let state = fvoci_server::app::build_state(config_with(&[(
+        "FVOCI_COLLAB_RECHECK_SECS",
+        short_recheck_secs().as_str(),
+    )]))
+    .unwrap();
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
     let admin = login(&state, "admin").await;
@@ -4146,12 +5382,12 @@ async fn an_edit_within_the_recheck_interval_after_a_demotion_during_a_move_is_k
     assert_eq!(out.closed, Some(4403));
 }
 
-/// 재확인 간격 1초인 방에서 이동이 잠금을 기다리는 동안 작성자를 독자로 바꾼다. `later_lock`이면 이동이 첫 잠금(새 자리
+/// 재확인 간격 `SHORT_RECHECK`인 방에서 이동이 잠금을 기다리는 동안 작성자를 독자로 바꾼다. `later_lock`이면 이동이 첫 잠금(새 자리
 /// 나무)을 지난 뒤 문서 행 잠금(`FOR UPDATE`)에서 기다리게 한다(재확인 뒤 남은 잠금에서 오래 기다리는 경우). 강등 응답
 /// 뒤 연결이 닫히기까지 걸린 시간(측정값)을 돌려준다.
 async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> Duration {
     let (writer, (_state, app, _addr, admin, from, to, id, mut e, r)) =
-        live_move_race_setup_rechecking(label, "1").await;
+        live_move_race_setup_rechecking(label, &short_recheck_secs()).await;
     assert!(
         e.until(acked).await,
         "the edit before the wait was never acknowledged"
@@ -4239,27 +5475,27 @@ async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> 
     owner.close().await;
     r.close().await;
     eprintln!(
-        "MEASURED {label}: demotion response -> 4403 close {close_after:?} (recheck interval 1s)"
+        "MEASURED {label}: demotion response -> 4403 close {close_after:?} (recheck interval {SHORT_RECHECK:?})"
     );
     close_after
 }
 
 /// W1b(coordinator 판단 B): 이동 트랜잭션이 잠금을 기다리는 동안에도 방은 재확인 간격마다 세션·옛 자리 권한을 다시 본다.
 /// 전에는 기다리는 동안 재확인이 멈춰, 간격이 지나도 강등된 작성자의 편집을 옛 권한으로 받아 옮긴 문서에 넣었다(창이 잠금
-/// 대기 전체로 늘어남). 이제 다음 재확인(간격 1초)에서 그 연결을 4403으로 닫고, 그 뒤 편집은 들어가지 않는다. 강등 전에
+/// 대기 전체로 늘어남). 이제 다음 재확인(간격 `SHORT_RECHECK`)에서 그 연결을 4403으로 닫고, 그 뒤 편집은 들어가지 않는다. 강등 전에
 /// 확인받은 편집은 옮긴 문서에 남는다.
 #[tokio::test]
 async fn an_editor_demoted_while_a_move_waits_is_closed_at_the_next_recheck() {
     let took = demote_while_a_rechecking_move_waits("대기 중 재확인 강등", false).await;
-    // 간격(1초) + 재확인 한 번(연결마다 짧은 읽기 둘)과 시험 쪽 지연의 여유.
-    assert!(took < Duration::from_secs(4), "{took:?}");
+    // 간격 T + 재확인 한 번(연결마다 짧은 읽기 둘)과 시험 쪽 지연의 여유.
+    assert!(took < SHORT_RECHECK + Duration::from_secs(3), "{took:?}");
 }
 
 /// W1b(추가 지시 2-1b·c): 이동이 마지막 재확인 뒤 남은 잠금(문서 행)에서 오래 기다려도 재확인은 계속 돈다.
 #[tokio::test]
 async fn an_editor_demoted_while_a_move_waits_on_a_later_lock_is_closed_at_the_next_recheck() {
     let took = demote_while_a_rechecking_move_waits("남은 잠금 대기 중 강등", true).await;
-    assert!(took < Duration::from_secs(4), "{took:?}");
+    assert!(took < SHORT_RECHECK + Duration::from_secs(3), "{took:?}");
 }
 
 /// W1b(사용자 요구 2b·2c, 방 안 이동): 같은 것을 워크스페이스에서 내보내기로. 내보내면 이동의 접근 변화가 사용자가 확인한

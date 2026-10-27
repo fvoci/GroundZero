@@ -105,7 +105,8 @@ pub struct FileView {
     pub updated_at: OffsetDateTime,
     /// 새 버전·이름 바꾸기·지우기를 할 수 있는지.
     pub can_write: bool,
-    /// 내려받을 수 있는지(D-20: 문서 첨부는 고칠 수 있는 사람, 또는 소유자가 복제·다운로드를 허용한 문서).
+    /// 내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의
+    /// `allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.
     /// 아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
     pub can_download: bool,
 }
@@ -664,13 +665,7 @@ pub async fn document_files(
     Path(doc): Path<DocumentId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: String = sqlx::query_scalar("SELECT app_access('document', $1)")
-        .bind(doc)
-        .fetch_one(tx.conn())
-        .await?;
-    if visible == "none" {
-        return Err(AppError::NotFound);
-    }
+    crate::access::require_visible(&mut tx, crate::access::Kind::Document, doc).await?;
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
         "{FILE_SELECT} WHERE f.document_id = $1 AND f.deleted_at IS NULL ORDER BY f.name, f.id"
     ))
@@ -691,13 +686,7 @@ pub async fn item_files(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let visible: String = sqlx::query_scalar("SELECT app_access('item', $1)")
-        .bind(item)
-        .fetch_one(tx.conn())
-        .await?;
-    if visible == "none" {
-        return Err(AppError::NotFound);
-    }
+    crate::access::require_visible(&mut tx, crate::access::Kind::Item, item).await?;
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
         "{FILE_SELECT} WHERE f.item_id = $1 AND f.deleted_at IS NULL ORDER BY f.name, f.id"
     ))

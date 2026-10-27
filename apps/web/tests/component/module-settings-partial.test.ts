@@ -17,11 +17,13 @@ const workspace: Workspace = {
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
 
 const before: Module = {
+  access: 'owner',
   id: 'A',
   workspace_id: 'ws-1',
   kind: 'project',

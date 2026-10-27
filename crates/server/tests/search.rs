@@ -77,7 +77,10 @@ async fn search(app: &Router, user: &TestUser, q: &str) -> Value {
     let r = send(
         app,
         Method::GET,
-        &format!("/api/search?q={q}"),
+        &format!(
+            "/api/search?q={q}&organization_id={}",
+            common::organization_for(user).await
+        ),
         Some(user),
         None,
     )
@@ -260,7 +263,10 @@ async fn search_returns_only_what_each_person_can_see() {
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&workspace_id={other_ws}"),
+        &format!(
+            "/api/search?q={tok}&workspace_id={other_ws}&organization_id={}",
+            common::organization_for(&writer).await
+        ),
         Some(&writer),
         None,
     )
@@ -269,7 +275,10 @@ async fn search_returns_only_what_each_person_can_see() {
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&kinds=nope"),
+        &format!(
+            "/api/search?q={tok}&kinds=nope&organization_id={}",
+            common::organization_for(&writer).await
+        ),
         Some(&writer),
         None,
     )
@@ -278,7 +287,10 @@ async fn search_returns_only_what_each_person_can_see() {
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&kinds=task"),
+        &format!(
+            "/api/search?q={tok}&kinds=task&organization_id={}",
+            common::organization_for(&admin).await
+        ),
         Some(&admin),
         None,
     )
@@ -674,7 +686,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     // 업무를 고친 내용(상태·담당·기한)이 색인에 반영될 때까지 기다린다(제목만으로는 알 수 없다).
     let report = format!("{tok} 보고서");
     for filter in [
-        "status=%EC%99%84%EB%A3%8C",
+        "status_category=done",
         "assignee=me",
         "from=2026-11-01&to=2026-11-30",
     ] {
@@ -688,21 +700,31 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         .await,
         [format!("{tok} 기획"), format!("{tok} 보고서")]
     );
-    // 상태는 항목별 정의의 이름이다(D-116): 모르는 이름은 400이 아니라 빈 결과다.
+    // 상태 필터는 범주만 본다(D-116): 세 낱말 밖은 400, 다른 범주는 빈 결과다(이름이 바뀐 상태도 범주로 찾는다).
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&status=late"),
+        &format!(
+            "/api/search?q={tok}&status_category=late&organization_id={}",
+            common::organization_for(&admin).await
+        ),
         Some(&admin),
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    assert!(found(format!("{tok}&status=late")).await.is_empty());
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+    assert!(
+        found(format!("{tok}&status_category=doing"))
+            .await
+            .is_empty()
+    );
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&from=2026/11/01"),
+        &format!(
+            "/api/search?q={tok}&from=2026/11/01&organization_id={}",
+            common::organization_for(&admin).await
+        ),
         Some(&admin),
         None,
     )
@@ -747,14 +769,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
     let plain_app = common::app(&plain);
     assert_eq!(
-        titles(
-            &search(
-                &plain_app,
-                &admin,
-                &format!("{tok}&status=%EC%99%84%EB%A3%8C")
-            )
-            .await
-        ),
+        titles(&search(&plain_app, &admin, &format!("{tok}&status_category=done")).await),
         [format!("{tok} 보고서")]
     );
     assert_eq!(
@@ -851,7 +866,10 @@ async fn author_and_title_only_narrow_results_without_widening_access() {
     let r = send(
         &app,
         Method::GET,
-        &format!("/api/search?q={tok}&author=someone"),
+        &format!(
+            "/api/search?q={tok}&author=someone&organization_id={}",
+            common::organization_for(&admin).await
+        ),
         Some(&admin),
         None,
     )
@@ -1721,7 +1739,10 @@ async fn search_dates_use_the_viewers_day_boundaries() {
             let r = send(
                 router,
                 Method::GET,
-                &format!("/api/search?q={tok}&from=2026-10-21&tz={tz}"),
+                &format!(
+                    "/api/search?q={tok}&from=2026-10-21&tz={tz}&organization_id={}",
+                    common::organization_for(&admin).await
+                ),
                 Some(&admin),
                 None,
             )
@@ -1739,7 +1760,10 @@ async fn search_dates_use_the_viewers_day_boundaries() {
         let r = send(
             router,
             Method::GET,
-            &format!("/api/search?q={tok}&to=9999-12-31&tz=UTC"),
+            &format!(
+                "/api/search?q={tok}&to=9999-12-31&tz=UTC&organization_id={}",
+                common::organization_for(&admin).await
+            ),
             Some(&admin),
             None,
         )

@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
+use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
@@ -32,6 +32,9 @@ const MAX_TAGS: usize = 20;
 const MAX_TAG_CHARS: usize = 50;
 /// 체크리스트 한 번에 덧붙일 수 있는 항목 수.
 const MAX_CHECKLIST_BATCH: usize = 200;
+
+/// 업무 쓰기의 기대 사용자 머리 계약(OpenAPI).
+pub(crate) const EXPECTED_TASK_USER_DOC: &str = "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다";
 
 /// 상태 이름은 앞뒤 공백을 제거하고 1..50자로 제한한다.
 pub(crate) fn validate_status(raw: &str) -> Result<String, AppError> {
@@ -280,6 +283,16 @@ pub struct UpdateChecklistItem {
 pub struct TaskConflict {
     pub error: &'static str,
     pub current: TaskDetail,
+}
+
+/// 업무 쓰기의 409 본문: 최신 업무를 포함한 충돌 또는 계정 변경 등 일반 오류.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum TaskWriteConflict {
+    /// 업무·이동·반복 규칙의 기준이 오래됨.
+    Stale(Box<TaskConflict>),
+    /// 기대 사용자가 다르거나 현재 상태에서 쓰기를 할 수 없음.
+    State(ErrorBody),
 }
 
 pub(crate) fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>, AppError> {
@@ -551,8 +564,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                 version,
                 move_version,
                 completed_at,
-                access: Access::parse(&access)
-                    .ok_or_else(|| AppError::Config(format!("unknown access {access}")))?,
+                access: Access::parse_present(&access)?,
                 updated_at,
             })
         })
@@ -661,12 +673,13 @@ pub async fn get(
 /// 업무 만들기(항목 쓰기 권한). 모든 칸을 한 트랜잭션에서 확인·저장한다(D-105). 같은 `request_id`는 같은 업무를 돌려주고,
 /// 그 업무를 지웠으면(휴지통) 409 `task_deleted`(항목을 볼 수 없으면 404).
 #[utoipa::path(post, path = "/api/items/{item_id}/tasks", operation_id = "create_task",
-    params(("item_id" = String, Path, format = Uuid)), request_body = CreateTask,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = CreateTask,
     responses((status = 201, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; task_deleted: 같은 요청으로 만든 업무가 휴지통에 있음; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn create(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
     Json(input): Json<CreateTask>,
 ) -> Result<(StatusCode, Json<TaskDetail>), AppError> {
@@ -717,12 +730,13 @@ pub async fn create(
 
 /// 업무 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본(입력은 클라이언트가 보존).
 #[utoipa::path(put, path = "/api/tasks/{task_id}", operation_id = "update_task",
-    params(("task_id" = String, Path, format = Uuid)), request_body = UpdateTask,
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = UpdateTask,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskConflict)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "conflict·shift_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn update(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTask>,
 ) -> Result<Response, AppError> {
@@ -829,12 +843,13 @@ pub async fn update(
 /// 트랜잭션에서 이동 판을 비교하고, 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고 409 `move_conflict`와 지금
 /// 업무를 돌려준다(D-89).
 #[utoipa::path(put, path = "/api/tasks/{task_id}/position",
-    params(("task_id" = String, Path, format = Uuid)), request_body = MoveTask,
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = MoveTask,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskConflict)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "move_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn move_task(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<MoveTask>,
 ) -> Result<Response, AppError> {
@@ -876,12 +891,13 @@ pub async fn move_task(
 
 /// 상위 업무 바꾸기(같은 항목, 한 단계).
 #[utoipa::path(put, path = "/api/tasks/{task_id}/parent", operation_id = "set_task_parent",
-    params(("task_id" = String, Path, format = Uuid)), request_body = SetTaskParent,
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = SetTaskParent,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn set_parent(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetTaskParent>,
 ) -> Result<Json<TaskDetail>, AppError> {
@@ -900,12 +916,13 @@ pub async fn set_parent(
 
 /// 체크리스트 덧붙이기(쓰기 권한). 항목별 `request_id`로 재시도해도 중복되지 않는다.
 #[utoipa::path(post, path = "/api/tasks/{task_id}/checklist",
-    params(("task_id" = String, Path, format = Uuid)), request_body = AddChecklist,
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = AddChecklist,
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn add_checklist(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<AddChecklist>,
 ) -> Result<Json<TaskDetail>, AppError> {
@@ -939,12 +956,13 @@ pub async fn add_checklist(
 /// 체크리스트 항목 고치기(쓰기 권한). 버전 없이 바로 반영하되 보낸 칸만 바꾼다: 문구만 고치면 그 사이 다른 사람이 바꾼
 /// 완료 상태를, 완료만 바꾸면 고친 문구를 되돌리지 않는다.
 #[utoipa::path(put, path = "/api/checklist-items/{item_id}",
-    params(("item_id" = String, Path, format = Uuid)), request_body = UpdateChecklistItem,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = UpdateChecklistItem,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "tasks")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn update_checklist_item(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateChecklistItem>,
 ) -> Result<StatusCode, AppError> {
@@ -970,11 +988,13 @@ pub async fn update_checklist_item(
 
 /// 체크리스트 항목 지우기(쓰기 권한).
 #[utoipa::path(delete, path = "/api/checklist-items/{item_id}",
-    params(("item_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "tasks")]
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn delete_checklist_item(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;

@@ -21,11 +21,12 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::collab::room::MoveRequest;
+use crate::collab::visibility::CommittedMove;
 use crate::config::Limits;
 use crate::db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
-use crate::features::workspaces::{member_role, validate_title};
+use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::http::cache;
 use crate::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
@@ -33,43 +34,28 @@ use crate::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
 
-/// 문서에 대한 현재 사용자의 권한.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Access {
-    /// 개인 노트 소유자 또는 워크스페이스 관리자. 설정·공유·이동을 할 수 있다.
-    Owner,
-    Write,
-    Read,
-}
-
-impl Access {
-    pub(crate) fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "owner" => Some(Self::Owner),
-            "write" => Some(Self::Write),
-            "read" => Some(Self::Read),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn can_write(self) -> bool {
-        matches!(self, Self::Owner | Self::Write)
-    }
-}
+/// 문서에 대한 현재 사용자의 등급. 모든 대상의 등급 타입은 하나다(`crate::access::Grade`, D-113).
+pub use crate::access::Grade as Access;
 
 /// 현재 사용자의 권한. 볼 수 없으면 `None`.
 pub async fn access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    let raw: String = sqlx::query_scalar("SELECT app_access('document', $1)")
+    crate::access::grade(tx, crate::access::Kind::Document, id).await
+}
+
+/// 관리 목록은 SQL의 관리 판단(현재 등급 + 보관 중 관리자 예외)을 따른다.
+/// 관리 허용이 내용 쓰기 등급을 높이지는 않는다.
+pub async fn require_manager(tx: &mut UserTx, id: DocumentId) -> Result<(), AppError> {
+    let can_manage: bool = sqlx::query_scalar("SELECT app_document_can_manage($1)")
         .bind(id)
         .fetch_one(tx.conn())
         .await?;
-    Ok(Access::parse(&raw))
-}
-
-/// 공유·공개 링크 관리도 현재 문서 접근 등급을 따른다.
-pub async fn manager_access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    access(tx, id).await
+    if can_manage {
+        return Ok(());
+    }
+    match access(tx, id).await? {
+        None => Err(AppError::NotFound),
+        Some(_) => Err(AppError::Forbidden),
+    }
 }
 
 /// 문서 목록 항목.
@@ -116,8 +102,8 @@ pub struct Document {
     pub visibility: String,
     /// 소유 권한자 외의 사람이 복제할 수 있는지 (D-20).
     pub allow_copy: bool,
-    /// 공유 철회·공개 링크 철회·비공개 전환처럼 노출을 줄이는 관리를 할 수 있는지.
-    /// 보관된 항목 아래 문서는 `access`가 `read`여도 소유 권한자는 이 값이 참이다.
+    /// 공유·공개 링크·설정을 관리할 수 있는지.
+    /// 보관된 항목 아래 문서는 `access`가 `read`여도 워크스페이스 관리자·소유자는 참이다.
     pub can_manage: bool,
     /// 휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서).
     pub can_delete: bool,
@@ -125,7 +111,8 @@ pub struct Document {
     pub is_template: bool,
     /// 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다.
     pub realtime: bool,
-    /// 이 사람이 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙: 고칠 수 있거나, 볼 수 있고 복제·내려받기 허용.
+    /// 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
+    /// 문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
     pub can_export: bool,
 }
 
@@ -180,9 +167,9 @@ pub enum SaveConflict {
 /// 기대 사용자 머리의 계약 설명(OpenAPI).
 pub(crate) const EXPECTED_USER_DOC: &str = "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 \
     아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 \
-    아무것도 허용하지 않는다. 적용 범위는 사용자 초안을 들고 자동 저장·재시도하거나 그 초안을 보존하는 쓰기(`PUT /api/documents/{document_id}`, \
-    `POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함)과 실시간 편집 연결(같은 값을 질의 `expected_user`로, 다르면 닫기 코드 4412)이고 다른 경로는 \
-    이 값을 읽지 않는다";
+    아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), \
+    업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. \
+    실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다";
 
 pub(crate) fn empty_body() -> Value {
     serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
@@ -394,7 +381,7 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     CASE WHEN app_access('item', item_id) <> 'none' THEN item_id END AS item_id, \
     CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id, placement, \
     app_document_reference(id) AS reference, title, body, schema_version, revision, updated_at, \
-    visibility, allow_copy, coalesce(app_access('document', id) = 'owner', false) AS can_manage, \
+    visibility, allow_copy, app_document_can_manage(id) AS can_manage, \
     coalesce(app_access('document', id) = 'owner' \
       OR (app_access('document', id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
     is_template, app_document_realtime(id) AS realtime, app_document_can_export(id) AS can_export";
@@ -504,7 +491,7 @@ pub async fn list_wiki(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
         "SELECT {SUMMARY_COLUMNS} FROM documents
          WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY {TREE_ORDER}"
@@ -648,17 +635,20 @@ pub struct SharedDocument {
     pub updated_at: OffsetDateTime,
 }
 
-/// 나에게 공유된 문서(검증된 이메일 기준).
-#[utoipa::path(get, path = "/api/me/shared",
-    responses((status = 200, body = [SharedDocument]), (status = 401, body = ErrorBody)), tag = "documents")]
+/// 나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만.
+#[utoipa::path(get, path = "/api/me/shared", operation_id = "shared_with_me",
+    params(("organization_id" = OrganizationId, Query)),
+    responses((status = 200, body = [SharedDocument]), (status = 400, body = ErrorBody),
+              (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn shared_with_me(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    scope: crate::features::organizations::OrgScope,
 ) -> Result<Json<Vec<SharedDocument>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
+    let mut tx = state.db.begin_as(scope.user).await?;
     let rows: Vec<(DocumentId, String, String, String, OffsetDateTime)> = sqlx::query_as(
-        "SELECT id, title, permission, shared_by, updated_at FROM app_shared_with_me()",
+        "SELECT id, title, permission, shared_by, updated_at FROM app_shared_with_me($1)",
     )
+    .bind(scope.organization)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
@@ -1082,11 +1072,7 @@ pub async fn list_shares(
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<Share>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    match manager_access(&mut tx, id).await? {
-        None => return Err(AppError::NotFound),
-        Some(Access::Owner) => {}
-        Some(_) => return Err(AppError::Forbidden),
-    }
+    require_manager(&mut tx, id).await?;
     let rows: Vec<Share> = sqlx::query_as(
         "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission FROM document_shares s
          JOIN users u ON u.id = s.grantee_user_id WHERE s.document_id = $1 ORDER BY s.created_at",
@@ -1376,10 +1362,12 @@ pub async fn move_document(
 /// 이동 트랜잭션의 결과.
 #[derive(Debug)]
 pub enum MoveReply {
-    /// 옮겼다. `committed_at`: 커밋을 마친 때(열린 방은 이 뒤에 받은 편집을 넣지 않는다).
+    /// 옮겼다. `committed_at`은 서버가 커밋 응답을 받은 때이며, 그 뒤 받은 편집은 넣지 않는다.
     Moved {
         outcome: Box<MoveOutcome>,
         committed_at: std::time::Instant,
+        /// 정확히 이 이동이 권한 확인 snapshot에 보이는지 구분하는 커밋 증거.
+        commit: CommittedMove,
     },
     /// 확인한 미리보기가 없거나 잠근 뒤 다시 계산한 것과 달라 옮기지 않았다(새 미리보기).
     Changed(MovePreview),
@@ -1478,6 +1466,12 @@ pub(crate) async fn move_in_db(
             .await
             .map_err(move_lock_error)?;
     let document = visible_document(&mut tx, id).await?;
+    let xid: String = sqlx::query_scalar("SELECT pg_current_xact_id()::text")
+        .fetch_one(tx.conn())
+        .await?;
+    let xid = xid
+        .parse::<u64>()
+        .map_err(|err| AppError::Database(sqlx::Error::Decode(Box::new(err))))?;
     tx.commit().await?;
     Ok(MoveReply::Moved {
         outcome: Box::new(MoveOutcome {
@@ -1486,6 +1480,7 @@ pub(crate) async fn move_in_db(
             document,
         }),
         committed_at: std::time::Instant::now(),
+        commit: CommittedMove::new(xid),
     })
 }
 
@@ -1542,7 +1537,7 @@ pub async fn templates(
 ) -> Result<Json<Vec<DocumentTemplate>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     if let Some(ws) = query.workspace_id {
-        member_role(&mut tx, ws).await?;
+        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     }
     let rows: Vec<(DocumentId, String, Option<String>, bool)> = sqlx::query_as(
         "SELECT id, title, app_document_reference(id), owner_user_id IS NOT NULL FROM documents
@@ -1675,14 +1670,6 @@ mod tests {
             validate_body(&three, &l).is_err(),
             "limit is 2 in this test"
         );
-    }
-
-    #[test]
-    fn access_parsing() {
-        assert_eq!(Access::parse("owner"), Some(Access::Owner));
-        assert!(Access::Write.can_write());
-        assert!(!Access::Read.can_write());
-        assert_eq!(Access::parse("other"), None);
     }
 
     #[test]

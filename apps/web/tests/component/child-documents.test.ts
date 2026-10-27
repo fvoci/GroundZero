@@ -42,6 +42,7 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     name: '모듈 예제',
     role: 'member',
+    access: 'write',
     is_owner: false,
     realtime_enabled: false,
   },

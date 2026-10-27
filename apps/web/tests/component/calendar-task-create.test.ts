@@ -16,6 +16,7 @@ const workspace: Workspace = {
   organization_id: 'org-1',
   name: '공간',
   role: 'member',
+  access: 'write',
   is_owner: false,
   realtime_enabled: false,
 };
@@ -80,6 +81,7 @@ function created(version = 1, due: string | null = null): TaskDetailView {
   };
 }
 const module: Module = {
+  access: 'owner',
   id: 'm1',
   workspace_id: 'ws-1',
   kind: 'project',

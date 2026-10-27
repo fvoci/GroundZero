@@ -93,12 +93,13 @@ async fn invitation_requires_the_verified_invited_email() {
     );
 
     let list = send(&app, Method::GET, "/api/workspaces", Some(&bob), None).await;
+    // 역할은 표시용이고 쓰기 여부는 접근 등급으로 나간다(D-113): 멤버는 write.
     assert!(
         list.json
             .as_array()
             .unwrap()
             .iter()
-            .any(|w| w["id"] == ws.as_str() && w["role"] == "member")
+            .any(|w| w["id"] == ws.as_str() && w["role"] == "member" && w["access"] == "write")
     );
     // 작성자는 문서를 만들 수 있다.
     create_doc(&app, &bob, &ws, "밥의 문서").await;
@@ -249,6 +250,9 @@ async fn roles_are_enforced_and_only_admins_manage_members() {
     assert!(email_of(&as_admin.json).is_string());
     assert!(email_of(&as_reader.json).is_null());
     assert_eq!(as_reader.json["my_role"], "readonly");
+    // 관리 가능 여부는 접근 등급(owner)에서 온다(D-113). 웹은 역할이 아니라 이 칸을 본다.
+    assert_eq!(as_admin.json["can_manage_members"], true);
+    assert_eq!(as_reader.json["can_manage_members"], false);
 }
 
 #[tokio::test]

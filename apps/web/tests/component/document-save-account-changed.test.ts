@@ -21,6 +21,14 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+// `/api/me` 계약의 서버 입력 한도(#79): 필수 칸이라 계정 응답 mock에도 넣는다(서버 기본값).
+const limits = {
+  max_title_chars: 200,
+  max_document_bytes: 2_000_000,
+  max_references_per_document: 500,
+  max_document_depth: 10,
+};
+
 const doc: DocumentView = {
   id: 'doc-1',
   workspace_id: 'ws-1',
@@ -59,7 +67,7 @@ let failFirst = false;
 function stubServer(): void {
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     if (input === '/api/me') {
-      return Promise.resolve(json(200, { id: 'u1', display_name: '나', email: null }));
+      return Promise.resolve(json(200, { id: 'u1', display_name: '나', email: null, limits }));
     }
     if (input === '/api/documents/doc-1' && init?.method === 'PUT') {
       const headers = new Headers(init.headers);

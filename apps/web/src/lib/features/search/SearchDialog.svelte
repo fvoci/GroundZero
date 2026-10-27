@@ -4,10 +4,9 @@
 
   import type { Module } from '@fvoci/api-client';
 
-  import type { SearchFilters, SearchKind, SearchResultView, TaskStatus } from '$lib/api/client';
+  import type { SearchFilters, SearchKind, SearchResultView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { displaySettings } from '$lib/display';
-  import { STATUS_LABEL } from '$lib/features/tasks/labels';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -29,8 +28,6 @@
     workspace?: { id: string; name: string } | undefined;
   } = $props();
 
-  const TASK_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'done'];
-
   let query = $state('');
   let results = $state<SearchResultView[]>([]);
   let status = $state<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -39,7 +36,15 @@
 
   // 필터(D-39). 상태·내 담당을 고르면 업무만 나온다.
   let kind = $state<SearchKind | 'all'>('all');
-  let taskStatus = $state<TaskStatus | 'any'>('any');
+  // 상태 필터는 항목별 상태 이름이 아니라 범주(todo·doing·done)다(D-116).
+  const CATEGORIES = ['todo', 'doing', 'done'] as const;
+  type Category = (typeof CATEGORIES)[number];
+  const categoryLabel: Record<Category, () => string> = {
+    todo: () => m.tasks_category_todo(),
+    doing: () => m.tasks_category_doing(),
+    done: () => m.tasks_category_done(),
+  };
+  let taskStatus = $state<Category | 'any'>('any');
   let mine = $state(false);
   let from = $state('');
   let to = $state('');
@@ -140,7 +145,7 @@
     const f: SearchFilters = {};
     if (taskOnly) f.kind = 'task';
     else if (kind !== 'all') f.kind = kind;
-    if (taskStatus !== 'any') f.status = taskStatus;
+    if (taskStatus !== 'any') f.statusCategory = taskStatus;
     if (mine) f.assignee = 'me';
     if (from !== '') f.from = from;
     if (to !== '') f.to = to;
@@ -280,17 +285,17 @@
           type="single"
           value={taskStatus}
           onValueChange={(v: string) => {
-            taskStatus = TASK_STATUSES.find((s) => s === v) ?? 'any';
+            taskStatus = CATEGORIES.find((s) => s === v) ?? 'any';
             refilter();
           }}
         >
           <Select.Trigger class="w-24" aria-labelledby="search-status-label"
-            >{taskStatus === 'any' ? m.search_all() : STATUS_LABEL[taskStatus]}</Select.Trigger
+            >{taskStatus === 'any' ? m.search_all() : categoryLabel[taskStatus]()}</Select.Trigger
           >
           <Select.Content>
             <Select.Item value="any" label={m.search_all()}>{m.search_all()}</Select.Item>
-            {#each TASK_STATUSES as s (s)}
-              <Select.Item value={s} label={STATUS_LABEL[s]}>{STATUS_LABEL[s]}</Select.Item>
+            {#each CATEGORIES as s (s)}
+              <Select.Item value={s} label={categoryLabel[s]()}>{categoryLabel[s]()}</Select.Item>
             {/each}
           </Select.Content>
         </Select.Root>

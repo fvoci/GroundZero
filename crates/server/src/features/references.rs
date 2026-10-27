@@ -7,9 +7,7 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -18,12 +16,10 @@ use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::access;
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, OrganizationId, WorkspaceId};
+use crate::ids::{DocumentId, ItemId, WorkspaceId};
 
 /// 종류별 후보 수 상한.
 const CANDIDATES_PER_KIND: i64 = 8;
-/// 알림 목록 상한.
-const NOTIFICATION_PAGE: i32 = 100;
 
 /// 참조 대상 종류.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
@@ -124,53 +120,6 @@ pub struct Backlink {
     pub item_id: Option<ItemId>,
 }
 
-/// 알림. invite는 초대 ID만 있고 대상 제목·참조는 없다.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Notification {
-    pub organization_id: Option<OrganizationId>,
-    #[schema(value_type = Option<String>, format = Uuid)]
-    pub invitation_id: Option<Uuid>,
-    #[schema(value_type = String, format = Uuid)]
-    pub id: Uuid,
-    /// `mention`(문서에서 언급)·`comment`(내 문서·업무에 댓글)·`reply`(참여한 스레드에 답글)·`due`(업무 기한: 내일·오늘)·
-    /// `expiry`(강좌 수강권 만료·목표 완료일)·`review`(복습일)·`deadline`(투고 제출·수정 마감, 산출물 마감).
-    pub kind: String,
-    /// 대상 문서(문서 알림).
-    pub document_id: Option<DocumentId>,
-    /// 대상 업무(업무 알림).
-    #[schema(value_type = Option<String>, format = Uuid)]
-    pub task_id: Option<Uuid>,
-    /// 대상 제목(문서 또는 업무).
-    pub document_title: Option<String>,
-    /// 대상 번호(문서 또는 업무).
-    pub document_reference: Option<String>,
-    pub workspace_id: Option<WorkspaceId>,
-    pub item_id: Option<ItemId>,
-    /// 댓글·답글이면 그 댓글.
-    #[schema(value_type = Option<String>, format = Uuid)]
-    pub comment_id: Option<Uuid>,
-    /// 댓글 첫 부분(최대 140자).
-    pub excerpt: Option<String>,
-    /// 기한·만료·복습·마감 알림의 날짜(YYYY-MM-DD).
-    pub due_date: Option<String>,
-    /// 항목 알림의 대상 이름(기록 제목이나 강좌 이름).
-    pub subject: Option<String>,
-    /// 한 사람. 워크스페이스를 함께 쓰지 않거나(공유받은 개인 노트 등) 자동 알림(기한)이면 없다.
-    pub actor_name: Option<String>,
-    #[serde(with = "time::serde::rfc3339")]
-    #[schema(value_type = String, format = DateTime)]
-    pub created_at: OffsetDateTime,
-    pub read: bool,
-}
-
-/// 읽음 표시 요청. `id`가 없으면 모두 읽음.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct MarkRead {
-    pub organization_id: Option<OrganizationId>,
-    #[schema(value_type = Option<String>, format = Uuid)]
-    pub id: Option<Uuid>,
-}
-
 /// LIKE 패턴 이스케이프(`\`, `%`, `_`).
 fn like_pattern(q: &str) -> String {
     let mut out = String::with_capacity(q.len() + 2);
@@ -230,7 +179,7 @@ async fn search_scope(
     ws: Option<WorkspaceId>,
 ) -> Result<Vec<WorkspaceId>, AppError> {
     if let Some(ws) = ws {
-        crate::features::workspaces::member_role(tx, ws).await?;
+        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
         return Ok(vec![ws]);
     }
     let ids: Vec<WorkspaceId> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
@@ -575,136 +524,6 @@ pub async fn item_backlinks(
     let links = backlinks_to(&mut tx, "item", id.0).await?;
     tx.commit().await?;
     Ok(Json(links))
-}
-
-type NotificationRow = (
-    Uuid,
-    Option<OrganizationId>,
-    Option<Uuid>,
-    String,
-    Option<DocumentId>,
-    Option<Uuid>,
-    Option<Uuid>,
-    Option<String>,
-    serde_json::Value,
-    OffsetDateTime,
-    Option<OffsetDateTime>,
-    Option<String>,
-    Option<String>,
-    Option<WorkspaceId>,
-    Option<ItemId>,
-);
-
-/// 알림 범위와 페이지 커서.
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct NotificationQuery {
-    pub organization: Option<OrganizationId>,
-    pub limit: Option<i32>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
-    #[param(value_type = Option<String>, format = DateTime)]
-    pub before: Option<OffsetDateTime>,
-    pub before_id: Option<Uuid>,
-}
-
-/// 내 알림(최근 순). 대상을 볼 수 없게 되면 나오지 않는다.
-#[utoipa::path(get, path = "/api/me/notifications", params(NotificationQuery),
-    responses((status = 200, body = [Notification]), (status = 401, body = ErrorBody)), tag = "references")]
-pub async fn notifications(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Query(query): Query<NotificationQuery>,
-) -> Result<Json<Vec<Notification>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let rows: Vec<NotificationRow> = sqlx::query_as(
-        "SELECT n.id, n.organization_id, n.invitation_id, n.kind, n.document_id, n.task_id, n.comment_id, n.actor_name, n.detail, n.created_at, n.read_at,
-                coalesce(d.title, t.title, i.title),
-                CASE WHEN d.id IS NOT NULL THEN app_document_reference(d.id)
-                     WHEN t.id IS NOT NULL THEN app_task_reference(t.id)
-                     ELSE app_item_reference(i.id) END,
-                coalesce(d.workspace_id, t.workspace_id, i.workspace_id),
-                CASE WHEN app_access('item', coalesce(d.item_id, t.item_id, i.id)) <> 'none'
-                     THEN coalesce(d.item_id, t.item_id, i.id) END
-         FROM app_my_notifications($1, $2, $3, $4) n
-         LEFT JOIN documents d ON d.id = n.document_id
-         LEFT JOIN tasks t ON t.id = n.task_id
-         LEFT JOIN items i ON i.id = n.item_id
-         ORDER BY n.created_at DESC, n.id DESC",
-    )
-    .bind(query.organization)
-    .bind(query.limit.unwrap_or(NOTIFICATION_PAGE).clamp(1, NOTIFICATION_PAGE))
-    .bind(query.before)
-    .bind(query.before_id)
-    .fetch_all(tx.conn())
-    .await?;
-    tx.commit().await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(
-                |(
-                    id,
-                    organization_id,
-                    invitation_id,
-                    kind,
-                    document_id,
-                    task_id,
-                    comment_id,
-                    actor_name,
-                    detail,
-                    created_at,
-                    read_at,
-                    title,
-                    reference,
-                    workspace_id,
-                    item_id,
-                )| Notification {
-                    id,
-                    organization_id,
-                    invitation_id,
-                    kind,
-                    document_id,
-                    task_id,
-                    document_title: title,
-                    document_reference: reference,
-                    workspace_id,
-                    item_id,
-                    comment_id,
-                    excerpt: detail
-                        .get("excerpt")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned),
-                    due_date: detail
-                        .get("due_date")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned),
-                    subject: detail
-                        .get("subject")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned),
-                    actor_name,
-                    created_at,
-                    read: read_at.is_some(),
-                },
-            )
-            .collect(),
-    ))
-}
-
-/// 알림 읽음 표시. 내 알림만 바뀐다.
-#[utoipa::path(post, path = "/api/me/notifications/read", request_body = MarkRead,
-    responses((status = 204), (status = 401, body = ErrorBody)), tag = "references")]
-pub async fn mark_read(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Json(input): Json<MarkRead>,
-) -> Result<StatusCode, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_mark_notifications_read($1, $2)")
-        .bind(input.id)
-        .bind(input.organization_id)
-        .execute(tx.conn())
-        .await?;
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// 공개 보기용: 참조 노드를 자리표시 글자 노드로 바꾼다(내부 id와 대상 존재를 익명 방문자에게 숨긴다).

@@ -1,6 +1,6 @@
 //! 통합 검색 API (D-39). 문서·업무·항목·일정을 한 번에 찾는다. 볼 수 있는 것만 나온다.
 //!
-//! Meilisearch가 있으면 "내 워크스페이스 또는 내 개인 노트 또는 나에게 공유된 문서"로 먼저 좁혀 찾은 뒤
+//! Meilisearch가 있으면 "현재 조직의 내 워크스페이스 또는 내 개인 노트"로 먼저 좁혀 찾은 뒤
 //! PostgreSQL 접근 함수로 다시 거른다(비공개 항목·지운 것·권한이 바뀐 것 제외). 없으면 제목만 DB에서 찾는다.
 //! 색인은 백그라운드 작업이 반영하므로 바로 직전의 변경은 조금 늦게 보일 수 있다.
 
@@ -15,10 +15,9 @@ use uuid::Uuid;
 
 use crate::db::UserTx;
 use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
-use crate::features::workspaces::member_role;
+use crate::features::organizations::OrgScope;
 use crate::http::AppState;
-use crate::ids::{UserId, WorkspaceId};
+use crate::ids::{OrganizationId, UserId, WorkspaceId};
 use crate::search::{SearchClient, day_number};
 
 /// 한 번에 돌려주는 결과 수.
@@ -31,6 +30,8 @@ const MAX_PAGES: usize = 5;
 const MAX_QUERY_CHARS: usize = 200;
 
 const KINDS: &[&str] = &["document", "task", "item", "event", "file", "record"];
+/// 업무 상태 범주(D-116). 검색 필터는 상태 이름이 아니라 범주만 본다.
+const STATUS_CATEGORIES: &[&str] = &["todo", "doing", "done"];
 
 /// 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -44,8 +45,8 @@ pub struct SearchQuery {
     /// 이 모듈 안의 것만.
     #[param(value_type = Option<String>, format = Uuid)]
     pub module_id: Option<Uuid>,
-    /// 업무 상태 이름(1..50자). 주면 업무만 나온다.
-    pub status: Option<String>,
+    /// 업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400.
+    pub status_category: Option<String>,
     /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
     pub assignee: Option<String>,
     /// 날짜 범위 시작(YYYY-MM-DD). 날짜만 있는 값(업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일)은 그 날짜로,
@@ -64,8 +65,9 @@ pub struct SearchQuery {
 /// 검색 조건 중 필터.
 #[derive(Debug, Default)]
 struct Filters {
+    organization: Option<OrganizationId>,
     module: Option<Uuid>,
-    status: Option<String>,
+    status_category: Option<&'static str>,
     assignee: Option<Uuid>,
     /// 날짜만 있는 값과 비교하는 범위(끝 포함).
     from: Option<time::Date>,
@@ -92,9 +94,17 @@ fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppErr
 }
 
 fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
-    let status = match query.status.as_deref().map(str::trim) {
+    let status_category = match query.status_category.as_deref().map(str::trim) {
         None | Some("") => None,
-        Some(s) => Some(crate::features::tasks::validate_status(s)?),
+        Some(raw) => Some(
+            STATUS_CATEGORIES
+                .iter()
+                .copied()
+                .find(|c| *c == raw)
+                .ok_or_else(|| {
+                    AppError::BadRequest("status_category must be todo, doing or done".to_owned())
+                })?,
+        ),
     };
     let person = |raw: Option<&str>, name: &str| -> Result<Option<Uuid>, AppError> {
         match raw.map(str::trim) {
@@ -108,8 +118,9 @@ fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
     let assignee = person(query.assignee.as_deref(), "assignee")?;
     let author = person(query.author.as_deref(), "author")?;
     Ok(Filters {
+        organization: None,
         module: query.module_id,
-        status,
+        status_category,
         assignee,
         from: parse_day(query.from.as_deref(), "from")?,
         to: parse_day(query.to.as_deref(), "to")?,
@@ -162,12 +173,9 @@ fn meili_filters(f: &Filters) -> String {
     if let Some(m) = f.module {
         out.push_str(&format!(" AND module_id = \"{m}\""));
     }
-    if let Some(s) = &f.status {
-        // 사용자 정의 이름의 따옴표·역슬래시가 필터 식을 바꾸지 않게 문자열로 인코딩한다.
-        out.push_str(&format!(
-            " AND status = {}",
-            serde_json::Value::String(s.clone())
-        ));
+    if let Some(c) = f.status_category {
+        // 범주는 고정 낱말 셋 가운데 하나다(D-116). 상태 이름으로는 거르지 않는다.
+        out.push_str(&format!(" AND status_category = \"{c}\""));
     }
     if let Some(a) = f.assignee {
         out.push_str(&format!(" AND assignee_ids = \"{a}\""));
@@ -241,35 +249,22 @@ async fn scope_filter(
     tx: &mut UserTx,
     workspace: Option<WorkspaceId>,
     kinds: &[&str],
+    organization: OrganizationId,
 ) -> Result<String, AppError> {
     let kind_filter = format!("kind IN {}", quote(kinds.iter().map(|k| (*k).to_owned())));
     if let Some(ws) = workspace {
-        member_role(tx, ws).await?;
+        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
         return Ok(format!("({kind_filter}) AND workspace_id = \"{}\"", ws.0));
     }
-    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
+    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids($1)")
+        .bind(organization)
         .fetch_all(tx.conn())
         .await?;
-    // 내 워크스페이스 밖에서 볼 수 있는 문서(받은 공유).
-    let shared: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT d.id FROM documents d
-         WHERE (d.workspace_id IS NULL AND d.owner_user_id IS DISTINCT FROM app_user_id())
-            OR (d.workspace_id IS NOT NULL AND d.workspace_id NOT IN (SELECT app_my_workspace_ids(NULL::uuid)))
-         LIMIT 1000",
-    )
-    .fetch_all(tx.conn())
-    .await?;
     let mut scope = vec![format!("owner_user_id = \"{}\"", tx.user().0)];
     if !workspaces.is_empty() {
         scope.push(format!(
             "workspace_id IN {}",
             quote(workspaces.iter().map(Uuid::to_string))
-        ));
-    }
-    if !shared.is_empty() {
-        scope.push(format!(
-            "(kind = \"document\" AND id IN {})",
-            quote(shared.iter().map(Uuid::to_string))
         ));
     }
     Ok(format!("({kind_filter}) AND ({})", scope.join(" OR ")))
@@ -278,13 +273,26 @@ async fn scope_filter(
 async fn visible(
     tx: &mut UserTx,
     candidates: &[(String, Uuid)],
+    organization: Option<OrganizationId>,
 ) -> Result<HashSet<(String, Uuid)>, AppError> {
     let kinds: Vec<&str> = candidates.iter().map(|(k, _)| k.as_str()).collect();
     let ids: Vec<Uuid> = candidates.iter().map(|(_, id)| *id).collect();
     let rows: Vec<(String, Uuid)> =
-        sqlx::query_as("SELECT kind, id FROM app_search_visible($1, $2)")
+        sqlx::query_as("SELECT v.kind, v.id FROM app_search_visible($1, $2) v
+             LEFT JOIN documents d ON v.kind = 'document' AND d.id = v.id
+             LEFT JOIN tasks t ON v.kind = 'task' AND t.id = v.id
+             LEFT JOIN items i ON v.kind = 'item' AND i.id = v.id
+             LEFT JOIN events e ON v.kind = 'event' AND e.id = v.id
+             LEFT JOIN files f ON v.kind = 'file' AND f.id = v.id
+             LEFT JOIN documents fd ON fd.id = f.document_id
+             LEFT JOIN item_records r ON v.kind = 'record' AND r.id = v.id
+             WHERE coalesce(d.workspace_id,t.workspace_id,i.workspace_id,e.workspace_id,f.workspace_id,r.workspace_id)
+                       IN (SELECT app_my_workspace_ids($3))
+                OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())
+                OR (f.workspace_id IS NULL AND fd.owner_user_id = app_user_id())")
             .bind(&kinds)
             .bind(&ids)
+            .bind(organization)
             .fetch_all(tx.conn())
             .await?;
     Ok(rows.into_iter().collect())
@@ -336,12 +344,12 @@ fn parse_uuid(raw: Option<&str>) -> Option<Uuid> {
 }
 
 /// 통합 검색(로그인한 사람). 볼 수 있는 것만, 최대 20건.
-#[utoipa::path(get, path = "/api/search", operation_id = "search", params(SearchQuery),
+#[utoipa::path(get, path = "/api/search", operation_id = "search", params(SearchQuery, ("organization_id" = OrganizationId, Query)),
     responses((status = 200, body = [SearchResult]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "search")]
 pub async fn search(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    OrgScope { user, organization }: OrgScope,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<SearchResult>>, AppError> {
     let q = query.q.trim();
@@ -355,8 +363,22 @@ pub async fn search(
     }
     let kinds = parse_kinds(query.kinds.as_deref())?;
     let mut wanted = filters(&query, user)?;
+    wanted.organization = Some(organization);
     let mut tx = state.db.begin_as(user).await?;
     day_bounds(&mut tx, &mut wanted, query.tz.as_deref()).await?;
+    if let Some(workspace) = query.workspace_id {
+        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, workspace).await?;
+        let in_scope: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = $1 AND organization_id = $2)",
+        )
+        .bind(workspace)
+        .bind(organization)
+        .fetch_one(tx.conn())
+        .await?;
+        if !in_scope {
+            return Err(AppError::NotFound);
+        }
+    }
     let Some(client) = &state.search else {
         let results = fallback(&mut tx, q, query.workspace_id, &kinds, &wanted).await?;
         tx.commit().await?;
@@ -364,7 +386,7 @@ pub async fn search(
     };
     let filter = format!(
         "({}){}",
-        scope_filter(&mut tx, query.workspace_id, &kinds).await?,
+        scope_filter(&mut tx, query.workspace_id, &kinds, organization).await?,
         meili_filters(&wanted)
     );
     tx.commit().await?;
@@ -424,7 +446,7 @@ async fn indexed(
             .filter_map(|h| Some((h.kind.clone(), Uuid::parse_str(&h.id).ok()?)))
             .collect();
         let mut tx = state.db.begin_as(user).await?;
-        let allowed = visible(&mut tx, &candidates).await?;
+        let allowed = visible(&mut tx, &candidates, wanted.organization).await?;
         // 항목 id·모듈은 그 항목을 볼 수 있는 사람에게만 쓴다(감사 델타 SD4). 공유로만 문서·첨부를 보는 사람에게는 항목
         // id를 주지 않고, 모듈로 거를 때는 대체(DB) 경로처럼 그 결과를 내지 않는다.
         let item_ids: Vec<Uuid> = hits
@@ -481,7 +503,7 @@ async fn fallback(
     wanted: &Filters,
 ) -> Result<Vec<SearchResult>, AppError> {
     if let Some(ws) = workspace {
-        member_role(tx, ws).await?;
+        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
     }
     let pattern = format!(
         "%{}%",
@@ -499,12 +521,12 @@ async fn fallback(
                 CASE WHEN r.item_id IS NOT NULL AND app_access('item', r.item_id) <> 'none' THEN r.item_id END
          FROM (
            SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
-                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status,
+                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status_category,
                   NULL::uuid[] AS assignees, d.updated_at AS at, NULL::date AS on_day, d.created_by
            FROM documents d WHERE d.title ILIKE $1 AND d.deleted_at IS NULL
            UNION ALL
            SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
-                  (SELECT module_id FROM items WHERE id = t.item_id), s.name,
+                  (SELECT module_id FROM items WHERE id = t.item_id), s.category,
                   ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), NULL,
                   coalesce(t.due_date, t.start_date), t.created_by
            FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.title ILIKE $1 AND t.deleted_at IS NULL
@@ -531,29 +553,34 @@ async fn fallback(
          ) r
          WHERE r.kind = ANY($2) AND ($3::uuid IS NULL OR r.workspace_id = $3)
            AND ($4::uuid IS NULL OR r.module_id = $4)
-           AND ($5::text IS NULL OR r.status = $5)
+           AND ($5::text IS NULL OR r.status_category = $5)
            AND ($6::uuid IS NULL OR $6 = ANY (r.assignees))
            AND (($7::date IS NULL AND $8::date IS NULL)
                 OR (r.at >= coalesce($9::timestamptz, '-infinity') AND r.at < coalesce($10::timestamptz, 'infinity'))
                 OR (r.on_day >= coalesce($7::date, '-infinity') AND r.on_day <= coalesce($8::date, 'infinity')))
            AND ($11::uuid IS NULL OR r.created_by = $11)
+           AND (r.workspace_id IN (SELECT app_my_workspace_ids($12))
+                OR (r.workspace_id IS NULL AND (
+                    (r.kind = 'document' AND EXISTS (SELECT 1 FROM documents d WHERE d.id = r.id AND d.owner_user_id = app_user_id()))
+                    OR (r.kind = 'file' AND EXISTS (SELECT 1 FROM files f JOIN documents d ON d.id = f.document_id WHERE f.id = r.id AND d.owner_user_id = app_user_id())))))
          ORDER BY r.updated_at DESC LIMIT 60",
     )
     .bind(&pattern)
     .bind(kinds)
     .bind(workspace)
     .bind(wanted.module)
-    .bind(wanted.status.as_deref())
+    .bind(wanted.status_category)
     .bind(wanted.assignee)
     .bind(wanted.from)
     .bind(wanted.to)
     .bind(wanted.start)
     .bind(wanted.end)
     .bind(wanted.author)
+    .bind(wanted.organization)
     .fetch_all(tx.conn())
     .await?;
     let candidates: Vec<(String, Uuid)> = rows.iter().map(|r| (r.0.clone(), r.1)).collect();
-    let allowed = visible(tx, &candidates).await?;
+    let allowed = visible(tx, &candidates, wanted.organization).await?;
     let mut results = Vec::new();
     for (kind, id, title, workspace_id, item_id) in rows {
         if results.len() == MAX_RESULTS || !allowed.contains(&(kind.clone(), id)) {
@@ -579,16 +606,31 @@ async fn fallback(
 mod tests {
     use super::*;
 
+    /// 검색 필터는 상태 이름이 아니라 범주만 본다(D-116): 세 낱말 가운데 하나만 받고 그대로 필터 식에 넣는다.
     #[test]
-    fn custom_status_is_a_quoted_filter_value() {
+    fn status_category_is_one_of_three_fixed_words() {
         let filter = Filters {
-            status: Some("검토 \\\" OR kind = \\\"file".into()),
+            status_category: Some("doing"),
             ..Filters::default()
         };
-        let expression = meili_filters(&filter);
-        let encoded = expression.strip_prefix(" AND status = ").unwrap();
-        let decoded: String = serde_json::from_str(encoded).unwrap();
-        assert_eq!(Some(decoded), filter.status);
+        assert_eq!(meili_filters(&filter), " AND status_category = \"doing\"");
+        let me = UserId(Uuid::from_u128(1));
+        let query = |raw: &str| -> SearchQuery {
+            serde_json::from_value(serde_json::json!({ "q": "x", "status_category": raw })).unwrap()
+        };
+        assert_eq!(
+            filters(&query(" done "), me).unwrap().status_category,
+            Some("done")
+        );
+        assert_eq!(filters(&query(""), me).unwrap().status_category, None);
+        assert!(matches!(
+            filters(&query("late"), me),
+            Err(AppError::BadRequest(_))
+        ));
+        assert!(matches!(
+            filters(&query("검토"), me),
+            Err(AppError::BadRequest(_))
+        ));
     }
 
     /// 날짜 범위는 그날 시작과 다음 날 시작을 시각으로 만든다. 다음 날이 없는 날(9999-12-31)이나 1년 전은 그 시각을

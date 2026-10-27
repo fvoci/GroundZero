@@ -50,6 +50,7 @@ describe('audit codes', () => {
       organization_id: 'org-1',
       name: '연구실',
       role: 'admin',
+      access: 'owner',
       is_owner: true,
       realtime_enabled: false,
     };

@@ -17,6 +17,7 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::access::Grade;
 use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
@@ -24,7 +25,7 @@ use crate::features::documents::{
     Access, CreateDocument, Document, DocumentSummary, SCHEMA_VERSION, SUMMARY_COLUMNS, SummaryRow,
     TREE_ORDER, initial_body, load_with_access, max_depth, to_document, to_summaries,
 };
-use crate::features::workspaces::{member_role, validate_title};
+use crate::features::workspaces::validate_title;
 
 time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;
@@ -84,6 +85,8 @@ pub struct Module {
     pub icon: String,
     /// 설명(관리자가 쓰는 글, 없으면 빈 문자열).
     pub description: String,
+    /// 현재 사용자의 접근 등급(D-113, `app_access('module', id)`): read·write·owner.
+    pub access: Grade,
 }
 
 /// 모듈 생성 요청(관리자).
@@ -214,17 +217,18 @@ type ModuleRow = (
     Vec<String>,
     String,
     String,
+    String,
 );
 
 const MODULE_SELECT: &str =
     "SELECT m.id, m.workspace_id, m.kind, m.name, k.key, m.archived_at IS NOT NULL,
         coalesce((SELECT array_agg(o.key ORDER BY o.created_at) FROM module_keys o
                   WHERE o.module_id = m.id AND o.retired_at IS NOT NULL), '{}'),
-        m.icon, m.description
+        m.icon, m.description, app_access('module', m.id)
  FROM modules m JOIN module_keys k ON k.module_id = m.id AND k.retired_at IS NULL";
 
 fn to_module(
-    (id, workspace_id, kind, name, key, archived, previous_keys, icon, description): ModuleRow,
+    (id, workspace_id, kind, name, key, archived, previous_keys, icon, description, access): ModuleRow,
 ) -> Result<Module, AppError> {
     let kind = ModuleKind::parse(&kind)
         .ok_or_else(|| AppError::Config(format!("unknown module kind in database: {kind}")))?;
@@ -238,6 +242,7 @@ fn to_module(
         archived,
         icon,
         description,
+        access: Grade::parse_present(&access)?,
     })
 }
 
@@ -292,8 +297,7 @@ fn to_item(
         version,
     ): ItemRow,
 ) -> Result<Item, AppError> {
-    let access = Access::parse(&access)
-        .ok_or_else(|| AppError::Config(format!("unknown item access: {access}")))?;
+    let access = Access::parse_present(&access)?;
     Ok(Item {
         id,
         module_id,
@@ -332,7 +336,7 @@ pub async fn list_modules(
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Module>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    member_role(&mut tx, ws).await?;
+    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
     let rows: Vec<ModuleRow> = sqlx::query_as(&format!(
         "{MODULE_SELECT} WHERE m.workspace_id = $1 ORDER BY m.created_at, m.id"
     ))

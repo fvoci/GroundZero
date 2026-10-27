@@ -101,6 +101,7 @@ export const WORKSPACE: Workspace = {
   name: data.workspace,
   organization_id: fixedId(1, 2),
   role: 'admin',
+  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -171,6 +172,7 @@ export const MODULES: Module[] = MODULE_DATA.map((mod, i) => ({
   archived: false,
   icon: '',
   description: mod.description,
+  access: 'owner',
 }));
 
 function moduleAt(index: number): Module {
@@ -473,6 +475,7 @@ export function membersView(): MembersView {
       { ...person('writer'), email: null, role: 'member', is_owner: false },
     ],
     my_role: 'admin',
+    can_manage_members: true,
     i_am_owner: true,
     pending_owner: null,
   };

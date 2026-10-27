@@ -70,6 +70,12 @@ beforeEach(async () => {
     time_zone: '',
     week_start: '',
     theme: 'system',
+    limits: {
+      max_title_chars: 200,
+      max_document_bytes: 2_000_000,
+      max_references_per_document: 500,
+      max_document_depth: 10,
+    },
   });
   // 같은 탭에서 다시 열었다(새로고침·앱 안 이동): 지난번 편집이 이 탭의 초안으로 남아 있다.
   storeDraft('doc-1', {

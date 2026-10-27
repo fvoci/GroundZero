@@ -60,6 +60,7 @@ describe('module validation', () => {
       archived: false,
       icon: '',
       description: '제품 개발',
+      access: 'owner',
     };
     expect(parseModule(module).previous_keys).toEqual(['ENG']);
     expect(parseModule(module).description).toBe('제품 개발');
@@ -71,8 +72,8 @@ describe('module validation', () => {
       reference: 'DEV-1',
       title: '항목',
       description: '',
-      visibility: 'private',
       access: 'owner',
+      visibility: 'private',
       archived: false,
       updated_at: '2026-10-17T00:00:00Z',
       status: 'active',

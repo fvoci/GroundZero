@@ -18,6 +18,7 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보관 관리").await;
+    let organization = common::organization_of_workspace(&ws).await;
     let (member, member_email) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let module = send(
         &app,
@@ -100,7 +101,9 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
         Method::POST,
         &format!("/api/documents/{doc_id}/shares"),
         Some(&admin),
-        Some(json!({ "email": member_email, "permission": "read" })),
+        Some(
+            json!({ "email": member_email, "permission": "read", "organization_id": organization }),
+        ),
     )
     .await;
     assert_eq!(shared.status, StatusCode::CREATED, "{:?}", shared.json);
@@ -113,6 +116,37 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
     )
     .await;
     assert_eq!(link.status, StatusCode::CREATED, "{:?}", link.json);
+    // 관리 목록도 SQL의 보관 예외를 따르되 멤버·외부인에게 관리 정보를 열지 않는다.
+    let stranger = login(&state, "stranger").await;
+    for (suffix, created) in [("shares", &shared.json), ("public-links", &link.json)] {
+        let path = format!("/api/documents/{doc_id}/{suffix}");
+        let listed = send(&app, Method::GET, &path, Some(&admin), None).await;
+        assert_eq!(listed.status, StatusCode::OK, "{:?}", listed.json);
+        assert_eq!(listed.json.as_array().unwrap().len(), 1);
+        assert_eq!(listed.json[0]["id"], created["id"]);
+        for (user, expected) in [
+            (&member, StatusCode::FORBIDDEN),
+            (&stranger, StatusCode::NOT_FOUND),
+        ] {
+            let denied = send(&app, Method::GET, &path, Some(user), None).await;
+            assert_eq!(denied.status, expected, "{:?}", denied.json);
+        }
+    }
+    for (user, can_manage) in [(&admin, true), (&member, false)] {
+        let viewed = send(
+            &app,
+            Method::GET,
+            &format!("/api/documents/{doc_id}"),
+            Some(user),
+            None,
+        )
+        .await;
+        assert_eq!(viewed.status, StatusCode::OK, "{:?}", viewed.json);
+        assert_eq!(viewed.json["access"], "read");
+        assert_eq!(viewed.json["can_manage"], can_manage);
+        assert_eq!(viewed.json["can_edit"], false);
+        assert_eq!(viewed.json["can_delete"], false);
+    }
     // 멤버는 보관 중 409 그대로.
     assert_eq!(
         settings(&member, "workspace").await.status,

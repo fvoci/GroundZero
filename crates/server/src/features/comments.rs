@@ -113,8 +113,9 @@ async fn list(
     .bind(task)
     .fetch_all(tx.conn())
     .await?;
-    let owner = access == "owner";
-    let writer = matches!(access.as_str(), "owner" | "write");
+    let grade = crate::access::Grade::parse_present(&access)?;
+    let owner = grade.is_owner();
+    let writer = grade.can_write();
     Ok(rows
         .into_iter()
         .map(
