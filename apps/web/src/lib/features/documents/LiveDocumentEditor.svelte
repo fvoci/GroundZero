@@ -331,14 +331,24 @@
       session?.provider.disconnect();
     });
   });
-  // 창을 떠나거나 다시 읽을 때(계정 전환으로 다시 읽기 포함: 저장 API의 409 `account_changed`, 창 복귀 확인) 반영되지 않은
-  // 편집을 초안으로 남긴다. 남기지 못하면(저장 공간 부족 등) 떠나기를 경고해 화면의 내용을 지킨다.
+  // 서버에 반영되지 않은(확인 응답 전) 편집이 있으면 앱 안 이동과 창 닫기를 다른 폼과 같은 규칙으로 경고한다(D-27 ⑱,
+  // #141 R8 A). 모두 반영됐으면 묻지 않는다. 떠나도 반영되지 않은 편집은 지금처럼 초안으로 남는다(없어질 때 `keepIfDirty`).
+  // 계정 전환으로 다시 읽을 때(저장 API의 409 `account_changed`, 창 복귀 확인)는 초안을 남겼으면 막지 않고, 남기지
+  // 못했으면(저장 공간 부족 등) 경고해 화면의 내용을 지킨다(D-96). 부모에게 맡긴 뒤로는 남기지도 묻지도 않는다(맡길 때
+  // 남겼거나 버렸다).
+  let leaveKept = $state(true);
+  const navigationGuard = createLeaveGuard({
+    dirty: () => !handedOff && !accountSwitching() && hasPending(),
+    onAsk: () => {
+      leaveKept = keepDraft();
+    },
+  });
   onMount(() => {
-    return leaveGuard.attach({
-      navigation: false,
+    return navigationGuard.attach({
       beforeUnload: () => {
-        // 부모에게 맡긴 뒤로는 남기지 않는다(맡길 때 남겼거나 버렸다). 남기면 다시 열 때 또 나온다.
-        return !handedOff && hasPending() && !keepDraft();
+        if (handedOff || !hasPending()) return false;
+        const kept = keepDraft();
+        return !accountSwitching() || !kept;
       },
     });
   });
@@ -566,5 +576,16 @@
     }}
     ondiscard={leaveGuard.discard}
     returnFocus={() => document.getElementById('live-discard-reconnect')}
+  />
+  <DiscardChangesConfirm
+    open={navigationGuard.open}
+    description={leaveKept
+      ? m.documents_live_leave_description()
+      : m.documents_live_leave_lost_description()}
+    confirmLabel={m.documents_live_leave()}
+    onkeep={() => {
+      navigationGuard.keep();
+    }}
+    ondiscard={navigationGuard.discard}
   />
 </section>
