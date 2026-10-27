@@ -984,7 +984,7 @@ async fn trashing_a_parent_while_its_subtask_is_being_trashed_keeps_the_subtask_
     let mut t1 = state.db.begin_as(admin.id).await.unwrap();
     let first: uuid::Uuid = sqlx::query_scalar("SELECT app_trash_task($1, $2)")
         .bind(sub_id)
-        .bind(fvoci_server::db::new_ids(2))
+        .bind(fvoci_db::new_ids(2))
         .fetch_one(t1.conn())
         .await
         .unwrap();
@@ -1182,7 +1182,7 @@ async fn owner_pool() -> sqlx::PgPool {
 }
 
 /// 열어 둔 트랜잭션의 서버 프로세스 번호.
-async fn backend_pid(tx: &mut fvoci_server::db::UserTx) -> i32 {
+async fn backend_pid(tx: &mut fvoci_db::UserTx) -> i32 {
     sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(tx.conn())
         .await
@@ -1249,7 +1249,7 @@ async fn trashing_a_parent_leaves_a_subtask_detached_while_it_waited() {
     let holder = backend_pid(&mut t1).await;
     sqlx::query("SELECT app_set_task_parent($1, NULL, $2)")
         .bind(sub_id)
-        .bind(fvoci_server::db::new_ids(1))
+        .bind(fvoci_db::new_ids(1))
         .execute(t1.conn())
         .await
         .unwrap();
@@ -1339,7 +1339,7 @@ async fn trashing_a_document_moved_to_another_workspace_meanwhile_conflicts() {
     sqlx::query("SELECT * FROM app_move_document($1, $2, NULL, $3)")
         .bind(doc_id)
         .bind(w2_id)
-        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .bind(fvoci_db::new_ids(usize::try_from(n).unwrap()))
         .execute(t1.conn())
         .await
         .unwrap();

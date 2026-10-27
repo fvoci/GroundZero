@@ -7,9 +7,10 @@
 
 use crate::common;
 
-use fvoci_server::config::{DbCommandConfig, Secret};
-use fvoci_server::db::{Db, admin};
-use fvoci_server::error::AppError;
+use fvoci_core::error::AppError;
+use fvoci_core::secret::Secret;
+use fvoci_db::config::DbCommandConfig;
+use fvoci_db::{Db, admin};
 use sqlx::migrate::Migrate;
 use sqlx::{Connection, PgConnection};
 
@@ -44,7 +45,7 @@ async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
 
 /// 새 설치가 적용하는 마이그레이션 수: 기준(202610250001, 오버홀 재통합 D-126) 하나와 그 뒤에 새 번호로 더한 것.
 fn migration_count() -> usize {
-    sqlx::migrate!("./migrations").migrations.len()
+    sqlx::migrate!("../db/migrations").migrations.len()
 }
 
 async fn ledger(conn: &mut PgConnection) -> Vec<(i64, Vec<u8>, bool)> {

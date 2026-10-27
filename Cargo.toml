@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/server", "xtask"]
+members = ["crates/core", "crates/db", "crates/server", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +12,8 @@ publish = false
 anyhow = "1"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query", "ws", "matched-path"] }
 clap = { version = "4", features = ["derive"] }
+fvoci-core = { path = "crates/core" }
+fvoci-db = { path = "crates/db" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "macros", "migrate", "uuid", "time", "json"] }
@@ -20,6 +22,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 utoipa = { version = "5", features = ["axum_extras", "uuid"] }
+uuid = { version = "1", features = ["serde", "v7"] }
 xshell = "0.2"
 
 # 개발·시험 빌드의 디버그 정보(#158). 워크스페이스 crate는 패닉 역추적에 쓸 줄 정보만 남기고, 외부 crate는 디버그 정보

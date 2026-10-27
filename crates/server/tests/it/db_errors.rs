@@ -11,7 +11,7 @@ use crate::common;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use common::{TestUser, login};
-use fvoci_server::error::AppError;
+use fvoci_core::error::AppError;
 use http_body_util::BodyExt;
 use serde_json::Value;
 

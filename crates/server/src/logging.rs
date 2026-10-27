@@ -8,7 +8,7 @@
 //!   요청 처리 중이면 `request_id`, 주기 작업 중이면 `job`·`job_id`가 붙는다(작업 단위 값이라 거르기와 상관없이
 //!   붙는다). 그 밖의 필드는 사건이 준 그대로(숫자는 숫자).
 //! - 민감정보: 요청·응답 본문, 헤더, 쿼리, 설정 값, DB 바인딩, 외부 서비스 오류 원문은 쓰지 않는다. 오류는
-//!   `error_code`(응답 오류 코드와 같은 값)와 우리가 붙인 짧은 분류(`detail`, [`safe_error`])만 남긴다. 헤더·본문을
+//!   `error_code`(응답 오류 코드와 같은 값)와 우리가 붙인 짧은 분류(`detail`, [`safe_error`](fvoci_core::logging::safe_error))만 남긴다. 헤더·본문을
 //!   debug·trace에서 찍을 수 있는 전송·HTTP 클라이언트 라이브러리는 거르기와 상관없이 `info`보다 자세히 내보내지
 //!   않는다([`LIBRARY_CAP`]).
 //! - 감사 기록은 DB(`audit_log`)에 따로 남으므로 로그 레벨과 상관없다.
@@ -29,7 +29,7 @@ use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::error::AppError;
+use fvoci_core::logging::current_request_id;
 
 /// 레벨을 올려도 `info`보다 자세히 내보내지 않는 라이브러리(헤더·쿠키·본문·URL을 debug·trace에서 찍을 수 있는 것).
 pub const LIBRARY_CAP: &[&str] = &[
@@ -246,25 +246,9 @@ pub struct Job {
     pub id: String,
 }
 
-/// 응답에 붙여 접근 줄이 읽는 오류 코드(응답 본문의 `error`와 같은 값).
-#[derive(Debug, Clone, Copy)]
-pub struct ErrorCode(pub &'static str);
-
 tokio::task_local! {
-    /// 지금 처리 중인 요청의 id. 오류 응답과 로그 줄에 같은 값을 넣는다.
-    pub static REQUEST_ID: String;
     /// 지금 실행 중인 주기 작업.
     static JOB: Job;
-}
-
-/// 지금 요청의 id(요청 밖이면 없음).
-#[must_use]
-pub fn current_request_id() -> Option<String> {
-    // 요청 밖에서 넘겨받은 빈 값(요청 id 없음)은 없음으로 본다.
-    REQUEST_ID
-        .try_with(Clone::clone)
-        .ok()
-        .filter(|id| !id.is_empty())
 }
 
 /// 주기 작업 하나를 새 작업 id로 실행한다(그 안의 로그 줄에 `job`·`job_id`가 붙는다).
@@ -283,62 +267,6 @@ pub fn acceptable_request_id(raw: &str) -> bool {
         && raw
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
-}
-
-/// 로그에 남겨도 되는 오류 분류. 외부 서비스·DB·OS가 준 원문(주소·쿼리·입력값·서명이 섞일 수 있음)은 버리고,
-/// 우리가 붙인 앞머리(`:` 앞)와 SQLSTATE·제약 이름·오류 종류만 남긴다.
-#[must_use]
-pub fn safe_error(err: &AppError) -> String {
-    fn ours(msg: &str) -> &str {
-        msg.split(':').next().unwrap_or_default().trim()
-    }
-    match err {
-        AppError::Database(e) | AppError::Migrate(sqlx::migrate::MigrateError::Execute(e)) => {
-            safe_sqlx(e)
-        }
-        AppError::Migrate(sqlx::migrate::MigrateError::ExecuteMigration(e, version)) => {
-            format!("migration {version} failed: {}", safe_sqlx(e))
-        }
-        AppError::Migrate(sqlx::migrate::MigrateError::VersionMissing(version)) => {
-            format!("migration {version} is applied but missing")
-        }
-        AppError::Migrate(sqlx::migrate::MigrateError::VersionMismatch(version)) => {
-            format!("migration {version} was changed after it was applied")
-        }
-        AppError::Migrate(sqlx::migrate::MigrateError::Dirty(version)) => {
-            format!("migration {version} is partially applied")
-        }
-        AppError::Migrate(_) => "migration failed".into(),
-        AppError::Io(e) => format!("io {:?}", e.kind()),
-        AppError::Oidc(msg) => format!("oidc {}", ours(msg)),
-        AppError::Storage(msg) => format!("storage {}", ours(msg)),
-        AppError::Upstream(msg) => format!("upstream {}", ours(msg)),
-        AppError::Config(msg) => ours(msg).to_owned(),
-        other => other.code().to_owned(),
-    }
-}
-
-/// DB 오류의 분류(SQLSTATE·제약 이름, 또는 연결 오류의 종류). 메시지·쿼리·바인딩 값은 남기지 않는다.
-#[must_use]
-pub fn safe_sqlx(e: &sqlx::Error) -> String {
-    if let Some(db) = e.as_database_error() {
-        let code = db.code().map(|c| c.into_owned()).unwrap_or_default();
-        return match db.constraint() {
-            Some(c) => format!("database {code} constraint {c}"),
-            None => format!("database {code}"),
-        };
-    }
-    let kind = match e {
-        sqlx::Error::PoolTimedOut => "pool timed out",
-        sqlx::Error::PoolClosed => "pool closed",
-        sqlx::Error::RowNotFound => "row not found",
-        sqlx::Error::Io(_) => "io",
-        sqlx::Error::Tls(_) => "tls",
-        sqlx::Error::Protocol(_) => "protocol",
-        sqlx::Error::ColumnDecode { .. } | sqlx::Error::Decode(_) => "decode",
-        _ => "other",
-    };
-    format!("database {kind}")
 }
 
 /// HTTP 클라이언트 오류의 분류(주소·본문 없이).
@@ -387,14 +315,5 @@ mod tests {
         let old_name = |k: &str| (k == "RUST_LOG").then(|| "error".to_owned());
         let (filter, _) = settings(old_name).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(filter.max_level_hint(), Some(LevelFilter::INFO));
-    }
-
-    #[test]
-    fn external_error_text_is_not_logged() {
-        let err = AppError::Oidc("token endpoint: code=SECRET123 rejected".into());
-        assert_eq!(safe_error(&err), "oidc token endpoint");
-        let err = AppError::Storage("s3: https://bucket/key?X-Amz-Signature=abc".into());
-        assert_eq!(safe_error(&err), "storage s3");
-        assert_eq!(safe_error(&AppError::Forbidden), "forbidden");
     }
 }

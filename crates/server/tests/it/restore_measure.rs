@@ -27,8 +27,9 @@ use axum::http::{Method, StatusCode};
 use common::{
     TestUser, config_with, fresh_database, new_request_id, send, send_raw, with_database,
 };
+use fvoci_core::secret::Secret;
+use fvoci_db::config::DbCommandConfig;
 use fvoci_server::backup;
-use fvoci_server::config::{DbCommandConfig, Secret};
 use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
 use fvoci_server::http::AppState;
 use serde_json::{Value, json};

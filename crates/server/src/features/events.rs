@@ -3,7 +3,7 @@
 //! 일정은 항목에 속하고 권한은 항목을 따른다(DB 함수 `app_access`). 시각이 있는 일정은 UTC 시각과 일정의
 //! 시간대를 함께 저장하고, 종일 일정은 날짜 그대로 둔다(D-50). 달력은 워크스페이스 단위의 기간 조회로, 볼 수 있는
 //! 업무(시작·마감)와 일정을 함께 돌려준다(홈의 주간 달력도 같은 API를 쓴다).
-//! DB 정의는 `migrations/202610250001_initial_state.sql`의 `app_access`·`app_event_occurrences` 등에 있다.
+//! DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`의 `app_access`·`app_event_occurrences` 등에 있다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -15,15 +15,15 @@ use time::{Date, Duration, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::tasks::{format_date, parse_date, validate_text};
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
-use crate::ids::{ItemId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{ItemId, WorkspaceId};
+use fvoci_db::{UserTx, is_unique_violation, new_ids};
 
 const MAX_DESCRIPTION_CHARS: usize = 10_000;
 /// 일정 하나의 최대 길이(일).

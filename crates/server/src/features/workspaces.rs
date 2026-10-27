@@ -10,11 +10,11 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::access::Grade;
-use crate::db::{UserTx, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
-use crate::ids::{DocumentId, OrganizationId, Role, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, OrganizationId, Role, WorkspaceId};
+use fvoci_db::{UserTx, new_ids};
 
 /// 워크스페이스 요약.
 #[derive(Debug, Serialize, ToSchema)]

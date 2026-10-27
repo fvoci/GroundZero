@@ -13,12 +13,12 @@ use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::UserTx;
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::records::{RecordFileInput, validate};
 use crate::http::AppState;
-use crate::ids::ItemId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::ItemId;
+use fvoci_db::UserTx;
 
 /// 한 번에 가져오는 최대 문헌 수.
 const MAX_ITEMS: usize = 2000;
@@ -508,7 +508,7 @@ pub async fn import(
                 .bind(&title)
                 .bind(fields)
                 .bind(files)
-                .bind(crate::db::new_ids(2))
+                .bind(fvoci_db::new_ids(2))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

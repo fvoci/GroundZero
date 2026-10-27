@@ -1,7 +1,7 @@
 //! 멤버·초대·역할·소유권 인계·그룹 (D-20, D-25, D-51, D-57).
 //!
 //! 변경은 `app_set_member_role`·`app_respond_invitation` 등의 정의자 함수가 권한 확인·불변식·감사 기록을 한 번에 처리한다.
-//! DB 정의는 `migrations/202610250001_initial_state.sql`에 있다.
+//! DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`에 있다.
 //! 이 모듈은 입력 검증과 응답 변환만 한다. 함수 오류 코드는 `AppError::from_db_function`이 응답으로 바꾼다.
 
 use axum::Json;
@@ -12,12 +12,12 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::workspaces::{member_role, validate_title};
 use crate::http::AppState;
-use crate::ids::{OrganizationId, Role, UserId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
+use fvoci_db::{UserTx, needed_ids, new_ids};
 
 /// 초대 유효 기간(초). 운영 한도로 옮길 수 있게 한곳에 둔다.
 const INVITATION_TTL_SECS: i32 = 14 * 24 * 3600;

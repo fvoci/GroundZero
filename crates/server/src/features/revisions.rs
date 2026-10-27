@@ -3,7 +3,7 @@
 //! 기록은 문서를 볼 수 있는 사람이 본다(RLS: `document_revisions_select`). 복원은 쓰기 권한자가 하며
 //! 옛 리비전의 내용으로 새 리비전을 만든다. 이력을 지우지 않고, 저장과 같은 충돌 규칙(기준 리비전,
 //! 같은 `request_id` 재시도)을 따른다. 처리는 DB 함수 `app_restore_document_revision`이 한 트랜잭션에서 한다
-//! (`migrations/202610230001_initial_state.sql`). 새 UUIDv7은 앱이 공급한다(D-88).
+//! (`crates/db/migrations/202610250001_initial_state.sql`). 새 UUIDv7은 앱이 공급한다(D-88).
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -16,8 +16,6 @@ use uuid::Uuid;
 
 use crate::collab::room::RestoreRequest;
 use crate::config::Limits;
-use crate::db::Db;
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
     ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
@@ -25,7 +23,9 @@ use crate::features::documents::{
 };
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
-use crate::ids::DocumentId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::DocumentId;
+use fvoci_db::Db;
 
 /// 한 번에 돌려주는 리비전 수.
 const PAGE: i64 = 100;
@@ -163,7 +163,7 @@ pub async fn get(
 }
 
 async fn fetch_revision(
-    tx: &mut crate::db::UserTx,
+    tx: &mut fvoci_db::UserTx,
     id: DocumentId,
     revision: i32,
 ) -> Result<Option<Revision>, AppError> {
@@ -243,7 +243,7 @@ pub async fn export(
         .bind(id)
         .bind(revision)
         .bind(format)
-        .bind(crate::db::new_ids(1))
+        .bind(fvoci_db::new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -348,7 +348,7 @@ pub(crate) async fn restore_in_db(
             .bind(request.request_id)
             .bind(request.base_revision)
             .bind(SCHEMA_VERSION)
-            .bind(crate::db::new_ids(2))
+            .bind(fvoci_db::new_ids(2))
             .fetch_one(tx.conn())
             .await
             .map_err(|err| {

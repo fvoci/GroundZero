@@ -1,7 +1,7 @@
 //! 권한 판정과 같은 DB snapshot에서 정확한 이동 트랜잭션이 보이는지 구분한다.
 
-use crate::db::AnonTx;
-use crate::error::AppError;
+use fvoci_core::error::AppError;
+use fvoci_db::AnonTx;
 
 /// 성공적으로 커밋된 이동의 top-level xid8. 롤백된 이동에는 만들지 않는다.
 #[derive(Debug, Clone, Copy)]

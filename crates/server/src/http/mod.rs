@@ -17,8 +17,8 @@ use utoipa::{OpenApi, ToSchema};
 
 use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
-use crate::db::Db;
-use crate::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_db::Db;
 // personal scope (2단계 B)
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
@@ -82,7 +82,7 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
             tracing::warn!(
                 event = "health.database_unavailable",
                 error_code = err.code(),
-                detail = crate::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 "database ping failed"
             );
             (
@@ -119,13 +119,13 @@ async fn require_same_origin(
                 Json(ErrorBody {
                     error: "bad_origin",
                     message: "cross-origin request rejected".into(),
-                    request_id: crate::logging::current_request_id(),
+                    request_id: fvoci_core::logging::current_request_id(),
                 }),
             )
                 .into_response();
             response
                 .extensions_mut()
-                .insert(crate::logging::ErrorCode("bad_origin"));
+                .insert(fvoci_core::logging::ErrorCode("bad_origin"));
             return response;
         }
     }
@@ -164,7 +164,7 @@ async fn request_context(request: Request, next: Next) -> Response {
     let path = request.uri().path();
     let quiet = path == "/healthz" || !(path.starts_with("/api/") || path.starts_with("/auth/"));
     let started = Instant::now();
-    let mut response = crate::logging::REQUEST_ID
+    let mut response = fvoci_core::logging::REQUEST_ID
         .scope(id.clone(), next.run(request))
         .await;
     let duration_ms = (started.elapsed().as_secs_f64() * 1_000_000.0).round() / 1000.0;
@@ -176,7 +176,7 @@ async fn request_context(request: Request, next: Next) -> Response {
     // 4xx도 어떤 거절인지(bad_request·invalid_state·bad_origin 등) 접근 줄에서 보이게 응답 오류 코드를 붙인다.
     let error_code = response
         .extensions()
-        .get::<crate::logging::ErrorCode>()
+        .get::<fvoci_core::logging::ErrorCode>()
         .map(|c| c.0);
     macro_rules! access {
         ($level:ident) => {
@@ -231,12 +231,12 @@ async fn json_rejections(request: Request, next: Next) -> Response {
         Json(ErrorBody {
             error,
             message,
-            request_id: crate::logging::current_request_id(),
+            request_id: fvoci_core::logging::current_request_id(),
         }),
     )
         .into_response();
     out.extensions_mut()
-        .insert(crate::logging::ErrorCode(error));
+        .insert(fvoci_core::logging::ErrorCode(error));
     out
 }
 /// 알 수 없는 API 경로는 웹 fallback이 아니라 404 JSON.
@@ -725,7 +725,7 @@ async fn api_not_found() -> AppError {
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
         public_links::PublicDocument,
-        crate::ids::Role,
+        fvoci_core::ids::Role,
     )),
     tags(
         (name = "system", description = "서비스 상태"),

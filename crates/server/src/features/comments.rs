@@ -8,11 +8,11 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
-use crate::ids::{DocumentId, UserId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, UserId};
+use fvoci_db::{UserTx, needed_ids, new_ids};
 
 /// 댓글 하나.
 #[derive(Debug, Serialize, ToSchema)]

@@ -5,13 +5,13 @@
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
+use fvoci_core::ids::UserId;
 use fvoci_server::app::build_state;
 use fvoci_server::config::Config;
 use fvoci_server::features::accounts::{
     EXPECTED_USER_HEADER, SESSION_COOKIE, VerifiedIdentity, start_session,
 };
 use fvoci_server::http::{AppState, router};
-use fvoci_server::ids::UserId;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -401,7 +401,7 @@ pub fn with_database(url: &str, database: &str) -> String {
 /// 섞이지 않게 시험할 때 쓴다(공유 테스트 DB에는 다른 시험의 행이 있다).
 pub struct FreshDb {
     pub name: String,
-    pub db: fvoci_server::config::DbCommandConfig,
+    pub db: fvoci_db::config::DbCommandConfig,
     pub app_url: String,
 }
 
@@ -430,22 +430,22 @@ pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> Fres
         .await
         .unwrap();
     // 운영자 경로(`db bootstrap`)와 같은 준비. superuser가 아닌 관리자(셀프호스트 Supabase)에서도 된다.
-    fvoci_server::db::admin::prepare_database(&mut db_admin)
+    fvoci_db::admin::prepare_database(&mut db_admin)
         .await
         .unwrap();
     db_admin.close().await.unwrap();
-    let db = fvoci_server::config::DbCommandConfig {
-        admin_url: Some(fvoci_server::config::Secret::new(with_database(
+    let db = fvoci_db::config::DbCommandConfig {
+        admin_url: Some(fvoci_core::secret::Secret::new(with_database(
             &admin_url, &name,
         ))),
-        migration_url: Some(fvoci_server::config::Secret::new(with_database(
+        migration_url: Some(fvoci_core::secret::Secret::new(with_database(
             &migration_url,
             &name,
         ))),
         migrator_password: None,
         app_password: None,
     };
-    fvoci_server::db::admin::migrate(&db).await.unwrap();
+    fvoci_db::admin::migrate(&db).await.unwrap();
     FreshDb {
         app_url: with_database(&app_url, &name),
         name,

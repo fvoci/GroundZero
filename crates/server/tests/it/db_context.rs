@@ -10,7 +10,7 @@ use crate::common;
 
 use common::{create_doc, create_workspace, login};
 
-async fn context(tx: &mut fvoci_server::db::AnonTx) -> (Option<String>, Option<uuid::Uuid>, i64) {
+async fn context(tx: &mut fvoci_db::AnonTx) -> (Option<String>, Option<uuid::Uuid>, i64) {
     sqlx::query_as(
         "SELECT nullif(current_setting('app.user_id', true), ''), app_user_id(), (SELECT count(*) FROM documents)",
     )

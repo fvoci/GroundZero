@@ -6,12 +6,12 @@ use tokio::net::TcpListener;
 use tokio::sync::watch;
 
 use crate::config::Config;
-use crate::db::Db;
-use crate::error::AppError;
 use crate::features::accounts::OidcProvider;
 use crate::http::{self, AppState};
 use crate::search::SearchClient;
 use crate::worker;
+use fvoci_core::error::AppError;
+use fvoci_db::Db;
 
 /// 구성으로 공유 상태를 만든다. 테스트도 같은 경로를 쓴다.
 pub fn build_state(config: Config) -> Result<AppState, AppError> {

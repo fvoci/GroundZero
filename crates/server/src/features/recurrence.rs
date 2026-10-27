@@ -5,7 +5,7 @@
 //! O-19 미결): 규칙을 정할 때, 반복 업무를 고칠 때, 쓰기 권한이 있는 사람이 항목을 열 때의 동기화 요청.
 //! 읽기는 아직 없는 회차를 "예정"으로 계산해 보여 줄 뿐 만들지 않는다. 반복 일정은 달력에서 펼친다.
 //! `app_recurrence_dates`·`app_sync_task_series`의 최종 정의와 앱 공급 UUIDv7(D-88) 처리는
-//! `migrations/202610250001_initial_state.sql`에 있다.
+//! `crates/db/migrations/202610250001_initial_state.sql`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -15,15 +15,15 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::events::{Event, EventConflict};
 use crate::features::tasks::{
     EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, format_date, load_detail, parse_date,
 };
 use crate::http::AppState;
-use crate::ids::ItemId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::ItemId;
+use fvoci_db::{needed_ids, new_ids};
 
 /// 반복 주기.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -145,7 +145,7 @@ pub async fn set_task(
         && let Some(series) = series
         && let Err(e) = sync_series(&state, user, series).await
     {
-        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = crate::logging::safe_error(&e), %series, "recurrence sync after rule change failed");
+        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = fvoci_core::logging::safe_error(&e), %series, "recurrence sync after rule change failed");
     }
     let mut tx = state.db.begin_as(user).await?;
     let detail = load_detail(&mut tx, id).await?;
@@ -167,7 +167,7 @@ pub async fn set_task(
 /// 한 반복의 회차를 만든다(별도 트랜잭션: 앞선 변경의 잠금과 섞이지 않게).
 pub(crate) async fn sync_series(
     state: &AppState,
-    user: crate::ids::UserId,
+    user: fvoci_core::ids::UserId,
     series: Uuid,
 ) -> Result<i32, AppError> {
     let mut tx = state.db.begin_as(user).await?;

@@ -32,10 +32,10 @@ use tokio::sync::RwLock;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::config::{Config, OidcConfig};
-use crate::db::{Db, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::http::AppState;
-use crate::ids::{OrganizationId, UserId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{OrganizationId, UserId};
+use fvoci_db::{Db, needed_ids, new_ids};
 use uuid::Uuid;
 
 /// http 공개 원점(개발·테스트)의 세션 쿠키 이름.
@@ -312,7 +312,7 @@ pub async fn start_session(
         tracing::warn!(
             event = "login.pending_invitations_failed",
             error_code = err.code(),
-            detail = crate::logging::safe_error(&err),
+            detail = fvoci_core::logging::safe_error(&err),
             "pending invitation notifications were not created"
         );
     }

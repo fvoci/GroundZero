@@ -2,7 +2,7 @@
 //!
 //! 권한·불변식(마지막 상태·30개 상한·이름 중복·업무 있는 열 삭제 시 옮길 열 필수)은 정의자 함수
 //! `app_task_statuses`·`app_create_task_status`·`app_update_task_status`·`app_delete_task_status`가 검사한다. 이 모듈은
-//! 입력 검증과 응답 변환만 한다. DB 정의는 `migrations/202610250001_initial_state.sql`.
+//! 입력 검증과 응답 변환만 한다. DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::tasks::EXPECTED_TASK_USER_DOC;
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
-use crate::ids::ItemId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::ItemId;
+use fvoci_db::{UserTx, new_ids};
 
 /// 상태 이름 상한(글자 수). 열 머리에 들어가는 짧은 라벨이다.
 const MAX_STATUS_NAME: usize = 50;

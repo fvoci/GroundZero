@@ -21,12 +21,12 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::search_text::plain_text;
 use crate::http::AppState;
-use crate::ids::{DocumentId, WorkspaceId};
 use crate::storage::Storage;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, WorkspaceId};
 
 /// 응답으로 보내는 조각 크기.
 const CHUNK: usize = 64 * 1024;
@@ -132,7 +132,7 @@ fn stream_zip(
     let (msg_tx, mut msg_rx) = mpsc::channel::<Msg>(8);
     let writer_tx = body_tx.clone();
     // 블로킹 스레드에는 요청 id가 따라가지 않으므로 직접 넘긴다(D-83).
-    let request_id = crate::logging::current_request_id();
+    let request_id = fvoci_core::logging::current_request_id();
     tokio::task::spawn_blocking(move || {
         // 저장소 실패로 멈춘 경우의 분류(우리가 만든 안전한 문구). 그 밖에는 io 오류 종류만 남긴다.
         let mut aborted: Option<String> = None;
@@ -184,7 +184,7 @@ fn stream_zip(
                     }
                     Err(err) => {
                         let _sent = msg_tx
-                            .send(Msg::Abort(crate::logging::safe_error(&err)))
+                            .send(Msg::Abort(fvoci_core::logging::safe_error(&err)))
                             .await;
                         return;
                     }
@@ -409,7 +409,7 @@ pub async fn workspace(
         .to_owned();
     sqlx::query("SELECT app_audit_workspace_export($1, $2)")
         .bind(ws)
-        .bind(crate::db::new_ids(1))
+        .bind(fvoci_db::new_ids(1))
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
@@ -474,7 +474,7 @@ pub async fn mine(
         .fetch_one(tx.conn())
         .await?;
     sqlx::query("SELECT app_audit_personal_export($1)")
-        .bind(crate::db::new_ids(1))
+        .bind(fvoci_db::new_ids(1))
         .execute(tx.conn())
         .await?;
     tx.commit().await?;

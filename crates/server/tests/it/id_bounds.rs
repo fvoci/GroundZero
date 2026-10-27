@@ -78,7 +78,7 @@ async fn exact_call(
         query = query.bind(arg);
     }
     let result = query
-        .bind(fvoci_server::db::new_ids(count))
+        .bind(fvoci_db::new_ids(count))
         .fetch_all(tx.conn())
         .await;
     match result {

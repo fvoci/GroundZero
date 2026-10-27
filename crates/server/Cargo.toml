@@ -19,6 +19,8 @@ axum-extra = { version = "0.12", default-features = false, features = ["cookie"]
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 bytes = "1"
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+fvoci-core.workspace = true
+fvoci-db.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 hmac = "0.13"
@@ -39,7 +41,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url = "2"
 utoipa.workspace = true
-uuid = { version = "1", features = ["serde", "v7"] }
+uuid.workspace = true
 yrs = "0.28.0"
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 

@@ -21,7 +21,7 @@
 
 ## 변경 종류별 읽을 스킬
 
-- 기준 SQL(`crates/server/migrations/`): `.agents/skills/sql/SKILL.md`
+- 기준 SQL(`crates/db/migrations/`): `.agents/skills/sql/SKILL.md`
 - 서버(`crates/server`): `.agents/skills/server/SKILL.md`
 - 웹(`apps/web`·`packages/api-client`): `.agents/skills/web/SKILL.md`
 - 시험 도구·Docker·CI(`xtask`·`deploy`·`.github/workflows`): `.agents/skills/test-docker-ci/SKILL.md`

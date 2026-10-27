@@ -17,12 +17,12 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::{UserTx, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::http::AppState;
-use crate::ids::{DocumentId, FileId, ItemId, UploadId, UserId};
 use crate::storage::{Assembled, Part, sha256_hex};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, FileId, ItemId, UploadId, UserId};
+use fvoci_db::{UserTx, new_ids};
 
 /// 조각 본문의 SHA-256(16진수) 헤더.
 pub const PART_SHA256_HEADER: &str = "x-content-sha256";
@@ -391,18 +391,21 @@ pub async fn complete_upload(
         let worker = state.clone();
         let claim = row.state_changed_at;
         // 따로 도는 작업에도 요청 id를 붙인다(실패 줄을 사용자가 본 요청 id로 찾게, D-83).
-        let request_id = crate::logging::current_request_id().unwrap_or_default();
-        let finished = tokio::spawn(crate::logging::REQUEST_ID.scope(request_id, async move {
-            let result = finish(&worker, user, id, row, parts, claim).await;
-            if result.is_err() {
-                // 마무리 작업이 멈췄다. 일시적 실패(저장소 읽기 오류, 연결 풀 대기 초과, 교착 등)로 'completing'에
-                // 남았으면 점유를 바로 풀어, 다시 요청이 5분 동안 "마치는 중"(409)을 받지 않게 한다(감사 S11). 연결이
-                // 끊겨 이 요청의 핸들러가 사라져도 풀리게 작업 안에서 푼다. 닫거나 되돌린 업로드, 다른 시도가 넘겨받은
-                // 점유는 그대로다.
-                release_claim(&worker, user, id, claim).await;
-            }
-            result
-        }))
+        let request_id = fvoci_core::logging::current_request_id().unwrap_or_default();
+        let finished = tokio::spawn(fvoci_core::logging::REQUEST_ID.scope(
+            request_id,
+            async move {
+                let result = finish(&worker, user, id, row, parts, claim).await;
+                if result.is_err() {
+                    // 마무리 작업이 멈췄다. 일시적 실패(저장소 읽기 오류, 연결 풀 대기 초과, 교착 등)로 'completing'에
+                    // 남았으면 점유를 바로 풀어, 다시 요청이 5분 동안 "마치는 중"(409)을 받지 않게 한다(감사 S11). 연결이
+                    // 끊겨 이 요청의 핸들러가 사라져도 풀리게 작업 안에서 푼다. 닫거나 되돌린 업로드, 다른 시도가 넘겨받은
+                    // 점유는 그대로다.
+                    release_claim(&worker, user, id, claim).await;
+                }
+                result
+            },
+        ))
         .await;
         match finished {
             Ok(Ok(())) => {}
@@ -450,7 +453,7 @@ async fn finish(
         Ok(assembled) => assembled,
         Err(AppError::NotFound) => Assembled::Published,
         Err(err) => {
-            tracing::warn!(event = "upload.assemble_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "storage could not assemble the upload");
+            tracing::warn!(event = "upload.assemble_failed", upload = %id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "storage could not assemble the upload");
             let mut tx = state.db.begin_as(user).await?;
             hold_claim(&mut tx, id, claim).await?;
             sqlx::query("SELECT app_reset_upload($1)")
@@ -550,7 +553,7 @@ async fn release_claim(state: &AppState, user: UserId, id: UploadId, claim: Offs
     }
     .await;
     if let Err(err) = released {
-        tracing::warn!(event = "upload.release_failed", upload = %id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not release the completion claim");
+        tracing::warn!(event = "upload.release_failed", upload = %id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not release the completion claim");
     }
 }
 

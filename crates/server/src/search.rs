@@ -17,12 +17,12 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::config::SearchConfig;
-use crate::db::Db;
-use crate::error::AppError;
 use crate::features::file_text;
 use crate::features::search_text::plain_text;
 use crate::storage::Storage;
 use futures_util::StreamExt;
+use fvoci_core::error::AppError;
+use fvoci_db::Db;
 
 /// 색인 이름.
 const INDEX: &str = "fvoci";
@@ -408,7 +408,7 @@ async fn upsert_each(client: &SearchClient, docs: &[IndexDoc], together: bool) -
                 tracing::warn!(event = "search.upsert_failed", uid = %doc.uid, "search upsert task failed");
             }
             Err(err) => {
-                tracing::warn!(event = "search.upsert_failed", uid = %doc.uid, error_code = err.code(), detail = crate::logging::safe_error(&err), "search upsert failed");
+                tracing::warn!(event = "search.upsert_failed", uid = %doc.uid, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "search upsert failed");
             }
         }
     }
@@ -590,7 +590,7 @@ pub async fn drain(
         Err(err) => tracing::warn!(
             event = "search.delete_failed",
             error_code = err.code(),
-            detail = crate::logging::safe_error(&err),
+            detail = fvoci_core::logging::safe_error(&err),
             "search delete failed"
         ),
     }

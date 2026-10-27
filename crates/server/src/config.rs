@@ -6,33 +6,9 @@ use std::time::Duration;
 
 use url::Url;
 
-use crate::error::AppError;
-
-/// 로그·`Debug` 출력에서 값을 가리는 문자열.
-#[derive(Clone)]
-pub struct Secret(String);
-
-impl Secret {
-    /// 값을 감싼다(테스트·명령 구성용).
-    #[must_use]
-    pub fn new(value: String) -> Self {
-        Self(value)
-    }
-
-    /// 원문. 연결·요청에만 쓴다.
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Debug for Secret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Secret(<redacted>)")
-    }
-}
-
-/// PostgreSQL 연결 문자열. 앱 역할(`fvoci_app`)로 접속한다.
-pub type DatabaseUrl = Secret;
+use fvoci_core::error::AppError;
+use fvoci_core::secret::Secret;
+use fvoci_db::config::DatabaseUrl;
 
 /// OIDC 제공자 설정 (D-45). 표준 OIDC만 쓴다.
 #[derive(Debug, Clone)]
@@ -201,7 +177,7 @@ impl Config {
             "FVOCI_BIND",
             SocketAddr::from(([127, 0, 0, 1], 8080)),
         )?;
-        let database_url = Secret(required(&lookup, "DATABASE_URL")?);
+        let database_url = Secret::new(required(&lookup, "DATABASE_URL")?);
         let public_url: Url = parse_or(
             &lookup,
             "FVOCI_PUBLIC_URL",
@@ -219,7 +195,7 @@ impl Config {
                 issuer: Url::parse(issuer.trim())
                     .map_err(|e| AppError::Config(format!("FVOCI_OIDC_ISSUER is invalid: {e}")))?,
                 client_id: required(&lookup, "FVOCI_OIDC_CLIENT_ID")?,
-                client_secret: Secret(required(&lookup, "FVOCI_OIDC_CLIENT_SECRET")?),
+                client_secret: Secret::new(required(&lookup, "FVOCI_OIDC_CLIENT_SECRET")?),
             }),
             None => None,
         };
@@ -270,7 +246,7 @@ impl Config {
                     .map_err(|e| AppError::Config(format!("FVOCI_SEARCH_URL is invalid: {e}")))?;
                 Some(SearchConfig {
                     url: url.trim().to_owned(),
-                    key: Secret(required(&lookup, "FVOCI_SEARCH_KEY")?),
+                    key: Secret::new(required(&lookup, "FVOCI_SEARCH_KEY")?),
                 })
             }
             None => None,
@@ -306,7 +282,7 @@ impl Config {
                         .unwrap_or_else(|| "auto".to_owned()),
                     bucket: required(&lookup, "FVOCI_S3_BUCKET")?,
                     access_key: required(&lookup, "FVOCI_S3_ACCESS_KEY")?,
-                    secret_key: Secret(required(&lookup, "FVOCI_S3_SECRET_KEY")?),
+                    secret_key: Secret::new(required(&lookup, "FVOCI_S3_SECRET_KEY")?),
                 })
             }
             Some(other) => {
@@ -399,36 +375,6 @@ impl Config {
     /// 공개 원점 문자열(`scheme://host[:port]`). Origin 헤더 비교에 쓴다.
     pub fn public_origin(&self) -> String {
         self.public_url.origin().ascii_serialization()
-    }
-}
-
-/// `db bootstrap`·`db migrate` 명령 구성. 서버 실행 구성과 분리한다.
-#[derive(Debug, Clone)]
-pub struct DbCommandConfig {
-    /// 관리자(역할 생성 권한) 연결. `DATABASE_ADMIN_URL`. bootstrap에만 필요.
-    pub admin_url: Option<Secret>,
-    /// 마이그레이션 역할 연결. `DATABASE_MIGRATION_URL`.
-    pub migration_url: Option<Secret>,
-    /// bootstrap이 설정할 마이그레이션 역할 비밀번호. `FVOCI_DB_MIGRATOR_PASSWORD`.
-    pub migrator_password: Option<Secret>,
-    /// bootstrap이 설정할 앱 역할 비밀번호. `FVOCI_DB_APP_PASSWORD`.
-    pub app_password: Option<Secret>,
-}
-
-impl DbCommandConfig {
-    pub fn from_env() -> Self {
-        let get = |k: &str| {
-            std::env::var(k)
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .map(Secret)
-        };
-        Self {
-            admin_url: get("DATABASE_ADMIN_URL"),
-            migration_url: get("DATABASE_MIGRATION_URL"),
-            migrator_password: get("FVOCI_DB_MIGRATOR_PASSWORD"),
-            app_password: get("FVOCI_DB_APP_PASSWORD"),
-        }
     }
 }
 

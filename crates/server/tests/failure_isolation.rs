@@ -77,7 +77,7 @@ async fn expired_batch_failure_rolls_back_its_files_but_other_batch_commits() {
         .await
         .unwrap();
     let purge = sqlx::query("SELECT fvoci.app_system_purge_expired($1)")
-        .bind(fvoci_server::db::new_ids(usize::try_from(needed).unwrap()))
+        .bind(fvoci_db::new_ids(usize::try_from(needed).unwrap()))
         .execute(worker.conn())
         .await;
     if purge.is_ok() {
@@ -287,7 +287,7 @@ async fn run_purge(state: &fvoci_server::http::AppState) -> Result<(), sqlx::Err
         .await
         .unwrap();
     let purge = sqlx::query("SELECT fvoci.app_system_purge_expired($1)")
-        .bind(fvoci_server::db::new_ids(usize::try_from(needed).unwrap()))
+        .bind(fvoci_db::new_ids(usize::try_from(needed).unwrap()))
         .execute(worker.conn())
         .await;
     if let Err(error) = purge {

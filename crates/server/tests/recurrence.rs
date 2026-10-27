@@ -1118,7 +1118,7 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
             .unwrap();
         let made = sqlx::query_scalar::<_, i32>("SELECT fvoci.app_system_sync_task_series($1, $2)")
             .bind(id)
-            .bind(fvoci_server::db::new_ids(
+            .bind(fvoci_db::new_ids(
                 usize::try_from(need).unwrap_or_default() + SPARE_TICK_IDS,
             ))
             .fetch_one(&mut *tx)

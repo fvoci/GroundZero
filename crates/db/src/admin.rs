@@ -15,8 +15,9 @@
 
 use sqlx::{Connection, PgConnection};
 
-use crate::config::{DatabaseUrl, DbCommandConfig, Secret};
-use crate::error::AppError;
+use crate::config::{DatabaseUrl, DbCommandConfig};
+use fvoci_core::error::AppError;
+use fvoci_core::secret::Secret;
 
 /// 마이그레이션 역할 이름. 마이그레이션 SQL이 이 이름을 참조한다.
 pub const MIGRATOR_ROLE: &str = "fvoci_migrator";
@@ -404,7 +405,7 @@ pub async fn release_migrator_or_reconnect(
     tracing::warn!(
         event = "db.release_migrator_retry",
         error_code = first.code(),
-        detail = crate::logging::safe_error(&first),
+        detail = fvoci_core::logging::safe_error(&first),
         "returning the borrowed migrator membership failed; retrying on a new admin connection"
     );
     let mut fresh = PgConnection::connect_with(&super::connect_options(admin)?).await?;

@@ -3,7 +3,7 @@
 //! 본문의 참조 노드는 종류와 내부 id만 가진다. 표시 이름은 여기서 권한을 확인해 만든다.
 //! 볼 수 없는 대상과 없는 대상은 같은 모양(`visible: false`)으로 돌려준다(존재 여부를 드러내지 않는다).
 //! 링크·언급 기록과 알림 생성은 저장 트랜잭션 안의 DB 함수 `app_record_document_references`가 한다
-//! (`migrations/202610250001_initial_state.sql`). 새 UUIDv7은 앱이 공급하며(D-88), 언급은 접근 권한을 주지 않는다.
+//! (`crates/db/migrations/202610250001_initial_state.sql`). 새 UUIDv7은 앱이 공급하며(D-88), 언급은 접근 권한을 주지 않는다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -11,12 +11,12 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::UserTx;
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::access;
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, ItemId, WorkspaceId};
+use fvoci_db::UserTx;
 
 /// 종류별 후보 수 상한.
 const CANDIDATES_PER_KIND: i64 = 8;

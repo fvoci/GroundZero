@@ -12,10 +12,10 @@ use tokio::sync::mpsc;
 
 use super::lease::Lease;
 use super::room::{self, CloseReason, Outbound, Peer};
-use crate::error::AppError;
 use crate::features::accounts::{self, CurrentUser};
 use crate::http::AppState;
-use crate::ids::DocumentId;
+use fvoci_core::error::AppError;
+use fvoci_core::ids::DocumentId;
 
 /// 연결로 보낼 것이 이만큼 쌓이면 느린 연결로 보고 닫는다.
 const OUTBOX: usize = 512;
@@ -80,7 +80,7 @@ pub async fn connect(
         .saturating_mul(2)
         .max(1 << 20);
     // 연결은 업그레이드 뒤 따로 도는 작업이라 요청 id를 직접 넘긴다(연결 동안의 로그 줄에 붙는다, D-83).
-    let request_id = crate::logging::current_request_id().unwrap_or_default();
+    let request_id = fvoci_core::logging::current_request_id().unwrap_or_default();
     Ok(ws
         .max_message_size(max)
         .max_frame_size(max)
@@ -92,7 +92,7 @@ pub async fn connect(
                 out,
                 access: Lease::new(can_write, checked_at, state.config.collab_recheck),
             };
-            crate::logging::REQUEST_ID
+            fvoci_core::logging::REQUEST_ID
                 .scope(
                     request_id,
                     run(socket, state, id, workspace, peer, outbox, lost_write),
@@ -144,7 +144,7 @@ async fn run(
                             event = "collab.join_failed",
                             document = %id.0,
                             error_code = other.code(),
-                            detail = crate::logging::safe_error(&other),
+                            detail = fvoci_core::logging::safe_error(&other),
                             "could not open the live editing room"
                         );
                         CloseReason::Busy
@@ -199,7 +199,7 @@ struct Recheck {
 }
 
 impl Recheck {
-    fn spawn(db: crate::db::Db, id: DocumentId, peer: Peer) -> Self {
+    fn spawn(db: fvoci_db::Db, id: DocumentId, peer: Peer) -> Self {
         let task = tokio::spawn(async move {
             peer.access
                 .monitor(|| room::observe_access(&db, id, &peer))

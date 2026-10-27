@@ -5,7 +5,7 @@
 //! 번호는 모듈마다 하나의 번호열을 항목·문서·작업이 함께 쓴다. 할당은 DB 함수 `app_allocate_number`만 한다.
 //! 참조 문자열(`DEV-3`)은 저장하지 않고 현재 키로 만든다. 링크는 내부 id 기준이다.
 //!
-//! 권한은 `migrations/202610250001_initial_state.sql`의 DB 함수가 판정한다. 모듈 관리는 관리자, 항목 생성은 작성자 이상,
+//! 권한은 `crates/db/migrations/202610250001_initial_state.sql`의 DB 함수가 판정한다. 모듈 관리는 관리자, 항목 생성은 작성자 이상,
 //! 항목 권한은 `app_access`, 항목 아래 문서는 `app_access`(항목 권한과 문서 규칙 중 낮은 쪽).
 
 use axum::Json;
@@ -18,8 +18,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::access::Grade;
-use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
     Access, CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION,
@@ -27,10 +25,12 @@ use crate::features::documents::{
     to_document, to_summaries,
 };
 use crate::features::workspaces::validate_title;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
 
 time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, ModuleId, WorkspaceId};
+use fvoci_core::ids::{DocumentId, ItemId, ModuleId, WorkspaceId};
 
 /// 설명 글 상한(문자). 제목보다 길게 받지만 본문은 문서로 쓴다.
 const MAX_DESCRIPTION_CHARS: usize = 2_000;
