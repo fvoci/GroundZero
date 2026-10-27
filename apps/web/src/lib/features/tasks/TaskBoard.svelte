@@ -240,6 +240,14 @@
     dirty: () => viewDirty,
   });
   let contextTouched = false;
+  /**
+   * 사용자가 보기·필터·정렬·검색을 만졌으면 늦게 온 기본 저장 보기를 적용하지 않는다. 새 업무 제목·CSV 칸처럼 보기와
+   * 무관한 입력은 세지 않는다(R5 최종 A 확인 필요 3). 보기 단추와 저장한 보기 고르기는 각자 켠다.
+   */
+  function touchContext(event: Event): void {
+    if (event.target instanceof Element && event.target.closest('[role="search"]') !== null)
+      contextTouched = true;
+  }
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   // 보기·필터·정렬은 이 탭에서 항목마다 기억한다. 다른 화면에 갔다 돌아와도 그대로다(이 브라우저 탭에만 남는 개인
   // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
@@ -1604,12 +1612,8 @@
   inert={hiddenForAccount}
   class="flex flex-col gap-3"
   aria-labelledby="tasks-heading"
-  oninput={() => {
-    contextTouched = true;
-  }}
-  onchange={() => {
-    contextTouched = true;
-  }}
+  oninput={touchContext}
+  onchange={touchContext}
 >
   <div class="flex flex-wrap items-center gap-2">
     <h2 id="tasks-heading" class="text-lg font-semibold">{m.tasks_heading()}</h2>

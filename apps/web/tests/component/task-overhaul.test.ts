@@ -1,6 +1,6 @@
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, parseTask } from '$lib/api/client';
 import { displaySettings } from '$lib/display';
 import { dayIn } from '$lib/features/events/time';
@@ -177,4 +177,61 @@ it.each([
   });
   expect(document.querySelectorAll('[data-span="range"]')).toHaveLength(3);
   expect(document.querySelectorAll('[data-span="point"]')).toHaveLength(1);
+});
+
+// R5 최종 A 확인 필요 3(코디네이터 판단): 늦게 온 기본 저장 보기는 사용자가 보기·필터·정렬·검색을 만졌을 때만 건너뛴다.
+// 새 업무 제목·CSV 칸 입력은 보기와 무관하므로 기본 보기를 막지 않는다.
+describe('a late default saved view', () => {
+  function holdDefaultView(): () => void {
+    let release: () => void = () => undefined;
+    vi.mocked(api.savedViews).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve([
+              {
+                id: 'saved',
+                name: '기본',
+                version: 1,
+                config: { default: true, view: 'list', filter: { status: 'done' } },
+              },
+            ]);
+          };
+        }),
+    );
+    return () => {
+      release();
+    };
+  }
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
+  };
+
+  it('still applies after typing a new task title or CSV rows', async () => {
+    const release = holdDefaultView();
+    render(TaskBoard, { item: TASK_ITEM, workspaces: [], openTaskId: undefined });
+    await fireEvent.input(await screen.findByLabelText('새 업무 제목'), {
+      target: { value: '새 업무' },
+    });
+    const csv = document.getElementById(`tasks-csv-${TASK_ITEM.id}`);
+    if (csv === null) throw new Error('csv textarea');
+    await fireEvent.input(csv, {
+      target: { value: 'title\n하나' },
+    });
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '목록' })).toHaveAttribute('aria-pressed', 'true');
+    });
+    expect(screen.getByLabelText('상태')).toHaveValue('done');
+  });
+
+  it('is skipped after searching', async () => {
+    const release = holdDefaultView();
+    render(TaskBoard, { item: TASK_ITEM, workspaces: [], openTaskId: undefined });
+    await fireEvent.input(await screen.findByRole('searchbox'), { target: { value: '설계' } });
+    release();
+    await flush();
+    expect(screen.getByRole('button', { name: '칸반' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('searchbox')).toHaveValue('설계');
+  });
 });
