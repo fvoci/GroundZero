@@ -8,6 +8,7 @@ import ItemTimePanel from '$lib/features/time/ItemTimePanel.svelte';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { timer } from '$lib/features/time/timer.svelte';
+import { org } from '$lib/org.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { course, running, study } from '../../stories/time/fixtures';
@@ -108,4 +109,26 @@ it('the header says "recording", not the in-progress label of entry rows (D-117)
   expect(await screen.findByText('기록 중')).toBeInTheDocument();
   expect(screen.queryByText('진행 중')).toBeNull();
   expect(m.time_recording({}, { locale: 'en' })).toBe('Recording');
+});
+it('shows a running timer and its stop before an organization is chosen (D-32, D-117)', async () => {
+  // R5 최종 A 확인 필요 1(코디네이터 판단): 실행 타이머는 사용자당 모든 조직에서 하나이고(D-32) 머리글이 "기록 중"과
+  // 멈춤을 둔다(D-117). 조직을 고르기 전에도 다른 기기에서 켠 타이머를 보고 멈출 수 있다.
+  await setLocale('ko', { reload: false });
+  org.reset();
+  vi.mocked(api.currentTimer).mockClear();
+  vi.mocked(api.currentTimer).mockResolvedValue(running);
+  render(TimerWidget);
+  expect(await screen.findByText('기록 중')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: m.time_stop() })).toBeInTheDocument();
+  expect(screen.queryByText(m.app_organization_required())).toBeNull();
+});
+it('still asks for an organization when no timer runs and none is chosen', async () => {
+  org.reset();
+  vi.mocked(api.currentTimer).mockClear();
+  render(TimerWidget);
+  await waitFor(() => {
+    expect(api.currentTimer).toHaveBeenCalled();
+  });
+  expect(screen.getByText(m.app_organization_required())).toBeInTheDocument();
+  expect(screen.queryByRole('button')).toBeNull();
 });
