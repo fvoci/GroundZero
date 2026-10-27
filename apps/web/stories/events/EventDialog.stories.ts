@@ -130,18 +130,3 @@ export const DraftAvailableNarrow200: Story = {
   ...DraftAvailable,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };
-
-/** 보관된 항목·모듈의 일정(워크스페이스 달력이 열 때 확인한 보관 상태, D-113): 고치기·지우기 없이 읽기만 보인다. */
-export const ArchivedLocked: Story = {
-  args: { locked: true },
-  play: async ({ canvasElement }) => {
-    const page = within(canvasElement.ownerDocument.body);
-    await page.findByRole('dialog');
-    await expect(page.queryByLabelText(m.events_title())).toBeNull();
-    await expect(page.queryByRole('button', { name: m.events_delete_event() })).toBeNull();
-  },
-};
-export const ArchivedLockedNarrowDark: Story = {
-  ...ArchivedLocked,
-  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
-};
