@@ -324,6 +324,42 @@ describe('durable learning input', () => {
     expect(value('study-unit-amount')).toBe('12oops');
   });
 
+  // R5 P2 C-2(⑱): 재배치 시작일과 하루 단위 수도 작업 설정 입력이다. 잘못된 숫자 원문까지 남기고 떠날 때 경고한다.
+  it('keeps reschedule settings with invalid per-day text and clears them after rescheduling', async () => {
+    vi.mocked(api.studyPlan).mockResolvedValue({
+      ...plan,
+      units: plan.units.map((u) => ({ ...u, planned_on: '2026-01-02' })),
+    });
+    const send = vi.spyOn(api, 'planStudyUnits').mockResolvedValue(2);
+    const view = render(StudyPanel, { itemId: 'i1' });
+    await screen.findByRole('form', { name: m.study_replan_form() });
+    await input('study-replan-start', '2026-12-01');
+    await input('study-replan-per', '2x');
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    view.unmount();
+    const next = render(StudyPanel, { itemId: 'i1' });
+    await screen.findByRole('form', { name: m.study_replan_form() });
+    expect(value('study-replan-per')).toBe('1');
+    await restore();
+    expect(value('study-replan-start')).toBe('2026-12-01');
+    expect(value('study-replan-per')).toBe('2x');
+    await fireEvent.submit(screen.getByRole('form', { name: m.study_replan_form() }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(m.study_per_day_invalid());
+    expect(send).not.toHaveBeenCalled();
+    await input('study-replan-per', '2');
+    await fireEvent.submit(screen.getByRole('form', { name: m.study_replan_form() }));
+    await waitFor(() => {
+      expect(send).toHaveBeenCalledOnce();
+    });
+    expect(send.mock.calls[0]?.[1][0]?.planned_on).toBe('2026-12-01');
+    next.unmount();
+    render(StudyPanel, { itemId: 'i1' });
+    await screen.findByRole('form', { name: m.study_replan_form() });
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+  });
+
   it('restores private study progress without sending it', async () => {
     const save = vi.spyOn(api, 'setUnitProgress').mockResolvedValue(undefined);
     const view = render(StudyPanel, { itemId: 'i1' });

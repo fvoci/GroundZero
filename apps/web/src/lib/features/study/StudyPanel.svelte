@@ -86,7 +86,9 @@
   let requestId = $state(newRequestId());
   let requestPayload = $state('');
   let replanStart = $state(today);
-  let replanPerDay = $state<number | null>(1);
+  // 하루 단위 수도 원문을 보존하고 제출할 때 검증한다.
+  let replanPerDay = $state('1');
+  let replanning = $state(false);
   let openUnit = $state<string | undefined>(undefined);
   let mine = $state<{ done_amount: string; planned_on: string; note: string }>({
     done_amount: '',
@@ -219,7 +221,49 @@
     dirty: () => openUnit !== undefined && JSON.stringify(mine) !== mineBase,
     busy: () => savingMine,
   });
-  const drafts = [newDraft, unitDraft, mineDraft];
+  // 재배치 시작일·하루 단위 수는 조회가 아니라 작업 설정이라 다른 학습 폼처럼 남긴다(⑱).
+  const replanDraft = createFormDraft({
+    name: () => `study:${itemId}:replan`,
+    snapshot: () => ({ start: replanStart, perDay: replanPerDay }),
+    parse: (raw) => textFields(raw, { start: '', perDay: '' }),
+    restore: (input) => {
+      replanStart = input.start;
+      replanPerDay = input.perDay;
+    },
+    reset: () => {
+      replanStart = today;
+      replanPerDay = '1';
+    },
+    dirty: () => replanStart !== today || replanPerDay !== '1',
+    busy: () => replanning,
+  });
+  const drafts = [newDraft, unitDraft, mineDraft, replanDraft];
+
+  async function reschedule(overdue: readonly StudyUnitView[]): Promise<void> {
+    const per = Number(replanPerDay.trim());
+    if (replanPerDay.trim() === '' || !Number.isInteger(per) || per < 1) {
+      error = m.study_per_day_invalid();
+      return;
+    }
+    if (replanning) return;
+    const attempt = replanDraft.capture();
+    if (attempt === undefined) return;
+    const start = replanStart;
+    replanning = true;
+    try {
+      const done = await run(
+        () => api.planStudyUnits(itemId, replan(overdue, start, per)),
+        m.study_replanned({
+          count: overdue.length,
+          start: start === '' ? '' : formatDay(start),
+          perDay: per,
+        }),
+      );
+      if (done) replanDraft.complete(attempt);
+    } finally {
+      if (replanDraft.isOwner(attempt)) replanning = false;
+    }
+  }
   onMount(() => {
     const detach = drafts.map((draft) => draft.attach());
     return () => {
@@ -549,24 +593,23 @@
     </div>
 
     {#if p.overdue.length > 0}
+      {#each replanDraft.offers as offer (offer.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            replanDraft.restore(offer);
+          }}
+          ondiscard={() => {
+            replanDraft.discard(offer);
+          }}
+        />
+      {/each}
       <form
         class="flex flex-wrap items-end gap-2 rounded-md border p-2 text-sm"
         aria-label={m.study_replan_form()}
+        novalidate
         onsubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          const per = replanPerDay ?? 0;
-          if (!Number.isInteger(per) || per < 1) {
-            error = m.study_per_day_invalid();
-            return;
-          }
-          void run(
-            () => api.planStudyUnits(itemId, replan(p.overdue, replanStart, per)),
-            m.study_replanned({
-              count: p.overdue.length,
-              start: replanStart === '' ? '' : formatDay(replanStart),
-              perDay: per,
-            }),
-          );
+          void reschedule(p.overdue);
         }}
       >
         <span>{m.study_replan_intro({ count: p.overdue.length })}</span>
@@ -576,15 +619,11 @@
         </div>
         <div class="flex flex-col gap-1">
           <Label for="study-replan-per">{m.study_per_day()}</Label>
-          <Input
-            id="study-replan-per"
-            type="number"
-            min={1}
-            bind:value={replanPerDay}
-            class="w-20"
-          />
+          <Input id="study-replan-per" inputmode="numeric" bind:value={replanPerDay} class="w-20" />
         </div>
-        <Button type="submit" size="sm" variant="outline">{m.study_replan()}</Button>
+        <Button type="submit" size="sm" variant="outline" disabled={replanning}
+          >{m.study_replan()}</Button
+        >
       </form>
     {/if}
 
