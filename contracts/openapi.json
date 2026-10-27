@@ -12517,6 +12517,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "다른 조직 공간의 템플릿",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }

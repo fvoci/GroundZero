@@ -159,6 +159,11 @@ fn supabase_stack(
         supabase.project()
     );
     print_recovery(services);
+    // 이 실행은 Supabase 프로젝트도 띄우므로 그 복구 명령도 알린다(#93).
+    println!(
+        "==> and this run's Supabase project: {}",
+        supabase.recovery_command()
+    );
     let result = services
         .up_services(&sh, &wanted)
         .and_then(|()| {

@@ -1552,7 +1552,7 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
         RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
       END IF;
     END IF;
-    -- 조직 탈퇴(조직 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다.
+    -- 조직 제거·탈퇴(멤버 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다(D-114).
     PERFORM 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee FOR SHARE;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
@@ -1771,6 +1771,46 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
 
 
 ALTER FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 공간(위키 p_workspace 또는 항목 p_item)에 템플릿으로 새 문서를 만들 때의 본문(D-27·D-114·D-115). 읽을 수 있는 템플릿이어야
+-- 하고, 템플릿 예외는 allow_copy만 넘는다: 공간 문서 템플릿은 복제처럼 같은 조직 공간에서만 쓰고 원본에 복제 감사를 남긴다.
+-- 개인 노트 대상은 이 함수를 거치지 않는다. 새 id 1: 원본 감사.
+CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_kind   text := CASE WHEN p_item IS NULL THEN 'workspace' ELSE 'item' END;
+    v_target uuid := coalesce(p_item, p_workspace);
+    v_ws     uuid := coalesce(p_workspace, (SELECT i.workspace_id FROM items i WHERE i.id = p_item));
+    v_src    documents%ROWTYPE;
+  BEGIN
+    SELECT * INTO v_src FROM documents WHERE id = p_template AND is_template AND deleted_at IS NULL;
+    IF v_src.id IS NULL OR app_access('document', p_template) = 'none' THEN
+      RAISE EXCEPTION 'template not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF (p_workspace IS NULL) = (p_item IS NULL) THEN
+      RAISE EXCEPTION 'choose a workspace or an item' USING ERRCODE = '22023';
+    END IF;
+    IF app_access(v_kind, v_target) = 'none' THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_src.workspace_id IS NOT NULL
+       AND app_target_organization('document', p_template) IS DISTINCT FROM app_target_organization(v_kind, v_target) THEN
+      RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
+    END IF;
+    -- 같은 request_id로 다시 보낸 생성은 이미 만든 문서를 돌려받으므로 감사를 다시 남기지 않는다(app_copy_document와 같다).
+    IF NOT EXISTS (SELECT 1 FROM documents
+                   WHERE workspace_id = v_ws AND created_by = app_user_id() AND request_id = p_request_id) THEN
+      PERFORM app_audit_document(app_id(p_ids, 1), p_template, 'copy',
+                                 jsonb_build_object('target', 'workspace', 'template', true));
+    END IF;
+    RETURN v_src.body;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 -- D-115: allow_copy가 꺼진 문서는 소유 권한 외 누구도(수정 권한 포함) 내보내거나 첨부를 내려받지 못한다.
 CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
@@ -3380,7 +3420,10 @@ CREATE FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user
       PERFORM app_require_organization_admin(p_organization);
     END IF;
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
-    IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user) THEN
+    -- 공유 생성(멤버 행 공유 잠금 뒤 공유 기록)과 줄 세운다(D-114). 먼저 온 공유는 커밋을 기다렸다가 아래에서 함께 거두고,
+    -- 나중 공유는 이 제거가 커밋된 뒤 멤버 행이 없어 거절된다.
+    PERFORM 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
+    IF NOT FOUND THEN
       RAISE EXCEPTION 'organization member not found' USING ERRCODE = 'P0002';
     END IF;
     IF NOT v_self THEN
@@ -6892,6 +6935,12 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
       PERFORM app_activity(app_id(p_ids, v_at), p_target, p_item, 'document', p_doc, 'unshare',
                            jsonb_build_object('user', v_child.grantee_user_id, 'reason', 'moved'));
     END LOOP;
+    -- D-114: 이 문서의 참조 가운데 옮긴 자리의 조직 밖 대상은 지운다(개인 노트는 쓴 사람이 속한 다른 조직의 대상도 참조한다).
+    -- 조직이 없는 개인 대상은 참조 기록 규칙대로 남긴다.
+    DELETE FROM document_links l
+    WHERE l.document_id = p_doc
+      AND app_target_organization(l.target_kind, l.target_id)
+          <> (SELECT w.organization_id FROM workspaces w WHERE w.id = p_target);
     v_at := v_at + 1;
     PERFORM app_audit_document(app_id(p_ids, v_at), p_doc, 'move_in',
       jsonb_build_object('from', CASE WHEN v_doc.owner_user_id IS NULL THEN 'workspace' ELSE 'personal' END));
@@ -13252,6 +13301,9 @@ REVOKE ALL ON FUNCTION fvoci.app_task_series_bound(p_series uuid) FROM PUBLIC;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_tasks_move_version() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) TO fvoci_app;

@@ -30,6 +30,8 @@ for (const scale of [100, 200] as const) {
     await page.locator(`[data-task-card="${task}"]`).click();
     const dialog = page.getByRole('dialog', { name: title, exact: true });
     await expect(dialog).toBeVisible();
+    // 대화상자는 상세 요청이 끝나기 전에도 보인다(안쪽은 로딩 표시). 상세 폼이 그려진 뒤에 배치를 잰다.
+    await expect(dialog.locator('#task-title')).toBeVisible();
     const pageY = await page.evaluate(() => window.scrollY);
 
     const focusInside = (): Promise<boolean> =>
