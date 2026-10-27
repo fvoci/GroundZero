@@ -200,6 +200,9 @@
   let formError = $state<string | undefined>(undefined);
   let saved = $state(false);
   let docTemplate = $state('');
+  // 새 항목 문서를 보내는 동안 템플릿 선택을 잠근다. 그 값도 초안(draftContext)이라 바꾸면 성공한 만들기를 버리고, 다시
+  // 내면 새 요청 id로 두 번째 문서가 생긴다(NotesScreen·WorkspaceScreen과 같다).
+  let creatingDoc = $state(false);
 
   // 마지막으로 서버 값으로 채운 입력란 값. 입력란이 이 값과 같으면 아직 고치지 않은 것이다. `version`은 저장할 때 보낼
   // 기준 판(D-104)이다: 입력 중에 다시 읽은 항목의 판으로 옮기면 그사이 다른 사람이 고친 것을 덮으므로, 입력란을
@@ -710,11 +713,13 @@
                 workspaceId={workspace.id}
                 id="new-item-document-template"
                 bind:value={docTemplate}
+                disabled={creatingDoc}
               />
               <CreateForm
                 id="new-item-document"
                 draftName={`item-document-new:${current.id}`}
                 bind:draftContext={docTemplate}
+                bind:busy={creatingDoc}
                 label={m.modules_new_document_title()}
                 placeholder={m.modules_new_document_placeholder()}
                 submitLabel={m.modules_create_document()}

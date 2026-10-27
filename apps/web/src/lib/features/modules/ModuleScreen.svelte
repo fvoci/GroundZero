@@ -309,14 +309,16 @@
 </script>
 
 {#each mod === undefined ? [] : settingsDraft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      settingsDraft.restore(entry);
-    }}
-    ondiscard={() => {
-      settingsDraft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={savingSettings}>
+    <FormDraftOffer
+      onrestore={() => {
+        settingsDraft.restore(entry);
+      }}
+      ondiscard={() => {
+        settingsDraft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={settingsDraft.leave.open}
@@ -485,50 +487,55 @@
 
     <!-- 설정은 보기와 상관없이 모듈 화면에 둔다(관리자). -->
     {#if isAdmin}
-      <form
-        class="flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 @md:p-3"
-        onsubmit={(e) => void saveSettings(e)}
-        novalidate
-        aria-label={m.modules_settings()}
-      >
-        <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
-          <Label for="module-edit-name">{m.modules_name()}</Label>
-          <Input id="module-edit-name" bind:value={editName} maxlength={200} />
-        </div>
-        <div class="flex w-28 flex-col gap-1">
-          <Label for="module-edit-key">{m.modules_key()}</Label>
-          <Input
-            id="module-edit-key"
-            bind:value={editKey}
-            maxlength={10}
-            autocomplete="off"
-            class="font-mono uppercase"
-          />
-        </div>
-        <div class="flex w-24 flex-col gap-1">
-          <Label for="module-edit-icon">{m.modules_icon()}</Label>
-          <Input
-            id="module-edit-icon"
-            bind:value={editIcon}
-            maxlength={16}
-            placeholder={m.modules_icon_placeholder()}
-          />
-        </div>
-        <div class="flex w-full flex-col gap-1">
-          <Label for="module-edit-description">{m.modules_description()}</Label>
-          <Textarea
-            id="module-edit-description"
-            bind:value={editDescription}
-            maxlength={2000}
-            rows={3}
-            class="min-h-20"
-          />
-        </div>
-        <Button type="submit" variant="outline" disabled={savingSettings}>{m.common_save()}</Button>
-        <Button type="button" variant="outline" onclick={() => void toggleArchive()}
-          >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
+      <!-- 저장하는 동안 설정 입력을 잠근다. 그사이 바뀐 입력은 저장 완료를 버려 성공 알림을 숨긴다. -->
+      <fieldset class="min-w-0" disabled={savingSettings}>
+        <form
+          class="flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 @md:p-3"
+          onsubmit={(e) => void saveSettings(e)}
+          novalidate
+          aria-label={m.modules_settings()}
         >
-      </form>
+          <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
+            <Label for="module-edit-name">{m.modules_name()}</Label>
+            <Input id="module-edit-name" bind:value={editName} maxlength={200} />
+          </div>
+          <div class="flex w-28 flex-col gap-1">
+            <Label for="module-edit-key">{m.modules_key()}</Label>
+            <Input
+              id="module-edit-key"
+              bind:value={editKey}
+              maxlength={10}
+              autocomplete="off"
+              class="font-mono uppercase"
+            />
+          </div>
+          <div class="flex w-24 flex-col gap-1">
+            <Label for="module-edit-icon">{m.modules_icon()}</Label>
+            <Input
+              id="module-edit-icon"
+              bind:value={editIcon}
+              maxlength={16}
+              placeholder={m.modules_icon_placeholder()}
+            />
+          </div>
+          <div class="flex w-full flex-col gap-1">
+            <Label for="module-edit-description">{m.modules_description()}</Label>
+            <Textarea
+              id="module-edit-description"
+              bind:value={editDescription}
+              maxlength={2000}
+              rows={3}
+              class="min-h-20"
+            />
+          </div>
+          <Button type="submit" variant="outline" disabled={savingSettings}
+            >{m.common_save()}</Button
+          >
+          <Button type="button" variant="outline" onclick={() => void toggleArchive()}
+            >{current.archived ? m.modules_unarchive() : m.modules_archive()}</Button
+          >
+        </form>
+      </fieldset>
       <p class="text-sm empty:hidden" role="status">
         {#if settingsNote !== undefined}{settingsNote}{/if}
       </p>

@@ -317,15 +317,19 @@
   };
 </script>
 
+<!-- 저장하는 동안 되살리기도 잠근다. 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 만들기는 다시 내면 새 요청 id로
+     두 번째 기록을, 고치기는 옮기지 못한 기준 판으로 자기 저장과 409를 낸다. -->
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      draft.restore(entry);
-    }}
-    ondiscard={() => {
-      draft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}
@@ -400,6 +404,7 @@
           {courses}
           {episodes}
           {files}
+          disabled={busy}
           submitLabel={m.records_add_kind({ label: kindLabel })}
           onsubmit={() => void save(def)}
           oncancel={() => {
@@ -526,6 +531,7 @@
                 {courses}
                 {episodes}
                 {files}
+                disabled={busy}
                 submitLabel={m.common_save()}
                 onsubmit={() => void save(def)}
                 oncancel={() => {
