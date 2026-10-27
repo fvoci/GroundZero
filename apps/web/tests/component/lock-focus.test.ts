@@ -117,6 +117,20 @@ describe('keepFocusAcrossLocks', () => {
     expect(document.activeElement).not.toBe(input);
   });
 
+  // D5-F-1(R1): 사용자가 먼저 떠난 입력(빈 곳 클릭, `blur()`, 마우스 클릭으로 단추에 초점을 주지 않는 Safari·macOS
+  // Firefox에서 단추 누르기)은 나중 작업(task)에서 잠기고 풀려도 초점을 끌어오지 않는다.
+  it('does not pull focus back to an input the user left before the lock', async () => {
+    const { fieldset, input } = form();
+    input.focus();
+    input.blur();
+    await new Promise((r) => setTimeout(r, 50));
+    fieldset.disabled = true;
+    await settle();
+    fieldset.disabled = false;
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('stops after the returned cleanup runs', async () => {
     stop?.();
     stop = undefined;
@@ -157,12 +171,16 @@ it('does not focus into a status dialog that closes on success', async () => {
   await waitFor(() => {
     expect(name).toBeDisabled();
   });
+  // 문서에서 빠진 요소는 activeElement가 될 수 없으므로, 닫히는 동안 한 번이라도 초점을 받았는지 수신기로 본다
+  // (e2e/save-lock-focus.spec.ts와 같은 방식).
+  const refocused = vi.fn();
+  name.addEventListener('focus', refocused);
   finish?.();
   await waitFor(() => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   await settle();
-  expect(document.activeElement).not.toBe(name);
+  expect(refocused).not.toHaveBeenCalled();
   expect(name.isConnected).toBe(false);
   me.userId = '';
   localStorage.clear();
