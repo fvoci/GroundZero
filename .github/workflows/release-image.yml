@@ -113,6 +113,10 @@ env:
     fail() { echo "::error::$platform: $*"; exit 1; }
     actual=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")
     [ "$actual" = "$platform" ] || fail "platform $actual, expected $platform"
+    # 이미지 크기 회귀를 실행 요약에서 본다(#138). 로컬 이미지 저장소의 크기이며 레지스트리의 압축 크기와 다르다.
+    size=$(docker image inspect --format '{{.Size}}' "$ref")
+    echo "image size: $platform $size bytes"
+    echo "- $platform: image size $size bytes (docker image inspect)" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
     label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$1\"}}" "$ref"; }
     [ "$(label revision)" = "$revision" ] || fail "revision label $(label revision), expected $revision"
     [ "$(label version)" = "$version" ] || fail "version label $(label version), expected $version"

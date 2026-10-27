@@ -22,6 +22,17 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 utoipa = { version = "5", features = ["axum_extras", "uuid"] }
 xshell = "0.2"
 
+# 제품 이미지의 서버 바이너리(#138). 크기·빌드 시간 전후 측정은 #138 PR에 둔다. LTO는 fat이 thin보다 크기는 3%쯤 작지만
+# 빌드 시간이 두 배 가까이 걸려 thin을 쓴다. opt-level은 기본(3)이다.
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+# 패닉은 펼침(unwind)으로 둔다. 첨부 본문 추출(search.rs)과 실시간 편집 검사(collab/room.rs)는 외부 해석기의 패닉을
+# spawn_blocking의 JoinError로 받아 그 일만 실패로 처리한다. abort면 서버 프로세스 전체가 내려간다. 우리 코드의
+# panic 금지는 Clippy 규칙(D-09)이 맡는다.
+panic = "unwind"
+
 # 품질 기준 D-09(docs/decisions/delivery.md#d-09). 선택 근거는 O-23 기록.
 [workspace.lints.rust]
 unsafe_code = "forbid"
