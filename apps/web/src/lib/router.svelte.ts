@@ -313,7 +313,10 @@ class Router {
    * 문맥 전환·기록 뒤로 가기에서는 없다. 다음 경로에서도 마운트된 채인 폼은 이 값으로 묻지 않고 통과한다.
    */
   guard: ((proceed: () => void, next?: string) => boolean) | undefined = undefined;
-  /** 가드가 막은 뒤로 가기를 떠나기로 확정했을 때 한 번 건너뛸 popstate(아래 참고). */
+  /**
+   * 이미 가드를 거친 기록 이동이 일으킬 popstate 한 번은 다시 묻지 않는다: 가드가 막은 뒤로 가기를 떠나기로 확정했을 때
+   * (아래 참고)와 가드가 허락한 `back()`(RA-1: 묻고 버린 입력이나 다음 화면에 남는 입력을 그 popstate가 다시 물었다).
+   */
   private skipGuardOnce = false;
 
   constructor() {
@@ -382,7 +385,10 @@ class Router {
     action();
   }
 
-  /** 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. 가드가 막으면 false. */
+  /**
+   * 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. 가드가 막으면 false.
+   * 앞 기록이 있을 때만 부른다(없으면 popstate가 오지 않아 다음 뒤로 가기가 가드를 건너뛴다).
+   */
   back(): boolean {
     if (
       this.guard !== undefined &&
@@ -391,6 +397,7 @@ class Router {
       })
     )
       return false;
+    this.skipGuardOnce = true;
     window.history.back();
     return true;
   }

@@ -297,6 +297,37 @@ describe('task detail dependency kinds', () => {
     expect(screen.queryByText(/관계를 지키지 못합니다/)).toBeNull();
   });
 
+  it('moves focus to save mine when the retry without shifts meets a conflict', async () => {
+    // 수정 차분 검수 RA-2: 미리보기를 승인한 저장의 재시도가 409면 패널과 누른 단추가 사라지므로 "내 입력으로 다시 저장"으로
+    // 초점을 돌린다. 재시도 전에 미리보기를 비워도 승인한 저장이었다는 것은 잃지 않는다.
+    await setLocale('ko', { reload: false });
+    mount(design, [build, review]);
+    vi.spyOn(api, 'previewSchedule')
+      .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, checklist: [] } })
+      .mockResolvedValueOnce({
+        kind: 'conflict',
+        current: { ...design, title: '남의 제목', version: 2, checklist: [] },
+      });
+    await fireEvent.input(await screen.findByLabelText('마감일'), {
+      target: { value: '2026-10-22' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    const approve = await screen.findByRole('button', { name: '후속 업무도 옮겨 저장' });
+    approve.focus();
+    await fireEvent.click(approve);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update.mock.calls[1]?.[4]).toEqual([]);
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('task-save-mine');
+    });
+  });
+
   it('keeps the typed values and shows the latest link when the link changed elsewhere meanwhile', async () => {
     // 감사 W4: 편집을 시작한 관계(SS·1)가 그사이 다른 곳에서 FF·4로 바뀌었다. 서버가 409 link_conflict로 거절하면
     // 덮지 않고 최신 관계를 알리며, 입력한 지연일은 그대로 두고 다음 저장은 최신 관계를 기준으로 보낸다.
