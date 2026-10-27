@@ -602,11 +602,14 @@ describe('durable learning input', () => {
     await fireEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
     expect(value('unit-note-u1')).toBe('Keep my note');
     view.unmount();
-    // 읽기 전용이 되면 내 진도 폼을 열 수 없다(D-20 ⑧). 남긴 입력은 지우지 않고 쓸 수 있게 되면 다시 고르게 한다.
+    // 읽기 전용이 되면 내 진도 폼은 저장 없이 읽기만 한다(D-20 ⑧, D3B-F-2). 남긴 입력은 고르게 하지 않고 지우지도 않아
+    // 쓸 수 있게 되면 다시 고르게 한다.
     vi.mocked(api.studyPlan).mockResolvedValue({ ...plan, can_write: false });
     const readOnly = render(StudyPanel, { itemId: 'i1' });
-    await screen.findByText('Unit 1');
-    expect(screen.queryByRole('button', { name: m.study_mine() })).toBeNull();
+    await firstButton(m.study_mine());
+    expect(document.getElementById('unit-note-u1')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    expect(screen.queryByRole('button', { name: m.common_save() })).toBeNull();
     expect(save).not.toHaveBeenCalled();
     readOnly.unmount();
     vi.mocked(api.studyPlan).mockResolvedValue(plan);

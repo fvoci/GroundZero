@@ -4,7 +4,7 @@
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
-  import { onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -131,11 +131,22 @@
     writeSession(groupKey(id), JSON.stringify(next));
   }
 
+  // 불러온 항목의 id. 다른 항목으로 옮기면 불러오기 전까지 앞 항목의 `mod`가 남아 있으므로, 묶음은 불러온 항목이 지금
+  // 항목일 때만 정한다(앞 종류의 기본 묶음으로 새 항목 주소를 바꾸거나 헛되이 저장 보기를 읽지 않게).
+  const loadedItemId = $derived(item?.id);
+  // 화면이 사라졌는지. 저장 보기를 기다리는 사이 다른 화면으로 갔으면 늦은 응답이 이 항목으로 끌어오지 않는다.
+  let destroyed = false;
+  onDestroy(() => {
+    destroyed = true;
+  });
+  // 묶음 단추를 누를 때마다 오른다. 업무 단추의 저장 보기를 기다리는 사이 다른 묶음을 골랐으면 늦은 응답을 버린다.
+  let selectSeq = 0;
+
   $effect(() => {
     const kind = mod?.kind;
     const id = currentItemId;
     const route = itemRoute;
-    if (kind === undefined) return;
+    if (kind === undefined || loadedItemId !== id) return;
     untrack(() => {
       const available = itemGroupsFor(kind);
       const memory = remembered(id);
@@ -160,7 +171,7 @@
       const at = router.path;
       const mine = loadSeq;
       void taskEntryView(id, lastView).then((view) => {
-        if (router.path !== at || !stillOn(id, mine)) return;
+        if (destroyed || router.path !== at || !stillOn(id, mine)) return;
         router.replace(itemGroupPath(workspace.id, id, 'tasks', view));
       });
     });
@@ -181,9 +192,14 @@
   async function selectGroup(next: ItemGroupName): Promise<void> {
     const id = currentItemId;
     const mine = loadSeq;
+    selectSeq += 1;
+    const ticket = selectSeq;
+    const at = router.path;
     const last = chosen?.view ?? 'board';
     const view = next === 'tasks' ? await taskEntryView(id, last) : last;
-    if (!stillOn(id, mine)) return;
+    // 기다리는 사이 다른 묶음을 고르거나(차례), 주소가 바뀌거나, 화면이 사라졌으면 늦은 응답으로 옮기지 않는다
+    // (뿌리 경로 쪽과 같은 규칙).
+    if (destroyed || ticket !== selectSeq || router.path !== at || !stillOn(id, mine)) return;
     const path = itemGroupPath(workspace.id, id, next, view);
     router.navigate(path);
     if (router.path !== path) return;

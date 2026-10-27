@@ -36,8 +36,6 @@
     onchanged?: () => void;
     /** 항목 범위에서 날짜 칸으로 업무를 만들 항목. 쓸 수 없으면 만들기 단추를 보이지 않는다. */
     item?: ItemView | undefined;
-    /** 날짜 칸에서 업무를 만들었다(같은 화면의 업무 목록이 다시 읽게). */
-    ontaskcreated?: () => void;
     /**
      * 범위의 항목이나 모듈이 보관됐다. 항목·모듈 등급은 보관을 반영하지 않으므로(D-113) 업무 만들기를 감춘다(서버도
      * 55000으로 거부한다). 일정은 서버가 보관을 반영해 일정 등급을 read로 내려 보내므로(`app_grade_under_item`) 그
@@ -53,7 +51,6 @@
     version = 0,
     onchanged,
     item,
-    ontaskcreated,
     locked = false,
   }: Props = $props();
 
@@ -381,7 +378,6 @@
     // 업무는 만들었지만 마감일을 넣지 못한 채 닫았다: 그 업무가 보이게 다시 읽는다.
     if (created) {
       reloadKey += 1;
-      ontaskcreated?.();
     }
     if (day !== undefined) void focusCreate(day);
   }}
@@ -397,7 +393,6 @@
       }),
     );
     reloadKey += 1;
-    ontaskcreated?.();
   }}
 />
 

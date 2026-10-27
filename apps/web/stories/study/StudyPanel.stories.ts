@@ -73,7 +73,7 @@ export const RestoreDraftLarge: Story = {
   globals: { fontScale: '200', viewport: { value: 'narrow375' } },
 };
 
-/** 읽기 전용: 상태 단추·내 분량 폼·다시 배정 없이 시간 측정만 보인다(D-20 ⑧). */
+/** 읽기 전용·보관 항목: 상태 단추·다시 배정은 없고, 내 분량·메모는 저장 단추 없는 비활성 폼으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
 export const ReadOnly: Story = {
   beforeEach: () => {
     spyOn(api, 'studyPlan').mockResolvedValue({ ...study, can_write: false });
@@ -81,8 +81,10 @@ export const ReadOnly: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('button', { name: m.study_track_aria({ title: '연습 문제' }) });
-    await expect(canvas.queryByRole('button', { name: m.study_mine() })).toBeNull();
     await expect(canvas.queryByRole('form', { name: m.study_replan_form() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.study_mine() }));
+    await expect(canvas.getByLabelText(m.study_note())).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: m.common_save() })).toBeNull();
   },
 };
 export const ReadOnlyNarrowDark: Story = {

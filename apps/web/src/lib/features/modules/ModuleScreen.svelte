@@ -68,7 +68,8 @@
     router.navigate(path);
     if (router.path === path) chosenView = next;
   }
-  // 설정·템플릿 입력은 보기와 상관없이 이 화면에 남으므로 같은 모듈 안 보기 전환에서는 묻지 않는다.
+  // 설정 폼은 보기와 상관없이 이 화면에 남으므로 같은 모듈 안 보기 전환에서는 묻지 않는다. 템플릿에서 만들기는 새 항목 폼처럼
+  // 항목 보기에만 있어 달력 보기로 가면 언마운트되므로 묻는다(D-121·D-125).
   const staysOnThisModule = (next: string): boolean => staysOnModule(next, moduleId);
 
   $effect(() => {
@@ -260,7 +261,6 @@
     },
     dirty: () => templateTitle !== '' || templateId !== '',
     busy: () => templateBusy,
-    stays: staysOnThisModule,
   });
   onMount(templateDraft.attach);
 
@@ -325,20 +325,6 @@
   onkeep={settingsDraft.leave.keep}
   ondiscard={settingsDraft.discardAndLeave}
 />
-<!-- 템플릿에서 만드는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면
-     새 요청 id로 두 번째 항목을 만든다. -->
-{#each mod === undefined ? [] : templateDraft.offers as entry (entry.key)}
-  <fieldset class="contents" disabled={templateBusy}>
-    <FormDraftOffer
-      onrestore={() => {
-        templateDraft.restore(entry);
-      }}
-      ondiscard={() => {
-        templateDraft.discard(entry);
-      }}
-    />
-  </fieldset>
-{/each}
 <DiscardChangesConfirm
   open={templateDraft.leave.open}
   onkeep={templateDraft.leave.keep}
@@ -402,6 +388,20 @@
         />
       </div>
     {:else}
+      <!-- 템플릿에서 만들기의 되살리기 제안은 그 폼이 있는 항목 보기에만 둔다. 만드는 동안 입력과 되살리기를 잠근다(D-97).
+           그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면 새 요청 id로 두 번째 항목을 만든다. -->
+      {#each templateDraft.offers as entry (entry.key)}
+        <fieldset class="contents" disabled={templateBusy}>
+          <FormDraftOffer
+            onrestore={() => {
+              templateDraft.restore(entry);
+            }}
+            ondiscard={() => {
+              templateDraft.discard(entry);
+            }}
+          />
+        </fieldset>
+      {/each}
       {#if items.length === 0}
         <p class="rounded-md border bg-card p-2 @md:p-3 text-muted-foreground">
           {m.modules_items_empty()}
