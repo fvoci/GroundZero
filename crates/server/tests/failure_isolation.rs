@@ -9,6 +9,11 @@ mod sql_support;
 use sql_support::*;
 use uuid::Uuid;
 
+/// 만료 비우기(`app_system_purge_expired`)는 DB 전체의 만료 묶음·워크스페이스를 지운다. 그것을 부르는 시험끼리는 차례로
+/// 돌린다. 겹치면 한쪽의 비우기가, 다른 쪽이 주입을 걷은 뒤 아직 만료로 둔 대상을 먼저 지운다(그 묶음의 복구가 P0002,
+/// CI run 40516693758).
+static EXPIRED_PURGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 // nextval은 실패한 하위 트랜잭션에도 되돌아가지 않아 실제 실패 주입의 증거가 된다.
 async fn install_failure(table: &str, operation: &str, predicate: &str) -> String {
     let name = format!("sql_failure_{}", Uuid::now_v7().simple());
@@ -41,6 +46,7 @@ async fn remove_failure(table: &str, name: &str) {
 
 #[tokio::test]
 async fn expired_batch_failure_rolls_back_its_files_but_other_batch_commits() {
+    let _serial = EXPIRED_PURGE.lock().await;
     let w = World::new().await;
     let bad = w.doc().await;
     let good = w.doc().await;
@@ -306,6 +312,7 @@ async fn count(sql: &str, arg: Uuid) -> i64 {
 // 남지 않고, 같은 실행에서 뒤에 처리되는 정상 워크스페이스는 커밋된다.
 #[tokio::test]
 async fn expired_workspace_failure_rolls_back_its_purge_but_other_workspace_commits() {
+    let _serial = EXPIRED_PURGE.lock().await;
     let bad = World::new().await;
     let good = World::new().await;
     // 워크스페이스 행을 지우기 전에 지워지는 자식(업무·항목)이 있어야 되돌림이 보인다.
