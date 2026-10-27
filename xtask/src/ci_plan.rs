@@ -122,6 +122,14 @@ impl Job {
         }
     }
 
+    /// 요약·알림에 보일 건너뜀 표기. rhwp는 빌드(출력 키 `rhwp`)만 건너뛰고 권고 검사는 모든 PR에서 돈다.
+    fn skipped_label(self) -> &'static str {
+        match self {
+            Self::Rhwp => "권고 검사(빌드는 캐시 재사용)",
+            _ => "건너뜀",
+        }
+    }
+
     fn skip_reason(self) -> &'static str {
         match self {
             Self::Licenses | Self::Integration | Self::Browser => {
@@ -212,7 +220,12 @@ impl Plan {
             out.push_str(&if self.runs(job) {
                 format!("| {} | 실행 | |\n", job.name())
             } else {
-                format!("| {} | 건너뜀 | {} |\n", job.name(), job.skip_reason())
+                format!(
+                    "| {} | {} | {} |\n",
+                    job.name(),
+                    job.skipped_label(),
+                    job.skip_reason()
+                )
             });
         }
         out
@@ -233,14 +246,20 @@ pub fn run(root: &Path, event: &str) -> Result<()> {
     if std::env::var_os("GITHUB_ACTIONS").is_some() {
         for job in Job::ALL.into_iter().filter(|job| !plan.runs(*job)) {
             println!(
-                "::notice title={} 건너뜀::{}",
+                "::notice title={} {}::{}",
                 job.name(),
+                job.skipped_label(),
                 job.skip_reason()
             );
         }
     }
-    append_env_file("GITHUB_OUTPUT", &plan.outputs())?;
-    append_env_file("GITHUB_STEP_SUMMARY", &plan.summary())
+    publish(&plan, append_env_file)
+}
+
+/// 요약을 먼저 쓰고, 성공할 때만 출력을 쓴다. 요약 쓰기가 실패했는데 출력이 남으면 사유 없이 job이 건너뛰어진다.
+fn publish(plan: &Plan, write: impl Fn(&str, &str) -> Result<()>) -> Result<()> {
+    write("GITHUB_STEP_SUMMARY", &plan.summary())?;
+    write("GITHUB_OUTPUT", &plan.outputs())
 }
 
 /// 체크아웃은 PR 병합 커밋이다(첫 부모가 기준 브랜치). 병합 커밋이 아니면 비교 기준을 믿을 수 없으므로 전체를 돈다.
@@ -406,6 +425,53 @@ mod tests {
     }
 
     #[test]
+    fn publish_writes_summary_before_outputs_and_skips_outputs_on_summary_failure() {
+        use std::cell::RefCell;
+
+        let plan = Plan::for_paths(["apps/web/src/app.html"]);
+
+        let written = RefCell::new(Vec::new());
+        super::publish(&plan, |var, _| {
+            written.borrow_mut().push(var.to_owned());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(*written.borrow(), ["GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT"]);
+
+        let written = RefCell::new(Vec::new());
+        let err = super::publish(&plan, |var, _| {
+            written.borrow_mut().push(var.to_owned());
+            anyhow::bail!("disk full")
+        })
+        .unwrap_err();
+        assert_eq!(err.to_string(), "disk full");
+        assert_eq!(*written.borrow(), ["GITHUB_STEP_SUMMARY"]);
+    }
+
+    #[test]
+    fn rhwp_not_built_shows_audit_only_in_summary() {
+        for paths in [
+            &["docs/decisions.md"][..],
+            &["apps/web/src/app.html"],
+            &["crates/server/src/lib.rs"],
+        ] {
+            let plan = Plan::for_paths(paths.iter().copied());
+            assert!(!plan.runs(Job::Rhwp), "{paths:?}");
+            assert!(plan.outputs().ends_with("rhwp=false\n"), "{paths:?}");
+            let summary = plan.summary();
+            assert!(
+                summary.contains("| rhwp | 권고 검사(빌드는 캐시 재사용) | rhwp 입력"),
+                "{summary}"
+            );
+            assert!(!summary.contains("| rhwp | 건너뜀 |"), "{summary}");
+        }
+
+        let built = Plan::for_paths(["deploy/rhwp/build.sh"]);
+        assert!(built.summary().contains("| rhwp | 실행 | |"));
+        assert!(built.outputs().ends_with("rhwp=true\n"));
+    }
+
+    #[test]
     fn outputs_and_summary_name_every_skipped_job_with_reason() {
         let plan = Plan::for_paths(["apps/web/src/app.html"]);
         assert_eq!(
@@ -415,7 +481,12 @@ mod tests {
         );
         let summary = plan.summary();
         for job in [Job::Oidc, Job::Supabase, Job::Rhwp] {
-            let row = format!("| {} | 건너뜀 | {} |", job.name(), job.skip_reason());
+            let row = format!(
+                "| {} | {} | {} |",
+                job.name(),
+                job.skipped_label(),
+                job.skip_reason()
+            );
             assert!(summary.contains(&row), "{summary}");
         }
 
