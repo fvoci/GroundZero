@@ -758,20 +758,22 @@
 
   // 보드가 기록을 쌓아 연 상세인지. 그렇다면 닫을 때 그 기록으로 돌아가(`router.back()`, D-121 popstate 보호를 거친다)
   // 뒤로 가기가 방금 닫은 카드를 다시 열지 않고 보드를 떠나게 한다. 주소로 바로 연 상세와 상세에서 옮겨 연 상세는 보드
-  // 주소로 옮긴다(R5 최종 A FA-4).
-  let openedHere = false;
+  // 주소로 옮긴다(R5 최종 A FA-4). 값은 돌아갈 보드 경로이고, 닫을 때 가드에 넘겨 그 경로에도 남는 항목 머리 폼은
+  // 묻지 않는다(RF-1).
+  let openedFrom: string | undefined;
 
   function open(id: string): void {
     const path = itemTaskPath(item.workspace_id, item.id, id);
     // 같은 보드 위에 상세를 여는 동안 새 업무·보기 입력은 그대로 남는다. 상세 간 이동은 requestOpen의 확인을 거친다.
     if (openTaskId === undefined) {
+      const from = router.path;
       leave.proceed(() => {
         router.navigate(path);
-        openedHere = router.path === path;
+        openedFrom = router.path === path ? from : undefined;
       });
     } else {
       router.navigate(path);
-      openedHere = false;
+      openedFrom = undefined;
     }
   }
 
@@ -789,7 +791,7 @@
   }
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
-    else openedHere = false;
+    else openedFrom = undefined;
     // 다른 업무를 열었거나 닫혔으면 앞 업무에 대해 물은 것을 거둔다(새로 연 업무를 닫거나 그 입력을 버리지 않게).
     leave.keep();
   });
@@ -881,9 +883,9 @@
   }
 
   function close(): void {
-    if (openedHere) {
+    if (openedFrom !== undefined) {
       // 이탈 확인에서 머물기로 하면 돌아가지 않았으므로 다음 닫기도 뒤로 간다.
-      openedHere = !router.back();
+      if (router.back(openedFrom)) openedFrom = undefined;
     } else {
       router.navigate(itemViewPath(item.workspace_id, item.id, 'board'));
     }
