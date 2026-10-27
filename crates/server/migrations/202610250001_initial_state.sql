@@ -1774,13 +1774,14 @@ ALTER FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_w
 -- 공간(위키 p_workspace 또는 항목 p_item)에 템플릿으로 새 문서를 만들 때의 본문(D-27·D-114·D-115). 읽을 수 있는 템플릿이어야
 -- 하고, 템플릿 예외는 allow_copy만 넘는다: 공간 문서 템플릿은 복제처럼 같은 조직 공간에서만 쓰고 원본에 복제 감사를 남긴다.
 -- 개인 노트 대상은 이 함수를 거치지 않는다. 새 id 1: 원본 감사.
-CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) RETURNS jsonb
+CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
     v_kind   text := CASE WHEN p_item IS NULL THEN 'workspace' ELSE 'item' END;
     v_target uuid := coalesce(p_item, p_workspace);
+    v_ws     uuid := coalesce(p_workspace, (SELECT i.workspace_id FROM items i WHERE i.id = p_item));
     v_src    documents%ROWTYPE;
   BEGIN
     SELECT * INTO v_src FROM documents WHERE id = p_template AND is_template AND deleted_at IS NULL;
@@ -1797,14 +1798,18 @@ CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_ite
        AND app_target_organization('document', p_template) IS DISTINCT FROM app_target_organization(v_kind, v_target) THEN
       RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
     END IF;
-    PERFORM app_audit_document(app_id(p_ids, 1), p_template, 'copy',
-                               jsonb_build_object('target', 'workspace', 'template', true));
+    -- 같은 request_id로 다시 보낸 생성은 이미 만든 문서를 돌려받으므로 감사를 다시 남기지 않는다(app_copy_document와 같다).
+    IF NOT EXISTS (SELECT 1 FROM documents
+                   WHERE workspace_id = v_ws AND created_by = app_user_id() AND request_id = p_request_id) THEN
+      PERFORM app_audit_document(app_id(p_ids, 1), p_template, 'copy',
+                                 jsonb_build_object('target', 'workspace', 'template', true));
+    END IF;
     RETURN v_src.body;
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 -- D-115: allow_copy가 꺼진 문서는 소유 권한 외 누구도(수정 권한 포함) 내보내거나 첨부를 내려받지 못한다.
 CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
@@ -13295,8 +13300,8 @@ REVOKE ALL ON FUNCTION fvoci.app_task_series_bound(p_series uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_tasks_move_version() FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) TO fvoci_app;

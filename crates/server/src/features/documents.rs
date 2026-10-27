@@ -184,13 +184,14 @@ pub(crate) enum NewDocumentPlace {
 }
 
 /// 새 문서의 본문: 템플릿을 주면 그 본문(읽을 수 있는 템플릿이어야 함, 아니면 404), 아니면 빈 문서.
-/// 공간에 만들 때 공간 문서 템플릿은 같은 조직 것만 쓰고(409) 원본에 복제 감사를 남긴다(D-114·D-115).
+/// 공간에 만들 때 공간 문서 템플릿은 같은 조직 것만 쓰고(409) 원본에 복제 감사를 남긴다(D-114·D-115). 같은
+/// `request_id`로 다시 보낸 생성에는 감사를 다시 남기지 않는다.
 pub(crate) async fn initial_body(
     tx: &mut UserTx,
-    template: Option<DocumentId>,
+    input: &CreateDocument,
     place: NewDocumentPlace,
 ) -> Result<Value, AppError> {
-    let Some(template) = template else {
+    let Some(template) = input.template_id else {
         return Ok(empty_body());
     };
     let (workspace, item) = match place {
@@ -207,10 +208,11 @@ pub(crate) async fn initial_body(
         NewDocumentPlace::Wiki(workspace) => (Some(workspace), None),
         NewDocumentPlace::Item(item) => (None, Some(item)),
     };
-    sqlx::query_scalar("SELECT app_template_body($1, $2, $3, $4)")
+    sqlx::query_scalar("SELECT app_template_body($1, $2, $3, $4, $5)")
         .bind(template)
         .bind(workspace)
         .bind(item)
+        .bind(input.request_id)
         .bind(new_ids(1))
         .fetch_one(tx.conn())
         .await
@@ -553,7 +555,7 @@ pub async fn create_wiki(
             "none" => return Err(AppError::NotFound),
             _ => return Err(AppError::Forbidden),
         }
-        let body = initial_body(&mut tx, input.template_id, NewDocumentPlace::Wiki(ws)).await?;
+        let body = initial_body(&mut tx, &input, NewDocumentPlace::Wiki(ws)).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(ws)
@@ -620,7 +622,7 @@ pub async fn create_note(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let body = initial_body(&mut tx, input.template_id, NewDocumentPlace::PersonalNote).await?;
+        let body = initial_body(&mut tx, &input, NewDocumentPlace::PersonalNote).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7)")
                 .bind(input.request_id)

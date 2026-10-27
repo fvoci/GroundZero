@@ -257,15 +257,22 @@ async fn space_templates_stay_within_the_organization() {
         );
     }
 
-    let made = send(
-        &app,
-        Method::POST,
-        &format!("/api/workspaces/{ws}/wiki/documents"),
-        Some(&admin),
-        Some(body()),
-    )
-    .await;
-    assert_eq!(made.status, StatusCode::CREATED, "{:?}", made.json);
+    // 같은 request_id로 다시 보내면 같은 문서를 돌려받고 감사는 하나만 남는다.
+    let request = body();
+    let mut made = Vec::new();
+    for _ in 0..2 {
+        let reply = send(
+            &app,
+            Method::POST,
+            &format!("/api/workspaces/{ws}/wiki/documents"),
+            Some(&admin),
+            Some(request.clone()),
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::CREATED, "{:?}", reply.json);
+        made.push(reply.json["id"].clone());
+    }
+    assert_eq!(made[0], made[1]);
     let mut conn = common::fixture_conn().await;
     let audits: Vec<serde_json::Value> = sqlx::query_scalar(
         "SELECT detail FROM fvoci.audit_log

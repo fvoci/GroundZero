@@ -703,7 +703,7 @@ pub async fn create_item_document(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let body = initial_body(&mut tx, input.template_id, NewDocumentPlace::Item(item)).await?;
+        let body = initial_body(&mut tx, &input, NewDocumentPlace::Item(item)).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(item)
