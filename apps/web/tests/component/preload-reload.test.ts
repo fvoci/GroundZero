@@ -2,10 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
-import { stopKeepingDrafts } from '$lib/features/common/leave-guard.svelte';
+import { leavingWithDrafts, stopKeepingDrafts } from '$lib/features/common/leave-guard.svelte';
 import {
   PRELOAD_RELOAD_KEY,
   PRELOAD_RELOAD_SETTLE_MS,
+  PRELOAD_RELOAD_STALL_MS,
   watchPreloadErrors,
 } from '$lib/features/common/preload-reload';
 import { newVersion } from '$lib/features/feedback/feedback.svelte';
@@ -141,6 +142,40 @@ describe('watchPreloadErrors', () => {
     expect(storage.getItem(PRELOAD_RELOAD_KEY)).toBeNull();
   });
 
+  // R5 B 최종 C-1: 다시 읽기를 바깥 beforeunload(확장 등)가 막아 사용자가 머무르면, 다시 읽는 중 상태가 영구히 남아 이후
+  // 실패를 모두 조용히 취소한다(import가 `undefined`로 끝남). 정해진 시간 안에 페이지가 내려가지 않으면 되돌린다.
+  it('undoes a reload that did not happen, and leaves later failures uncancelled', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const storage = memoryStorage();
+    const reload = vi.fn();
+    const onStale = vi.fn();
+    const cancelReload = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload, onStale, cancelReload });
+    expect(preloadError()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).toHaveBeenCalledTimes(1);
+    expect(onStale).toHaveBeenCalledTimes(1);
+    // 같은 실패 묶음이라 다시 읽지 않고, 오류는 취소하지 않는다.
+    expect(preloadError()).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a reload that is unloading the page alone', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const storage = memoryStorage();
+    const reload = vi.fn(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    const onStale = vi.fn();
+    const cancelReload = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload, onStale, cancelReload });
+    expect(preloadError()).toBe(true);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+  });
+
   it('stops listening after cleanup', () => {
     const reload = vi.fn();
     const storage = memoryStorage();
@@ -257,6 +292,20 @@ describe('app: watchNewVersion keeps drafts before reloading', () => {
     // 닫은 뒤 또 실패하면 다시 보인다.
     preloadError();
     expect(await screen.findByTestId('new-version-banner')).toBeInTheDocument();
+  });
+
+  it('turns the draft-keeping mode off and shows the banner when the reload does not happen', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const reload = vi.fn();
+    const storage = memoryStorage();
+    stop = watchNewVersion({ storage: () => storage, reload });
+    expect(preloadError()).toBe(true);
+    expect(leavingWithDrafts()).toBe(true);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    // 창 떠나기 경고가 다시 보통 규칙으로 돌아오고, 저장한 뒤 새로고침하라고 알린다.
+    expect(leavingWithDrafts()).toBe(false);
+    expect(newVersion.times).toBe(1);
+    expect(preloadError()).toBe(false);
   });
 
   it('reloads with nothing to keep when no form is dirty', () => {
