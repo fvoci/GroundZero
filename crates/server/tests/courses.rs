@@ -666,3 +666,109 @@ async fn two_writers_on_the_same_episode_version_do_not_overwrite() {
     };
     assert_eq!(kept["title"], winner);
 }
+
+/// D-113(개정 ⑯)·D-20(⑧): 본인 진도 저장도 쓰기다. 보관된 항목이나 보관된 모듈의 항목에서는 멤버의 회차 진도 저장이
+/// 409 `invalid_state`("the item is archived", 웹의 보관 문구)이고, 열린 항목에서는 저장된다.
+#[tokio::test]
+async fn episode_progress_is_refused_under_an_archived_item_or_module() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "강의 진도 보관").await;
+    let (member, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let open_module = course_module(&app, &admin, &ws, "OPN").await;
+    let archived_module = course_module(&app, &admin, &ws, "AMD").await;
+    let open = course_item(&app, &admin, &open_module, "열린 강의").await;
+    let archived_item = course_item(&app, &admin, &open_module, "보관된 강의").await;
+    let in_archived_module =
+        course_item(&app, &admin, &archived_module, "보관된 모듈의 강의").await;
+    let mut episodes = Vec::new();
+    for item in [&open, &archived_item, &in_archived_module] {
+        let added = send(
+            &app,
+            Method::POST,
+            &format!("/api/items/{item}/episodes"),
+            Some(&admin),
+            Some(json!({ "episodes": [{ "request_id": new_request_id(), "title": "1회" }] })),
+        )
+        .await;
+        assert_eq!(added.json["added"], 1, "{:?}", added.json);
+        episodes.push(get(&app, &member, item).await["episodes"][0].clone());
+    }
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/items/{archived_item}/archived"),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let r = send(
+        &app,
+        Method::PUT,
+        &format!("/api/modules/{archived_module}/archived"),
+        Some(&admin),
+        Some(json!({ "archived": true })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    for (episode, archived) in [
+        (&episodes[0], false),
+        (&episodes[1], true),
+        (&episodes[2], true),
+    ] {
+        let r = send(
+            &app,
+            Method::PUT,
+            &format!("/api/episodes/{}/progress", episode["id"].as_str().unwrap()),
+            Some(&member),
+            Some(json!({ "status": "done" })),
+        )
+        .await;
+        if archived {
+            assert_eq!(r.status, StatusCode::CONFLICT, "{episode}: {:?}", r.json);
+            assert_eq!(r.json["error"], "invalid_state", "{:?}", r.json);
+            assert_eq!(r.json["message"], "the item is archived", "{:?}", r.json);
+        } else {
+            assert_eq!(r.status, StatusCode::NO_CONTENT, "{episode}: {:?}", r.json);
+        }
+    }
+}
+
+async fn course_module(app: &Router, admin: &TestUser, ws: &str, key: &str) -> String {
+    let m = send(
+        app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "kind": "course", "name": key, "key": key })),
+    )
+    .await;
+    assert_eq!(m.status, StatusCode::CREATED, "{:?}", m.json);
+    m.json["id"].as_str().unwrap().to_owned()
+}
+
+/// 워크스페이스에 공개한 강의 항목.
+async fn course_item(app: &Router, admin: &TestUser, module: &str, title: &str) -> String {
+    let i = send(
+        app,
+        Method::POST,
+        &format!("/api/modules/{module}/items"),
+        Some(admin),
+        Some(json!({ "request_id": new_request_id(), "title": title })),
+    )
+    .await;
+    assert_eq!(i.status, StatusCode::CREATED, "{:?}", i.json);
+    let id = i.json["id"].as_str().unwrap().to_owned();
+    let r = send(
+        app,
+        Method::PUT,
+        &format!("/api/items/{id}"),
+        Some(admin),
+        Some(json!({ "base_version": 1, "title": title, "description": "", "visibility": "workspace" })),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    id
+}
