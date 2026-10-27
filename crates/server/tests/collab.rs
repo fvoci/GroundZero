@@ -220,7 +220,10 @@ impl Client {
     }
 
     /// 내 문서를 바꾸고 그 변경만 보낸다.
-    async fn edit(&mut self, change: impl FnOnce(&mut yrs::TransactionMut, &yrs::XmlFragmentRef)) {
+    async fn edit(
+        &mut self,
+        change: impl FnOnce(&mut yrs::TransactionMut<'_>, &yrs::XmlFragmentRef),
+    ) {
         let before = self.doc.transact().state_vector();
         let fragment = self.doc.get_or_insert_xml_fragment(FRAGMENT);
         change(&mut self.doc.transact_mut(), &fragment);

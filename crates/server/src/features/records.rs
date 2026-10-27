@@ -125,10 +125,6 @@ const ATTACH: [ChoiceDef; 1] = [c("other", "첨부")];
 
 /// 모든 기록 종류. 각 종류는 결정 문서의 낱말에 대응한다(X-08: 목록 밖 기능을 더하지 않는다).
 #[must_use]
-#[allow(
-    clippy::too_many_lines,
-    reason = "one declarative table of every record kind; splitting it would scatter the schema"
-)]
 pub fn record_kinds() -> Vec<RecordKindDef> {
     use FieldType::{
         Course, Date as Day, Episode, LongText, Number, People, Person, Tags, Text, Url,

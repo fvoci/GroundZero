@@ -175,7 +175,7 @@ pub async fn notifications(
         .collect();
     let next = notifications
         .last()
-        .filter(|_| notifications.len() == limit as usize);
+        .filter(|_| i32::try_from(notifications.len()).is_ok_and(|n| n == limit));
     let (next_before, next_before_id) = (next.map(|n| n.created_at), next.map(|n| n.id));
     Ok(Json(NotificationPage {
         notifications,

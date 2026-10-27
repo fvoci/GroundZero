@@ -95,7 +95,9 @@ async fn clean_until_gone(state: &AppState, owner: &mut sqlx::PgConnection, keys
 
 /// 결정적인 내용(5 MiB 조각 둘: 앞은 꽉, 뒤는 작게).
 fn content(len: usize, seed: u8) -> Vec<u8> {
-    (0..len).map(|i| (i % 251) as u8 ^ seed).collect()
+    (0..len)
+        .map(|i| u8::try_from(i % 251).unwrap() ^ seed)
+        .collect()
 }
 
 async fn start(app: &Router, user: &TestUser, body: Value) -> (StatusCode, Value) {
