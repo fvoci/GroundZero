@@ -12,7 +12,7 @@
 
 - 작업 결과를 통합 브랜치에 합치고 확인했으면 그 워크트리를 지운다. 다음 중 하나라도 있으면 지우지 않고 이유를 남긴다.
   - 커밋하지 않은 변경(`git status --porcelain`이 비어 있지 않다)
-  - 통합 브랜치에도 원격에도 없는 커밋(`git branch -r --contains <커밋>`이 비어 있다)
+  - 통합 브랜치에도 원격에도 없는 커밋(`git merge-base --is-ancestor <커밋> <통합 브랜치>`가 실패하고 `git branch -r --contains <커밋>`도 비어 있다)
 - 지울 때는 `git worktree remove <경로>`를 쓴다. `--force`로 남은 변경을 버리지 않는다.
 
 ## 2. 새 워크트리 데우기
@@ -49,7 +49,7 @@ cp -cR ../<부모>/target ./target
   - `cargo xtask test`·`cargo xtask browser`: 끝나면 자기 Compose 프로젝트만 내린다. `--keep`이면 남긴다.
   - 강제로 끝났으면(SIGKILL 등) 시작할 때 출력한 복구 명령으로 그 프로젝트만 멈춘다. 이 명령은 볼륨을 지우지 않는다.
   - release 이미지 smoke: 실행 라벨이 붙은 자원만 지운다(`.github/workflows/release-image.yml`의 `SMOKE_RECOVER`).
-- `cargo xtask down`은 이 체크아웃의 개발·시험·브라우저 프로젝트를 볼륨까지 지운다. 개발 DB 내용도 사라진다. 다른 체크아웃은 건드리지 않는다.
+- `cargo xtask down`은 이 체크아웃의 개발·시험·브라우저·Supabase 시험 프로젝트를 볼륨까지 지운다. 개발 DB 내용도 사라진다. `cargo xtask test --supabase --keep`으로 남긴 시험 DB도 사라진다. 다른 체크아웃은 건드리지 않는다.
 
 ## 5. 워크트리별 시험 격리
 
