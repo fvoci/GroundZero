@@ -58,9 +58,9 @@
   const restrictOnly = $derived(!isOwner && doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
   const publicLinksEnabled = $derived(org.current?.public_links_enabled === true);
-  // Workspace에 쓰기 플래그가 없어 역할 필터의 D-113 교체는 계약 보완 대기. 조직 밖 이동·복제는 제외한다(D-114).
+  // 쓰기 대상은 서버 접근 등급(`Workspace.access`)으로만 고른다(D-113). 조직 밖 이동·복제는 제외한다(D-114).
   const writable = $derived(
-    workspaces.filter((w) => w.organization_id === org.currentId && w.role !== 'readonly'),
+    workspaces.filter((w) => w.organization_id === org.currentId && w.access !== 'read'),
   );
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 

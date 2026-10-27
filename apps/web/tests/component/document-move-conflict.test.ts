@@ -128,6 +128,29 @@ describe('move panel when the live room is busy', () => {
     await setLocale('ko', { reload: false });
   });
 
+  // R5 P2 F-4(D-113): 옮길 곳은 서버 접근 등급(`Workspace.access`)으로 고른다. 역할 이름이 관리자여도 읽기 등급이면 뺀다.
+  it('offers only workspaces whose server access is not read as move targets', async () => {
+    const modules = vi.spyOn(api, 'modules').mockResolvedValue([]);
+    vi.spyOn(api, 'movePreview').mockResolvedValue(preview);
+    const readOnlyAdmin: Workspace = {
+      access: 'read',
+      id: 'ws-3',
+      name: '보관 운영',
+      organization_id: 'org-1',
+      role: 'admin',
+      is_owner: false,
+      realtime_enabled: false,
+    };
+    render(DocumentActions, {
+      props: { doc, workspaces: [...workspaces, readOnlyAdmin], onchanged: () => undefined },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    await fireEvent.click(await screen.findByRole('menuitem', { name: '이동' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('move-preview');
+    expect(modules.mock.calls.map((call) => call[0]).sort()).toEqual(['ws-1', 'ws-2']);
+  });
+
   it('shows the error, stays on the page and keeps the preview so the move can be retried', async () => {
     vi.spyOn(api, 'modules').mockResolvedValue([]);
     vi.spyOn(api, 'movePreview').mockResolvedValue(preview);
