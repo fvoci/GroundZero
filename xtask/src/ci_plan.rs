@@ -253,8 +253,13 @@ pub fn run(root: &Path, event: &str) -> Result<()> {
             );
         }
     }
-    append_env_file("GITHUB_OUTPUT", &plan.outputs())?;
-    append_env_file("GITHUB_STEP_SUMMARY", &plan.summary())
+    publish(&plan, append_env_file)
+}
+
+/// 요약을 먼저 쓰고, 성공할 때만 출력을 쓴다. 요약 쓰기가 실패했는데 출력이 남으면 사유 없이 job이 건너뛰어진다.
+fn publish(plan: &Plan, write: impl Fn(&str, &str) -> Result<()>) -> Result<()> {
+    write("GITHUB_STEP_SUMMARY", &plan.summary())?;
+    write("GITHUB_OUTPUT", &plan.outputs())
 }
 
 /// 체크아웃은 PR 병합 커밋이다(첫 부모가 기준 브랜치). 병합 커밋이 아니면 비교 기준을 믿을 수 없으므로 전체를 돈다.
@@ -417,6 +422,30 @@ mod tests {
         let plan = Plan::full("push 이벤트는 전체를 돈다");
         assert!(!plan.docs_only());
         assert!(Job::ALL.into_iter().all(|job| plan.runs(job)));
+    }
+
+    #[test]
+    fn publish_writes_summary_before_outputs_and_skips_outputs_on_summary_failure() {
+        use std::cell::RefCell;
+
+        let plan = Plan::for_paths(["apps/web/src/app.html"]);
+
+        let written = RefCell::new(Vec::new());
+        super::publish(&plan, |var, _| {
+            written.borrow_mut().push(var.to_owned());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(*written.borrow(), ["GITHUB_STEP_SUMMARY", "GITHUB_OUTPUT"]);
+
+        let written = RefCell::new(Vec::new());
+        let err = super::publish(&plan, |var, _| {
+            written.borrow_mut().push(var.to_owned());
+            anyhow::bail!("disk full")
+        })
+        .unwrap_err();
+        assert_eq!(err.to_string(), "disk full");
+        assert_eq!(*written.borrow(), ["GITHUB_STEP_SUMMARY"]);
     }
 
     #[test]
