@@ -2,7 +2,7 @@
   // 멤버·초대·그룹·소유권 화면 (D-20, D-51). 권한 판단은 서버가 하고, 화면은 가능한 동작만 보여준다.
   import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -260,8 +260,18 @@
     return true;
   }
 
-  // 다른 워크스페이스로 바뀌면 다시 읽는다.
+  // 다른 워크스페이스로 바뀌면(또는 사용자가 바뀌면) 다시 읽는다. 초대·그룹 만들기 뒤 앱이 같은 id의 새 객체를 넘기는
+  // 것(이름 등 갱신, `onchanged`)으로는 다시 돌지 않는다: 돌면 화면을 비워 성공 안내와 입력 요소(초점)를 지웠다
+  // (R5 delta2 fixes §7). 같은 id의 갱신은 `workspace`를 직접 그리는 곳에 그대로 반영된다.
+  // 문자열 열쇠라 같은 id·같은 사용자면 값이 같아 효과가 다시 돌지 않는다.
+  const loadKey = $derived(JSON.stringify([workspace.id, me.userId]));
   $effect(() => {
+    if (loadKey === '') return;
+    untrack(() => {
+      reset(workspace.id);
+    });
+  });
+  function reset(id: string): void {
     view = undefined;
     groups = [];
     invitations = [];
@@ -270,8 +280,8 @@
     notice = undefined;
     error = undefined;
     loadError = undefined;
-    void load(workspace.id);
-  });
+    void load(id);
+  }
 </script>
 
 <section class="flex flex-col gap-8" aria-labelledby="members-heading">
