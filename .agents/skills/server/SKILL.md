@@ -18,6 +18,7 @@ description: fvoci 서버(crates/server)를 바꿀 때 무엇을 읽고 어떤 �
 - 핸들러는 입력 검증과 응답 변환만 한다. 권한·불변식·감사는 SQL 정의자 함수. 오류 코드는 D-81 언어 중립(기존 `AppError` 변종).
 - API를 바꾸면 `#[utoipa::path(..., operation_id = "<고유>")]`와 `http/mod.rs`의 paths·schemas·라우터를 함께 고치고 `cargo xtask openapi`·`pnpm run generate:api`로 계약·클라이언트를 재생성한다.
 - 시험은 실제 앱 역할(`state.db.begin_as`)과 실제 HTTP로 거부 경로를 확인한다. 기대값을 `app_access`에서 만들지 않는다. 잠금 대기는 `pg_blocking_pids`로 확인한다(고정 지연 금지).
+- Rust 관용·오류 처리·패닉 경로는 `.agents/skills/rust-review/`(BeautifulRust rust-review, CodeRabbit도 같은 지침을 씀)를 참고한다. 저장소 규칙이 우선하고, 검사 규칙 변경은 제안하지 않는다.
 
 ## 돌릴 검사
 
