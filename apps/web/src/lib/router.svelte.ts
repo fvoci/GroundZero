@@ -387,14 +387,15 @@ class Router {
 
   /**
    * 바로 앞 기록으로 돌아간다(이 화면이 기록을 쌓아 연 대화상자를 닫을 때). 주소는 popstate가 맞춘다. 가드가 막으면 false.
-   * 앞 기록이 있을 때만 부른다(없으면 popstate가 오지 않아 다음 뒤로 가기가 가드를 건너뛴다).
+   * 앞 기록이 있을 때만 부른다(없으면 popstate가 오지 않아 다음 뒤로 가기가 가드를 건너뛴다). `next`는 그 앞 기록의
+   * 경로다. 넘기면 그 경로에서도 마운트된 채인 폼이 묻지 않고 통과한다(RF-1: 항목 머리 폼).
    */
-  back(): boolean {
+  back(next?: string): boolean {
     if (
       this.guard !== undefined &&
       !this.guard(() => {
-        this.back();
-      })
+        this.back(next);
+      }, next)
     )
       return false;
     this.skipGuardOnce = true;

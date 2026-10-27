@@ -113,6 +113,30 @@ describe('router popstate guard', () => {
     expect(router.path).toBe('/notes');
   });
 
+  // RF-1: back()도 갈 경로를 가드에 넘긴다(확인 뒤 다시 하는 back()도 같다). 그래야 다음 경로에서도 마운트된 채인 폼이
+  // 묻지 않고 통과한다.
+  it('passes the next path to the guard on back and on its retry after refusal', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    let proceed: (() => void) | undefined;
+    const guard = vi.fn<(go: () => void, next?: string) => boolean>((go) => {
+      if (proceed !== undefined) return true;
+      proceed = go;
+      return false;
+    });
+    router.guard = guard;
+    expect(router.back('/shared')).toBe(false);
+    expect(guard).toHaveBeenLastCalledWith(expect.any(Function), '/shared');
+    expect(back).not.toHaveBeenCalled();
+    proceed?.();
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(guard).toHaveBeenLastCalledWith(expect.any(Function), '/shared');
+    expect(back).toHaveBeenCalledTimes(1);
+    // 막은 history.back 대신 그 popstate를 보낸다(다음 시험에 건너뛰기를 남기지 않게).
+    popTo('/shared');
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(router.path).toBe('/shared');
+  });
+
   // 가드는 갈 경로를 받는다(다음 경로에서도 마운트된 채인 폼은 묻지 않고 통과한다, D-121).
   it('passes the next path to the guard on popstate and navigate, and none on a context change', () => {
     const guard = vi.fn<(go: () => void, next?: string) => boolean>(() => true);

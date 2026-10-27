@@ -3,7 +3,7 @@ import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemView, SavedViewView } from '$lib/api/client';
+import type { ItemView, SavedViewView, TaskDetailView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
@@ -77,6 +77,37 @@ function itemOf(id: string): ItemView {
     ends_on: null,
   };
 }
+
+const taskDetail: TaskDetailView = {
+  id: taskId,
+  item_id: itemId,
+  module_id: moduleId,
+  workspace_id: ws,
+  parent_id: null,
+  reference: 'DEV-7',
+  title: '카드 업무',
+  description: '',
+  status: '할 일',
+  priority: 'none',
+  start_date: null,
+  due_date: null,
+  estimate_minutes: null,
+  tags: [],
+  milestone: false,
+  predecessors: [],
+  series: null,
+  occurrence_date: null,
+  assignees: [],
+  status_category: 'todo',
+  checklist_done: 0,
+  checklist_total: 0,
+  version: 1,
+  move_version: 0,
+  completed_at: null,
+  access: 'write',
+  updated_at: '2026-10-21T00:00:00Z',
+  checklist: [],
+};
 
 /** 묶음 안 패널의 나머지 요청은 끝나지 않게 둔다. 이 시험은 어느 묶음이 마운트되는지만 본다. */
 function server(kind: ModuleKind, views: SavedViewView[] = []): void {
@@ -359,6 +390,57 @@ describe('item screen groups and unsaved input', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>('제목').value).toBe('고친 제목');
   });
+
+  // RF-1: 보드에서 카드로 연 상세는 닫을 때 `router.back()`으로 돌아간다(FA-4). 돌아갈 보드도 같은 항목 안이므로 닫을
+  // 때도 머리 폼을 묻지 않고 입력이 남는다. 닫기는 기록을 쌓지 않는다. jsdom의 실제 기록 이동으로 닫는다.
+  it.each(['close button', 'Escape'] as const)(
+    'keeps the header input unasked when closing a task opened from the board by the %s',
+    async (how) => {
+      vi.spyOn(api, 'tasks').mockResolvedValue([taskDetail]);
+      vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+      vi.spyOn(api, 'task').mockResolvedValue(taskDetail);
+      vi.spyOn(api, 'assignable').mockResolvedValue([]);
+      vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
+      vi.spyOn(api, 'comments').mockResolvedValue([]);
+      await openItem('project');
+      await pathIs(itemViewPath(ws, itemId, 'board'));
+      const title = screen.getByLabelText<HTMLInputElement>('제목');
+      await fireEvent.input(title, { target: { value: '고친 제목' } });
+      const push = vi.spyOn(window.history, 'pushState');
+
+      await fireEvent.click(await screen.findByRole('button', { name: /^DEV-7\s*카드 업무$/ }));
+      await pathIs(itemTaskPath(ws, itemId, taskId));
+      const dialog = await screen.findByRole('dialog');
+      const taskTitle = await waitFor(() => {
+        const el = document.getElementById('task-title');
+        if (el === null) throw new Error('task-title');
+        expect(el).toHaveValue('카드 업무');
+        return el;
+      });
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+
+      if (how === 'Escape') await fireEvent.keyDown(taskTitle, { key: 'Escape' });
+      else await fireEvent.click(within(dialog).getByRole('button', { name: '닫기' }));
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      await waitFor(() => {
+        expect(router.path).toBe(itemViewPath(ws, itemId, 'board'));
+        expect(screen.queryByRole('dialog')).toBeNull();
+      });
+      // popstate 가드가 막았다면 상세 주소를 다시 쌓는다. 몇 틱 더 기다려도 보드에 머무는지 본다.
+      await new Promise((r) => setTimeout(r, 30));
+      expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'board'));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(title.isConnected).toBe(true);
+      expect(title.value).toBe('고친 제목');
+      expect(push).toHaveBeenCalledTimes(1);
+
+      // 항목을 떠나는 이동은 그대로 머리 입력을 묻는다(D-121).
+      router.navigate(itemPath(ws, otherItemId));
+      expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+      expect(window.location.pathname).toBe(itemViewPath(ws, itemId, 'board'));
+    },
+  );
 
   it('asks about the header input when leaving for another item', async () => {
     await openItem('project', `${itemPath(ws, itemId)}/docs`);
