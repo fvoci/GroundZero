@@ -73,6 +73,7 @@
   let version = $state(0);
   let container = $state<HTMLDivElement | undefined>();
   let bubbleEl = $state<HTMLDivElement | undefined>();
+  let bubbleToolbar = $state<ReturnType<typeof BubbleToolbar> | undefined>();
   let menuRequest = $state<number | undefined>(undefined);
   // 붙여넣기·입력에서 문서 규칙에 맞춰 바꾼 것의 안내, Markdown 원문에서 저장할 수 없는 것의 안내.
   let contentNotice = $state('');
@@ -634,6 +635,20 @@
       }}
     />
   {/each}
+  <!-- 링크 주소 초안의 제안은 말풍선(글자를 골라야 보임) 대신 여기에 둔다. -->
+  {#each bubbleToolbar?.linkOffers() ?? [] as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        bubbleToolbar?.restoreLinkOffer(offer);
+      }}
+      ondiscard={() => {
+        bubbleToolbar?.discardLinkOffer(offer);
+      }}
+    />
+  {/each}
+  {#if bubbleToolbar?.linkWaitsForSelection() === true}
+    <p role="status" class="text-sm text-muted-foreground">{m.documents_link_select_text()}</p>
+  {/if}
   {#if math !== undefined}
     {@const current = math}
     <form
@@ -754,7 +769,7 @@
     aria-label={m.documents_bubble_label()}
     data-testid="bubble-toolbar"
   >
-    <BubbleToolbar editor={editorRef} {version} {draftName} />
+    <BubbleToolbar bind:this={bubbleToolbar} editor={editorRef} {version} {draftName} />
   </div>
 {/if}
 

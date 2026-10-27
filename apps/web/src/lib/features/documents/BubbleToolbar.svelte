@@ -5,7 +5,6 @@
   import { onMount } from 'svelte';
 
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
-  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Input } from '$lib/ui/input';
@@ -70,6 +69,25 @@
     dirty: () => linkDirty,
   });
   onMount(linkDraft.attach);
+
+  // 남은 링크 주소 초안의 제안은 말풍선 밖(편집기 본문 위)에 보인다: 말풍선은 글자를 골라야 나타나 새로고침 뒤 제안을 못
+  // 볼 수 있었다(⑱). 그리는 쪽(TiptapEditor)이 아래 함수로 고르고 되살린다.
+  type LinkOffer = (typeof linkDraft.offers)[number];
+  export function linkOffers(): LinkOffer[] {
+    return linkDraft.offers;
+  }
+  export function restoreLinkOffer(offer: LinkOffer): void {
+    linkDraft.restore(offer);
+    // 고른 글자가 있으면 편집기로 초점을 돌려 말풍선의 주소 칸을 다시 보인다.
+    if (editor !== undefined && !editor.state.selection.empty) editor.commands.focus();
+  }
+  export function discardLinkOffer(offer: LinkOffer): void {
+    linkDraft.discard(offer);
+  }
+  /** 남긴 링크 주소를 붙일 글자를 아직 고르지 않았는지(고르라고 안내한다). */
+  export function linkWaitsForSelection(): boolean {
+    return linkDirty && version >= 0 && editor !== undefined && editor.state.selection.empty;
+  }
   // 링크 입력을 열면 주소 칸으로 초점을 옮긴다(조건부로 그려지는 칸에는 autofocus가 듣지 않는다).
   $effect(() => {
     if (linkEditing && linkInput !== null) {
@@ -149,16 +167,6 @@
 
 {#if info !== undefined}
   {@const current = info}
-  {#each linkDraft.offers as offer (offer.key)}
-    <FormDraftOffer
-      onrestore={() => {
-        linkDraft.restore(offer);
-      }}
-      ondiscard={() => {
-        linkDraft.discard(offer);
-      }}
-    />
-  {/each}
   {#if linkEditing}
     <form
       class="flex items-center gap-1"
