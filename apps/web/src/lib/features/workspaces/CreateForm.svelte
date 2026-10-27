@@ -173,15 +173,19 @@
   }
 </script>
 
+<!-- 보내는 동안 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면 새 요청 id로 하나
+     더 만든다(입력 칸은 아래에서 따로 잠근다). -->
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      draft.restore(entry);
-    }}
-    ondiscard={() => {
-      draft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}
