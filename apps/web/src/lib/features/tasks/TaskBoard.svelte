@@ -102,25 +102,9 @@
     onstale?: () => void;
     /** 항목 밖의 읽기 전용 사유(보관된 모듈). 서버가 쓰기를 거부하므로 추가·이동 조작을 끈다. */
     locked?: boolean;
-    /** 같은 화면의 다른 곳(항목 달력)에서 업무를 만들 때마다 늘어난다(목록을 다시 읽는다). */
-    tasksVersion?: number;
   }
 
-  const {
-    item,
-    workspaces,
-    openTaskId,
-    routeView,
-    onstale,
-    locked = false,
-    tasksVersion = 0,
-  }: Props = $props();
-  $effect(() => {
-    if (tasksVersion === 0) return;
-    untrack(() => {
-      void reload();
-    });
-  });
+  const { item, workspaces, openTaskId, routeView, onstale, locked = false }: Props = $props();
 
   const editingUser = untrack(() => me.userId);
   let accountBlocked = $state(false);
