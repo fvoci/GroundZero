@@ -274,6 +274,7 @@
           .join('\n')}
       </p>
       <FormDraftOffer
+        restorable={canEdit && !accountSwitching()}
         onrestore={() => {
           formDraft.restore(offer);
         }}

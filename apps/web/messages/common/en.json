@@ -4,6 +4,7 @@
   "common_draft_available": "There is unsaved input. Restore it?",
   "common_draft_restore": "Restore input",
   "common_draft_discard": "Discard saved input",
+  "common_draft_read_only": "You cannot edit here right now, so the input cannot be restored. It stays in this browser until you discard it.",
   "common_cancel": "Cancel",
   "common_items_count": [
     {

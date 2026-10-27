@@ -4,6 +4,7 @@
   "common_draft_available": "저장하지 않은 입력이 있습니다. 되살릴까요?",
   "common_draft_restore": "입력 되살리기",
   "common_draft_discard": "남긴 입력 버리기",
+  "common_draft_read_only": "지금은 편집할 수 없어 되살릴 수 없습니다. 버리기 전까지 이 브라우저에 남습니다.",
   "common_cancel": "취소",
   "common_items_count": [
     {
