@@ -30,7 +30,7 @@ export function keepAllDrafts(): boolean {
   return keepingForReload;
 }
 
-/** `keepAllDrafts()` 뒤 다시 읽기가 일어나지 않았을 때(시험 등) 표지를 내린다. */
+/** `keepAllDrafts()` 뒤 다시 읽기가 일어나지 않았을 때(바깥 beforeunload가 막음, `new-version.ts`) 표지를 내린다. */
 export function stopKeepingDrafts(): void {
   keepingForReload = false;
 }

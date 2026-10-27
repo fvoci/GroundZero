@@ -1,4 +1,4 @@
-import { keepAllDrafts } from '$lib/features/common/leave-guard.svelte';
+import { keepAllDrafts, stopKeepingDrafts } from '$lib/features/common/leave-guard.svelte';
 import { watchPreloadErrors, type PreloadReloadOptions } from '$lib/features/common/preload-reload';
 
 import { reportNewVersion } from './feedback.svelte';
@@ -12,5 +12,11 @@ import { reportNewVersion } from './feedback.svelte';
 export function watchNewVersion(
   options: Pick<PreloadReloadOptions, 'reload' | 'storage'> = {},
 ): () => void {
-  return watchPreloadErrors({ ...options, ready: keepAllDrafts, onStale: reportNewVersion });
+  return watchPreloadErrors({
+    ...options,
+    ready: keepAllDrafts,
+    // 다시 읽기가 일어나지 않았으면 창 떠나기 경고를 보통 규칙으로 되돌린다(R5 B 최종 C-1).
+    cancelReload: stopKeepingDrafts,
+    onStale: reportNewVersion,
+  });
 }
