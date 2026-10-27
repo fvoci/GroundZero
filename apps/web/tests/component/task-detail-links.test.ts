@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ShiftProposalView, TaskLinkView, TaskView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -213,6 +214,73 @@ describe('task detail dependency kinds', () => {
     expect(screen.getByText(/→ 2026-10-23~2026-10-25/)).toBeTruthy();
     expect(preview).toHaveBeenCalledTimes(2);
     expect(set).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the link without asking again when the recalculated plan moves nothing', async () => {
+    // R5 최종 A FA-2(D-91 개정·D-125): 다시 계산한 계획에 밀릴 업무가 없으면 묻지 않고 저장하고 그렇게 알린다.
+    await setLocale('ko', { reload: false });
+    mount();
+    const preview = vi
+      .spyOn(api, 'previewLink')
+      .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const set = vi
+      .spyOn(api, 'setPredecessor')
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...build, checklist: [] } })
+      .mockResolvedValue({
+        kind: 'updated',
+        task: {
+          ...build,
+          version: 2,
+          predecessors: [{ task_id: 'a', kind: 'SS', lag_days: 3 }],
+          checklist: [],
+        },
+      });
+    await editLagTo('3');
+    await fireEvent.click(
+      await screen.findByRole('button', { name: '관계 저장하고 후속 업무 옮기기' }),
+    );
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(2);
+    });
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(set.mock.calls[1]?.[6]).toEqual([]);
+    expect(await screen.findByText(/밀릴 업무가 없어 그대로 저장했습니다\./)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /관계를 지키지 못합니다/ })).toBeNull();
+  });
+
+  it('saves the dates without asking again when the recalculated plan moves nothing', async () => {
+    // R5 최종 A FA-2: 상세의 일정 저장도 같다(재현 R-shift).
+    await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
+    mount(design, [build, review]);
+    const preview = vi
+      .spyOn(api, 'previewSchedule')
+      .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, checklist: [] } })
+      .mockResolvedValue({
+        kind: 'updated',
+        task: { ...design, due_date: '2026-10-22', version: 2, checklist: [] },
+      });
+    await fireEvent.input(await screen.findByLabelText('마감일'), {
+      target: { value: '2026-10-22' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '후속 업무도 옮겨 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(update.mock.calls[1]?.[4]).toEqual([]);
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+      );
+    });
+    expect(screen.queryByText(/관계를 지키지 못합니다/)).toBeNull();
   });
 
   it('keeps the typed values and shows the latest link when the link changed elsewhere meanwhile', async () => {

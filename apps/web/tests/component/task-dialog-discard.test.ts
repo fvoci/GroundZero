@@ -131,8 +131,8 @@ async function clickOutside(): Promise<void> {
 }
 
 /**
- * 보드에서 업무 카드를 눌러 대화상자를 연다. 닫으면 보드 경로(`/tasks/board`)로 이동한다. `back`은 그 이동을 센다
- * (`history.back`을 부르지 않는다).
+ * 보드에서 업무 카드를 눌러 대화상자를 연다. 보드에서 연 상세는 닫으면 그 기록으로 돌아간다(`history.back`, R5 최종 A FA-4).
+ * `back`은 그 돌아가기를 센다(주소는 그대로이므로 닫힌 것은 `reopen(undefined)`로 흉내 낸다).
  */
 async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: () => Promise<void>) {
   window.history.replaceState(null, '', '/w/ws-1/i/i1');
@@ -145,19 +145,13 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: ()
   vi.spyOn(api, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
-  const back = vi.fn();
-  const navigate = router.navigate.bind(router);
-  const navigating = vi.spyOn(router, 'navigate').mockImplementation((path) => {
-    if (path.endsWith('/tasks/board')) back();
-    navigate(path);
-  });
+  const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
   const props = (openTaskId: string | undefined) => ({ item, workspaces: [], openTaskId });
   const view = render(TaskBoard, { props: props(undefined) });
   await beforeOpen?.();
   await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
   await view.rerender(props('t1'));
   await screen.findByRole('dialog');
-  navigating.mockClear();
   await waitFor(() => {
     expect(field('task-title').value).toBe('옛 제목');
   });

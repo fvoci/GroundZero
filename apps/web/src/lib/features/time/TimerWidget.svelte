@@ -1,5 +1,6 @@
 <script lang="ts">
-  // 머리글은 기록 중 표시와 멈춤만 둔다(D-117).
+  // 머리글은 기록 중 표시와 멈춤만 둔다(D-117). 실행 타이머는 사용자당 모든 조직에서 하나라(D-32) 조직을 고르기 전에도
+  // 읽고 보인다. 타이머가 없을 때만 조직을 고르라고 한다(R5 최종 A 확인 필요 1).
   // 길이 글자는 1초마다 바뀌므로 화면 낭독기에는 읽히지 않게 하고, 상태가 바뀔 때만 알린다.
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
@@ -15,7 +16,6 @@
   let busy = $state(false);
 
   $effect(() => {
-    if (org.currentId === undefined) return;
     void timer.load();
     return timer.watchVisibility();
   });
@@ -43,9 +43,9 @@
 </script>
 
 <div class="flex items-center gap-1 text-sm" role="group" aria-label={m.time_timer()}>
-  {#if org.currentId === undefined}
-    <span>{m.app_organization_required()}</span>
-  {:else if timer.entry !== null}
+  {#if timer.entry === null}
+    {#if org.currentId === undefined}<span>{m.app_organization_required()}</span>{/if}
+  {:else}
     <span>{m.time_recording()}</span>
     <span class="hidden max-w-40 truncate text-muted-foreground sm:inline" title={label}
       >{label}</span

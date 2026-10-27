@@ -59,7 +59,6 @@
     size="icon-sm"
     variant="ghost"
     disabled={busy}
-    aria-pressed={runningHere}
     aria-label={`${runningHere ? m.time_stop_timer() : m.time_track_task()}: ${title}`}
     title={runningHere ? m.time_stop_timer() : m.time_track_task()}
     onpointerdown={isolate}

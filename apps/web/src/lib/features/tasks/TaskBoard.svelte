@@ -174,6 +174,7 @@
     target: { id: string; version: number } | null;
   }
   let viewRequest = $state<ViewRequest | null>(null);
+  const isViewRequest = (id: string): boolean => viewRequest?.id === id;
   const viewDirty = $derived(
     viewRequest !== null ||
       viewName.trim() !== (views.find((v) => v.id === selectedView)?.name ?? ''),
@@ -239,6 +240,14 @@
     dirty: () => viewDirty,
   });
   let contextTouched = false;
+  /**
+   * 사용자가 보기·필터·정렬·검색을 만졌으면 늦게 온 기본 저장 보기를 적용하지 않는다. 새 업무 제목·CSV 칸처럼 보기와
+   * 무관한 입력은 세지 않는다(R5 최종 A 확인 필요 3). 보기 단추와 저장한 보기 고르기는 각자 켠다.
+   */
+  function touchContext(event: Event): void {
+    if (event.target instanceof Element && event.target.closest('[role="search"]') !== null)
+      contextTouched = true;
+  }
   // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
   // 보기·필터·정렬은 이 탭에서 항목마다 기억한다. 다른 화면에 갔다 돌아와도 그대로다(이 브라우저 탭에만 남는 개인
   // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
@@ -407,7 +416,13 @@
         error = m.tasks_view_conflict({ name });
         return;
       }
-      viewDraft.complete(draftAttempt);
+      if (!viewDraft.complete(draftAttempt)) {
+        // 저장하는 사이 이름·검색어·필터가 바뀌었다. 바뀐 입력은 두되, 보낸 요청은 저장돼 소진됐다. 남기면
+        // `viewDirty`가 참으로 굳어 떠나기 확인과 되살리기 제안이 계속 떴다(R5 최종 A FA-3).
+        // 그사이 다시 저장을 눌러 새 요청이 나갔으면 그것은 두고 이 요청만 비운다.
+        if (isViewRequest(requestId)) viewRequest = null;
+        viewDraft.persist();
+      }
       notifyDone(m.tasks_view_saved({ name }));
       error = undefined;
     } catch (e: unknown) {
@@ -721,13 +736,23 @@
   const titleOf = (id: string | null): string =>
     id === null ? '' : (tasks.find((t) => t.id === id)?.title ?? '');
 
+  // 보드가 기록을 쌓아 연 상세인지. 그렇다면 닫을 때 그 기록으로 돌아가(`router.back()`, D-121 popstate 보호를 거친다)
+  // 뒤로 가기가 방금 닫은 카드를 다시 열지 않고 보드를 떠나게 한다. 주소로 바로 연 상세와 상세에서 옮겨 연 상세는 보드
+  // 주소로 옮긴다(R5 최종 A FA-4).
+  let openedHere = false;
+
   function open(id: string): void {
-    const navigate = (): void => {
-      router.navigate(itemTaskPath(item.workspace_id, item.id, id));
-    };
+    const path = itemTaskPath(item.workspace_id, item.id, id);
     // 같은 보드 위에 상세를 여는 동안 새 업무·보기 입력은 그대로 남는다. 상세 간 이동은 requestOpen의 확인을 거친다.
-    if (openTaskId === undefined) leave.proceed(navigate);
-    else navigate();
+    if (openTaskId === undefined) {
+      leave.proceed(() => {
+        router.navigate(path);
+        openedHere = router.path === path;
+      });
+    } else {
+      router.navigate(path);
+      openedHere = false;
+    }
   }
 
   // 주소로 연 대화상자는 여는 단추를 모르므로, 닫으면 마지막으로 연 업무의 카드로 초점을 돌린다.
@@ -744,6 +769,7 @@
   }
   $effect(() => {
     if (openTaskId !== undefined) returnTo = openTaskId;
+    else openedHere = false;
     // 다른 업무를 열었거나 닫혔으면 앞 업무에 대해 물은 것을 거둔다(새로 연 업무를 닫거나 그 입력을 버리지 않게).
     leave.keep();
   });
@@ -835,7 +861,12 @@
   }
 
   function close(): void {
-    router.navigate(itemViewPath(item.workspace_id, item.id, 'board'));
+    if (openedHere) {
+      // 이탈 확인에서 머물기로 하면 돌아가지 않았으므로 다음 닫기도 뒤로 간다.
+      openedHere = !router.back();
+    } else {
+      router.navigate(itemViewPath(item.workspace_id, item.id, 'board'));
+    }
   }
 
   /** 옮긴 뒤 화면 낭독기에 알리는 글. */
@@ -1079,8 +1110,11 @@
       return 'stopped';
     }
     if (result.kind === 'shift_conflict') {
-      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
+      // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
       const plan = await api.previewSchedule(t.id, input.start_date, input.due_date);
+      if (plan.shifts.length === 0)
+        return saveSchedule(t, input, baseVersion, [], done, plan.undated, true);
       ganttAsk = {
         task: t,
         input,
@@ -1578,12 +1612,8 @@
   inert={hiddenForAccount}
   class="flex flex-col gap-3"
   aria-labelledby="tasks-heading"
-  oninput={() => {
-    contextTouched = true;
-  }}
-  onchange={() => {
-    contextTouched = true;
-  }}
+  oninput={touchContext}
+  onchange={touchContext}
 >
   <div class="flex flex-wrap items-center gap-2">
     <h2 id="tasks-heading" class="text-lg font-semibold">{m.tasks_heading()}</h2>

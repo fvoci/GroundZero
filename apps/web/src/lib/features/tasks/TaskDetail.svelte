@@ -867,6 +867,8 @@
     baseVersion: number,
     shifts: ShiftProposalView[],
     undated: UndatedTaskView[] = [],
+    /** 다시 계산해 보니 밀릴 업무가 없어 묻지 않고 저장했다(저장한 뒤 알린다, D-125). */
+    noShiftNeeded = false,
   ): Promise<void> {
     if (task === undefined) return;
     // 후속 업무 미리보기에서 승인한 저장(덮어쓰기 뒤 미리보기 승인 등)이 다시 409면, 패널과 함께 누른 단추가 없어져
@@ -887,8 +889,14 @@
       return;
     }
     if (result.kind === 'shift_conflict') {
-      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
+      // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
       const plan = await api.previewSchedule(task.id, input.start_date, input.due_date);
+      if (plan.shifts.length === 0) {
+        pending = undefined;
+        await save(input, baseVersion, [], plan.undated, true);
+        return;
+      }
       pending = {
         proposals: plan.shifts,
         undated: plan.undated,
@@ -903,7 +911,9 @@
     fill(result.task);
     undatedNotice = undatedText(undated);
     saved = true;
-    notifyDone(m.common_saved());
+    notifyDone(
+      noShiftNeeded ? `${m.common_saved()} ${m.tasks_gantt_no_shifts()}` : m.common_saved(),
+    );
     onchanged();
     await focusSave();
   }
@@ -1071,6 +1081,8 @@
     base: LinkBase | null,
     shifts: ShiftProposalView[],
     undated: UndatedTaskView[],
+    /** 다시 계산해 보니 밀릴 업무가 없어 묻지 않고 저장했다(저장한 뒤 알린다, D-125). */
+    noShiftNeeded = false,
   ): Promise<void> {
     if (task === undefined) return;
     const result = await api.setPredecessor(
@@ -1102,8 +1114,14 @@
       return;
     }
     if (result.kind === 'shift_conflict') {
-      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
+      // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
       const plan = await api.previewLink(task.id, predecessor, kind, lag);
+      if (plan.shifts.length === 0) {
+        linkPending = undefined;
+        await saveLink(predecessor, kind, lag, base, [], plan.undated, true);
+        return;
+      }
       linkPending = {
         predecessor,
         kind,
@@ -1121,7 +1139,13 @@
     const fresh = result.task;
     if (task.version === fresh.version) task = fresh;
     else refresh(fresh);
-    linkStatus = [m.tasks_link_saved(), undatedText(undated)].filter((s) => s !== '').join(' ');
+    linkStatus = [
+      m.tasks_link_saved(),
+      noShiftNeeded ? m.tasks_gantt_no_shifts() : '',
+      undatedText(undated),
+    ]
+      .filter((s) => s !== '')
+      .join(' ');
     onchanged();
     // 패널과 편집 칸이 닫히므로 선행 업무 제목으로 돌린다.
     await focusLater('predecessors-heading');
@@ -1582,9 +1606,12 @@
             <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
           {/each}
           {#if canEdit && (editing !== undefined || candidates.length > 0)}
+            <!-- 저장 중에는 칸 전체를 잠근다. 성공 뒤 resetLinkEditor()가 그사이 친 값을 지우지 않게 한다(FA-1, D-97).
+                 bits-ui Select는 조상 fieldset의 disabled를 보지 않아 자기 disabled로 잠근다. -->
             <fieldset
               class="flex flex-col gap-2 rounded-md border p-2"
               inert={linkPending !== undefined}
+              disabled={busy}
               aria-describedby="link-kind-meaning"
             >
               <legend class="px-1 text-sm font-medium" id="predecessor-label">
@@ -1595,6 +1622,7 @@
               {:else}
                 <Select.Root
                   type="single"
+                  disabled={busy}
                   value={predecessorChoice}
                   onValueChange={(v: string) => (predecessorChoice = v)}
                 >
@@ -1615,6 +1643,7 @@
                   <span id="link-kind-label" class="text-sm">{m.tasks_link_kind_label()}</span>
                   <Select.Root
                     type="single"
+                    disabled={busy}
                     value={linkKind}
                     onValueChange={(v: string) => {
                       const found = LINK_KINDS.find((k) => k === v);

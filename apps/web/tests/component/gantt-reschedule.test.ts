@@ -202,6 +202,47 @@ describe('gantt reschedule', () => {
     });
   });
 
+  it('saves without asking again when the recalculated plan after a stale approval moves nothing', async () => {
+    // R5 최종 A FA-2(D-91 개정·D-125): 승인한 목록이 그사이 낡아(shift_conflict) 다시 계산했는데 밀릴 업무가 없으면
+    // "0개가 지키지 못합니다" 창을 다시 띄우지 않고 그대로 저장하고 그렇게 알린다.
+    const done = vi.spyOn(feedback, 'notifyDone');
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(api, 'task').mockResolvedValue(detail(design));
+    const preview = vi
+      .spyOn(api, 'previewSchedule')
+      .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: detail(design) })
+      .mockResolvedValue({
+        kind: 'updated',
+        task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
+      });
+    const gantt = await mount();
+    await fireEvent.keyDown(rowButton(gantt, 'a'), {
+      key: 'ArrowRight',
+      altKey: true,
+      shiftKey: true,
+    });
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.click(within(dialog).getByRole('button', { name: '후속 업무도 옮겨 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(update.mock.calls[1]?.[4]).toEqual([]);
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(screen.queryByText('후속 업무가 그사이 바뀌어 다시 계산했습니다.')).toBeNull();
+  });
+
   it('says before approval when more followers would move than one save allows', async () => {
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));

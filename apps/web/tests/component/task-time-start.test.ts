@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { timer } from '$lib/features/time/timer.svelte';
 import TaskTimeStart from '$lib/features/time/TaskTimeStart.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 업무 행·카드의 시간 기록 시작 단추(D-117): 서버 합계를 읽지 않고 타이머 저장소로 이 업무를 시작하거나 멈춘다.
@@ -22,7 +23,9 @@ describe('task time start button', () => {
     const start = vi.spyOn(timer, 'start').mockResolvedValue(undefined);
     render(TaskTimeStart, { props: { taskId: 't-1', title: '설계 검토' } });
     const button = screen.getByRole('button', { name: /설계 검토/ });
-    expect(button).toHaveAttribute('aria-pressed', 'false');
+    // 토글 상태(aria-pressed) 대신 이름으로 동작을 알린다(TaskTimePanel과 같게, R5 최종 A FA-7).
+    expect(button).not.toHaveAttribute('aria-pressed');
+    expect(button).toHaveAccessibleName(`${m.time_track_task()}: 설계 검토`);
     await fireEvent.click(button);
     expect(start).toHaveBeenCalledWith('work', { kind: 'task', id: 't-1' });
   });
@@ -43,7 +46,8 @@ describe('task time start button', () => {
     const act = vi.spyOn(timer, 'act').mockRejectedValue(new Error('offline'));
     render(TaskTimeStart, { props: { taskId: 't-1', title: '설계 검토' } });
     const button = screen.getByRole('button', { name: /설계 검토/ });
-    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).not.toHaveAttribute('aria-pressed');
+    expect(button).toHaveAccessibleName(`${m.time_stop_timer()}: 설계 검토`);
     await fireEvent.click(button);
     expect(act).toHaveBeenCalledWith('stop');
     expect(await screen.findByRole('alert')).toBeInTheDocument();

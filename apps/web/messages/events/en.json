@@ -133,12 +133,9 @@
   "events_task_due": "Due date",
   "events_task_name": "Task title",
   "events_task_cancel": "Cancel",
-  "events_task_retry_date": "Set the due date again",
   "events_task_title_required": "Enter a task title.",
   "events_task_target_required": "Choose the item for the task.",
   "events_task_date_required": "Choose a date.",
   "events_task_create_failed": "Couldn't create the task.",
-  "events_task_date_failed": "The task was created, but its due date couldn't be set. Set it again or open the task to fix it.",
-  "events_task_open": "Open {title}",
   "events_task_created": "Task created: {title} (due {day})"
 }

@@ -87,7 +87,7 @@ describe('event dialog late results', () => {
       onclose,
       onchanged: () => undefined,
     });
-    const { unmount } = render(EventDialog, { props: props('A') });
+    const view = render(EventDialog, { props: props('A') });
     await screen.findByDisplayValue('A 일정');
     await fireEvent.input(titleInput(), { target: { value: 'A 새 제목' } });
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
@@ -95,21 +95,27 @@ describe('event dialog late results', () => {
       expect(update).toHaveBeenCalledTimes(1);
     });
 
-    // Navigation teardown can unmount even when a request is pending.
-    unmount();
-    render(EventDialog, { props: props('B') });
-    await screen.findByDisplayValue('B 일정');
+    // R5 최종 A FA-8(1): 같은 창에서 저장하는 동안 B로 바꾸려 하면 저장 중 가드가 막아 A가 남는다. 그래서 A의 늦은
+    // 결과는 A의 창에만 들어간다(새 창을 그려 보던 옛 시험은 보호를 지워도 통과했다).
+    await view.rerender(props('B'));
+    await flush();
+    expect(dialogTitle()).toBe('A 일정');
+    // 저장 중이라 묻지도 않는다(고친 입력의 버릴지 확인이 아니라 저장 중 잠금이 막는다).
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(titleInput().value).toBe('A 새 제목');
 
     late.resolve({ kind: 'updated', event: ev('A', 2, 'A 새 제목') });
-    await flush();
-    expect(dialogTitle()).toBe('B 일정');
-    expect(titleInput().value).toBe('B 일정');
+    await waitFor(() => {
+      expect(dialogTitle()).toBe('A 새 제목');
+    });
+    expect(api.event).not.toHaveBeenCalledWith('B');
 
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update.mock.calls[1]?.[0]).toBe('B');
+    expect(update.mock.calls[1]?.[0]).toBe('A');
+    expect(update.mock.calls[1]?.[1]).toBe(2);
   });
 
   it('does not close the event open now after a late delete of the previous one', async () => {

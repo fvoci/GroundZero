@@ -120,6 +120,11 @@ it.each(['event', 'recurrence'] as const)(
   },
 );
 
+/** 늦게 끝난 요청의 후속 처리(마이크로태스크·다음 틱)가 다 돌게 한다. */
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
+};
+
 function formOf(field: HTMLElement): HTMLFormElement {
   const form = field.closest('form');
   if (form === null) throw new Error('Missing form');
@@ -296,7 +301,10 @@ it('ignores a late successful creation after the user changes', async () => {
     target: { value: 'User B input' },
   });
   resolve();
-  await waitFor(() => expect(screen.getByLabelText(m.events_title())).toHaveValue('User B input'));
+  // R5 최종 A FA-8(2): 값은 이미 B 입력이라 waitFor는 첫 검사에서 통과했다. 늦은 성공 처리(완료·초안 지우기)가 돌 때까지
+  // 기다린 뒤에 본다.
+  await flush();
+  expect(screen.getByLabelText(m.events_title())).toHaveValue('User B input');
   expect(
     Object.keys(localStorage).some(
       (key) => key.includes('fvoci:draft-user:') && key.includes('form-draft:event-new:i1:'),
