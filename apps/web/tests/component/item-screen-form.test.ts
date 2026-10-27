@@ -209,7 +209,9 @@ describe('item info draft after write access is withdrawn', () => {
     quietServer();
     mockItem(item());
     const update = vi.spyOn(api, 'updateItem');
-    const view = render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    const view = render(ItemScreen, {
+      props: { workspace, itemId: 'i1', workspaces: [workspace] },
+    });
     await fireEvent.input(await waitFor(titleInput), { target: { value: '권한 철회 전 제목' } });
     view.unmount();
 
