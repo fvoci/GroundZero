@@ -28,6 +28,7 @@ mod audit;
 mod backup;
 mod cache;
 mod comment_archive_race;
+mod comment_flags;
 mod conflict_contracts;
 mod courses;
 mod db_context;
