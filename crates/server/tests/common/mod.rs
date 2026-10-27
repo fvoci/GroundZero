@@ -405,12 +405,15 @@ pub struct FreshDb {
     pub app_url: String,
 }
 
+/// 새 DB 준비(`admin::prepare_database`)를 한 번에 하나씩 하게 하는 잠금. 같은 시험 바이너리에서 준비가 겹치면 클러스터
+/// 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently updated"(XX000)로 실패한다. 새 DB를 만드는 모든 경로
+/// ([`fresh_database`]와 따로 준비하는 시험)가 이 잠금 하나를 쓴다.
+pub static PREPARE_DATABASE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
     use sqlx::Connection as _;
-    // 같은 시험 바이너리에서 새 DB 준비가 겹치면 클러스터 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently
-    // updated"(XX000)로 실패한다. 준비와 마이그레이션은 한 번에 하나씩 한다.
-    static PREPARE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    let _serial = PREPARE.lock().await;
+    // 준비와 마이그레이션은 한 번에 하나씩 한다.
+    let _serial = PREPARE_DATABASE.lock().await;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let migration_url =
         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");

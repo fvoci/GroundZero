@@ -14,8 +14,7 @@ use sqlx::migrate::Migrate;
 use sqlx::{Connection, PgConnection};
 
 async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
-    static PREPARE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    let _serial = PREPARE.lock().await;
+    let _serial = common::PREPARE_DATABASE.lock().await;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
     let migration_url =
         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via cargo xtask test");
