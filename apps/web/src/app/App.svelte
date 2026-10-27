@@ -68,6 +68,7 @@
       currentUser.locale = me.locale;
       currentUser.weekStart = me.week_start;
       currentUser.hourCycle = me.hour_cycle;
+      currentUser.maxTitleChars = me.limits.max_title_chars;
       const theme = asTheme(me.theme);
       currentUser.theme = theme;
       // 화면 밝기의 정본은 계정이다. 다른 기기에서 바꿨으면 여기서 맞추고 다음 첫 그림을 위한 사본도 고친다(D-109).

@@ -273,3 +273,138 @@ async fn a_failed_series_does_not_rollback_another_series_transaction() {
         3
     );
 }
+
+async fn run_purge(state: &fvoci_server::http::AppState) -> Result<(), sqlx::Error> {
+    let mut worker = state.db.begin_anonymous().await.unwrap();
+    let needed: i32 = sqlx::query_scalar("SELECT fvoci.app_system_purge_expired_ids()")
+        .fetch_one(worker.conn())
+        .await
+        .unwrap();
+    let purge = sqlx::query("SELECT fvoci.app_system_purge_expired($1)")
+        .bind(fvoci_server::db::new_ids(usize::try_from(needed).unwrap()))
+        .execute(worker.conn())
+        .await;
+    if let Err(error) = purge {
+        // 실패한 트랜잭션은 바로 닫는다. 열어 두면 행 잠금이 남아 트리거 제거(ACCESS EXCLUSIVE)가 멈춘다.
+        drop(worker);
+        return Err(error);
+    }
+    worker.commit().await.unwrap();
+    Ok(())
+}
+
+async fn count(sql: &str, arg: Uuid) -> i64 {
+    let mut conn = common::fixture_conn().await;
+    sqlx::query_scalar(sql)
+        .bind(arg)
+        .fetch_one(&mut conn)
+        .await
+        .unwrap()
+}
+
+// #85: app_system_purge_expired의 삭제된 워크스페이스 분기. 실패한 워크스페이스는 하위 트랜잭션째 되돌아가 부분 삭제가
+// 남지 않고, 같은 실행에서 뒤에 처리되는 정상 워크스페이스는 커밋된다.
+#[tokio::test]
+async fn expired_workspace_failure_rolls_back_its_purge_but_other_workspace_commits() {
+    let bad = World::new().await;
+    let good = World::new().await;
+    // 워크스페이스 행을 지우기 전에 지워지는 자식(업무·항목)이 있어야 되돌림이 보인다.
+    bad.task().await;
+    good.task().await;
+    for w in [&bad, &good] {
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT fvoci.app_delete_workspace($1,'SQL workspace',@ids)",
+            &[w.ws],
+        )
+        .await;
+    }
+    // 실패할 쪽을 먼저 처리하게 더 오래전에 지운 것으로 한다(실패 뒤에도 다음 대상으로 넘어가는지 보인다).
+    fixture(
+        "UPDATE fvoci.workspaces SET deleted_at=now()-interval '41 days' WHERE id=$1",
+        &[bad.ws],
+    )
+    .await;
+    fixture(
+        "UPDATE fvoci.workspaces SET deleted_at=now()-interval '40 days' WHERE id=$1",
+        &[good.ws],
+    )
+    .await;
+    let injection = install_failure(
+        "workspaces",
+        "DELETE",
+        &format!("OLD.id='{}'::uuid", bad.ws),
+    )
+    .await;
+    let purge = run_purge(&bad.state).await;
+    let fired = one(
+        &bad.state,
+        &bad.owner,
+        &format!("SELECT is_called FROM fvoci.{injection}"),
+        &[],
+    )
+    .await;
+    remove_failure("workspaces", &injection).await;
+    purge.unwrap();
+    assert_eq!(
+        fired["is_called"], true,
+        "the target trigger must actually raise"
+    );
+
+    // 실패한 워크스페이스: 아직 삭제 표시된 채 그대로이고, 먼저 지워졌을 자식과 비우기 기록도 남아 있다.
+    for (table, column) in [
+        ("workspaces", "id"),
+        ("tasks", "workspace_id"),
+        ("items", "workspace_id"),
+    ] {
+        assert_eq!(
+            count(
+                &format!("SELECT count(*) FROM fvoci.{table} WHERE {column}=$1"),
+                bad.ws
+            )
+            .await,
+            1,
+            "{table} of the failed workspace must survive the rollback"
+        );
+    }
+    assert_eq!(
+        count(
+            "SELECT count(*) FROM fvoci.audit_log WHERE target_id=$1 AND action='purge'",
+            bad.ws
+        )
+        .await,
+        0
+    );
+    // 정상 워크스페이스: 같은 실행에서 커밋되어 사라지고 비우기 기록이 남는다.
+    for (table, column) in [
+        ("workspaces", "id"),
+        ("tasks", "workspace_id"),
+        ("items", "workspace_id"),
+    ] {
+        assert_eq!(
+            count(
+                &format!("SELECT count(*) FROM fvoci.{table} WHERE {column}=$1"),
+                good.ws
+            )
+            .await,
+            0,
+            "{table} of the other workspace must be purged and committed"
+        );
+    }
+    assert_eq!(
+        count(
+            "SELECT count(*) FROM fvoci.audit_log WHERE target_id=$1 AND action='purge'",
+            good.ws
+        )
+        .await,
+        2
+    );
+
+    // 주입을 걷은 뒤 다음 실행은 실패했던 워크스페이스도 비운다(일시적 실패였고 시험이 남긴 만료 대상도 치운다).
+    run_purge(&bad.state).await.unwrap();
+    assert_eq!(
+        count("SELECT count(*) FROM fvoci.workspaces WHERE id=$1", bad.ws).await,
+        0
+    );
+}
