@@ -811,6 +811,7 @@ async fn export_follows_download_permission_and_is_audited() {
     );
 
     // D-115: 수정 권한도 allow_copy가 꺼져 있으면 내보내지 못한다.
+    assert_eq!(get(&app, &writer, &doc).await.1["can_export"], false);
     assert_eq!(
         export(&app, &writer, &doc, 2, "markdown").await.0,
         StatusCode::FORBIDDEN
