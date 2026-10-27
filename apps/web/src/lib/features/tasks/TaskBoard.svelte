@@ -174,6 +174,7 @@
     target: { id: string; version: number } | null;
   }
   let viewRequest = $state<ViewRequest | null>(null);
+  const isViewRequest = (id: string): boolean => viewRequest?.id === id;
   const viewDirty = $derived(
     viewRequest !== null ||
       viewName.trim() !== (views.find((v) => v.id === selectedView)?.name ?? ''),
@@ -407,7 +408,13 @@
         error = m.tasks_view_conflict({ name });
         return;
       }
-      viewDraft.complete(draftAttempt);
+      if (!viewDraft.complete(draftAttempt)) {
+        // 저장하는 사이 이름·검색어·필터가 바뀌었다. 바뀐 입력은 두되, 보낸 요청은 저장돼 소진됐다. 남기면
+        // `viewDirty`가 참으로 굳어 떠나기 확인과 되살리기 제안이 계속 떴다(R5 최종 A FA-3).
+        // 그사이 다시 저장을 눌러 새 요청이 나갔으면 그것은 두고 이 요청만 비운다.
+        if (isViewRequest(requestId)) viewRequest = null;
+        viewDraft.persist();
+      }
       notifyDone(m.tasks_view_saved({ name }));
       error = undefined;
     } catch (e: unknown) {
