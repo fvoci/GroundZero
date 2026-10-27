@@ -247,6 +247,7 @@ it('reloads the revision history after applying the server values', async () => 
     {
       started_at: entry.started_at,
       ended_at: entry.ended_at,
+      paused_seconds: 0,
       kind: 'work',
       memo: 'older memo',
       changed_at: '2026-11-01T07:00:00Z',
