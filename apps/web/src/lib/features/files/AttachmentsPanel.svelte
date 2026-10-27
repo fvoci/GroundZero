@@ -6,7 +6,7 @@
   import type { FileTarget, FileVersionView, FileView } from '$lib/api/client';
   import { api, fileContentUrl } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -25,11 +25,11 @@
     target: FileTarget;
     /** 새 파일을 붙일 수 있는지(대상에 쓸 수 있는지). */
     canWrite: boolean;
-    /** 문서의 access=owner 또는 allow_copy. 항목 첨부는 서버 can_download만 따른다. */
-    allowCopy?: boolean;
   }
 
-  const { target, canWrite, allowCopy = true }: Props = $props();
+  // 내려받기·Office 미리보기는 서버의 `can_download`(app_file_can_download, 문서 첨부에는 allow_copy를 적용함)만 따르고
+  // 웹에서 다시 계산하지 않는다(D-113). 인라인 미리보기는 내려받기 권한과 따로 둔다.
+  const { target, canWrite }: Props = $props();
   // 올리기를 시작한 화면의 사용자(서버가 세션과 비교한다, #60). 만료된 업로드를 스스로 다시 시작할 때 다른 탭에서 바꾼
   // 계정으로 만들지 않게 한다.
   const uploader = untrack(() => me.userId);
@@ -266,8 +266,9 @@
   </p>
   {#each renameDraft.offers as offer (offer.key)}
     <FormDraftOffer
+      restorable={canWrite && !accountSwitching()}
       onrestore={() => {
-        renameDraft.restore(offer);
+        if (canWrite && !accountSwitching()) renameDraft.restore(offer);
       }}
       ondiscard={() => {
         renameDraft.discard(offer);
@@ -319,7 +320,7 @@
                 {/if}
               </form>
             {:else}
-              {#if allowCopy && f.can_download}
+              {#if f.can_download}
                 <a
                   class="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline"
                   title={f.name}
@@ -345,7 +346,7 @@
                 rel="noopener"
                 aria-label={m.files_preview_aria({ name: f.name })}>{m.files_preview()}</Button
               >
-            {:else if allowCopy && f.can_download && officeKind(f.content_type, f.name) !== undefined}
+            {:else if f.can_download && officeKind(f.content_type, f.name) !== undefined}
               {@const kind = officeKind(f.content_type, f.name)}
               <Button
                 size="sm"
@@ -408,7 +409,7 @@
             >
               {#each versions.list as v (v.version)}
                 <li class="flex flex-wrap items-baseline gap-2">
-                  {#if allowCopy && f.can_download}
+                  {#if f.can_download}
                     <a
                       class="underline-offset-2 hover:underline"
                       href={fileContentUrl(f.id, v.version)}>v{v.version}</a

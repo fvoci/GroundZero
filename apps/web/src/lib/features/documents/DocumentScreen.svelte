@@ -283,7 +283,6 @@
     <Backlinks kind="document" id={doc.id} {workspaces} />
   {/key}
   <AttachmentsPanel
-    allowCopy={doc.access === 'owner' || doc.allow_copy}
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
   />

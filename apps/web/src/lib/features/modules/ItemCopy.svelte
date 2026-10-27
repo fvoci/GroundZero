@@ -11,6 +11,7 @@
   import type { ItemView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { itemPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
@@ -34,7 +35,6 @@
   let title = $state('');
   let reset = $state(true);
   let error = $state<string | undefined>(undefined);
-  let result = $state<{ id: string; skipped: number } | undefined>(undefined);
   // 같은 입력의 재시도는 같은 요청 id, 대상·제목·초기화를 고치면 새 id.
   let pending = $state<{ requestId: string; signature: string } | null>(null);
   let busy = $state(false);
@@ -86,7 +86,6 @@
 
   async function start(): Promise<void> {
     error = undefined;
-    result = undefined;
     try {
       const all = await api.modules(item.workspace_id);
       targets = all.filter((mod) => mod.kind === module.kind && !mod.archived);
@@ -120,8 +119,24 @@
       busy = true;
       const copied = await api.copyItem(item.id, requestId, target, name, reset);
       if (!draft.complete(attempt)) return;
-      result = { id: copied.item_id, skipped: copied.skipped_documents };
       open = false;
+      // 일반 완료는 토스트다(D-82). 새 항목 열기는 토스트의 동작 단추이고, 건너뛴 문서 수는 문구에 넣는다.
+      const created = copied.item_id;
+      const skipped = copied.skipped_documents;
+      notifyDone(
+        skipped > 0
+          ? `${m.modules_copy_done()} ${m.modules_copy_skipped({ count: skipped })}`
+          : m.modules_copy_done(),
+        `item-copy:${created}`,
+        {
+          action: {
+            label: m.modules_copy_open(),
+            onClick: () => {
+              router.navigate(itemPath(item.workspace_id, created));
+            },
+          },
+        },
+      );
     } catch (err: unknown) {
       if (attempt === undefined || !draft.isCurrent(attempt)) return;
       error = errorText(err, m.modules_copy_failed());
@@ -192,22 +207,4 @@
     </fieldset>
   {/if}
   {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
-  <div role="status" class="empty:hidden">
-    {#if result !== undefined}
-      {@const done = result}
-      <p>
-        {m.modules_copy_done()}{done.skipped > 0
-          ? ` ${m.modules_copy_skipped({ count: done.skipped })}`
-          : ''}
-        <a
-          class="underline"
-          href={itemPath(item.workspace_id, done.id)}
-          onclick={(e: MouseEvent) => {
-            e.preventDefault();
-            router.navigate(itemPath(item.workspace_id, done.id));
-          }}>{m.modules_copy_open()}</a
-        >
-      </p>
-    {/if}
-  </div>
 </div>

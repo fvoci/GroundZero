@@ -9,6 +9,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -31,7 +32,6 @@
   let collection = $state('');
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   // Only these non-secret inputs cross the durable draft boundary. Keep the ID verbatim.
   interface ImportSettings {
     libraryType: 'user' | 'group';
@@ -83,7 +83,6 @@
       verified = undefined;
       busy = false;
       error = undefined;
-      status = '';
     },
     dirty: () => libraryType !== 'user' || libraryId !== '' || collection !== '',
     // The key is warned about on leaving but stays out of snapshot and storage.
@@ -126,7 +125,7 @@
       if (!draft.isCurrent(attempt) || context.keyVersion !== keyVersion) return;
       collections = list;
       verified = context;
-      status = m.records_zotero_collections_read({ count: collections.length });
+      notifyDone(m.records_zotero_collections_read({ count: collections.length }));
     } catch (e: unknown) {
       if (!draft.isCurrent(attempt) || context.keyVersion !== keyVersion) return;
       error = errorText(e, m.records_zotero_unreachable());
@@ -146,11 +145,14 @@
       const r = await api.zoteroImport(itemId, lib, collection === '' ? null : collection);
       if (!draft.isOwner(attempt)) return;
       draft.complete(attempt);
-      status = m.records_zotero_result({
-        created: r.created,
-        updated: r.updated,
-        skipped: r.skipped,
-      });
+      // 일반 완료는 토스트다(D-82). 만든·고친·건너뛴 수는 문구에 넣는다.
+      notifyDone(
+        m.records_zotero_result({
+          created: r.created,
+          updated: r.updated,
+          skipped: r.skipped,
+        }),
+      );
       onimported();
     } catch (e: unknown) {
       if (!draft.isOwner(attempt)) return;
@@ -167,15 +169,19 @@
   ondiscard={draft.discardAndLeave}
 />
 <div class="flex flex-col gap-2 text-sm">
+  <!-- 가져오거나 컬렉션을 읽는 동안 입력과 되살리기를 잠근다(D-97). 그사이 라이브러리·종류를 바꾸거나 다른 탭 초안을
+       되살리면 완료를 버리고 옛 설정의 결과를 보이게 된다. -->
   {#each draft.offers as entry (entry.key)}
-    <FormDraftOffer
-      onrestore={() => {
-        draft.restore(entry);
-      }}
-      ondiscard={() => {
-        draft.discard(entry);
-      }}
-    />
+    <fieldset class="contents" disabled={busy}>
+      <FormDraftOffer
+        onrestore={() => {
+          draft.restore(entry);
+        }}
+        ondiscard={() => {
+          draft.discard(entry);
+        }}
+      />
+    </fieldset>
   {/each}
   {#if !open}
     <div>
@@ -184,81 +190,82 @@
       >
     </div>
   {:else}
-    <form
-      class="flex flex-wrap items-end gap-2 rounded-md border p-2"
-      aria-label={m.records_zotero_import()}
-      onsubmit={(e: SubmitEvent) => {
-        e.preventDefault();
-        void run();
-      }}
-    >
-      <div class="flex flex-col gap-1">
-        <Label for="zotero-type">{m.records_zotero_library()}</Label>
-        <NativeSelect id="zotero-type" class="w-full" bind:value={libraryType}>
-          <option value="user">{m.records_zotero_my_library()}</option>
-          <option value="group">{m.records_zotero_group()}</option>
-        </NativeSelect>
-      </div>
-      <div class="flex w-32 flex-col gap-1">
-        <Label for="zotero-id"
-          >{libraryType === 'user'
-            ? m.records_zotero_user_id()
-            : m.records_zotero_group_id()}</Label
-        >
-        <Input id="zotero-id" inputmode="numeric" bind:value={libraryId} />
-      </div>
-      <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
-        <Label for="zotero-key">{m.records_zotero_key()}</Label>
-        <Input
-          id="zotero-key"
-          type="password"
-          autocomplete="off"
-          bind:value={apiKey}
-          oninput={() => {
-            keyVersion += 1;
-          }}
-        />
-      </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={busy}
-        onclick={() => void loadCollections()}>{m.records_zotero_read_collections()}</Button
+    <fieldset class="min-w-0" disabled={busy}>
+      <form
+        class="flex flex-wrap items-end gap-2 rounded-md border p-2"
+        aria-label={m.records_zotero_import()}
+        onsubmit={(e: SubmitEvent) => {
+          e.preventDefault();
+          void run();
+        }}
       >
-      {#if collection !== '' || (collectionsCurrent && collections.length > 0)}
         <div class="flex flex-col gap-1">
-          <Label for="zotero-collection">{m.records_zotero_collection()}</Label>
-          <NativeSelect id="zotero-collection" class="w-full" bind:value={collection}>
-            <option value="">{m.records_zotero_all()}</option>
-            {#if !collectionValid}<option value={collection} disabled>{collection}</option>{/if}
-            {#if collectionsCurrent}
-              {#each collections as c (c.key)}<option value={c.key}>{c.name}</option>{/each}
-            {/if}
+          <Label for="zotero-type">{m.records_zotero_library()}</Label>
+          <NativeSelect id="zotero-type" class="w-full" bind:value={libraryType}>
+            <option value="user">{m.records_zotero_my_library()}</option>
+            <option value="group">{m.records_zotero_group()}</option>
           </NativeSelect>
         </div>
-      {/if}
-      <Button
-        type="submit"
-        size="sm"
-        disabled={busy || !collectionValid || !draft.active || draft.blocked}
-        >{busy ? m.records_zotero_importing() : m.records_zotero_run()}</Button
-      >
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onclick={() => {
-          draft.leave.request(() => {
-            open = false;
-            apiKey = '';
-            keyVersion += 1;
-          });
-        }}>{m.records_zotero_close()}</Button
-      >
-      <p class="w-full text-muted-foreground">{m.records_zotero_hint()}</p>
-    </form>
+        <div class="flex w-32 flex-col gap-1">
+          <Label for="zotero-id"
+            >{libraryType === 'user'
+              ? m.records_zotero_user_id()
+              : m.records_zotero_group_id()}</Label
+          >
+          <Input id="zotero-id" inputmode="numeric" bind:value={libraryId} />
+        </div>
+        <div class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
+          <Label for="zotero-key">{m.records_zotero_key()}</Label>
+          <Input
+            id="zotero-key"
+            type="password"
+            autocomplete="off"
+            bind:value={apiKey}
+            oninput={() => {
+              keyVersion += 1;
+            }}
+          />
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onclick={() => void loadCollections()}>{m.records_zotero_read_collections()}</Button
+        >
+        {#if collection !== '' || (collectionsCurrent && collections.length > 0)}
+          <div class="flex flex-col gap-1">
+            <Label for="zotero-collection">{m.records_zotero_collection()}</Label>
+            <NativeSelect id="zotero-collection" class="w-full" bind:value={collection}>
+              <option value="">{m.records_zotero_all()}</option>
+              {#if !collectionValid}<option value={collection} disabled>{collection}</option>{/if}
+              {#if collectionsCurrent}
+                {#each collections as c (c.key)}<option value={c.key}>{c.name}</option>{/each}
+              {/if}
+            </NativeSelect>
+          </div>
+        {/if}
+        <Button
+          type="submit"
+          size="sm"
+          disabled={busy || !collectionValid || !draft.active || draft.blocked}
+          >{busy ? m.records_zotero_importing() : m.records_zotero_run()}</Button
+        >
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onclick={() => {
+            draft.leave.request(() => {
+              open = false;
+              apiKey = '';
+              keyVersion += 1;
+            });
+          }}>{m.records_zotero_close()}</Button
+        >
+        <p class="w-full text-muted-foreground">{m.records_zotero_hint()}</p>
+      </form>
+    </fieldset>
   {/if}
   {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
-  <p aria-live="polite">{status}</p>
 </div>

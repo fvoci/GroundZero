@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventView, ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
 import ItemCopy from '$lib/features/modules/ItemCopy.svelte';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
@@ -13,7 +14,7 @@ import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
-import { router } from '$lib/router.svelte';
+import { itemPath, router } from '$lib/router.svelte';
 
 // F-16·F-8(R5 B): 저장 요청이 가는 동안 입력과 초안 되살리기가 열려 있으면, 그사이 고친 입력 때문에 같은 사용자의
 // 성공 응답을 버렸다. 만들기는 고친 입력으로 다시 내면 새 요청 id로 두 번째 항목·일정이 생겼고, 고치기는 기준 판을
@@ -89,6 +90,7 @@ const item: ItemView = {
 describe('creating while a request is in flight', () => {
   it('locks item copy input and shows the copy once it succeeds', async () => {
     vi.spyOn(api, 'modules').mockResolvedValue([mod]);
+    const done = vi.spyOn(feedback, 'notifyDone');
     const request = held<Awaited<ReturnType<typeof api.copyItem>>>();
     const copy = vi.spyOn(api, 'copyItem').mockReturnValue(request.promise);
     render(ItemCopy, { item, module: mod });
@@ -102,7 +104,17 @@ describe('creating while a request is in flight', () => {
     expect(title).toBeDisabled();
     expect(screen.getByLabelText(m.modules_copy_module())).toBeDisabled();
     request.resolve({ item_id: 'copied', skipped_documents: 0 });
-    await screen.findByRole('link', { name: m.modules_copy_open() });
+    // 일반 완료는 토스트이고 새 항목 열기는 그 동작 단추다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    const [message, key, options] = done.mock.calls[0] ?? [];
+    expect(message).toBe(m.modules_copy_done());
+    expect(key).toBe('item-copy:copied');
+    expect(options?.action?.label).toBe(m.modules_copy_open());
+    const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
+    options?.action?.onClick();
+    expect(navigate).toHaveBeenCalledWith(itemPath(item.workspace_id, 'copied'));
     expect(screen.queryByLabelText(m.modules_copy_new_title())).toBeNull();
     expect(copy).toHaveBeenCalledOnce();
   });

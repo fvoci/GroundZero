@@ -13,7 +13,7 @@
   import { errorText } from '$lib/api/errors';
   import { forgetReferences } from '$lib/features/references/resolver';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { me } from '$lib/me.svelte';
@@ -393,8 +393,9 @@
       {#each templateDraft.offers as entry (entry.key)}
         <fieldset class="contents" disabled={templateBusy}>
           <FormDraftOffer
+            restorable={canCreate && !accountSwitching()}
             onrestore={() => {
-              templateDraft.restore(entry);
+              if (canCreate && !accountSwitching()) templateDraft.restore(entry);
             }}
             ondiscard={() => {
               templateDraft.discard(entry);

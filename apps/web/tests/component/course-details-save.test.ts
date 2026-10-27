@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -69,6 +70,7 @@ describe('course details save', () => {
   it('closes the form after a successful save', async () => {
     await setLocale('ko', { reload: false });
     mockCourse();
+    const done = vi.spyOn(feedback, 'notifyDone');
     const save = vi.spyOn(api, 'setCourseDetails').mockResolvedValue(undefined);
     render(CoursePanel, { props: { itemId: 'i1' } });
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
@@ -77,7 +79,10 @@ describe('course details save', () => {
     await fireEvent.input(field, { target: { value: '박 강사' } });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    expect(await screen.findByText('강좌 정보를 저장했습니다.')).toBeInTheDocument();
+    // 일반 완료는 토스트다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('강좌 정보를 저장했습니다.');
+    });
     expect(save.mock.calls[0]?.[1].instructor).toBe('박 강사');
     expect(instructor()).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
@@ -88,6 +93,7 @@ describe('course details save', () => {
   it('keeps the form open with details typed while the save was in flight', async () => {
     await setLocale('ko', { reload: false });
     mockCourse();
+    const done = vi.spyOn(feedback, 'notifyDone');
     let finish: () => void = () => undefined;
     const save = vi.spyOn(api, 'setCourseDetails').mockImplementation(
       () =>
@@ -110,7 +116,10 @@ describe('course details save', () => {
     await fireEvent.input(field, { target: { value: '최 강사' } });
     finish();
 
-    expect(await screen.findByText('강좌 정보를 저장했습니다.')).toBeInTheDocument();
+    // 일반 완료는 토스트다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('강좌 정보를 저장했습니다.');
+    });
     expect(save.mock.calls[0]?.[1].instructor).toBe('박 강사');
     expect(instructor()?.value).toBe('최 강사');
   });

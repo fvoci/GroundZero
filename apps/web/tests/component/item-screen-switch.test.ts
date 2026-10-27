@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemProfileView, ItemView, SummaryView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import './fixtures/authenticated';
@@ -107,6 +108,7 @@ describe('item screen results after switching items', () => {
   it('drops a late save of the previous item', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
@@ -122,7 +124,8 @@ describe('item screen results after switching items', () => {
     await settle();
 
     expect(heading()).toHaveTextContent('항목 B');
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    // 일반 완료는 토스트다(D-82). 앞 항목의 늦은 저장을 알리지 않는다.
+    expect(done).not.toHaveBeenCalled();
   });
 
   it('drops a late archive of the previous item', async () => {
@@ -176,6 +179,7 @@ describe('item screen results after switching items', () => {
   it('does not carry the previous item "saved" message over', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
@@ -183,11 +187,13 @@ describe('item screen results after switching items', () => {
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await screen.findByText('저장했습니다.');
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('저장했습니다.');
+    });
 
     await view.rerender({ workspace, itemId: 'B', workspaces: [workspace] });
     await screen.findByRole('heading', { name: '항목 B' });
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    expect(done).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -225,6 +231,7 @@ describe('item screen results after leaving and coming back to the same item', (
   it('drops a late save sent before leaving', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
@@ -238,7 +245,8 @@ describe('item screen results after leaving and coming back to the same item', (
     write.resolve({ kind: 'updated', item: item('A') });
     await settle();
 
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    // 일반 완료는 토스트다(D-82). 이 화면에서 하지 않은 저장을 알리지 않는다.
+    expect(done).not.toHaveBeenCalled();
   });
 
   it('drops a late save failure from before leaving', async () => {

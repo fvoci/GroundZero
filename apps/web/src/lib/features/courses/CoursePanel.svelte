@@ -8,7 +8,7 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { me } from '$lib/me.svelte';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
@@ -53,7 +53,6 @@
   let course = $state<CourseView | undefined>(undefined);
   let participants = $state<ParticipantView[]>([]);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let timerBusy = $state(false);
   async function startEpisode(id: string): Promise<void> {
     if (timerBusy) return;
@@ -360,7 +359,7 @@
     try {
       await action();
       if (!stillOwner()) return false;
-      status = done;
+      notifyDone(done);
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
@@ -505,7 +504,7 @@
       // Closing this target makes isOwner false, so release its busy state first.
       savingEpisode = false;
       if (episodeDraft.complete(attempt)) editingEpisode = undefined;
-      status = m.courses_episode_saved({ number });
+      notifyDone(m.courses_episode_saved({ number }));
       reloadKey += 1;
     } catch (e: unknown) {
       if (!episodeDraft.isOwner(attempt)) return;
@@ -588,7 +587,7 @@
     reloadKey += 1;
     const now = courseProgress(after.episodes, today, after.details.target_on).percentByCount;
     // 목차가 늘면 진행률이 바뀐다는 것을 알린다(D-37).
-    status = m.courses_added({ count: added, before, after: now });
+    notifyDone(m.courses_added({ count: added, before, after: now }));
     return true;
   }
 
@@ -624,7 +623,7 @@
         mineBase = JSON.stringify(sent);
         mineDraft.persist();
       }
-      status = m.courses_mine_saved({ number: e.number });
+      notifyDone(m.courses_mine_saved({ number: e.number }));
       reloadKey += 1;
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.courses_action_failed());
@@ -645,7 +644,6 @@
 {#if error !== undefined}
   <p role="alert" class="text-sm text-destructive">{error}</p>
 {/if}
-<p aria-live="polite" class="text-sm">{status}</p>
 
 {#if course !== undefined && progress !== undefined && owner === me.userId && !accountSwitching()}
   {@const c = course}
@@ -668,8 +666,9 @@
     {#each detailsDraft.offers as offer (offer.key)}
       <fieldset class="contents" disabled={savingDetails}>
         <FormDraftOffer
+          restorable={c.can_write && !accountSwitching()}
           onrestore={() => {
-            detailsDraft.restore(offer);
+            if (c.can_write && !accountSwitching()) detailsDraft.restore(offer);
           }}
           ondiscard={() => {
             detailsDraft.discard(offer);

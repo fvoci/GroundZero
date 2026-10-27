@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tick } from 'svelte';
 
 import { api, ApiError, type CourseView, type StudyPlanView } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { me } from '$lib/me.svelte';
@@ -200,15 +201,17 @@ describe('learning pending request ownership', () => {
 
   it('reports the submitted study title after successful form reset', async () => {
     vi.spyOn(api, 'updateStudyUnit').mockResolvedValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(StudyPanel, { itemId: 'i1' });
     await firstButton(m.study_edit_aria({ title: 'Unit 1' }));
     await input('unit-title-u1', 'Submitted title');
     const form = document.getElementById('unit-title-u1')?.closest('form');
     if (form == null) throw new Error('Missing form');
     await fireEvent.submit(form);
-    expect(
-      await screen.findByText(m.study_unit_saved({ title: 'Submitted title' })),
-    ).toBeInTheDocument();
+    // 일반 완료는 토스트다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.study_unit_saved({ title: 'Submitted title' }));
+    });
   });
 
   it.each(['course', 'study'])(
@@ -265,6 +268,26 @@ async function firstButton(name: string): Promise<void> {
   if (button === undefined) throw new Error(`Missing button: ${name}`);
   await fireEvent.click(button);
 }
+
+// FC-2(R5 P1 F-11): 쓸 수 없게 된 강좌에는 남긴 강좌 정보 입력의 되살리기 대신 읽기 전용 안내와 버리기만 보인다.
+describe('course details draft after write access is withdrawn', () => {
+  it('offers only a read-only notice and discard for the kept input', async () => {
+    const save = vi.spyOn(api, 'setCourseDetails');
+    const view = render(CoursePanel, { itemId: 'i1' });
+    await firstButton(m.courses_edit());
+    await input('course-instructor', 'Kept instructor');
+    view.unmount();
+
+    vi.mocked(api.course).mockResolvedValue({ ...course, can_write: false });
+    render(CoursePanel, { itemId: 'i1' });
+    const offer = await screen.findByTestId('form-draft-offer');
+    expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    expect(offer).toHaveTextContent(m.common_draft_read_only());
+    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_discard() }));
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
+});
 
 describe('durable learning input', () => {
   it('offers a new episode verbatim after remount without sending it', async () => {
@@ -484,6 +507,7 @@ describe('durable learning input', () => {
 
   it('keeps study creation request identity through remount and ignores late success after further typing', async () => {
     const add = vi.spyOn(api, 'addStudyUnits').mockRejectedValueOnce(new Error('offline'));
+    const done = vi.spyOn(feedback, 'notifyDone');
     const view = render(StudyPanel, { itemId: 'i1' });
     await screen.findByText('Unit 1');
     await input('study-unit-title', 'Draft one');
@@ -507,7 +531,10 @@ describe('durable learning input', () => {
     expect(add.mock.calls[1]?.[1][0]?.request_id).toBe(id);
     await input('study-unit-title', 'Draft two');
     finish(1);
-    await screen.findByText(m.study_unit_added());
+    // 일반 완료는 토스트다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.study_unit_added());
+    });
     expect(value('study-unit-title')).toBe('Draft two');
   });
 

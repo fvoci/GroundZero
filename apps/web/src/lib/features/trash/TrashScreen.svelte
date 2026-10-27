@@ -45,6 +45,9 @@
   // 덮지 않게 한다.
   let daysSeq = 0;
   let versionDaysSeq = 0;
+  // 보존 기간을 저장하는 동안 그 폼의 입력·되살리기·단추를 잠근다(D-97). 그사이 바뀐 입력은 실패를 숨겼다(FC-4).
+  let daysSaving = $state(false);
+  let versionDaysSaving = $state(false);
   let reloadKey = $state(0);
 
   const isAdmin = $derived(workspace === undefined || workspace.access === 'owner');
@@ -108,6 +111,7 @@
     reset: () => {
       days = savedDays ?? '';
       editingDays = false;
+      daysSaving = false;
       daysError = undefined;
     },
     dirty: () => editingDays && days !== savedDays,
@@ -125,6 +129,7 @@
     reset: () => {
       versionDays = savedVersionDays ?? '';
       editingVersionDays = false;
+      versionDaysSaving = false;
       versionDaysError = undefined;
     },
     dirty: () => editingVersionDays && versionDays !== savedVersionDays,
@@ -136,6 +141,7 @@
     const draft = version ? versionDraft : daysDraft;
     const ws = workspace?.id;
     if (ws === undefined || !isAdmin || !draft.active || draft.blocked) return;
+    if (version ? versionDaysSaving : daysSaving) return;
     const mine = version ? ++versionDaysSeq : ++daysSeq;
     const raw = (version ? versionDays : days).trim();
     const n = version && raw === '' ? null : Number(raw);
@@ -150,6 +156,8 @@
     else daysError = undefined;
     const current = (): boolean =>
       draft.isOwner(attempt) && mine === (version ? versionDaysSeq : daysSeq);
+    if (version) versionDaysSaving = true;
+    else daysSaving = true;
     try {
       if (version) await api.setVersionRetention(ws, n);
       else if (n !== null) await api.setTrashRetention(ws, n);
@@ -172,6 +180,11 @@
       const text = errorText(e, m.trash_action_failed());
       if (version) versionDaysError = text;
       else daysError = text;
+    } finally {
+      if (draft.isOwner(attempt)) {
+        if (version) versionDaysSaving = false;
+        else daysSaving = false;
+      }
     }
   }
 
@@ -270,32 +283,34 @@
         void saveRetention(false);
       }}
     >
-      {#each daysDraft.offers as entry (entry.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            daysDraft.restore(entry);
-          }}
-          ondiscard={() => {
-            daysDraft.discard(entry);
-          }}
-        />
-      {/each}
-      <div class="flex flex-col gap-1">
-        <Label for="trash-retention">{m.trash_retention_label()}</Label>
-        <Input
-          id="trash-retention"
-          class="w-28"
-          inputmode="numeric"
-          bind:value={days}
-          disabled={!daysDraft.active}
-          oninput={() => (editingDays = true)}
-          aria-invalid={daysError !== undefined}
-          aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
-        />
-      </div>
-      <Button type="submit" variant="outline" disabled={!daysDraft.active || daysDraft.blocked}
-        >{m.trash_change()}</Button
-      >
+      <fieldset class="contents" disabled={daysSaving}>
+        {#each daysDraft.offers as entry (entry.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              daysDraft.restore(entry);
+            }}
+            ondiscard={() => {
+              daysDraft.discard(entry);
+            }}
+          />
+        {/each}
+        <div class="flex flex-col gap-1">
+          <Label for="trash-retention">{m.trash_retention_label()}</Label>
+          <Input
+            id="trash-retention"
+            class="w-28"
+            inputmode="numeric"
+            bind:value={days}
+            disabled={!daysDraft.active}
+            oninput={() => (editingDays = true)}
+            aria-invalid={daysError !== undefined}
+            aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
+          />
+        </div>
+        <Button type="submit" variant="outline" disabled={!daysDraft.active || daysDraft.blocked}
+          >{m.trash_change()}</Button
+        >
+      </fieldset>
       {#if daysError !== undefined}
         <p id="trash-retention-error" role="alert" class="w-full text-sm text-destructive">
           {daysError}
@@ -310,34 +325,38 @@
         void saveRetention(true);
       }}
     >
-      {#each versionDraft.offers as entry (entry.key)}
-        <FormDraftOffer
-          onrestore={() => {
-            versionDraft.restore(entry);
-          }}
-          ondiscard={() => {
-            versionDraft.discard(entry);
-          }}
-        />
-      {/each}
-      <div class="flex flex-col gap-1">
-        <Label for="version-retention">{m.trash_version_retention_label()}</Label>
-        <Input
-          id="version-retention"
-          class="w-28"
-          inputmode="numeric"
-          bind:value={versionDays}
-          disabled={!versionDraft.active}
-          oninput={() => (editingVersionDays = true)}
-          aria-invalid={versionDaysError !== undefined}
-          aria-describedby={versionDaysError !== undefined ? 'version-retention-error' : undefined}
-        />
-      </div>
-      <Button
-        type="submit"
-        variant="outline"
-        disabled={!versionDraft.active || versionDraft.blocked}>{m.trash_change()}</Button
-      >
+      <fieldset class="contents" disabled={versionDaysSaving}>
+        {#each versionDraft.offers as entry (entry.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              versionDraft.restore(entry);
+            }}
+            ondiscard={() => {
+              versionDraft.discard(entry);
+            }}
+          />
+        {/each}
+        <div class="flex flex-col gap-1">
+          <Label for="version-retention">{m.trash_version_retention_label()}</Label>
+          <Input
+            id="version-retention"
+            class="w-28"
+            inputmode="numeric"
+            bind:value={versionDays}
+            disabled={!versionDraft.active}
+            oninput={() => (editingVersionDays = true)}
+            aria-invalid={versionDaysError !== undefined}
+            aria-describedby={versionDaysError !== undefined
+              ? 'version-retention-error'
+              : undefined}
+          />
+        </div>
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={!versionDraft.active || versionDraft.blocked}>{m.trash_change()}</Button
+        >
+      </fieldset>
       {#if versionDaysError !== undefined}
         <p id="version-retention-error" role="alert" class="w-full text-sm text-destructive">
           {versionDaysError}
