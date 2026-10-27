@@ -9,6 +9,7 @@ import { api, NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -67,7 +68,8 @@ function task(id: string, title: string): TaskView {
 // 칸반 맥락(목표 3): 카드를 열었다 닫은 뒤 브라우저 뒤로 가기는 보드를 떠나야 한다. 닫기가 새 기록을 쌓으면 뒤로 가기가
 // 방금 닫은 카드를 다시 연다.
 describe('task dialog and browser history', () => {
-  it('closing a card navigates to its board path without going back', async () => {
+  it('closing a card opened from the board goes back instead of adding an entry', async () => {
+    // R5 최종 A FA-4: 보드에서 연 상세는 닫을 때 그 기록으로 돌아간다(D-121 popstate 보호를 거치는 router.back).
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
     vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
@@ -85,6 +87,30 @@ describe('task dialog and browser history', () => {
     expect(push).toHaveBeenCalledTimes(1);
     // 앱에서는 주소가 바뀌면 부모가 연 업무를 넘긴다.
     await view.rerender({ item, workspaces: [], openTaskId: '2' });
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    await waitFor(() => {
+      expect(back).toHaveBeenCalledTimes(1);
+    });
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it('closing a card opened directly by its address navigates to the board path', async () => {
+    // 주소로 바로 연 상세는 돌아갈 보드 기록이 없으므로(다른 사이트일 수 있다) 보드 주소로 옮긴다.
+    await setLocale('ko', { reload: false });
+    window.history.replaceState(null, '', '/w/ws-1/i/i1/tasks/board/t/2');
+    router.path = '/w/ws-1/i/i1/tasks/board/t/2';
+    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(api, 'task').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    const push = vi.spyOn(window.history, 'pushState');
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: '2' } });
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeTruthy();
     });
