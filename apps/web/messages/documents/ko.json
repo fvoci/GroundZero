@@ -136,7 +136,6 @@
   "documents_unshare_confirm": "{email}의 접근을 철회할까요?",
   "documents_revoke_link_confirm": "이 링크를 철회할까요? 링크를 가진 사람은 더 읽을 수 없습니다.",
   "documents_share_empty": "공유한 사람이 없습니다.",
-  "documents_restrict_only": "보관된 항목 아래 문서입니다. 공유·공개 링크 철회와 비공개 전환처럼 노출을 줄이는 변경만 할 수 있습니다.",
   "documents_email": "이메일",
   "documents_share_permission": "공유 권한",
   "documents_share": "공유",

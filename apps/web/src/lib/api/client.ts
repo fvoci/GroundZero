@@ -72,7 +72,7 @@ export interface DocumentView {
   can_edit: boolean;
   visibility: 'workspace' | 'private';
   allow_copy: boolean;
-  /** 노출을 줄이는 관리(공유·공개 링크 철회, 비공개 전환)를 할 수 있는지. 보관 중에도 소유 권한자는 참. */
+  /** 공유·공개 링크·설정을 바꿀 수 있는지. 보관된 항목의 문서도 워크스페이스 관리자는 참(D-113 ⑯). */
   can_manage: boolean;
   /** 휴지통으로 옮길 수 있는지. */
   can_delete: boolean;

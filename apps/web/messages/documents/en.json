@@ -137,7 +137,6 @@
   "documents_unshare_confirm": "Revoke access for {email}?",
   "documents_revoke_link_confirm": "Revoke this link? People who have it can no longer read the document.",
   "documents_share_empty": "Not shared with anyone.",
-  "documents_restrict_only": "This document is under an archived item. You can only make changes that reduce exposure, such as revoking shares or public links or making it private.",
   "documents_email": "Email",
   "documents_share_permission": "Share permission",
   "documents_share": "Share",
