@@ -35,7 +35,7 @@ function task(id: string, title: string): TaskView {
     reference: `KED-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,
@@ -85,8 +85,8 @@ describe('move menu within a column', () => {
     await waitFor(() => {
       expect(move).toHaveBeenCalledTimes(1);
     });
-    // 같은 열(todo)의 "문서 검토" 앞으로.
-    expect(move.mock.calls[0]?.slice(1, 4)).toEqual(['2', 'todo', '1']);
+    // 같은 열(할 일)의 "문서 검토" 앞으로.
+    expect(move.mock.calls[0]?.slice(1, 4)).toEqual(['2', '할 일', '1']);
   });
 });
 
@@ -106,7 +106,7 @@ describe('reordering under a non-default sort', () => {
   it('Alt+Up/Down sends no move in title order, while Alt+Right still changes the column', async () => {
     const move = vi
       .spyOn(api, 'moveTask')
-      .mockResolvedValue({ ...task('1', '문서 검토'), status: 'in_progress', checklist: [] });
+      .mockResolvedValue({ ...task('1', '문서 검토'), status: '진행 중', checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByRole('button', { name: '문서 검토 옮기기' });
     const card = document.querySelector<HTMLElement>('[data-task-card="1"]');
@@ -126,6 +126,6 @@ describe('reordering under a non-default sort', () => {
     await waitFor(() => {
       expect(move).toHaveBeenCalledTimes(1);
     });
-    expect(move.mock.calls[0]?.slice(1, 4)).toEqual(['1', 'in_progress', null]);
+    expect(move.mock.calls[0]?.slice(1, 4)).toEqual(['1', '진행 중', null]);
   });
 });

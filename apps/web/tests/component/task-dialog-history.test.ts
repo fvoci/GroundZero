@@ -42,7 +42,7 @@ function task(id: string, title: string): TaskView {
     reference: `KED-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,
@@ -107,7 +107,7 @@ describe('board context across navigation', () => {
     const first = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByTestId('task-board');
     const status = await screen.findByLabelText('상태');
-    await fireEvent.change(status, { target: { value: 'in_progress' } });
+    await fireEvent.change(status, { target: { value: '진행 중' } });
     await fireEvent.click(screen.getByRole('button', { name: '목록' }));
     first.unmount();
 
@@ -116,7 +116,7 @@ describe('board context across navigation', () => {
       expect(api.taskStatuses).toHaveBeenCalled();
     });
     const again = await screen.findByLabelText('상태');
-    expect(again instanceof HTMLSelectElement ? again.value : '').toBe('in_progress');
+    expect(again instanceof HTMLSelectElement ? again.value : '').toBe('진행 중');
     expect(screen.getByRole('button', { name: '목록' }).getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -130,7 +130,7 @@ describe('board context across navigation', () => {
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.change(await screen.findByLabelText('상태'), {
-      target: { value: 'in_progress' },
+      target: { value: '진행 중' },
     });
     await fireEvent.click(screen.getByRole('button', { name: '목록' }));
 
@@ -142,7 +142,7 @@ describe('board context across navigation', () => {
     });
     expect(screen.getByRole('button', { name: '칸반' }).getAttribute('aria-pressed')).toBe('true');
     const saved: unknown = JSON.parse(window.sessionStorage.getItem(org.key('board:i2')) ?? 'null');
-    expect(JSON.stringify(saved)).not.toContain('in_progress');
+    expect(JSON.stringify(saved)).not.toContain('진행 중');
   });
 });
 
@@ -159,9 +159,9 @@ describe('move menu', () => {
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: 'API 연결 옮기기' }));
-    await fireEvent.click(await screen.findByRole('menuitem', { name: 'done(으)로 옮기기' }));
+    await fireEvent.click(await screen.findByRole('menuitem', { name: '완료(으)로 옮기기' }));
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith(expect.any(String), '2', 'done', null, undefined);
+      expect(move).toHaveBeenCalledWith(expect.any(String), '2', '완료', null, undefined);
     });
   });
 });
@@ -181,7 +181,7 @@ describe('quick add in a column', () => {
       .spyOn(api, 'moveTask')
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
-    const lane = await screen.findByRole('region', { name: /in_progress/ });
+    const lane = await screen.findByRole('region', { name: /진행 중/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
     const input = within(lane).getByRole('textbox');
     await fireEvent.input(input, { target: { value: '새 업무' } });
@@ -194,7 +194,7 @@ describe('quick add in a column', () => {
         '새 업무',
         null,
         {
-          status: 'in_progress',
+          status: '진행 중',
         },
       );
       expect(move).not.toHaveBeenCalled();
@@ -219,7 +219,7 @@ describe('quick add focus, cancel and notice', () => {
     vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
     vi.spyOn(api, 'moveTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
-    const lane = await screen.findByRole('region', { name: /in_progress/ });
+    const lane = await screen.findByRole('region', { name: /진행 중/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
     const input = within(lane).getByRole('textbox');
     await waitFor(() => {
@@ -235,7 +235,7 @@ describe('quick add focus, cancel and notice', () => {
     const again = within(lane).getByRole('textbox');
     await fireEvent.input(again, { target: { value: '새 업무' } });
     await fireEvent.submit(again.closest('form') ?? again);
-    // 전에는 만든 업무가 아직 목록에 없어 ": 옮겼습니다(in_progress)."처럼 제목이 비었다.
+    // 전에는 만든 업무가 아직 목록에 없어 ": 옮겼습니다(진행 중)."처럼 제목이 비었다.
     await waitFor(() => {
       expect(api.createTask).toHaveBeenCalledWith(
         expect.any(String),
@@ -244,7 +244,7 @@ describe('quick add focus, cancel and notice', () => {
         '새 업무',
         null,
         {
-          status: 'in_progress',
+          status: '진행 중',
         },
       );
     });
@@ -307,7 +307,7 @@ describe('drag cancel when the release is not seen', () => {
   }
 
   it('drops normally while the button is held (contrast)', async () => {
-    const { move } = await startDragOver(/done/);
+    const { move } = await startDragOver(/완료/);
     await fireEvent.pointerUp(window, {
       pointerId: 1,
       pointerType: 'mouse',
@@ -315,12 +315,12 @@ describe('drag cancel when the release is not seen', () => {
       clientY: 10,
     });
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith(expect.any(String), '2', 'done', null, undefined);
+      expect(move).toHaveBeenCalledWith(expect.any(String), '2', '완료', null, undefined);
     });
   });
 
   it('cancels when the window loses focus mid-drag', async () => {
-    const { move } = await startDragOver(/done/);
+    const { move } = await startDragOver(/완료/);
     await fireEvent.blur(window);
     await fireEvent.pointerUp(window, {
       pointerId: 1,
@@ -333,7 +333,7 @@ describe('drag cancel when the release is not seen', () => {
   });
 
   it('cancels when a move arrives with no button pressed', async () => {
-    const { move } = await startDragOver(/done/);
+    const { move } = await startDragOver(/완료/);
     await fireEvent.pointerMove(window, {
       pointerId: 1,
       buttons: 0,

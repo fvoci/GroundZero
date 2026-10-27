@@ -65,7 +65,7 @@ function task(id: string, title: string): TaskView {
     reference: `KED-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,
@@ -186,10 +186,10 @@ describe('new task title across reloads and account switches', () => {
   it('keeps a lane quick-add title with its lane, discards it on Esc and restores it into that lane', async () => {
     await mount();
     await fireEvent.click(firstAddButton());
-    const lane = await input('todo에 업무 추가');
-    await fireEvent.input(lane, { target: { value: 'todo 열의 업무' } });
+    const lane = await input('할 일에 업무 추가');
+    await fireEvent.input(lane, { target: { value: '할 일 열의 업무' } });
     await waitFor(() => {
-      expect(stored(A)).toEqual([{ lane: 'todo', name: 'todo 열의 업무', requestId: null }]);
+      expect(stored(A)).toEqual([{ lane: '할 일', name: '할 일 열의 업무', requestId: null }]);
     });
     // Esc는 이 입력을 버리는 것이다.
     await fireEvent.keyDown(lane, { key: 'Escape' });
@@ -198,7 +198,9 @@ describe('new task title across reloads and account switches', () => {
     });
 
     await fireEvent.click(firstAddButton());
-    await fireEvent.input(await input('todo에 업무 추가'), { target: { value: 'todo 열의 업무' } });
+    await fireEvent.input(await input('할 일에 업무 추가'), {
+      target: { value: '할 일 열의 업무' },
+    });
     await waitFor(() => {
       expect(stored(A)).toHaveLength(1);
     });
@@ -206,10 +208,10 @@ describe('new task title across reloads and account switches', () => {
 
     await mount();
     const offer = await screen.findByTestId('task-new-draft-offer');
-    expect(offer).toHaveTextContent('todo 열');
-    expect(offer).toHaveTextContent('todo 열의 업무');
+    expect(offer).toHaveTextContent('할 일 열');
+    expect(offer).toHaveTextContent('할 일 열의 업무');
     await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
-    expect((await input('todo에 업무 추가')).value).toBe('todo 열의 업무');
+    expect((await input('할 일에 업무 추가')).value).toBe('할 일 열의 업무');
     expect(screen.queryByTestId('task-new-draft-offer')).toBeNull();
   });
 
@@ -232,7 +234,9 @@ describe('new task title across reloads and account switches', () => {
   it('drops the restored quick-add seed when that lane form closes, so reopening starts empty with a fresh request id', async () => {
     await mount();
     await fireEvent.click(firstAddButton());
-    await fireEvent.input(await input('todo에 업무 추가'), { target: { value: 'todo 열의 업무' } });
+    await fireEvent.input(await input('할 일에 업무 추가'), {
+      target: { value: '할 일 열의 업무' },
+    });
     await waitFor(() => {
       expect(stored(A)).toHaveLength(1);
     });
@@ -241,11 +245,11 @@ describe('new task title across reloads and account switches', () => {
     await mount();
     await screen.findByTestId('task-new-draft-offer');
     await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
-    const seeded = await input('todo에 업무 추가');
-    expect(seeded.value).toBe('todo 열의 업무');
+    const seeded = await input('할 일에 업무 추가');
+    expect(seeded.value).toBe('할 일 열의 업무');
     const create = vi
       .spyOn(api, 'createTask')
-      .mockResolvedValue({ ...task('9', 'todo 열의 업무'), checklist: [] });
+      .mockResolvedValue({ ...task('9', '할 일 열의 업무'), checklist: [] });
     const form = seeded.closest('form');
     if (form === null) throw new Error('quick add form');
     await fireEvent.submit(form);
@@ -261,14 +265,14 @@ describe('new task title across reloads and account switches', () => {
 
     // 닫고 같은 열을 다시 연다: 옛 제목이 다시 채워지지 않고, 같은 제목을 쳐도 새 request_id로 보낸다(옛 id면 서버가 앞서
     // 만든 업무를 돌려줘 새 업무가 생기지 않는다).
-    await fireEvent.keyDown(await input('todo에 업무 추가'), { key: 'Escape' });
+    await fireEvent.keyDown(await input('할 일에 업무 추가'), { key: 'Escape' });
     await waitFor(() => {
-      expect(screen.queryByLabelText('todo에 업무 추가')).toBeNull();
+      expect(screen.queryByLabelText('할 일에 업무 추가')).toBeNull();
     });
     await fireEvent.click(firstAddButton());
-    const reopened = await input('todo에 업무 추가');
+    const reopened = await input('할 일에 업무 추가');
     expect(reopened.value).toBe('');
-    await fireEvent.input(reopened, { target: { value: 'todo 열의 업무' } });
+    await fireEvent.input(reopened, { target: { value: '할 일 열의 업무' } });
     const again = reopened.closest('form');
     if (again === null) throw new Error('quick add form');
     await fireEvent.submit(again);

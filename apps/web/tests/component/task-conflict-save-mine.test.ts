@@ -40,7 +40,7 @@ const v2: TaskDetailView = {
   reference: 'KED-1',
   title: '옛 제목',
   description: '',
-  status: 'todo',
+  status: '할 일',
   priority: 'none',
   start_date: null,
   due_date: null,
@@ -275,7 +275,7 @@ describe('saving my input after a task conflict', () => {
     mount();
     const v3 = { ...v2, version: 3, title: '새 제목' };
     // 다시 저장하려는 사이 또 바뀌었다(제목을 한 번 더, 상태도).
-    const v4: TaskDetailView = { ...v3, version: 4, title: '세 번째 제목', status: 'in_progress' };
+    const v4: TaskDetailView = { ...v3, version: 4, title: '세 번째 제목', status: '진행 중' };
     const v5 = { ...v4, version: 5, description: 'B 설명' };
     const update = vi
       .spyOn(api, 'updateTask')
@@ -288,7 +288,7 @@ describe('saving my input after a task conflict', () => {
 
     await fireEvent.click(saveMineButton());
     // 서버가 판 3으로 검사해 다시 409로 답했다: 충돌 화면이 더 새 판을 보이고 입력은 그대로다.
-    expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: in_progress/)).toBeTruthy();
+    expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: 진행 중/)).toBeTruthy();
     expect(update).toHaveBeenNthCalledWith(
       2,
       expect.any(String),
@@ -313,7 +313,7 @@ describe('saving my input after a task conflict', () => {
       expect.any(String),
       't1',
       4,
-      { ...unchanged, title: '세 번째 제목', status: 'in_progress', description: 'B 설명' },
+      { ...unchanged, title: '세 번째 제목', status: '진행 중', description: 'B 설명' },
       [],
     );
     expect(await screen.findByText('저장했습니다.')).toBeTruthy();
@@ -625,7 +625,7 @@ describe('the overwrite question after a task conflict', () => {
         .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
         .mockResolvedValueOnce({
           kind: 'conflict',
-          current: { ...v3, version: 4, status: 'done' },
+          current: { ...v3, version: 4, status: '완료' },
         });
       await screen.findByLabelText('마감일');
       if (clash) await type('task-title', '내 제목');
@@ -645,7 +645,7 @@ describe('the overwrite question after a task conflict', () => {
       await waitFor(() => {
         expect(update).toHaveBeenCalledTimes(2);
       });
-      expect(await screen.findByText(/상태: done/)).toBeTruthy();
+      expect(await screen.findByText(/상태: 완료/)).toBeTruthy();
       await waitFor(() => {
         expect(document.activeElement?.id).toBe('task-save-mine');
       });
@@ -880,7 +880,7 @@ describe('the overwrite question after the second review', () => {
       .mockResolvedValueOnce(titleConflict)
       .mockResolvedValueOnce({
         kind: 'conflict',
-        current: { ...titleConflict.current, version: 4, status: 'done' },
+        current: { ...titleConflict.current, version: 4, status: '완료' },
       });
     await screen.findByLabelText('설명');
     await type('task-description', '내 설명');
@@ -889,7 +889,7 @@ describe('the overwrite question after the second review', () => {
     if (save === null) throw new Error('task-save');
     save.focus();
     await fireEvent.click(save);
-    expect(await screen.findByText(/상태: done/)).toBeTruthy();
+    expect(await screen.findByText(/상태: 완료/)).toBeTruthy();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(document.activeElement?.id).toBe('task-save');
