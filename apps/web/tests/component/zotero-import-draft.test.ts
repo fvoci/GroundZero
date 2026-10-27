@@ -4,7 +4,7 @@ import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, NetworkError } from '$lib/api/client';
 import { formDraftTabKey } from '$lib/features/common/form-draft';
-import { markAccountSwitch } from '$lib/features/feedback/feedback.svelte';
+import { accountSafety, markAccountSwitch } from '$lib/features/feedback/feedback.svelte';
 import ZoteroImport from '$lib/features/records/ZoteroImport.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -181,16 +181,95 @@ it('guards close, navigation and unload, preserves on keep and clears only after
   expect(field('key')).toHaveValue('');
 });
 
-it('does not add a leave warning or durable draft for key-only edits', async () => {
+// R3 A: the API key never reaches durable storage, yet leaving the screen with it typed is still warned.
+const secret = 'synthetic-test-only';
+function stored(): string {
+  return [localStorage, sessionStorage]
+    .map((area) =>
+      Object.keys(area)
+        .map((key) => `${key}=${area.getItem(key) ?? ''}`)
+        .join('\n'),
+    )
+    .join('\n');
+}
+
+it('warns on unload, close and navigation for a key-only edit without storing it', async () => {
   mount();
   await open();
-  await edit('key', 'synthetic-test-only');
-  expect(unload()).toBe(false);
+  await edit('key', secret);
+  expect(unload()).toBe(true);
+  expect(stored()).not.toContain(secret);
   expect(keys()).toHaveLength(0);
   await fireEvent.click(screen.getByRole('button', { name: m.records_zotero_close() }));
-  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  await screen.findByRole('alertdialog');
+  await fireEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
+  expect(field('key')).toHaveValue(secret);
+  const move = vi.fn();
+  router.confirmLeave(move);
+  await screen.findByRole('alertdialog');
+  expect(move).not.toHaveBeenCalled();
+  expect(stored()).not.toContain(secret);
+  await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
+  expect(move).toHaveBeenCalledOnce();
+  expect(field('key')).toHaveValue('');
+  expect(unload()).toBe(false);
+  expect(stored()).not.toContain(secret);
+});
+
+it('discards a key-only edit on close and never offers it after a remount', async () => {
+  mount();
+  await open();
+  await edit('key', secret);
+  await fireEvent.click(screen.getByRole('button', { name: m.records_zotero_close() }));
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_discard_confirm() }));
+  expect(screen.queryByRole('form')).not.toBeInTheDocument();
   await open();
   expect(field('key')).toHaveValue('');
+  await edit('key', secret);
+  cleanup();
+  mount();
+  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  await open();
+  expect(field('key')).toHaveValue('');
+  expect(unload()).toBe(false);
+  expect(stored()).not.toContain(secret);
+});
+
+it('never stores the key while other fields are drafted and clears it after a successful import', async () => {
+  mount();
+  await open();
+  await fill();
+  await selectCollection();
+  expect(stored()).not.toContain(secret);
+  await edit('key', secret);
+  await read();
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: m.records_zotero_run() })).toBeEnabled();
+  });
+  await run();
+  await waitFor(() => {
+    expect(imported).toHaveBeenCalledOnce();
+  });
+  expect(field('key')).toHaveValue('');
+  expect(unload()).toBe(false);
+  expect(stored()).not.toContain(secret);
+});
+
+it('warns during an account-switch reload because the key is never kept, and never shows it to the next account', async () => {
+  mount();
+  await open();
+  await edit('key', secret);
+  markAccountSwitch();
+  expect(unload()).toBe(true);
+  expect(stored()).not.toContain(secret);
+  accountSafety.switching = false;
+  flushSync(() => {
+    me.userId = 'user-b';
+  });
+  expect(field('key')).toHaveValue('');
+  expect(unload()).toBe(false);
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(stored()).not.toContain(secret);
 });
 
 it('warns and preserves live input when local storage fails, including account-switch reload', async () => {
@@ -330,7 +409,8 @@ it('fences late success when account switching starts before user ID changes', a
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(imported).not.toHaveBeenCalled();
   expect(values()).toContain(' 00123 ');
-  expect(unload()).toBe(false);
+  // The settings are kept, but the typed key never is, so the reload still warns.
+  expect(unload()).toBe(true);
 });
 
 it('discards an offered draft explicitly without submitting it', async () => {

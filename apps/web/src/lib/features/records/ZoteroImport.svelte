@@ -1,6 +1,6 @@
 <script lang="ts">
   // Zotero에서 문헌 가져오기(D-34 읽기 연동, X-05 PDF·주석·양방향 쓰기 제외). API 키는 이 화면의 입력에만 있고
-  // 저장하지 않는다(서버도 저장하지 않음). 같은 문헌을 다시 가져오면 서지만 새로 하고 내 칸은 둔다.
+  // 저장하지 않는다(서버도 저장하지 않음). 화면을 떠날 때의 경고만 받는다(R3 A). 같은 문헌을 다시 가져오면 서지만 새로 하고 내 칸은 둔다.
   import type { ZoteroLibraryInput } from '$lib/api/client';
   import { onMount, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
@@ -77,6 +77,8 @@
       libraryType = 'user';
       libraryId = '';
       collection = '';
+      apiKey = '';
+      keyVersion += 1;
       collections = [];
       verified = undefined;
       busy = false;
@@ -84,6 +86,8 @@
       status = '';
     },
     dirty: () => libraryType !== 'user' || libraryId !== '' || collection !== '',
+    // The key is warned about on leaving but stays out of snapshot and storage.
+    screenOnly: () => apiKey !== '',
     busy: () => busy,
   });
   onMount(draft.attach);
