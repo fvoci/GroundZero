@@ -40,6 +40,8 @@
     initial?: CreateDraft | undefined;
     /** 입력이 바뀔 때마다(비었거나 만들었거나 Esc로 버렸으면 undefined) 알린다. */
     onchange?: ((draft: CreateDraft | undefined) => void) | undefined;
+    /** 보내는 중인지(읽기 전용으로 묶는다). 폼 밖에서 `draftContext`를 고르는 칸을 그동안 잠그는 데 쓴다. */
+    busy?: boolean;
   }
 
   let {
@@ -54,6 +56,7 @@
     onchange,
     draftName,
     draftContext = $bindable(''),
+    busy = $bindable(false),
   }: Props = $props();
 
   let input = $state<HTMLInputElement | null>(null);
@@ -64,7 +67,6 @@
   // 되살린 시작값은 처음 한 번만 읽는다.
   const start = untrack(() => initial);
   let name = $state(start?.name ?? '');
-  let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let pending: { requestId: string; name: string; context: string } | undefined =
     start !== undefined && start.requestId !== null
@@ -173,15 +175,19 @@
   }
 </script>
 
+<!-- 보내는 동안 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면 새 요청 id로 하나
+     더 만든다(입력 칸은 아래에서 따로 잠근다). -->
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      draft.restore(entry);
-    }}
-    ondiscard={() => {
-      draft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}

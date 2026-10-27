@@ -41,6 +41,9 @@
       : undefined,
   );
   let templateId = $state('');
+  // 새 문서를 보내는 동안 템플릿 선택을 잠근다. 그 값도 초안(draftContext)이라 바꾸면 성공한 만들기를 버리고, 다시 내면
+  // 새 요청 id로 두 번째 문서가 생긴다.
+  let creating = $state(false);
   // 워크스페이스를 옮겨도 이 화면은 다시 만들어지지 않는다. 앞 워크스페이스에서 고른 템플릿으로 새 문서를 만들지 않게
   // 워크스페이스가 바뀌면 비운다(같은 워크스페이스의 정보만 새로 오면 그대로 둔다).
   let templateWorkspace: string | undefined;
@@ -150,11 +153,17 @@
     />
   {/if}
   {#if canWrite}
-    <TemplatePicker workspaceId={workspace.id} id="new-document-template" bind:value={templateId} />
+    <TemplatePicker
+      workspaceId={workspace.id}
+      id="new-document-template"
+      bind:value={templateId}
+      disabled={creating}
+    />
     <CreateForm
       id="new-document"
       draftName={`wiki-new:${workspace.id}`}
       bind:draftContext={templateId}
+      bind:busy={creating}
       label={m.workspaces_new_doc_title()}
       placeholder={m.workspaces_new_doc_placeholder()}
       submitLabel={m.workspaces_create_doc()}
