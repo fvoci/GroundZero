@@ -1552,7 +1552,7 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
         RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
       END IF;
     END IF;
-    -- 조직 탈퇴(조직 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다.
+    -- 조직 제거·탈퇴(멤버 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다(D-114).
     PERFORM 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee FOR SHARE;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
@@ -3379,7 +3379,10 @@ CREATE FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user
       PERFORM app_require_organization_admin(p_organization);
     END IF;
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
-    IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user) THEN
+    -- 공유 생성(멤버 행 공유 잠금 뒤 공유 기록)과 줄 세운다(D-114). 먼저 온 공유는 커밋을 기다렸다가 아래에서 함께 거두고,
+    -- 나중 공유는 이 제거가 커밋된 뒤 멤버 행이 없어 거절된다.
+    PERFORM 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
+    IF NOT FOUND THEN
       RAISE EXCEPTION 'organization member not found' USING ERRCODE = 'P0002';
     END IF;
     IF NOT v_self THEN
