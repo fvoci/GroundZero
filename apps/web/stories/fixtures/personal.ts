@@ -28,7 +28,7 @@ export const ACTIVITY: Activity[] = [
   'unassign',
   'create',
   'move',
-  'detach',
+  'unshare',
 ].map((kind, index) => ({
   id: `activity-${String(index)}`,
   kind,

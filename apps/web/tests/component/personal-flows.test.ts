@@ -374,6 +374,10 @@ describe('activity feed', () => {
     expect(screen.getAllByRole('link')[0]).toHaveAttribute('href', '/w/ws1/i/item-1');
     expect(screen.getByRole('list')).toHaveTextContent('댓글');
     expect(screen.getByRole('list')).toHaveTextContent('담당을 해제');
+    // 서버가 내는 종류만 쓴다(SQL activity_kind_check, R5 B 최종 FB-3). 공유 철회도 읽을 수 있는 문장이고, 모르는
+    // 종류의 "변경했습니다"로 떨어지는 항목은 없다.
+    expect(screen.getByRole('list')).toHaveTextContent('공유를 철회');
+    expect(screen.getByRole('list')).not.toHaveTextContent('변경했습니다');
   });
 
   it('reloads recent activity after organization changes', async () => {
