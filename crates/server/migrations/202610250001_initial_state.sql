@@ -6928,6 +6928,12 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
       PERFORM app_activity(app_id(p_ids, v_at), p_target, p_item, 'document', p_doc, 'unshare',
                            jsonb_build_object('user', v_child.grantee_user_id, 'reason', 'moved'));
     END LOOP;
+    -- D-114: 이 문서의 참조 가운데 옮긴 자리의 조직 밖 대상은 지운다(개인 노트는 쓴 사람이 속한 다른 조직의 대상도 참조한다).
+    -- 조직이 없는 개인 대상은 참조 기록 규칙대로 남긴다.
+    DELETE FROM document_links l
+    WHERE l.document_id = p_doc
+      AND app_target_organization(l.target_kind, l.target_id)
+          <> (SELECT w.organization_id FROM workspaces w WHERE w.id = p_target);
     v_at := v_at + 1;
     PERFORM app_audit_document(app_id(p_ids, v_at), p_doc, 'move_in',
       jsonb_build_object('from', CASE WHEN v_doc.owner_user_id IS NULL THEN 'workspace' ELSE 'personal' END));
