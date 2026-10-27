@@ -83,7 +83,7 @@ export const ReadOnly: Story = {
     await canvas.findByRole('button', { name: m.study_track_aria({ title: '연습 문제' }) });
     await expect(canvas.queryByRole('form', { name: m.study_replan_form() })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.study_mine() }));
-    await expect(canvas.getByLabelText(m.study_note())).toBeDisabled();
+    await expect(canvas.getByLabelText(m.study_note())).toHaveAttribute('readonly');
     await expect(canvas.queryByRole('button', { name: m.common_save() })).toBeNull();
   },
 };

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView, StudyPlanView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { formatDay } from '$lib/display';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { me } from '$lib/me.svelte';
@@ -53,7 +54,7 @@ const course = (canWrite: boolean): CourseView => ({
       planned_on: null,
       mine: {
         status: 'not_started',
-        planned_on: null,
+        planned_on: '2026-11-02',
         completed_on: null,
         watch_count: 0,
         last_position_seconds: 90,
@@ -80,7 +81,7 @@ const plan = (canWrite: boolean): StudyPlanView => ({
       mine: {
         status: 'not_started',
         done_amount: 7,
-        planned_on: null,
+        planned_on: '2020-01-02',
         note: '스터디 메모',
         completed_on: null,
       },
@@ -88,6 +89,16 @@ const plan = (canWrite: boolean): StudyPlanView => ({
     },
   ],
 });
+
+/**
+ * 읽으라고 보이는 칸: 비활성(흐림·탭 순서 밖·고르기 불가)이 아니라 네이티브 readonly이고 초점을 받는다(R5 delta5 D5-F-3).
+ */
+function expectReadable(field: HTMLElement): void {
+  expect(field).toHaveAttribute('readonly');
+  expect(field).toBeEnabled();
+  field.focus();
+  expect(field).toHaveFocus();
+}
 
 const draftKeys = (): string[] =>
   Object.keys(localStorage).filter((k) => localStorage.getItem(k)?.includes('바뀐 메모') === true);
@@ -104,9 +115,15 @@ describe('course progress without write access (read-only member or archived ite
     await fireEvent.click(screen.getByRole('button', { name: '1회 내 메모·날짜' }));
     const note = screen.getByLabelText(m.courses_my_note());
     expect(note).toHaveValue('내 메모');
-    expect(note).toBeDisabled();
-    expect(screen.getByLabelText(m.courses_last_position())).toHaveValue('0:01:30');
-    expect(screen.getByLabelText(m.courses_last_position())).toBeDisabled();
+    expectReadable(note);
+    const position = screen.getByLabelText(m.courses_last_position());
+    expect(position).toHaveValue('0:01:30');
+    expectReadable(position);
+    // 날짜는 달력이 열리지 않게 글로 보인다.
+    const planned = screen.getByLabelText(m.courses_my_planned());
+    expect(planned).toHaveValue(formatDay('2026-11-02'));
+    expect(planned).not.toHaveAttribute('type', 'date');
+    expectReadable(planned);
     expect(screen.queryByRole('button', { name: m.common_save() })).toBeNull();
   });
 
@@ -159,10 +176,15 @@ describe('study progress without write access (read-only member or archived item
     await fireEvent.click(screen.getByRole('button', { name: '내 분량·날짜·메모' }));
     const note = document.getElementById('unit-note-u1');
     const done = document.getElementById('unit-done-u1');
+    const planned = document.getElementById('unit-plan-u1');
+    if (note === null || done === null || planned === null) throw new Error('my progress fields');
     expect(note).toHaveValue('스터디 메모');
-    expect(note).toBeDisabled();
+    expectReadable(note);
     expect(done).toHaveValue('7');
-    expect(done).toBeDisabled();
+    expectReadable(done);
+    expect(planned).toHaveValue(formatDay('2020-01-02'));
+    expect(planned).not.toHaveAttribute('type', 'date');
+    expectReadable(planned);
     expect(screen.queryByRole('button', { name: m.common_save() })).toBeNull();
   });
 

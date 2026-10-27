@@ -607,7 +607,7 @@ describe('durable learning input', () => {
     vi.mocked(api.studyPlan).mockResolvedValue({ ...plan, can_write: false });
     const readOnly = render(StudyPanel, { itemId: 'i1' });
     await firstButton(m.study_mine());
-    expect(document.getElementById('unit-note-u1')).toBeDisabled();
+    expect(document.getElementById('unit-note-u1')).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
     expect(screen.queryByRole('button', { name: m.common_save() })).toBeNull();
     expect(save).not.toHaveBeenCalled();
