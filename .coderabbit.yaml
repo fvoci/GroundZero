@@ -24,6 +24,14 @@ reviews:
         트랜잭션·동시성·재시도·삭제/복원의 데이터 정합성, API 계약과 시간대 경계 오류를 우선한다.
         문제를 지적할 때 구체적인 실패 경로와 필요한 검증을 설명한다.
         기존 검사와 중복되는 지적, 필요가 입증되지 않은 추상화·범용 프레임워크·범위 밖 재설계를 요구하지 않는다.
+    - path: '{crates,xtask}/**/*.rs'
+      instructions: >-
+        .agents/skills/rust-review/SKILL.md의 우선순위(정확성·건전성 → 오류 처리 →
+        API 설계 → 관용 표현 → 문서·시험)와 지적 형식(위치, 규칙 출처, 최소 수정)을 참고한다.
+        이 코드는 애플리케이션이므로 라이브러리 공개 API 규칙은 엄격하게 적용하지 않는다.
+        저장소 규칙(AGENTS.md, 결정 기록, rustfmt·Clippy 설정)이 우선하며,
+        [lints] 표 도입이나 clippy::pedantic 전체 적용 같은 검사 규칙 변경은 제안하지 않는다.
+        같은 종류의 지적은 위치를 모아 하나로 쓴다.
   finishing_touches:
     # One-off Fix comments only; ongoing Autofix has a separate task/PR control.
     autofix:
@@ -39,6 +47,13 @@ reviews:
     resolve_merge_conflict:
       enabled: false
     custom: []
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - files: '.agents/skills/rust-review/SKILL.md'
+        applyTo: 'crates/**/*.rs,xtask/**/*.rs'
 
 chat:
   art: false
