@@ -1,6 +1,8 @@
 # 제품 검사. 로컬과 같은 xtask 진입점을 호출한다.
 # 컨테이너 검사는 base-image 워크플로의 digest를 쓴다. Compose를 직접 다루는 작업은 고정 도구의 호스트 러너에서 돈다.
 # digest는 저장소 변수 CI_BASE_IMAGE_DIGEST (sha256:...)에 둔다. 비어 있으면 image 참조가 잘못되어 job이 시작 단계에서 실패한다. 성공으로 처리하지 않는다.
+# rust-cache의 자동 키에는 Cargo 프로필이 들지 않는다. 루트 Cargo.toml의 [profile.*]를 바꾸면 아래 rust-cache의 prefix-key를
+# 모두 함께 올린다(#158). 그대로 두면 옛 프로필의 의존 빌드를 받아 매번 다시 빌드하고, 키가 같아 새 결과를 저장하지 않는다.
 name: ci
 
 on:
@@ -41,6 +43,8 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - id: plan
         run: cargo xtask ci-plan --event "$GITHUB_EVENT_NAME"
 
@@ -55,6 +59,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       # pnpm은 Corepack이 packageManager의 판·sha512대로 실행한다(이미지의 다른 pnpm이 아니라). 쓰인 판을 로그에 남긴다.
       - run: corepack enable pnpm && rustc -V && node -v && corepack --version && pnpm -v
       - run: pnpm install --frozen-lockfile
@@ -111,6 +117,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - run: cargo xtask test --external-services
 
   # S3 저장소 테스트(s3_*)는 SeaweedFS에 시작 인자(사용 통계 끄기 등)가 필요해 job 서비스로 띄울 수 없으므로
@@ -159,6 +167,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - run: cargo xtask test --supabase --session-pooler --oidc
 
   # 실제 API·DB·OIDC를 쓰는 Chromium 회귀. 브라우저/서비스 생명주기는 로컬과 같은 xtask가 소유한다.
@@ -173,6 +183,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.22.1'

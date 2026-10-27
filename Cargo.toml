@@ -25,6 +25,7 @@ xshell = "0.2"
 # 개발·시험 빌드의 디버그 정보(#158). 워크스페이스 crate는 패닉 역추적에 쓸 줄 정보만 남기고, 외부 crate는 디버그 정보
 # 없이 빌드한다(역추적에 함수 이름은 남지만 줄은 없다). 디버거에서 지역 변수는 보이지 않는다. `test` 프로필은 `dev`를
 # 물려받는다.
+# 프로필을 바꾸면 `.github/workflows/ci.yml`의 rust-cache `prefix-key`를 올린다(캐시 키에 프로필이 들지 않는다).
 [profile.dev]
 debug = "line-tables-only"
 
