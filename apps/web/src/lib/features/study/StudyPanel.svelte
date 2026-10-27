@@ -291,6 +291,7 @@
         savingUnit = false;
         savingMine = false;
         adding = false;
+        replanning = false;
       }
     });
     let cancelled = false;
