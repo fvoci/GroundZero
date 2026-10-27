@@ -105,6 +105,17 @@ export const NewWorkspace: Story = {
     const bar = within(await sidebar(canvasElement));
     await bar.findByText('아직 모듈이 없습니다.');
     await expect(bar.queryByTestId('sidebar-modules')).toBeNull();
+    // 조직 › 워크스페이스 전환기가 사이드바 맨 위, 검색 앞이다(D-121).
+    const switcher = bar.getByTestId('organization-switcher');
+    await expect(
+      switcher.compareDocumentPosition(bar.getByTestId('workspace-switcher')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await expect(
+      bar
+        .getByTestId('workspace-switcher')
+        .compareDocumentPosition(bar.getByTestId('search-open')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   },
 };
 
