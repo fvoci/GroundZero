@@ -5,8 +5,6 @@ import type { AssigneeView, TaskPriority, TaskStatus } from '$lib/api/client';
 import { csvDate, csvRecords, isHeader } from '$lib/csv';
 import { m } from '$lib/paraglide/messages.js';
 
-/** 업무 제목 한도(서버 기본 FVOCI_MAX_TITLE_CHARS). */
-const MAX_TITLE = 200;
 // 서버가 만들기에서 거부하는 값(crates/server/src/features/tasks.rs). 서버가 최종 판단하고 거절된 줄은 아무것도 남기지
 // 않지만(D-105), 등록 전에 줄 번호와 함께 알리려고 같은 규칙으로 미리 본다. 글자 수는 서버처럼 문자(코드 포인트)로 센다.
 /** 설명 글자 수(MAX_DESCRIPTION_CHARS). */
@@ -83,10 +81,12 @@ const list = (raw: string): string[] =>
     .map((s) => s.trim())
     .filter((s) => s !== '');
 
+/** `maxTitleChars`는 서버의 제목 한도(`me.limits.max_title_chars`, FVOCI_MAX_TITLE_CHARS, #79). */
 export function parseTasksCsv(
   text: string,
   assignable: readonly AssigneeView[],
   statuses: readonly TaskStatusDefinition[],
+  maxTitleChars: number,
 ): TaskCsvResult {
   const rows: TaskRow[] = [];
   const errors: { line: number; reason: string }[] = [];
@@ -111,8 +111,8 @@ export function parseTasksCsv(
       fail(m.tasks_csv_no_title());
       return;
     }
-    if (chars(title) > MAX_TITLE) {
-      fail(m.tasks_csv_title_too_long({ max: MAX_TITLE }));
+    if (chars(title) > maxTitleChars) {
+      fail(m.tasks_csv_title_too_long({ max: maxTitleChars }));
       return;
     }
     if (chars(description) > MAX_DESCRIPTION) {

@@ -4,6 +4,8 @@ import type { TaskStatusDefinition } from '@fvoci/api-client';
 import { parseTasksCsv } from '$lib/features/tasks/csv';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
+/** 서버 기본 제목 한도(FVOCI_MAX_TITLE_CHARS). */
+const DEFAULT_MAX_TITLE = 200;
 const people = [
   { user_id: 'u1', display_name: '김철수' },
   { user_id: 'u2', display_name: '이영희' },
@@ -25,6 +27,7 @@ describe('task CSV', () => {
         '배포,,,,,,,,\n',
       people,
       statuses,
+      DEFAULT_MAX_TITLE,
     );
     expect(r.errors).toEqual([]);
     expect(r.rows[0]).toEqual({
@@ -47,6 +50,7 @@ describe('task CSV', () => {
       ',설명만\n일,,끝남\n일,,,급함\n일,,,,2026-10-30,2026-10-01\n일,,,,,,오래\n일,,,,,,,박민수',
       people,
       statuses,
+      DEFAULT_MAX_TITLE,
     );
     expect(r.errors.map((e) => e.line)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(r.rows).toEqual([]);
@@ -71,6 +75,7 @@ describe('task CSV', () => {
       ].join('\n'),
       people,
       statuses,
+      DEFAULT_MAX_TITLE,
     );
     expect(r.rows).toEqual([]);
     expect(r.errors).toEqual([
@@ -99,6 +104,7 @@ describe('task CSV', () => {
       ].join('\n'),
       people,
       statuses,
+      DEFAULT_MAX_TITLE,
     );
     expect(r.errors).toEqual([]);
     expect(r.rows[0]?.tags).toHaveLength(20);
@@ -107,13 +113,40 @@ describe('task CSV', () => {
   });
 
   it('skips rows of empty cells and reports a long title on its own line', () => {
-    const r = parseTasksCsv(`,,,\n"둘째\n줄",,\n${'가'.repeat(201)}`, people, statuses);
+    const r = parseTasksCsv(
+      `,,,\n"둘째\n줄",,\n${'가'.repeat(201)}`,
+      people,
+      statuses,
+      DEFAULT_MAX_TITLE,
+    );
     expect(r.rows.map((x) => x.title)).toEqual(['둘째\n줄']);
     expect(r.errors).toEqual([{ line: 4, reason: '제목은 200자까지입니다' }]);
   });
 
+  // #79: 제목 한도는 서버 설정(me.limits.max_title_chars)을 따른다. 서버 쪽 짝은 limits_contract.rs의
+  // task_csv_rows_follow_a_title_limit_*이며 같은 길이(한도-1, 한도, 한도+1, 200)를 쓴다. 글자 수는 코드 포인트다.
+  it.each([300, 50])('follows a server title limit of %i', (max) => {
+    const cases: [number, string][] = [
+      [max - 1, '가'],
+      [max, '🦀'],
+      [max + 1, '나'],
+      [200, '다'],
+    ];
+    const text = cases.map(([length, glyph]) => glyph.repeat(length)).join('\n');
+    const r = parseTasksCsv(text, people, statuses, max);
+    const accepted = cases.filter(([length]) => length <= max).map(([, g]) => g);
+    expect(r.rows.map((x) => Array.from(x.title)[0])).toEqual(accepted);
+    expect(r.errors).toEqual(
+      cases.flatMap(([length], index) =>
+        length > max ? [{ line: index + 1, reason: `제목은 ${String(max)}자까지입니다` }] : [],
+      ),
+    );
+  });
+
   it('matches exact names first and accepts only one case-insensitive match', () => {
-    expect(parseTasksCsv('업무,, rEaDy ', people, statuses).rows[0]?.status).toBe('Ready');
+    expect(
+      parseTasksCsv('업무,, rEaDy ', people, statuses, DEFAULT_MAX_TITLE).rows[0]?.status,
+    ).toBe('Ready');
     const ambiguous = [
       ...statuses,
       {
@@ -129,6 +162,7 @@ describe('task CSV', () => {
       '첫째,,Ready\n둘째,,READY\n셋째,,ready\n넷째,,todo\n다섯째,,완료',
       people,
       ambiguous,
+      DEFAULT_MAX_TITLE,
     );
     expect(result.rows.map((row) => row.status)).toEqual(['Ready', 'READY']);
     expect(result.errors).toEqual([
@@ -136,6 +170,8 @@ describe('task CSV', () => {
       { line: 4, reason: '상태를 알 수 없습니다: todo' },
       { line: 5, reason: '상태를 알 수 없습니다: 완료' },
     ]);
-    expect(parseTasksCsv('업무,,   ', people, []).rows[0]).not.toHaveProperty('status');
+    expect(parseTasksCsv('업무,,   ', people, [], DEFAULT_MAX_TITLE).rows[0]).not.toHaveProperty(
+      'status',
+    );
   });
 });
