@@ -23,6 +23,12 @@ const workspace: Workspace = {
   realtime_enabled: false,
 };
 const other: Workspace = { ...workspace, id: 'ws-2', name: '다른 공간' };
+const invitation = {
+  id: 'inv-1',
+  email: 'kim@lab.example',
+  role: 'member' as const,
+  expires_at: '2026-11-03T00:00:00Z',
+};
 
 const view: MembersView = {
   can_manage_members: true,
@@ -79,7 +85,7 @@ async function submit(input: HTMLElement, value: string): Promise<void> {
 
 describe('members screen after a refresh of the same workspace', () => {
   it('keeps the invite notice and input after the app passes a new object for the same id', async () => {
-    const invite = vi.spyOn(api, 'invite').mockResolvedValue(undefined);
+    const invite = vi.spyOn(api, 'invite').mockResolvedValue(invitation);
     renderWithAppRefresh();
     const email = await screen.findByLabelText('이메일');
     await submit(email, 'kim@lab.example');
@@ -104,7 +110,6 @@ describe('members screen after a refresh of the same workspace', () => {
   it('keeps the group name input element after creating a group', async () => {
     vi.spyOn(api, 'createGroup').mockResolvedValue({
       id: 'g1',
-      workspace_id: 'ws-1',
       name: '조교',
       members: [],
     });
@@ -123,7 +128,7 @@ describe('members screen after a refresh of the same workspace', () => {
   });
 
   it('still starts over for another workspace', async () => {
-    vi.spyOn(api, 'invite').mockResolvedValue(undefined);
+    vi.spyOn(api, 'invite').mockResolvedValue(invitation);
     const view = render(MembersScreen, {
       props: { workspace, meId: 'u1', onchanged: () => undefined },
     });
