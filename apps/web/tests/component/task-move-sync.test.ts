@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskStatus, TaskView } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import {
   backTo,
   classifyMoveError,
@@ -176,13 +177,21 @@ describe('move result helpers', () => {
 
 // 칸반 저장 상태: 화면은 먼저 옮기고, 응답이 늦으면 지연을, 결과를 모르면 서버 목록을 대조해 확정한다.
 describe('kanban save states', () => {
+  let done: MockInstance<typeof feedback.notifyDone>;
   beforeEach(async () => {
     vi.useFakeTimers();
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    done = vi.spyOn(feedback, 'notifyDone');
   });
+  /** 이동 완료는 토스트(key `board-move`)로 알린다(D-82). 지금까지 띄운 이동 완료 글. */
+  const moveToast = (): string =>
+    done.mock.calls
+      .filter(([, key]) => key === 'board-move')
+      .map(([text]) => text)
+      .join(' ');
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -255,7 +264,7 @@ describe('kanban save states', () => {
     save.resolve({ ...movedA, checklist: [] });
     await flush();
     expect(saveState('a')).toBeNull();
-    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(moveToast()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
   });
 
   it('slow success: says the response is delayed, then confirms when it arrives', async () => {
@@ -325,7 +334,7 @@ describe('kanban save states', () => {
     expect(move).toHaveBeenCalledTimes(1);
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('진행 중');
-    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
+    expect(moveToast()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
   });
 
   it('lost response and not saved: shows the server place, retries once only on request', async () => {
@@ -351,7 +360,7 @@ describe('kanban save states', () => {
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('진행 중');
     // 응답의 판이 이 이동만으로 될 판(1 → 2)이므로 겹친 변경으로 알리지 않는다.
-    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(moveToast()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
     expect(screen.queryByRole('alert')?.textContent ?? '').not.toContain('덮었을 수 있습니다');
   });
 
@@ -377,7 +386,7 @@ describe('kanban save states', () => {
     await flush();
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('진행 중');
-    expect(liveText()).toContain('저장을 확인했습니다');
+    expect(moveToast()).toContain('저장을 확인했습니다');
   });
 
   it('retry is not sent when the list read just before it shows a change made elsewhere', async () => {
@@ -425,7 +434,7 @@ describe('kanban save states', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'API 연결: 그사이 다른 곳에서 이 업무가 옮겨져, 덮어쓰지 않도록 다시 시도를 저장하지 않았습니다.',
     );
-    expect(liveText()).not.toContain('저장을 확인했습니다');
+    expect(moveToast()).not.toContain('저장을 확인했습니다');
     await flush(20000);
     expect(move).toHaveBeenCalledTimes(2);
   });
@@ -438,7 +447,7 @@ describe('kanban save states', () => {
     await moveRight('a');
     await flush(10000);
     expect(saveState('a')).toBeNull();
-    expect(liveText()).toContain('저장을 확인했습니다');
+    expect(moveToast()).toContain('저장을 확인했습니다');
     // 늦게 온 성공 응답은 아무것도 되돌리지 않는다.
     save.resolve({ ...movedA, checklist: [] });
     await flush();
@@ -485,7 +494,7 @@ describe('kanban save states', () => {
     await flush();
     expect(saveState('a')).toBeNull();
     expect(laneOf('a')).toBe('진행 중');
-    expect(liveText()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
+    expect(moveToast()).toContain('API 연결: 저장을 확인했습니다(진행 중).');
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -704,6 +713,6 @@ describe('kanban save states', () => {
     expect(laneOf('a')).toBe('진행 중');
     // 늦게 끝난 실패 쪽 흐름이 방금 성공한 이동의 안내를 실패 경고로 덮지 않는다.
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(liveText()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(moveToast()).toContain('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
   });
 });

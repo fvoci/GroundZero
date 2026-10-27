@@ -120,12 +120,14 @@ async function expectFocusOnFirst(canvasElement: HTMLElement): Promise<void> {
   );
 }
 
-/** 옮기면 카드가 먼저 옮겨지고 저장되면 확정·되돌리기 제안이 나온다. 초점은 옮긴 카드에 남는다. */
+/**
+ * 옮기면 카드가 먼저 옮겨지고 저장되면 확정된다. 완료와 되돌리기 단추는 토스트로 알린다(D-82, 이 이야기 밖의
+ * FeedbackHost). 초점은 옮긴 카드에 남는다.
+ */
 export const MoveSaved: Story = {
   play: async ({ canvasElement }) => {
     await moveFirstRight(canvasElement);
-    const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('button', { name: /되돌리기/ })).toBeInTheDocument();
+    await waitFor(() => expect(canvasElement.querySelector('[data-save-state]')).toBeNull());
     await expect(within(lane(canvasElement, '완료')).getByText(FIRST.title)).toBeInTheDocument();
     await expectFocusOnFirst(canvasElement);
   },

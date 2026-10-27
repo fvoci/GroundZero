@@ -4,12 +4,17 @@
 // 문구는 부르는 쪽이 i18n 메시지로 넘긴다(D-81).
 import { toast } from 'svelte-sonner';
 import { flushSync } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 
 /** 완료 토스트의 동작 단추 하나(복제한 새 항목 열기 등). */
 export interface DoneAction {
   label: string;
   onClick: () => void;
 }
+
+// 동작 단추를 붙여 띄운 완료 토스트의 key. 토스트 라이브러리는 같은 id를 고칠 때 앞 값에 덮어 합치므로, 단추 없는 완료로
+// 고치면 앞 단추와 "닫을 때까지 둔다"가 남는다. 그때는 앞 토스트를 내리고 새로 띄운다.
+const actionKeys = new SvelteSet<string>();
 
 /**
  * 완료 알림. 같은 `key`(없으면 문구)는 쌓지 않고 하나를 새로 고친다. 화면 낭독기는 토스트 영역(aria-live)으로 읽는다.
@@ -22,6 +27,11 @@ export function notifyDone(
   options: { action?: DoneAction } = {},
 ): void {
   const action = options.action;
+  if (action === undefined) {
+    if (actionKeys.delete(key)) toast.dismiss(key);
+  } else {
+    actionKeys.add(key);
+  }
   toast.success(
     message,
     action === undefined
@@ -32,6 +42,12 @@ export function notifyDone(
           action: { label: action.label, onClick: action.onClick },
         },
   );
+}
+
+/** 그 key의 완료 토스트를 내린다. 동작 단추가 더는 맞지 않을 때(되돌릴 이동이 그사이 바뀜 등) 부른다. */
+export function dismissDone(key: string): void {
+  actionKeys.delete(key);
+  toast.dismiss(key);
 }
 
 /** 같은 실패는 한 토스트에서 갱신한다. 저장 오류는 호출 화면에 남긴다(D-82). */

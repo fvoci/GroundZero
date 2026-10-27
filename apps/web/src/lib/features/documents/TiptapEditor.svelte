@@ -18,6 +18,7 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { m } from '$lib/paraglide/messages.js';
@@ -262,7 +263,9 @@
             marks: [{ type: 'link', attrs: { href: added.href } }],
           })
           .run();
-      fileStatus = m.documents_file_inserted({ name: file.name });
+      // 일반 완료는 토스트다(D-82). 알림 영역의 "올리는 중" 글은 비운다.
+      fileStatus = '';
+      notifyDone(m.documents_file_inserted({ name: file.name }));
     } catch (e: unknown) {
       fileStatus =
         e instanceof Error
@@ -702,7 +705,8 @@
       {/if}
     </form>
   {/if}
-  {#if fileStatus !== ''}<p class="py-1 text-sm" aria-live="polite">{fileStatus}</p>{/if}
+  <!-- 파일을 올리는 중·실패. 처음부터 그려 두고 글만 바꾼다(D-110(4)). -->
+  <p class="py-1 text-sm empty:hidden" aria-live="polite">{fileStatus}</p>
   <!-- 붙여넣기·입력을 문서 규칙에 맞춰 바꿨을 때의 안내. 사용자가 닫을 때까지 남긴다. -->
   <div class="text-sm" aria-live="polite">
     {#if contentNotice !== ''}

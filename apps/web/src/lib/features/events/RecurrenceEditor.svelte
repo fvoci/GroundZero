@@ -87,7 +87,6 @@
   const f = $state(initial());
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
-  let saved = $state(false);
   let localUntilError = $state<string | undefined>(undefined);
   let conflicted = $state(false);
   let baseFields = $state(initial());
@@ -108,7 +107,6 @@
       baseRule = rule;
       error = undefined;
       busy = false;
-      saved = false;
       conflicted = false;
       localUntilError = undefined;
     },
@@ -164,7 +162,6 @@
     if (draftName !== undefined && attempt === undefined) return;
     error = undefined;
     localUntilError = undefined;
-    saved = false;
     const proposed = build();
     if (typeof proposed === 'string') {
       error = proposed;
@@ -179,7 +176,6 @@
       baseFields = savedFields;
       baseRule = proposed;
       draft.persist();
-      saved = true;
       conflicted = false;
       notifyDone(m.common_saved());
     } catch (e: unknown) {
@@ -332,8 +328,6 @@
           aria-label={conflicted ? m.tasks_rule_save_mine() : undefined}
           >{conflicted ? m.tasks_save_mine() : m.events_recurrence_save()}</Button
         >
-        <!-- 저장 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
-        <span class="sr-only" role="status">{saved ? m.common_saved() : ''}</span>
       </form>
     </fieldset>
     {#if error !== undefined}

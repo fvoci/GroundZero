@@ -3,8 +3,11 @@ import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
+import DeletedWorkspaces from '$lib/features/trash/DeletedWorkspaces.svelte';
 import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 보존 기간 입력 오류는 그 칸 옆에 보인다(D-82, 감사 W37). 화면 위 공용 알림이 아니라 칸에 묶인 설명으로.
@@ -127,4 +130,71 @@ describe('trash retention field errors', () => {
       expect(input).toHaveValue('40');
     },
   );
+});
+
+// D-82: 일반 완료는 토스트다. 휴지통 화면의 낭독용 완료 영역(sr-only)과 지운 워크스페이스의 화면 안 완료 문구를 두지 않는다.
+describe('trash completions are toasts', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    localStorage.clear();
+  });
+  afterEach(() => {
+    me.userId = '';
+    vi.restoreAllMocks();
+  });
+
+  it('reports a changed retention once as a toast and keeps no completion text in the page', async () => {
+    vi.spyOn(api, 'trash').mockResolvedValue({
+      retention_days: 30,
+      version_retention_days: null,
+      entries: [],
+    });
+    vi.spyOn(api, 'setTrashRetention').mockResolvedValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    render(TrashScreen, { props: { workspace } });
+    const input = await screen.findByLabelText('보존 기간(일)');
+    await vi.waitFor(() => {
+      expect(input).toHaveValue('30');
+    });
+    await fireEvent.input(input, { target: { value: '45' } });
+    const form = input.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.submit(form);
+
+    await vi.waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    const text = m.trash_retention_changed({ days: 45 });
+    expect(done).toHaveBeenCalledWith(text);
+    expect(screen.queryByText(text)).toBeNull();
+  });
+
+  it('reports a restored workspace once as a toast and keeps the heading for focus', async () => {
+    const gone = {
+      id: 'ws-old',
+      name: '지운 공간',
+      deleted_at: '2026-10-20T00:00:00Z',
+      expires_at: '2026-11-19T00:00:00Z',
+      expired: false,
+    };
+    vi.spyOn(api, 'deletedWorkspaces').mockResolvedValueOnce([gone]).mockResolvedValue([]);
+    vi.spyOn(api, 'restoreWorkspace').mockResolvedValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    render(DeletedWorkspaces, { props: { onchanged: () => undefined } });
+    await fireEvent.click(
+      await screen.findByRole('button', { name: m.trash_restore_named({ name: '지운 공간' }) }),
+    );
+
+    await vi.waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    const text = m.trash_restored({ label: '지운 공간' });
+    expect(done).toHaveBeenCalledWith(text);
+    expect(screen.queryByText(text)).toBeNull();
+    // 목록이 비어도 제목은 남아 초점을 받는다(누른 단추가 사라졌다).
+    await vi.waitFor(() => {
+      expect(document.activeElement?.id).toBe('deleted-workspaces-heading');
+    });
+  });
 });

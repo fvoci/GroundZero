@@ -173,7 +173,6 @@
   let peopleError = $state<string | undefined>(undefined);
   let conflict = $state<TaskDetailView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
-  let saved = $state(false);
   // 날짜를 바꿀 때 함께 옮길 후속 업무(미리보기). 패널이 떠 있는 동안 폼은 잠그고, 승인하면 본 입력과 기준 버전
   // 그대로 보낸다(D-31: 보여 준 영향을 사용자가 승인).
   interface Pending {
@@ -194,8 +193,6 @@
     rows: ClashRow[];
   }
   let clashAsk = $state<ClashAsk | undefined>(undefined);
-  // 저장했지만 날짜가 없어 옮기지 않은 후속 업무 알림(날짜를 지어내지 않는다).
-  let undatedNotice = $state('');
   let busy = $state(false);
   let predecessorChoice = $state('');
   // 관계 고치기(D-91): 고르는 선행 업무(새 관계) 또는 고치는 관계, 종류, 지연일(글자 그대로 두고 저장할 때 확인).
@@ -210,7 +207,6 @@
       ? predecessorChoice !== '' || linkKind !== 'FS' || lagText !== '0'
       : linkKind !== linkBase?.kind || lagText !== String(linkBase.lag_days),
   );
-  let linkStatus = $state('');
   // 관계를 바꾸면 옮겨야 하는 후속 업무(미리보기). 승인하면 본 관계·목록 그대로 보낸다.
   interface LinkPending {
     predecessor: string;
@@ -234,7 +230,6 @@
   let commentsDraftKept = $state(true);
   let recurrenceDraftKept = $state(true);
   let taskDraftKept = $state(true);
-  let parentStatus = $state('');
   const parentCandidates = $derived(
     tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
   );
@@ -733,7 +728,6 @@
       linkKind = link.kind;
       lagText = link.lag;
       linkBase = stillLinked ? link.base : null;
-      linkStatus = '';
     }
     // 남길 때의 판보다 서버가 앞섰으면 기존 다시 채우기로 병합한다(양쪽이 다르게 바꾼 칸은 옛 판 번호를 남겨 저장이 충돌
     // 화면으로 간다). 같은 판이면 그 판으로 저장한다.
@@ -807,8 +801,6 @@
     busy = true;
     saving = true;
     error = undefined;
-    saved = false;
-    undatedNotice = '';
     try {
       // 목록의 선행 정보는 오래됐을 수 있으므로 날짜가 바뀌면 언제나 서버에 묻는다.
       let undated: UndatedTaskView[] = [];
@@ -909,10 +901,12 @@
     }
     conflict = undefined;
     fill(result.task);
-    undatedNotice = undatedText(undated);
-    saved = true;
+    // 일반 완료는 토스트다(D-82). 날짜가 없어 옮기지 않은 업무 안내도 그 문구에 붙인다.
     notifyDone(
-      noShiftNeeded ? `${m.common_saved()} ${m.tasks_gantt_no_shifts()}` : m.common_saved(),
+      [m.common_saved(), noShiftNeeded ? m.tasks_gantt_no_shifts() : '', undatedText(undated)]
+        .filter((s) => s !== '')
+        .join(' '),
+      'task-save',
     );
     onchanged();
     await focusSave();
@@ -989,13 +983,12 @@
     if (task === undefined || busy) return;
     busy = true;
     error = undefined;
-    linkStatus = '';
     try {
       const fresh = await api.removePredecessor(editingUser, task.id, predecessor);
       if (task.version === fresh.version) task = fresh;
       else refresh(fresh);
       if (editing === predecessor) resetLinkEditor();
-      linkStatus = m.tasks_link_removed();
+      notifyDone(m.tasks_link_removed(), 'task-link');
       onchanged();
       await focusLater('predecessors-heading');
     } catch (e: unknown) {
@@ -1021,7 +1014,6 @@
     linkKind = link.kind;
     lagText = String(link.lag_days);
     linkBase = { kind: link.kind, lag_days: link.lag_days };
-    linkStatus = '';
   }
 
   function resetLinkEditor(): void {
@@ -1047,7 +1039,6 @@
     }
     busy = true;
     error = undefined;
-    linkStatus = '';
     const kind = linkKind;
     const base = linkBase;
     try {
@@ -1139,13 +1130,12 @@
     const fresh = result.task;
     if (task.version === fresh.version) task = fresh;
     else refresh(fresh);
-    linkStatus = [
-      m.tasks_link_saved(),
-      noShiftNeeded ? m.tasks_gantt_no_shifts() : '',
-      undatedText(undated),
-    ]
-      .filter((s) => s !== '')
-      .join(' ');
+    notifyDone(
+      [m.tasks_link_saved(), noShiftNeeded ? m.tasks_gantt_no_shifts() : '', undatedText(undated)]
+        .filter((s) => s !== '')
+        .join(' '),
+      'task-link',
+    );
     onchanged();
     // 패널과 편집 칸이 닫히므로 선행 업무 제목으로 돌린다.
     await focusLater('predecessors-heading');
@@ -1176,13 +1166,12 @@
   async function changeParent(id: string, parentId: string | null): Promise<void> {
     const choiceAtStart = parentChoice;
     error = undefined;
-    parentStatus = '';
     try {
       const fresh = await api.setTaskParent(editingUser, id, parentId);
       if (parentChoice === choiceAtStart) parentChoice = '';
       if (task?.version === fresh.version) task = fresh;
       else refresh(fresh);
-      parentStatus = m.tasks_parent_changed();
+      notifyDone(m.tasks_parent_changed());
       onchanged();
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
@@ -1434,16 +1423,7 @@
           {#if canEdit}
             <div class="@md:col-span-2 flex items-center gap-2">
               <Button id="task-save" type="submit" disabled={busy}>{m.common_save()}</Button>
-              <span class="sr-only" role="status">{saved ? m.common_saved() : ''}</span>
             </div>
-            {#if undatedNotice !== ''}
-              <p
-                class="@md:col-span-2 text-sm text-muted-foreground"
-                data-testid="task-undated-notice"
-              >
-                {undatedNotice}
-              </p>
-            {/if}
           {/if}
         </form>
 
@@ -1514,7 +1494,6 @@
               >
             </div>
           {/if}
-          <p aria-live="polite" class="text-sm">{parentStatus}</p>
         </section>
 
         {#if current.parent_id === null}
@@ -1711,7 +1690,6 @@
               }}
             />
           {/if}
-          <p aria-live="polite" class="text-sm" data-testid="link-status">{linkStatus}</p>
         </section>
 
         <section class="flex flex-col gap-2" aria-labelledby="successors-heading">

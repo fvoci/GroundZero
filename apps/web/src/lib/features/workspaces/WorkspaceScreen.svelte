@@ -6,6 +6,7 @@
   import { errorText } from '$lib/api/errors';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { moveThenReload } from '$lib/features/documents/tree';
   import { m } from '$lib/paraglide/messages.js';
@@ -58,6 +59,7 @@
 
   // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
   let realtime = $state(false);
+  // 바꾸기 실패 안내(성공은 토스트).
   let realtimeMessage = $state('');
   // 안내가 어느 워크스페이스의 것인지. 같은 워크스페이스의 새 값(바꾼 뒤 앱이 목록을 고침)으로는 안내를 지우지 않는다.
   let messageFor = '';
@@ -78,8 +80,12 @@
       await api.setWorkspaceRealtime(id, on);
       onrealtimechanged?.(id, on);
       if (workspace.id !== id) return;
-      messageFor = id;
-      realtimeMessage = on ? m.workspaces_realtime_on() : m.workspaces_realtime_off();
+      // 일반 완료는 토스트다(D-82). 화면 안 영역에는 앞선 실패만 남아 있었으므로 비운다.
+      realtimeMessage = '';
+      notifyDone(
+        on ? m.workspaces_realtime_on() : m.workspaces_realtime_off(),
+        'workspace-realtime',
+      );
     } catch (e: unknown) {
       if (workspace.id !== id) return;
       realtime = before;

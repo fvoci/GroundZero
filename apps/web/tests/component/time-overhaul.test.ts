@@ -35,12 +35,29 @@ it('the header has no start or target controls without a timer', async () => {
 it('the header only stops, and preserves the running pill on failure', async () => {
   vi.mocked(api.currentTimer).mockResolvedValue(running);
   vi.spyOn(api, 'timerAction').mockRejectedValue(new Error('offline'));
+  const done = vi.spyOn(feedback, 'notifyDone');
   render(TimerWidget);
   await fireEvent.click(await screen.findByRole('button', { name: m.time_stop() }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   expect(screen.getAllByRole('button')).toHaveLength(1);
   expect(timer.entry?.id).toBe(running.id);
-  expect(screen.getByRole('status')).toBeInTheDocument();
+  // 실패하면 기록 중 표시가 그대로 남는다(완료 토스트도 없다, D-82).
+  expect(screen.getByText(m.time_recording())).toBeInTheDocument();
+  expect(done).not.toHaveBeenCalled();
+});
+it('the header reports a stopped timer once as a toast, not in the page', async () => {
+  await setLocale('ko', { reload: false });
+  vi.mocked(api.currentTimer).mockResolvedValue(running);
+  vi.spyOn(api, 'timerAction').mockResolvedValue(running);
+  const done = vi.spyOn(feedback, 'notifyDone');
+  render(TimerWidget);
+  await fireEvent.click(await screen.findByRole('button', { name: m.time_stop() }));
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledOnce();
+  });
+  expect(done.mock.calls[0]?.[0]).toMatch(/^타이머를 끝냈습니다/);
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.queryByText(/타이머를 끝냈습니다/)).toBeNull();
 });
 it('a task starts with one server request and reports the previous entry saved', async () => {
   vi.spyOn(api, 'taskTime').mockResolvedValue({ estimate_minutes: 5, mine_seconds: 60 });

@@ -113,7 +113,6 @@
   let editIcon = $state('');
   let editDescription = $state('');
   let settingsError = $state<string | undefined>(undefined);
-  let settingsNote = $state<string | undefined>(undefined);
   /**
    * 설정을 저장하는 중. 저장은 요청 여러 개라 두 번 겹치면 먼저 시작해 늦게 실패한 저장이 이미 저장된 일부(아이콘·설명)만
    * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
@@ -173,7 +172,6 @@
       return;
     }
     settingsError = undefined;
-    settingsNote = undefined;
     // 저장을 시작한 모듈과 입력값을 붙잡아 둔다. 기다리는 사이 다른 모듈로 옮겨 가도 그 모듈에 보내거나 그 화면에
     // 결과를 넣지 않는다(이 화면은 모듈이 바뀌어도 다시 만들어지지 않는다).
     const target = mod;
@@ -207,10 +205,14 @@
       const list = await api.items(saved.id);
       if (!stillHere()) return;
       items = list;
-      if (completed) notifyDone(m.common_saved());
-      if (before !== saved.key) {
-        settingsNote = m.modules_key_changed({ before, after: saved.key });
-      }
+      // 일반 완료는 토스트다(D-82). 키를 바꿨으면 예전 키가 남는다는 안내를 그 문구에 붙인다.
+      const done = [
+        completed ? m.common_saved() : '',
+        before !== saved.key ? m.modules_key_changed({ before, after: saved.key }) : '',
+      ]
+        .filter((s) => s !== '')
+        .join(' ');
+      if (done !== '') notifyDone(done, 'module-settings');
     } catch (e: unknown) {
       if (partial !== undefined) {
         workspaceNav.refreshModules();
@@ -537,9 +539,6 @@
           >
         </form>
       </fieldset>
-      <p class="text-sm empty:hidden" role="status">
-        {#if settingsNote !== undefined}{settingsNote}{/if}
-      </p>
       {#if settingsError !== undefined}
         <p class="text-sm text-destructive" role="alert">{settingsError}</p>
       {/if}

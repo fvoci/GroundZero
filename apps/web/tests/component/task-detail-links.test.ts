@@ -131,6 +131,7 @@ describe('task detail dependency kinds', () => {
 
   it('previews the change, shows the moved task with its cause, and saves only after approval', async () => {
     await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount();
     const preview = vi
       .spyOn(api, 'previewLink')
@@ -168,9 +169,12 @@ describe('task detail dependency kinds', () => {
         [{ task_id: 'b', base_version: 1, start_date: '2026-10-22', due_date: '2026-10-24' }],
       );
     });
-    expect((await screen.findByTestId('link-status')).textContent).toContain(
-      '관계를 저장했습니다.',
-    );
+    // 일반 완료는 토스트 한 번이고 화면 안 완료 문구는 없다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith('관계를 저장했습니다.', 'task-link');
+    expect(screen.queryByText('관계를 저장했습니다.')).toBeNull();
   });
 
   it('saves nothing when the preview is cancelled and returns focus to the save button', async () => {
@@ -219,6 +223,7 @@ describe('task detail dependency kinds', () => {
   it('saves the link without asking again when the recalculated plan moves nothing', async () => {
     // R5 최종 A FA-2(D-91 개정·D-125): 다시 계산한 계획에 밀릴 업무가 없으면 묻지 않고 저장하고 그렇게 알린다.
     await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount();
     const preview = vi
       .spyOn(api, 'previewLink')
@@ -245,7 +250,15 @@ describe('task detail dependency kinds', () => {
     });
     expect(preview).toHaveBeenCalledTimes(2);
     expect(set.mock.calls[1]?.[6]).toEqual([]);
-    expect(await screen.findByText(/밀릴 업무가 없어 그대로 저장했습니다\./)).toBeTruthy();
+    // 일반 완료는 토스트 한 번이다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith(
+      '관계를 저장했습니다. 밀릴 업무가 없어 그대로 저장했습니다.',
+      'task-link',
+    );
+    expect(screen.queryByText(/밀릴 업무가 없어 그대로 저장했습니다/)).toBeNull();
     expect(screen.queryByRole('heading', { name: /관계를 지키지 못합니다/ })).toBeNull();
   });
 
@@ -278,6 +291,7 @@ describe('task detail dependency kinds', () => {
     await waitFor(() => {
       expect(done).toHaveBeenCalledWith(
         expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+        'task-save',
       );
     });
     expect(screen.queryByText(/관계를 지키지 못합니다/)).toBeNull();
@@ -327,6 +341,7 @@ describe('task detail dependency kinds', () => {
 
   it('saves directly when nothing moves and says which undated followers were not checked', async () => {
     await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount();
     vi.spyOn(api, 'previewLink').mockResolvedValue({
       shifts: [],
@@ -348,9 +363,15 @@ describe('task detail dependency kinds', () => {
         [],
       );
     });
-    expect((await screen.findByTestId('link-status')).textContent).toContain(
-      '날짜가 없어 옮기지 않는 업무: KED-c 검토',
+    // 날짜 없는 업무 안내는 완료 토스트 문구에 붙는다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith(
+      expect.stringMatching(/^관계를 저장했습니다\. 날짜가 없어 옮기지 않는 업무: KED-c 검토/),
+      'task-link',
     );
+    expect(screen.queryByText(/날짜가 없어 옮기지 않는 업무/)).toBeNull();
   });
 
   it('explains a plan with a date outside the saveable range and only offers saving the link alone', async () => {
@@ -427,6 +448,7 @@ describe('removing a dependency while editing', () => {
 
   it('closes the editor of the removed link, returns focus and does not recreate it on save', async () => {
     await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount(two, [design, prep]);
     const remove = vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('a'));
     const preview = vi
@@ -448,7 +470,9 @@ describe('removing a dependency while editing', () => {
     await fireEvent.click(screen.getByRole('button', { name: '관계 저장' }));
     expect(preview).not.toHaveBeenCalled();
     expect(set).not.toHaveBeenCalled();
-    expect((await screen.findByTestId('link-status')).textContent).toContain('관계를 지웠습니다.');
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith('관계를 지웠습니다.', 'task-link');
+    expect(screen.queryByText('관계를 지웠습니다.')).toBeNull();
     await waitFor(() => {
       expect(document.activeElement?.id).toBe('predecessors-heading');
     });
@@ -456,12 +480,15 @@ describe('removing a dependency while editing', () => {
 
   it('keeps the editor of another link when a different link is removed', async () => {
     await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount(two, [design, prep]);
     vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('x'));
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     await fireEvent.input(screen.getByLabelText('지연(일)'), { target: { value: '4' } });
     await fireEvent.click(screen.getByRole('button', { name: 'KED-x 준비 선행 관계 지우기' }));
-    expect((await screen.findByTestId('link-status')).textContent).toContain('관계를 지웠습니다.');
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('관계를 지웠습니다.', 'task-link');
+    });
     expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
     expect(screen.getByLabelText<HTMLInputElement>('지연(일)').value).toBe('4');
   });
@@ -500,5 +527,70 @@ describe('removing a dependency while editing', () => {
     });
     expect(preview).not.toHaveBeenCalled();
     expect(set).not.toHaveBeenCalled();
+  });
+});
+
+// D-82: 일반 완료는 토스트다. 상세의 상위 업무 바꾸기와 저장(날짜 없는 업무 안내 포함)은 화면 안 완료 문구를 두지 않는다.
+describe('task detail completions are toasts', () => {
+  it('reports a changed parent once as a toast', async () => {
+    await setLocale('ko', { reload: false });
+    // 선택 상자(bits-ui)는 포인터 잡기를 쓴다. jsdom에는 없다.
+    Element.prototype.hasPointerCapture = (): boolean => false;
+    Element.prototype.setPointerCapture = (): void => undefined;
+    Element.prototype.releasePointerCapture = (): void => undefined;
+    Element.prototype.scrollIntoView = (): void => undefined;
+    const done = vi.spyOn(feedback, 'notifyDone');
+    const child = { ...review, parent_id: design.id };
+    mount(child, [design, build]);
+    const set = vi
+      .spyOn(api, 'setTaskParent')
+      .mockResolvedValue({ ...child, parent_id: null, version: 2, checklist: [] });
+    const trigger = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>('[aria-labelledby="parent-choose-label"]');
+      if (el === null) throw new Error('parent trigger');
+      return el;
+    });
+    await fireEvent.pointerDown(trigger, { button: 0, pointerType: 'mouse' });
+    await fireEvent.click(trigger);
+    const option = await screen.findByRole('option', { name: '없음(최상위 업무)' });
+    await fireEvent.pointerUp(option, { button: 0, pointerType: 'mouse' });
+    await fireEvent.click(option);
+    await fireEvent.click(screen.getByRole('button', { name: '바꾸기' }));
+
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(set).toHaveBeenCalledWith(expect.any(String), child.id, null);
+    expect(done).toHaveBeenCalledWith('상위 업무를 바꿨습니다.');
+    expect(screen.queryByText('상위 업무를 바꿨습니다.')).toBeNull();
+  });
+
+  it('puts the undated followers note into the save toast', async () => {
+    await setLocale('ko', { reload: false });
+    const done = vi.spyOn(feedback, 'notifyDone');
+    mount(design, [build, review]);
+    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+      shifts: [],
+      undated: [{ task_id: 'c', reference: 'KED-c', title: '검토' }],
+      blocked: null,
+    });
+    vi.spyOn(api, 'updateTask').mockResolvedValue({
+      kind: 'updated',
+      task: { ...design, due_date: '2026-10-22', version: 2, checklist: [] },
+    });
+    await fireEvent.input(await screen.findByLabelText('마감일'), {
+      target: { value: '2026-10-22' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith(
+      expect.stringMatching(/^저장했습니다\. 날짜가 없어 옮기지 않는 업무: KED-c 검토/),
+      'task-save',
+    );
+    expect(screen.queryByText(/날짜가 없어 옮기지 않는 업무/)).toBeNull();
+    expect(screen.queryByText('저장했습니다.')).toBeNull();
   });
 });

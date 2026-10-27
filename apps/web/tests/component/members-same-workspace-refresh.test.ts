@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -11,7 +12,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // R5 delta2 fixes §7: 초대·그룹 만들기가 성공하면 `onchanged()` → 앱이 워크스페이스 목록을 다시 읽어 같은 id의 새
 // 워크스페이스 객체를 넘긴다. "다른 워크스페이스로 바뀌면 다시 읽는다" 효과가 객체가 바뀔 때마다 돌아 화면을 비우고
 // 다시 그려, 성공 안내와 입력 요소(초점)를 지웠다. 그 효과는 워크스페이스 id가 바뀔 때만 돌고, 같은 id의 갱신(이름 등)은
-// 화면에 그대로 반영된다.
+// 화면에 그대로 반영된다. 성공 안내는 이제 토스트다(D-82).
 
 const workspace: Workspace = {
   access: 'owner',
@@ -84,8 +85,9 @@ async function submit(input: HTMLElement, value: string): Promise<void> {
 }
 
 describe('members screen after a refresh of the same workspace', () => {
-  it('keeps the invite notice and input after the app passes a new object for the same id', async () => {
+  it('keeps the input after the app passes a new object for the same id and reports the invite once as a toast', async () => {
     const invite = vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    const done = vi.spyOn(feedback, 'notifyDone');
     renderWithAppRefresh();
     const email = await screen.findByLabelText('이메일');
     await submit(email, 'kim@lab.example');
@@ -99,9 +101,11 @@ describe('members screen after a refresh of the same workspace', () => {
         name: m.members_heading({ workspace: '연구실 1' }),
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      m.members_invited({ email: 'kim@lab.example' }),
-    );
+    // 일반 완료는 토스트 한 번이고 화면 안 완료 문구는 없다(D-82). 같은 id의 갱신으로 다시 띄우지 않는다.
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
+    expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByLabelText('이메일')).toBe(email);
     // 첫 읽기 + 초대 뒤 다시 읽기. 같은 id의 갱신으로 또 읽지 않는다.
     expect(api.members).toHaveBeenCalledTimes(2);
@@ -129,9 +133,13 @@ describe('members screen after a refresh of the same workspace', () => {
 
   it('starts over when only the user changes on the same workspace', async () => {
     vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
-    await submit(await screen.findByLabelText('이메일'), 'kim@lab.example');
-    await screen.findByText(m.members_invited({ email: 'kim@lab.example' }));
+    const email = await screen.findByLabelText('이메일');
+    await submit(email, 'kim@lab.example');
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
+    });
     expect(api.members).toHaveBeenCalledTimes(2);
 
     // 같은 워크스페이스에서 사용자만 바뀌었다(다른 탭의 계정 전환). 앞 사용자의 화면을 두지 않고 다시 읽는다.
@@ -140,20 +148,25 @@ describe('members screen after a refresh of the same workspace', () => {
       expect(api.members).toHaveBeenCalledTimes(3);
     });
     expect(api.members).toHaveBeenLastCalledWith('ws-1');
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    // 화면을 처음부터 다시 그렸다(앞 사용자의 입력 요소를 그대로 두지 않는다).
+    expect(await screen.findByLabelText('이메일')).not.toBe(email);
   });
 
   it('still starts over for another workspace', async () => {
     vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    const done = vi.spyOn(feedback, 'notifyDone');
     const view = render(MembersScreen, {
       props: { workspace, meId: 'u1', onchanged: () => undefined },
     });
-    await submit(await screen.findByLabelText('이메일'), 'kim@lab.example');
-    await screen.findByText(m.members_invited({ email: 'kim@lab.example' }));
+    const email = await screen.findByLabelText('이메일');
+    await submit(email, 'kim@lab.example');
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
+    });
     await view.rerender({ workspace: other });
     await waitFor(() => {
       expect(api.members).toHaveBeenLastCalledWith('ws-2');
     });
-    expect(screen.getByRole('status')).toHaveTextContent('');
+    expect(await screen.findByLabelText('이메일')).not.toBe(email);
   });
 });

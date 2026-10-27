@@ -270,7 +270,7 @@ describe('module settings while they are saved', () => {
 
     request.resolve({ ...mod, name: '새 이름' });
     await waitFor(() => {
-      expect(done).toHaveBeenCalledWith(m.common_saved());
+      expect(done).toHaveBeenCalledWith(m.common_saved(), 'module-settings');
     });
     expect(update).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledWith(mod.id, '새 이름', mod.key);

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskStatus, TaskView } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
+import type { DoneAction } from '$lib/features/feedback/feedback.svelte';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -60,13 +62,24 @@ function task(id: string, title: string, status: TaskStatus = '할 일', version
 }
 
 // 이동 알림의 되돌리기: 확정된 이동에만 내놓고, 보내기 전 그 카드가 이 이동의 결과 그대로일 때만 보내며, 끼어든 변경은 알린다.
+// 이동 완료와 되돌리기는 완료 토스트(key `board-move`)와 그 동작 단추다(D-82). 토스트는 FeedbackHost가 그리므로 여기서는
+// notifyDone·dismissDone이 남긴 토스트 하나를 흉내 낸다.
 describe('kanban undo', () => {
+  let toast: { message: string; action: DoneAction | undefined } | undefined;
+  let done: MockInstance<typeof feedback.notifyDone>;
   beforeEach(async () => {
     vi.useFakeTimers();
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    toast = undefined;
+    done = vi.spyOn(feedback, 'notifyDone').mockImplementation((message, key, options) => {
+      if (key === 'board-move') toast = { message, action: options?.action };
+    });
+    vi.spyOn(feedback, 'dismissDone').mockImplementation((key) => {
+      if (key === 'board-move') toast = undefined;
+    });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -102,8 +115,16 @@ describe('kanban undo', () => {
   };
   const liveText = (): string =>
     [...document.querySelectorAll('[aria-live="polite"]')].map((e) => e.textContent).join(' ');
-  const undoButton = (): HTMLElement | null =>
-    screen.queryByRole('button', { name: 'API 연결 이동 되돌리기' });
+  const undoOffered = (): boolean => toast?.action !== undefined;
+  /** 토스트의 되돌리기 단추를 누른다. 토스트 단추는 누르면 토스트가 닫힌다. */
+  async function clickUndo(): Promise<void> {
+    const action = toast?.action;
+    if (action === undefined) throw new Error('undo');
+    toast = undefined;
+    action.onClick();
+    await tick();
+  }
+  const toasted = (text: string): boolean => done.mock.calls.some(([m]) => m.includes(text));
 
   async function mount(): Promise<void> {
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
@@ -119,17 +140,22 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    expect(screen.getByText('API 연결: 방금 옮긴 것을 되돌릴 수 있습니다.')).toBeTruthy();
-    const button = undoButton();
-    if (button === null) throw new Error('undo');
-    await fireEvent.click(button);
+    // 이동 완료는 되돌리기 단추가 달린 토스트 하나다. 화면 안(알림 영역 포함) 완료 문구는 없다.
+    expect(toast?.message).toBe('API 연결: 오른쪽 열로 옮겼습니다(진행 중).');
+    expect(undoOffered()).toBe(true);
+    expect(toast?.action?.label).toBe('되돌리기');
+    expect(liveText()).not.toContain('옮겼습니다');
+    expect(document.querySelector('[data-move-undo]')).toBeNull();
+    await clickUndo();
     await flush();
     // 보내기 전에 서버를 다시 읽고, 원래 자리(할 일, 문서 검토 앞)로 보낸다.
     expect(read).toHaveBeenCalledTimes(4);
     expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', '할 일', 'b', 2);
     expect(laneOf('a')).toBe('할 일');
-    expect(liveText()).toContain('API 연결: 되돌렸습니다(할 일).');
-    expect(undoButton()).toBeNull();
+    // 되돌린 완료도 같은 key의 토스트이고, 다시 되돌리기는 내놓지 않는다.
+    expect(toast?.message).toBe('API 연결: 되돌렸습니다(할 일).');
+    expect(undoOffered()).toBe(false);
+    expect(liveText()).not.toContain('되돌렸습니다');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(document.activeElement).toBe(card('a'));
   });
@@ -157,7 +183,8 @@ describe('kanban undo', () => {
     await flush();
     finishOld([a, b, c]);
     await flush();
-    await fireEvent.click(screen.getByRole('button', { name: '회의 준비 이동 되돌리기' }));
+    expect(toast?.message).toContain('회의 준비');
+    await clickUndo();
     await flush();
     expect(move).toHaveBeenLastCalledWith(expect.any(String), 'c', '할 일', 'b', 2);
   });
@@ -183,12 +210,10 @@ describe('kanban undo', () => {
     expect(move).toHaveBeenLastCalledWith(expect.any(String), 'b', '할 일', null, undefined);
     await moveRight('a');
     await flush();
-    expect(undoButton()).not.toBeNull();
+    expect(undoOffered()).toBe(true);
     failB(new ApiError(400, 'stale', 'moved meanwhile'));
     await flush();
-    const button = undoButton();
-    if (button === null) throw new Error('undo');
-    await fireEvent.click(button);
+    await clickUndo();
     await flush();
     expect(move).toHaveBeenLastCalledWith(expect.any(String), 'a', '할 일', 'b', 2);
   });
@@ -203,9 +228,9 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    expect(undoButton()).toBeNull();
+    expect(undoOffered()).toBe(false);
     await flush(20000);
-    expect(undoButton()).toBeNull();
+    expect(undoOffered()).toBe(false);
   });
 
   it('offers undo once a lost response is confirmed from the list', async () => {
@@ -214,8 +239,9 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    expect(liveText()).toContain('저장을 확인했습니다');
-    expect(undoButton()).not.toBeNull();
+    expect(toast?.message).toContain('저장을 확인했습니다');
+    expect(liveText()).not.toContain('저장을 확인했습니다');
+    expect(undoOffered()).toBe(true);
   });
 
   it('does not move back when the card changed elsewhere after the move', async () => {
@@ -225,9 +251,7 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    const button = undoButton();
-    if (button === null) throw new Error('undo');
-    await fireEvent.click(button);
+    await clickUndo();
     await flush();
     expect(move).toHaveBeenCalledTimes(1);
     expect(laneOf('a')).toBe('완료');
@@ -248,13 +272,11 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    const button = undoButton();
-    if (button === null) throw new Error('undo');
-    await fireEvent.click(button);
+    await clickUndo();
     await flush();
     expect(move.mock.calls[1]).toEqual([expect.any(String), 'a', '할 일', 'b', 2]);
     expect(screen.getByRole('alert').textContent).toContain('되돌리지 않았습니다');
-    expect(liveText()).not.toContain('되돌렸습니다');
+    expect(toasted('되돌렸습니다')).toBe(false);
     await flush(20000);
     expect(move).toHaveBeenCalledTimes(2);
   });
@@ -268,10 +290,10 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    expect(undoButton()).not.toBeNull();
+    expect(undoOffered()).toBe(true);
     await moveRight('a');
     await flush();
-    expect(undoButton()).toBeNull();
+    expect(undoOffered()).toBe(false);
   });
 
   it('keeps the offer and sends nothing when the current state cannot be read', async () => {
@@ -286,12 +308,25 @@ describe('kanban undo', () => {
     await mount();
     await moveRight('a');
     await flush();
-    const button = undoButton();
-    if (button === null) throw new Error('undo');
-    await fireEvent.click(button);
+    await clickUndo();
     await flush();
     expect(move).toHaveBeenCalledTimes(1);
     expect(liveText()).toContain('지금 상태를 확인하지 못해 되돌리지 않았습니다');
-    expect(undoButton()).not.toBeNull();
+    // 토스트 단추는 누르면 닫히므로 되돌리기를 다시 내놓는다.
+    expect(undoOffered()).toBe(true);
+    expect(toast?.message).toBe('API 연결: 방금 옮긴 것을 되돌릴 수 있습니다.');
+  });
+
+  it('takes the undo toast down when the board is left', async () => {
+    lists(start, moved);
+    vi.spyOn(api, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
+    const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await flush();
+    await moveRight('a');
+    await flush();
+    expect(undoOffered()).toBe(true);
+    // 떠난 보드의 되돌리기 단추를 토스트에 남기지 않는다.
+    view.unmount();
+    expect(undoOffered()).toBe(false);
   });
 });

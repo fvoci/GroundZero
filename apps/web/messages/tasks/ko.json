@@ -337,7 +337,6 @@
   "tasks_lane_estimate_hint": "열 머리의 예상은 카드에 적은 예상 시간을 더한 값입니다(하위 업무 카드도 따로 더하고, 실제로 쓴 시간은 넣지 않습니다).",
   "tasks_undo_offer": "{title}: 방금 옮긴 것을 되돌릴 수 있습니다.",
   "tasks_undo": "되돌리기",
-  "tasks_undo_label": "{title} 이동 되돌리기",
   "tasks_undone": "{title}: 되돌렸습니다({status}).",
   "tasks_undone_end": "{title}: 되돌렸습니다({status}). 원래 바로 뒤에 있던 업무가 그 열에 없어 열 끝에 두었습니다.",
   "tasks_undo_changed": "{title}: 옮긴 뒤 다른 곳에서 바뀌어 되돌리지 않았습니다. 서버의 최신 상태를 보여 줍니다.",

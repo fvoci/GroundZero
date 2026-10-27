@@ -29,7 +29,6 @@
 
   let trash = $state<TrashView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let confirmPurge = $state<string | undefined>(undefined);
   let days = $state('');
   let editingDays = $state(false);
@@ -71,7 +70,6 @@
         days = versionDays = '';
         editingDays = editingVersionDays = false;
         daysError = versionDaysError = error = undefined;
-        status = '';
         confirmPurge = undefined;
       });
     }
@@ -167,13 +165,13 @@
       // 제출했던 입력만 처리한다. 저장 중 추가로 친 원문은 그대로 보존한다.
       draft.complete(attempt);
       draft.persist();
-      status =
+      notifyDone(
         n === null
           ? m.trash_versions_forever()
           : version
             ? m.trash_versions_days({ days: n })
-            : m.trash_retention_changed({ days: n });
-      notifyDone(status);
+            : m.trash_retention_changed({ days: n }),
+      );
       reloadKey += 1;
     } catch (e: unknown) {
       if (!current() || !draft.isCurrent(attempt)) return;
@@ -197,7 +195,6 @@
     error = undefined;
     try {
       await action();
-      status = done;
       notifyDone(done);
       confirmPurge = undefined;
       reloadKey += 1;
@@ -273,7 +270,6 @@
       {/if}
     </p>
   {/if}
-  <p class="sr-only" aria-live="polite">{status}</p>
 
   {#if workspace !== undefined && isAdmin}
     <form
