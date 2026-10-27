@@ -200,9 +200,11 @@ jobs:
   # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는
   # 그래프만 cargo-deny로 검사한다(취약점·회수·라이선스, 예외는 deploy/rhwp/deny.toml의 HWP 용도 승인분만).
   # 입력(deploy/rhwp의 네 파일)이 같으면 앞서 만든 결과를 다시 쓴다. 고지 파일이 그 결과와 같은지도 본다.
+  # 권고 검사는 모든 PR에서 돈다(#155 승인 조건). 감사 작업 공간이 빌드 결과 안에 있어 캐시 복원·cargo xtask rhwp도 늘 돌고
+  # (같은 입력이면 재사용, 캐시가 없을 때만 빌드), 경로 조건(rhwp 출력)은 고지 비교에만 건다.
   rhwp:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.rhwp != 'false' }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -214,7 +216,8 @@ jobs:
           path: target/rhwp
           key: rhwp-${{ hashFiles('deploy/rhwp/build.sh', 'deploy/rhwp/inputs.env', 'deploy/rhwp/Cargo.lock', 'deploy/rhwp/deny.toml') }}
       - run: cargo xtask rhwp
-      - run: git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt
+      - if: needs.changes.outputs.rhwp != 'false'
+        run: git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt
       # 다시 빌드하지 않은 실행에서도 새 보안 권고를 놓치지 않게 권고만 매번 새 DB로 다시 본다(cargo-deny는 베이스 이미지 안).
       - name: cargo xtask rhwp --audit (base image)
         run: >-

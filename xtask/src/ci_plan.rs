@@ -122,6 +122,14 @@ impl Job {
         }
     }
 
+    /// 요약·알림에 보일 건너뜀 표기. rhwp는 빌드(출력 키 `rhwp`)만 건너뛰고 권고 검사는 모든 PR에서 돈다.
+    fn skipped_label(self) -> &'static str {
+        match self {
+            Self::Rhwp => "권고 검사(빌드는 캐시 재사용)",
+            _ => "건너뜀",
+        }
+    }
+
     fn skip_reason(self) -> &'static str {
         match self {
             Self::Licenses | Self::Integration | Self::Browser => {
@@ -212,7 +220,12 @@ impl Plan {
             out.push_str(&if self.runs(job) {
                 format!("| {} | 실행 | |\n", job.name())
             } else {
-                format!("| {} | 건너뜀 | {} |\n", job.name(), job.skip_reason())
+                format!(
+                    "| {} | {} | {} |\n",
+                    job.name(),
+                    job.skipped_label(),
+                    job.skip_reason()
+                )
             });
         }
         out
@@ -233,8 +246,9 @@ pub fn run(root: &Path, event: &str) -> Result<()> {
     if std::env::var_os("GITHUB_ACTIONS").is_some() {
         for job in Job::ALL.into_iter().filter(|job| !plan.runs(*job)) {
             println!(
-                "::notice title={} 건너뜀::{}",
+                "::notice title={} {}::{}",
                 job.name(),
+                job.skipped_label(),
                 job.skip_reason()
             );
         }
@@ -406,6 +420,29 @@ mod tests {
     }
 
     #[test]
+    fn rhwp_not_built_shows_audit_only_in_summary() {
+        for paths in [
+            &["docs/decisions.md"][..],
+            &["apps/web/src/app.html"],
+            &["crates/server/src/lib.rs"],
+        ] {
+            let plan = Plan::for_paths(paths.iter().copied());
+            assert!(!plan.runs(Job::Rhwp), "{paths:?}");
+            assert!(plan.outputs().ends_with("rhwp=false\n"), "{paths:?}");
+            let summary = plan.summary();
+            assert!(
+                summary.contains("| rhwp | 권고 검사(빌드는 캐시 재사용) | rhwp 입력"),
+                "{summary}"
+            );
+            assert!(!summary.contains("| rhwp | 건너뜀 |"), "{summary}");
+        }
+
+        let built = Plan::for_paths(["deploy/rhwp/build.sh"]);
+        assert!(built.summary().contains("| rhwp | 실행 | |"));
+        assert!(built.outputs().ends_with("rhwp=true\n"));
+    }
+
+    #[test]
     fn outputs_and_summary_name_every_skipped_job_with_reason() {
         let plan = Plan::for_paths(["apps/web/src/app.html"]);
         assert_eq!(
@@ -415,7 +452,12 @@ mod tests {
         );
         let summary = plan.summary();
         for job in [Job::Oidc, Job::Supabase, Job::Rhwp] {
-            let row = format!("| {} | 건너뜀 | {} |", job.name(), job.skip_reason());
+            let row = format!(
+                "| {} | {} | {} |",
+                job.name(),
+                job.skipped_label(),
+                job.skip_reason()
+            );
             assert!(summary.contains(&row), "{summary}");
         }
 
