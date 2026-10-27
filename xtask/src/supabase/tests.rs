@@ -167,3 +167,30 @@ fn preparation_failure_stops_setup_and_preserves_original_error() -> Result<()> 
     }
     Ok(())
 }
+
+/// 강제 종료 뒤 안내(#93): 이 체크아웃의 Supabase 프로젝트만 멈추고 볼륨은 지우지 않는다. 같은 실행의 시험 Compose
+/// 프로젝트는 [`compose::Compose::recovery_command`]가 따로 알린다.
+#[test]
+fn recovery_command_names_only_this_project() {
+    let root = Path::new("/work/GroundZero");
+    let supabase = Supabase {
+        root: root.to_path_buf(),
+        upstream: root.join("target/supabase").join(REVISION).join("docker"),
+        project: compose::project_name(root, Env::Supabase),
+    };
+    let command = supabase.recovery_command();
+    let args: Vec<&str> = command.split(' ').collect();
+    assert_eq!(args[..2], ["docker", "compose"], "{command}");
+    let projects: Vec<&str> = args
+        .windows(2)
+        .filter(|pair| pair[0] == "--project-name")
+        .map(|pair| pair[1])
+        .collect();
+    assert_eq!(projects, [supabase.project()], "{command}");
+    assert!(command.ends_with(" down --remove-orphans"), "{command}");
+    assert!(!command.contains("--volumes"), "{command}");
+    assert!(
+        !command.contains(&compose::project_name(root, Env::Test)),
+        "{command}"
+    );
+}

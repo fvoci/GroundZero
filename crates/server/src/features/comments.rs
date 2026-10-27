@@ -141,9 +141,9 @@ async fn list(
                     edited,
                     deleted,
                     resolved,
-                    can_edit: mine && !deleted && !archived,
+                    can_edit: mine && writer && !deleted && !archived,
                     can_delete: (mine || owner) && !deleted,
-                    can_resolve: parent_id.is_none() && (mine || writer) && !archived,
+                    can_resolve: parent_id.is_none() && writer && !archived,
                 }
             },
         )

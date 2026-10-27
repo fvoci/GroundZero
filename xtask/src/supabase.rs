@@ -80,6 +80,12 @@ impl Supabase {
         &self.project
     }
 
+    /// 강제로 끝난 실행의 이 Supabase 프로젝트 컨테이너만 멈추는 명령([`compose::Compose::recovery_command`]와 같은
+    /// 방식). 볼륨은 지우지 않으며 DB는 tmpfs라 컨테이너가 멈추면 내용이 사라진다.
+    pub fn recovery_command(&self) -> String {
+        format!("docker {} down --remove-orphans", self.args().join(" "))
+    }
+
     fn args(&self) -> Vec<String> {
         let up = self.upstream.to_string_lossy().into_owned();
         vec![

@@ -597,3 +597,59 @@ async fn same_named_workspaces_are_searched_together_and_links_survive_renames()
     .await;
     assert_eq!(links[0]["id"], doc["id"]);
 }
+
+/// SR1-5: 개인 노트를 다른 조직의 공간으로 옮기면 옛 조직 대상을 가리키던 참조 행이 남지 않는다(D-114). 조직이 없는
+/// 개인 대상은 볼 수 있으면 되므로 남는다.
+#[tokio::test]
+async fn moving_a_note_into_another_organization_drops_outside_links() {
+    use crate::sql_support::{World, fixture, rows, workspace};
+
+    async fn links(note: uuid::Uuid) -> Vec<uuid::Uuid> {
+        let mut conn = common::fixture_conn().await;
+        sqlx::query_scalar(
+            "SELECT target_id FROM fvoci.document_links WHERE document_id = $1 ORDER BY target_id",
+        )
+        .bind(note)
+        .fetch_all(&mut conn)
+        .await
+        .unwrap()
+    }
+
+    let w = World::new().await;
+    let space_doc = w.doc().await;
+    let personal = w.note().await;
+    let note = w.note().await;
+    fixture(
+        "UPDATE fvoci.documents SET body = jsonb_build_object('type', 'doc', 'content', jsonb_build_array(
+           jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
+             jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', $2::text)),
+             jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', $3::text)))))),
+           revision = revision + 1
+         WHERE id = $1",
+        &[note, space_doc, personal],
+    )
+    .await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_record_document_references($1,false,@ids)",
+        &[note],
+    )
+    .await;
+    let mut both = vec![space_doc, personal];
+    both.sort();
+    assert_eq!(links(note).await, both);
+
+    let boss = login(&w.state, "boss").await;
+    let other = common::organization_for(&boss).await;
+    common::join_organization(other, &w.owner, "admin").await;
+    let other_ws = workspace(&w.state, &w.owner, other).await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT * FROM fvoci.app_move_document($1,$2,NULL,@ids)",
+        &[note, other_ws],
+    )
+    .await;
+    assert_eq!(links(note).await, [personal]);
+}
