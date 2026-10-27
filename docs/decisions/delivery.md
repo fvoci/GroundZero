@@ -4,7 +4,7 @@
 
 ## 현재 규칙 요약
 
-- Rust는 rustfmt·Clippy(선택 규칙, 2026-10-27에 BeautifulRust 대조로 몇 개 추가), TypeScript는 strict·타입 기반 ESLint이며 예외는 위치 한정이다(D-09). 도구는 rg·git grep·jq를 쓰고 셸 안 Python 헬퍼로 파일을 고치지 않는다. 저장소·CI에 래퍼를 더하지 않으며, 사용자 지시로 5950X에만 머신 설정으로 sccache를 넣었다. CI sccache(GHA 백엔드)는 #158 측정 뒤 사용자 확인으로만 넣는다(D-67).
+- Rust는 rustfmt·Clippy(선택 규칙, BeautifulRust 대조로 고른 규칙은 4단계 #170에서 추가), TypeScript는 strict·타입 기반 ESLint이며 예외는 위치 한정이다(D-09). 도구는 rg·git grep·jq를 쓰고 셸 안 Python 헬퍼로 파일을 고치지 않는다. 저장소·CI에 래퍼를 더하지 않으며, 사용자 지시로 5950X에만 머신 설정으로 sccache를 넣었다. CI sccache(GHA 백엔드)는 #158 측정 뒤 사용자 확인으로만 넣는다(D-67).
 - 개발·통합 시험은 격리된 Docker Compose이며 운영·개인 DB로 시험하지 않는다(D-10, D-63).
 - CI는 공통 베이스 이미지 digest를 쓰고 YAML에 긴 셸을 두지 않는다. Supabase·browser job만 호스트 러너 예외다(D-64).
 - 저장소·CI 이미지는 공개, 제품 이미지는 검증한 `vX.Y.Z` 태그에서만 게시하며 main 병합·태그·배포는 별도 승인이다(D-65, D-87).
@@ -20,7 +20,7 @@
 <a id="d-09"></a>
 
 - **D-09 Rust·TypeScript 품질 기준.** Rust는 rustfmt·Clippy를 필수 검사로 쓰고 Clippy 규칙은 선택하며, 고정 툴체인의 경고 오류 처리, 무분별한 unwrap·expect·panic과 오류 버림 금지, 자체 unsafe 기본 금지, 의미 있는 타입·async 책임을 지킨다. TypeScript는 strict·명시 옵션, svelte-check·타입 기반 ESLint, unknown에서 외부 입력 검증, any·이중 단언·@ts-ignore 금지, 비동기 오류·취소·오래된 응답 처리·수명주기 해제를 지킨다. Rust↔TS 계약·전송 표현·상태 정본을 단일화하고 런타임 검증을 유지한다. 세부·예외·복잡도 원칙과 이미 구현한 검사 설정은 [제거 전 개발 지침](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)(D-127)과 O-22·O-23. 근거: 품질 기준 지침.
-  - 개정 2026-10-27: BeautifulRust 모범 사례와 대조해 Clippy 선택 규칙을 더한다(#170, 달리는 아비시니안 4단계): `string_add`·`redundant_clone`·`rc_buffer`·`wildcard_imports`·`allow_attributes`(`#[allow]` 대신 이유를 단 `#[expect]`)·`cast_sign_loss`·`cast_possible_truncation`·`clone_on_ref_ptr`·`fn_params_excessive_bools`·`format_push_string`, rust 그룹 `rust_2018_idioms`. 새 경고는 모두 고친다. `clippy::pedantic` 전체, 문서·출력 lint(`missing_docs`·`missing_errors_doc`·`print_stdout` 등, 라이브러리용), `expect_used` 완화는 넣지 않는다. bool 많은 구조체의 enum화(#171)와 잠금 오염 처리 정책(#172)은 오버홀 뒤로 미룬다. 근거: 사용자(2026-10-27, #170).
+  - 개정 2026-10-27: BeautifulRust 모범 사례와 대조해 lint를 더한다(#170, 달리는 아비시니안 4단계). Clippy: `string_add`·`redundant_clone`·`rc_buffer`·`wildcard_imports`·`allow_attributes`(`#[allow]` 대신 이유를 단 `#[expect]`)·`cast_sign_loss`·`cast_possible_truncation`·`clone_on_ref_ptr`·`fn_params_excessive_bools`·`format_push_string`. rustc lint 그룹: `rust_2018_idioms`. 새 경고는 모두 고친다. `clippy::pedantic` 전체, 문서·출력 lint(`missing_docs`·`missing_errors_doc`·`print_stdout` 등, 라이브러리용), `expect_used` 완화는 넣지 않는다. bool 많은 구조체의 enum화(#171)와 잠금 오염 처리 정책(#172)은 달리는 아비시니안 오버홀 뒤(노르웨이숲 태비 후보)로 미룬다. 근거: 사용자(2026-10-27, #170).
 
 <a id="d-10"></a>
 
