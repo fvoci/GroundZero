@@ -75,6 +75,14 @@ export const RepeatedError: Story = {
     notifyError('연결 실패', 'connection');
     notifyError('다시 연결하지 못했습니다.', 'connection');
     await screen.findByText('다시 연결하지 못했습니다.');
+    // 같은 key는 첫 토스트를 고쳐 쓴다(토스트가 쌓이지 않는다, D-82). 앞 story의 닫힌 토스트가 사라지는 중일 수 있어
+    // 이 연결 오류의 토스트만 센다.
+    await expect(screen.queryByText('연결 실패')).toBeNull();
+    await expect(
+      [...document.querySelectorAll('[data-sonner-toast]')].filter((item) =>
+        item.textContent.includes('연결'),
+      ),
+    ).toHaveLength(1);
   },
 };
 

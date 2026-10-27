@@ -62,6 +62,13 @@ describe('user feedback (D-82)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('연결 오류 갱신')).toHaveLength(1);
     });
+    // 같은 key는 첫 토스트를 고쳐 쓴다. 새 토스트가 하나 더 생기면 첫 글이 남는다(R5 B 최종 FB-2).
+    expect(screen.queryByText('연결 오류')).toBeNull();
+    expect(
+      [...document.querySelectorAll('[data-sonner-toast]')].filter((toast) =>
+        toast.textContent.includes('연결 오류'),
+      ),
+    ).toHaveLength(1);
     auth.expired = true;
     connection.lost = true;
     await waitFor(() => {
