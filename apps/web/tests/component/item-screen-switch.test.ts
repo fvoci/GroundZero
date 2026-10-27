@@ -8,6 +8,7 @@ import type { ItemProfileView, ItemView, SummaryView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -328,4 +329,3 @@ describe('item screen results after leaving and coming back to the same item', (
     expect(screen.getByText('셋째 문서')).toBeInTheDocument();
   });
 });
-import './fixtures/authenticated';

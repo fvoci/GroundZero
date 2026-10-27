@@ -6,6 +6,7 @@ import { api, ApiError } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -143,4 +144,3 @@ describe('module settings partial save', () => {
     });
   });
 });
-import './fixtures/authenticated';

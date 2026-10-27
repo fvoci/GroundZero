@@ -5,6 +5,7 @@ import type { ItemView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -131,4 +132,3 @@ describe('records panel loading', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
-import './fixtures/authenticated';

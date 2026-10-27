@@ -6,6 +6,7 @@ import type { ItemView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -141,4 +142,3 @@ describe('module item list', () => {
     expect(title).toHaveClass('min-w-0', '[overflow-wrap:anywhere]');
   });
 });
-import './fixtures/authenticated';
