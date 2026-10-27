@@ -1,7 +1,7 @@
 import { router } from '$lib/router.svelte';
 import { SvelteSet } from 'svelte/reactivity';
 
-type NavigationGuard = (action: () => void) => boolean;
+type NavigationGuard = (action: () => void, next?: string) => boolean;
 const attached = new SvelteSet<{ guard: NavigationGuard; previous: NavigationGuard | undefined }>();
 
 interface LeaveOptions {
@@ -11,6 +11,11 @@ interface LeaveOptions {
   identity?: () => unknown;
   /** 확인을 열기 직전 초점 등 화면 문맥을 기억한다. */
   onAsk?: () => void;
+  /**
+   * 앱 안 이동의 다음 경로에서도 이 폼이 마운트된 채인지(항목 머리 폼은 묶음만 바뀌면 그대로다, D-121). true면 묻지
+   * 않고 다음 가드로 넘긴다. 경로를 모르는 이동(문맥 전환·기록 뒤로 가기)과 beforeunload는 그대로 묻는다.
+   */
+  stays?: (next: string) => boolean;
 }
 
 /** DiscardChangesConfirm의 open/onkeep/ondiscard와 연결한다(D-97·D-125). */
@@ -58,17 +63,20 @@ export function createLeaveGuard(options: LeaveOptions) {
       guard: () => true,
       previous: router.guard,
     };
-    const guard = (action: () => void): boolean => {
-      if (bypass) return link.previous?.(action) ?? true;
+    const guard = (action: () => void, next?: string): boolean => {
+      if (bypass) return link.previous?.(action, next) ?? true;
+      // The form stays mounted at the next path, so its input is not left behind.
+      if (next !== undefined && options.stays?.(next) === true)
+        return link.previous?.(action, next) ?? true;
       if (options.busy?.() === true) return false;
-      if (!options.dirty()) return link.previous?.(action) ?? true;
+      if (!options.dirty()) return link.previous?.(action, next) ?? true;
       // Carry each accepted guard's bypass into the remaining confirmations.
       // Otherwise a sibling's later confirmation would ask this dirty form again.
       const resume = (): void => {
         proceed(action);
       };
       request(() => {
-        if (link.previous?.(resume) ?? true) resume();
+        if (link.previous?.(resume, next) ?? true) resume();
       });
       return false;
     };

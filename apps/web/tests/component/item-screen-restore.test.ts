@@ -8,6 +8,7 @@ import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { openItemGroup, resetRoute } from './fixtures/item-groups';
 
 const workspace: Workspace = {
   id: 'ws-restore',
@@ -71,14 +72,17 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
+  sessionStorage.clear();
+  resetRoute();
   me.userId = '';
 });
 
-// 화면이 크다(업무 보드·달력·기록·첨부 등). 역할 질의는 기다리는 동안 DOM 전체의 접근성 이름을 매번 계산해 부하가 높은
-// 전체 실행에서 5초 한도 가까이 갔다(R5 확인). 같은 요소(그 제목의 제목 요소, 그 이름의 양식 선택지)를 선택자로 찾는다.
+// 역할 질의는 기다리는 동안 DOM 전체의 접근성 이름을 매번 계산해 부하가 높은 전체 실행에서 5초 한도 가까이 갔다(R5
+// 확인). 같은 요소(그 제목의 제목 요소, 그 이름의 양식 선택지)를 선택자로 찾는다. 항목 문서 만들기는 문서 묶음에 있다(D-121).
 async function mount(itemId = 'item-a', title = `서버 항목 ${itemId}`) {
   const view = render(ItemScreen, { workspace, itemId, workspaces: [workspace] });
   await screen.findByText(title, { selector: 'h1, h2, h3, h4, h5, h6' });
+  await openItemGroup('문서');
   await screen.findByText(/선택할 양식/, { selector: 'option' });
   return view;
 }

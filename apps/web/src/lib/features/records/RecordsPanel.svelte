@@ -26,9 +26,13 @@
     item: ItemView;
     kind: ModuleKind;
     canWrite: boolean;
+    /** 이 기록 종류만 보인다(항목 화면의 첫 묶음: 연구 문헌, 취미 활동, D-121). 없으면 모든 종류. */
+    only?: readonly string[] | undefined;
+    /** 이 기록 종류는 빼고 보인다(첫 묶음에 간 종류를 공통 기록 묶음에서 뺀다). 없으면 모든 종류. */
+    except?: readonly string[] | undefined;
   }
 
-  const { item, kind, canWrite }: Props = $props();
+  const { item, kind, canWrite, only, except }: Props = $props();
 
   let defs = $state<RecordKindView[]>([]);
   let records = $state<RecordView[]>([]);
@@ -129,11 +133,18 @@
     const id = item.id;
     const ws = item.workspace_id;
     const moduleKind = kind;
+    const shownKinds = only;
+    const hiddenKinds = except;
     if (reloadKey < 0) return;
     let cancelled = false;
     Promise.all([api.recordKinds(), api.itemRecords(id), api.members(ws)])
       .then(async ([all, list, members]) => {
-        const mine = all.filter((d) => d.module_kind === moduleKind);
+        const mine = all.filter(
+          (d) =>
+            d.module_kind === moduleKind &&
+            (shownKinds === undefined || shownKinds.includes(d.kind)) &&
+            !(hiddenKinds?.includes(d.kind) ?? false),
+        );
         let courseList: { id: string; name: string }[] = [];
         if (mine.some((d) => d.fields.some((f) => f.type === 'course'))) {
           const modules = await api.modules(ws);
@@ -306,15 +317,19 @@
   };
 </script>
 
+<!-- 저장하는 동안 되살리기도 잠근다. 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 만들기는 다시 내면 새 요청 id로
+     두 번째 기록을, 고치기는 옮기지 못한 기준 판으로 자기 저장과 409를 낸다. -->
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      draft.restore(entry);
-    }}
-    ondiscard={() => {
-      draft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}
@@ -389,6 +404,7 @@
           {courses}
           {episodes}
           {files}
+          disabled={busy}
           submitLabel={m.records_add_kind({ label: kindLabel })}
           onsubmit={() => void save(def)}
           oncancel={() => {
@@ -515,6 +531,7 @@
                 {courses}
                 {episodes}
                 {files}
+                disabled={busy}
                 submitLabel={m.common_save()}
                 onsubmit={() => void save(def)}
                 oncancel={() => {
