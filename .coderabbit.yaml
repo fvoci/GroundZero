@@ -9,7 +9,9 @@ reviews:
   profile: chill
   request_changes_workflow: false
   high_level_summary_in_walkthrough: true
-  sequence_diagrams: false
+  sequence_diagrams: true
+  # Keep the walkthrough comment expanded so the summary is readable without clicking.
+  collapse_walkthrough: false
   poem: false
   auto_review:
     enabled: true
