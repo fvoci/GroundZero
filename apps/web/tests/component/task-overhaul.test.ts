@@ -115,15 +115,37 @@ it('uses the saved default before the session without rewriting the URL', async 
 });
 
 it('does not choose arbitrarily when multiple saved views claim to be default', async () => {
-  window.sessionStorage.setItem(org.key(`board:${TASK_ITEM.id}`), JSON.stringify({ view: 'list' }));
-  vi.mocked(api.savedViews).mockResolvedValue([
-    { id: 'one', name: '하나', version: 1, config: { default: true, view: 'gantt' } },
-    { id: 'two', name: '둘', version: 1, config: { default: true, view: 'calendar' } },
-  ]);
+  window.sessionStorage.setItem(
+    org.key(`board:${TASK_ITEM.id}`),
+    JSON.stringify({ view: 'list', filter: { status: 'in_progress' } }),
+  );
+  // R5 최종 A FA-8(3): 세션 보기는 첫 그리기에서 동기로 적용되므로, 늦게 온 기본 보기 둘을 어떻게 다루는지 보려면 그
+  // 응답이 처리된 뒤에 본다.
+  let release: () => void = () => undefined;
+  const listed = vi.mocked(api.savedViews).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        release = () => {
+          resolve([
+            {
+              id: 'one',
+              name: '하나',
+              version: 1,
+              config: { default: true, view: 'gantt', filter: { status: 'done' } },
+            },
+            { id: 'two', name: '둘', version: 1, config: { default: true, view: 'calendar' } },
+          ]);
+        };
+      }),
+  );
   render(TaskBoard, { item: TASK_ITEM, workspaces: [], openTaskId: undefined });
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: '목록' })).toHaveAttribute('aria-pressed', 'true');
+    expect(listed).toHaveBeenCalled();
   });
+  release();
+  for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0));
+  expect(screen.getByRole('button', { name: '목록' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByLabelText('상태')).toHaveValue('in_progress');
 });
 
 it('restores the scoped session without rewriting a path that has no view', async () => {
