@@ -347,18 +347,53 @@ describe('draft offers after write access is withdrawn', () => {
     await expectReadOnlyOffer();
   });
 
-  it('shows the attachment rename offer read-only', async () => {
+  // RB-1: 설정 폼은 관리자에게만 그린다. 쓰기 등급이면 설정 초안을 되살려도 보이지 않는 입력이 채워져 떠날 때 묻는다.
+  it('shows the module settings offer read-only to a non-admin writer', async () => {
+    otherTabDraft(`module-settings:${mod.id}`, {
+      name: '강등 전 이름',
+      key: 'DEV',
+      icon: '',
+      description: '',
+    });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(mod);
+    vi.spyOn(api, 'items').mockResolvedValue([]);
+    render(ModuleScreen, { workspace: { ...workspace, access: 'write' }, moduleId: mod.id });
+    await screen.findByRole('heading', { name: mod.name });
+    expect(screen.queryByLabelText(m.modules_name())).toBeNull();
+    await expectReadOnlyOffer();
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+  });
+
+  // RB-2: 이름 바꾸기는 파일마다 서버가 준 `can_write`로 정한다(D-113). 패널의 `canWrite`(새 파일 붙이기)와는 따로 온다.
+  it('shows the attachment rename offer read-only when the file is not writable', async () => {
     otherTabDraft('attachment-rename:item:i1', {
       id: ACCESS_FILE.id,
       name: '권한 철회 전 이름.pdf',
       baseline: ACCESS_FILE.name,
     });
-    vi.spyOn(api, 'itemFiles').mockResolvedValue([ACCESS_FILE]);
+    vi.spyOn(api, 'itemFiles').mockResolvedValue([{ ...ACCESS_FILE, can_write: false }]);
     const rename = vi.spyOn(api, 'renameFile');
-    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: false } });
+    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
     await screen.findByText(ACCESS_FILE.name);
     await expectReadOnlyOffer();
     expect(screen.queryByDisplayValue('권한 철회 전 이름.pdf')).toBeNull();
     expect(rename).not.toHaveBeenCalled();
+  });
+
+  it('restores the attachment rename offer when the file is writable on a read-only target', async () => {
+    otherTabDraft('attachment-rename:item:i1', {
+      id: ACCESS_FILE.id,
+      name: '쓸 수 있는 파일 이름.pdf',
+      baseline: ACCESS_FILE.name,
+    });
+    vi.spyOn(api, 'itemFiles').mockResolvedValue([ACCESS_FILE]);
+    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: false } });
+    await screen.findByText(ACCESS_FILE.name);
+    const offer = await screen.findByTestId('form-draft-offer');
+    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_restore() }));
+    expect(screen.getByLabelText(m.files_new_name())).toHaveValue('쓸 수 있는 파일 이름.pdf');
   });
 });
