@@ -391,6 +391,7 @@
   "tasks_status_remove": "Delete {name}",
   "tasks_status_invalid": "Check the name and position. Color must be empty or #rrggbb.",
   "tasks_status_failed": "Could not save the status. Your input is preserved.",
+  "tasks_status_name_exists": "Could not save the status. This item already has a status with this name. Your input is preserved.",
   "tasks_status_move_required": "Choose a destination status.",
   "tasks_status_move_to": "Move tasks to",
   "tasks_status_name": "Status name",

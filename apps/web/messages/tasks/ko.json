@@ -365,6 +365,7 @@
   "tasks_status_remove": "{name} 삭제",
   "tasks_status_invalid": "이름과 순서를 확인하세요. 색은 빈 값 또는 #rrggbb 형식입니다.",
   "tasks_status_failed": "상태를 저장하지 못했습니다. 입력을 보존했습니다.",
+  "tasks_status_name_exists": "상태를 저장하지 못했습니다. 이 항목에 같은 이름의 상태가 이미 있습니다. 입력을 보존했습니다.",
   "tasks_status_move_required": "업무를 옮길 상태를 고르세요.",
   "tasks_status_move_to": "업무를 옮길 상태",
   "tasks_status_name": "상태 이름",

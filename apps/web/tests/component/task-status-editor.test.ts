@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from '$lib/api/client';
 import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { TEST_STATUSES } from './fixtures/task-statuses';
 import { me } from '$lib/me.svelte';
@@ -58,7 +59,8 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
   const update = vi
     .spyOn(api, 'updateTaskStatus')
     .mockRejectedValueOnce(new ApiError(400, 'bad_request', 'color rejected'))
-    .mockRejectedValueOnce(new ApiError(409, 'archived', 'item archived'))
+    .mockRejectedValueOnce(new ApiError(409, 'invalid_state', 'the item is archived'))
+    .mockRejectedValueOnce(new ApiError(409, 'invalid_state', 'a status with this name exists'))
     .mockResolvedValue(first);
   const changed = vi.fn(() => Promise.resolve());
   render(StatusEditor, {
@@ -73,10 +75,24 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
   await fireEvent.change(screen.getByLabelText('범주'), { target: { value: 'doing' } });
   await fireEvent.input(screen.getByLabelText('순서'), { target: { value: '1.5' } });
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('color rejected');
+  // D-81: 서버의 영어 진단 문구는 한국어 화면에 보이지 않는다. 번역한 이유만 붙인다.
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(`${m.tasks_status_failed()} ${m.common_error_bad_request()}`);
+  expect(alert).not.toHaveTextContent('color rejected');
   expect(screen.getByLabelText('상태 이름')).toHaveValue('검토');
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('item archived');
+  await waitFor(() => {
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      `${m.tasks_status_failed()} ${m.comments_archived()}`,
+    );
+  });
+  expect(screen.getByRole('alert')).not.toHaveTextContent('archived');
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(screen.getByRole('alert')).toHaveTextContent(m.tasks_status_name_exists());
+  });
+  expect(screen.getByRole('alert')).not.toHaveTextContent('a status with this name exists');
+  expect(screen.getByLabelText('상태 이름')).toHaveValue('검토');
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
   await waitFor(() => {
     expect(changed).toHaveBeenCalledOnce();
