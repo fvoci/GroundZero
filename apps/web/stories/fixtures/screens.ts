@@ -82,18 +82,19 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
 }
 
 const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
+  // ⑪ 기본 상태 정의(이름은 그대로 보이고 범주로만 완료를 판단한다). 합성 업무(synthetic.ts)의 상태 이름과 같다.
   taskStatuses: () =>
     Promise.resolve([
-      { id: 'todo', name: 'todo', color: '', position: 0, category: 'todo', task_count: 4 },
+      { id: 'todo', name: '할 일', color: '', position: 0, category: 'todo', task_count: 4 },
       {
         id: 'in_progress',
-        name: 'in_progress',
+        name: '진행 중',
         color: '',
         position: 1,
         category: 'doing',
         task_count: 2,
       },
-      { id: 'done', name: 'done', color: '', position: 2, category: 'done', task_count: 1 },
+      { id: 'done', name: '완료', color: '', position: 2, category: 'done', task_count: 1 },
     ]),
   myTasks: () => Promise.resolve(myTasksView()),
   recentActivity: () => Promise.resolve(ACTIVITY),

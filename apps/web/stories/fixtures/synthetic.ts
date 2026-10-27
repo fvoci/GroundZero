@@ -7,6 +7,7 @@ import type {
   ModuleKind,
   OrganizationSummary,
   Role,
+  StatusCategory,
   Workspace,
 } from '@fvoci/api-client';
 
@@ -168,8 +169,18 @@ function asItemStatus(value: string): ItemStatus {
   return status;
 }
 
-function asTaskStatus(value: string): TaskStatus {
-  return value;
+// seed 자료의 업무 상태 값을 ⑪의 기본 상태 정의(서버가 항목마다 만드는 이름)와 그 범주로 옮긴다. 화면은 이름을 그대로
+// 보이고 완료 판단은 범주로만 한다.
+const SEED_STATUSES: Record<string, { name: TaskStatus; category: StatusCategory }> = {
+  todo: { name: '할 일', category: 'todo' },
+  in_progress: { name: '진행 중', category: 'doing' },
+  done: { name: '완료', category: 'done' },
+};
+
+function asTaskStatus(value: string): { name: TaskStatus; category: StatusCategory } {
+  const status = SEED_STATUSES[value];
+  if (status === undefined) throw new TypeError(`unknown task status ${value}`);
+  return status;
 }
 
 function asTaskPriority(value: string): TaskPriority {
@@ -264,7 +275,8 @@ const TASK_ROWS = data.tasks.map((t, i) => ({
   workspace_id: WORKSPACE.id,
   reference: `${PROJECT_MODULE.key}-${String(i + 2)}`,
   title: t.title,
-  status: asTaskStatus(t.status),
+  status: asTaskStatus(t.status).name,
+  status_category: asTaskStatus(t.status).category,
   milestone: t.milestone,
   start_date: day(t.start),
   due_date: day(t.due),
@@ -285,7 +297,7 @@ const homeTask = (t: (typeof TASK_ROWS)[number]): HomeTaskView => ({
   reference: t.reference,
   title: t.title,
   status: t.status,
-  status_category: t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing' : 'todo',
+  status_category: t.status_category,
   due_date: t.due_date,
   bucket: bucketOf(t.due_date),
 });
@@ -295,7 +307,7 @@ export function homeView(): HomeView {
   // 서버처럼 오늘부터 7일 뒤까지 마감인 것만, 마감이 이른 것부터(같으면 번호 순).
   const until = day(7) ?? TODAY;
   const upNext = TASK_ROWS.filter(
-    (t) => t.mine && t.status !== 'done' && t.due_date !== null && t.due_date <= until,
+    (t) => t.mine && t.status_category !== 'done' && t.due_date !== null && t.due_date <= until,
   )
     .map(homeTask)
     .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''));
@@ -315,7 +327,8 @@ export function homeView(): HomeView {
         module_kind: mod.kind,
         reference: it.reference ?? null,
         title: it.title,
-        tasks_done: it === TASK_ITEM ? TASK_ROWS.filter((t) => t.status === 'done').length : 0,
+        tasks_done:
+          it === TASK_ITEM ? TASK_ROWS.filter((t) => t.status_category === 'done').length : 0,
         tasks_total: it === TASK_ITEM ? TASK_ROWS.length : 0,
         can_write: true,
       })),
@@ -392,7 +405,7 @@ export function calendarView(): CalendarView {
       reference: t.reference,
       title: t.title,
       status: t.status,
-      status_category: t.status === 'done' ? 'done' : t.status === 'in_progress' ? 'doing' : 'todo',
+      status_category: t.status_category,
       milestone: t.milestone,
       start_date: t.start_date,
       due_date: t.due_date,
@@ -432,8 +445,7 @@ export function taskViews(): TaskView[] {
       title: t.title,
       description: t.description,
       status: row.status,
-      status_category:
-        row.status === 'done' ? 'done' : row.status === 'in_progress' ? 'doing' : 'todo',
+      status_category: row.status_category,
       priority: asTaskPriority(t.priority),
       start_date: row.start_date,
       due_date: row.due_date,
@@ -448,7 +460,7 @@ export function taskViews(): TaskView[] {
       checklist_total: 0,
       version: 1,
       move_version: 1,
-      completed_at: row.status === 'done' ? at(10 + i) : null,
+      completed_at: row.status_category === 'done' ? at(10 + i) : null,
       access: 'write',
       updated_at: at(10 + i),
     };
@@ -537,7 +549,7 @@ export function notificationsView(): NotificationView[] {
     });
   });
   const overdue = TASK_ROWS.find(
-    (t) => t.mine && t.status !== 'done' && bucketOf(t.due_date) === 'overdue',
+    (t) => t.mine && t.status_category !== 'done' && bucketOf(t.due_date) === 'overdue',
   );
   if (overdue !== undefined)
     list.push({
