@@ -1582,9 +1582,12 @@
             <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
           {/each}
           {#if canEdit && (editing !== undefined || candidates.length > 0)}
+            <!-- 저장 중에는 칸 전체를 잠근다. 성공 뒤 resetLinkEditor()가 그사이 친 값을 지우지 않게 한다(FA-1, D-97).
+                 bits-ui Select는 조상 fieldset의 disabled를 보지 않아 자기 disabled로 잠근다. -->
             <fieldset
               class="flex flex-col gap-2 rounded-md border p-2"
               inert={linkPending !== undefined}
+              disabled={busy}
               aria-describedby="link-kind-meaning"
             >
               <legend class="px-1 text-sm font-medium" id="predecessor-label">
@@ -1595,6 +1598,7 @@
               {:else}
                 <Select.Root
                   type="single"
+                  disabled={busy}
                   value={predecessorChoice}
                   onValueChange={(v: string) => (predecessorChoice = v)}
                 >
@@ -1615,6 +1619,7 @@
                   <span id="link-kind-label" class="text-sm">{m.tasks_link_kind_label()}</span>
                   <Select.Root
                     type="single"
+                    disabled={busy}
                     value={linkKind}
                     onValueChange={(v: string) => {
                       const found = LINK_KINDS.find((k) => k === v);
