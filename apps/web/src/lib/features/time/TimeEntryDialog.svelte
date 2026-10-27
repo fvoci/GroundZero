@@ -247,6 +247,14 @@
     // Capture the selected version before discarding resets the reactive conflict.
     draft.leave.request(() => {
       fill(current);
+      // 버리기가 폼과 함께 수정 이력도 비웠다. 서버 내용(새 판)의 이력을 다시 읽는다.
+      const userId = me.userId;
+      void api
+        .timeEntryRevisions(current.id)
+        .then((h) => {
+          if (me.userId === userId && base?.id === current.id) history = h;
+        })
+        .catch(() => undefined);
     });
   }
 
