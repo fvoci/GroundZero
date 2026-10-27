@@ -15,8 +15,8 @@ import { router } from '$lib/router.svelte';
 // `app_set_unit_progress`·`app_plan_units`가 42501로 거절). 화면은 서버가 준 `can_write`로 진도 단추와 다시 배정을
 // 감춘다. 시간 측정은 진도가 아니라 그대로 둔다. 결정은 남기기만 막고 읽기는 막지 않으므로 내 메모·위치·한 분량은 쓸 수
 // 없을 때도(읽기 전용, 보관 항목의 모든 멤버: `can_write` = `!archived && access in (owner, write)`) 저장 단추 없는
-// 비활성 폼으로 보인다(R5 delta3 B D3B-F-2). 쓸 수 없게 되면 그 폼은 고친 것으로 치지 않고(이탈 확인 없음) 남은 초안은
-// 지우지 않는다(확인 필요 2).
+// 읽기 전용(readonly) 칸으로 보인다(R5 delta3 B D3B-F-2, D5-F-3). 쓸 수 없게 되면 그 칸은 고친 것으로 치지 않고(이탈 확인
+// 없음) 남은 초안은 지우지 않는다(확인 필요 2).
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });

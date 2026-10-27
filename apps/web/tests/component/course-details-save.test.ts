@@ -151,6 +151,8 @@ describe('course details save', () => {
     if (again === null) throw new Error('course-instructor');
     await fireEvent.input(again, { target: { value: '박 강사' } });
     finish();
+    // 앞 저장의 응답 처리(.then)까지 끝난 뒤에 본다. 한 tick 뒤에는 아직 돌지 않아 가드가 없어도 통과했다(FC-12).
+    await new Promise((r) => setTimeout(r, 0));
     await tick();
     expect(instructor()?.value).toBe('박 강사');
   });

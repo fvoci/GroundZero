@@ -1,3 +1,4 @@
+import './fixtures/authenticated';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -108,4 +109,3 @@ describe('restoring an item profile draft', () => {
     expect(leaderTrigger().textContent.trim()).toBe('Second User');
   });
 });
-import './fixtures/authenticated';
