@@ -70,18 +70,22 @@ it('runs every story file on disk', () => {
 describe('story conditions', () => {
   type Condition = 'base' | 'combined' | 'partial';
 
-  function conditionOf(globals: Record<string, unknown>): Condition {
-    const viewport = globals['viewport'];
+  function conditionOf(globals: {
+    viewport?: unknown;
+    theme?: unknown;
+    fontScale?: unknown;
+  }): Condition {
+    const viewport = globals.viewport;
     const viewportValue =
       typeof viewport === 'object' && viewport !== null && 'value' in viewport
         ? String(viewport.value)
         : '';
-    const dark = globals['theme'] === 'dark';
-    const large = Number(globals['fontScale'] ?? 100) > 100;
+    const dark = globals.theme === 'dark';
+    const large = Number(globals.fontScale ?? 100) > 100;
     const narrow = viewportValue.startsWith('narrow');
     const hard = [dark, large, narrow].filter(Boolean).length;
     if (hard === 0) return 'base';
-    const exact = dark && Number(globals['fontScale']) === 200 && viewportValue === 'narrow375';
+    const exact = dark && Number(globals.fontScale) === 200 && viewportValue === 'narrow375';
     return exact ? 'combined' : 'partial';
   }
 
