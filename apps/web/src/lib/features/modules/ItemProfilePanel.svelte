@@ -374,9 +374,11 @@
       {/if}
       <form class="grid gap-3 @xl:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
         <div class="flex flex-col gap-1">
+          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 저장 중에는 따로 잠근다(상태·리더). -->
           <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
           <Select.Root
             type="single"
+            disabled={busy}
             value={form.status}
             onValueChange={(v: string) => {
               form.status = ITEM_STATUSES.find((s) => s === v) ?? form.status;
@@ -396,6 +398,7 @@
           <span id="item-leader-label" class="text-sm font-medium">{labels.leader}</span>
           <Select.Root
             type="single"
+            disabled={busy}
             value={form.leader === '' ? 'none' : form.leader}
             onValueChange={(v: string) => {
               form.leader = v === 'none' ? '' : v;

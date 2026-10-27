@@ -128,15 +128,19 @@
   }
 </script>
 
+<!-- 만드는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 키까지 고쳐 다시 내면
+     새 요청 id로 두 번째 모듈을 만든다. -->
 {#each draft.offers as entry (entry.key)}
-  <FormDraftOffer
-    onrestore={() => {
-      draft.restore(entry);
-    }}
-    ondiscard={() => {
-      draft.discard(entry);
-    }}
-  />
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
 {/each}
 <DiscardChangesConfirm
   open={draft.leave.open}
@@ -177,55 +181,59 @@
   {/if}
 
   {#if isAdmin}
-    <form
-      class="flex flex-wrap items-end gap-2"
-      onsubmit={(e) => void create(e)}
-      novalidate
-      aria-label={m.modules_create()}
-    >
-      <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="module-kind-label">{m.modules_kind()}</span>
-        <Select.Root
-          type="single"
-          value={kind}
-          onValueChange={(v: string) => {
-            kind = asKind(v) ?? kind;
-          }}
-        >
-          <Select.Trigger class="w-28" aria-labelledby="module-kind-label"
-            >{kindLabel(kind)}</Select.Trigger
+    <fieldset class="min-w-0" disabled={busy}>
+      <form
+        class="flex flex-wrap items-end gap-2"
+        onsubmit={(e) => void create(e)}
+        novalidate
+        aria-label={m.modules_create()}
+      >
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium" id="module-kind-label">{m.modules_kind()}</span>
+          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 따로 잠근다. -->
+          <Select.Root
+            type="single"
+            disabled={busy}
+            value={kind}
+            onValueChange={(v: string) => {
+              kind = asKind(v) ?? kind;
+            }}
           >
-          <Select.Content>
-            {#each MODULE_KINDS as k (k)}
-              <Select.Item value={k} label={kindLabel(k)}>{kindLabel(k)}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex min-w-40 flex-1 flex-col gap-1">
-        <Label for="module-name">{m.modules_name()}</Label>
-        <Input
-          id="module-name"
-          bind:value={name}
-          placeholder={m.modules_name_placeholder()}
-          maxlength={200}
-        />
-      </div>
-      <div class="flex w-28 flex-col gap-1">
-        <Label for="module-key">{m.modules_key()}</Label>
-        <Input
-          id="module-key"
-          bind:value={key}
-          placeholder="DEV"
-          maxlength={10}
-          autocomplete="off"
-          class="font-mono uppercase"
-          aria-invalid={formError !== undefined}
-          aria-describedby={formError !== undefined ? 'module-form-error' : undefined}
-        />
-      </div>
-      <Button type="submit" disabled={busy}>{m.modules_create()}</Button>
-    </form>
+            <Select.Trigger class="w-28" aria-labelledby="module-kind-label"
+              >{kindLabel(kind)}</Select.Trigger
+            >
+            <Select.Content>
+              {#each MODULE_KINDS as k (k)}
+                <Select.Item value={k} label={kindLabel(k)}>{kindLabel(k)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex min-w-40 flex-1 flex-col gap-1">
+          <Label for="module-name">{m.modules_name()}</Label>
+          <Input
+            id="module-name"
+            bind:value={name}
+            placeholder={m.modules_name_placeholder()}
+            maxlength={200}
+          />
+        </div>
+        <div class="flex w-28 flex-col gap-1">
+          <Label for="module-key">{m.modules_key()}</Label>
+          <Input
+            id="module-key"
+            bind:value={key}
+            placeholder="DEV"
+            maxlength={10}
+            autocomplete="off"
+            class="font-mono uppercase"
+            aria-invalid={formError !== undefined}
+            aria-describedby={formError !== undefined ? 'module-form-error' : undefined}
+          />
+        </div>
+        <Button type="submit" disabled={busy}>{m.modules_create()}</Button>
+      </form>
+    </fieldset>
     {#if formError !== undefined}
       <p id="module-form-error" class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}

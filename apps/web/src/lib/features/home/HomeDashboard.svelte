@@ -265,15 +265,19 @@
   <p role="status">{m.app_organization_required()}</p>
 {:else}
   <section class="flex flex-col gap-6" aria-labelledby="dashboard-heading">
+    <!-- 보내는 동안 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 다시 내면 새 요청 id로 두 번째
+         업무를 만든다(입력 칸은 아래에서 따로 잠근다). -->
     {#each quickDraft.offers as offer (offer.key)}
-      <FormDraftOffer
-        onrestore={() => {
-          quickDraft.restore(offer);
-        }}
-        ondiscard={() => {
-          quickDraft.discard(offer);
-        }}
-      />
+      <fieldset class="contents" disabled={adding}>
+        <FormDraftOffer
+          onrestore={() => {
+            quickDraft.restore(offer);
+          }}
+          ondiscard={() => {
+            quickDraft.discard(offer);
+          }}
+        />
+      </fieldset>
     {/each}
     <Collapsible.Root bind:open={quickOpen}>
       <div class="flex flex-wrap items-baseline gap-2">
