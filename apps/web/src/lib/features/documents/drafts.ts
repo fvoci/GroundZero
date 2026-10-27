@@ -4,7 +4,7 @@
 import type { DocNode } from '$lib/api/client';
 import { parseDocNode } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
-import { org } from '$lib/org.svelte';
+import { scopedKey } from '$lib/storage';
 
 export interface Draft {
   baseRevision: number;
@@ -30,9 +30,12 @@ export function tabId(): string {
   }
 }
 
-/** 이 사용자·문서의 초안 키 앞부분. 로그인 전이면 없다. */
+/**
+ * 이 사용자·문서의 초안 키 앞부분. 로그인 전이면 없다. 조직은 넣지 않는다(폼 초안 `form-draft.ts`와 같은 규칙): 개인
+ * 노트는 조직과 무관하고, 되살릴 때의 조직 문맥이 남길 때와 다를 수 있다(⑱·D-27).
+ */
 function base(documentId: string): string | undefined {
-  return me.userId === '' ? undefined : org.key(`draft:${me.userId}:${documentId}`);
+  return me.userId === '' ? undefined : scopedKey(`draft:${documentId}`, me.userId, undefined);
 }
 
 /** 이 탭의 지금 편집의 초안 키. */

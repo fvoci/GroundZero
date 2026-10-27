@@ -8,7 +8,7 @@ import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { auth, connection } from '$lib/features/feedback/feedback.svelte';
 import { me as currentUser } from '$lib/me.svelte';
-import { org } from '$lib/org.svelte';
+import { scopedKey } from '$lib/storage';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -79,7 +79,9 @@ async function editAndFailOnce(save: MockInstance<typeof api.saveDocument>): Pro
 }
 
 const drafts = (user: string): string[] =>
-  Object.keys(window.localStorage).filter((k) => k.startsWith(org.key(`draft:${user}:doc-1`)));
+  Object.keys(window.localStorage).filter((k) =>
+    k.startsWith(scopedKey('draft:doc-1', user, undefined)),
+  );
 
 describe('a background save checks who is signed in before it goes out', () => {
   beforeEach(async () => {
