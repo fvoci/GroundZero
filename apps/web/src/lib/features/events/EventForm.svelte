@@ -9,6 +9,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { parseEventDraft, type EventDraft } from './input-drafts';
   import { errorText } from '$lib/api/errors';
+  import { trimLikeServer } from '$lib/features/tasks/form';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -267,9 +268,19 @@
     }
   }
 
-  // D-27: 서버 정규화 전의 원문과 잠시 숨긴 날짜·시각도 보존한다. 부모는 반복 입력과 함께 이탈을 확인한다.
+  // 고친 칸은 서버에 저장될 모양으로 견준다: 서버가 떼는 앞뒤 공백만 바뀐 것은 수정이 아니다(D-97 구현 해석, 업무 폼
+  // `edited`와 같다). 수정이 있으면 초안에는 원문과 잠시 숨긴 날짜·시각을 그대로 남긴다(D-27). 부모는 반복 입력과 함께
+  // 이탈을 확인한다.
   const unsaved = $derived(
-    JSON.stringify(f) !== JSON.stringify(base) ||
+    f.kind !== base.kind ||
+      trimLikeServer(f.title) !== trimLikeServer(base.title) ||
+      trimLikeServer(f.description) !== trimLikeServer(base.description) ||
+      f.allDay !== base.allDay ||
+      (f.allDay
+        ? f.startDate !== base.startDate || f.endDate !== base.endDate
+        : f.startWall !== base.startWall ||
+          f.endWall !== base.endWall ||
+          f.timezone.trim() !== base.timezone) ||
       startChoice !== undefined ||
       endChoice !== undefined,
   );
