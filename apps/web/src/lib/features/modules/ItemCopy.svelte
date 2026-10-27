@@ -117,6 +117,8 @@
       attempt = draft.capture();
       if (attempt === undefined) return;
       busy = true;
+      // 토스트는 닫을 때까지 남고 이 대화상자는 다른 항목으로 옮겨도 다시 쓰이므로, 새 항목 열기는 복제한 워크스페이스로 간다.
+      const workspaceId = item.workspace_id;
       const copied = await api.copyItem(item.id, requestId, target, name, reset);
       if (!draft.complete(attempt)) return;
       open = false;
@@ -132,7 +134,7 @@
           action: {
             label: m.modules_copy_open(),
             onClick: () => {
-              router.navigate(itemPath(item.workspace_id, created));
+              router.navigate(itemPath(workspaceId, created));
             },
           },
         },
