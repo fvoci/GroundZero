@@ -1,6 +1,6 @@
 // Storybook story를 jsdom에서 다시 쓴다(composeStories). 모든 story가 오류 없이 그려지고, play 함수(키보드·저장
 // 실패·입력 보존 등 상호작용)가 통과하는지 본다. 실제 배치·픽셀은 jsdom이 계산하지 않으므로 Storybook을 실제
-// 브라우저로 열어 확인한다(docs/development.md의 Storybook 절).
+// 브라우저로 열어 확인한다(D-108 docs/decisions/ui.md#d-108).
 import { readdirSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 

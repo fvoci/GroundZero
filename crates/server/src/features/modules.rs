@@ -22,8 +22,9 @@ use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use crate::error::{AppError, ErrorBody};
 use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
-    Access, CreateDocument, Document, DocumentSummary, SCHEMA_VERSION, SUMMARY_COLUMNS, SummaryRow,
-    TREE_ORDER, initial_body, load_with_access, max_depth, to_document, to_summaries,
+    Access, CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION,
+    SUMMARY_COLUMNS, SummaryRow, TREE_ORDER, initial_body, load_with_access, max_depth,
+    to_document, to_summaries,
 };
 use crate::features::workspaces::validate_title;
 
@@ -702,7 +703,7 @@ pub async fn create_item_document(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let body = initial_body(&mut tx, input.template_id).await?;
+        let body = initial_body(&mut tx, &input, NewDocumentPlace::Item(item)).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(item)

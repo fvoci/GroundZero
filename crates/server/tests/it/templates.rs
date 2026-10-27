@@ -187,6 +187,105 @@ async fn documents_start_from_readable_templates() {
     );
 }
 
+/// SR1-4: 공간 문서 템플릿은 같은 조직의 공간에서만 새 문서의 본문이 된다(D-114, 복제와 같다). 템플릿 예외는
+/// `allow_copy`에 대한 것뿐이다(D-115). 쓰면 템플릿에 복제 감사가 남는다.
+#[tokio::test]
+async fn space_templates_stay_within_the_organization() {
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "조직 A").await;
+    let template = create_doc(&app, &admin, &ws, "회의록 양식").await;
+    let template_id = template["id"].as_str().unwrap().to_owned();
+    let mark = send(
+        &app,
+        Method::PUT,
+        &format!("/api/documents/{template_id}/template"),
+        Some(&admin),
+        Some(json!({ "template": true })),
+    )
+    .await;
+    assert_eq!(mark.status, StatusCode::NO_CONTENT, "{:?}", mark.json);
+
+    // 같은 사람이 다른 조직에도 속해 그 조직의 공간을 쓸 수 있다.
+    let boss = login(&state, "boss").await;
+    let other = common::organization_for(&boss).await;
+    common::join_organization(other, &admin, "admin").await;
+    let other_ws = send(
+        &app,
+        Method::POST,
+        "/api/workspaces",
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "organization_id": other, "name": "조직 B" })),
+    )
+    .await;
+    assert_eq!(other_ws.status, StatusCode::CREATED, "{:?}", other_ws.json);
+    let other_ws = other_ws.json["id"].as_str().unwrap().to_owned();
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{other_ws}/modules"),
+        Some(&admin),
+        Some(
+            json!({ "request_id": new_request_id(), "kind": "project", "name": "B", "key": "BTP" }),
+        ),
+    )
+    .await;
+    assert_eq!(module.status, StatusCode::CREATED, "{:?}", module.json);
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module.json["id"].as_str().unwrap()),
+        Some(&admin),
+        Some(json!({ "request_id": new_request_id(), "title": "항목" })),
+    )
+    .await;
+    assert_eq!(item.status, StatusCode::CREATED, "{:?}", item.json);
+    let item = item.json["id"].as_str().unwrap().to_owned();
+
+    let body = || json!({ "request_id": new_request_id(), "title": "새 회의", "template_id": template_id });
+    for uri in [
+        format!("/api/workspaces/{other_ws}/wiki/documents"),
+        format!("/api/items/{item}/documents"),
+    ] {
+        let refused = send(&app, Method::POST, &uri, Some(&admin), Some(body())).await;
+        assert_eq!(
+            refused.status,
+            StatusCode::CONFLICT,
+            "{uri}: {:?}",
+            refused.json
+        );
+    }
+
+    // 같은 request_id로 다시 보내면 같은 문서를 돌려받고 감사는 하나만 남는다.
+    let request = body();
+    let mut made = Vec::new();
+    for _ in 0..2 {
+        let reply = send(
+            &app,
+            Method::POST,
+            &format!("/api/workspaces/{ws}/wiki/documents"),
+            Some(&admin),
+            Some(request.clone()),
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::CREATED, "{:?}", reply.json);
+        made.push(reply.json["id"].clone());
+    }
+    assert_eq!(made[0], made[1]);
+    let mut conn = common::fixture_conn().await;
+    let audits: Vec<serde_json::Value> = sqlx::query_scalar(
+        "SELECT detail FROM fvoci.audit_log
+         WHERE target_type = 'document' AND target_id = $1::uuid AND action = 'copy' AND actor = $2",
+    )
+    .bind(&template_id)
+    .bind(admin.id.0)
+    .fetch_all(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(audits, [json!({ "target": "workspace", "template": true })]);
+}
+
 #[tokio::test]
 async fn bodies_reject_outside_images_and_unsafe_links() {
     let state = common::state();

@@ -175,22 +175,48 @@ pub(crate) fn empty_body() -> Value {
     serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
 }
 
+/// 템플릿 본문을 받을 새 문서의 자리.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum NewDocumentPlace {
+    PersonalNote,
+    Wiki(WorkspaceId),
+    Item(ItemId),
+}
+
 /// 새 문서의 본문: 템플릿을 주면 그 본문(읽을 수 있는 템플릿이어야 함, 아니면 404), 아니면 빈 문서.
+/// 공간에 만들 때 공간 문서 템플릿은 같은 조직 것만 쓰고(409) 원본에 복제 감사를 남긴다(D-114·D-115). 같은
+/// `request_id`로 다시 보낸 생성에는 감사를 다시 남기지 않는다.
 pub(crate) async fn initial_body(
     tx: &mut UserTx,
-    template: Option<DocumentId>,
+    input: &CreateDocument,
+    place: NewDocumentPlace,
 ) -> Result<Value, AppError> {
-    let Some(template) = template else {
+    let Some(template) = input.template_id else {
         return Ok(empty_body());
     };
-    // 문서 RLS가 읽을 수 없는 템플릿을 거른다.
-    let body: Option<Value> = sqlx::query_scalar(
-        "SELECT body FROM documents WHERE id = $1 AND is_template AND deleted_at IS NULL",
-    )
-    .bind(template)
-    .fetch_optional(tx.conn())
-    .await?;
-    body.ok_or(AppError::NotFound)
+    let (workspace, item) = match place {
+        NewDocumentPlace::PersonalNote => {
+            // 문서 RLS가 읽을 수 없는 템플릿을 거른다.
+            let body: Option<Value> = sqlx::query_scalar(
+                "SELECT body FROM documents WHERE id = $1 AND is_template AND deleted_at IS NULL",
+            )
+            .bind(template)
+            .fetch_optional(tx.conn())
+            .await?;
+            return body.ok_or(AppError::NotFound);
+        }
+        NewDocumentPlace::Wiki(workspace) => (Some(workspace), None),
+        NewDocumentPlace::Item(item) => (None, Some(item)),
+    };
+    sqlx::query_scalar("SELECT app_template_body($1, $2, $3, $4, $5)")
+        .bind(template)
+        .bind(workspace)
+        .bind(item)
+        .bind(input.request_id)
+        .bind(new_ids(1))
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)
 }
 
 /// 본문 검증: `type: "doc"` 객체이고 직렬화 크기가 상한 이하.
@@ -508,7 +534,8 @@ pub async fn list_wiki(
 #[utoipa::path(post, path = "/api/workspaces/{workspace_id}/wiki/documents",
     params(("workspace_id" = String, Path, format = Uuid)), request_body = CreateDocument,
     responses((status = 201, body = Document), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "다른 조직 공간의 템플릿")), tag = "documents")]
 pub async fn create_wiki(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -528,7 +555,7 @@ pub async fn create_wiki(
             "none" => return Err(AppError::NotFound),
             _ => return Err(AppError::Forbidden),
         }
-        let body = initial_body(&mut tx, input.template_id).await?;
+        let body = initial_body(&mut tx, &input, NewDocumentPlace::Wiki(ws)).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_wiki_document($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(ws)
@@ -595,7 +622,7 @@ pub async fn create_note(
     let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
-        let body = initial_body(&mut tx, input.template_id).await?;
+        let body = initial_body(&mut tx, &input, NewDocumentPlace::PersonalNote).await?;
         let id: DocumentId =
             sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7)")
                 .bind(input.request_id)
@@ -1376,7 +1403,7 @@ pub enum MoveReply {
 /// 이동·복원 트랜잭션이 잠금 하나를 기다리는 한도. 열린 방은 이동·복원을 자기 명령 안에서 하므로(#71) 그동안 편집이 멈춘다
 /// (권한 재확인은 이동 중에도 이어 간다, `Room::move_rechecking`). 끝없이 기다리지 않고 409로 돌려준다(하지 않음, 편집은 방에 남는다, #64 리뷰). PostgreSQL
 /// `lock_timeout`이라 잠금을 얻으려는 시도마다 따로 재며, 이동·복원 요청 전체의 상한이 아니다(잠금 대기는 최대 이 값 ×
-/// 기다린 잠금 수, docs/development.md#live-document-preservation). 다른 이동·항목 변경은 보통 이보다 훨씬 짧게 잠근다.
+/// 기다린 잠금 수, D-95 docs/decisions/documents.md#d-95). 다른 이동·항목 변경은 보통 이보다 훨씬 짧게 잠근다.
 pub(crate) const LOCK_LIMIT: &str = "10s";
 
 /// 이 트랜잭션에만 잠금 대기 한도(`LOCK_LIMIT`)를 건다(세션 풀러의 연결에 남지 않는다).
