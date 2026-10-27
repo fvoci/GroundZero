@@ -13,7 +13,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 import { scopedKey } from '$lib/storage';
 
-// D-27 ⑱·#141 R8 A: 실시간 문서도 서버에 반영되지 않은(확인 응답 전) 편집이 있으면 앱 안 이동과 창 닫기를 다른 폼과
+// D-27 개정 2026-10-27(#141 R8 A): 실시간 문서도 서버에 반영되지 않은(확인 응답 전) 편집이 있으면 앱 안 이동과 창 닫기를 다른 폼과
 // 같은 규칙으로 경고한다. 모두 반영됐으면 묻지 않는다. 떠나도 반영되지 않은 편집은 초안으로 남는다.
 
 /** 편집기가 연 연결과, 서버의 저장 확인을 대신 보낼 콜백. */

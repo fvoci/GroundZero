@@ -87,7 +87,7 @@ describe('a title edited before the first live sync', () => {
     if (!(title instanceof HTMLInputElement)) throw new Error('live-title');
     await fireEvent.input(title, { target: { value: '동기화 전에 고친 제목' } });
 
-    // 창을 닫으려 하면 남기고(초안), 반영되지 않은 편집이 있으니 다른 폼처럼 경고한다(D-27 ⑱, #141 R8 A).
+    // 창을 닫으려 하면 남기고(초안), 반영되지 않은 편집이 있으니 다른 폼처럼 경고한다(D-27 개정 2026-10-27, #141 R8 A).
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);

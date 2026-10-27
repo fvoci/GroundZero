@@ -92,7 +92,7 @@ export const BrandNarrowLargeText: Story = {
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };
 
-/** 실시간 문서를 떠날 때: 서버에 반영되지 않은 편집은 초안으로 남는다고 알리고 "떠나기"로 이동한다(D-27 ⑱, #141 R8 A). */
+/** 실시간 문서를 떠날 때: 서버에 반영되지 않은 편집은 초안으로 남는다고 알리고 "떠나기"로 이동한다(D-27 개정 2026-10-27, #141 R8 A). */
 export const LiveDocumentLeave: Story = {
   args: {
     description: m.documents_live_leave_description(),
