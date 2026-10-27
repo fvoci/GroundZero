@@ -13,6 +13,13 @@
  * 빠졌을 때만이다. 사용자가 앞 작업에서 이미 떠난 입력(빈 곳 클릭, `blur()`, 마우스 클릭으로 단추에 초점을 주지 않는
  * Safari·macOS Firefox에서 단추 누르기)은 나중에 잠기고 풀려도 끌어오지 않는다.
  */
+/** 닫히는 중이거나 숨긴 대화상자. */
+const CLOSING = [
+  '[role="dialog"][data-state="closed"]',
+  '[role="alertdialog"][data-state="closed"]',
+  '[inert]',
+].join(', ');
+
 export function keepFocusAcrossLocks(doc: Document = document): () => void {
   // 마지막으로 초점을 받은 요소. 브라우저가 비활성이 된 요소에서 초점을 뺄 때 blur를 내는지는 엔진마다 다르므로
   // focusin으로 따라간다.
@@ -29,6 +36,11 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     last = event.target;
     // 다른 곳에 초점을 두었으면 되돌리지 않는다(되돌린 초점 자신은 같은 요소라 지우지 않는다).
     if (lost !== undefined && lost !== event.target) lost = undefined;
+  };
+
+  // 잠긴 동안 누르면(초점이 없는 빈 곳·글을 눌러 focusin이 없어도) 사용자가 손을 댄 것이다. 되돌리지 않는다(R5 B 최종 C-2).
+  const onPointerDown = (): void => {
+    lost = undefined;
   };
 
   const onFocusOut = (event: FocusEvent): void => {
@@ -56,9 +68,9 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
       } else if (lost !== undefined && el.contains(lost)) released = true;
     }
     if (!released || lost === undefined) return;
-    // 사라졌거나 닫히는 중인 곳(성공하면 닫히는 대화상자는 잠금이 풀릴 때 `data-state="closed"`로 닫히는 중이다)으로는
-    // 되돌리지 않는다.
-    if (!lost.isConnected || lost.closest('[data-state="closed"], [inert]') !== null) {
+    // 사라졌거나 닫히는 중인 대화상자(성공하면 닫히는 대화상자는 잠금이 풀릴 때 `data-state="closed"`로 닫히는 중이다)
+    // 안으로는 되돌리지 않는다. 닫힌 Select·Popover·Tooltip 트리거도 `data-state="closed"`라 대화상자로 좁힌다(C-2).
+    if (!lost.isConnected || lost.closest(CLOSING) !== null) {
       lost = undefined;
       return;
     }
@@ -71,6 +83,7 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
 
   doc.addEventListener('focusin', onFocusIn, true);
   doc.addEventListener('focusout', onFocusOut, true);
+  doc.addEventListener('pointerdown', onPointerDown, true);
   observer.observe(doc.documentElement, {
     attributes: true,
     attributeFilter: ['disabled'],
@@ -79,6 +92,7 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   return () => {
     doc.removeEventListener('focusin', onFocusIn, true);
     doc.removeEventListener('focusout', onFocusOut, true);
+    doc.removeEventListener('pointerdown', onPointerDown, true);
     observer.disconnect();
   };
 }

@@ -131,6 +131,53 @@ describe('keepFocusAcrossLocks', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  // R5 B 최종 C-2(a): 잠긴 동안 초점이 없는 곳(빈 곳·글)을 누르면 focusin이 없지만 사용자가 손을 댄 것이다.
+  it('does not pull focus back after the user pressed somewhere during the lock', async () => {
+    const { fieldset, input } = form();
+    input.focus();
+    await lock(fieldset, input);
+    await fireEvent.pointerDown(document.body);
+    fieldset.disabled = false;
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  // R5 B 최종 C-2(b): bits-ui의 닫힌 Select·Popover·Tooltip 트리거도 `data-state="closed"`다. 닫히는 대화상자가 아니므로
+  // 저장 중 잠긴 Select 트리거에는 초점이 돌아와야 한다.
+  it('returns focus to a closed Select trigger', async () => {
+    document.body.innerHTML =
+      '<form><fieldset><button id="kind" type="button" role="combobox" data-state="closed">종류</button>' +
+      '</fieldset></form>';
+    const fieldset = document.querySelector('fieldset');
+    const trigger = document.querySelector<HTMLButtonElement>('#kind');
+    if (fieldset === null || trigger === null) throw new Error('form');
+    trigger.focus();
+    trigger.blur();
+    // Select.Root disabled가 트리거 자신도 잠근다(겹친 잠금).
+    trigger.disabled = true;
+    fieldset.disabled = true;
+    await settle();
+    trigger.disabled = false;
+    fieldset.disabled = false;
+    await settle();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('does not focus into a dialog that is closing', async () => {
+    document.body.innerHTML =
+      '<div role="dialog" data-state="open"><form><fieldset><input id="name"></fieldset></form></div>';
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    const fieldset = document.querySelector('fieldset');
+    const input = document.querySelector<HTMLInputElement>('#name');
+    if (dialog === null || fieldset === null || input === null) throw new Error('form');
+    input.focus();
+    await lock(fieldset, input);
+    dialog.dataset.state = 'closed';
+    fieldset.disabled = false;
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('stops after the returned cleanup runs', async () => {
     stop?.();
     stop = undefined;
