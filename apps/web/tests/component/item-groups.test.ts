@@ -5,12 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, SavedViewView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { org } from '$lib/org.svelte';
 import { me } from '$lib/me.svelte';
-import { itemPath, itemViewPath, modulePath, router } from '$lib/router.svelte';
+import { itemDocumentPath, itemPath, itemViewPath, modulePath, router } from '$lib/router.svelte';
 import { scopedKey } from '$lib/storage';
 import './fixtures/authenticated';
 
@@ -482,5 +483,172 @@ describe('item group memory scope', () => {
     await openItem('project');
 
     await pathIs(itemViewPath(ws, itemId, 'board'));
+  });
+});
+
+// R5 2차 delta 3묶음 A(D3A-F-1·F-2·F-3·F-5) 회귀.
+describe('late answers and item switches', () => {
+  function heldViews(): (views: SavedViewView[]) => void {
+    let resolve: (views: SavedViewView[]) => void = () => undefined;
+    vi.spyOn(api, 'savedViews').mockReturnValue(
+      new Promise<SavedViewView[]>((r) => {
+        resolve = r;
+      }),
+    );
+    return (views) => {
+      resolve(views);
+    };
+  }
+
+  const settle = async (): Promise<void> => {
+    await new Promise((r) => setTimeout(r, 0));
+  };
+
+  // R1: 업무를 누르고 저장 보기를 기다리는 사이 다른 묶음을 고르면 늦은 응답이 업무 보드로 다시 보내지 않는다.
+  it('drops the tasks group answer when another group was chosen meanwhile', async () => {
+    await openItem('project', `${itemPath(ws, itemId)}/docs`);
+    const answer = heldViews();
+
+    await fireEvent.click(groupLink('업무'));
+    await fireEvent.click(groupLink('기록'));
+    const before = window.history.length;
+    answer([savedDefault('list')]);
+    await settle();
+
+    expect(window.location.pathname).toBe(`${itemPath(ws, itemId)}/records`);
+    expect(window.history.length).toBe(before);
+    expect(mounted('attachments-heading')).toBe(true);
+    expect(mounted('tasks-heading')).toBe(false);
+  });
+
+  // R1b: 기다리는 사이 다른 화면으로 가서 항목 화면이 사라졌으면 늦은 응답이 그 항목으로 끌어오지 않는다.
+  it('drops the tasks group answer after leaving the item screen', async () => {
+    server('project');
+    goTo(`${itemPath(ws, itemId)}/docs`);
+    const view = render(ItemScreen, { props: { workspace, itemId, workspaces: [workspace] } });
+    await screen.findByRole('navigation', { name: '항목 묶음' });
+    const answer = heldViews();
+
+    await fireEvent.click(groupLink('업무'));
+    router.navigate('/shared');
+    view.unmount();
+    answer([]);
+    await settle();
+
+    expect(window.location.pathname).toBe('/shared');
+    expect(router.path).toBe('/shared');
+  });
+
+  // R2: 같은 화면에서 다른 항목으로 옮기면 앞 항목의 종류로 새 항목 주소를 바꾸지 않는다(replaceState 한 번).
+  it.each([
+    ['research', `/references`, 'project', '/tasks/board'],
+    ['project', '/tasks/board', 'research', '/references'],
+  ] as const)(
+    'replaces the new item address once, with its own kind (%s → %s)',
+    async (fromKind, fromPath, toKind, toPath) => {
+      const other = '77777777-7777-7777-7777-777777777777';
+      const otherModule = '88888888-8888-8888-8888-888888888888';
+      vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+      vi.spyOn(api, 'item').mockImplementation((id: string) =>
+        Promise.resolve(id === other ? { ...itemOf(other), module_id: otherModule } : itemOf(id)),
+      );
+      vi.spyOn(api, 'module').mockImplementation((id: string) =>
+        Promise.resolve(
+          id === otherModule ? { ...moduleOf(toKind), id: otherModule } : moduleOf(fromKind),
+        ),
+      );
+      vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
+      const views = vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+      goTo(`${itemPath(ws, itemId)}${fromPath}`);
+      const view = render(ItemScreen, { props: { workspace, itemId, workspaces: [workspace] } });
+      await screen.findByRole('navigation', { name: '항목 묶음' });
+      const replace = vi.spyOn(window.history, 'replaceState');
+
+      router.navigate(itemPath(ws, other));
+      await view.rerender({ workspace, itemId: other, workspaces: [workspace] });
+      await pathIs(`${itemPath(ws, other)}${toPath}`);
+      await settle();
+
+      expect(replace.mock.calls.map((call) => call[2])).toEqual([
+        `${itemPath(ws, other)}${toPath}`,
+      ]);
+      // 앞 항목이 프로젝트여도 연구 항목의 저장 보기를 헛되이 읽지 않는다.
+      if (toKind === 'research')
+        expect(views.mock.calls.filter((call) => call[0] === other)).toHaveLength(0);
+    },
+  );
+
+  // F-5(a): 같은 사용자라도 다른 조직의 기억은 읽지 않는다.
+  it('does not read the group memory of another organization', async () => {
+    sessionStorage.setItem(
+      scopedKey(`item-group:${itemId}`, 'user-a', 'org-2'),
+      JSON.stringify({ group: 'events', view: 'board' }),
+    );
+    await openItem('project');
+
+    await pathIs(itemViewPath(ws, itemId, 'board'));
+  });
+
+  // F-5(b): 머리 입력이 있을 때 항목 문서로 가면 항목 화면을 떠나므로 묻는다.
+  it('asks about the header input when opening an item document', async () => {
+    await openItem('project', `${itemPath(ws, itemId)}/docs`);
+    const title = screen.getByLabelText<HTMLInputElement>('제목');
+    await fireEvent.input(title, { target: { value: '고친 제목' } });
+
+    router.navigate(itemDocumentPath(ws, itemId, '99999999-9999-9999-9999-999999999999'));
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(window.location.pathname).toBe(`${itemPath(ws, itemId)}/docs`);
+  });
+});
+
+// R3: 템플릿에서 만들기는 항목 보기에만 있으므로 입력이 있으면 달력 보기로 가기 전에 묻고, 그 되살리기 제안도 항목
+// 보기에만 보인다.
+describe('module template form and the calendar view', () => {
+  function templateServer(): void {
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(moduleOf('project'));
+    vi.spyOn(api, 'items').mockResolvedValue([{ ...itemOf(itemId), is_template: true }]);
+    vi.spyOn(api, 'calendar').mockReturnValue(new Promise(() => undefined));
+  }
+  const views = (): HTMLElement => screen.getByRole('navigation', { name: '모듈 보기' });
+
+  it('asks before the calendar view unmounts template input and keeps it on cancel', async () => {
+    templateServer();
+    goTo(modulePath(ws, moduleId));
+    render(ModuleScreen, { props: { workspace, moduleId } });
+    const title = await screen.findByLabelText<HTMLInputElement>('템플릿으로 만들 항목 제목');
+    await fireEvent.input(title, { target: { value: '템플릿 항목' } });
+
+    await fireEvent.click(within(views()).getByRole('link', { name: '달력' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(window.location.pathname).toBe(modulePath(ws, moduleId));
+    await fireEvent.click(within(dialog).getByRole('button', { name: '계속 편집' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    expect(screen.getByLabelText<HTMLInputElement>('템플릿으로 만들 항목 제목').value).toBe(
+      '템플릿 항목',
+    );
+    expect(screen.getByTestId('item-list')).toBeInTheDocument();
+  });
+
+  it('shows the template restore offer only in the items view', async () => {
+    const own = formDraftTabKey(`module-template:${moduleId}`, 'user-a');
+    if (own === undefined) throw new Error('draft key');
+    writeFormDraftAt(own.replace(/:tab:.*$/, ':tab:other-tab'), {
+      savedAt: '2026-10-27T00:00:00.000Z',
+      input: { title: '다른 탭 항목', source: '', pending: null },
+    });
+    templateServer();
+    goTo(`${modulePath(ws, moduleId)}/calendar`);
+    render(ModuleScreen, { props: { workspace, moduleId } });
+    await screen.findByRole('navigation', { name: '모듈 보기' });
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+
+    await fireEvent.click(within(views()).getByRole('link', { name: '항목' }));
+
+    expect(await screen.findByTestId('form-draft-offer')).toBeInTheDocument();
   });
 });
