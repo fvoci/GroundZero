@@ -141,12 +141,12 @@ describe('workspace delete confirmation name', () => {
     expect(unload()).toBe(true);
   });
 
-  it('lets an account-switch reload through and never shows the name to the next account', async () => {
+  it('warns during an account-switch reload because the name is never kept, and never shows it to the next account', async () => {
     render(MembersScreen, { props });
     const input = await nameInput();
     await type(input, typed);
     markAccountSwitch();
-    expect(unload()).toBe(false);
+    expect(unload()).toBe(true);
     expect(stored()).not.toContain(typed);
     accountSafety.switching = false;
     flushSync(() => {

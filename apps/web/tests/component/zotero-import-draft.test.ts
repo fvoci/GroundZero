@@ -255,12 +255,12 @@ it('never stores the key while other fields are drafted and clears it after a su
   expect(stored()).not.toContain(secret);
 });
 
-it('lets an account-switch reload through and never shows the key to the next account', async () => {
+it('warns during an account-switch reload because the key is never kept, and never shows it to the next account', async () => {
   mount();
   await open();
   await edit('key', secret);
   markAccountSwitch();
-  expect(unload()).toBe(false);
+  expect(unload()).toBe(true);
   expect(stored()).not.toContain(secret);
   accountSafety.switching = false;
   flushSync(() => {
@@ -409,7 +409,8 @@ it('fences late success when account switching starts before user ID changes', a
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(imported).not.toHaveBeenCalled();
   expect(values()).toContain(' 00123 ');
-  expect(unload()).toBe(false);
+  // The settings are kept, but the typed key never is, so the reload still warns.
+  expect(unload()).toBe(true);
 });
 
 it('discards an offered draft explicitly without submitting it', async () => {

@@ -227,12 +227,9 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return leave.attach({
       beforeUnload: () => {
         persist();
-        // An account-switch reload must not be blocked by input that is never kept: that would leave
-        // the previous account's secret on screen under the new session (D-96).
-        return (
-          owned() &&
-          ((options.dirty() && (!accountSwitching() || !kept)) || (held() && !accountSwitching()))
-        );
+        // Screen-only input has no stored copy, so it is never "kept": it warns during an account
+        // switch too. Cancelling leaves the hidden safety state with the input only in memory (D-96).
+        return owned() && ((options.dirty() && (!accountSwitching() || !kept)) || held());
       },
     });
   }
