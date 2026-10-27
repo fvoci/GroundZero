@@ -1,7 +1,7 @@
 //! Zotero 읽기 연동 (D-34 "Zotero는 서지 정보·컬렉션 읽기와 원본 링크를 지원한다", X-05 PDF·주석 가져오기와 양방향 쓰기
 //! 제외). 사용자가 가져올 때마다 Zotero API 키를 보내고, 서버는 그 요청 동안만 머리글로 Zotero Web API(v3)에 쓰며 저장하거나
 //! 기록하지 않는다. 가져온 서지는 연구 항목의 문헌 기록(records)이 되고, Zotero 키로 맞춰 다시 가져오면 서지 칸만 새로 하고
-//! 읽기 상태·인용·메모 같은 내 칸은 그대로 둔다. 계약: docs/development.md#research-import
+//! 읽기 상태·인용·메모 같은 내 칸은 그대로 둔다. 계약: D-34(docs/decisions/modules.md#d-34)
 
 use std::collections::HashMap;
 use std::time::Duration;

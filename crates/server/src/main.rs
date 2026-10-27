@@ -1,6 +1,6 @@
 //! 실행 진입점.
 //!
-//! - `fvoci-server` : 서버 실행 (구성은 환경 변수, `docs/development.md`)
+//! - `fvoci-server` : 서버 실행 (구성은 환경 변수, `fvoci-server --help`·`deploy/selfhost.env.example`)
 //! - `fvoci-server --help` / `fvoci-server db --help` : 설치 명령·설정 안내 (DB 연결 없음)
 //! - `fvoci-server db bootstrap` : 역할·스키마 준비 (`DATABASE_ADMIN_URL`)
 //! - `fvoci-server db migrate` : 마이그레이션 적용 (`DATABASE_MIGRATION_URL`)

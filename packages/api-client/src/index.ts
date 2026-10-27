@@ -19,7 +19,7 @@ export type Group = Schemas['Group'];
 export type ModuleKind = Schemas['ModuleKind'];
 export type Module = Schemas['Module'];
 export type Item = Schemas['Item'];
-// 2026-10-25 오버홀(D-111~D-126) 계약.
+// 오버홀 '달리는 아비시니안'(D-111~D-126) 계약.
 export type OrgRole = Schemas['OrgRole'];
 export type OrganizationSummary = Schemas['OrganizationSummary'];
 export type Organization = Schemas['Organization'];

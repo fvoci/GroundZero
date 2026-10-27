@@ -1,5 +1,5 @@
 // Storybook 정적 빌드를 Cloudflare Workers(정적 자산만, Worker 코드 없음)로 보인다. 빌드·배포·PR 미리보기는
-// Workers Builds가 맡는다. 설정 값과 명령은 docs/development.md의 Storybook 절을 따른다.
+// Workers Builds가 맡는다. 공개 범위와 배포 방식은 D-108(docs/decisions/ui.md#d-108)을 따른다.
 {
   "name": "fvoci-storybook",
   "compatibility_date": "2026-10-20",

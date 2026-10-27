@@ -1,4 +1,4 @@
--- GroundZero 새 설치 기준(2026-10-25 오버홀 1단계, D-126). 역할·스키마는 먼저 db bootstrap으로 준비한다.
+-- GroundZero 새 설치 기준(오버홀 '달리는 아비시니안' 1단계, D-126·D-131). 역할·스키마는 먼저 db bootstrap으로 준비한다.
 -- PostgreSQL 17 이상에서 환경 공통 SQL을 쓴다(D-100: docs/decisions/database.md#d-100).
 -- 기존 개발·시험 DB는 대상·백업·삭제 승인을 거쳐 재생성한다(D-107: docs/decisions/database.md#d-107).
 -- 비교용 과거 기준 SQL: 355fe26407b91b5b560a4f13dd34981f74c0ee6f의
@@ -1629,7 +1629,8 @@ CREATE FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item
 
 ALTER FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) OWNER TO fvoci_migrator;
 
--- 이동 전 확인(D-24·D-114): 사용자 id·등급 단위의 변화. 같은 조직 안의 이동이라 공개 링크·개별 공유는 그대로 유효하다.
+-- 이동 전 확인(D-24·D-114): 사용자 id·등급 단위의 변화. 공간 사이 이동은 같은 조직 안에서만 한다(app_check_move).
+-- 개인 노트는 소유자가 속한 어느 공간으로든 옮길 수 있고, 그 공간의 조직 밖 개별 공유는 app_move_document가 철회한다.
 CREATE FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) RETURNS TABLE(change text, user_id uuid, display_name text, from_grade text, to_grade text)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -3845,8 +3846,8 @@ CREATE FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uui
 
 ALTER FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uuid, p_name text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- 워크스페이스 초대(워크스페이스 관리자, D-20·D-118). 받는 사람은 수락할 때 조직 멤버여야 한다(D-114). 발송 단계에서 조직 밖
--- 이메일을 막을지는 사용자 결정 대기다. 새 id 3: 초대, 공간 로그, 알림.
+-- 워크스페이스 초대(워크스페이스 관리자, D-20·D-118). 받는 사람이 조직 밖이어도 보낸다. 수락하면 그 조직의 멤버로 먼저
+-- 가입한다(D-112 개정 2026-10-26, app_respond_invitation). 새 id 3: 초대, 공간 로그, 알림.
 CREATE FUNCTION fvoci.app_invite(p_workspace uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -3913,7 +3914,8 @@ CREATE FUNCTION fvoci.app_my_invitations() RETURNS TABLE(id uuid, organization_i
 
 ALTER FUNCTION fvoci.app_my_invitations() OWNER TO fvoci_migrator;
 
--- 초대 수락·거절(D-51·D-118). 조직 초대는 조직 멤버가 되고, 워크스페이스 초대는 그 조직의 멤버여야 수락할 수 있다(D-114).
+-- 초대 수락·거절(D-51·D-118). 조직 초대는 조직 멤버가 되고, 워크스페이스 초대는 조직 밖 사람이면 그 조직의 멤버로 먼저
+-- 가입한 뒤(감사로그 join) 워크스페이스 역할을 받는다(D-112 개정 2026-10-26).
 -- 돌려주는 값은 워크스페이스 초대면 워크스페이스 id, 조직 초대면 조직 id다. 알림함의 invite 알림에 결과를 남긴다.
 CREATE FUNCTION fvoci.app_respond_invitation(p_invitation uuid, p_accept boolean, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
