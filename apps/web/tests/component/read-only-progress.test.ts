@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView, StudyPlanView } from '$lib/api/client';
@@ -6,11 +6,16 @@ import { api } from '$lib/api/client';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
 
 // ⑧(D-20 개정 2026-10-26): 읽기 전용은 본인 강의·스터디 진도도 남기지 못한다(서버 `app_set_episode_progress`·
-// `app_set_unit_progress`·`app_plan_units`가 42501로 거절). 화면은 서버가 준 `can_write`로 진도 단추·내 메모 폼·
-// 다시 배정을 감춘다. 시간 측정은 진도가 아니라 그대로 둔다.
+// `app_set_unit_progress`·`app_plan_units`가 42501로 거절). 화면은 서버가 준 `can_write`로 진도 단추와 다시 배정을
+// 감춘다. 시간 측정은 진도가 아니라 그대로 둔다. 결정은 남기기만 막고 읽기는 막지 않으므로 내 메모·위치·한 분량은 쓸 수
+// 없을 때도(읽기 전용, 보관 항목의 모든 멤버: `can_write` = `!archived && access in (owner, write)`) 저장 단추 없는
+// 비활성 폼으로 보인다(R5 delta3 B D3B-F-2). 쓸 수 없게 되면 그 폼은 고친 것으로 치지 않고(이탈 확인 없음) 남은 초안은
+// 지우지 않는다(확인 필요 2).
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
@@ -18,6 +23,9 @@ beforeEach(async () => {
   localStorage.clear();
 });
 afterEach(() => {
+  cleanup();
+  router.guard = undefined;
+  router.navigate('/');
   me.userId = '';
   vi.restoreAllMocks();
 });
@@ -48,8 +56,8 @@ const course = (canWrite: boolean): CourseView => ({
         planned_on: null,
         completed_on: null,
         watch_count: 0,
-        last_position_seconds: null,
-        note: '',
+        last_position_seconds: 90,
+        note: '내 메모',
       },
       version: 1,
     },
@@ -71,9 +79,9 @@ const plan = (canWrite: boolean): StudyPlanView => ({
       planned_on: '2020-01-01',
       mine: {
         status: 'not_started',
-        done_amount: 0,
+        done_amount: 7,
         planned_on: null,
-        note: '',
+        note: '스터디 메모',
         completed_on: null,
       },
       version: 1,
@@ -81,45 +89,114 @@ const plan = (canWrite: boolean): StudyPlanView => ({
   ],
 });
 
-describe('course progress for a read-only member', () => {
-  it('hides the progress buttons and my notes but keeps time tracking', async () => {
+const draftKeys = (): string[] =>
+  Object.keys(localStorage).filter((k) => localStorage.getItem(k)?.includes('바뀐 메모') === true);
+
+describe('course progress without write access (read-only member or archived item)', () => {
+  it('hides the progress buttons but shows my note and position read-only', async () => {
     vi.spyOn(api, 'course').mockResolvedValue(course(false));
     vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
     render(CoursePanel, { props: { itemId: 'item-1' } });
     await screen.findByRole('button', { name: '1회 강의 시간 측정' });
     expect(screen.queryByRole('button', { name: '1회 완료' })).toBeNull();
     expect(screen.queryByRole('button', { name: '1회 수강 중' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '1회 내 메모·날짜' })).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: '1회 내 메모·날짜' }));
+    const note = screen.getByLabelText(m.courses_my_note());
+    expect(note).toHaveValue('내 메모');
+    expect(note).toBeDisabled();
+    expect(screen.getByLabelText(m.courses_last_position())).toHaveValue('0:01:30');
+    expect(screen.getByLabelText(m.courses_last_position())).toBeDisabled();
+    expect(screen.queryByRole('button', { name: m.common_save() })).toBeNull();
   });
 
-  it('shows them to a member who can write', async () => {
+  it('shows the progress buttons and an editable form to a member who can write', async () => {
     vi.spyOn(api, 'course').mockResolvedValue(course(true));
     vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
     render(CoursePanel, { props: { itemId: 'item-1' } });
     await screen.findByRole('button', { name: '1회 완료' });
     expect(screen.getByRole('button', { name: '1회 수강 중' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '1회 내 메모·날짜' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '1회 내 메모·날짜' }));
+    expect(screen.getByLabelText(m.courses_my_note())).toBeEnabled();
+    expect(screen.getByRole('button', { name: m.common_save() })).toBeInTheDocument();
+  });
+
+  it('does not ask to leave after losing write access and keeps the typed draft', async () => {
+    window.history.replaceState(null, '', '/w/ws-1/i/item-1');
+    router.path = '/w/ws-1/i/item-1';
+    vi.spyOn(api, 'course').mockResolvedValueOnce(course(true)).mockResolvedValue(course(false));
+    vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
+    vi.spyOn(api, 'setEpisodeProgress').mockResolvedValue(undefined);
+    render(CoursePanel, { props: { itemId: 'item-1' } });
+    await fireEvent.click(await screen.findByRole('button', { name: '1회 내 메모·날짜' }));
+    await fireEvent.input(screen.getByLabelText(m.courses_my_note()), {
+      target: { value: '바뀐 메모' },
+    });
+    // 다른 동작 뒤의 다시 읽기에서 쓸 수 없게 됐다(역할 강등·보관).
+    await fireEvent.click(screen.getByRole('button', { name: '1회 완료' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '1회 완료' })).toBeNull();
+    });
+    expect(draftKeys()).not.toEqual([]);
+
+    router.navigate('/notes');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(router.path).toBe('/notes');
+    expect(draftKeys()).not.toEqual([]);
   });
 });
 
-describe('study progress for a read-only member', () => {
-  it('hides the status buttons, my amount form and rescheduling but keeps time tracking', async () => {
+describe('study progress without write access (read-only member or archived item)', () => {
+  it('hides status buttons and rescheduling but shows my amount and note read-only', async () => {
     vi.spyOn(api, 'studyPlan').mockResolvedValue(plan(false));
     vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
     render(StudyPanel, { props: { itemId: 'item-1' } });
     await screen.findByRole('button', { name: '1장 공부 시간 측정' });
     expect(screen.queryByRole('button', { name: '완료' })).toBeNull();
     expect(screen.queryByRole('button', { name: '진행 중' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '내 분량·날짜·메모' })).toBeNull();
     expect(screen.queryByRole('form', { name: '밀린 단위 다시 배정' })).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: '내 분량·날짜·메모' }));
+    const note = document.getElementById('unit-note-u1');
+    const done = document.getElementById('unit-done-u1');
+    expect(note).toHaveValue('스터디 메모');
+    expect(note).toBeDisabled();
+    expect(done).toHaveValue('7');
+    expect(done).toBeDisabled();
+    expect(screen.queryByRole('button', { name: m.common_save() })).toBeNull();
   });
 
-  it('shows them to a member who can write', async () => {
+  it('shows status buttons, rescheduling and an editable form to a member who can write', async () => {
     vi.spyOn(api, 'studyPlan').mockResolvedValue(plan(true));
     vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
     render(StudyPanel, { props: { itemId: 'item-1' } });
     await screen.findByRole('button', { name: '완료' });
-    expect(screen.getByRole('button', { name: '내 분량·날짜·메모' })).toBeInTheDocument();
     expect(screen.getByRole('form', { name: '밀린 단위 다시 배정' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '내 분량·날짜·메모' }));
+    expect(document.getElementById('unit-note-u1')).toBeEnabled();
+    expect(screen.getByRole('button', { name: m.common_save() })).toBeInTheDocument();
+  });
+
+  it('does not ask to leave after losing write access and keeps the typed draft', async () => {
+    window.history.replaceState(null, '', '/w/ws-1/i/item-1');
+    router.path = '/w/ws-1/i/item-1';
+    vi.spyOn(api, 'studyPlan').mockResolvedValueOnce(plan(true)).mockResolvedValue(plan(false));
+    vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
+    vi.spyOn(api, 'setUnitProgress').mockResolvedValue(undefined);
+    render(StudyPanel, { props: { itemId: 'item-1' } });
+    await fireEvent.click(await screen.findByRole('button', { name: '내 분량·날짜·메모' }));
+    const note = document.getElementById('unit-note-u1');
+    if (note === null) throw new Error('note');
+    await fireEvent.input(note, { target: { value: '바뀐 메모' } });
+    await fireEvent.click(screen.getByRole('button', { name: '완료' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '완료' })).toBeNull();
+    });
+    expect(draftKeys()).not.toEqual([]);
+
+    router.navigate('/notes');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(router.path).toBe('/notes');
+    expect(draftKeys()).not.toEqual([]);
   });
 });

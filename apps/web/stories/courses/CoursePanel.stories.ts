@@ -74,7 +74,7 @@ export const RestoreDraftLarge: Story = {
   globals: { fontScale: '200', viewport: { value: 'narrow375' } },
 };
 
-/** 읽기 전용: 진도 단추와 내 메모·날짜 없이 시간 측정만 보인다(D-20 ⑧). */
+/** 읽기 전용·보관 항목: 진도 단추는 없고, 내 메모·날짜는 저장 단추 없는 비활성 폼으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
 export const ReadOnly: Story = {
   beforeEach: () => {
     spyOn(api, 'course').mockResolvedValue({ ...course, can_write: false });
@@ -85,9 +85,11 @@ export const ReadOnly: Story = {
     await expect(
       canvas.queryByRole('button', { name: m.courses_mark_done_aria({ number: 1 }) }),
     ).toBeNull();
-    await expect(
-      canvas.queryByRole('button', { name: m.courses_notes_aria({ number: 1 }) }),
-    ).toBeNull();
+    await userEvent.click(
+      canvas.getByRole('button', { name: m.courses_notes_aria({ number: 1 }) }),
+    );
+    await expect(canvas.getByLabelText(m.courses_my_note())).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: m.common_save() })).toBeNull();
   },
 };
 export const ReadOnlyNarrowDark: Story = {
