@@ -22,11 +22,11 @@
   import { setLocale } from '$lib/paraglide/runtime.js';
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
-  // 계정 전환 뒤 다시 읽기 전까지 기존 화면·입력을 숨기되 메모리는 보존한다(D-96).
+  // 작업자 C: 계정 전환 뒤 다시 읽기 전까지 기존 화면·입력을 숨기되 메모리는 보존한다(D-96).
   import { accountSafety } from '$lib/features/feedback/feedback.svelte';
   import { connection } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
-  // 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
+  // 작업자 B: 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
   import { invitationChanges } from '$lib/features/home/invitations.svelte';
   import TimeScreen from '$lib/features/time/TimeScreen.svelte';
   import TimerWidget from '$lib/features/time/TimerWidget.svelte';
@@ -110,7 +110,7 @@
   // 읽지 않은 알림 수는 서버가 현재 조직 범위로 센다(D-118; 초대는 어느 조직에서나 포함). 화면을 옮길 때 다시 세되
   // 30초 안에는 다시 묻지 않는다. 알림 화면에서 읽음 처리하면 곧바로, 창으로 돌아오거나 조직을 바꾸면 다시 센다.
   const UNREAD_FRESH_MS = 30_000;
-  // 초대 수락·거절은 경로 이동의 30초 캐시를 기다리지 않는다.
+  // 작업자 B: 초대 수락·거절은 경로 이동의 30초 캐시를 기다리지 않는다.
   let seenInvitationVersion = invitationChanges.version;
   $effect(() => {
     const version = invitationChanges.version;
@@ -282,7 +282,7 @@
   <FeedbackHost />
 {/if}
 
-<!-- 계정 전환 안전 상태. 입력 보존을 위해 조건부 제거하지 않는다. -->
+<!-- 작업자 C: 계정 전환 안전 상태. 입력 보존을 위해 조건부 제거하지 않는다. -->
 <div style:display={accountSafety.switching ? 'none' : 'contents'} inert={accountSafety.switching}>
   {#if route.name === 'public'}
     <PublicView token={route.token} />
@@ -340,7 +340,7 @@
           class={`@container mx-auto flex w-full min-w-0 flex-col gap-8 px-4 py-6 sm:px-6 ${READING_ROUTES.has(route.name) ? 'max-w-3xl' : 'max-w-5xl'}`}
         >
           {#if route.name === 'home'}
-            <!-- 조직 선택 전 홈은 선택 안내만 표시(D-111·D-120). -->
+            <!-- 작업자 B: 조직 선택 전 홈은 선택 안내만 표시(D-111·D-120). -->
             {#if org.currentId === undefined}
               <p role="status">{m.app_organization_required()}</p>
             {:else}
@@ -405,7 +405,7 @@
           {:else if route.name === 'my-tasks'}
             <MyTasksScreen />
           {:else if route.name === 'notifications'}
-            <!-- 초대 수락 뒤 조직·공간 문맥을 함께 갱신(D-112·D-118). 상세 id는 router.route에서 읽는다. -->
+            <!-- 작업자 B: 초대 수락 뒤 조직·공간 문맥을 함께 갱신(D-112·D-118). 상세 id는 router.route에서 읽는다. -->
             <NotificationsScreen
               workspaces={signedIn.workspaces}
               onchanged={() => void refreshUnread(true)}
@@ -419,7 +419,7 @@
               <DeletedWorkspaces onchanged={() => void reloadWorkspaces()} />
             </div>
           {:else if route.name === 'time'}
-            <!-- 공유 설정 제거(D-117)로 워크스페이스 목록을 넘기지 않는다. -->
+            <!-- 작업자 D: 공유 설정 제거(D-117)로 워크스페이스 목록을 넘기지 않는다. -->
             <TimeScreen />
           {:else if route.name === 'shared'}
             <SharedScreen />

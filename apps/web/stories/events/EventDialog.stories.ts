@@ -53,7 +53,7 @@ export const NarrowDark200: Story = {
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };
 
-/** 반복 없는 회의 일정(기본 모양 확인용). meta의 반복 일정 대신 이 일정을 돌려준다. */
+/** 반복 없는 회의 일정(작업자 C의 기본 모양 확인용). meta의 반복 일정 대신 이 일정을 돌려준다. */
 const plainMeeting = (): void => {
   spyOn(api, 'event').mockResolvedValue({
     id: 'event-example',
