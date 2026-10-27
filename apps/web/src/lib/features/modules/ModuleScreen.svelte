@@ -429,7 +429,12 @@
     {/if}
 
     <div class="rounded-md border bg-card p-2 @md:p-3">
-      <CalendarScreen {workspace} scope={{ moduleId: current.id }} embedded />
+      <CalendarScreen
+        {workspace}
+        scope={{ moduleId: current.id }}
+        locked={current.archived}
+        embedded
+      />
     </div>
 
     {#if isAdmin}

@@ -645,6 +645,7 @@
     <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
     <ItemEvents
       item={view}
+      locked={moduleArchived}
       version={listVersion}
       onchanged={() => {
         calendarVersion += 1;
@@ -654,6 +655,7 @@
       {workspace}
       scope={{ itemId: current.id }}
       item={view}
+      locked={moduleArchived || view.archived}
       embedded
       version={calendarVersion}
       onchanged={() => {

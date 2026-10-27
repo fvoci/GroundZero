@@ -32,9 +32,11 @@
     returnFocus?: (() => HTMLElement | null) | undefined;
     /** 달력에서 반복 일정의 한 회차를 열었으면 그 회차 날짜(일정 시간대 기준). */
     occurrence?: string | undefined;
+    /** 항목이나 모듈이 보관됐다(D-113: 보관은 등급과 따로 쓰기를 막는다). 고치기·지우기를 보이지 않는다. */
+    locked?: boolean;
   }
 
-  const { eventId, onclose, onchanged, returnFocus, occurrence }: Props = $props();
+  const { eventId, onclose, onchanged, returnFocus, occurrence, locked = false }: Props = $props();
   let activeId = $state(untrack(() => eventId));
 
   let event = $state<EventView | undefined>(undefined);
@@ -144,7 +146,7 @@
     };
   });
 
-  const canEdit = $derived(event !== undefined && event.access !== 'read');
+  const canEdit = $derived(event !== undefined && event.access !== 'read' && !locked);
   // 충돌 알림이 보이고 다시 저장이 합칠 서버 일정(D-94). 알림 뒤 반복 규칙을 저장했으면 `event`가 더 새 판이다(옛 판에
   // 합치면 보내자마자 다시 409이고, "서버 내용 불러오기"가 방금 저장한 규칙을 되돌린다).
   const latest = $derived(
