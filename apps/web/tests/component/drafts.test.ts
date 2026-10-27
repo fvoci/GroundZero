@@ -13,6 +13,9 @@ import {
 } from '$lib/features/documents/drafts';
 import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';
+import { scopedKey } from '$lib/storage';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 const body = { type: 'doc', content: [{ type: 'paragraph' }] };
 const draft = { baseRevision: 3, title: 'A의 초안', body, savedAt: '2026-10-19T00:00:00Z' };
@@ -35,6 +38,27 @@ describe('drafts are per user', () => {
 
     me.userId = 'user-a';
     expect(loadDraft('doc-1')?.title).toBe('A의 초안');
+  });
+
+  // R5 P2 F-3(⑱·D-27): 문서 초안은 사용자·탭·문서로만 묶는다. 개인 노트는 조직과 무관하므로, 한 조직에서 남긴 초안을
+  // 다른 조직이나 조직을 고르지 않은 문맥에서도 되살릴 수 있고, 편집 중 조직 선택이 바뀌어도 같은 키에 쓴다.
+  it('keeps the same draft across organization contexts', () => {
+    const second = { ...TEST_ORGANIZATION, id: 'org-2' };
+    org.load('user-a', [TEST_ORGANIZATION, second], TEST_ORGANIZATION.id);
+    me.userId = 'user-a';
+    storeDraft('doc-note', draft);
+    org.select(second.id);
+    expect(loadDraft('doc-note')?.title).toBe('A의 초안');
+    storeDraft('doc-note', { ...draft, title: '조직을 바꾼 뒤' });
+    org.load('user-a', [TEST_ORGANIZATION, second], null);
+    expect(org.currentId).toBeUndefined();
+    expect(loadDraft('doc-note')?.title).toBe('조직을 바꾼 뒤');
+    expect(
+      Object.keys(window.localStorage).filter(
+        (k) => k.includes(':draft:') && k.includes('doc-note'),
+      ),
+    ).toHaveLength(1);
+    expect(queueDraft('doc-note').map((d) => d.title)).toEqual(['조직을 바꾼 뒤']);
   });
 
   it('ignores legacy keys and keeps nothing before login', () => {
@@ -123,7 +147,7 @@ describe('drafts per tab', () => {
 describe('orphaned tab drafts', () => {
   it('adopts only drafts of tabs that are no longer alive', async () => {
     me.userId = 'user-a';
-    const prefix = org.key('draft:user-a:doc-8');
+    const prefix = scopedKey('draft:doc-8', 'user-a', undefined);
     window.localStorage.setItem(
       `${prefix}:tab:tab-live`,
       JSON.stringify({ ...draft, title: '살아 있는 탭' }),
@@ -192,7 +216,7 @@ describe('two tabs queueing at once', () => {
     ) {
       if (this === window.sessionStorage) return fromSession(k);
       const value = fromLocal(k);
-      if (armed && k.startsWith(org.key('draft:user-a:doc-7'))) {
+      if (armed && k.startsWith(scopedKey('draft:doc-7', 'user-a', undefined))) {
         armed = false;
         window.sessionStorage.setItem('fvoci:tab', 'tab-b');
         queueDraft('doc-7');
@@ -216,7 +240,7 @@ describe('two tabs queueing at once', () => {
 describe('duplicated tab', () => {
   it('takes a new tab id when a live tab already holds this one', async () => {
     window.sessionStorage.setItem('fvoci:tab', 'tab-1');
-    const prefix = org.key('draft:user-a:doc-10');
+    const prefix = scopedKey('draft:doc-10', 'user-a', undefined);
     window.localStorage.setItem(
       `${prefix}:tab:tab-1`,
       JSON.stringify({ ...draft, title: '원래 탭' }),

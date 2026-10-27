@@ -8,7 +8,7 @@ import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
 import { me } from '$lib/me.svelte';
-import { org } from '$lib/org.svelte';
+import { scopedKey } from '$lib/storage';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // #60(사용자 결정 2026-10-22): 다른 탭에서 계정을 바꾼 뒤 y-websocket이 새 쿠키로 다시 붙으면 앞 계정 화면의
@@ -72,7 +72,9 @@ const doc: DocumentView = {
 };
 
 const drafts = (user: string): string[] =>
-  Object.keys(window.localStorage).filter((k) => k.startsWith(org.key(`draft:${user}:d1`)));
+  Object.keys(window.localStorage).filter((k) =>
+    k.startsWith(scopedKey('draft:d1', user, undefined)),
+  );
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });

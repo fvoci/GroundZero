@@ -130,7 +130,10 @@ async function clickOutside(): Promise<void> {
   await new Promise((r) => setTimeout(r, 30));
 }
 
-/** 보드에서 업무 카드를 눌러 대화상자를 연다. 닫으면 연 기록으로 돌아간다(`history.back`). */
+/**
+ * 보드에서 업무 카드를 눌러 대화상자를 연다. 닫으면 보드 경로(`/tasks/board`)로 이동한다. `back`은 그 이동을 센다
+ * (`history.back`을 부르지 않는다).
+ */
 async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: () => Promise<void>) {
   window.history.replaceState(null, '', '/w/ws-1/i/i1');
   vi.spyOn(api, 'tasks').mockResolvedValue(tasks);

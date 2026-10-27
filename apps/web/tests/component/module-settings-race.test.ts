@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -89,4 +90,3 @@ describe('module settings save while switching modules', () => {
 function inputValue(element: HTMLElement): string {
   return element instanceof HTMLInputElement ? element.value : '';
 }
-import './fixtures/authenticated';

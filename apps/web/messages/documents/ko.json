@@ -306,6 +306,7 @@
   "documents_link_remove": "링크 해제",
   "documents_link_open": "열기",
   "documents_link_invalid": "https:// 또는 mailto: 주소를 넣으세요",
+  "documents_link_select_text": "남긴 링크 주소를 붙일 글자를 선택한 뒤 링크 단추를 누르세요.",
   "documents_placeholder_empty": "내용을 쓰거나 / 로 블록을 넣으세요",
   "documents_placeholder_block": "/ 로 블록 넣기",
   "documents_placeholder_heading": "제목",

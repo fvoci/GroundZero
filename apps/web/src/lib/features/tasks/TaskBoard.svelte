@@ -239,11 +239,14 @@
     restore: (value) => {
       contextTouched = true;
       viewName = value.name;
-      view = value.config.view;
       filter = value.config.filter;
       sort = value.config.sort;
       viewDefault = value.config.default;
       viewRequest = value.request;
+      // 보기는 다른 보기 전환처럼 주소로 바꾼다(D-121). 되살린 이 입력을 버릴지 이 보드가 다시 묻지 않는다.
+      leave.proceed(() => {
+        changeView(value.config.view);
+      });
     },
     reset: () => {
       viewName = views.find((v) => v.id === selectedView)?.name ?? '';
@@ -296,7 +299,7 @@
       // 저장소를 쓸 수 없으면 기억하지 않는다.
     }
   });
-  // 작업자 A: 경로의 보기는 저장 문맥보다 우선하며 경로 없는 진입은 주소를 바꾸지 않는다.
+  // 경로의 보기는 저장 문맥보다 우선하며 경로 없는 진입은 주소를 바꾸지 않는다.
   function applyUrl(): void {
     const route = router.route;
     if (routeView !== undefined) view = routeView;
@@ -2317,6 +2320,8 @@
       adding = undefined;
       quickInitial = undefined;
       viewName = views.find((v) => v.id === selectedView)?.name ?? '';
+      // 응답을 잃은 저장의 요청도 버린다. 남기면 버린 보기 초안을 다음에 다시 제안했다(⑱·D-97).
+      viewRequest = null;
       viewDraft.persist();
     }
     leave.discard();

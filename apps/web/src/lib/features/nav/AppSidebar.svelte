@@ -113,16 +113,14 @@
   /**
    * 조직을 바꾼다. 다른 조직의 워크스페이스를 보고 있었으면 홈으로 간다(화면은 현재 조직 범위다). 그 이동은 저장하지 않은
    * 편집의 이탈 확인을 먼저 거치고, 떠나기로 확정된 뒤에야 선택(메모리·저장소)과 화면을 함께 바꾼다. 취소하면 현재 조직·
-   * 워크스페이스·저장된 선택·화면·입력을 그대로 둔다(CodeRabbit outside-diff 1e6de63c). 이동이 필요 없으면 선택만 바꾼다.
+   * 워크스페이스·저장된 선택·화면·입력을 그대로 둔다(CodeRabbit outside-diff 1e6de63c). 워크스페이스 밖 화면(홈·내 업무·
+   * 시간)도 조직 범위 입력(예: 홈 빠른 추가)이 조직과 함께 바뀌므로 같은 확인을 거친다(R5 F-6). 같은 조직이면 묻지 않는다.
    */
   function chooseOrganization(id: string): void {
-    if (current === undefined || current.organization_id === id) {
-      org.select(id);
-      return;
-    }
+    if (id === org.currentId) return;
     router.confirmLeave(() => {
       org.select(id);
-      router.navigate('/');
+      if (current !== undefined && current.organization_id !== id) router.navigate('/');
     });
   }
 

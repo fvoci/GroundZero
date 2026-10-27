@@ -8,7 +8,7 @@ import { applyMove } from '$lib/features/tasks/board';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
-// 작업자 B: 개인 화면·활동 story의 실제 계약 모양을 채운다.
+// 개인 화면·활동 story의 실제 계약 모양을 채운다.
 import { ACTIVITY, myTasksView } from './personal';
 
 import {
@@ -38,7 +38,7 @@ export interface ScreenApi {
   notifications: typeof api.notifications;
   myInvitations: typeof api.myInvitations;
   currentTimer: typeof api.currentTimer;
-  // 작업자 A: 업무 보기는 서버 상태 정의를 함께 읽는다.
+  // 업무 보기는 서버 상태 정의를 함께 읽는다.
   taskStatuses: typeof api.taskStatuses;
   tasks: typeof api.tasks;
   savedViews: typeof api.savedViews;
@@ -82,18 +82,19 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
 }
 
 const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
+  // ⑪ 기본 상태 정의(이름은 그대로 보이고 범주로만 완료를 판단한다). 합성 업무(synthetic.ts)의 상태 이름과 같다.
   taskStatuses: () =>
     Promise.resolve([
-      { id: 'todo', name: 'todo', color: '', position: 0, category: 'todo', task_count: 4 },
+      { id: 'todo', name: '할 일', color: '', position: 0, category: 'todo', task_count: 4 },
       {
         id: 'in_progress',
-        name: 'in_progress',
+        name: '진행 중',
         color: '',
         position: 1,
         category: 'doing',
         task_count: 2,
       },
-      { id: 'done', name: 'done', color: '', position: 2, category: 'done', task_count: 1 },
+      { id: 'done', name: '완료', color: '', position: 2, category: 'done', task_count: 1 },
     ]),
   myTasks: () => Promise.resolve(myTasksView()),
   recentActivity: () => Promise.resolve(ACTIVITY),
@@ -150,7 +151,7 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
   spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
   spyOn(api, 'tasks').mockImplementation(stubs.tasks);
-  // 작업자 A: 실제 상태 정의 조회도 합성 응답으로 격리한다.
+  // 실제 상태 정의 조회도 합성 응답으로 격리한다.
   spyOn(api, 'taskStatuses').mockImplementation(stubs.taskStatuses);
   spyOn(api, 'savedViews').mockImplementation(stubs.savedViews);
   spyOn(api, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);

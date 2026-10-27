@@ -1,5 +1,4 @@
 <script lang="ts">
-  const editingUser = untrack(() => me.userId);
   import { onMount, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import type { StatusCategory, TaskStatusDefinition } from '@fvoci/api-client';
@@ -15,6 +14,7 @@
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
+  const editingUser = untrack(() => me.userId);
   const {
     itemId,
     statuses,
@@ -157,9 +157,12 @@
       open = false;
       notifyDone(m.common_saved());
     } catch (e: unknown) {
+      // 서버 설명은 영어 진단이라 그대로 붙이지 않는다(D-81). 이름 중복만 따로 알린다(서버는 409 invalid_state로 거절).
       error =
-        e instanceof ApiError && (e.status === 400 || e.status === 409)
-          ? `${m.tasks_status_failed()} ${e.message}`
+        e instanceof ApiError &&
+        e.code === 'invalid_state' &&
+        e.message === 'a status with this name exists'
+          ? m.tasks_status_name_exists()
           : errorText(e, m.tasks_status_failed());
     } finally {
       busy = false;

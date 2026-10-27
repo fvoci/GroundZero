@@ -1782,7 +1782,7 @@
         />
 
         <TaskTimePanel taskId={current.id} />
-        <!-- 작업자 C: 댓글 입력은 서버 접근 등급으로 연다(D-113). -->
+        <!-- 댓글 입력은 서버 접근 등급으로 연다(D-113). -->
         <CommentsPanel
           bind:this={commentsEditor}
           target={{ kind: 'task', id: current.id }}

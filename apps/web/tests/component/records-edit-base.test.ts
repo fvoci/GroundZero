@@ -5,6 +5,7 @@ import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -240,4 +241,3 @@ describe('record edit base version', () => {
     expect(document.getElementById('record-risk-title')).toBeNull();
   });
 });
-import './fixtures/authenticated';

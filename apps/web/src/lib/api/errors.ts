@@ -7,6 +7,25 @@ import { getLocale } from '$lib/paraglide/runtime.js';
 
 import { ApiError, NetworkError } from './client';
 
+/**
+ * 보관된 항목·모듈에 대한 거절(SQL 55000 → 409 `invalid_state`)의 서버 고정 문구. 따로 오류 코드가 없어 이 문구로 가린다.
+ * `tests/component/archived-error.test.ts`가 마이그레이션에 이 문구들이 그대로 있는지 본다.
+ */
+export const ARCHIVED_MESSAGES: readonly string[] = [
+  'the item is archived',
+  'the module is archived',
+  'the target item is archived',
+];
+
+/** 보관 때문에 거절된 쓰기인지. */
+export function isArchivedRejection(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === 'invalid_state' &&
+    ARCHIVED_MESSAGES.includes(error.message)
+  );
+}
+
 function reason(error: ApiError): string {
   switch (error.code) {
     case 'unauthorized':
@@ -19,8 +38,8 @@ function reason(error: ApiError): string {
     case 'bad_request':
       return getLocale() === 'en' ? error.message : m.common_error_bad_request();
     case 'invalid_state':
-      // 작업자 C: 보관 상태의 409는 새로고침 안내로 숨기지 않는다(D-20·D-106).
-      if (/archived/i.test(error.message)) return m.comments_archived();
+      // 보관 상태의 409는 새로고침 안내로 숨기지 않는다(D-20·D-106).
+      if (isArchivedRejection(error)) return m.common_error_archived();
       return getLocale() === 'en' ? error.message : m.common_error_invalid_state();
     case 'account_changed':
       return m.common_error_account_changed();

@@ -8,6 +8,7 @@ import { api, ApiError } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { itemViewPath, itemTaskPath, router } from '$lib/router.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -370,4 +371,3 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
     expect(api.task).toHaveBeenCalledWith(entry.id);
   });
 });
-import './fixtures/authenticated';

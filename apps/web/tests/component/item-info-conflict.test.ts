@@ -8,6 +8,7 @@ import { api } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 // D-104(감사 P-30): 항목 정보(제목·설명·공개 범위)와 항목 정보 패널의 저장은 읽은 판을 보낸다. 그사이 다른 사람이
 // 고쳤으면 서버는 409와 최신본을 돌려주고 아무것도 바꾸지 않는다. 화면은 입력을 그대로 두고 최신본을 보이며, 최신본을
@@ -244,4 +245,3 @@ describe('item profile save on a stale version', () => {
     });
   });
 });
-import './fixtures/authenticated';

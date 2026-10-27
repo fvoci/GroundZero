@@ -5,6 +5,7 @@ import type { TaskStatusDefinition } from '@fvoci/api-client';
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import type { TaskRow } from '$lib/features/tasks/csv';
 import type { RowProgress } from '$lib/features/tasks/csv-import';
 import { matchRows, rowApplied } from '$lib/features/tasks/csv-import';
@@ -301,7 +302,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     expect(onimported).not.toHaveBeenCalled();
   });
 
-  it('confirms navigation and keeps the draft when continuing to edit', async () => {
+  it('confirms navigation, keeps the draft when continuing, and keeps it after stopping', async () => {
     render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
     const cleanUnload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(cleanUnload);
@@ -319,7 +320,59 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     router.navigate('/csv-away');
     await fireEvent.click(await screen.findByRole('button', { name: m.tasks_csv_leave() }));
     expect(router.path).toBe('/csv-away');
-    expect(restoreImport(org.key('csv-import:i1')).text).toBe('');
+    // F-1: "중단하고 이동"은 입력을 이 탭에 보관한다고 말한다. 지우는 것은 제안의 "버리기"뿐이다.
+    expect(restoreImport(org.key('csv-import:i1')).text).toBe('A');
+  });
+
+  // F-1(D-105·⑱): 등록하는 중에 떠나기로 하면 응답을 잃은 줄의 요청 id가 남아, 돌아와 되살린 뒤 다시 누르면 같은 id로
+  // 보낸다(서버는 이미 만든 업무를 돌려주고 새로 만들지 않는다).
+  it('resumes a row whose response was lost when leaving during an import', async () => {
+    const server = fakeServer();
+    const onimported = vi.fn(() => Promise.resolve());
+    const first = render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    await setText('A\nB');
+    const release = server.holdNextCreate();
+    await fireEvent.click(screen.getByRole('button', { name: '등록' }));
+    await waitFor(() => {
+      expect(server.create).toHaveBeenCalledTimes(1);
+    });
+    const lostId = server.create.mock.calls[0]?.[2];
+    router.navigate('/csv-away-busy');
+    await fireEvent.click(await screen.findByRole('button', { name: m.tasks_csv_leave() }));
+    expect(router.path).toBe('/csv-away-busy');
+    // 서버는 붙잡힌 만들기를 끝까지 처리했지만 화면은 응답을 받지 못했다.
+    release();
+    first.unmount();
+    await waitFor(() => {
+      expect(server.made).toHaveLength(1);
+    });
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported });
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 복원' }));
+    expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveValue('A\nB');
+    await pressImport(onimported, 1);
+    expect(server.titles()).toEqual(['A', 'A', 'B']);
+    expect(server.create.mock.calls[1]?.[2]).toBe(lostId);
+    expect(server.made).toHaveLength(2);
+  });
+
+  // F-2(D-96·#88): 계정 전환으로 다시 읽을 때 입력이 앞 계정의 초안으로 남았으면 막지 않고, 남기지 못했으면 경고한다.
+  it('follows the account switch rule for beforeunload', async () => {
+    render(TaskCsvImport, { statuses, itemId: 'i1', onimported: () => Promise.resolve() });
+    await setText('A');
+    accountSafety.switching = true;
+    const kept = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(kept);
+    expect(kept.defaultPrevented).toBe(false);
+    accountSafety.switching = false;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    await setText('B');
+    accountSafety.switching = true;
+    const lost = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(lost);
+    expect(lost.defaultPrevented).toBe(true);
+    accountSafety.switching = false;
   });
 
   it('offers each account and organization draft for explicit restoration', async () => {

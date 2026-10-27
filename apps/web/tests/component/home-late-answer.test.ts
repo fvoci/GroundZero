@@ -1,15 +1,14 @@
 import type { Workspace } from '@fvoci/api-client';
 import { render } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
-import { beforeEach as beforeHome } from 'vitest';
-
-beforeHome(homeExtras);
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(homeExtras);
 
 // 리뷰: 늦은 응답은 새 요청이 시작됐을 때만 버렸다. 홈이 사라진 뒤 도착한 응답은 이어서 달력·알림을 묻고 사라진
 // 화면의 상태를 고쳤다. 화면이 사라지면 응답을 버리고 다음 요청도 보내지 않는다.

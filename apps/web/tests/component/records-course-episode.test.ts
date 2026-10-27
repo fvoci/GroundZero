@@ -12,6 +12,7 @@ import { api } from '$lib/api/client';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 // D-123: 강의 항목의 질문·복습 기록은 그 강좌의 회차에 붙는다. 회차 칸은 이 강좌의 회차 가운데 고르고, 기록에는
 // "번호. 제목"으로 보인다. 지워져 더는 없는 회차는 그렇다고 적는다.
@@ -184,4 +185,3 @@ describe('course records when the episode list cannot be loaded', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
-import './fixtures/authenticated';

@@ -123,6 +123,7 @@
     <div data-testid="comment-edit-draft-offer">
       <p class="text-sm whitespace-pre-wrap">{offer.value.input.text}</p>
       <FormDraftOffer
+        restorable={canWrite && comment.can_edit && !accountSwitching()}
         onrestore={() => {
           draft.restore(offer);
         }}
