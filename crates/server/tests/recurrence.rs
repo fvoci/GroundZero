@@ -775,6 +775,12 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
             "all_day": true, "start_date": "2026-12-07", "end_date": "2026-12-07", "starts_at": null,
             "ends_at": null, "timezone": "Asia/Seoul" }))).await;
     assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
+    // #76: 웹(apps/web/src/lib/api/errors.ts의 untilBeforeStart)이 이 경우를 `error`와 `message`의 고정 값으로 알아본다.
+    assert_eq!(moved.json["error"], "bad_request");
+    assert_eq!(
+        moved.json["message"],
+        "until must not be before the first occurrence"
+    );
     let cal = send(
         &app,
         Method::GET,
@@ -816,6 +822,11 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
             "all_day": false, "start_date": null, "end_date": null, "starts_at": "2026-11-02T23:30:00+09:00",
             "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Pacific/Kiritimati" }))).await;
     assert_eq!(zone.status, StatusCode::BAD_REQUEST, "{:?}", zone.json);
+    assert_eq!(zone.json["error"], "bad_request");
+    assert_eq!(
+        zone.json["message"],
+        "until must not be before the first occurrence"
+    );
 
     // 끝 안에서 옮기는 것은 그대로 된다.
     let inside = send(&app, Method::PUT, &format!("/api/events/{}", all_day["id"].as_str().unwrap()), Some(&admin),
