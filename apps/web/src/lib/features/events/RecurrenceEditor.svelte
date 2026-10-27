@@ -200,130 +200,139 @@
 </script>
 
 <section class="flex flex-col gap-2" aria-labelledby={`${idPrefix}-heading`}>
+  <!-- 저장하는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 기준 규칙을 옮기지
+       않은 다음 저장이 자기 저장과 충돌한다. 일정 대화상자는 바깥에서도 잠그지만 업무 상세는 이 잠금만 쓴다. -->
   {#each draft.offers as offer (offer.key)}
-    <FormDraftOffer
-      onrestore={() => {
-        draft.restore(offer);
-      }}
-      ondiscard={() => {
-        draft.discard(offer);
-      }}
-    />
+    <fieldset class="contents" disabled={busy}>
+      <FormDraftOffer
+        onrestore={() => {
+          draft.restore(offer);
+        }}
+        ondiscard={() => {
+          draft.discard(offer);
+        }}
+      />
+    </fieldset>
   {/each}
   <h3 id={`${idPrefix}-heading`} class="text-sm font-semibold">{m.events_recurrence()}</h3>
   <p class="text-sm text-muted-foreground">
     {rule === null ? m.events_no_recurrence() : describeRule(rule)} ({zoneNote})
   </p>
   {#if canEdit && (draftName === undefined || draft.active)}
-    <form class="flex flex-wrap items-end gap-3" onsubmit={(e) => void save(e)}>
-      <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}>{m.events_frequency()}</span
-        >
-        <Select.Root
-          type="single"
-          value={f.freq}
-          onValueChange={(v: string) => {
-            const found = FREQUENCIES.find((x) => x === v);
-            f.freq = found ?? 'none';
-          }}
-        >
-          <Select.Trigger aria-labelledby={`${idPrefix}-freq-label`}
-            >{FREQ_LABEL[f.freq]}</Select.Trigger
-          >
-          <Select.Content>
-            <Select.Item value="none" label={FREQ_LABEL.none}>{FREQ_LABEL.none}</Select.Item>
-            {#each FREQUENCIES as fr (fr)}
-              <Select.Item value={fr} label={FREQ_LABEL[fr]}>{FREQ_LABEL[fr]}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      {#if f.freq !== 'none'}
+    <fieldset class="min-w-0" disabled={busy}>
+      <form class="flex flex-wrap items-end gap-3" onsubmit={(e) => void save(e)}>
         <div class="flex flex-col gap-1">
-          <Label for={`${idPrefix}-interval`}>{m.events_interval()}</Label>
-          <Input
-            id={`${idPrefix}-interval`}
-            class="w-20"
-            inputmode="numeric"
-            bind:value={f.interval}
-          />
-        </div>
-        {#if f.freq === 'weekly'}
-          <fieldset class="flex flex-col gap-1">
-            <legend class="text-sm font-medium">{m.events_weekdays_legend()}</legend>
-            <div class="flex flex-wrap gap-2">
-              {#each ISO_WEEKDAYS as day (day)}
-                <span class="flex items-center gap-1">
-                  <Checkbox
-                    id={`${idPrefix}-wd-${String(day)}`}
-                    checked={f.weekdays.includes(day)}
-                    onCheckedChange={(v) => {
-                      f.weekdays =
-                        v === true
-                          ? [...new Set([...f.weekdays, day])]
-                          : f.weekdays.filter((d) => d !== day);
-                    }}
-                  />
-                  <Label for={`${idPrefix}-wd-${String(day)}`}>{weekdayLabel(day)}</Label>
-                </span>
+          <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}
+            >{m.events_frequency()}</span
+          >
+          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 따로 잠근다. -->
+          <Select.Root
+            type="single"
+            disabled={busy}
+            value={f.freq}
+            onValueChange={(v: string) => {
+              const found = FREQUENCIES.find((x) => x === v);
+              f.freq = found ?? 'none';
+            }}
+          >
+            <Select.Trigger aria-labelledby={`${idPrefix}-freq-label`}
+              >{FREQ_LABEL[f.freq]}</Select.Trigger
+            >
+            <Select.Content>
+              <Select.Item value="none" label={FREQ_LABEL.none}>{FREQ_LABEL.none}</Select.Item>
+              {#each FREQUENCIES as fr (fr)}
+                <Select.Item value={fr} label={FREQ_LABEL[fr]}>{FREQ_LABEL[fr]}</Select.Item>
               {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        {#if f.freq !== 'none'}
+          <div class="flex flex-col gap-1">
+            <Label for={`${idPrefix}-interval`}>{m.events_interval()}</Label>
+            <Input
+              id={`${idPrefix}-interval`}
+              class="w-20"
+              inputmode="numeric"
+              bind:value={f.interval}
+            />
+          </div>
+          {#if f.freq === 'weekly'}
+            <fieldset class="flex flex-col gap-1">
+              <legend class="text-sm font-medium">{m.events_weekdays_legend()}</legend>
+              <div class="flex flex-wrap gap-2">
+                {#each ISO_WEEKDAYS as day (day)}
+                  <span class="flex items-center gap-1">
+                    <Checkbox
+                      id={`${idPrefix}-wd-${String(day)}`}
+                      checked={f.weekdays.includes(day)}
+                      onCheckedChange={(v) => {
+                        f.weekdays =
+                          v === true
+                            ? [...new Set([...f.weekdays, day])]
+                            : f.weekdays.filter((d) => d !== day);
+                      }}
+                    />
+                    <Label for={`${idPrefix}-wd-${String(day)}`}>{weekdayLabel(day)}</Label>
+                  </span>
+                {/each}
+              </div>
+            </fieldset>
+          {/if}
+          <fieldset class="flex flex-col gap-1">
+            <legend class="text-sm font-medium">{m.events_end()}</legend>
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+              <label class="flex items-center gap-1"
+                ><input type="radio" bind:group={f.end} value="never" />
+                {m.events_end_never()}</label
+              >
+              <label class="flex items-center gap-1"
+                ><input type="radio" bind:group={f.end} value="until" />
+                {m.events_end_until()}</label
+              >
+              {#if f.end === 'until'}
+                <Input
+                  class="w-40"
+                  type="date"
+                  bind:value={f.until}
+                  aria-label={m.events_end_until_aria()}
+                  aria-invalid={untilError !== undefined || localUntilError !== undefined}
+                  aria-describedby={untilError !== undefined || localUntilError !== undefined
+                    ? `${idPrefix}-until-error`
+                    : undefined}
+                  required
+                />
+                {#if untilError !== undefined || localUntilError !== undefined}
+                  <p id={`${idPrefix}-until-error`} role="alert" class="text-sm text-destructive">
+                    {untilError ?? localUntilError}
+                  </p>
+                {/if}
+              {/if}
+              <label class="flex items-center gap-1"
+                ><input type="radio" bind:group={f.end} value="count" />
+                {m.events_end_count()}</label
+              >
+              {#if f.end === 'count'}
+                <Input
+                  class="w-24"
+                  inputmode="numeric"
+                  bind:value={f.count}
+                  aria-label={m.events_end_count_aria()}
+                />
+              {/if}
             </div>
           </fieldset>
         {/if}
-        <fieldset class="flex flex-col gap-1">
-          <legend class="text-sm font-medium">{m.events_end()}</legend>
-          <div class="flex flex-wrap items-center gap-3 text-sm">
-            <label class="flex items-center gap-1"
-              ><input type="radio" bind:group={f.end} value="never" />
-              {m.events_end_never()}</label
-            >
-            <label class="flex items-center gap-1"
-              ><input type="radio" bind:group={f.end} value="until" />
-              {m.events_end_until()}</label
-            >
-            {#if f.end === 'until'}
-              <Input
-                class="w-40"
-                type="date"
-                bind:value={f.until}
-                aria-label={m.events_end_until_aria()}
-                aria-invalid={untilError !== undefined || localUntilError !== undefined}
-                aria-describedby={untilError !== undefined || localUntilError !== undefined
-                  ? `${idPrefix}-until-error`
-                  : undefined}
-                required
-              />
-              {#if untilError !== undefined || localUntilError !== undefined}
-                <p id={`${idPrefix}-until-error`} role="alert" class="text-sm text-destructive">
-                  {untilError ?? localUntilError}
-                </p>
-              {/if}
-            {/if}
-            <label class="flex items-center gap-1"
-              ><input type="radio" bind:group={f.end} value="count" />
-              {m.events_end_count()}</label
-            >
-            {#if f.end === 'count'}
-              <Input
-                class="w-24"
-                inputmode="numeric"
-                bind:value={f.count}
-                aria-label={m.events_end_count_aria()}
-              />
-            {/if}
-          </div>
-        </fieldset>
-      {/if}
-      <Button
-        type="submit"
-        size="sm"
-        disabled={busy}
-        aria-label={conflicted ? m.tasks_rule_save_mine() : undefined}
-        >{conflicted ? m.tasks_save_mine() : m.events_recurrence_save()}</Button
-      >
-      <!-- 저장 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
-      <span class="sr-only" role="status">{saved ? m.common_saved() : ''}</span>
-    </form>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={busy}
+          aria-label={conflicted ? m.tasks_rule_save_mine() : undefined}
+          >{conflicted ? m.tasks_save_mine() : m.events_recurrence_save()}</Button
+        >
+        <!-- 저장 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
+        <span class="sr-only" role="status">{saved ? m.common_saved() : ''}</span>
+      </form>
+    </fieldset>
     {#if error !== undefined}
       <p role="alert" class="text-sm text-destructive">{error}</p>
     {/if}
