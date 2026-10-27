@@ -105,7 +105,7 @@ describe('organization summaries', () => {
     // 요약과 같은 묶음 제목(이름과 수)을 날짜 순서대로, 업무가 있는 묶음만 둔다.
     const headings = within(section)
       .getAllByRole('heading', { level: 3 })
-      .map((h) => h.textContent?.trim());
+      .map((h) => h.textContent.trim());
     expect(headings).toEqual(['오늘 2', '날짜 없음 1']);
     const undated = within(section)
       .getByRole('heading', { name: '날짜 없음 1' })

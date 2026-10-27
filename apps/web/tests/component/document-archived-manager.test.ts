@@ -27,7 +27,7 @@ const workspaces: Workspace[] = [
 const archivedForAdmin: DocumentView = {
   id: 'doc-1',
   workspace_id: 'ws-1',
-  placement: 'item',
+  placement: 'module',
   item_id: 'item-1',
   parent_id: null,
   reference: 'DEV-1',
