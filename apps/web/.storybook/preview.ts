@@ -30,8 +30,8 @@ globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Respo
 };
 
 // 브랜치 미리보기는 push마다 같은 주소에 새 해시 파일로 덮어쓴다. 이미 열린 탭이 스토리를 바꾸다 사라진 옛 청크를
-// 동적 import해 404가 나면(`vite:preloadError`) 이 미리보기 창을 한 번만 다시 읽는다. 다시 읽은 뒤에도 나면 오류를 그대로
-// 둔다(무한 다시 읽기 방지, `preload-reload.ts`).
+// 동적 import해 404가 나면(`vite:preloadError`) 이 미리보기 창을 다시 읽는다. 실패 묶음마다 한 번이다: 다시 읽어 뜬 직후 또
+// 나면 오류를 그대로 두고(무한 다시 읽기 방지), 오래 열어 둔 뒤 다음 배포를 만나면 또 한 번 다시 읽는다(`preload-reload.ts`).
 watchPreloadErrors();
 
 /** 브라우저 글자 크기 설정을 흉내 낸다(rem 기준 크기 확인). 실제 브라우저·OS 설정 시험과는 다르다. */
