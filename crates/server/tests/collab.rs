@@ -3011,21 +3011,26 @@ struct CommitGate {
     stall_access_ms: std::sync::atomic::AtomicU64,
 }
 
+impl CommitGate {
+    fn new() -> Self {
+        let (release, _) = tokio::sync::watch::channel(false);
+        Self {
+            release,
+            used: std::sync::atomic::AtomicBool::new(false),
+            committed: tokio::sync::Notify::new(),
+            allowed_checks: std::sync::atomic::AtomicUsize::new(0),
+            stall_access_ms: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+}
+
 impl DbProxy {
     async fn start() -> Self {
         Self::start_with_gate(None).await
     }
 
     async fn holding_move_commit() -> Self {
-        let (release, _) = tokio::sync::watch::channel(false);
-        Self::start_with_gate(Some(std::sync::Arc::new(CommitGate {
-            release,
-            used: std::sync::atomic::AtomicBool::new(false),
-            committed: tokio::sync::Notify::new(),
-            allowed_checks: std::sync::atomic::AtomicUsize::new(0),
-            stall_access_ms: std::sync::atomic::AtomicU64::new(0),
-        })))
-        .await
+        Self::start_with_gate(Some(std::sync::Arc::new(CommitGate::new()))).await
     }
 
     async fn start_with_gate(commit_gate: Option<std::sync::Arc<CommitGate>>) -> Self {
@@ -3126,16 +3131,16 @@ impl DbProxy {
 
 /// PG message framing: https://www.postgresql.org/docs/current/protocol-message-formats.html
 /// 실제 app_move_document 실행 연결의 COMMIT 응답만 한 번 멈춘다. ReadyForQuery는 그 뒤 순서를 따른다.
-async fn forward_move_commit(
-    incoming: &mut TcpStream,
-    outgoing: &mut TcpStream,
-    gate: &CommitGate,
-) {
+async fn forward_move_commit<C, D>(incoming: C, outgoing: D, gate: &CommitGate)
+where
+    C: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    D: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
     use std::sync::atomic::{AtomicBool, Ordering};
     use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
-    let (mut client_read, mut client_write) = incoming.split();
-    let (mut db_read, mut db_write) = outgoing.split();
+    let (mut client_read, mut client_write) = tokio::io::split(incoming);
+    let (mut db_read, mut db_write) = tokio::io::split(outgoing);
     let moving = AtomicBool::new(false);
     // Execute/CommandComplete 순서로 해당 권한 질의의 결과만 연결한다. 풀에서 재사용된 연결의
     // 과거 질의나 다른 owner/write 열을 현재 권한 확인으로 세지 않는다.
@@ -3149,8 +3154,7 @@ async fn forward_move_commit(
         assert!((8..=8192).contains(&length));
         let mut body = vec![0; length - 4];
         if client_read.read_exact(&mut body).await.is_err()
-            || db_write.write_all(&startup).await.is_err()
-            || db_write.write_all(&body).await.is_err()
+            || db_write.write_all(&framed(&startup, &body)).await.is_err()
         {
             return;
         }
@@ -3198,9 +3202,7 @@ async fn forward_move_commit(
                 _ => {}
             }
             // 인증/세션 payload를 로그나 산출물에 남기지 않는다.
-            if db_write.write_all(&header).await.is_err()
-                || db_write.write_all(&body).await.is_err()
-            {
+            if db_write.write_all(&framed(&header, &body)).await.is_err() {
                 break;
             }
         }
@@ -3258,8 +3260,10 @@ async fn forward_move_commit(
                 executions.lock().unwrap().clear();
                 role_seen = false;
             }
-            if client_write.write_all(&header).await.is_err()
-                || client_write.write_all(&body).await.is_err()
+            if client_write
+                .write_all(&framed(&header, &body))
+                .await
+                .is_err()
             {
                 break;
             }
@@ -3270,6 +3274,154 @@ async fn forward_move_commit(
         }
     };
     tokio::select! { _ = client => {}, _ = server => {} }
+}
+
+/// 메시지 하나(헤더·본문)를 한 버퍼로 잇는다. 프록시는 메시지마다 한 번에 쓴다: nodelay 소켓에 헤더와 본문을 따로 쓰면
+/// 두 세그먼트로 나가고, 수신 한 번을 메시지 하나로 읽는 상대(Supavisor의 인증 단계)는 헤더만 받아 인증을 끝낸다.
+fn framed(header: &[u8], body: &[u8]) -> Vec<u8> {
+    let mut message = Vec::with_capacity(header.len() + body.len());
+    message.extend_from_slice(header);
+    message.extend_from_slice(body);
+    message
+}
+
+/// 쓰기 호출 사이마다 `gap`을 두는 쓰기 쪽. 혼잡한 러너에서 nodelay 소켓의 두 쓰기가 다른 TCP 세그먼트·다른 수신으로
+/// 도착하는 일을 정해진 순서로 만든다.
+struct PacedWriter<T> {
+    inner: T,
+    gap: Duration,
+    pause: Option<std::pin::Pin<Box<tokio::time::Sleep>>>,
+}
+
+impl<T: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for PacedWriter<T> {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().inner).poll_read(cx, buf)
+    }
+}
+
+impl<T: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for PacedWriter<T> {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        use std::future::Future as _;
+        let this = self.get_mut();
+        if let Some(pause) = &mut this.pause {
+            std::task::ready!(pause.as_mut().poll(cx));
+            this.pause = None;
+        }
+        let written = std::task::ready!(std::pin::Pin::new(&mut this.inner).poll_write(cx, buf))?;
+        this.pause = Some(Box::pin(tokio::time::sleep(this.gap)));
+        std::task::Poll::Ready(Ok(written))
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+    }
+}
+
+/// 받은 바이트가 PG 메시지 경계에서 끝나는지. `startup`이면 첫 메시지는 종류 바이트가 없는 시작 메시지다. 끝나면 그 안의
+/// 메시지 수.
+fn whole_pg_messages(mut bytes: &[u8], mut startup: bool) -> Option<usize> {
+    let mut count = 0;
+    while !bytes.is_empty() {
+        let header = if startup { 0 } else { 1 };
+        let length = bytes.get(header..header + 4)?;
+        let total = header + usize::try_from(u32::from_be_bytes(length.try_into().ok()?)).ok()?;
+        bytes = bytes.get(total..)?;
+        startup = false;
+        count += 1;
+    }
+    Some(count)
+}
+
+/// CI(run 40435671581, Supavisor 2.9.13 session 풀러)에서 커밋 장벽 프록시를 쓰는 두 시험이 첫 로그인의 인증에서
+/// `08P01 (EAUTHPROTOCOL) protocol violation during authentication`으로 끝났다. Supavisor는 인증 단계에서 소켓이 넘긴
+/// 바이트 한 묶음을 완전한 메시지 하나로 해석하고(`Server.decode_pkt`, 덜 오면 `:incomplete`) 아니면 인증을 끝낸다. 이
+/// 프록시는 nodelay 소켓에 메시지의 헤더와 본문을 따로 썼다: 두 쓰기 사이에 틈이 생기면 헤더만 먼저 도착한다. 풀러처럼
+/// 수신마다 경계를 보는 상대에게 쓰기 사이 틈을 두고 시작·SASL 메시지를 넘겨, 메시지가 한 번에 도착하는지 본다.
+#[tokio::test]
+async fn the_commit_gate_proxy_delivers_each_message_in_one_write() {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_addr = upstream.local_addr().unwrap();
+    let strict = tokio::spawn(async move {
+        let (mut socket, _) = upstream.accept().await.unwrap();
+        let mut deliveries = Vec::new();
+        let mut buf = vec![0_u8; 64 * 1024];
+        loop {
+            let read = socket.read(&mut buf).await.unwrap();
+            if read == 0 {
+                return deliveries;
+            }
+            deliveries.push(whole_pg_messages(&buf[..read], deliveries.is_empty()));
+        }
+    });
+    let front = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let front_addr = front.local_addr().unwrap();
+    let proxy = tokio::spawn(async move {
+        let (mut incoming, _) = front.accept().await.unwrap();
+        let outgoing = TcpStream::connect(upstream_addr).await.unwrap();
+        // 실제 프록시처럼 nodelay: 쓰기마다 바로 세그먼트로 나간다.
+        incoming.set_nodelay(true).unwrap();
+        outgoing.set_nodelay(true).unwrap();
+        let outgoing = PacedWriter {
+            inner: outgoing,
+            gap: Duration::from_millis(50),
+            pause: None,
+        };
+        forward_move_commit(&mut incoming, outgoing, &CommitGate::new()).await;
+    });
+    let mut client = TcpStream::connect(front_addr).await.unwrap();
+    // 클라이언트는 메시지마다 한 번에 쓴다(sqlx와 같다): 시작 메시지, 그다음 SASLInitialResponse.
+    let params = b"user\0fvoci_app\0database\0postgres\0\0";
+    let mut startup = u32::try_from(8 + params.len())
+        .unwrap()
+        .to_be_bytes()
+        .to_vec();
+    startup.extend_from_slice(&196_608_u32.to_be_bytes());
+    startup.extend_from_slice(params);
+    client.write_all(&startup).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let first = b"n,,n=,r=fvoci-test-nonce";
+    let mut sasl = b"SCRAM-SHA-256\0".to_vec();
+    sasl.extend_from_slice(&u32::try_from(first.len()).unwrap().to_be_bytes());
+    sasl.extend_from_slice(first);
+    let mut message = vec![b'p'];
+    message.extend_from_slice(&u32::try_from(4 + sasl.len()).unwrap().to_be_bytes());
+    message.extend_from_slice(&sasl);
+    client.write_all(&message).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    drop(client);
+    tokio::time::timeout(Duration::from_secs(5), proxy)
+        .await
+        .unwrap()
+        .unwrap();
+    let deliveries = tokio::time::timeout(Duration::from_secs(5), strict)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        deliveries,
+        vec![Some(1), Some(1)],
+        "each delivery must hold whole messages (None = a split message), in order: startup, SASL"
+    );
 }
 
 impl Drop for DbProxy {
