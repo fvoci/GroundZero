@@ -9,6 +9,7 @@ import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { openItemGroup, openModuleView, resetRoute } from './fixtures/item-groups';
 
 // F-1(R5 B): 등급(app_access)은 보관을 반영하지 않으므로 보관된 모듈의 항목도 owner·write를 받는다(D-113). 항목 화면은
 // 정보·기록·업무판만 잠그고 일정 목록·달력에는 보관을 넘기지 않아, 서버가 55000으로 거부할 일정 추가·고치기와 날짜 칸의
@@ -16,6 +17,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  resetRoute();
 });
 
 const workspace: Workspace = {
@@ -90,6 +92,8 @@ async function mountItem(archived: boolean): Promise<void> {
   vi.spyOn(api, 'event').mockResolvedValue(event);
   render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
   await screen.findByRole('heading', { name: '항목' });
+  // 일정 목록과 항목 달력은 일정 묶음에 있다.
+  await openItemGroup('일정');
 }
 
 describe('events of an archived module', () => {
@@ -122,6 +126,8 @@ describe('events of an archived module', () => {
     vi.spyOn(api, 'items').mockResolvedValue([]);
     render(ModuleScreen, { workspace, moduleId: 'm1' });
     await screen.findByRole('heading', { name: '개발' });
+    await openModuleView('달력');
+    expect(document.getElementById('calendar-heading')).not.toBeNull();
     expect(document.querySelector('[data-create-top]')).toBeNull();
     expect(document.querySelector('[data-create-day]')).toBeNull();
   });

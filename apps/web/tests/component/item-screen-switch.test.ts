@@ -9,10 +9,13 @@ import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import './fixtures/authenticated';
+import { openItemGroup, resetRoute } from './fixtures/item-groups';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
+  resetRoute();
 });
 
 const workspace: Workspace = {
@@ -312,6 +315,8 @@ describe('item screen results after leaving and coming back to the same item', (
     // 옮기기가 실패해도 목록은 다시 읽는다. 이 테스트는 그 다시 읽기만 본다.
     vi.spyOn(api, 'setParent').mockRejectedValue(new Error('conflict'));
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    // 항목 문서 목록은 문서 묶음에 있다(D-121).
+    await openItemGroup('문서');
     const rows = await screen.findAllByRole('treeitem');
     const second = rows[1];
     if (second === undefined) throw new Error('no second tree item');
@@ -321,6 +326,7 @@ describe('item screen results after leaving and coming back to the same item', (
     });
 
     await leaveAndComeBack(view, '항목 A');
+    await openItemGroup('문서');
     await screen.findByText('셋째 문서');
     // 떠나기 전에 읽은 옛 목록.
     reload.resolve(two);

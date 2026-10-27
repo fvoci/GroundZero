@@ -29,6 +29,8 @@ interface DraftOptions<T> {
    */
   screenOnly?: () => boolean;
   busy?: () => boolean;
+  /** The form stays mounted at this in-app path, so leaving for it does not ask (see createLeaveGuard). */
+  stays?: (next: string) => boolean;
 }
 
 interface Saved<T> {
@@ -89,6 +91,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     busy: () => current() && options.busy?.() === true,
     identity: () => session,
     onAsk: persist,
+    ...(options.stays === undefined ? {} : { stays: options.stays }),
   });
 
   $effect(() => {

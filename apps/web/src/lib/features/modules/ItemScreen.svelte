@@ -4,7 +4,7 @@
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -31,7 +31,20 @@
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
-  import { itemDocumentPath, modulePath, router, workspacePath } from '$lib/router.svelte';
+  import { org } from '$lib/org.svelte';
+  import type { ItemGroupName, TaskViewName } from '$lib/router.svelte';
+  import {
+    ITEM_GROUP_DEFAULT,
+    itemDocumentPath,
+    itemGroupPath,
+    itemGroupsFor,
+    modulePath,
+    router,
+    staysOnItem,
+    TASK_VIEWS,
+    workspacePath,
+  } from '$lib/router.svelte';
+  import { readSession, writeSession } from '$lib/storage';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -39,9 +52,10 @@
   import { Label } from '$lib/ui/label';
   import { Textarea } from '$lib/ui/textarea';
 
+  import GroupSwitch from './GroupSwitch.svelte';
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
-  // 활동(D-119). 업무 보기 탭과 별개인 항목 활동 섹션.
+  // 활동(D-119). 기록 묶음 안의 항목 활동 섹션.
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
   interface Props {
@@ -53,8 +67,8 @@
   }
 
   const { workspace, itemId, workspaces, taskId }: Props = $props();
-  // 같은 항목 안 보기·상세 경로 변경도 업무 화면에 즉시 전달한다(D-121).
-  const taskRoute = $derived(
+  // 같은 항목 안 묶음·보기·상세 경로 변경도 화면에 즉시 전달한다(D-121).
+  const itemRoute = $derived(
     router.route.name === 'item' && router.route.itemId === itemId ? router.route : undefined,
   );
   // 주소 객체가 바뀌어도(업무 대화상자 열고 닫기) 같은 항목이면 다시 불러오지 않는다.
@@ -63,12 +77,94 @@
   let item = $state<ItemView | undefined>(undefined);
   let mod = $state<Module | undefined>(undefined);
   let docs = $state<SummaryView[]>([]);
-  // 항목 일정 목록에서 바꾸면 달력을, 달력에서 바꾸면 목록을 다시 읽게 하는 값.
+  // 항목 일정 목록에서 바꾸면 달력을, 달력에서 바꾸면 목록을 다시 읽게 하는 값(둘 다 일정 묶음).
   let calendarVersion = $state(0);
   let listVersion = $state(0);
-  // 항목 달력의 날짜 칸에서 업무를 만들면 같은 화면의 업무 보드가 다시 읽는다.
-  let taskVersion = $state(0);
   let error = $state<string | undefined>(undefined);
+
+  // 묶음(D-121, 사용자 R7 A). 주소의 묶음이 이 종류에 있으면 그것, 없으면(뿌리 경로·다른 종류의 묶음) 이 탭의 기억 ›
+  // 종류별 기본 묶음으로 주소를 바꾼다(replaceState). 주소가 이 항목 경로가 아닐 때(독립 렌더)는 `chosen`을 쓴다.
+  // `view`는 업무 묶음으로 돌아갈 때 쓸 마지막 업무 보기다.
+  let chosen = $state<{ group: ItemGroupName; view: TaskViewName } | undefined>(undefined);
+  const groups = $derived(mod === undefined ? [] : itemGroupsFor(mod.kind));
+  const routeGroup = $derived(
+    itemRoute?.group !== undefined && groups.includes(itemRoute.group)
+      ? itemRoute.group
+      : undefined,
+  );
+  const group = $derived(mod === undefined ? undefined : (routeGroup ?? chosen?.group));
+  const GROUP_LABEL: Record<ItemGroupName, () => string> = {
+    tasks: m.modules_item_group_tasks,
+    docs: m.modules_item_group_docs,
+    events: m.modules_item_group_events,
+    records: m.modules_item_group_records,
+    references: m.modules_item_group_references,
+    plan: m.modules_item_group_plan,
+    episodes: m.modules_item_group_episodes,
+    activities: m.modules_item_group_activities,
+  };
+  // 첫 묶음이 기록 종류인 모듈(연구 문헌, 취미 활동). 그 종류는 첫 묶음에만, 나머지 종류는 공통 기록 묶음에 보인다.
+  const FIRST_GROUP_RECORDS: Partial<Record<ModuleKind, readonly string[]>> = {
+    research: ['reference'],
+    hobby: ['activity'],
+  };
+  const firstRecords = $derived(mod === undefined ? undefined : FIRST_GROUP_RECORDS[mod.kind]);
+
+  // 이 탭에서 항목마다 기억하는 묶음. 저장소 키에 사용자와 조직을 넣는다(D-121). 기억은 편의일 뿐이라 깨졌으면 버린다.
+  const groupKey = (id: string): string => org.key(`item-group:${id}`);
+  function remembered(id: string): { group?: string; view?: TaskViewName } {
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(readSession(groupKey(id)) ?? 'null');
+    } catch {
+      return {};
+    }
+    if (!object(raw)) return {};
+    const view = TASK_VIEWS.find((v) => v === raw.view);
+    return {
+      ...(typeof raw.group === 'string' ? { group: raw.group } : {}),
+      ...(view === undefined ? {} : { view }),
+    };
+  }
+  function remember(id: string, next: { group: ItemGroupName; view: TaskViewName }): void {
+    writeSession(groupKey(id), JSON.stringify(next));
+  }
+
+  $effect(() => {
+    const kind = mod?.kind;
+    const id = currentItemId;
+    const route = itemRoute;
+    if (kind === undefined) return;
+    untrack(() => {
+      const available = itemGroupsFor(kind);
+      const memory = remembered(id);
+      const lastView = chosen?.view ?? memory.view ?? 'board';
+      if (route?.group !== undefined && available.includes(route.group)) {
+        chosen = {
+          group: route.group,
+          view: route.group === 'tasks' ? (route.view ?? 'board') : lastView,
+        };
+        remember(id, chosen);
+        return;
+      }
+      if (route === undefined && chosen !== undefined && available.includes(chosen.group)) return;
+      const start = available.find((g) => g === memory.group) ?? ITEM_GROUP_DEFAULT[kind];
+      chosen = { group: start, view: lastView };
+      if (route !== undefined) router.replace(itemGroupPath(workspace.id, id, start, lastView));
+    });
+  });
+
+  function selectGroup(next: ItemGroupName): void {
+    const view = chosen?.view ?? 'board';
+    const path = itemGroupPath(workspace.id, currentItemId, next, view);
+    router.navigate(path);
+    if (router.path !== path) return;
+    chosen = { group: next, view };
+    remember(currentItemId, chosen);
+  }
+  // 머리(정보·프로필·복제)는 묶음과 상관없이 마운트된 채다. 같은 항목 안에서 묶음·업무 보기만 바뀌면 그 입력은 남으므로
+  // 묻지 않는다. 다른 항목·화면으로 가면 지금처럼 묻는다(코디네이터 지시 2026-10-27).
+  const staysOnThisItem = (next: string): boolean => staysOnItem(next, currentItemId);
 
   let title = $state('');
   let description = $state('');
@@ -130,6 +226,7 @@
       item !== undefined &&
       (title !== filled.title || description !== filled.description || shared !== filled.shared),
     busy: () => saving,
+    stays: staysOnThisItem,
   });
   onMount(infoDraft.attach);
   // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
@@ -179,6 +276,7 @@
     let cancelled = false;
     item = undefined;
     mod = undefined;
+    chosen = undefined;
     error = undefined;
     // 앞 항목의 "저장했습니다."·오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
     // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
@@ -330,31 +428,6 @@
       ? []
       : [{ path: modulePath(workspace.id, mod.id), label: `${mod.name} · ${mod.key}` }]),
   ]);
-
-  // 항목 화면 절로 바로 가기. 업무가 화면 아래쪽에 있어 자주 쓰는 절에 바로 닿게 한다.
-  function jumpLinks(kind: ModuleKind | undefined): { id: string; label: string }[] {
-    const links = [{ id: 'tasks-heading', label: m.tasks_heading() }];
-    if (kind === 'course') links.push({ id: 'course-info-heading', label: m.courses_info() });
-    if (kind === 'study') links.push({ id: 'study-heading', label: m.study_heading() });
-    if (kind !== undefined) {
-      links.push({ id: 'item-profile-heading', label: m.modules_profile() });
-      links.push({ id: 'records-heading', label: m.records_heading() });
-      links.push({ id: 'item-time-heading', label: m.time_heading() });
-    }
-    links.push({ id: 'attachments-heading', label: m.files_heading() });
-    links.push({ id: 'item-docs-heading', label: m.modules_documents() });
-    links.push({ id: 'events-heading', label: m.events_heading() });
-    return links;
-  }
-
-  function jumpTo(id: string): void {
-    const target = document.getElementById(id);
-    if (target === null) return;
-    target.scrollIntoView({ block: 'start' });
-    // 화면 낭독기·키보드도 그 절에서 이어 가도록 제목에 초점을 둔다.
-    if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
-    target.focus({ preventScroll: true });
-  }
 </script>
 
 {#each item === undefined ? [] : infoDraft.offers as entry (entry.key)}
@@ -426,20 +499,6 @@
         {/if}
       </div>
     </div>
-
-    <!-- 긴 항목 화면 안에서 바로 가기. 모듈 유형에 있는 절만 보인다. -->
-    <nav aria-label={m.modules_jump_label()} class="-mt-2 flex flex-wrap gap-1 text-sm">
-      {#each jumpLinks(mod?.kind) as link (link.id)}
-        <a
-          class="rounded-md border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          href={`#${link.id}`}
-          onclick={(e: MouseEvent) => {
-            e.preventDefault();
-            jumpTo(link.id);
-          }}>{link.label}</a
-        >
-      {/each}
-    </nav>
 
     {#if canEdit}
       <form
@@ -533,17 +592,18 @@
     {/if}
 
     {#if mod !== undefined}
+      <!-- 머리: 묶음과 상관없이 늘 보이는 항목 프로필과 복제·템플릿(R7 A가 묶음을 정하지 않은 영역). -->
       <ItemProfilePanel
         item={view}
         kind={mod.kind}
+        stays={staysOnThisItem}
         onchanged={() => {
           reread(current.id, refresh);
         }}
       />
-      <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} />
       {#if workspace.access !== 'read'}
         <div class="flex flex-wrap items-start gap-2">
-          <ItemCopy item={current} module={mod} />
+          <ItemCopy item={current} module={mod} stays={staysOnThisItem} />
           {#if canEdit}
             <Button size="sm" variant="outline" onclick={() => void toggleTemplate()}
               >{current.is_template ? m.modules_template_unset() : m.modules_template_set()}</Button
@@ -551,120 +611,130 @@
           {/if}
         </div>
       {/if}
-    {/if}
 
-    {#if mod?.kind === 'course'}
-      <CoursePanel itemId={current.id} />
-    {/if}
-    {#if mod?.kind === 'study'}
-      <StudyPanel itemId={current.id} />
-    {/if}
-
-    {#if mod !== undefined}
-      <!-- 항목은 내 합계만 보며 시작 설정은 없다(D-117). -->
-      <ItemTimePanel itemId={current.id} />
-    {/if}
-
-    <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />
-    <!-- 활동(D-119) -->
-    <ItemActivityTab itemId={current.id} workspaceId={workspace.id} />
-
-    <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
-      <h2 id="item-docs-heading" class="text-lg font-semibold">{m.modules_documents()}</h2>
-      <DocumentTree
-        {docs}
-        label={m.modules_documents_tree({ title: current.title })}
-        empty={m.modules_documents_empty()}
-        hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
-        navigate={(path: string) => {
-          router.navigate(path);
-        }}
-        canWrite={canEdit}
-        onmove={(id: string, move: TreeMove) =>
-          // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
-          moveThenReload(
-            () => api.setParent(id, move.parentId, move.beforeId),
-            async () => {
-              // 다시 읽는 사이 다른 항목으로 옮겼으면(같은 항목으로 돌아왔어도) 이 목록을 그 화면에 넣지 않는다.
-              const requested = current.id;
-              const mine = loadSeq;
-              const list = await api.itemDocuments(requested);
-              if (stillOn(requested, mine)) docs = list;
-            },
-          )}
-        oncreatechild={async (parentId: string) => {
-          const doc = await api.createItemDocument(
-            current.id,
-            newRequestId(),
-            m.modules_new_document_default(),
-            parentId,
-          );
-          router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
-        }}
+      <!-- 묶음(D-121): 고른 묶음만 마운트한다. 다른 묶음으로 가면 그 묶음의 입력은 이탈 확인(D-125)을 거친다. -->
+      <GroupSwitch
+        label={m.modules_item_groups_label()}
+        options={groups.map((g) => ({
+          id: g,
+          label: GROUP_LABEL[g](),
+          href: itemGroupPath(workspace.id, current.id, g, chosen?.view),
+        }))}
+        current={group}
+        onselect={selectGroup}
       />
-      {#if canEdit}
-        <TemplatePicker
-          workspaceId={workspace.id}
-          id="new-item-document-template"
-          bind:value={docTemplate}
-        />
-        <CreateForm
-          id="new-item-document"
-          draftName={`item-document-new:${current.id}`}
-          bind:draftContext={docTemplate}
-          label={m.modules_new_document_title()}
-          placeholder={m.modules_new_document_placeholder()}
-          submitLabel={m.modules_create_document()}
-          create={async (requestId: string, docTitle: string, context: CreateFormContext) => {
-            const doc = await api.createItemDocument(
-              current.id,
-              requestId,
-              docTitle,
-              null,
-              docTemplate === '' ? null : docTemplate,
-            );
-            if (context.saved())
-              router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
-          }}
-        />
-      {/if}
-    </section>
-    <TaskBoard
-      item={view}
-      {workspaces}
-      routeView={taskRoute?.view}
-      openTaskId={taskRoute === undefined ? taskId : taskRoute.taskId}
-      tasksVersion={taskVersion}
-      locked={moduleArchived}
-      onstale={() => {
-        // 권한·보관이 바뀌었을 수 있다. 입력 중인 칸은 두고, 항목 상태와 고치지 않은 칸은 새로 읽은 값으로 바꾼다
-        // (옛 값이 남으면 다음 저장이 그사이 바뀐 제목·설명을 되돌린다).
-        reread(current.id, refresh);
-      }}
-    />
-    <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
-    <ItemEvents
-      item={view}
-      locked={moduleArchived}
-      version={listVersion}
-      onchanged={() => {
-        calendarVersion += 1;
-      }}
-    />
-    <CalendarScreen
-      {workspace}
-      scope={{ itemId: current.id }}
-      item={view}
-      locked={moduleArchived || view.archived}
-      embedded
-      version={calendarVersion}
-      onchanged={() => {
-        listVersion += 1;
-      }}
-      ontaskcreated={() => {
-        taskVersion += 1;
-      }}
-    />
-    <Backlinks kind="item" id={current.id} {workspaces} />
+      <div class="flex flex-col gap-6" data-item-group={group}>
+        {#if group === 'references' || group === 'activities'}
+          <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} only={firstRecords} />
+        {:else if group === 'plan'}
+          <StudyPanel itemId={current.id} />
+        {:else if group === 'episodes'}
+          <CoursePanel itemId={current.id} />
+        {:else if group === 'tasks'}
+          <TaskBoard
+            item={view}
+            {workspaces}
+            routeView={itemRoute?.view}
+            openTaskId={itemRoute === undefined ? taskId : itemRoute.taskId}
+            locked={moduleArchived}
+            onstale={() => {
+              // 권한·보관이 바뀌었을 수 있다. 입력 중인 칸은 두고, 항목 상태와 고치지 않은 칸은 새로 읽은 값으로 바꾼다
+              // (옛 값이 남으면 다음 저장이 그사이 바뀐 제목·설명을 되돌린다).
+              reread(current.id, refresh);
+            }}
+          />
+        {:else if group === 'docs'}
+          <section class="flex flex-col gap-3" aria-labelledby="item-docs-heading">
+            <h2 id="item-docs-heading" class="text-lg font-semibold">{m.modules_documents()}</h2>
+            <DocumentTree
+              {docs}
+              label={m.modules_documents_tree({ title: current.title })}
+              empty={m.modules_documents_empty()}
+              hrefFor={(id: string) => itemDocumentPath(workspace.id, current.id, id)}
+              navigate={(path: string) => {
+                router.navigate(path);
+              }}
+              canWrite={canEdit}
+              onmove={(id: string, move: TreeMove) =>
+                // 실패해도(권한 철회·동시 변경) 최신 목록을 다시 읽는다.
+                moveThenReload(
+                  () => api.setParent(id, move.parentId, move.beforeId),
+                  async () => {
+                    // 다시 읽는 사이 다른 항목으로 옮겼으면(같은 항목으로 돌아왔어도) 이 목록을 그 화면에 넣지 않는다.
+                    const requested = current.id;
+                    const mine = loadSeq;
+                    const list = await api.itemDocuments(requested);
+                    if (stillOn(requested, mine)) docs = list;
+                  },
+                )}
+              oncreatechild={async (parentId: string) => {
+                const doc = await api.createItemDocument(
+                  current.id,
+                  newRequestId(),
+                  m.modules_new_document_default(),
+                  parentId,
+                );
+                router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
+              }}
+            />
+            {#if canEdit}
+              <TemplatePicker
+                workspaceId={workspace.id}
+                id="new-item-document-template"
+                bind:value={docTemplate}
+              />
+              <CreateForm
+                id="new-item-document"
+                draftName={`item-document-new:${current.id}`}
+                bind:draftContext={docTemplate}
+                label={m.modules_new_document_title()}
+                placeholder={m.modules_new_document_placeholder()}
+                submitLabel={m.modules_create_document()}
+                create={async (requestId: string, docTitle: string, context: CreateFormContext) => {
+                  const doc = await api.createItemDocument(
+                    current.id,
+                    requestId,
+                    docTitle,
+                    null,
+                    docTemplate === '' ? null : docTemplate,
+                  );
+                  if (context.saved())
+                    router.navigate(itemDocumentPath(workspace.id, current.id, doc.id));
+                }}
+              />
+            {/if}
+          </section>
+          <Backlinks kind="item" id={current.id} {workspaces} />
+        {:else if group === 'events'}
+          <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
+          <ItemEvents
+            item={view}
+            locked={moduleArchived}
+            version={listVersion}
+            onchanged={() => {
+              calendarVersion += 1;
+            }}
+          />
+          <CalendarScreen
+            {workspace}
+            scope={{ itemId: current.id }}
+            item={view}
+            locked={moduleArchived || view.archived}
+            embedded
+            version={calendarVersion}
+            onchanged={() => {
+              listVersion += 1;
+            }}
+          />
+        {:else if group === 'records'}
+          <RecordsPanel item={current} kind={mod.kind} canWrite={canEdit} except={firstRecords} />
+          <!-- 항목은 내 합계만 보며 시작 설정은 없다(D-117). -->
+          <ItemTimePanel itemId={current.id} />
+          <AttachmentsPanel target={{ kind: 'item', id: current.id }} canWrite={canEdit} />
+          <!-- 활동(D-119) -->
+          <ItemActivityTab itemId={current.id} workspaceId={workspace.id} />
+        {/if}
+      </div>
+    {/if}
   </section>
 {/if}

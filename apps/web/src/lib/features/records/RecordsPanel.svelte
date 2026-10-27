@@ -26,9 +26,13 @@
     item: ItemView;
     kind: ModuleKind;
     canWrite: boolean;
+    /** 이 기록 종류만 보인다(항목 화면의 첫 묶음: 연구 문헌, 취미 활동, D-121). 없으면 모든 종류. */
+    only?: readonly string[] | undefined;
+    /** 이 기록 종류는 빼고 보인다(첫 묶음에 간 종류를 공통 기록 묶음에서 뺀다). 없으면 모든 종류. */
+    except?: readonly string[] | undefined;
   }
 
-  const { item, kind, canWrite }: Props = $props();
+  const { item, kind, canWrite, only, except }: Props = $props();
 
   let defs = $state<RecordKindView[]>([]);
   let records = $state<RecordView[]>([]);
@@ -129,11 +133,18 @@
     const id = item.id;
     const ws = item.workspace_id;
     const moduleKind = kind;
+    const shownKinds = only;
+    const hiddenKinds = except;
     if (reloadKey < 0) return;
     let cancelled = false;
     Promise.all([api.recordKinds(), api.itemRecords(id), api.members(ws)])
       .then(async ([all, list, members]) => {
-        const mine = all.filter((d) => d.module_kind === moduleKind);
+        const mine = all.filter(
+          (d) =>
+            d.module_kind === moduleKind &&
+            (shownKinds === undefined || shownKinds.includes(d.kind)) &&
+            !(hiddenKinds?.includes(d.kind) ?? false),
+        );
         let courseList: { id: string; name: string }[] = [];
         if (mine.some((d) => d.fields.some((f) => f.type === 'course'))) {
           const modules = await api.modules(ws);

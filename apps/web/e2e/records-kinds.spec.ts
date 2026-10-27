@@ -14,7 +14,8 @@ test('a project item shows its record kinds while the server also serves course 
   expect(kinds).toContain('"type":"episode"');
   expect(kinds).toContain('"module_kind":"project"');
 
-  await page.goto(`/w/${ws}/i/${item}`);
+  // 기록은 항목의 기록 묶음에 있다(D-121).
+  await page.goto(`/w/${ws}/i/${item}/records`);
   await expect(page.getByRole('heading', { name: '기록', exact: true })).toBeVisible();
   await expect(page.getByRole('group', { name: '기록 종류' }).getByRole('button')).not.toHaveCount(
     0,

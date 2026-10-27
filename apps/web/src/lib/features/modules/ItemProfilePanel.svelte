@@ -35,9 +35,11 @@
     kind: ModuleKind;
     /** 상태·기간이 바뀌면 항목을 다시 읽는다. */
     onchanged: () => void;
+    /** 앱 안 이동의 다음 경로에서도 이 패널이 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
+    stays?: ((next: string) => boolean) | undefined;
   }
 
-  const { item, kind, onchanged }: Props = $props();
+  const { item, kind, onchanged, stays }: Props = $props();
 
   let profile = $state<ItemProfileView | undefined>(undefined);
   let people = $state<AssigneeView[]>([]);
@@ -162,6 +164,7 @@
       baseline = '';
     },
     dirty: () => editing && JSON.stringify(form) !== baseline,
+    stays: (next) => stays?.(next) === true,
   });
   onMount(draft.attach);
 

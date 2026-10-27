@@ -22,9 +22,11 @@
   interface Props {
     item: ItemView;
     module: Module;
+    /** 앱 안 이동의 다음 경로에서도 이 대화상자가 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
+    stays?: ((next: string) => boolean) | undefined;
   }
 
-  const { item, module }: Props = $props();
+  const { item, module, stays }: Props = $props();
 
   let open = $state(false);
   let targets = $state<Module[]>([]);
@@ -74,6 +76,7 @@
     dirty: () =>
       open && (pending !== null || title !== initialTitle || target !== initialTarget || !reset),
     busy: () => busy,
+    stays: (next) => stays?.(next) === true,
   });
   onMount(draft.attach);
   async function loadTargets(): Promise<void> {

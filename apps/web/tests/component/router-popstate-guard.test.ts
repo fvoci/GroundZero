@@ -32,12 +32,14 @@ describe('router popstate guard', () => {
       name: 'item',
       workspaceId: ws,
       itemId: item,
+      group: 'tasks',
       view: 'gantt',
     });
     expect(parseRoute(`/w/${ws}/i/${item}/tasks/board/t/${task}`)).toEqual({
       name: 'item',
       workspaceId: ws,
       itemId: item,
+      group: 'tasks',
       view: 'board',
       taskId: task,
     });
@@ -80,6 +82,29 @@ describe('router popstate guard', () => {
     popTo('/shared');
     expect(guard).toHaveBeenCalledTimes(1);
     expect(router.path).toBe('/shared');
+  });
+
+  // 가드는 갈 경로를 받는다(다음 경로에서도 마운트된 채인 폼은 묻지 않고 통과한다, D-121).
+  it('passes the next path to the guard on popstate and navigate, and none on a context change', () => {
+    const guard = vi.fn<(go: () => void, next?: string) => boolean>(() => true);
+    router.guard = guard;
+    popTo('/shared');
+    expect(guard).toHaveBeenLastCalledWith(expect.any(Function), '/shared');
+    router.navigate('/time#top');
+    expect(guard).toHaveBeenLastCalledWith(expect.any(Function), '/time');
+    router.confirmLeave(() => undefined);
+    expect(guard).toHaveBeenLastCalledWith(expect.any(Function));
+  });
+
+  it('replaces the address without asking the guard or adding history', () => {
+    const guard = vi.fn(() => false);
+    router.guard = guard;
+    const before = window.history.length;
+    router.replace('/shared');
+    expect(guard).not.toHaveBeenCalled();
+    expect(router.path).toBe('/shared');
+    expect(window.location.pathname).toBe('/shared');
+    expect(window.history.length).toBe(before);
   });
 
   it('ignores hash-only changes for the guard', () => {

@@ -19,7 +19,15 @@
   import { me } from '$lib/me.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
-  import { itemPath, router, workspacePath } from '$lib/router.svelte';
+  import type { ModuleViewName } from '$lib/router.svelte';
+  import {
+    itemPath,
+    moduleCalendarPath,
+    modulePath,
+    router,
+    staysOnModule,
+    workspacePath,
+  } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -27,6 +35,7 @@
   import { NativeSelect } from '$lib/ui/native-select';
   import { Textarea } from '$lib/ui/textarea';
 
+  import GroupSwitch from './GroupSwitch.svelte';
   import { kindLabel, normalizeKey } from './kinds';
   import { itemStatusLabel, periodText } from './profile';
 
@@ -41,11 +50,33 @@
   let items = $state<ItemView[]>([]);
   let error = $state<string | undefined>(undefined);
 
+  // 보기(D-121, 사용자 R7 A): 항목(`/m/:mod`)·달력(`/m/:mod/calendar`). 달력은 고른 때만 마운트해 조회한다. 주소가 이 모듈
+  // 경로가 아닐 때(독립 렌더)는 고른 값을 쓴다.
+  const moduleRoute = $derived(
+    router.route.name === 'module' && router.route.moduleId === moduleId ? router.route : undefined,
+  );
+  let chosenView = $state<ModuleViewName>('items');
+  const view = $derived<ModuleViewName>(
+    moduleRoute === undefined ? chosenView : (moduleRoute.view ?? 'items'),
+  );
+  const viewPath = (next: ModuleViewName): string =>
+    next === 'calendar'
+      ? moduleCalendarPath(workspace.id, moduleId)
+      : modulePath(workspace.id, moduleId);
+  function selectView(next: ModuleViewName): void {
+    const path = viewPath(next);
+    router.navigate(path);
+    if (router.path === path) chosenView = next;
+  }
+  // 설정·템플릿 입력은 보기와 상관없이 이 화면에 남으므로 같은 모듈 안 보기 전환에서는 묻지 않는다.
+  const staysOnThisModule = (next: string): boolean => staysOnModule(next, moduleId);
+
   $effect(() => {
     const id = moduleId;
     let cancelled = false;
     mod = undefined;
     error = undefined;
+    chosenView = 'items';
     // 템플릿에서 만들기는 모듈마다 따로다. 앞 모듈에서 고른 템플릿·제목·오류를 새 모듈에 남기지 않는다.
     templateId = '';
     templateTitle = '';
@@ -126,6 +157,7 @@
         editIcon !== mod.icon ||
         editDescription !== mod.description),
     busy: () => savingSettings,
+    stays: staysOnThisModule,
   });
   onMount(settingsDraft.attach);
 
@@ -228,6 +260,7 @@
     },
     dirty: () => templateTitle !== '' || templateId !== '',
     busy: () => templateBusy,
+    stays: staysOnThisModule,
   });
   onMount(templateDraft.attach);
 
@@ -347,96 +380,110 @@
       </p>
     {/if}
 
-    {#if items.length === 0}
-      <p class="rounded-md border bg-card p-2 @md:p-3 text-muted-foreground">
-        {m.modules_items_empty()}
-      </p>
-    {:else}
-      <ul class="flex flex-col gap-1 rounded-md border bg-card p-2" data-testid="item-list">
-        {#each items as it (it.id)}
-          <li>
-            <a
-              class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              href={itemPath(workspace.id, it.id)}
-              onclick={(e) => {
-                e.preventDefault();
-                router.navigate(itemPath(workspace.id, it.id));
-              }}
-            >
-              <span class="shrink-0 font-mono text-sm whitespace-nowrap text-muted-foreground"
-                >{it.reference}</span
-              >
-              <span class="min-w-0 [overflow-wrap:anywhere]">{it.title}</span>
-              <Badge variant="outline">{itemStatusLabel(it.status)}</Badge>
-              {#if it.starts_on !== null || it.ends_on !== null}
-                <span class="text-sm text-muted-foreground"
-                  >{periodText(it.starts_on, it.ends_on)}</span
-                >
-              {/if}
-              {#if it.visibility === 'private'}<Badge variant="outline">{m.modules_private()}</Badge
-                >{/if}
-              {#if it.archived}<Badge variant="secondary">{m.modules_archived()}</Badge>{/if}
-              {#if it.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
-            </a>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    <GroupSwitch
+      label={m.modules_views_label()}
+      options={[
+        { id: 'items', label: m.modules_view_items(), href: viewPath('items') },
+        { id: 'calendar', label: m.modules_view_calendar(), href: viewPath('calendar') },
+      ]}
+      current={view}
+      onselect={selectView}
+    />
 
-    <!-- 기능 단위의 큰 구획(항목 목록·만들기·달력·설정)만 얇은 테두리로 나눈다. 행·입력 칸에는 박스를 두르지 않는다. -->
-    {#if canCreate}
-      <div class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3">
-        <CreateForm
-          id="new-item"
-          draftName={`module-item-new:${current.id}`}
-          label={m.modules_new_item_title()}
-          placeholder={m.modules_new_item_placeholder()}
-          submitLabel={m.modules_create_item()}
-          create={async (requestId: string, title: string, context: CreateFormContext) => {
-            const created = await api.createItem(current.id, requestId, title);
-            if (context.saved()) router.navigate(itemPath(workspace.id, created.id));
-          }}
+    {#if view === 'calendar'}
+      <div class="rounded-md border bg-card p-2 @md:p-3">
+        <CalendarScreen
+          {workspace}
+          scope={{ moduleId: current.id }}
+          locked={current.archived}
+          embedded
         />
-        <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
-        {#if templates.length > 0 || templateTitle !== '' || templateId !== ''}
-          <fieldset class="min-w-0" disabled={templateBusy}>
-            <form
-              class="flex flex-wrap items-end gap-2"
-              aria-label={m.modules_from_template()}
-              onsubmit={(e: SubmitEvent) => {
-                e.preventDefault();
-                void fromTemplate(current.id);
-              }}
-            >
-              <div class="flex flex-col gap-1">
-                <Label for="template-source">{m.modules_template()}</Label>
-                <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
-                  {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
-                </NativeSelect>
-              </div>
-              <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
-                <Label for="template-title">{m.modules_template_item_title()}</Label>
-                <Input id="template-title" bind:value={templateTitle} maxlength={200} />
-              </div>
-              <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
-            </form>
-          </fieldset>
-          {#if templateError !== undefined}
-            <p class="text-sm text-destructive" role="alert">{templateError}</p>
-          {/if}
-        {/if}
       </div>
+    {:else}
+      {#if items.length === 0}
+        <p class="rounded-md border bg-card p-2 @md:p-3 text-muted-foreground">
+          {m.modules_items_empty()}
+        </p>
+      {:else}
+        <ul class="flex flex-col gap-1 rounded-md border bg-card p-2" data-testid="item-list">
+          {#each items as it (it.id)}
+            <li>
+              <a
+                class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                href={itemPath(workspace.id, it.id)}
+                onclick={(e) => {
+                  e.preventDefault();
+                  router.navigate(itemPath(workspace.id, it.id));
+                }}
+              >
+                <span class="shrink-0 font-mono text-sm whitespace-nowrap text-muted-foreground"
+                  >{it.reference}</span
+                >
+                <span class="min-w-0 [overflow-wrap:anywhere]">{it.title}</span>
+                <Badge variant="outline">{itemStatusLabel(it.status)}</Badge>
+                {#if it.starts_on !== null || it.ends_on !== null}
+                  <span class="text-sm text-muted-foreground"
+                    >{periodText(it.starts_on, it.ends_on)}</span
+                  >
+                {/if}
+                {#if it.visibility === 'private'}<Badge variant="outline"
+                    >{m.modules_private()}</Badge
+                  >{/if}
+                {#if it.archived}<Badge variant="secondary">{m.modules_archived()}</Badge>{/if}
+                {#if it.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
+              </a>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      <!-- 기능 단위의 큰 구획(항목 목록·만들기·달력·설정)만 얇은 테두리로 나눈다. 행·입력 칸에는 박스를 두르지 않는다. -->
+      {#if canCreate}
+        <div class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3">
+          <CreateForm
+            id="new-item"
+            draftName={`module-item-new:${current.id}`}
+            label={m.modules_new_item_title()}
+            placeholder={m.modules_new_item_placeholder()}
+            submitLabel={m.modules_create_item()}
+            create={async (requestId: string, title: string, context: CreateFormContext) => {
+              const created = await api.createItem(current.id, requestId, title);
+              if (context.saved()) router.navigate(itemPath(workspace.id, created.id));
+            }}
+          />
+          <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>
+          {#if templates.length > 0 || templateTitle !== '' || templateId !== ''}
+            <fieldset class="min-w-0" disabled={templateBusy}>
+              <form
+                class="flex flex-wrap items-end gap-2"
+                aria-label={m.modules_from_template()}
+                onsubmit={(e: SubmitEvent) => {
+                  e.preventDefault();
+                  void fromTemplate(current.id);
+                }}
+              >
+                <div class="flex flex-col gap-1">
+                  <Label for="template-source">{m.modules_template()}</Label>
+                  <NativeSelect id="template-source" class="w-full" bind:value={templateId}>
+                    {#each templates as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+                  </NativeSelect>
+                </div>
+                <div class="flex min-w-0 flex-1 basis-40 flex-col gap-1">
+                  <Label for="template-title">{m.modules_template_item_title()}</Label>
+                  <Input id="template-title" bind:value={templateTitle} maxlength={200} />
+                </div>
+                <Button type="submit" variant="outline">{m.modules_from_template()}</Button>
+              </form>
+            </fieldset>
+            {#if templateError !== undefined}
+              <p class="text-sm text-destructive" role="alert">{templateError}</p>
+            {/if}
+          {/if}
+        </div>
+      {/if}
     {/if}
 
-    <div class="rounded-md border bg-card p-2 @md:p-3">
-      <CalendarScreen
-        {workspace}
-        scope={{ moduleId: current.id }}
-        locked={current.archived}
-        embedded
-      />
-    </div>
-
+    <!-- 설정은 보기와 상관없이 모듈 화면에 둔다(관리자). -->
     {#if isAdmin}
       <form
         class="flex flex-wrap items-end gap-2 rounded-md border bg-card p-2 @md:p-3"

@@ -9,6 +9,7 @@ import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
+import { openItemGroup, resetRoute } from './fixtures/item-groups';
 
 beforeEach(() => {
   me.userId = 'user-a';
@@ -18,6 +19,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
+  resetRoute();
 });
 
 function workspace(id: string): Workspace {
@@ -127,12 +130,18 @@ describe('document template after switching', () => {
     const view = render(ItemScreen, {
       props: { workspace: workspace('A'), itemId: 'ia', workspaces },
     });
+    // 항목 문서 만들기는 문서 묶음에 있다(D-121).
+    await openItemGroup('문서');
     await screen.findByRole('option', { name: /A 회의록 양식/ });
     await fireEvent.change(input('new-item-document-template'), { target: { value: 't-a' } });
 
     // 참조·역링크를 따라 다른 워크스페이스의 항목으로 간다.
     await view.rerender({ workspace: workspace('B'), itemId: 'ib', workspaces });
     await screen.findByRole('heading', { name: '항목 ib' });
+    await openItemGroup('문서');
+    await waitFor(() => {
+      expect(input('new-item-document')).toBeInTheDocument();
+    });
     await waitFor(() => {
       expect(screen.queryByRole('option', { name: /A 회의록 양식/ })).toBeNull();
     });
@@ -169,6 +178,7 @@ describe('document template after switching', () => {
     const view = render(ItemScreen, {
       props: { workspace: workspace('A'), itemId: 'ia', workspaces },
     });
+    await openItemGroup('문서');
     await screen.findByRole('option', { name: /A 회의록 양식/ });
     await fireEvent.change(input('new-item-document-template'), { target: { value: 't-a' } });
     // 고르는 것만으로는 목록을 다시 읽거나 값을 비우지 않는다.

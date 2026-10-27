@@ -138,5 +138,16 @@
   "modules_people": "사람",
   "modules_groups": "그룹",
   "modules_group_badge": "그룹 · {name}",
-  "modules_jump_label": "이 항목에서 바로 가기"
+  "modules_item_groups_label": "항목 묶음",
+  "modules_item_group_tasks": "업무",
+  "modules_item_group_docs": "문서",
+  "modules_item_group_events": "일정",
+  "modules_item_group_records": "기록",
+  "modules_item_group_references": "문헌",
+  "modules_item_group_plan": "계획",
+  "modules_item_group_episodes": "회차",
+  "modules_item_group_activities": "활동",
+  "modules_views_label": "모듈 보기",
+  "modules_view_items": "항목",
+  "modules_view_calendar": "달력"
 }
