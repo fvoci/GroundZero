@@ -12,7 +12,7 @@ description: >-
 
 > **fvoci 저장소에서 쓸 때(이 상자는 원문이 아니라 이 저장소가 덧붙인 것이다, D-130).**
 > 저장소 규칙이 우선한다: `AGENTS.md`, 결정 기록(`docs/decisions.md`), 저장소의 rustfmt·Clippy 설정(D-09).
-> `crates/server`와 `xtask`는 애플리케이션 코드이므로 라이브러리 공개 API 규칙은 엄격하게 적용하지 않는다.
+> `crates/*`와 `xtask`는 애플리케이션 코드이므로 라이브러리 공개 API 규칙은 엄격하게 적용하지 않는다.
 > `[lints]` 표 도입·lint 강화는 검사 규칙 변경이라 사용자 결정 없이는 하지 않는다. 검사는 저장소 명령(`cargo xtask check`)으로 돌린다.
 > 출처·라이선스는 같은 폴더의 `README.md`·`LICENSE`. 리뷰할 때는 `.agents/skills/rust-review/`를 쓴다.
 

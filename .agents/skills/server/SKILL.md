@@ -1,6 +1,6 @@
 ---
 name: server
-description: fvoci 서버(crates/server)를 바꿀 때 무엇을 읽고 어떤 검사를 돌리는지 — 접근 등급 모듈, 조직 문맥, 정의자 함수 호출 규칙
+description: fvoci 서버(crates/server와 공통 crate core·db·http)를 바꿀 때 무엇을 읽고 어떤 검사를 돌리는지 — 접근 등급 모듈, 조직 문맥, 정의자 함수 호출 규칙
 ---
 
 # 서버 작업

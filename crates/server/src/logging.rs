@@ -1,6 +1,7 @@
 //! 운영 로그(D-83). 기존 `tracing`을 그대로 쓰고 거르기와 출력 형식만 정한다.
 //!
-//! - 레벨·모듈 거르기: `FVOCI_LOG`(없으면 `info`. 옛 이름 `RUST_LOG`는 읽지 않는다, D-92). 예: `info,fvoci_server::collab=debug`.
+//! - 레벨·모듈 거르기: `FVOCI_LOG`(없으면 `info`. 옛 이름 `RUST_LOG`는 읽지 않는다, D-92). 예: `info,fvoci_server::collab=debug`, 서버 전체는
+//!   `info,fvoci_server=debug,fvoci_core=debug,fvoci_db=debug,fvoci_http=debug`(공통 crate의 target은 `fvoci_core`·`fvoci_db`·`fvoci_http`).
 //!   시작할 때 한 번 읽으므로 바꾸면 다시 시작해야 한다. 잘못 쓰면 시작하지 않는다.
 //! - 형식: `FVOCI_LOG_FORMAT=json`(기본, 한 줄에 JSON 객체 하나) 또는 `pretty`(개발용, 같은 사건·필드를 한 줄
 //!   글로). 둘 다 stdout으로, 색(ANSI)은 쓰지 않는다.
