@@ -24,11 +24,11 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -236,6 +236,7 @@ function task(due: string): TaskView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,

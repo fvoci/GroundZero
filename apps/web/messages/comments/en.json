@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "comments_heading": "Comments",
+  "comments_archived": "You cannot write to an archived item.",
   "comments_load_failed": "Couldn't load comments.",
   "comments_action_failed": "Couldn't do that.",
   "comments_posted": "Comment added.",
@@ -26,5 +27,7 @@
   "comments_delete": "Delete",
   "comments_delete_confirm_label": "Confirm comment deletion",
   "comments_delete_confirm": "Delete this comment?",
-  "comments_loading": "Loading…"
+  "comments_loading": "Loading…",
+  "comments_discard_reply": "Discard this reply? Other comment drafts will be kept.",
+  "comments_discard_edit": "Discard changes to this comment? Other comment drafts will be kept."
 }

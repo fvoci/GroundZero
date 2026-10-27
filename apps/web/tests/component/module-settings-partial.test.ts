@@ -3,9 +3,12 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,11 +16,11 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -76,6 +79,29 @@ describe('module settings partial save', () => {
     });
     // 막힌 키 입력은 그대로 남는다.
     expect(field('module-edit-key').value).toBe('OPS');
+  });
+
+  // D-82: 일반 완료는 토스트다. 키를 바꾼 저장의 안내(예전 키가 남음)도 그 토스트 문구에 붙고 화면 안에는 없다.
+  it('reports a key change once as a toast that carries the old key note', async () => {
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(before);
+    vi.spyOn(api, 'items').mockResolvedValue([]);
+    vi.spyOn(api, 'updateModule').mockResolvedValue({ ...before, key: 'OPS' });
+    vi.spyOn(workspaceNav, 'refreshModules').mockReturnValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    render(ModuleScreen, { props: { workspace, moduleId: 'A' } });
+    await screen.findByRole('heading', { name: '개발' });
+
+    await fireEvent.input(field('module-edit-key'), { target: { value: 'OPS' } });
+    await fireEvent.submit(field('module-edit-key').closest('form') ?? field('module-edit-key'));
+
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    const note = m.modules_key_changed({ before: 'DEV', after: 'OPS' });
+    expect(done).toHaveBeenCalledWith(`${m.common_saved()} ${note}`, 'module-settings');
+    expect(screen.queryByText(note)).toBeNull();
   });
 
   // 리뷰: 저장 중에도 다시 보낼 수 있어 저장이 겹쳤다. 먼저 시작한 저장이 늦게 실패하면 그 저장의 일부(아이콘만 바꾼 옛

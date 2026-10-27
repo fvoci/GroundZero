@@ -89,15 +89,33 @@ export const NewWorkspace: Story = {
       modules: () => Promise.resolve([]),
       wikiDocuments: () => Promise.resolve([]),
       home: () => Promise.resolve(emptyHomeView()),
+      // 홈의 내 업무는 날짜 없음까지 포함하는 별도 계약이다.
+      myTasks: () =>
+        Promise.resolve({
+          counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 },
+          workspaces: [],
+        }),
+      recentActivity: () => Promise.resolve([]),
       calendar: () => Promise.resolve(emptyCalendarView()),
-      notifications: () => Promise.resolve([]),
+      notifications: () => Promise.resolve({ notifications: [], next: null }),
     }),
   args: { unreadCount: 0 },
   play: async ({ canvasElement }) => {
-    await within(canvasElement).findByText('이번 주까지 마감인 내 업무가 없습니다.');
+    await within(canvasElement).findByText('담당한 업무가 없습니다.');
     const bar = within(await sidebar(canvasElement));
     await bar.findByText('아직 모듈이 없습니다.');
     await expect(bar.queryByTestId('sidebar-modules')).toBeNull();
+    // 조직 › 워크스페이스 전환기가 사이드바 맨 위, 검색 앞이다(D-121).
+    const switcher = bar.getByTestId('organization-switcher');
+    await expect(
+      switcher.compareDocumentPosition(bar.getByTestId('workspace-switcher')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await expect(
+      bar
+        .getByTestId('workspace-switcher')
+        .compareDocumentPosition(bar.getByTestId('search-open')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   },
 };
 
@@ -220,4 +238,10 @@ export const Narrow375: Story = {
 export const Narrow500: Story = {
   ...Narrow375,
   globals: { viewport: { value: 'narrow500', isRotated: false } },
+};
+
+export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
+export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
+export const BrandNarrowLargeText: Story = {
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

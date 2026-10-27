@@ -1,4 +1,11 @@
 {
+  "references_load_more": "Load more",
+  "references_unread_count": "{count} unread",
+  "references_notifications_back": "Back to list",
+  "references_notifications_choose": "Choose a notification to see its details.",
+  "references_notification_open_target": "Open target",
+  "references_notification_unavailable": "This notification is unavailable.",
+  "references_notification_invite": "{who} invited you. {target}",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "references_kind_item": "Item",
   "references_kind_document": "Document",

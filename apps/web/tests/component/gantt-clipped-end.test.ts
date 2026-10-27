@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,6 +48,7 @@ function task(id: string, title: string, start: string, due: string): TaskView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -62,7 +65,7 @@ function task(id: string, title: string, start: string, due: string): TaskView {
 describe('gantt bar clipped at the end of the shown period', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
-    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'gantt' }));
+    window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
@@ -128,7 +131,7 @@ describe('gantt bar clipped at the end of the shown period', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[2]).toMatchObject({
+    expect(update.mock.calls[0]?.[3]).toMatchObject({
       start_date: '2026-01-03',
       due_date: '2028-01-03',
     });

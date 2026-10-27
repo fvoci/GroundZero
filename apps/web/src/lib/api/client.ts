@@ -1,7 +1,6 @@
 // API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
 // 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — docs/development.md#api-contract).
 import type {
-  Accepted,
   AuthInfo,
   Group,
   Health,
@@ -16,9 +15,25 @@ import type {
   Role,
   Workspace,
 } from '@fvoci/api-client';
+import type {
+  Accepted,
+  Activity,
+  ActivityPage,
+  MyTask,
+  MyTaskCounts,
+  Organization,
+  OrganizationLimits,
+  OrganizationSummary,
+  OrgRole,
+  StatusCategory,
+  TaskStatusDefinition,
+} from '@fvoci/api-client';
+
+import { untrack } from 'svelte';
 
 import {
   auth,
+  accountSwitching,
   connection,
   reportConnectionLost,
   reportSessionExpired,
@@ -57,7 +72,7 @@ export interface DocumentView {
   can_edit: boolean;
   visibility: 'workspace' | 'private';
   allow_copy: boolean;
-  /** 노출을 줄이는 관리(공유·공개 링크 철회, 비공개 전환)를 할 수 있는지. 보관 중에도 소유 권한자는 참. */
+  /** 공유·공개 링크·설정을 바꿀 수 있는지. 보관된 항목의 문서도 워크스페이스 관리자는 참(D-113 ⑯). */
   can_manage: boolean;
   /** 휴지통으로 옮길 수 있는지. */
   can_delete: boolean;
@@ -188,6 +203,7 @@ export function parseMe(value: Json): Me {
     week_start: typeof o.week_start === 'string' ? o.week_start : '',
     hour_cycle: typeof o.hour_cycle === 'string' ? o.hour_cycle : '',
     theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'system',
+    last_organization_id: optStr(o, 'last_organization_id'),
     limits: parseInputLimits(rec(o.limits, 'me.limits')),
   };
 }
@@ -213,6 +229,187 @@ export function parseWorkspace(value: Json): Workspace {
     realtime_enabled: bool(o, 'realtime_enabled'),
     access: access(str(o, 'access')),
   };
+}
+
+// --- 조직 (D-111·D-112·D-124) --------------------------------------------
+
+function orgRole(value: string): OrgRole {
+  if (value === 'admin' || value === 'member') return value;
+  throw new TypeError(`unknown organization role ${value}`);
+}
+
+export function parseOrganizationSummary(value: Json): OrganizationSummary {
+  const o = rec(value, 'organization');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    role: orgRole(str(o, 'role')),
+    public_links_enabled: bool(o, 'public_links_enabled'),
+    created_at: str(o, 'created_at'),
+  };
+}
+
+export function parseOrganizationLimits(value: Json): OrganizationLimits {
+  const o = rec(value, 'organization limits');
+  return {
+    max_file_bytes: optInt(o, 'max_file_bytes'),
+    max_storage_bytes: optInt(o, 'max_storage_bytes'),
+    max_concurrent_uploads: optInt(o, 'max_concurrent_uploads'),
+    notification_rate_per_hour: optInt(o, 'notification_rate_per_hour'),
+    activity_retention_days: optInt(o, 'activity_retention_days'),
+    audit_retention_days: optInt(o, 'audit_retention_days'),
+  };
+}
+
+export function parseOrganization(value: Json): Organization {
+  const o = rec(value, 'organization');
+  return {
+    ...parseOrganizationSummary(value),
+    limits: parseOrganizationLimits(o.limits),
+  };
+}
+
+/** 초대 수락 결과. 조직 초대는 워크스페이스가 없다(D-112·D-118). */
+export function parseAccepted(value: Json): Accepted {
+  const o = rec(value, 'accepted');
+  return {
+    kind: invitationTarget(str(o, 'kind')),
+    organization_id: str(o, 'organization_id'),
+    workspace_id: optStr(o, 'workspace_id'),
+  };
+}
+
+// --- 항목별 업무 상태 정의 (D-116) ----------------------------------------
+
+export function statusCategory(value: string): StatusCategory {
+  if (value === 'todo' || value === 'doing' || value === 'done') return value;
+  throw new TypeError(`unknown status category ${value}`);
+}
+
+export function parseTaskStatusDefinition(value: Json): TaskStatusDefinition {
+  const o = rec(value, 'task status');
+  const position = o.position;
+  if (typeof position !== 'number' || !Number.isFinite(position))
+    throw new TypeError('expected number at position');
+  return {
+    id: str(o, 'id'),
+    name: str(o, 'name'),
+    color: str(o, 'color'),
+    position,
+    category: statusCategory(str(o, 'category')),
+    task_count: int(o, 'task_count'),
+  };
+}
+
+// --- 내 업무 (D-120) ---------------------------------------------------
+
+export type MyTaskBucket = 'overdue' | 'today' | 'upcoming' | 'none' | 'done';
+
+export interface MyTaskView extends Omit<MyTask, 'bucket' | 'status_category'> {
+  bucket: MyTaskBucket;
+  status_category: StatusCategory;
+}
+
+export interface MyTasksView {
+  counts: MyTaskCounts;
+  workspaces: { workspace_id: string; workspace_name: string; tasks: MyTaskView[] }[];
+}
+
+function myTaskBucket(value: string): MyTaskBucket {
+  if (
+    value === 'overdue' ||
+    value === 'today' ||
+    value === 'upcoming' ||
+    value === 'none' ||
+    value === 'done'
+  )
+    return value;
+  throw new TypeError(`unknown bucket ${value}`);
+}
+
+function parseMyTask(value: Json): MyTaskView {
+  const o = rec(value, 'my task');
+  return {
+    id: str(o, 'id'),
+    item_id: str(o, 'item_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    status: str(o, 'status'),
+    status_category: statusCategory(str(o, 'status_category')),
+    priority: str(o, 'priority'),
+    start_date: optStr(o, 'start_date'),
+    due_date: optStr(o, 'due_date'),
+    bucket: myTaskBucket(str(o, 'bucket')),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+export function parseMyTasks(value: Json): MyTasksView {
+  const o = rec(value, 'my tasks');
+  const c = rec(o.counts, 'my task counts');
+  return {
+    counts: {
+      overdue: int(c, 'overdue'),
+      today: int(c, 'today'),
+      upcoming: int(c, 'upcoming'),
+      undated: int(c, 'undated'),
+      done: int(c, 'done'),
+    },
+    workspaces: parseList(o.workspaces, (v) => {
+      const w = rec(v, 'workspace tasks');
+      return {
+        workspace_id: str(w, 'workspace_id'),
+        workspace_name: str(w, 'workspace_name'),
+        tasks: parseList(w.tasks, parseMyTask),
+      };
+    }),
+  };
+}
+
+// --- 활동 (D-119, 감사와 분리) ---------------------------------------------
+
+export function parseActivity(value: Json): Activity {
+  const o = rec(value, 'activity');
+  const detail: unknown = o.detail;
+  return {
+    id: str(o, 'id'),
+    kind: str(o, 'kind'),
+    actor_id: optStr(o, 'actor_id'),
+    actor_name: optStr(o, 'actor_name'),
+    workspace_id: optStr(o, 'workspace_id'),
+    target_kind: str(o, 'target_kind'),
+    target_id: str(o, 'target_id'),
+    item_id: optStr(o, 'item_id'),
+    detail: isRecord(detail) ? detail : {},
+    created_at: str(o, 'created_at'),
+  };
+}
+
+export function parseActivityPage(value: Json): ActivityPage {
+  const o = rec(value, 'activity page');
+  return {
+    activity: parseList(o.activity, parseActivity),
+    next_before: optStr(o, 'next_before'),
+    next_before_id: optStr(o, 'next_before_id'),
+  };
+}
+
+/** 커서 조회(D-118·D-119): `before`와 `before_id`는 함께 보낸다. */
+export interface PageCursor {
+  before: string;
+  before_id: string;
+}
+
+function cursorParams(
+  params: URLSearchParams,
+  cursor: PageCursor | undefined,
+  limit?: number,
+): void {
+  if (cursor !== undefined) {
+    params.set('before', cursor.before);
+    params.set('before_id', cursor.before_id);
+  }
+  if (limit !== undefined) params.set('limit', String(limit));
 }
 
 export function parseSummary(value: Json): SummaryView {
@@ -472,15 +669,6 @@ export function parseReceivedInvitation(value: Json): ReceivedInvitation {
   };
 }
 
-export function parseAccepted(value: Json): Accepted {
-  const o = rec(value, 'accepted');
-  return {
-    kind: invitationTarget(str(o, 'kind')),
-    organization_id: str(o, 'organization_id'),
-    workspace_id: optStr(o, 'workspace_id'),
-  };
-}
-
 export function parseGroup(value: Json): Group {
   const o = rec(value, 'group');
   return {
@@ -660,6 +848,7 @@ export type RecordFieldType =
   | 'person'
   | 'people'
   | 'course'
+  /** 이 강좌의 회차(D-123 강의 질문·복습). */
   | 'episode';
 
 const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
@@ -943,11 +1132,16 @@ export interface BacklinkView {
 
 export interface NotificationView {
   id: string;
-  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감) */
+  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감)·invite(초대, D-118) */
   kind: string;
+  /** 알림이 속한 조직. 초대는 어느 조직 문맥에서나 보이므로 현재 조직과 다를 수 있다(D-118). */
+  organization_id: string | null;
+  /** `invite`면 수락·거절할 초대 id. */
+  invitation_id: string | null;
   document_id: string | null;
   task_id: string | null;
-  /** 대상(문서 또는 업무) 제목. 초대 알림처럼 대상이 없으면 null. */
+  /** 대상(문서 또는 업무) 제목. */
+  // 초대 알림의 대상 제목은 계약대로 null이다(D-118).
   document_title: string | null;
   document_reference: string | null;
   workspace_id: string | null;
@@ -999,13 +1193,32 @@ export function parseBacklink(value: Json): BacklinkView {
   };
 }
 
+export interface NotificationPageView {
+  notifications: NotificationView[];
+  /** 둘 다 null이면 더 읽을 페이지가 없다(D-118). */
+  next: PageCursor | null;
+}
+
+export function parseNotificationPage(value: Json): NotificationPageView {
+  const o = rec(value, 'notification page');
+  const before = optStr(o, 'next_before');
+  const beforeId = optStr(o, 'next_before_id');
+  return {
+    notifications: parseList(o.notifications, parseNotification),
+    next: before !== null && beforeId !== null ? { before, before_id: beforeId } : null,
+  };
+}
+
 export function parseNotification(value: Json): NotificationView {
   const o = rec(value, 'notification');
   return {
     id: str(o, 'id'),
     kind: str(o, 'kind'),
+    organization_id: optStr(o, 'organization_id'),
+    invitation_id: optStr(o, 'invitation_id'),
     document_id: optStr(o, 'document_id'),
     task_id: optStr(o, 'task_id'),
+    // 초대 알림은 대상 제목이 없다(D-118).
     document_title: optStr(o, 'document_title'),
     document_reference: optStr(o, 'document_reference'),
     workspace_id: optStr(o, 'workspace_id'),
@@ -1082,9 +1295,40 @@ export function parseRevision(value: Json): RevisionView {
 
 // --- 업무 -------------------------------------------------------------
 
-export type TaskStatus = 'todo' | 'in_progress' | 'done';
+// 상태 이름은 항목 정의의 문자열, 완료 판단은 status_category만 사용한다.
+export type TaskStatus = string;
+// 업무 요청의 409 account_changed: 다른 요청과 똑같이 앱 전체 계정 전환(안전 상태·다시 읽기)을 시작한다(D-96; 앞 계정의
+// 화면을 그대로 두면 다른 화면이 새 계정의 세션으로 요청을 보낸다). 업무 폼은 이 오류로 입력을 숨기고, 입력은 앞 계정의
+// 브라우저 초안(common/form-draft.ts, 사용자별 키)으로 남아 그 계정이 다시 열면 되살릴 수 있다. 모든 업무 쓰기는 편집을 시작한
+// 사용자를 명시적으로 보내며, 다른 409(conflict 등)는 그대로 폼이 받는다.
+function failTask(status: number, json: Json): never {
+  if (status === 409 && isRecord(json) && json.error === 'account_changed') {
+    switchAccount();
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
+  }
+  fail(status, json);
+}
+
+async function expectTask<T>(
+  method: string,
+  path: string,
+  parse: (v: Json) => T,
+  body: Json,
+  expectedUser: string,
+  // 선택적 취소 신호(#84 CSV 가져오기 중단). 기존 호출은 그대로.
+  signal?: AbortSignal,
+): Promise<T> {
+  const { status, json } = await request(
+    method,
+    path,
+    body,
+    { [EXPECTED_USER]: expectedUser },
+    signal,
+  );
+  if (status < 200 || status >= 300) failTask(status, json);
+  return parse(json);
+}
 export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
-export const TASK_STATUSES: readonly TaskStatus[] = ['todo', 'in_progress', 'done'] as const;
 export const TASK_PRIORITIES: readonly TaskPriority[] = [
   'none',
   'low',
@@ -1125,6 +1369,13 @@ function parseRule(value: Json): RecurrenceRule | null {
   };
 }
 
+// 반복 충돌 최신본은 편집 중 입력과 분리한다.
+export class TaskRuleConflict extends ApiError {
+  constructor(readonly current: TaskDetailView) {
+    super(409, 'rule_conflict', 'rule_conflict');
+  }
+}
+
 export interface TaskSeriesView {
   id: string;
   root_task_id: string;
@@ -1142,8 +1393,7 @@ export interface TaskView {
   title: string;
   description: string;
   status: TaskStatus;
-  /** 서버가 준 상태 이름 그대로(항목 정의, D-116). 화면 열은 `status`(기본 이름이거나 범주로 맞춘 값), 저장 본문은 이 이름이다. 없으면 `status`. */
-  status_name?: string;
+  status_category: StatusCategory;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1179,8 +1429,7 @@ export interface TaskDetailView extends TaskView {
 export interface TaskInput {
   title: string;
   description: string;
-  /** 상태 이름(항목 정의, D-116). 이 단계 화면은 기본 세 이름만 고르지만, 서버가 준 다른 이름은 그대로 돌려보낸다. */
-  status: string;
+  status: TaskStatus;
   priority: TaskPriority;
   start_date: string | null;
   due_date: string | null;
@@ -1338,36 +1587,6 @@ function parseSchedulePlan(value: Json): SchedulePlanView {
   };
 }
 
-/**
- * 새 항목의 기본 상태 이름(SQL `app_seed_task_statuses`, 개정 2026-10-26 ⑪): `할 일`·`진행 중`·`완료`. 이 단계의 화면은 열을
- * 안쪽 id(`todo`·`in_progress`·`done`)로 다루므로, 서버로 보낼 때 열 id를 이 이름으로 바꾸고 받을 때 이 이름을 열 id로 돌린다.
- * 다른 이름(사용자 정의 상태)은 그대로 보내고 범주로 열을 정한다. 항목별 상태 정의 화면은 3단계 범위다.
- */
-export const SEED_STATUS_NAME: Readonly<Record<TaskStatus, string>> = {
-  todo: '할 일',
-  in_progress: '진행 중',
-  done: '완료',
-};
-
-/** 서버에 보낼 상태 이름: 열 id면 기본 상태 이름으로, 그 밖(항목이 정의한 이름)은 그대로. */
-export function toServerStatus(status: string): string {
-  const lane = TASK_STATUSES.find((s) => s === status);
-  return lane === undefined ? status : SEED_STATUS_NAME[lane];
-}
-
-/**
- * 업무 상태 이름은 항목이 정의한 문자열이다(D-116, 1단계 계약). 이 단계의 화면은 기본 세 이름(`todo`·`in_progress`·`done`)으로
- * 열을 그리므로, 다른 이름이면 서버가 함께 주는 범주(`status_category`: todo·doing·done)의 열로 보인다. 모르는 값으로
- * 목록 전체를 버리지 않는다. 저장 본문은 원래 이름(`status_name`)을 돌려보낸다(`formOf`). 항목별 상태 정의 화면은 3단계 범위다.
- */
-function taskStatus(value: string, category: unknown): TaskStatus {
-  const found = TASK_STATUSES.find((s) => s === value || SEED_STATUS_NAME[s] === value);
-  if (found !== undefined) return found;
-  if (category === 'doing') return 'in_progress';
-  if (category === 'done') return 'done';
-  return 'todo';
-}
-
 function taskPriority(value: string): TaskPriority {
   const found = TASK_PRIORITIES.find((p) => p === value);
   if (found === undefined) throw new TypeError(`unknown priority ${value}`);
@@ -1390,8 +1609,8 @@ export function parseTask(value: Json): TaskView {
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
     description: str(o, 'description'),
-    status: taskStatus(str(o, 'status'), o.status_category),
-    status_name: str(o, 'status'),
+    status: str(o, 'status'),
+    status_category: statusCategory(str(o, 'status_category')),
     priority: taskPriority(str(o, 'priority')),
     start_date: optStr(o, 'start_date'),
     due_date: optStr(o, 'due_date'),
@@ -1501,6 +1720,7 @@ export interface CalendarTaskView {
   reference: string | null;
   title: string;
   status: TaskStatus;
+  status_category: StatusCategory;
   milestone: boolean;
   start_date: string | null;
   due_date: string | null;
@@ -1570,7 +1790,8 @@ function parseCalendar(value: Json): CalendarView {
         item_id: str(t, 'item_id'),
         reference: optStr(t, 'reference'),
         title: str(t, 'title'),
-        status: taskStatus(str(t, 'status'), t.status_category),
+        status: str(t, 'status'),
+        status_category: statusCategory(str(t, 'status_category')),
         milestone: bool(t, 'milestone'),
         start_date: optStr(t, 'start_date'),
         due_date: optStr(t, 'due_date'),
@@ -1727,7 +1948,9 @@ export interface HomeTaskView {
   workspace_id: string;
   reference: string | null;
   title: string;
-  status: TaskStatus;
+  // 홈 계약의 상태는 항목별 사용자 정의 문자열이고 집계는 status_category(D-116).
+  status: string;
+  status_category: StatusCategory;
   due_date: string | null;
   bucket: 'overdue' | 'today' | 'upcoming' | null;
 }
@@ -1784,8 +2007,9 @@ function parseHomeTask(value: Json): HomeTaskView {
     workspace_id: str(o, 'workspace_id'),
     reference: optStr(o, 'reference'),
     title: str(o, 'title'),
-    status: taskStatus(str(o, 'status'), o.status_category),
+    status: str(o, 'status'),
     due_date: optStr(o, 'due_date'),
+    status_category: statusCategory(str(o, 'status_category')),
     bucket,
   };
 }
@@ -2008,6 +2232,9 @@ export function fileContentUrl(id: string, version?: number, inline = false): st
 
 /** 업로드 조각 보내기(날것 본문 + SHA-256 머리글). */
 async function putPart(upload: string, number: number, body: Blob, sha256: string): Promise<void> {
+  // 일반 JSON 요청 밖 업로드 재시도도 계정 전환 시 멈춘다.
+  if (untrack(accountSwitching))
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   try {
     response = await fetch(`/api/uploads/${encodeURIComponent(upload)}/parts/${String(number)}`, {
@@ -2238,7 +2465,7 @@ export interface SearchFilters {
   kind?: SearchKind;
   moduleId?: string;
   /** 업무 상태 범주(D-116). 상태 이름이 아니라 범주로 거르며, 주면 업무만 나온다. */
-  statusCategory?: 'todo' | 'doing' | 'done';
+  statusCategory?: StatusCategory;
   /** `me` 또는 사용자 id. */
   assignee?: string;
   from?: string;
@@ -2307,7 +2534,15 @@ async function request(
   path: string,
   body?: Json,
   extra: Record<string, string> = {},
+  // CSV 가져오기 취소 신호를 fetch까지 전달한다.
+  signal?: AbortSignal,
 ): Promise<{ status: number; json: Json; etag: string | null }> {
+  // 계정 변경 감지 뒤 자동 재시도·늦은 응답을 기존 화면에 적용하지 않는다(D-96).
+  // 전환 상태는 반응형 읽기가 아니다: 화면의 $effect가 요청을 부를 때 여기서 읽은 switching이 그 효과의 의존성이 되면, 전환이
+  // 시작되는 순간 그 효과들이 다시 실행돼 화면이 로딩 상태로 돌아가고(DOM·메모리 입력·떠나기 가드가 사라짐) 입력 보존 설계가
+  // 깨진다(#88). 그래서 untrack으로 읽는다. 전환 중 요청을 막는 동작은 같다.
+  if (untrack(accountSwitching))
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   const expiriesAtStart = sessionExpiries();
   try {
@@ -2322,13 +2557,18 @@ async function request(
       headers,
     };
     if (body !== undefined) init.body = JSON.stringify(body);
+    if (signal !== undefined) init.signal = signal;
     response = await fetch(path, init);
   } catch (error: unknown) {
+    if (signal?.aborted === true) throw error;
     // 연결 배너(D-82). 각 화면은 자기 자리에서 입력을 지키고 다시 시도한다.
     reportConnectionLost();
     throw new NetworkError(error instanceof Error ? error.message : 'network error');
   }
   const text = await response.text();
+  // 진행 중이던 요청도 계정 전환 안전 상태를 벗어나지 못한다.
+  if (untrack(accountSwitching))
+    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let json: Json = null;
   if (text !== '') {
     try {
@@ -2392,8 +2632,10 @@ async function expectOk<T>(
   path: string,
   parse: (v: Json) => T,
   body?: Json,
+  // 선택적 취소 신호(기존 호출은 그대로).
+  signal?: AbortSignal,
 ): Promise<T> {
-  const { status, json } = await request(method, path, body);
+  const { status, json } = await request(method, path, body, {}, signal);
   if (status < 200 || status >= 300) fail(status, json);
   return parse(json);
 }
@@ -2420,13 +2662,24 @@ export const api = {
     week_start?: string;
     hour_cycle?: string;
     theme?: string;
+    last_organization_id?: string | null;
   }) => expectOk('PUT', '/api/me/settings', none, settings),
   async logout(): Promise<string> {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
   },
+  /** 내가 속한 조직(전환기 목록, D-111). 서버는 기본 조직을 정하지 않는다. */
+  myOrganizations: () =>
+    expectOk('GET', '/api/me/organizations', (v) => parseList(v, parseOrganizationSummary)),
+  organization: (id: string) =>
+    expectOk('GET', `/api/organizations/${encodeURIComponent(id)}`, parseOrganization),
   workspaces: () => expectOk('GET', '/api/workspaces', (v) => parseList(v, parseWorkspace)),
-  createWorkspace: (requestId: string, name: string) =>
-    expectOk('POST', '/api/workspaces', parseWorkspace, { request_id: requestId, name }),
+  /** 조직 안 워크스페이스는 조직 멤버 누구나 만든다(D-112). */
+  createWorkspace: (requestId: string, organizationId: string, name: string) =>
+    expectOk('POST', '/api/workspaces', parseWorkspace, {
+      request_id: requestId,
+      organization_id: organizationId,
+      name,
+    }),
   wikiDocuments: (workspaceId: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`, (v) =>
       parseList(v, parseSummary),
@@ -2685,6 +2938,7 @@ export const api = {
     expectOk('DELETE', `/api/invitations/${encodeURIComponent(id)}`, none),
   myInvitations: () =>
     expectOk('GET', '/api/invitations', (v) => parseList(v, parseReceivedInvitation)),
+  /** 수락 결과의 `kind`로 조직 초대(워크스페이스 없음)와 워크스페이스 초대를 가른다(D-118). */
   acceptInvitation: (id: string) =>
     expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, parseAccepted),
   declineInvitation: (id: string) =>
@@ -2728,7 +2982,11 @@ export const api = {
     if (status < 200 || status >= 300) fail(status, json);
     return parseDocument(json);
   },
-  sharedWithMe: () => expectOk('GET', '/api/me/shared', (v) => parseList(v, parseSharedView)),
+  /** 공유받은 문서는 현재 조직에서 받은 것만(D-111). */
+  sharedWithMe: (organizationId: string) =>
+    expectOk('GET', `/api/me/shared?organization_id=${encodeURIComponent(organizationId)}`, (v) =>
+      parseList(v, parseSharedView),
+    ),
   /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
   setSettings: (
     id: string,
@@ -2738,10 +2996,11 @@ export const api = {
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
     ),
-  share: (id: string, email: string, perm: 'read' | 'write') =>
+  share: (id: string, email: string, perm: 'read' | 'write', organizationId: string) =>
     expectOk('POST', `/api/documents/${encodeURIComponent(id)}/shares`, parseShareView, {
       email,
       permission: perm,
+      organization_id: organizationId,
     }),
   unshare: (shareId: string) =>
     expectOk('DELETE', `/api/document-shares/${encodeURIComponent(shareId)}`, none),
@@ -2756,6 +3015,55 @@ export const api = {
       target_workspace_id: target.workspaceId,
       target_item_id: target.itemId,
     }),
+  /** 항목의 상태 정의(D-116). 칸반 열·상태 편집의 정본. */
+  taskStatuses: (itemId: string) =>
+    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/statuses`, (v) =>
+      parseList(v, parseTaskStatusDefinition),
+    ),
+  createTaskStatus: (
+    expectedUser: string,
+    itemId: string,
+    name: string,
+    color: string,
+    category: StatusCategory,
+  ) =>
+    expectTask(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/statuses`,
+      parseTaskStatusDefinition,
+      { name, color, category },
+      expectedUser,
+    ),
+  /** 바꾸는 칸만 보낸다. `category`를 done으로 바꾸면 그 열 업무의 완료 시각이 채워진다. */
+  updateTaskStatus: (
+    expectedUser: string,
+    itemId: string,
+    statusId: string,
+    patch: { name?: string; color?: string; category?: StatusCategory; position?: number },
+  ) =>
+    expectTask(
+      'PUT',
+      `/api/items/${encodeURIComponent(itemId)}/statuses/${encodeURIComponent(statusId)}`,
+      parseTaskStatusDefinition,
+      patch,
+      expectedUser,
+    ),
+  /** 업무가 있는 열은 `moveTo`(같은 항목의 다른 상태)가 필요하다. 옮긴 업무 수를 돌려준다. */
+  deleteTaskStatus: (
+    expectedUser: string,
+    itemId: string,
+    statusId: string,
+    moveTo: string | null,
+  ) =>
+    expectTask(
+      'DELETE',
+      `/api/items/${encodeURIComponent(itemId)}/statuses/${encodeURIComponent(statusId)}${
+        moveTo === null ? '' : `?move_to=${encodeURIComponent(moveTo)}`
+      }`,
+      (v) => int(rec(v, 'deleted status'), 'moved'),
+      undefined,
+      expectedUser,
+    ),
   tasks: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
       parseList(v, parseTask),
@@ -2937,27 +3245,56 @@ export const api = {
   task: (id: string) => expectOk('GET', `/api/tasks/${encodeURIComponent(id)}`, parseTaskDetail),
   /**
    * 업무 만들기. `fields`를 주면 그 칸까지 서버가 한 트랜잭션에서 확인·저장한다(D-105, 하나라도 거절되면 업무가 남지
-   * 않는다). 같은 요청 id는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도).
+   * 않는다). 같은 요청 id는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도). `expectedUser`는 편집 시작 시 고정한다.
    */
   createTask: (
+    expectedUser: string,
     itemId: string,
     requestId: string,
     title: string,
     parentId: string | null = null,
-    fields?: Omit<TaskInput, 'title'>,
+    fields?: Partial<Omit<TaskInput, 'title'>>,
+    // #84 가져오기 중단.
+    signal?: AbortSignal,
   ) =>
-    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/tasks`, parseTaskDetail, {
-      ...fields,
-      ...(fields?.status === undefined ? {} : { status: toServerStatus(fields.status) }),
-      request_id: requestId,
-      title,
-      parent_id: parentId,
-    }),
+    expectTask(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/tasks`,
+      parseTaskDetail,
+      {
+        ...fields,
+        request_id: requestId,
+        title,
+        parent_id: parentId,
+      },
+      expectedUser,
+      signal,
+    ),
+  // 빠른 추가는 CreateTask의 기본값을 쓰고 담당=나만 명시한다(D-120).
+  createQuickTask: (
+    expectedUser: string,
+    itemId: string,
+    requestId: string,
+    title: string,
+    userId: string,
+  ) =>
+    expectTask(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/tasks`,
+      parseTaskDetail,
+      {
+        request_id: requestId,
+        title,
+        assignee_ids: [userId],
+      },
+      expectedUser,
+    ),
   /**
    * 필드 고치기와 승인한 후속 재배치. 이 업무의 기준 버전이 지났으면 `conflict`, 승인한 후속 업무가 그사이
    * 바뀌었으면 `shift_conflict`(아무것도 바뀌지 않았으니 다시 미리 본다).
    */
   async updateTask(
+    expectedUser: string,
     id: string,
     baseVersion: number,
     input: TaskInput,
@@ -2967,11 +3304,16 @@ export const api = {
     | { kind: 'conflict'; current: TaskDetailView }
     | { kind: 'shift_conflict'; current: TaskDetailView }
   > {
-    const { status, json } = await request('PUT', `/api/tasks/${encodeURIComponent(id)}`, {
-      base_version: baseVersion,
-      ...input,
-      successor_shifts: successorShifts,
-    });
+    const { status, json } = await request(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}`,
+      {
+        base_version: baseVersion,
+        ...input,
+        successor_shifts: successorShifts,
+      },
+      { [EXPECTED_USER]: expectedUser },
+    );
     // 409 중 기준 버전 충돌만 서버 최신본이 온다(보관·다시 시도 등은 일반 오류).
     if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
@@ -2980,19 +3322,31 @@ export const api = {
         ? { kind: 'shift_conflict', current }
         : { kind: 'conflict', current };
     }
-    if (status !== 200) fail(status, json);
+    if (status !== 200) failTask(status, json);
     return { kind: 'updated', task: parseTaskDetail(json) };
   },
   /**
    * 칸반 이동. `baseMoveVersion`을 주면 그 이동 판에서 읽은 업무만 옮긴다(D-89): 그사이 열·위치가 바뀌었으면 서버가
    * 아무것도 바꾸지 않고 409 `move_conflict`를 돌려준다(`ApiError`). 주지 않으면 판과 상관없이 옮긴다.
    */
-  moveTask: (id: string, status: TaskStatus, beforeId: string | null, baseMoveVersion?: number) =>
-    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/position`, parseTaskDetail, {
-      status: toServerStatus(status),
-      before_id: beforeId,
-      ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
-    }),
+  moveTask: (
+    expectedUser: string,
+    id: string,
+    status: TaskStatus,
+    beforeId: string | null,
+    baseMoveVersion?: number,
+  ) =>
+    expectTask(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}/position`,
+      parseTaskDetail,
+      {
+        status,
+        before_id: beforeId,
+        ...(baseMoveVersion === undefined ? {} : { base_move_version: baseMoveVersion }),
+      },
+      expectedUser,
+    ),
   /** 날짜를 바꿀 때의 재배치 계획(옮길 후속 업무와 원인 관계, 날짜가 없어 계산하지 않은 업무). */
   previewSchedule: (id: string, startDate: string | null, dueDate: string | null) =>
     expectOk('POST', `/api/tasks/${encodeURIComponent(id)}/schedule-plan`, parseSchedulePlan, {
@@ -3013,6 +3367,7 @@ export const api = {
    * `shift_conflict`(둘 다 아무것도 바뀌지 않았고 최신본을 준다).
    */
   async setPredecessor(
+    expectedUser: string,
     id: string,
     predecessorId: string,
     kind: LinkKind,
@@ -3033,6 +3388,7 @@ export const api = {
         base: base === null ? null : { kind: base.kind, lag_days: base.lag_days },
         successor_shifts: successorShifts,
       },
+      { [EXPECTED_USER]: expectedUser },
     );
     if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
@@ -3044,25 +3400,59 @@ export const api = {
     if (status !== 200) fail(status, json);
     return { kind: 'updated', task: parseTaskDetail(json) };
   },
-  removePredecessor: (id: string, predecessorId: string) =>
-    expectOk(
+  removePredecessor: (expectedUser: string, id: string, predecessorId: string) =>
+    expectTask(
       'DELETE',
       `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
       parseTaskDetail,
+      undefined,
+      expectedUser,
     ),
-  setTaskParent: (id: string, parentId: string | null) =>
-    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/parent`, parseTaskDetail, {
-      parent_id: parentId,
-    }),
-  addChecklist: (taskId: string, items: { request_id: string; text: string; checked: boolean }[]) =>
-    expectOk('POST', `/api/tasks/${encodeURIComponent(taskId)}/checklist`, parseTaskDetail, {
-      items,
-    }),
+  setTaskParent: (expectedUser: string, id: string, parentId: string | null) =>
+    expectTask(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}/parent`,
+      parseTaskDetail,
+      {
+        parent_id: parentId,
+      },
+      expectedUser,
+    ),
+  addChecklist: (
+    expectedUser: string,
+    taskId: string,
+    items: { request_id: string; text: string; checked: boolean }[],
+  ) =>
+    expectTask(
+      'POST',
+      `/api/tasks/${encodeURIComponent(taskId)}/checklist`,
+      parseTaskDetail,
+      {
+        items,
+      },
+      expectedUser,
+    ),
   /** 체크리스트 항목 고치기. 바꾸려는 칸만 보낸다(빠진 칸은 서버가 그대로 둔다). */
-  updateChecklistItem: (id: string, change: { text: string } | { checked: boolean }) =>
-    expectOk('PUT', `/api/checklist-items/${encodeURIComponent(id)}`, none, { ...change }),
-  deleteChecklistItem: (id: string) =>
-    expectOk('DELETE', `/api/checklist-items/${encodeURIComponent(id)}`, none),
+  updateChecklistItem: (
+    expectedUser: string,
+    id: string,
+    change: { text: string } | { checked: boolean },
+  ) =>
+    expectTask(
+      'PUT',
+      `/api/checklist-items/${encodeURIComponent(id)}`,
+      none,
+      { ...change },
+      expectedUser,
+    ),
+  deleteChecklistItem: (expectedUser: string, id: string) =>
+    expectTask(
+      'DELETE',
+      `/api/checklist-items/${encodeURIComponent(id)}`,
+      none,
+      undefined,
+      expectedUser,
+    ),
   taskBacklinks: (id: string) =>
     expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
@@ -3093,15 +3483,41 @@ export const api = {
     return { kind: 'updated', event: parseEvent(json) };
   },
   deleteEvent: (id: string) => expectOk('DELETE', `/api/events/${encodeURIComponent(id)}`, none),
-  setTaskRecurrence: (id: string, rule: RecurrenceRule | null, timezone: string) =>
-    expectOk('PUT', `/api/tasks/${encodeURIComponent(id)}/recurrence`, parseTaskDetail, {
-      rule: rule === null ? null : { ...rule },
-      timezone,
-    }),
+  async setTaskRecurrence(
+    expectedUser: string,
+    id: string,
+    rule: RecurrenceRule | null,
+    timezone: string,
+    base: RecurrenceRule | null,
+  ): Promise<TaskDetailView> {
+    const { status, json } = await request(
+      'PUT',
+      `/api/tasks/${encodeURIComponent(id)}/recurrence`,
+      {
+        rule: rule === null ? null : { ...rule },
+        timezone,
+        base: base === null ? null : { ...base },
+      },
+      { [EXPECTED_USER]: expectedUser },
+    );
+    if (
+      status === 409 &&
+      isRecord(json) &&
+      json.error === 'rule_conflict' &&
+      json.current !== undefined
+    )
+      throw new TaskRuleConflict(parseTaskDetail(json.current));
+    if (status !== 200) failTask(status, json);
+    return parseTaskDetail(json);
+  },
   /** 반복 업무 회차 만들기(쓰기 권한으로 항목을 열 때). 만든 수. */
-  syncRecurrences: (itemId: string) =>
-    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`, (v) =>
-      int(rec(v, 'sync'), 'created'),
+  syncRecurrences: (expectedUser: string, itemId: string) =>
+    expectTask(
+      'POST',
+      `/api/items/${encodeURIComponent(itemId)}/recurrences/sync`,
+      (v) => int(rec(v, 'sync'), 'created'),
+      undefined,
+      expectedUser,
     ),
   /**
    * 일정 반복 정하기. `base`는 편집을 시작한 규칙(반복이 없었으면 null)이다. 그사이 규칙이 바뀌었으면 서버가 아무것도
@@ -3131,7 +3547,14 @@ export const api = {
     expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
   trashDocument: (id: string) =>
     expectOk('DELETE', `/api/documents/${encodeURIComponent(id)}`, parseBatch),
-  trashTask: (id: string) => expectOk('DELETE', `/api/tasks/${encodeURIComponent(id)}`, parseBatch),
+  trashTask: (expectedUser: string, id: string) =>
+    expectTask(
+      'DELETE',
+      `/api/tasks/${encodeURIComponent(id)}`,
+      parseBatch,
+      undefined,
+      expectedUser,
+    ),
   trashItem: (id: string) => expectOk('DELETE', `/api/items/${encodeURIComponent(id)}`, parseBatch),
   /** 모듈을 휴지통으로(관리자, D-78). 항목은 모듈과 함께 보이지 않고, 되살리면 모듈만 돌아온다. */
   trashModule: (id: string) =>
@@ -3170,7 +3593,41 @@ export const api = {
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
       days,
     }),
-  home: (tz: string) => expectOk('GET', `/api/me/home?tz=${encodeURIComponent(tz)}`, parseHome),
+  /** 홈은 현재 조직의 요약이다(D-19·D-120). */
+  home: (organizationId: string, tz: string) =>
+    expectOk(
+      'GET',
+      `/api/me/home?organization_id=${encodeURIComponent(organizationId)}&tz=${encodeURIComponent(tz)}`,
+      parseHome,
+    ),
+  /** 내 업무: 담당=나, 날짜 없음 포함, 워크스페이스별 묶음(D-120). `today`는 사용자 시간대의 오늘(YYYY-MM-DD). */
+  myTasks: (organizationId: string, today: string) =>
+    expectOk(
+      'GET',
+      `/api/me/tasks?organization_id=${encodeURIComponent(organizationId)}&today=${encodeURIComponent(today)}`,
+      parseMyTasks,
+    ),
+  /** 현재 조직의 최근 활동(D-119). */
+  recentActivity: (organizationId: string, limit?: number) => {
+    const params = new URLSearchParams({ organization_id: organizationId });
+    if (limit !== undefined) params.set('limit', String(limit));
+    return expectOk('GET', `/api/me/activity?${params.toString()}`, (v) =>
+      parseList(v, parseActivity),
+    );
+  },
+  /** 항목·문서·업무의 활동(대상을 볼 수 있으면, D-119). */
+  targetActivity: (
+    kind: 'item' | 'document' | 'task',
+    id: string,
+    cursor?: PageCursor,
+    limit?: number,
+  ) => {
+    const params = new URLSearchParams();
+    cursorParams(params, cursor, limit);
+    const base = `/api/${kind === 'item' ? 'items' : kind === 'document' ? 'documents' : 'tasks'}/${encodeURIComponent(id)}/activity`;
+    const query = params.toString();
+    return expectOk('GET', query === '' ? base : `${base}?${query}`, parseActivityPage);
+  },
   mark: (kind: MarkTarget, id: string) =>
     expectOk('GET', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState),
   setMark: (kind: MarkTarget, id: string, mark: MarkKind, on: boolean) =>
@@ -3178,6 +3635,7 @@ export const api = {
       mark,
       on,
     }),
+  // D-117 개인 시간 계약, 시작 응답의 자동 종료 기록.
   currentTimer: () =>
     expectOk('GET', '/api/me/timer', (v) => (v === null ? null : parseTimeEntry(v))),
   startTimer: (
@@ -3185,13 +3643,23 @@ export const api = {
     kind: TimeKind,
     memo: string,
     target: { kind: TimeTargetKind; id: string } | null,
+    mode?: 'continue' | 'new',
   ) =>
-    expectOk('POST', '/api/me/timer', parseTimeEntry, {
-      request_id: requestId,
-      kind,
-      memo,
-      target: target === null ? null : { ...target },
-    }),
+    expectOk(
+      'POST',
+      '/api/me/timer',
+      (v) => ({
+        ...parseTimeEntry(v),
+        stopped_entry_id: optStr(rec(v, 'started timer'), 'stopped_entry_id'),
+      }),
+      {
+        request_id: requestId,
+        kind,
+        memo,
+        target: target === null ? null : { ...target },
+        ...(mode === undefined ? {} : { mode }),
+      },
+    ),
   timerAction: (id: string, action: 'pause' | 'resume' | 'stop') =>
     expectOk('POST', `/api/time-entries/${encodeURIComponent(id)}/timer`, parseTimeEntry, {
       action,
@@ -3335,8 +3803,14 @@ export const api = {
     return { kind: 'restored', document: withEtag(parseDocument(json), etag) };
   },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
-  search: (q: string, workspaceId: string | null, filters: SearchFilters = {}) => {
-    const params = new URLSearchParams({ q });
+  /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
+  search: (
+    organizationId: string,
+    q: string,
+    workspaceId: string | null,
+    filters: SearchFilters = {},
+  ) => {
+    const params = new URLSearchParams({ organization_id: organizationId, q });
     if (workspaceId !== null) params.set('workspace_id', workspaceId);
     if (filters.kind !== undefined) params.set('kinds', filters.kind);
     if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
@@ -3368,11 +3842,27 @@ export const api = {
     expectOk('GET', `/api/items/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
     ),
-  notifications: () =>
-    expectOk('GET', '/api/me/notifications', (v) => parseList(v, parseNotification)),
-  /** id가 null이면 모두 읽음. */
-  markNotificationsRead: (id: string | null) =>
-    expectOk('POST', '/api/me/notifications/read', none, { id }),
+  /** 알림함은 현재 조직 범위이며 초대는 어느 조직 문맥에서나 보인다. 목록은 커서로 더 본다(D-118). */
+  notifications: (organizationId: string, cursor?: PageCursor, limit?: number) => {
+    const params = new URLSearchParams({ organization_id: organizationId });
+    cursorParams(params, cursor, limit);
+    return expectOk('GET', `/api/me/notifications?${params.toString()}`, parseNotificationPage);
+  },
+  /** 안 읽은 수는 서버가 센다(D-118). */
+  unreadCount: (organizationId: string) =>
+    expectOk(
+      'GET',
+      `/api/me/notifications/unread-count?organization_id=${encodeURIComponent(organizationId)}`,
+      (v) => int(rec(v, 'unread count'), 'unread_count'),
+    ),
+  /** id가 null이면 현재 조직의 모두 읽음(초대 포함). 읽음 처리한 수를 돌려준다. */
+  markNotificationsRead: (organizationId: string, id: string | null) =>
+    expectOk(
+      'POST',
+      `/api/me/notifications/read?organization_id=${encodeURIComponent(organizationId)}`,
+      (v) => int(rec(v, 'marked notifications'), 'marked'),
+      { id },
+    ),
   modules: (ws: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/modules`, (v) =>
       parseList(v, parseModule),

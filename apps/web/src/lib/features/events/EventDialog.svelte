@@ -2,13 +2,15 @@
   // 일정 상세 대화상자: 보기·고치기·지우기. 고치기는 기준 버전으로 충돌을 막고, 충돌하면 입력을 두고 서버 내용을
   // 보여 준다(D-53과 같은 원칙). 충돌 뒤 다시 저장하면 내가 고친 칸만 서버 최신 일정에 얹고, 같은 칸을 다른 사람도
   // 고쳤으면 양쪽 값을 보여 덮어쓸지 묻는다(D-94). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
-  import { tick } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
 
   import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
   import { api, ApiError, RuleConflict } from '$lib/api/client';
-  import { errorText } from '$lib/api/errors';
+  import { errorText, untilBeforeStart } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -20,6 +22,7 @@
   import RecurrenceEditor from './RecurrenceEditor.svelte';
   import { describeRule, describeWhen, KIND_LABEL } from './labels';
   import { localTimeZone } from './time';
+  import { me } from '$lib/me.svelte';
 
   interface Props {
     eventId: string | undefined;
@@ -29,9 +32,12 @@
     returnFocus?: (() => HTMLElement | null) | undefined;
     /** 달력에서 반복 일정의 한 회차를 열었으면 그 회차 날짜(일정 시간대 기준). */
     occurrence?: string | undefined;
+    /** 항목이나 모듈이 보관됐다(D-113: 보관은 등급과 따로 쓰기를 막는다). 고치기·지우기를 보이지 않는다. */
+    locked?: boolean;
   }
 
-  const { eventId, onclose, onchanged, returnFocus, occurrence }: Props = $props();
+  const { eventId, onclose, onchanged, returnFocus, occurrence, locked = false }: Props = $props();
+  let activeId = $state(untrack(() => eventId));
 
   let event = $state<EventView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
@@ -43,14 +49,17 @@
   let confirmDelete = $state(false);
   let epoch = $state(0);
   // 반복 편집기는 일정 저장 때 다시 그리지 않는다(저장 안 한 규칙 입력을 지우지 않게). 서버 규칙이 화면 규칙과 달라질
-  // 때("서버 내용 불러오기", 충돌 뒤 "내 내용으로 저장")만 서버 규칙으로 다시 만든다(그러지 않으면 요약은 서버 규칙인데
-  // 칸은 옛 규칙이라, 저장하면 옛 규칙을 다시 보낸다).
+  // 때("서버 내용 불러오기", 충돌 뒤 "내 내용으로 저장") 편집 중인 규칙이 없으면 서버 규칙으로 다시 만든다.
+  // 편집 중인 반복 입력과 그 원래 기준은 보존하며, 다음 명시적 반복 저장에서 서버가 충돌을 검사한다.
   let ruleEpoch = $state(0);
   // 보내는 중인 요청 수. 보내는 동안은 닫지 않는다(늦게 온 결과가 다시 연 창에 들어가지 않게, CalendarTaskDialog와 같음).
   let pending = $state(0);
   const busy = $derived(pending > 0);
   // 지금 보이는 일정을 연 차례. 요청을 보낸 뒤 다른 일정을 열었으면(또는 닫았다 다시 열었으면) 늦은 결과를 버린다.
   let shown = 0;
+  onDestroy(() => {
+    shown += 1;
+  });
   // 일정 입력이 바탕으로 삼은 버전. 반복 규칙 저장은 입력을 다시 그리지 않으므로 `event.version`과 따로 둔다.
   let formVersion = 0;
   // 일정 입력을 만든 일정(D-94). 충돌 뒤 다시 저장할 때 내가 무엇을 고쳤는지 이것과 비교한다. 입력을 다시 그릴 때만
@@ -67,29 +76,60 @@
   // 일정 입력에 연 때와 다르게 고친 칸이 있는지, 그래서 닫기 전에 버릴지 묻는 중인지. 물은 차례(`asked`)가 지금 연
   // 차례와 같을 때만 버리고 닫는다. 계속 편집하면 물을 때 초점이 있던 칸(대화상자 밖이었으면 머리말)으로 돌아간다.
   let unsaved = $state(false);
-  let confirmClose = $state(false);
-  let asked = 0;
+  let ruleUnsaved = $state(false);
+  let formKept = $state(true);
+  let ruleKept = $state(true);
+  let formEditor = $state<{ discardDraft: () => void }>();
+  let ruleEditor = $state<{ discardDraft: () => void }>();
+  const leaveGuard = createLeaveGuard({
+    dirty: () => !accountSwitching() && (unsaved || ruleUnsaved),
+    busy: () => busy,
+    identity: () => shown,
+  });
+  onMount(() =>
+    leaveGuard.attach({
+      beforeUnload: () =>
+        (unsaved || ruleUnsaved) && (!leavingWithDrafts() || !formKept || !ruleKept),
+    }),
+  );
+  const confirmClose = $derived(leaveGuard.open);
   let keepFocus: HTMLElement | null = null;
   let content = $state<HTMLElement | null>(null);
   const zone = localTimeZone();
 
   $effect(() => {
     const id = eventId;
+    untrack(() => {
+      if (id !== activeId) {
+        leaveGuard.keep();
+        leaveGuard.request(() => {
+          activeId = id;
+        });
+      }
+    });
+  });
+
+  $effect(() => {
+    const id = activeId;
+    const user = me.userId;
     shown += 1;
+    pending = 0;
     event = undefined;
     formBase = undefined;
     error = undefined;
+    untilError = undefined;
     conflict = undefined;
     clash = undefined;
     confirmDelete = false;
     unsaved = false;
-    confirmClose = false;
+    ruleUnsaved = false;
+    leaveGuard.keep();
     if (id === undefined) return;
     let cancelled = false;
     api
       .event(id)
       .then((e) => {
-        if (cancelled) return;
+        if (cancelled || user !== me.userId) return;
         event = e;
         formBase = e;
         formVersion = e.version;
@@ -106,7 +146,7 @@
     };
   });
 
-  const canEdit = $derived(event !== undefined && event.access !== 'read');
+  const canEdit = $derived(event !== undefined && event.access !== 'read' && !locked);
   // 충돌 알림이 보이고 다시 저장이 합칠 서버 일정(D-94). 알림 뒤 반복 규칙을 저장했으면 `event`가 더 새 판이다(옛 판에
   // 합치면 보내자마자 다시 409이고, "서버 내용 불러오기"가 방금 저장한 규칙을 되돌린다).
   const latest = $derived(
@@ -131,40 +171,45 @@
 
   /** 보내는 동안 닫지 않게 센다. */
   async function sending<T>(request: Promise<T>): Promise<T> {
+    const mine = shown;
     pending += 1;
     try {
       return await request;
+    } catch (e: unknown) {
+      if (untilBeforeStart(e)) untilError = m.events_until_before_start();
+      throw e;
     } finally {
-      pending -= 1;
+      if (mine === shown) pending -= 1;
     }
   }
 
-  async function save(input: EventInput, baseVersion: number): Promise<void> {
-    if (event === undefined) return;
+  async function save(input: EventInput, baseVersion: number): Promise<boolean> {
+    if (event === undefined) return false;
     const mine = shown;
+    const user = me.userId;
     const result = await sending(api.updateEvent(event.id, baseVersion, input));
-    if (mine !== shown) {
+    if (mine !== shown || user !== me.userId) {
       // 그사이 다른 일정을 열었다. 고친 일정은 목록에서 다시 읽게만 한다.
       if (result.kind === 'updated') onchanged();
-      return;
+      return false;
     }
     if (result.kind === 'conflict') {
       // 다시 저장하는 사이 또 바뀌었으면 알림이 더 새 일정을 보인다. 입력과 그 기준(`formBase`)은 그대로 두어 다음
       // 다시 저장이 가장 새 일정에 합치게 한다(D-94).
       conflict = { current: result.current };
       clash = undefined;
-      return;
+      return false;
     }
     conflict = undefined;
     clash = undefined;
     // 보통 저장은 기준 버전이 맞아야 되므로 규칙이 그대로다. 충돌 뒤 "내 내용으로 저장"이면 저장된 일정에 다른 사람이
     // 바꾼 규칙이 들어 있으니 반복 편집기도 그 규칙으로 다시 만든다(요약만 바뀌고 칸은 옛 규칙이면 옛 규칙을 다시 보냄).
-    if (!sameRule(result.event.recurrence, event.recurrence)) ruleEpoch += 1;
+    if (!ruleUnsaved && !sameRule(result.event.recurrence, event.recurrence)) ruleEpoch += 1;
     event = result.event;
     formBase = result.event;
     formVersion = result.event.version;
-    epoch += 1;
     onchanged();
+    return true;
   }
 
   /**
@@ -185,9 +230,12 @@
   }
 
   /** 일정 입력 양식의 제출. 충돌 알림의 단추에서 시작됐으면 서버 최신 일정에 합쳐 보낸다. */
-  function submitted(input: EventInput): Promise<void> {
+  let untilError = $state<string | undefined>(undefined);
+
+  function submitted(input: EventInput): Promise<boolean> {
     const mode = submitMode;
     submitMode = undefined;
+    untilError = undefined;
     if (mode !== undefined && latest !== undefined && formBase !== undefined)
       return saveMine(input, formBase, latest, mode === 'overwrite');
     return save(input, formVersion);
@@ -216,7 +264,7 @@
     base: EventView,
     current: EventView,
     overwrite: boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const mine = shown;
     const merged = mergeEventInput(base, input, current);
     const asked = clash;
@@ -233,13 +281,14 @@
       clash = { current, mine: input, units: merged.clashes };
       await tick();
       if (mine === shown) clashBox?.focus();
-      return;
+      return false;
     }
-    await save(merged.input, current.version);
-    if (mine !== shown) return;
+    const saved = await save(merged.input, current.version);
+    if (mine !== shown) return false;
     // 또 바뀌어 다시 409면 덮어쓰기 단추가 사라졌으니 새 알림의 다시 저장 단추로, 저장됐으면 알림이 사라지니
     // 머리말(저장된 제목)로 초점을 옮긴다.
     await focusLater(() => (conflict !== undefined ? saveMineButton : heading));
+    return saved;
   }
 
   /** 덮어쓰지 않는다: 아무것도 보내지 않고 알림과 입력을 그대로 둔다. */
@@ -277,24 +326,31 @@
     }
   }
 
-  async function saveRule(rule: RecurrenceRule | null): Promise<void> {
+  async function saveRule(
+    rule: RecurrenceRule | null,
+    baseRule?: RecurrenceRule | null,
+  ): Promise<void> {
     if (event === undefined) return;
+    untilError = undefined;
     const mine = shown;
+    const user = me.userId;
     const before = event.version;
     const id = event.id;
     // 편집 중인 일정 입력과 반복 편집기의 상태(저장 알림·초점)를 지우지 않게 다시 그리지 않는다. 기준은 화면이 보이는
     // 규칙이다(그사이 바뀌었으면 서버가 409, 감사 W21).
     let saved: EventView;
     try {
-      saved = await sending(api.setEventRecurrence(id, rule, event.recurrence));
+      saved = await sending(
+        api.setEventRecurrence(id, rule, baseRule === undefined ? event.recurrence : baseRule),
+      );
     } catch (e: unknown) {
       // 서버가 거절하며 함께 준 지금 규칙을 요약에 보이고 다음 저장의 기준으로 삼는다(따로 다시 읽지 않으니 다시 읽기가
       // 실패해 옛 기준으로 같은 409를 되풀이할 일이 없다). 입력한 칸은 그대로 둔다(다시 저장하면 덮어씀).
       // 일정 입력의 기준 판은 두어, 일정 저장이 다른 사람의 변경을 충돌로 드러내게 한다.
-      if (e instanceof RuleConflict && mine === shown) event = e.current;
+      if (e instanceof RuleConflict && mine === shown && user === me.userId) event = e.current;
       throw e;
     }
-    if (mine !== shown) {
+    if (mine !== shown || user !== me.userId) {
       onchanged();
       return;
     }
@@ -335,23 +391,15 @@
     if (unsaved) {
       const active = document.activeElement;
       keepFocus = active instanceof HTMLElement && content?.contains(active) ? active : heading;
-      asked = shown;
-      confirmClose = true;
-      return;
     }
-    onclose();
-  }
-
-  function discard(): void {
-    confirmClose = false;
-    if (asked === shown && !busy) onclose();
+    leaveGuard.request(onclose);
   }
 </script>
 
 <!-- 닫기를 대화상자가 정하지 않고 close()가 정한다(고친 입력이 있으면 열어 둔 채 묻는다). -->
 <Dialog.Root
   bind:open={
-    () => eventId !== undefined,
+    () => activeId !== undefined,
     (o: boolean) => {
       if (!o) close();
     }
@@ -401,14 +449,17 @@
               <Button
                 size="sm"
                 variant="outline"
+                disabled={busy}
                 onclick={() => {
+                  if (busy) return;
+                  formEditor?.discardDraft();
                   event = c;
                   formBase = c;
                   formVersion = c.version;
                   conflict = undefined;
                   clash = undefined;
                   epoch += 1;
-                  ruleEpoch += 1;
+                  if (!ruleUnsaved) ruleEpoch += 1;
                 }}>{m.events_load_server()}</Button
               >
               <Button
@@ -472,7 +523,21 @@
         <fieldset class="min-w-0" disabled={busy} bind:this={formWrap}>
           {#key epoch}
             <EventForm
+              bind:this={formEditor}
               idPrefix="event-edit"
+              draftName={`event:${current.id}`}
+              attachGuard={false}
+              disabled={busy}
+              onrestorebase={(base: EventView) => {
+                formBase = base;
+                formVersion = base.version;
+              }}
+              ondraftkept={(value: boolean) => {
+                formKept = value;
+              }}
+              onsaved={() => {
+                epoch += 1;
+              }}
               initial={formBase ?? current}
               submitLabel={m.common_save()}
               onsubmit={submitted}
@@ -485,11 +550,21 @@
         <fieldset class="min-w-0" disabled={busy}>
           {#key ruleEpoch}
             <RecurrenceEditor
+              bind:this={ruleEditor}
               idPrefix="event-recurrence"
+              disabled={busy}
+              draftName={`event-recurrence:${current.id}`}
+              onunsaved={(value: boolean) => {
+                ruleUnsaved = value;
+              }}
+              ondraftkept={(value: boolean) => {
+                ruleKept = value;
+              }}
               rule={current.recurrence}
               canEdit={true}
               zoneNote={m.events_zone_note({ zone: current.timezone })}
               onsave={saveRule}
+              {untilError}
             />
           {/key}
         </fieldset>
@@ -544,10 +619,12 @@
     {/if}
     <DiscardChangesConfirm
       open={confirmClose}
-      onkeep={() => {
-        confirmClose = false;
+      onkeep={leaveGuard.keep}
+      ondiscard={() => {
+        formEditor?.discardDraft();
+        ruleEditor?.discardDraft();
+        leaveGuard.discard();
       }}
-      ondiscard={discard}
       returnFocus={() => (keepFocus?.isConnected === true ? keepFocus : heading)}
     />
   </Dialog.Content>

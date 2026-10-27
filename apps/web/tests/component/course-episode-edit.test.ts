@@ -1,12 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView, EpisodeView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
+import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
+beforeEach(() => {
+  me.userId = 'user-a';
+  localStorage.clear();
+});
 afterEach(() => {
+  me.userId = '';
   vi.restoreAllMocks();
 });
 

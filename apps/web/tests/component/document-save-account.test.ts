@@ -8,6 +8,8 @@ import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { auth, connection } from '$lib/features/feedback/feedback.svelte';
 import { me as currentUser } from '$lib/me.svelte';
+import { scopedKey } from '$lib/storage';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // 리뷰 지적(#60 요약): 저장이 연결 오류로 재시도를 기다리는 동안 다른 탭에서 다른 계정으로 로그인하면, 이 창은
@@ -77,7 +79,9 @@ async function editAndFailOnce(save: MockInstance<typeof api.saveDocument>): Pro
 }
 
 const drafts = (user: string): string[] =>
-  Object.keys(window.localStorage).filter((k) => k.startsWith(`fvoci:draft:${user}:doc-1`));
+  Object.keys(window.localStorage).filter((k) =>
+    k.startsWith(scopedKey('draft:doc-1', user, undefined)),
+  );
 
 describe('a background save checks who is signed in before it goes out', () => {
   beforeEach(async () => {
@@ -94,6 +98,7 @@ describe('a background save checks who is signed in before it goes out', () => {
     stubServer();
   });
   afterEach(() => {
+    accountSafety.switching = false;
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

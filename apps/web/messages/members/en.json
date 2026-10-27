@@ -1,4 +1,9 @@
 {
+  "members_invitation_organization": "Organization invitation",
+  "members_invitation_workspace": "{organization} · Workspace invitation",
+  "members_invitation_accepted": "Invitation accepted.",
+  "members_invitation_declined": "Invitation declined.",
+  "members_invitation_unavailable": "This invitation has already been handled or has expired.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "members_role_admin": "Admin",
   "members_role_member": "Member",

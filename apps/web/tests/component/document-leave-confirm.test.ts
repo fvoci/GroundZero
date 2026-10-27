@@ -7,16 +7,17 @@ import { api } from '$lib/api/client';
 import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+import { me } from '$lib/me.svelte';
 
 // 저장하지 않은 문서에서 다른 화면으로 가려 하면 브라우저 기본 확인창(window.confirm)이 떴다(UI 감사). 업무·일정
 // 대화상자와 같은 확인(DiscardChangesConfirm)을 쓰고, 계속 편집하면 입력을 그대로 두며, 떠나기로 하면 같은 이동을 한다.
 const workspaces: Workspace[] = [
   {
-    id: 'ws-1',
-    organization_id: 'org-1',
-    name: '공간',
-    role: 'member',
     access: 'write',
+    id: 'ws-1',
+    name: '공간',
+    organization_id: 'org-1',
+    role: 'member',
     is_owner: false,
     realtime_enabled: false,
   },
@@ -71,6 +72,26 @@ afterEach(() => {
 });
 
 describe('leaving a document with unsaved changes', () => {
+  it('removes a comment draft only after the parent discard is confirmed', async () => {
+    me.userId = 'user-a';
+    try {
+      const view = render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
+      await fireEvent.input(await screen.findByRole('textbox', { name: /^새 댓글/ }), {
+        target: { value: '지울 댓글 초안' },
+      });
+      router.navigate('/notes');
+      const ask = await screen.findByRole('alertdialog');
+      await fireEvent.click(within(ask).getByRole('button', { name: '변경 버리고 닫기' }));
+      expect(router.path).toBe('/notes');
+      view.unmount();
+      render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
+      expect(await screen.findByRole('textbox', { name: /^새 댓글/ })).toHaveValue('');
+      expect(screen.queryByTestId('comment-draft-offer')).not.toBeInTheDocument();
+    } finally {
+      me.userId = '';
+    }
+  });
+
   it('asks in an in-app dialog, keeps the input on keep, and goes on leave', async () => {
     render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
     const title = await screen.findByRole('textbox', { name: '제목' });

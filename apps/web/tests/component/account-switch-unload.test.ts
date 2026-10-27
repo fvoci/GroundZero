@@ -7,6 +7,8 @@ import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { auth } from '$lib/features/feedback/feedback.svelte';
 import { me as currentUser } from '$lib/me.svelte';
+import { scopedKey } from '$lib/storage';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 function json(status: number, body: unknown): Response {
@@ -55,6 +57,7 @@ function unloadBlocked(): boolean {
 }
 
 afterEach(() => {
+  accountSafety.switching = false;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   auth.expired = false;
@@ -111,7 +114,7 @@ describe('account switch reload and the unsaved-edit warning', () => {
     });
     // 입력은 앞 계정의 초안으로 남아 있다(다시 로그인하면 되살릴 수 있다).
     const kept = Object.keys(window.localStorage).filter((k) =>
-      k.startsWith('fvoci:draft:u1:doc-1'),
+      k.startsWith(scopedKey('draft:doc-1', 'u1', undefined)),
     );
     expect(kept.length).toBeGreaterThan(0);
   });

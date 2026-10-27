@@ -139,5 +139,16 @@
   "modules_people": "People",
   "modules_groups": "Groups",
   "modules_group_badge": "Group · {name}",
-  "modules_jump_label": "Jump to a section of this item"
+  "modules_item_groups_label": "Item sections",
+  "modules_item_group_tasks": "Tasks",
+  "modules_item_group_docs": "Documents",
+  "modules_item_group_events": "Events",
+  "modules_item_group_records": "Records",
+  "modules_item_group_references": "References",
+  "modules_item_group_plan": "Plan",
+  "modules_item_group_episodes": "Episodes",
+  "modules_item_group_activities": "Activities",
+  "modules_views_label": "Module views",
+  "modules_view_items": "Items",
+  "modules_view_calendar": "Calendar"
 }

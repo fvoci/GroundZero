@@ -2,8 +2,14 @@
   // 일정 입력 (D-31, D-50). 시각은 일정에 지정한 시간대의 벽시계 시각으로 넣고 UTC로 바꿔 보낸다.
   // 종일 일정은 날짜 그대로 보낸다.
   import type { EventInput, EventKind, EventView } from '$lib/api/client';
-  import { EVENT_KINDS } from '$lib/api/client';
+  import { EVENT_KINDS, newRequestId } from '$lib/api/client';
+  import { onMount, untrack } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { parseEventDraft, type EventDraft } from './input-drafts';
   import { errorText } from '$lib/api/errors';
+  import { trimLikeServer } from '$lib/features/tasks/form';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -12,7 +18,6 @@
   import { Textarea } from '$lib/ui/textarea';
   import * as Select from '$lib/ui/select';
 
-  import { trimLikeServer } from './conflict';
   import { KIND_LABEL } from './labels';
   import type { EditedWall } from './repeated';
   import { describedBy, readEditedWall, repeatedOptions } from './repeated';
@@ -23,13 +28,36 @@
     idPrefix: string;
     initial: EventView | undefined;
     submitLabel: string;
-    onsubmit: (input: EventInput) => Promise<void>;
+    onsubmit: (input: EventInput, requestId?: string) => Promise<boolean> | Promise<void>;
+    draftName?: string;
+    attachGuard?: boolean;
+    onrestorebase?: (base: EventView) => void;
+    onsaved?: () => void;
+    ondraftkept?: (value: boolean) => void;
     oncancel?: (() => void) | undefined;
     /** 연 때와 다르게 고친 칸이 있는지 바뀔 때마다 알린다. */
     onunsaved?: ((unsaved: boolean) => void) | undefined;
+    /**
+     * 부모가 저장하는 동안 잠근다. 부모의 fieldset이 입력 칸은 잠그지만 bits-ui Select는 조상 fieldset을 보지 않고 자기
+     * disabled만 보므로 따로 받는다(R5 delta2 확인 필요 1).
+     */
+    disabled?: boolean;
   }
 
-  const { idPrefix, initial, submitLabel, onsubmit, oncancel, onunsaved }: Props = $props();
+  const {
+    idPrefix,
+    initial,
+    submitLabel,
+    onsubmit,
+    oncancel,
+    onunsaved,
+    draftName,
+    attachGuard = true,
+    onrestorebase,
+    onsaved,
+    ondraftkept,
+    disabled = false,
+  }: Props = $props();
 
   /** 오늘(사용자 시간대, D-81). */
   function today(): string {
@@ -70,8 +98,9 @@
   // 연 때의 입력값. 고칠 때(D-93) 끝마다 따로 정한다: 그 끝의 시각과 시간대를 고치지 않았으면 저장된 RFC3339 값을 그대로
   // 보낸다. 입력란은 분 단위라 다시 변환하면 초가 지워지고, 두 번 있는 시각(여름시간 끝)은 다른 쪽으로 바뀔 수 있다.
   // 시간대를 바꾸면 두 끝 모두 새 시간대로 다시 읽는다. 끝이 시작보다 앞서면 서버가 거절한다(400, 화면은 그 오류를 보인다).
-  const base = initialState();
-  const f = $state({ ...base });
+  let base = $state(initialState());
+  let source = $state.raw(untrack(() => initial));
+  const f = $state(initialState());
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   /** 이미 있는 일정을 고치는지(새 일정은 D-81: 두 번 있는 시각은 앞의 것). */
@@ -79,6 +108,57 @@
   // 고친 끝이 두 번 있는 시각일 때 고른 UTC 시각. 그 칸이나 시간대를 고치면 지운다(저장 때 지금 후보인지 다시 본다).
   let startChoice = $state<string | undefined>(undefined);
   let endChoice = $state<string | undefined>(undefined);
+  let retry = $state<EventDraft['request']>(null);
+  const draft = createFormDraft<EventDraft>({
+    name: () => draftName,
+    snapshot: () => ({
+      fields: { ...f },
+      baseFields: base,
+      base: source ?? null,
+      startChoice: startChoice ?? null,
+      endChoice: endChoice ?? null,
+      request: retry,
+    }),
+    parse: parseEventDraft,
+    restore: (value) => {
+      if (value.base !== null && value.base.id !== initial?.id) return;
+      Object.assign(f, value.fields);
+      base = value.baseFields;
+      source = value.base ?? undefined;
+      startChoice = value.startChoice ?? undefined;
+      endChoice = value.endChoice ?? undefined;
+      retry = value.request;
+      if (source !== undefined) onrestorebase?.(source);
+    },
+    reset: () => {
+      base = initialState();
+      source = initial;
+      Object.assign(f, base);
+      startChoice = undefined;
+      endChoice = undefined;
+      retry = null;
+      error = undefined;
+      busy = false;
+    },
+    dirty: () => unsaved,
+    busy: () => busy,
+  });
+  onMount(() => (attachGuard && draftName !== undefined ? draft.attach() : undefined));
+  export function discardDraft(): void {
+    if (busy) return;
+    const attempt = draft.capture();
+    if (attempt !== undefined && draft.complete(attempt)) return;
+    Object.assign(f, base);
+    startChoice = undefined;
+    endChoice = undefined;
+    retry = null;
+    draft.persist();
+  }
+  function cancel(): void {
+    if (oncancel === undefined) return;
+    if (draftName === undefined) oncancel();
+    else draft.leave.request(oncancel);
+  }
   /** 두 번 있는 시각인데 고르지 않고 저장하려 한 칸(칸 옆에 알린다, D-82). */
   const unchosen = $state({ start: false, end: false });
   // 고르지 않고 저장하려 한 횟수(다시 막힐 때마다 칸 옆 알림을 새로 그린다).
@@ -96,12 +176,12 @@
 
   const zoneNow = $derived(f.timezone.trim());
   const startOptions = $derived(
-    editing && !f.allDay && edited(f.startWall, base.startWall, initial?.starts_at, zoneNow)
+    editing && !f.allDay && edited(f.startWall, base.startWall, source?.starts_at, zoneNow)
       ? repeatedOptions(f.startWall, zoneNow)
       : [],
   );
   const endOptions = $derived(
-    editing && !f.allDay && edited(f.endWall, base.endWall, initial?.ends_at, zoneNow)
+    editing && !f.allDay && edited(f.endWall, base.endWall, source?.ends_at, zoneNow)
       ? repeatedOptions(f.endWall, zoneNow)
       : [],
   );
@@ -134,6 +214,7 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (busy) return;
+    if (draftName !== undefined && (!draft.active || draft.blocked)) return;
     error = undefined;
     unchosen.start = false;
     unchosen.end = false;
@@ -143,8 +224,8 @@
       let startsAt: string | null = null;
       let endsAt: string | null = null;
       if (!f.allDay) {
-        const start = readEnd(f.startWall, base.startWall, initial?.starts_at, startChoice, zone);
-        const end = readEnd(f.endWall, base.endWall, initial?.ends_at, endChoice, zone);
+        const start = readEnd(f.startWall, base.startWall, source?.starts_at, startChoice, zone);
+        const end = readEnd(f.endWall, base.endWall, source?.ends_at, endChoice, zone);
         if (start.kind === 'missing' || end.kind === 'missing') {
           error = m.events_missing_time({ zone });
           return;
@@ -174,39 +255,67 @@
       error = m.events_zone_invalid();
       return;
     }
+    const payload = JSON.stringify(input);
+    if (retry?.payload !== payload) retry = { id: newRequestId(), payload };
+    const formAttempt = draftName === undefined ? undefined : draft.capture();
+    if (draftName !== undefined && formAttempt === undefined) return;
     busy = true;
     try {
-      await onsubmit(input);
+      const saved = await onsubmit(input, retry.id);
+      if (saved !== false) {
+        if (formAttempt !== undefined && !draft.complete(formAttempt)) return;
+        onsaved?.();
+      }
     } catch (e: unknown) {
+      if (formAttempt !== undefined && !draft.isOwner(formAttempt)) return;
       error = errorText(e, m.events_save_failed());
     } finally {
-      busy = false;
+      if (formAttempt === undefined || draft.isOwner(formAttempt)) busy = false;
     }
   }
 
-  // 연 때와 다르게 고친 칸이 있는지(대화상자가 닫기 전에 버릴지 묻는다). 서버가 저장할 값으로 본다: 제목·설명은
-  // 서버처럼 앞뒤 공백을 지우고(D-94 비교와 같음), 시간대는 보낼 때처럼 지운다. 보내지 않는 칸(종일이면 시각, 아니면
-  // 날짜)은 보지 않는다.
+  // 고친 칸은 서버에 저장될 모양으로 견준다: 서버가 떼는 앞뒤 공백만 바뀐 것은 수정이 아니다(D-97 구현 해석, 업무 폼
+  // `edited`와 같다). 수정이 있으면 초안에는 원문과 잠시 숨긴 날짜·시각을 그대로 남긴다(D-27). 부모는 반복 입력과 함께
+  // 이탈을 확인한다. 시간대는 종일 일정에도 보내고 서버가 저장·정렬에 쓰므로 늘 견준다(D2-F-2).
   const unsaved = $derived(
     f.kind !== base.kind ||
       trimLikeServer(f.title) !== trimLikeServer(base.title) ||
       trimLikeServer(f.description) !== trimLikeServer(base.description) ||
       f.allDay !== base.allDay ||
+      f.timezone.trim() !== base.timezone ||
       (f.allDay
         ? f.startDate !== base.startDate || f.endDate !== base.endDate
-        : f.startWall !== base.startWall ||
-          f.endWall !== base.endWall ||
-          f.timezone.trim() !== base.timezone),
+        : f.startWall !== base.startWall || f.endWall !== base.endWall) ||
+      startChoice !== undefined ||
+      endChoice !== undefined,
   );
   $effect(() => {
     onunsaved?.(unsaved);
+    ondraftkept?.(draft.kept);
     return () => {
       onunsaved?.(false);
+      ondraftkept?.(true);
     };
   });
 </script>
 
-<form class="grid gap-3 md:grid-cols-2" onsubmit={(e) => void submit(e)}>
+{#each draft.offers as offer (offer.key)}
+  <FormDraftOffer
+    onrestore={() => {
+      draft.restore(offer);
+    }}
+    ondiscard={() => {
+      draft.discard(offer);
+    }}
+  />
+{/each}
+
+<!-- 칸의 min-width를 0으로 두어 날짜·시각 입력의 고유 폭이 좁은 대화상자(375px·200%)를 넓히지 않게 한다. -->
+<form
+  hidden={draftName !== undefined && !draft.active}
+  class="grid gap-3 *:min-w-0 md:grid-cols-2"
+  onsubmit={(e) => void submit(e)}
+>
   <div class="flex flex-col gap-1 md:col-span-2">
     <Label for={`${idPrefix}-title`}>{m.events_title()}</Label>
     <Input id={`${idPrefix}-title`} bind:value={f.title} maxlength={200} required />
@@ -215,6 +324,7 @@
     <span class="text-sm font-medium" id={`${idPrefix}-kind-label`}>{m.events_kind()}</span>
     <Select.Root
       type="single"
+      disabled={busy || disabled}
       value={f.kind}
       onValueChange={(v: string) => {
         const k = EVENT_KINDS.find((x) => x === v);
@@ -349,7 +459,14 @@
   <div class="flex gap-2 md:col-span-2">
     <Button type="submit" disabled={busy}>{submitLabel}</Button>
     {#if oncancel !== undefined}
-      <Button type="button" variant="ghost" onclick={oncancel}>{m.common_cancel()}</Button>
+      <Button type="button" variant="ghost" onclick={cancel}>{m.common_cancel()}</Button>
     {/if}
   </div>
 </form>
+{#if attachGuard}
+  <DiscardChangesConfirm
+    open={draft.leave.open}
+    onkeep={draft.leave.keep}
+    ondiscard={draft.discardAndLeave}
+  />
+{/if}

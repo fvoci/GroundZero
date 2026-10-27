@@ -1,4 +1,5 @@
 {
+  "events_until_before_start": "The recurrence end date is before the start date. Set the recurrence end on or after the start date, or move the start date earlier.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "events_load_failed": "Couldn't load the calendar.",
   "events_calendar_embedded": "Calendar · {title}",
@@ -24,6 +25,7 @@
   "events_entry_projected_milestone": "Planned ◆ {title}",
   "events_entry_task_start": "Starts {reference} {title}",
   "events_entry_task_due": "Due {reference} {title}",
+  "events_entry_task_continued": "Continues {reference} {title}",
   "events_entry_milestone": "◆ {reference} {title}",
   "events_date_episode": "Watch",
   "events_date_study_unit": "Study",
@@ -131,12 +133,9 @@
   "events_task_due": "Due date",
   "events_task_name": "Task title",
   "events_task_cancel": "Cancel",
-  "events_task_retry_date": "Set the due date again",
   "events_task_title_required": "Enter a task title.",
   "events_task_target_required": "Choose the item for the task.",
   "events_task_date_required": "Choose a date.",
   "events_task_create_failed": "Couldn't create the task.",
-  "events_task_date_failed": "The task was created, but its due date couldn't be set. Set it again or open the task to fix it.",
-  "events_task_open": "Open {title}",
   "events_task_created": "Task created: {title} (due {day})"
 }

@@ -1,3 +1,6 @@
+import * as feedback from '$lib/features/feedback/feedback.svelte';
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -53,6 +56,7 @@ function task(
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version,
@@ -107,7 +111,7 @@ describe('gantt date edits', () => {
 describe('gantt reschedule', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
-    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'gantt' }));
+    window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
@@ -129,6 +133,7 @@ describe('gantt reschedule', () => {
   };
 
   it('Alt+Right moves the task a day and saves when no later task is affected', async () => {
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
     vi.spyOn(api, 'task').mockResolvedValue(detail(design));
     const preview = vi
@@ -143,13 +148,22 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
+    // 일반 완료는 토스트 한 번이고 알림 영역 등 화면 안 완료 문구는 없다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+        'gantt-save',
+      );
+    });
+    expect(done).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/일정을 바꿨습니다/)).toBeNull();
     expect(preview).toHaveBeenCalledWith('a', '2026-10-21', '2026-10-23');
-    expect(update.mock.calls[0]?.[1]).toBe(1);
-    expect(update.mock.calls[0]?.[2]).toMatchObject({
+    expect(update.mock.calls[0]?.[2]).toBe(1);
+    expect(update.mock.calls[0]?.[3]).toMatchObject({
       start_date: '2026-10-21',
       due_date: '2026-10-23',
     });
-    expect(update.mock.calls[0]?.[3]).toEqual([]);
+    expect(update.mock.calls[0]?.[4]).toEqual([]);
   });
 
   it('asks before moving later tasks and saves them together when approved', async () => {
@@ -180,7 +194,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[3]).toEqual([
+    expect(update.mock.calls[0]?.[4]).toEqual([
       { task_id: 'b', base_version: 1, start_date: '2026-10-24', due_date: '2026-10-26' },
     ]);
     await waitFor(() => {
@@ -190,6 +204,48 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(rowButton(gantt, 'a'));
     });
+  });
+
+  it('saves without asking again when the recalculated plan after a stale approval moves nothing', async () => {
+    // R5 최종 A FA-2(D-91 개정·D-125): 승인한 목록이 그사이 낡아(shift_conflict) 다시 계산했는데 밀릴 업무가 없으면
+    // "0개가 지키지 못합니다" 창을 다시 띄우지 않고 그대로 저장하고 그렇게 알린다.
+    const done = vi.spyOn(feedback, 'notifyDone');
+    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(api, 'task').mockResolvedValue(detail(design));
+    const preview = vi
+      .spyOn(api, 'previewSchedule')
+      .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
+      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const update = vi
+      .spyOn(api, 'updateTask')
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: detail(design) })
+      .mockResolvedValue({
+        kind: 'updated',
+        task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
+      });
+    const gantt = await mount();
+    await fireEvent.keyDown(rowButton(gantt, 'a'), {
+      key: 'ArrowRight',
+      altKey: true,
+      shiftKey: true,
+    });
+    const dialog = await screen.findByRole('dialog');
+    await fireEvent.click(within(dialog).getByRole('button', { name: '후속 업무도 옮겨 저장' }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(preview).toHaveBeenCalledTimes(2);
+    expect(update.mock.calls[1]?.[4]).toEqual([]);
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        expect.stringContaining('밀릴 업무가 없어 그대로 저장했습니다.'),
+        'gantt-save',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(screen.queryByText('후속 업무가 그사이 바뀌어 다시 계산했습니다.')).toBeNull();
   });
 
   it('says before approval when more followers would move than one save allows', async () => {
@@ -230,7 +286,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[3]).toEqual([]);
+    expect(update.mock.calls[0]?.[4]).toEqual([]);
   });
 
   it('cannot be cancelled once the change is being saved', async () => {
@@ -333,7 +389,7 @@ describe('gantt reschedule', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalled();
     });
-    expect(update.mock.calls[0]?.[2]).toMatchObject({
+    expect(update.mock.calls[0]?.[3]).toMatchObject({
       start_date: '2026-10-22',
       due_date: '2026-10-24',
     });

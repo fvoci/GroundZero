@@ -15,6 +15,10 @@
 
   import type { DocNode } from '$lib/api/client';
   import { parseDocNode } from '$lib/api/client';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { ReferenceSuggestion } from '$lib/features/references/reference-extension';
   import { m } from '$lib/paraglide/messages.js';
@@ -32,6 +36,7 @@
     setBlockKind,
   } from './block-types';
   import BubbleToolbar from './BubbleToolbar.svelte';
+  import type { LinkDraftControl } from './link-draft-control';
   import { canonicalJson } from './drafts';
   import { schemaExtensions } from './editor-schema';
   import type { LiveSession } from './live';
@@ -52,9 +57,12 @@
       ((file: File) => Promise<{ href: string; name: string; image: boolean }>) | undefined;
     /** 실시간 공동 편집(D-70). 있으면 본문은 이 Yjs 문서가 맡고 `content`는 쓰지 않는다. */
     collab?: LiveSession | undefined;
+    /** Stable document identity for unapplied link and formula text. */
+    draftName?: string | undefined;
   }
 
-  const { content, editable, label, onchange, references, insertFile, collab }: Props = $props();
+  const { content, editable, label, onchange, references, insertFile, collab, draftName }: Props =
+    $props();
 
   type Command = 'bold' | 'italic' | 'heading' | 'bulletList' | 'taskList' | 'codeBlock';
   type Mode = 'rich' | 'markdown' | 'preview';
@@ -67,6 +75,7 @@
   let version = $state(0);
   let container = $state<HTMLDivElement | undefined>();
   let bubbleEl = $state<HTMLDivElement | undefined>();
+  let linkDraft = $state<LinkDraftControl | undefined>();
   let menuRequest = $state<number | undefined>(undefined);
   // 붙여넣기·입력에서 문서 규칙에 맞춰 바꾼 것의 안내, Markdown 원문에서 저장할 수 없는 것의 안내.
   let contentNotice = $state('');
@@ -164,16 +173,55 @@
   >(undefined);
   let fileInput = $state<HTMLInputElement | undefined>();
   let fileStatus = $state('');
+  let mathBaseline = $state('');
+  interface MathDraft {
+    kind: 'inline' | 'block';
+    latex: string;
+  }
+  function resetMath(): void {
+    math = undefined;
+    mathBaseline = '';
+  }
+  // 수식 폼은 편집할 수 있을 때만 그린다. 편집할 수 없게 되면(실시간 연결 중단·권한 변화) 보이지 않는 입력으로 이탈을
+  // 묻지 않고, 이름을 같은 갱신에서 비워 이 탭에 남긴 입력을 지우지 않는다(다시 편집할 수 있으면 되살리기 제안으로 고른다,
+  // D3B-F-2와 같은 규칙, R5 B 최종 C-6).
+  const mathDraft = createFormDraft<MathDraft | null>({
+    name: () => (draftName === undefined || !editable ? undefined : `editor-math:${draftName}`),
+    snapshot: () => (math === undefined ? null : { kind: math.kind, latex: math.latex }),
+    parse: (value) => {
+      if (value === null) return null;
+      if (
+        typeof value !== 'object' ||
+        !('kind' in value) ||
+        (value.kind !== 'inline' && value.kind !== 'block') ||
+        !('latex' in value) ||
+        typeof value.latex !== 'string'
+      )
+        return undefined;
+      return { kind: value.kind, latex: value.latex };
+    },
+    restore: (value) => {
+      // A saved formula is text, never a stale position in a changed document.
+      math = value === null ? undefined : { ...value, pos: undefined };
+      mathBaseline = '';
+    },
+    reset: resetMath,
+    dirty: () => editable && math !== undefined && math.latex !== mathBaseline,
+  });
+  onMount(mathDraft.attach);
 
   function openMath(kind: 'inline' | 'block', latex: string, pos: number | undefined): void {
     if (editor?.isEditable !== true) return;
-    math = { kind, latex, pos };
+    mathDraft.leave.request(() => {
+      math = { kind, latex, pos };
+      mathBaseline = latex;
+    });
   }
 
   function applyMath(): void {
     const e = editor;
     const m = math;
-    if (e === undefined || m === undefined) return;
+    if (e === undefined || !e.isEditable || m === undefined) return;
     const latex = m.latex.trim();
     const chain = e.chain().focus();
     if (latex === '') {
@@ -193,7 +241,7 @@
         : chain.updateBlockMath({ latex, pos: m.pos })
       ).run();
     }
-    math = undefined;
+    resetMath();
   }
 
   async function onFile(event: Event): Promise<void> {
@@ -215,7 +263,9 @@
             marks: [{ type: 'link', attrs: { href: added.href } }],
           })
           .run();
-      fileStatus = m.documents_file_inserted({ name: file.name });
+      // 일반 완료는 토스트다(D-82). 알림 영역의 "올리는 중" 글은 비운다.
+      fileStatus = '';
+      notifyDone(m.documents_file_inserted({ name: file.name }));
     } catch (e: unknown) {
       fileStatus =
         e instanceof Error
@@ -582,6 +632,30 @@
       {/if}
     {/if}
   </div>
+  {#each mathDraft.offers as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        mathDraft.restore(offer);
+      }}
+      ondiscard={() => {
+        mathDraft.discard(offer);
+      }}
+    />
+  {/each}
+  <!-- 링크 주소 초안의 제안은 말풍선(글자를 골라야 보임) 대신 여기에 둔다. -->
+  {#each linkDraft?.offers() ?? [] as offer (offer.key)}
+    <FormDraftOffer
+      onrestore={() => {
+        linkDraft?.restore(offer);
+      }}
+      ondiscard={() => {
+        linkDraft?.discard(offer);
+      }}
+    />
+  {/each}
+  {#if linkDraft?.waitsForSelection() === true}
+    <p role="status" class="text-sm text-muted-foreground">{m.documents_link_select_text()}</p>
+  {/if}
   {#if math !== undefined}
     {@const current = math}
     <form
@@ -618,15 +692,21 @@
           ? m.documents_math_insert()
           : m.documents_math_replace()}</Button
       >
-      <Button type="button" size="sm" variant="ghost" onclick={() => (math = undefined)}
-        >{m.common_cancel()}</Button
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onclick={() => {
+          mathDraft.leave.request(resetMath);
+        }}>{m.common_cancel()}</Button
       >
       {#if current.pos !== undefined}
         <span class="w-full text-xs text-muted-foreground">{m.documents_math_clear_hint()}</span>
       {/if}
     </form>
   {/if}
-  {#if fileStatus !== ''}<p class="py-1 text-sm" aria-live="polite">{fileStatus}</p>{/if}
+  <!-- 파일을 올리는 중·실패. 처음부터 그려 두고 글만 바꾼다(D-110(4)). -->
+  <p class="py-1 text-sm empty:hidden" aria-live="polite">{fileStatus}</p>
   <!-- 붙여넣기·입력을 문서 규칙에 맞춰 바꿨을 때의 안내. 사용자가 닫을 때까지 남긴다. -->
   <div class="text-sm" aria-live="polite">
     {#if contentNotice !== ''}
@@ -697,6 +777,19 @@
     aria-label={m.documents_bubble_label()}
     data-testid="bubble-toolbar"
   >
-    <BubbleToolbar editor={editorRef} {version} />
+    <BubbleToolbar
+      editor={editorRef}
+      {version}
+      {draftName}
+      onlinkcontrol={(control: LinkDraftControl) => {
+        linkDraft = control;
+      }}
+    />
   </div>
 {/if}
+
+<DiscardChangesConfirm
+  open={mathDraft.leave.open}
+  onkeep={mathDraft.leave.keep}
+  ondiscard={mathDraft.discardAndLeave}
+/>

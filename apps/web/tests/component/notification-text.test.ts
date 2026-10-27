@@ -8,6 +8,8 @@ import { m } from '$lib/paraglide/messages.js';
 const base: NotificationView = {
   id: 'n1',
   kind: 'mention',
+  organization_id: null,
+  invitation_id: null,
   document_id: null,
   task_id: 't1',
   document_title: '보고서',

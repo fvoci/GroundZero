@@ -5,7 +5,7 @@
   import { formatInstant } from '$lib/display';
   import type { Workspace } from '@fvoci/api-client';
   import type { Snippet } from 'svelte';
-  import { tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
 
   import type {
     DocumentView,
@@ -14,11 +14,16 @@
     PublicLinkView,
     ShareView,
   } from '$lib/api/client';
-  import { api } from '$lib/api/client';
-  import { RetryKey } from '$lib/api/retry-key';
+  import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { me } from '$lib/me.svelte';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
   import { m } from '$lib/paraglide/messages.js';
+  import { org } from '$lib/org.svelte';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -49,10 +54,22 @@
   let error = $state<string | undefined>(undefined);
 
   const isOwner = $derived(doc.access === 'owner');
-  // 보관된 항목 아래 문서: 소유 권한자도 노출을 줄이는 변경만 할 수 있다.
-  const restrictOnly = $derived(!isOwner && doc.can_manage);
+  // 공유·공개 링크·설정은 서버의 관리 판단(`can_manage`)을 따른다. 보관된 항목의 문서는 등급이 read로 낮아져도
+  // 워크스페이스 관리자는 보관 해제 없이 넓히는 변경까지 할 수 있다(D-113 ⑯, SQL `app_document_can_manage`).
+  // 템플릿 지정과 이동은 owner 등급만이다.
+  const canManage = $derived(isOwner || doc.can_manage);
   const canCopy = $derived(isOwner || doc.allow_copy);
-  const writable = $derived(workspaces.filter((w) => w.role !== 'readonly'));
+  // 공개 링크 정책은 문서가 속한 워크스페이스의 조직 것이다(지금 고른 조직이 아니다). 개인 노트에는 조직 정책이 없다
+  // (SQL `app_create_public_link`). 그 조직을 알 수 없으면 숨기지 않고 서버의 거절(409)을 그대로 알린다.
+  const publicLinksEnabled = $derived.by(() => {
+    if (doc.workspace_id === null) return true;
+    const organizationId = workspaces.find((w) => w.id === doc.workspace_id)?.organization_id;
+    return org.organizations.find((o) => o.id === organizationId)?.public_links_enabled !== false;
+  });
+  // 쓰기 대상은 서버 접근 등급(`Workspace.access`)으로만 고른다(D-113). 조직 밖 이동·복제는 제외한다(D-114).
+  const writable = $derived(
+    workspaces.filter((w) => w.organization_id === org.currentId && w.access !== 'read'),
+  );
   const memberOf = (ws: string): boolean => workspaces.some((w) => w.id === ws);
 
   function fail(e: unknown): void {
@@ -60,19 +77,23 @@
   }
 
   function open(next: Panel): void {
+    const change = (): void => {
+      openNow(next);
+    };
+    if (panel === 'share') shareDraft.leave.request(change);
+    else if (panel === 'copy') copyDraft.leave.request(change);
+    else change();
+  }
+
+  function openNow(next: Panel): void {
     error = undefined;
     panel = next;
-    opened = next;
+    if (next !== undefined) opened = next;
     if (next === 'share') {
       newLinkUrl = undefined;
       void loadShares();
       void loadLinks();
       void refreshSettings();
-    }
-    if (next === 'copy') {
-      copyTitle = m.documents_copy_default_title({ title: doc.title });
-      copyTarget = 'personal';
-      copyKey.done();
     }
     if (next === 'move') void openMove();
   }
@@ -81,23 +102,75 @@
   let shares = $state<ShareView[]>([]);
   let shareEmail = $state('');
   let sharePermission = $state<'read' | 'write'>('read');
+  let sharing = $state(false);
+  interface ShareDraft {
+    email: string;
+    permission: 'read' | 'write';
+  }
+  function resetShare(): void {
+    shareEmail = '';
+    sharePermission = 'read';
+  }
+  const shareDraft = createFormDraft<ShareDraft>({
+    name: () => `document-share:${doc.id}:${org.currentId ?? ''}`,
+    snapshot: () => ({ email: shareEmail, permission: sharePermission }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('email' in value) ||
+        typeof value.email !== 'string' ||
+        !('permission' in value) ||
+        (value.permission !== 'read' && value.permission !== 'write')
+      )
+        return undefined;
+      return { email: value.email, permission: value.permission };
+    },
+    restore: (value) => {
+      shareEmail = value.email;
+      sharePermission = value.permission;
+    },
+    reset: resetShare,
+    dirty: () => shareEmail !== '',
+    busy: () => sharing,
+  });
+  onMount(shareDraft.attach);
+  let sharesSequence = 0;
 
   async function loadShares(): Promise<void> {
+    const sequence = ++sharesSequence;
+    const documentId = doc.id;
+    const userId = me.userId;
+    const current = (): boolean =>
+      alive && sequence === sharesSequence && documentId === doc.id && userId === me.userId;
     try {
-      shares = await api.shares(doc.id);
+      const result = await api.shares(documentId);
+      if (current()) shares = result;
     } catch (e: unknown) {
-      fail(e);
+      if (current()) fail(e);
     }
   }
 
   async function addShare(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (sharing) return;
+    const organizationId = org.currentId;
+    if (organizationId === undefined) {
+      error = m.app_organization_required();
+      return;
+    }
+    const attempt = shareDraft.capture();
+    if (attempt === undefined) return;
+    sharing = true;
     try {
-      await api.share(doc.id, shareEmail, sharePermission);
-      shareEmail = '';
+      await api.share(doc.id, shareEmail, sharePermission, organizationId);
+      if (!shareDraft.isOwner(attempt)) return;
+      if (shareDraft.complete(attempt)) notifyDone(m.common_saved());
       await loadShares();
     } catch (e: unknown) {
-      fail(e);
+      if (shareDraft.isCurrent(attempt)) fail(e);
+    } finally {
+      if (shareDraft.isOwner(attempt)) sharing = false;
     }
   }
 
@@ -127,6 +200,7 @@
   async function removeShare(id: string): Promise<void> {
     try {
       await api.unshare(id);
+      notifyDone(m.common_saved());
       await loadShares();
     } catch (e: unknown) {
       fail(e);
@@ -179,6 +253,7 @@
     const mine = ++settingsSeq;
     try {
       const saved = await api.setSettings(doc.id, change);
+      notifyDone(m.common_saved());
       // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
       // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
       if (mine === settingsSeq) settingsChanged(saved);
@@ -197,6 +272,7 @@
     const mine = ++settingsSeq;
     try {
       await api.setDocumentTemplate(doc.id, on);
+      notifyDone(m.common_saved());
       if (mine === settingsSeq) settingsChanged({ ...doc, is_template: on });
       // 템플릿 응답에는 다른 설정이 없다. 창을 열 때 시작한 다시 읽기가 이 저장 때문에 버려졌을 수 있으므로, 서버의 지금
       // 값으로 한 번 더 맞춘다(리뷰: 그사이 다른 소유자가 바꾼 비공개·복제 금지가 창을 다시 열 때까지 옛 값으로 보였다).
@@ -222,11 +298,13 @@
   }
 
   async function createLink(): Promise<void> {
+    if (!publicLinksEnabled) return;
     try {
       const days = Number(linkExpiryDays);
       const expiresAt =
         days > 0 ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString() : null;
       newLinkUrl = (await api.createPublicLink(doc.id, expiresAt)).url;
+      notifyDone(m.common_saved());
       await loadLinks();
     } catch (e: unknown) {
       fail(e);
@@ -236,6 +314,7 @@
   async function revokeLink(id: string): Promise<void> {
     try {
       await api.revokePublicLink(id);
+      notifyDone(m.common_saved());
       newLinkUrl = undefined;
       await loadLinks();
     } catch (e: unknown) {
@@ -250,20 +329,108 @@
   // --- 복제 ---------------------------------------------------------------
   let copyTitle = $state('');
   let copyTarget = $state('personal');
-  // 같은 대상·제목의 재시도는 같은 요청 id, 고치면 새 id.
-  const copyKey = new RetryKey();
+  let copyBaseline = $state('');
+  let copying = $state(false);
+  interface CopyDraft {
+    title: string;
+    target: string;
+    baseline: string;
+    pending: { requestId: string; signature: string } | null;
+  }
+  let copyPending = $state<CopyDraft['pending']>(null);
+  function resetCopy(): void {
+    copyBaseline = m.documents_copy_default_title({ title: doc.title });
+    copyTitle = copyBaseline;
+    copyTarget = 'personal';
+    copyPending = null;
+  }
+  const copyDraft = createFormDraft<CopyDraft>({
+    name: () => `document-copy:${doc.id}:${org.currentId ?? ''}`,
+    snapshot: () => ({
+      title: copyTitle,
+      target: copyTarget,
+      baseline: copyBaseline,
+      pending: copyPending,
+    }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('title' in value) ||
+        typeof value.title !== 'string' ||
+        !('target' in value) ||
+        typeof value.target !== 'string' ||
+        !('baseline' in value) ||
+        typeof value.baseline !== 'string' ||
+        !('pending' in value)
+      )
+        return undefined;
+      const pending = value.pending;
+      let restoredPending: CopyDraft['pending'] = null;
+      if (pending !== null) {
+        if (
+          typeof pending !== 'object' ||
+          !('requestId' in pending) ||
+          typeof pending.requestId !== 'string' ||
+          !('signature' in pending) ||
+          typeof pending.signature !== 'string'
+        )
+          return undefined;
+        restoredPending = { requestId: pending.requestId, signature: pending.signature };
+      }
+      return {
+        title: value.title,
+        target: value.target,
+        baseline: value.baseline,
+        pending: restoredPending,
+      };
+    },
+    restore: (value) => {
+      copyTitle = value.title;
+      copyTarget = value.target;
+      copyBaseline = value.baseline;
+      copyPending = value.pending;
+    },
+    reset: resetCopy,
+    dirty: () => copyTitle !== copyBaseline || copyTarget !== 'personal' || copyPending !== null,
+    busy: () => copying,
+  });
+  onMount(copyDraft.attach);
+  let formIdentity: string | undefined;
+  $effect(() => {
+    const identity = JSON.stringify([me.userId, doc.id, org.currentId]);
+    if (identity === formIdentity) return;
+    formIdentity = identity;
+    untrack(() => {
+      resetShare();
+      resetCopy();
+      sharing = false;
+      copying = false;
+      panel = undefined;
+      error = undefined;
+    });
+  });
 
   async function submitCopy(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (copying) return;
+    const target = copyTarget === 'personal' ? null : copyTarget;
+    const signature = JSON.stringify({ doc: doc.id, target, title: copyTitle });
+    if (copyPending?.signature !== signature)
+      copyPending = { requestId: newRequestId(), signature };
+    const attempt = copyDraft.capture();
+    if (attempt === undefined) return;
+    copying = true;
     try {
-      const target = copyTarget === 'personal' ? null : copyTarget;
-      const requestId = copyKey.for({ doc: doc.id, target, title: copyTitle });
-      const copied = await api.copyDocument(doc.id, requestId, target, copyTitle);
-      copyKey.done(requestId);
+      const copied = await api.copyDocument(doc.id, copyPending.requestId, target, copyTitle);
+      if (!copyDraft.complete(attempt)) return;
+      notifyDone(m.common_saved());
       panel = undefined;
       router.navigate(pathFor(copied, memberOf));
     } catch (e: unknown) {
-      fail(e);
+      if (copyDraft.isCurrent(attempt)) fail(e);
+    } finally {
+      if (copyDraft.isOwner(attempt)) copying = false;
     }
   }
 
@@ -379,7 +546,7 @@
   {:else if doc.visibility === 'private'}
     <span class="rounded border px-1.5 text-sm text-muted-foreground">{m.documents_private()}</span>
   {/if}
-  {#if isOwner || doc.can_manage}
+  {#if canManage}
     <Button
       size="sm"
       variant="outline"
@@ -418,13 +585,16 @@
 </div>
 
 <Dialog.Root
-  open={panel !== undefined}
-  onOpenChange={(o: boolean) => {
-    if (!o) panel = undefined;
-  }}
+  bind:open={
+    () => panel !== undefined,
+    (value: boolean) => {
+      if (!value) open(undefined);
+    }
+  }
 >
   <!-- 복제·이동은 "더 보기" 메뉴의 항목(닫히며 사라짐)에서 열린다. 닫으면 브라우저에 맡기지 않고 "더 보기"로 초점을 돌린다. -->
   <Dialog.Content
+    class="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto"
     onCloseAutoFocus={(e: Event) => {
       if (opened !== 'copy' && opened !== 'move') return;
       e.preventDefault();
@@ -484,52 +654,68 @@
           <li class="text-sm text-muted-foreground">{m.documents_share_empty()}</li>
         {/each}
       </ul>
-      {#if restrictOnly}
-        <p class="text-sm text-muted-foreground" role="note">
-          {m.documents_restrict_only()}
-        </p>
-      {:else}
-        <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
-          <div class="flex min-w-48 flex-1 flex-col gap-1">
-            <Label for="share-email">{m.documents_email()}</Label>
-            <Input
-              id="share-email"
-              type="email"
-              bind:value={shareEmail}
-              autocomplete="off"
-              required
+      {#if canManage}
+        <!-- 공유·복제는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공(공유 저장·복제본으로 이동)과
+             실패 알림을 숨기고, 복제는 다시 내면 새 요청 id로 두 번째 사본을 만든다. bits-ui Select는 조상 fieldset의
+             disabled를 보지 않으므로 따로 잠근다. -->
+        {#each shareDraft.offers as offer (offer.key)}
+          <fieldset class="contents" disabled={sharing}>
+            <FormDraftOffer
+              onrestore={() => {
+                shareDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                shareDraft.discard(offer);
+              }}
             />
-          </div>
-          <Select.Root
-            type="single"
-            value={sharePermission}
-            onValueChange={(v: string) => {
-              sharePermission = v === 'write' ? 'write' : 'read';
-            }}
-          >
-            <Select.Trigger class="w-24" aria-label={m.documents_share_permission()}
-              >{sharePermission === 'write'
-                ? m.documents_permission_write()
-                : m.documents_permission_read()}</Select.Trigger
+          </fieldset>
+        {/each}
+        <fieldset class="min-w-0" disabled={sharing}>
+          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void addShare(e)}>
+            <div class="flex min-w-0 flex-1 basis-48 flex-col gap-1">
+              <Label for="share-email">{m.documents_email()}</Label>
+              <Input
+                id="share-email"
+                type="email"
+                bind:value={shareEmail}
+                autocomplete="off"
+                required
+              />
+            </div>
+            <Select.Root
+              type="single"
+              disabled={sharing}
+              value={sharePermission}
+              onValueChange={(v: string) => {
+                sharePermission = v === 'write' ? 'write' : 'read';
+              }}
             >
-            <Select.Content>
-              <Select.Item value="read" label={m.documents_permission_read()}
-                >{m.documents_permission_read()}</Select.Item
+              <Select.Trigger class="w-24" aria-label={m.documents_share_permission()}
+                >{sharePermission === 'write'
+                  ? m.documents_permission_write()
+                  : m.documents_permission_read()}</Select.Trigger
               >
-              <Select.Item value="write" label={m.documents_permission_write()}
-                >{m.documents_permission_write()}</Select.Item
-              >
-            </Select.Content>
-          </Select.Root>
-          <Button type="submit" disabled={shareEmail.trim() === ''}>{m.documents_share()}</Button>
-        </form>
+              <Select.Content>
+                <Select.Item value="read" label={m.documents_permission_read()}
+                  >{m.documents_permission_read()}</Select.Item
+                >
+                <Select.Item value="write" label={m.documents_permission_write()}
+                  >{m.documents_permission_write()}</Select.Item
+                >
+              </Select.Content>
+            </Select.Root>
+            <Button type="submit" disabled={sharing || shareEmail.trim() === ''}
+              >{m.documents_share()}</Button
+            >
+          </form>
+        </fieldset>
       {/if}
       <div class="flex flex-col gap-2 border-t pt-3">
         {#if doc.placement !== 'personal'}
           <div class="flex items-center gap-2">
             <Checkbox
               id="doc-private"
-              disabled={settingsBusy || (restrictOnly && doc.visibility === 'private')}
+              disabled={settingsBusy}
               checked={doc.visibility === 'private'}
               onCheckedChange={(v) =>
                 void setSettings({ visibility: v === true ? 'private' : 'workspace' })}
@@ -540,7 +726,7 @@
         <div class="flex items-center gap-2">
           <Checkbox
             id="doc-allow-copy"
-            disabled={settingsBusy || (restrictOnly && !doc.allow_copy)}
+            disabled={settingsBusy}
             checked={doc.allow_copy}
             onCheckedChange={(v) => void setSettings({ allow_copy: v === true })}
           />
@@ -567,7 +753,10 @@
           {m.documents_public_link_hint()}
         </p>
         <div role="status" class="empty:hidden">
-          {#if newLinkUrl !== undefined}
+          {#if !publicLinksEnabled}
+            <p>{m.documents_public_links_disabled()}</p>
+          {/if}
+          {#if newLinkUrl !== undefined && publicLinksEnabled}
             <div class="flex flex-col gap-1 rounded border px-2 py-2">
               <Label for="new-link-url">{m.documents_new_link()}</Label>
               <Input
@@ -628,8 +817,8 @@
             </li>
           {/each}
         </ul>
-        {#if isOwner}
-          <div class="flex items-center gap-2">
+        {#if canManage && publicLinksEnabled}
+          <div class="flex flex-wrap items-center gap-2">
             <Select.Root
               type="single"
               value={linkExpiryDays}
@@ -659,44 +848,66 @@
           {m.documents_copy_description()}
         </Dialog.Description>
       </Dialog.Header>
-      <form class="flex flex-col gap-3" onsubmit={(e) => void submitCopy(e)}>
-        <div class="flex flex-col gap-1">
-          <Label for="copy-title">{m.documents_new_title()}</Label>
-          <Input id="copy-title" bind:value={copyTitle} maxlength={200} required />
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-sm font-medium" id="copy-target-label">{m.documents_copy_target()}</span
-          >
-          <Select.Root
-            type="single"
-            value={copyTarget}
-            onValueChange={(v: string) => {
-              // 대상만 바꾼 것으로는 키를 비우지 않는다(보낼 때 내용이 다르면 for가 새 id를 준다. 되돌린 뒤 다시 보내면 같은 id).
-              copyTarget = v;
+      {#each copyDraft.offers as offer (offer.key)}
+        <fieldset class="contents" disabled={copying}>
+          <FormDraftOffer
+            onrestore={() => {
+              copyDraft.restore(offer);
             }}
-          >
-            <Select.Trigger aria-labelledby="copy-target-label"
-              >{targetLabel(copyTarget)}</Select.Trigger
+            ondiscard={() => {
+              copyDraft.discard(offer);
+            }}
+          />
+        </fieldset>
+      {/each}
+      <fieldset class="min-w-0" disabled={copying}>
+        <form class="flex flex-col gap-3" onsubmit={(e) => void submitCopy(e)}>
+          <div class="flex flex-col gap-1">
+            <Label for="copy-title">{m.documents_new_title()}</Label>
+            <Input id="copy-title" bind:value={copyTitle} maxlength={200} required />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm font-medium" id="copy-target-label"
+              >{m.documents_copy_target()}</span
             >
-            <Select.Content>
-              <Select.Item value="personal" label={m.documents_my_notes()}
-                >{m.documents_my_notes()}</Select.Item
+            <Select.Root
+              type="single"
+              disabled={copying}
+              value={copyTarget}
+              onValueChange={(v: string) => {
+                // 보낼 때 대상·제목이 달라졌으면 새 요청 ID를 만든다.
+                copyTarget = v;
+              }}
+            >
+              <Select.Trigger aria-labelledby="copy-target-label"
+                >{targetLabel(copyTarget)}</Select.Trigger
               >
-              {#each writable as w (w.id)}
-                <Select.Item value={w.id} label={workspaceLabel(w, workspaces)}
-                  >{m.documents_wiki({ workspace: workspaceLabel(w, workspaces) })}</Select.Item
+              <Select.Content>
+                <Select.Item value="personal" label={m.documents_my_notes()}
+                  >{m.documents_my_notes()}</Select.Item
                 >
-              {/each}
-            </Select.Content>
-          </Select.Root>
-        </div>
-        <Dialog.Footer>
-          <Button variant="ghost" type="button" onclick={() => (panel = undefined)}
-            >{m.common_cancel()}</Button
-          >
-          <Button type="submit" disabled={copyTitle.trim() === ''}>{m.documents_copy()}</Button>
-        </Dialog.Footer>
-      </form>
+                {#each writable as w (w.id)}
+                  <Select.Item value={w.id} label={workspaceLabel(w, workspaces)}
+                    >{m.documents_wiki({ workspace: workspaceLabel(w, workspaces) })}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+          <Dialog.Footer>
+            <Button
+              variant="ghost"
+              type="button"
+              onclick={() => {
+                open(undefined);
+              }}>{m.common_cancel()}</Button
+            >
+            <Button type="submit" disabled={copying || copyTitle.trim() === ''}
+              >{m.documents_copy()}</Button
+            >
+          </Dialog.Footer>
+        </form>
+      </fieldset>
     {:else if panel === 'move'}
       <Dialog.Header>
         <Dialog.Title>{m.documents_move_title()}</Dialog.Title>
@@ -785,3 +996,14 @@
     {/if}
   </Dialog.Content>
 </Dialog.Root>
+
+<DiscardChangesConfirm
+  open={shareDraft.leave.open}
+  onkeep={shareDraft.leave.keep}
+  ondiscard={shareDraft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={copyDraft.leave.open}
+  onkeep={copyDraft.leave.keep}
+  ondiscard={copyDraft.discardAndLeave}
+/>

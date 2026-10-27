@@ -1,11 +1,16 @@
+import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemProfileView, ItemView, TaskView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
+import { itemViewPath, itemTaskPath, router } from '$lib/router.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,11 +18,11 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -142,6 +147,7 @@ describe('item info form while the item is read again', () => {
   it('keeps edits typed while the save is in flight and does not claim they were saved', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     mockItem(item());
     let finish: (next: ItemView) => void = () => undefined;
     type Saved = Awaited<ReturnType<typeof api.updateItem>>;
@@ -167,12 +173,14 @@ describe('item info form while the item is read again', () => {
     await screen.findByRole('heading', { name: '보낸 제목' });
 
     expect(titleInput().value).toBe('더 고친 제목');
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    // 일반 완료는 토스트다(D-82). 더 고친 칸이 남았으면 알리지 않는다.
+    expect(done).not.toHaveBeenCalled();
   });
 
   it('shows the saved status when nothing more was typed during the save', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     mockItem(item());
     vi.spyOn(api, 'updateItem').mockResolvedValue({
       kind: 'updated',
@@ -185,8 +193,37 @@ describe('item info form while the item is read again', () => {
     const form = screen.getByRole('form', { name: '항목 정보' });
     await fireEvent.click(within(form).getByRole('button', { name: '저장' }));
 
-    expect(await screen.findByText('저장했습니다.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('저장했습니다.');
+    });
     expect(titleInput().value).toBe('보낸 제목');
+  });
+});
+
+// FC-2(R5 P1 F-11): 쓸 수 없게 된 항목에는 남긴 입력의 되살리기 대신 읽기 전용 안내와 버리기만 보인다. 되살리면 저장할
+// 수 없는 편집 상태가 열렸다.
+describe('item info draft after write access is withdrawn', () => {
+  it('offers only a read-only notice and discard for the kept input', async () => {
+    await setLocale('ko', { reload: false });
+    localStorage.clear();
+    quietServer();
+    mockItem(item());
+    const update = vi.spyOn(api, 'updateItem');
+    const view = render(ItemScreen, {
+      props: { workspace, itemId: 'i1', workspaces: [workspace] },
+    });
+    await fireEvent.input(await waitFor(titleInput), { target: { value: '권한 철회 전 제목' } });
+    view.unmount();
+
+    mockItem(item({ access: 'read' }));
+    render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    const offer = await screen.findByTestId('form-draft-offer');
+    expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    expect(offer).toHaveTextContent(m.common_draft_read_only());
+    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_discard() }));
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+    localStorage.clear();
   });
 });
 
@@ -197,6 +234,7 @@ describe('item info save while a visibility change is in flight', () => {
   it('sends no second save until the public one returns, then sends private', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     mockItem(item({ visibility: 'private' }));
     // 서버의 공개 범위. 첫 저장은 손으로 끝내고, 그 뒤의 저장은 보낸 공개 범위만 바꾼다(없으면 그대로).
     let serverVisibility: ItemView['visibility'] = 'private';
@@ -260,7 +298,11 @@ describe('item info save while a visibility change is in flight', () => {
       description: '원래 설명',
       visibility: 'private',
     });
-    expect(await screen.findByText('저장했습니다.')).toBeInTheDocument();
+    // 일반 완료는 토스트다(D-82). 체크를 푼 채 돌아온 첫 저장은 알리지 않고, 끝난 뒤의 저장만 알린다.
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('저장했습니다.');
+    });
+    expect(done).toHaveBeenCalledTimes(1);
     // 화면은 서버에 남은 값과 같다.
     expect(serverVisibility).toBe('private');
     expect(screen.getByText('비공개')).toBeInTheDocument();
@@ -279,7 +321,7 @@ function task(id: string, title: string): TaskView {
     reference: `DEV-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,
@@ -290,6 +332,7 @@ function task(id: string, title: string): TaskView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -329,5 +372,41 @@ describe('item info form when the task board finds the item changed', () => {
 
     expect(titleInput().value).toBe('다른 사람이 고친 제목');
     expect(description().value).toBe('쓰는 중인 설명');
+  });
+});
+it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (E regression)', async () => {
+  await setLocale('ko', { reload: false });
+  quietServer();
+  const ws = { ...workspace, id: '10000000-0000-0000-0000-000000000001' };
+  const current = item({ id: '20000000-0000-0000-0000-000000000001', workspace_id: ws.id });
+  const entry = {
+    ...task('30000000-0000-0000-0000-000000000001', '경로 업무'),
+    item_id: current.id,
+    workspace_id: ws.id,
+    start_date: '2026-10-25',
+    due_date: '2026-10-28',
+  };
+  mockItem(current);
+  vi.spyOn(api, 'tasks').mockResolvedValue([entry]);
+  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(api, 'task').mockResolvedValue({ ...entry, checklist: [] });
+  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  router.guard = undefined;
+  router.path = itemViewPath(ws.id, current.id, 'gantt');
+  window.history.replaceState(null, '', router.path);
+  render(ItemScreen, { workspace: ws, itemId: current.id, workspaces: [ws] });
+  await screen.findByTestId('task-gantt');
+  expect(screen.getByRole('button', { name: '간트' })).toHaveAttribute('aria-pressed', 'true');
+  await fireEvent.click(screen.getByRole('button', { name: '칸반' }));
+  await screen.findByTestId('task-board');
+  expect(window.location.pathname).toBe(itemViewPath(ws.id, current.id, 'board'));
+  await fireEvent.click(screen.getByRole('button', { name: '간트' }));
+  await screen.findByTestId('task-gantt');
+  expect(window.location.pathname).toBe(itemViewPath(ws.id, current.id, 'gantt'));
+  router.navigate(itemTaskPath(ws.id, current.id, entry.id));
+  await screen.findByRole('dialog');
+  await waitFor(() => {
+    expect(api.task).toHaveBeenCalledWith(entry.id);
   });
 });

@@ -6,7 +6,10 @@ import type { TaskView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import { applyMove } from '$lib/features/tasks/board';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
+import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
+// 개인 화면·활동 story의 실제 계약 모양을 채운다.
+import { ACTIVITY, myTasksView } from './personal';
 
 import {
   calendarView,
@@ -16,6 +19,7 @@ import {
   membersView,
   MODULES,
   notificationsView,
+  ORGANIZATION,
   TASK_ITEM,
   taskViews,
   WORKSPACE,
@@ -23,6 +27,8 @@ import {
 
 /** 화면이 부르는 서버 함수. 기본값은 합성 데이터로 답하고, story가 일부만 바꾼다. */
 export interface ScreenApi {
+  myTasks: typeof api.myTasks;
+  recentActivity: typeof api.recentActivity;
   modules: typeof api.modules;
   wikiDocuments: typeof api.wikiDocuments;
   module: typeof api.module;
@@ -32,6 +38,8 @@ export interface ScreenApi {
   notifications: typeof api.notifications;
   myInvitations: typeof api.myInvitations;
   currentTimer: typeof api.currentTimer;
+  // 업무 보기는 서버 상태 정의를 함께 읽는다.
+  taskStatuses: typeof api.taskStatuses;
   tasks: typeof api.tasks;
   savedViews: typeof api.savedViews;
   syncRecurrences: typeof api.syncRecurrences;
@@ -40,6 +48,8 @@ export interface ScreenApi {
   members: typeof api.members;
   assignable: typeof api.assignable;
   search: typeof api.search;
+  myOrganizations: typeof api.myOrganizations;
+  unreadCount: typeof api.unreadCount;
 }
 
 /** 응답이 오지 않는 요청(불러오는 중). */
@@ -61,7 +71,7 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
   return {
     tasks: (itemId) => Promise.resolve(itemId === TASK_ITEM.id ? list : []),
     task: (id) => Promise.resolve({ ...find(id), checklist: [] }),
-    moveTask: (id, status, beforeId) => {
+    moveTask: (_expectedUser, id, status, beforeId) => {
       const before = find(id);
       list = applyMove(list, id, { status, beforeId }).map((t) =>
         t.id === id ? { ...t, move_version: before.move_version + 1 } : t,
@@ -72,6 +82,22 @@ function taskServer(): Pick<ScreenApi, 'tasks' | 'task' | 'moveTask'> {
 }
 
 const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
+  // ⑪ 기본 상태 정의(이름은 그대로 보이고 범주로만 완료를 판단한다). 합성 업무(synthetic.ts)의 상태 이름과 같다.
+  taskStatuses: () =>
+    Promise.resolve([
+      { id: 'todo', name: '할 일', color: '', position: 0, category: 'todo', task_count: 4 },
+      {
+        id: 'in_progress',
+        name: '진행 중',
+        color: '',
+        position: 1,
+        category: 'doing',
+        task_count: 2,
+      },
+      { id: 'done', name: '완료', color: '', position: 2, category: 'done', task_count: 1 },
+    ]),
+  myTasks: () => Promise.resolve(myTasksView()),
+  recentActivity: () => Promise.resolve(ACTIVITY),
   modules: () => Promise.resolve(MODULES),
   wikiDocuments: () => Promise.resolve(DOCS),
   module: (id) => {
@@ -86,7 +112,7 @@ const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
   },
   home: () => Promise.resolve(homeView()),
   calendar: () => Promise.resolve(calendarView()),
-  notifications: () => Promise.resolve(notificationsView()),
+  notifications: () => Promise.resolve({ notifications: notificationsView(), next: null }),
   myInvitations: () => Promise.resolve([]),
   currentTimer: () => Promise.resolve(null),
   savedViews: () => Promise.resolve([]),
@@ -97,6 +123,8 @@ const DEFAULTS: Omit<ScreenApi, 'tasks' | 'task' | 'moveTask'> = {
       membersView().members.map((p) => ({ user_id: p.user_id, display_name: p.display_name })),
     ),
   search: () => Promise.resolve([]),
+  myOrganizations: () => Promise.resolve([ORGANIZATION]),
+  unreadCount: () => Promise.resolve(notificationsView().filter((n) => !n.read).length),
 };
 
 /** 계정 메뉴가 묻는 빌드 정보(/healthz). 개발 빌드로 답한다. */
@@ -111,6 +139,8 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   // 바로 바꾸면 이 story의 클릭이 막히므로 먼저 푼다(tests/component/stories.test.ts의 afterEach와 같은 정리).
   document.body.style.removeProperty('pointer-events');
   const stubs: ScreenApi = { ...DEFAULTS, ...taskServer(), ...overrides };
+  spyOn(api, 'myTasks').mockImplementation(stubs.myTasks);
+  spyOn(api, 'recentActivity').mockImplementation(stubs.recentActivity);
   spyOn(api, 'modules').mockImplementation(stubs.modules);
   spyOn(api, 'wikiDocuments').mockImplementation(stubs.wikiDocuments);
   spyOn(api, 'module').mockImplementation(stubs.module);
@@ -121,6 +151,8 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
   spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
   spyOn(api, 'tasks').mockImplementation(stubs.tasks);
+  // 실제 상태 정의 조회도 합성 응답으로 격리한다.
+  spyOn(api, 'taskStatuses').mockImplementation(stubs.taskStatuses);
   spyOn(api, 'savedViews').mockImplementation(stubs.savedViews);
   spyOn(api, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);
   spyOn(api, 'task').mockImplementation(stubs.task);
@@ -128,6 +160,11 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'members').mockImplementation(stubs.members);
   spyOn(api, 'assignable').mockImplementation(stubs.assignable);
   spyOn(api, 'search').mockImplementation(stubs.search);
+  spyOn(api, 'myOrganizations').mockImplementation(stubs.myOrganizations);
+  spyOn(api, 'unreadCount').mockImplementation(stubs.unreadCount);
+
+  // 개인 화면은 현재 조직 범위다(D-111). story는 합성 조직 하나를 고른 상태로 시작한다.
+  org.load('story-user', [ORGANIZATION], ORGANIZATION.id);
 
   // 사이드바 목록은 앱 전체가 같이 쓰는 저장소다. 같은 워크스페이스라도 앞 story의 목록·오류를 이어 받지 않게 비운다.
   workspaceNav.workspaceId = undefined;
@@ -136,7 +173,8 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   workspaceNav.currentItem = undefined;
   // 마지막으로 연 워크스페이스(사이드바가 브라우저에 남기는 편의 기억)를 정해 두어 보는 브라우저마다 다르지 않게 한다.
   try {
-    window.localStorage.setItem('fvoci.lastWorkspace', WORKSPACE.id);
+    // 마지막으로 연 워크스페이스 기억은 사용자·조직별 키다(D-121).
+    window.localStorage.setItem(org.key('lastWorkspace'), WORKSPACE.id);
   } catch {
     // 저장소를 못 쓰면 사이드바도 기억하지 않는다.
   }

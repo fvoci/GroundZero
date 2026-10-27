@@ -2,6 +2,7 @@
   // 문서를 불러와 동작 막대와 편집기에 넘긴다. 다른 문서로 바뀌면 편집기를 새로 만든다.
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import type { Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
 
   import type { DocumentView } from '$lib/api/client';
   import { api, ApiError } from '$lib/api/client';
@@ -19,6 +20,10 @@
   import { itemPath, router, workspacePath } from '$lib/router.svelte';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
+  import { me } from '$lib/me.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
   import DocumentEditor from './DocumentEditor.svelte';
@@ -40,6 +45,31 @@
   let epoch = $state(0);
   // 편집기에 저장하지 않은 편집이 있는지(내보내기 안내).
   let unsaved = $state(false);
+  let commentsUnsaved = $state(false);
+  let commentsKept = $state(true);
+  let commentsEditor = $state<{ discardInput(): boolean; isSaving(): boolean }>();
+  const commentsIdentity = $derived(`${me.userId}:${documentId}`);
+  const commentsLeave = createLeaveGuard({
+    dirty: () => commentsUnsaved && !accountSwitching(),
+    busy: () => commentsEditor?.isSaving() === true,
+    identity: () => commentsIdentity,
+  });
+  let previousCommentsIdentity = '';
+  $effect(() => {
+    if (previousCommentsIdentity === commentsIdentity) return;
+    previousCommentsIdentity = commentsIdentity;
+    commentsUnsaved = false;
+    commentsKept = true;
+    commentsLeave.keep();
+  });
+  $effect(() => {
+    if (accountSwitching()) commentsLeave.keep();
+  });
+  onMount(() =>
+    commentsLeave.attach({
+      beforeUnload: () => commentsUnsaved && (!leavingWithDrafts() || !commentsKept),
+    }),
+  );
   // 목차가 읽는 본문 영역.
   let bodyArea = $state<HTMLDivElement | undefined>(undefined);
   // "더 보기" 메뉴에서 여는 내보내기·지우기 확인과, 그 일이 끝나면 초점을 돌려줄 "더 보기" 단추.
@@ -114,11 +144,12 @@
   }
 </script>
 
+<p role="status" class="empty:hidden">
+  {#if error === undefined && doc === undefined}{m.documents_loading()}{/if}
+</p>
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
-{:else if doc === undefined}
-  <p aria-live="polite">{m.documents_loading()}</p>
-{:else}
+{:else if doc !== undefined}
   {@const shownDoc = doc}
   <div class="flex flex-wrap items-center gap-2">
     <DocumentActions
@@ -142,7 +173,7 @@
         />
       {/snippet}
       {#snippet more()}
-        {#if shownDoc.can_export}
+        {#if shownDoc.can_export && (shownDoc.access === 'owner' || shownDoc.allow_copy)}
           <DropdownMenu.Item onSelect={() => (exportOpen = true)}
             >{m.documents_export()}</DropdownMenu.Item
           >
@@ -157,7 +188,7 @@
         {/if}
       {/snippet}
     </DocumentActions>
-    {#if doc.can_export}
+    {#if doc.can_export && (doc.access === 'owner' || doc.allow_copy)}
       <ExportDialog
         bind:open={exportOpen}
         returnFocus={moreButton}
@@ -255,5 +286,26 @@
     target={{ kind: 'document', id: doc.id }}
     canWrite={doc.access === 'owner' || doc.access === 'write'}
   />
-  <CommentsPanel target={{ kind: 'document', id: doc.id }} />
+  {#key doc.id}
+    <CommentsPanel
+      bind:this={commentsEditor}
+      target={{ kind: 'document', id: doc.id }}
+      canWrite={doc.access !== 'read'}
+      itemId={doc.item_id}
+      onunsaved={(value: boolean) => {
+        commentsUnsaved = value;
+      }}
+      ondraftkept={(value: boolean) => {
+        commentsKept = value;
+      }}
+    />
+  {/key}
 {/if}
+
+<DiscardChangesConfirm
+  open={commentsLeave.open}
+  onkeep={commentsLeave.keep}
+  ondiscard={() => {
+    if (commentsEditor?.discardInput() !== false) commentsLeave.discard();
+  }}
+/>

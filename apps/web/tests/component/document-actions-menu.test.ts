@@ -12,11 +12,11 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 일이 끝나면 초점은 "더 보기"로 돌아온다(대화상자의 초점 복귀는 실제 브라우저에서도 확인했다).
 const workspaces: Workspace[] = [
   {
-    id: 'ws-1',
-    organization_id: 'org-1',
-    name: '공간',
-    role: 'member',
     access: 'write',
+    id: 'ws-1',
+    name: '공간',
+    organization_id: 'org-1',
+    role: 'member',
     is_owner: false,
     realtime_enabled: false,
   },

@@ -4,18 +4,21 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
+import { errorText } from '$lib/api/errors';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import WorkspaceScreen from '$lib/features/workspaces/WorkspaceScreen.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 const LABEL = '실시간 공동 편집(문서를 여럿이 동시에 고침)';
 
 function workspaceWith(realtime: boolean): Workspace {
   return {
-    id: 'ws-1',
-    organization_id: 'org-1',
-    name: '공간',
-    role: 'admin',
     access: 'owner',
+    id: 'ws-1',
+    name: '공간',
+    organization_id: 'org-1',
+    role: 'admin',
     is_owner: true,
     realtime_enabled: realtime,
   };
@@ -74,6 +77,7 @@ describe('workspace realtime checkbox', () => {
 
   it('reports a successful change so the shared workspace list (and the next visit) shows it', async () => {
     vi.spyOn(api, 'setWorkspaceRealtime').mockResolvedValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
     const changed = vi.fn<(workspaceId: string, enabled: boolean) => void>();
     const view = render(WorkspaceScreen, {
       props: { workspace: workspaceWith(false), onrealtimechanged: changed },
@@ -83,16 +87,42 @@ describe('workspace realtime checkbox', () => {
     await waitFor(() => {
       expect(changed).toHaveBeenCalledWith('ws-1', true);
     });
-    expect(
-      screen.getByText('실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.'),
-    ).toBeInTheDocument();
+    // 일반 완료는 토스트 한 번이다(D-82). 화면 안 완료 문구는 없다.
+    expect(done).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledWith(
+      '실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.',
+      'workspace-realtime',
+    );
+    expect(screen.queryByText(/실시간 공동 편집을 켰습니다/)).toBeNull();
 
-    // 앱이 목록을 고쳐 새 값을 넘겨도 방금 보인 안내와 칸은 그대로다.
+    // 앱이 목록을 고쳐 새 값을 넘겨도 칸은 그대로이고 토스트를 다시 띄우지 않는다.
     await view.rerender({ workspace: workspaceWith(true), onrealtimechanged: changed });
     expect(checkbox().checked).toBe(true);
-    expect(
-      screen.getByText('실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.'),
-    ).toBeInTheDocument();
+    expect(done).toHaveBeenCalledOnce();
+  });
+
+  it('clears an earlier failure from the screen when a later change succeeds', async () => {
+    vi.spyOn(api, 'setWorkspaceRealtime')
+      .mockRejectedValueOnce(new ApiError(403, 'forbidden', 'forbidden'))
+      .mockResolvedValueOnce(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    render(WorkspaceScreen, { props: { workspace: workspaceWith(false) } });
+
+    await fireEvent.click(checkbox());
+    await waitFor(() => {
+      expect(checkbox().checked).toBe(false);
+    });
+    const failure = errorText(
+      new ApiError(403, 'forbidden', 'forbidden'),
+      m.workspaces_realtime_failed(),
+    );
+    expect(screen.queryByText(failure)).not.toBeNull();
+
+    await fireEvent.click(checkbox());
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(screen.queryByText(failure)).toBeNull();
   });
 
   it('does not send a second change while the first is still being saved', async () => {

@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HomeView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(homeExtras);
 
 // 홈을 처음 불러오지 못하면 오류만 남고 다시 받을 길이 없었다(빠른 추가를 해야만 다시 읽었다). 받기 전에는 불러오는
 // 중이라고 알리고, 실패하면 오류 옆의 "다시 시도"로 다시 받는다.
@@ -23,15 +26,15 @@ beforeEach(async () => {
     dates: [],
     items: [],
   });
-  vi.spyOn(api, 'notifications').mockResolvedValue([]);
+  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };

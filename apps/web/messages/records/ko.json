@@ -260,5 +260,16 @@
   "records_kind_portfolio_date": "완성일",
   "records_field_portfolio_retrospective": "회고",
   "records_field_portfolio_next_goal": "다음 목표",
-  "records_role_portfolio_result": "결과물 사진·영상"
+  "records_role_portfolio_result": "결과물 사진·영상",
+  "records_kind_question": "질문",
+  "records_kind_question_date": "질문한 날",
+  "records_field_question_episode": "회차",
+  "records_field_question_answer": "답변",
+  "records_field_question_state": "상태",
+  "records_choice_question_state_open": "미해결",
+  "records_choice_question_state_answered": "답변됨",
+  "records_role_question_other": "첨부",
+  "records_field_review_episode": "회차",
+  "records_hidden_episode": "(볼 수 없는 회차)",
+  "records_episodes_load_failed": "회차 목록을 불러오지 못해 회차 이름과 선택을 보일 수 없습니다."
 }

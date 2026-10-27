@@ -1,30 +1,11 @@
 // 업무 상태·우선순위의 표시 이름. 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
-import type { AssigneeView, LinkKind, TaskInput, TaskPriority, TaskStatus } from '$lib/api/client';
-import { TASK_STATUSES } from '$lib/api/client';
+import type { AssigneeView, LinkKind, TaskInput, TaskPriority } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { shortId } from '$lib/features/workspaces/badge';
 import { m } from '$lib/paraglide/messages.js';
 
 import type { MergeUnit } from './form';
 import { MERGE_UNITS, scheduleOf, trimLikeServer } from './form';
-
-export const STATUS_LABEL: Record<TaskStatus, string> = {
-  get todo() {
-    return m.tasks_status_todo();
-  },
-  get in_progress() {
-    return m.tasks_status_in_progress();
-  },
-  get done() {
-    return m.tasks_status_done();
-  },
-};
-
-/** 상태 이름의 표시 글. 기본 세 이름은 번역한 이름, 항목이 정의한 다른 이름은 그대로(1단계 소비자). */
-export function statusLabel(name: string): string {
-  const s = TASK_STATUSES.find((x) => x === name);
-  return s === undefined ? name : STATUS_LABEL[s];
-}
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   get none() {
@@ -172,7 +153,7 @@ function fieldText(unit: MergeUnit, input: TaskInput, names: ReadonlyMap<string,
     case 'description':
       return fullText(input[unit]);
     case 'status':
-      return statusLabel(input.status);
+      return input.status;
     case 'priority':
       return PRIORITY_LABEL[input.priority];
     case 'schedule': {

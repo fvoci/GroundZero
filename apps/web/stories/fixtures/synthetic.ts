@@ -1,7 +1,15 @@
 // 개발 seed와 같은 합성 데이터(deploy/postgres/dev-ui-data.json)를 화면 타입으로 옮긴다. 내용(제목·본문·트리·
 // 스레드·상태)은 `cargo xtask dev`의 "UI 상태 예제" 워크스페이스와 같다. id·시각은 DB가 정하므로 여기서는 고정값을 쓴다
 // (시각은 기준 시각에서 몇 분씩 뒤, 표시 시간대는 preview.ts가 Asia/Seoul로 고정).
-import type { MembersView, Module, ModuleKind, Role, Workspace } from '@fvoci/api-client';
+import type {
+  MembersView,
+  Module,
+  ModuleKind,
+  OrganizationSummary,
+  Role,
+  StatusCategory,
+  Workspace,
+} from '@fvoci/api-client';
 
 import type {
   CalendarView,
@@ -17,7 +25,7 @@ import type {
   TaskStatus,
   TaskView,
 } from '$lib/api/client';
-import { ITEM_STATUSES, MODULE_KINDS, TASK_PRIORITIES, TASK_STATUSES } from '$lib/api/client';
+import { ITEM_STATUSES, MODULE_KINDS, TASK_PRIORITIES } from '$lib/api/client';
 
 import data from '../../../../deploy/postgres/dev-ui-data.json';
 
@@ -96,19 +104,30 @@ function day(offset: number | null): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-export const WORKSPACE: Workspace = {
-  id: fixedId(1, 1),
-  name: data.workspace,
-  organization_id: fixedId(1, 2),
+/** 합성 조직(D-111). 워크스페이스·개인 화면이 이 조직 범위다. */
+export const ORGANIZATION: OrganizationSummary = {
+  id: fixedId(0, 1),
+  name: '가상 연구소',
   role: 'admin',
+  public_links_enabled: true,
+  created_at: '2026-10-01T00:00:00Z',
+};
+
+export const WORKSPACE: Workspace = {
   access: 'owner',
+  id: fixedId(1, 1),
+  organization_id: fixedId(0, 1),
+  name: data.workspace,
+  role: 'admin',
   is_owner: true,
   realtime_enabled: false,
 };
 
 /** 같은 워크스페이스를 다른 역할로 본다(읽기 전용 등). */
 export function workspaceAs(role: Role): Workspace {
-  return { ...WORKSPACE, role, is_owner: false };
+  // 접근 등급은 서버가 역할에서 계산해 준다(D-113): admin→owner, member→write, readonly→read.
+  const access = role === 'admin' ? 'owner' : role === 'member' ? 'write' : 'read';
+  return { ...WORKSPACE, role, access, is_owner: false };
 }
 
 interface ModuleData {
@@ -150,8 +169,16 @@ function asItemStatus(value: string): ItemStatus {
   return status;
 }
 
-function asTaskStatus(value: string): TaskStatus {
-  const status = TASK_STATUSES.find((s) => s === value);
+// seed 자료의 업무 상태 값을 ⑪의 기본 상태 정의(서버가 항목마다 만드는 이름)와 그 범주로 옮긴다. 화면은 이름을 그대로
+// 보이고 완료 판단은 범주로만 한다.
+const SEED_STATUSES: Record<string, { name: TaskStatus; category: StatusCategory }> = {
+  todo: { name: '할 일', category: 'todo' },
+  in_progress: { name: '진행 중', category: 'doing' },
+  done: { name: '완료', category: 'done' },
+};
+
+function asTaskStatus(value: string): { name: TaskStatus; category: StatusCategory } {
+  const status = SEED_STATUSES[value];
   if (status === undefined) throw new TypeError(`unknown task status ${value}`);
   return status;
 }
@@ -248,7 +275,8 @@ const TASK_ROWS = data.tasks.map((t, i) => ({
   workspace_id: WORKSPACE.id,
   reference: `${PROJECT_MODULE.key}-${String(i + 2)}`,
   title: t.title,
-  status: asTaskStatus(t.status),
+  status: asTaskStatus(t.status).name,
+  status_category: asTaskStatus(t.status).category,
   milestone: t.milestone,
   start_date: day(t.start),
   due_date: day(t.due),
@@ -269,6 +297,7 @@ const homeTask = (t: (typeof TASK_ROWS)[number]): HomeTaskView => ({
   reference: t.reference,
   title: t.title,
   status: t.status,
+  status_category: t.status_category,
   due_date: t.due_date,
   bucket: bucketOf(t.due_date),
 });
@@ -278,7 +307,7 @@ export function homeView(): HomeView {
   // 서버처럼 오늘부터 7일 뒤까지 마감인 것만, 마감이 이른 것부터(같으면 번호 순).
   const until = day(7) ?? TODAY;
   const upNext = TASK_ROWS.filter(
-    (t) => t.mine && t.status !== 'done' && t.due_date !== null && t.due_date <= until,
+    (t) => t.mine && t.status_category !== 'done' && t.due_date !== null && t.due_date <= until,
   )
     .map(homeTask)
     .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''));
@@ -298,7 +327,8 @@ export function homeView(): HomeView {
         module_kind: mod.kind,
         reference: it.reference ?? null,
         title: it.title,
-        tasks_done: it === TASK_ITEM ? TASK_ROWS.filter((t) => t.status === 'done').length : 0,
+        tasks_done:
+          it === TASK_ITEM ? TASK_ROWS.filter((t) => t.status_category === 'done').length : 0,
         tasks_total: it === TASK_ITEM ? TASK_ROWS.length : 0,
         can_write: true,
       })),
@@ -375,6 +405,7 @@ export function calendarView(): CalendarView {
       reference: t.reference,
       title: t.title,
       status: t.status,
+      status_category: t.status_category,
       milestone: t.milestone,
       start_date: t.start_date,
       due_date: t.due_date,
@@ -414,6 +445,7 @@ export function taskViews(): TaskView[] {
       title: t.title,
       description: t.description,
       status: row.status,
+      status_category: row.status_category,
       priority: asTaskPriority(t.priority),
       start_date: row.start_date,
       due_date: row.due_date,
@@ -428,7 +460,7 @@ export function taskViews(): TaskView[] {
       checklist_total: 0,
       version: 1,
       move_version: 1,
-      completed_at: row.status === 'done' ? at(10 + i) : null,
+      completed_at: row.status_category === 'done' ? at(10 + i) : null,
       access: 'write',
       updated_at: at(10 + i),
     };
@@ -470,12 +502,12 @@ export function searchResults(): SearchResultView[] {
 /** 워크스페이스 멤버(owner는 소유자·관리자, writer는 작성자). 개발 seed의 두 테스트 사용자와 같다. */
 export function membersView(): MembersView {
   return {
+    can_manage_members: true,
     members: [
       { ...person('owner'), email: null, role: 'admin', is_owner: true },
       { ...person('writer'), email: null, role: 'member', is_owner: false },
     ],
     my_role: 'admin',
-    can_manage_members: true,
     i_am_owner: true,
     pending_owner: null,
   };
@@ -498,6 +530,8 @@ export function notificationsView(): NotificationView[] {
       list.push({
         id: `n-${String(t + 1)}-${String(r + 1)}`,
         kind: row.kind,
+        organization_id: null,
+        invitation_id: null,
         document_id: seminar?.id ?? null,
         task_id: null,
         document_title: seminar?.title ?? '',
@@ -515,12 +549,14 @@ export function notificationsView(): NotificationView[] {
     });
   });
   const overdue = TASK_ROWS.find(
-    (t) => t.mine && t.status !== 'done' && bucketOf(t.due_date) === 'overdue',
+    (t) => t.mine && t.status_category !== 'done' && bucketOf(t.due_date) === 'overdue',
   );
   if (overdue !== undefined)
     list.push({
       id: 'n-due',
       kind: 'due',
+      organization_id: null,
+      invitation_id: null,
       document_id: null,
       task_id: overdue.id,
       document_title: overdue.title,

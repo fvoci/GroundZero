@@ -9,11 +9,11 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 // 초대 취소가 409이면(그사이 초대가 수락·철회됨, 서버 0081) 오류만 보이지 않고 지금 상태를 다시 읽어, 이미 닫힌
 // 초대를 목록에서 뺀다. 이유는 다시 읽은 뒤에도 남는다.
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };

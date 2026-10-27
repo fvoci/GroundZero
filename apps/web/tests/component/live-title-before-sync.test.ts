@@ -8,6 +8,7 @@ import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
 import { me } from '$lib/me.svelte';
+import { scopedKey } from '$lib/storage';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 // CodeRabbit(#60 8e42036): 첫 동기화 전이라 편집기가 본문을 넘기지 않았을 때 제목만 고치고 계정이 바뀌어도(4412) 그
@@ -86,9 +87,10 @@ describe('a title edited before the first live sync', () => {
     if (!(title instanceof HTMLInputElement)) throw new Error('live-title');
     await fireEvent.input(title, { target: { value: '동기화 전에 고친 제목' } });
 
+    // 창을 닫으려 하면 남기고(초안), 반영되지 않은 편집이 있으니 다른 폼처럼 경고한다(D-27 개정 2026-10-27, #141 R8 A).
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
-    expect(unload.defaultPrevented).toBe(false);
+    expect(unload.defaultPrevented).toBe(true);
 
     const last = opened.at(-1);
     last?.provider.emit('connection-close', [
@@ -97,7 +99,7 @@ describe('a title edited before the first live sync', () => {
     ]);
     expect(reload).toHaveBeenCalledOnce();
     const kept = Object.keys(window.localStorage)
-      .filter((k) => k.startsWith('fvoci:draft:user-a:d1'))
+      .filter((k) => k.startsWith(scopedKey('draft:d1', 'user-a', undefined)))
       .map((k) => window.localStorage.getItem(k) ?? '');
     expect(kept.some((v) => v.includes('동기화 전에 고친 제목'))).toBe(true);
   });

@@ -29,7 +29,7 @@ describe('new-entry title fields in wrapping forms', () => {
     vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
     render(StudyPanel, { props: { itemId: 'i1' } });
     await screen.findByLabelText('새 단위 제목');
-    expect(wrapperOf('study-unit-title')).toMatch(/\bmin-w-48\b/);
+    expect(wrapperOf('study-unit-title')).toMatch(/min-w-\[min\(12rem,100%\)\]/);
   });
 
   it('keeps a minimum width for the course episode title, and shows long titles whole', async () => {
@@ -74,7 +74,7 @@ describe('new-entry title fields in wrapping forms', () => {
     const title = await screen.findByText('질문 만들기와 긴 회차 제목');
     expect(title.className).not.toMatch(/\btruncate\b/);
     expect(title.className).toMatch(/\bmin-w-40\b/);
-    expect(wrapperOf('episode-title')).toMatch(/\bmin-w-48\b/);
+    expect(wrapperOf('episode-title')).toMatch(/min-w-\[min\(12rem,100%\)\]/);
   });
 });
 
@@ -127,6 +127,7 @@ describe('gantt name column', () => {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,

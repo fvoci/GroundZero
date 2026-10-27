@@ -20,6 +20,7 @@ const task = (n: number, over: Partial<TaskView>): TaskView => ({
   predecessors: [],
   series: null,
   occurrence_date: null,
+  status_category: 'todo',
   checklist_done: 0,
   checklist_total: 0,
   version: 1,

@@ -2,9 +2,11 @@
   // 멤버·초대·그룹·소유권 화면 (D-20, D-51). 권한 판단은 서버가 하고, 화면은 가능한 동작만 보여준다.
   import { formatInstant } from '$lib/display';
   import type { Group, Invitation, MembersView, Role, Workspace } from '@fvoci/api-client';
+  import { onMount, untrack } from 'svelte';
 
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Badge } from '$lib/ui/badge';
@@ -12,6 +14,10 @@
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { me } from '$lib/me.svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import RoleSelect from './RoleSelect.svelte';
   import { roleLabel } from './roles';
@@ -29,7 +35,6 @@
   let invitations = $state<Invitation[]>([]);
   let groups = $state<Group[]>([]);
   let error = $state<string | undefined>(undefined);
-  let notice = $state<string | undefined>(undefined);
   let inviteEmail = $state('');
   let inviteRole = $state<Role>('member');
   let groupName = $state('');
@@ -37,6 +42,7 @@
   let inviteError = $state<string | undefined>(undefined);
   // 초대를 보내는 중. 그동안 다시 보내지 않는다(Enter 두 번이면 같은 초대가 두 번 나갔다).
   let inviting = $state(false);
+  let grouping = $state(false);
   let groupError = $state<string | undefined>(undefined);
   let deleteName = $state('');
   let deleteError = $state<string | undefined>(undefined);
@@ -48,8 +54,13 @@
     deleteError = undefined;
     try {
       await api.deleteWorkspace(workspace.id, deleteName);
+      // 지운 뒤의 이동을 이탈 경고가 막지 않게 한다. 삭제 이름의 가드는 아직 `deleting`(busy)이라 묻지 않고 막으므로
+      // 그 가드는 건너뛰고(`proceed`), 다른 입력 칸의 가드는 그대로 거친다(R5 delta F-1).
+      deleteName = '';
       onchanged();
-      router.navigate('/trash');
+      deleteDraft.leave.proceed(() => {
+        router.navigate('/trash');
+      });
     } catch (e: unknown) {
       deleteError = errorText(e, m.members_delete_failed());
     } finally {
@@ -60,7 +71,133 @@
     undefined,
   );
 
-  const isAdmin = $derived(view?.my_role === 'admin');
+  // 관리 가능 여부는 서버가 접근 등급으로 계산한 칸이다(D-113). 역할은 표시에만 쓴다.
+  const isAdmin = $derived(view?.can_manage_members === true);
+
+  const inviteDraft = createFormDraft<{ email: string; role: Role }>({
+    name: () => `members-invite:${workspace.id}`,
+    snapshot: () => ({ email: inviteEmail, role: inviteRole }),
+    parse: (value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('email' in value) ||
+        typeof value.email !== 'string' ||
+        !('role' in value) ||
+        (value.role !== 'admin' && value.role !== 'member' && value.role !== 'readonly')
+      )
+        return undefined;
+      return { email: value.email, role: value.role };
+    },
+    restore: (value) => {
+      inviteEmail = value.email;
+      inviteRole = value.role;
+      inviteError = undefined;
+    },
+    reset: () => {
+      inviteEmail = '';
+      inviteRole = 'member';
+      inviteError = undefined;
+    },
+    dirty: () => inviteEmail !== '',
+    busy: () => inviting,
+  });
+  const groupDraft = createFormDraft<string>({
+    name: () => `members-group:${workspace.id}`,
+    snapshot: () => groupName,
+    parse: (value) => (typeof value === 'string' ? value : undefined),
+    restore: (value) => {
+      groupName = value;
+      groupError = undefined;
+    },
+    reset: () => {
+      groupName = '';
+      groupError = undefined;
+    },
+    dirty: () => groupName !== '',
+    busy: () => grouping,
+  });
+  // 삭제 재확인 이름은 저장하지 않는다(R3 A). 화면에 있는 동안만 두고 떠날 때만 경고하며, 사용자·워크스페이스가
+  // 바뀌면 지운다.
+  const deleteDraft = createFormDraft<undefined>({
+    name: () => `members-delete:${workspace.id}`,
+    snapshot: () => undefined,
+    parse: () => undefined,
+    restore: () => undefined,
+    reset: () => {
+      deleteName = '';
+      deleteError = undefined;
+    },
+    dirty: () => false,
+    screenOnly: () => deleteName !== '',
+    busy: () => deleting,
+  });
+  onMount(() => {
+    const detachInvite = inviteDraft.attach();
+    const detachGroup = groupDraft.attach();
+    const detachDelete = deleteDraft.attach();
+    return () => {
+      detachDelete();
+      detachGroup();
+      detachInvite();
+    };
+  });
+
+  async function invite(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (inviting || !isAdmin) return;
+    const attempt = inviteDraft.capture();
+    if (attempt === undefined) return;
+    const wsId = workspace.id;
+    const email = inviteEmail;
+    const role = inviteRole;
+    inviteError = undefined;
+    inviting = true;
+    try {
+      await api.invite(wsId, email, role);
+      if (!inviteDraft.isOwner(attempt)) return;
+      // 일반 완료는 토스트다(D-82).
+      if (inviteDraft.complete(attempt)) notifyDone(m.members_invited({ email }));
+      await load(wsId);
+      if (inviteDraft.isOwner(attempt)) onchanged();
+    } catch (e: unknown) {
+      if (!inviteDraft.isOwner(attempt)) return;
+      if (e instanceof ApiError && e.status === 409) {
+        await load(wsId);
+        if (inviteDraft.isOwner(attempt)) onchanged();
+      }
+      if (inviteDraft.isCurrent(attempt)) inviteError = errorText(e, m.members_request_failed());
+    } finally {
+      if (inviteDraft.isOwner(attempt)) inviting = false;
+    }
+  }
+
+  async function createGroup(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (grouping || !isAdmin) return;
+    const attempt = groupDraft.capture();
+    if (attempt === undefined) return;
+    const wsId = workspace.id;
+    const name = groupName;
+    groupError = undefined;
+    grouping = true;
+    try {
+      await api.createGroup(wsId, name);
+      if (!groupDraft.isOwner(attempt)) return;
+      groupDraft.complete(attempt);
+      await load(wsId);
+      if (groupDraft.isOwner(attempt)) onchanged();
+    } catch (e: unknown) {
+      if (!groupDraft.isOwner(attempt)) return;
+      if (e instanceof ApiError && e.status === 409) {
+        await load(wsId);
+        if (groupDraft.isOwner(attempt)) onchanged();
+      }
+      if (groupDraft.isCurrent(attempt)) groupError = errorText(e, m.members_request_failed());
+    } finally {
+      if (groupDraft.isOwner(attempt)) grouping = false;
+    }
+  }
 
   function nameOf(userId: string): string {
     return view?.members.find((member) => member.user_id === userId)?.display_name ?? userId;
@@ -70,16 +207,26 @@
   // 실패해도 다시 읽기 단추는 남는다.
   let loadError = $state<string | undefined>(undefined);
 
+  let loadSequence = 0;
   async function load(wsId: string = workspace.id): Promise<void> {
+    const sequence = ++loadSequence;
+    const userId = me.userId;
+    const current = (): boolean =>
+      sequence === loadSequence && workspace.id === wsId && me.userId === userId;
     try {
       const v = await api.members(wsId);
+      if (!current()) return;
       view = v;
-      groups = await api.groups(wsId);
-      invitations = v.my_role === 'admin' ? await api.invitations(wsId) : [];
+      const loadedGroups = await api.groups(wsId);
+      if (!current()) return;
+      groups = loadedGroups;
+      const loadedInvitations = v.can_manage_members ? await api.invitations(wsId) : [];
+      if (!current()) return;
+      invitations = loadedInvitations;
       error = undefined;
       loadError = undefined;
     } catch (e: unknown) {
-      loadError = errorText(e, m.members_load_failed());
+      if (current()) loadError = errorText(e, m.members_load_failed());
     }
   }
 
@@ -92,7 +239,6 @@
     done?: string,
     fail?: (text: string) => void,
   ): Promise<boolean> {
-    notice = undefined;
     try {
       await action();
     } catch (e: unknown) {
@@ -107,16 +253,33 @@
       else fail(text);
       return false;
     }
-    if (done !== undefined) notice = done;
+    if (done !== undefined) notifyDone(done);
     await load();
     onchanged();
     return true;
   }
 
-  // 다른 워크스페이스로 바뀌면 다시 읽는다.
+  // 다른 워크스페이스로 바뀌면(또는 사용자가 바뀌면) 다시 읽는다. 초대·그룹 만들기 뒤 앱이 같은 id의 새 객체를 넘기는
+  // 것(이름 등 갱신, `onchanged`)으로는 다시 돌지 않는다: 돌면 화면을 비워 성공 안내와 입력 요소(초점)를 지웠다
+  // (R5 delta2 fixes §7). 같은 id의 갱신은 `workspace`를 직접 그리는 곳에 그대로 반영된다.
+  // 문자열 열쇠라 같은 id·같은 사용자면 값이 같아 효과가 다시 돌지 않는다.
+  const loadKey = $derived(JSON.stringify([workspace.id, me.userId]));
   $effect(() => {
-    void load(workspace.id);
+    if (loadKey === '') return;
+    untrack(() => {
+      reset(workspace.id);
+    });
   });
+  function reset(id: string): void {
+    view = undefined;
+    groups = [];
+    invitations = [];
+    inviting = false;
+    grouping = false;
+    error = undefined;
+    loadError = undefined;
+    void load(id);
+  }
 </script>
 
 <section class="flex flex-col gap-8" aria-labelledby="members-heading">
@@ -144,8 +307,6 @@
       {error}
     </p>
   {/if}
-  <!-- 완료 알림은 처음부터 있는 알림 영역 안에서 바뀐다(새로 만든 영역은 낭독기가 읽지 않을 수 있다). -->
-  <p role="status" class="text-sm text-muted-foreground empty:sr-only">{notice ?? ''}</p>
 
   {#if view === undefined}
     <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->
@@ -239,52 +400,50 @@
         <p class="text-sm text-muted-foreground">
           {m.members_invite_hint()}
         </p>
-        <form
-          class="flex flex-wrap items-end gap-2"
-          onsubmit={(e) => {
-            e.preventDefault();
-            if (inviting) return;
-            const email = inviteEmail;
-            inviteError = undefined;
-            inviting = true;
-            void act(
-              () => api.invite(workspace.id, email, inviteRole),
-              m.members_invited({ email }),
-              (text: string) => (inviteError = text),
-            )
-              .then((ok: boolean) => {
-                // 성공했을 때만, 그사이 고쳐 치지 않았으면 비운다.
-                if (ok && inviteEmail === email) inviteEmail = '';
-              })
-              .finally(() => (inviting = false));
-          }}
-        >
-          <div class="flex min-w-60 flex-1 flex-col gap-1">
-            <Label for="invite-email">{m.members_email()}</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              bind:value={inviteEmail}
-              autocomplete="off"
-              required
-              aria-invalid={inviteError !== undefined}
-              aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
+        <!-- 초대·그룹 만들기는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공 안내와 실패 알림을
+             숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
+        {#each inviteDraft.offers as offer (offer.key)}
+          <fieldset class="contents" disabled={inviting}>
+            <FormDraftOffer
+              onrestore={() => {
+                inviteDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                inviteDraft.discard(offer);
+              }}
             />
-          </div>
-          <RoleSelect
-            value={inviteRole}
-            label={m.members_invite_role()}
-            onchange={(r: Role) => (inviteRole = r)}
-          />
-          <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
-            >{m.members_invite()}</Button
-          >
-          {#if inviteError !== undefined}
-            <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
-              {inviteError}
-            </p>
-          {/if}
-        </form>
+          </fieldset>
+        {/each}
+        <fieldset class="min-w-0" disabled={inviting}>
+          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
+            <div class="flex min-w-60 flex-1 flex-col gap-1">
+              <Label for="invite-email">{m.members_email()}</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                bind:value={inviteEmail}
+                autocomplete="off"
+                required
+                aria-invalid={inviteError !== undefined}
+                aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
+              />
+            </div>
+            <RoleSelect
+              value={inviteRole}
+              label={m.members_invite_role()}
+              disabled={inviting}
+              onchange={(r: Role) => (inviteRole = r)}
+            />
+            <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
+              >{m.members_invite()}</Button
+            >
+            {#if inviteError !== undefined}
+              <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
+                {inviteError}
+              </p>
+            {/if}
+          </form>
+        </fieldset>
         {#if invitations.length > 0}
           <ul class="flex flex-col gap-1" data-testid="invitation-list">
             {#each invitations as inv (inv.id)}
@@ -356,41 +515,41 @@
         </div>
       {/each}
       {#if isAdmin}
-        <form
-          class="flex flex-wrap items-end gap-2"
-          onsubmit={(e) => {
-            e.preventDefault();
-            const name = groupName;
-            groupError = undefined;
-            void act(
-              () => api.createGroup(workspace.id, name),
-              undefined,
-              (text: string) => (groupError = text),
-            ).then((ok: boolean) => {
-              if (ok && groupName === name) groupName = '';
-            });
-          }}
-        >
-          <div class="flex flex-1 flex-col gap-1">
-            <Label for="group-name">{m.members_new_group_name()}</Label>
-            <Input
-              id="group-name"
-              bind:value={groupName}
-              maxlength={200}
-              autocomplete="off"
-              aria-invalid={groupError !== undefined}
-              aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
+        {#each groupDraft.offers as offer (offer.key)}
+          <fieldset class="contents" disabled={grouping}>
+            <FormDraftOffer
+              onrestore={() => {
+                groupDraft.restore(offer);
+              }}
+              ondiscard={() => {
+                groupDraft.discard(offer);
+              }}
             />
-          </div>
-          <Button type="submit" disabled={groupName.trim() === ''}
-            >{m.members_create_group()}</Button
-          >
-          {#if groupError !== undefined}
-            <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
-              {groupError}
-            </p>
-          {/if}
-        </form>
+          </fieldset>
+        {/each}
+        <fieldset class="min-w-0" disabled={grouping}>
+          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void createGroup(e)}>
+            <div class="flex flex-1 flex-col gap-1">
+              <Label for="group-name">{m.members_new_group_name()}</Label>
+              <Input
+                id="group-name"
+                bind:value={groupName}
+                maxlength={200}
+                autocomplete="off"
+                aria-invalid={groupError !== undefined}
+                aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
+              />
+            </div>
+            <Button type="submit" disabled={grouping || groupName.trim() === ''}
+              >{m.members_create_group()}</Button
+            >
+            {#if groupError !== undefined}
+              <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
+                {groupError}
+              </p>
+            {/if}
+          </form>
+        </fieldset>
       {/if}
     </section>
 
@@ -489,3 +648,19 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<DiscardChangesConfirm
+  open={inviteDraft.leave.open}
+  onkeep={inviteDraft.leave.keep}
+  ondiscard={inviteDraft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={groupDraft.leave.open}
+  onkeep={groupDraft.leave.keep}
+  ondiscard={groupDraft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={deleteDraft.leave.open}
+  onkeep={deleteDraft.leave.keep}
+  ondiscard={deleteDraft.discardAndLeave}
+/>

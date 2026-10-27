@@ -7,6 +7,7 @@
   import type { SearchFilters, SearchKind, SearchResultView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { displaySettings } from '$lib/display';
+  import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { Checkbox } from '$lib/ui/checkbox';
@@ -51,6 +52,7 @@
   // 작성자(만든 사람)와 제목만. 작성자 거르기는 좁히기만 한다(볼 수 없는 것은 그대로 안 나온다).
   let author = $state<string>('any');
   let titleOnly = $state(false);
+  let workspaceOnly = $state(false);
   let people = $state<{ user_id: string; display_name: string }[]>([]);
   // 고를 때의 사람 이름. 대화상자를 다시 열어 멤버 목록을 다시 읽는 동안에도 작성자 거르기는 남으므로, 목록이 오기 전에는
   // 이 이름을 보인다(표시는 "누구나"인데 거르기는 남아 있는 일이 없게. 모듈도 같다).
@@ -76,6 +78,7 @@
     modules = [];
     if (moduleWs !== ws) dropMissingModule([]);
     if (!open) return;
+    if (org.currentId === undefined) return;
     if (ws === undefined) return;
     let cancelled = false;
     api
@@ -111,6 +114,7 @@
     const ws = workspace?.id;
     people = [];
     if (!open) return;
+    if (org.currentId === undefined) return;
     if (ws === undefined) {
       dropMissingAuthor([]);
       return;
@@ -164,7 +168,15 @@
 
   async function run(q: string, ticket: number): Promise<void> {
     try {
-      const found = await api.search(q, null, filters());
+      // 검색은 현재 조직 범위다(D-111). 조직을 고르기 전에는 찾지 않는다.
+      const organizationId = org.currentId;
+      if (organizationId === undefined) return;
+      const found = await api.search(
+        organizationId,
+        q,
+        workspaceOnly ? (workspace?.id ?? null) : null,
+        filters(),
+      );
       if (ticket !== seq) return;
       results = found;
       status = 'done';
@@ -181,7 +193,7 @@
     const ticket = seq;
     if (timer !== undefined) clearTimeout(timer);
     const q = value.trim();
-    if (q === '') {
+    if (q === '' || org.currentId === undefined) {
       results = [];
       status = 'idle';
       return;
@@ -191,6 +203,22 @@
       run(q, ticket).catch(() => undefined);
     }, delay);
   }
+
+  $effect(() => {
+    const organizationId = org.currentId;
+    untrack(() => {
+      workspaceOnly = false;
+      moduleId = 'any';
+      author = 'any';
+      results = [];
+      if (organizationId !== undefined && open) changed(query, 0);
+      else {
+        seq += 1;
+        if (timer !== undefined) clearTimeout(timer);
+        status = 'idle';
+      }
+    });
+  });
 
   let list = $state<HTMLUListElement | undefined>();
 
@@ -237,11 +265,28 @@
       <Dialog.Title>{m.search_title()}</Dialog.Title>
       <Dialog.Description>{m.search_description()}</Dialog.Description>
     </Dialog.Header>
+    <p role="status" class="text-sm text-muted-foreground">
+      {org.current === undefined
+        ? m.app_organization_required()
+        : m.search_organization_scope({ name: org.current.name })}
+    </p>
+    {#if workspace !== undefined && org.currentId !== undefined}
+      <label class="flex items-center gap-2 text-sm"
+        ><Checkbox
+          checked={workspaceOnly}
+          onCheckedChange={(value: boolean) => {
+            workspaceOnly = value;
+            refilter();
+          }}
+        />{m.search_workspace_scope({ name: workspace.name })}</label
+      >
+    {/if}
     <Input
       type="search"
       aria-label={m.search_query()}
       placeholder={m.search_query()}
       maxlength={200}
+      disabled={org.currentId === undefined}
       value={query}
       oninput={(e: Event) => {
         if (e.currentTarget instanceof HTMLInputElement) changed(e.currentTarget.value);
@@ -301,7 +346,7 @@
         </Select.Root>
       </div>
       {#if workspace !== undefined}
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1">
           <span id="search-module-label" class="font-medium">{m.search_module()}</span>
           <Select.Root
             type="single"
@@ -313,7 +358,7 @@
               refilter();
             }}
           >
-            <Select.Trigger class="w-40" aria-labelledby="search-module-label"
+            <Select.Trigger class="w-40 max-w-full" aria-labelledby="search-module-label"
               >{moduleLabel}</Select.Trigger
             >
             <Select.Content>
@@ -327,7 +372,7 @@
           </Select.Root>
         </div>
       {/if}
-      <div class="flex flex-col gap-1">
+      <div class="flex min-w-0 flex-col gap-1">
         <span id="search-author-label" class="font-medium">{m.search_author()}</span>
         <Select.Root
           type="single"
@@ -338,7 +383,7 @@
             refilter();
           }}
         >
-          <Select.Trigger class="w-36" aria-labelledby="search-author-label"
+          <Select.Trigger class="w-36 max-w-full" aria-labelledby="search-author-label"
             >{authorLabel}</Select.Trigger
           >
           <Select.Content>
@@ -373,25 +418,27 @@
         />
         <Label for="search-mine">{m.search_mine()}</Label>
       </div>
-      <div class="flex items-end gap-2">
-        <div class="flex flex-col gap-1">
+      <!-- 좁은 화면(sm 미만)에서는 날짜 묶음이 한 줄을 차지하고 두 칸이 각각 한 줄씩 전체 폭을 쓴다(375px·200%에서 9rem 칸이
+           대화상자 안쪽을 넘었다, D-110). -->
+      <div class="flex flex-wrap items-end gap-2 max-sm:w-full">
+        <div class="flex min-w-0 flex-col gap-1 max-sm:basis-full">
           <Label for="search-from">{m.search_from()}</Label>
           <Input
             id="search-from"
             type="date"
-            class="w-36"
+            class="w-36 max-sm:w-full"
             bind:value={from}
             onchange={() => {
               refilter();
             }}
           />
         </div>
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1 max-sm:basis-full">
           <Label for="search-to">{m.search_to()}</Label>
           <Input
             id="search-to"
             type="date"
-            class="w-36"
+            class="w-36 max-sm:w-full"
             bind:value={to}
             onchange={() => {
               refilter();

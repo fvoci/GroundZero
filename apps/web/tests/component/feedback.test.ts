@@ -1,10 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import {
   connection,
+  dismissDone,
   notifyDone,
+  notifyError,
+  auth,
   reportConnectionLost,
 } from '$lib/features/feedback/feedback.svelte';
 
@@ -36,18 +39,107 @@ describe('user feedback (D-82)', () => {
     expect(document.querySelector('[data-close-button]')).not.toBeNull();
   });
 
+  // FC-1: 복제의 "새 항목 열기"처럼 완료 토스트에 동작 단추 하나를 붙인다. 닫을 때까지 남고 닫기 단추로 닫는다.
+  // RB-4: 토스트 라이브러리의 기본 지속 시간(4초)을 넉넉히 넘긴 뒤에도 남아 있어야 키보드·낭독기 사용자가 닿는다.
+  it('adds one action button to a completion toast and keeps it until closed', async () => {
+    vi.useFakeTimers();
+    const onClick = vi.fn();
+    render(FeedbackHost);
+    notifyDone('복제했습니다.', 'copy', { action: { label: '새 항목 열기', onClick } });
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '새 항목 열기' })).toBeInTheDocument();
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    const action = screen.getByRole('button', { name: '새 항목 열기' });
+    expect(screen.getByText('복제했습니다.')).toBeInTheDocument();
+    const close = action.closest('[data-sonner-toast]')?.querySelector('[data-close-button]');
+    if (!(close instanceof HTMLElement)) throw new Error('close button');
+    await fireEvent.click(close);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.waitFor(() => {
+      expect(screen.queryByText('복제했습니다.')).toBeNull();
+    });
+    expect(screen.queryByRole('button', { name: '새 항목 열기' })).toBeNull();
+    expect(onClick).not.toHaveBeenCalled();
+
+    notifyDone('복제했습니다.', 'copy-again', { action: { label: '새 항목 열기', onClick } });
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: '새 항목 열기' })).toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '새 항목 열기' }));
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  // 칸반 이동: 되돌리기 단추가 달린 완료를 같은 key의 단추 없는 완료(되돌림)로 고치면 앞 단추가 남지 않는다. 토스트
+  // 라이브러리는 같은 id를 고칠 때 앞 값에 합치므로 notifyDone이 앞 토스트를 내리고 새로 띄운다.
+  it('drops the earlier action when the same key is updated without one', async () => {
+    render(FeedbackHost);
+    notifyDone('옮겼습니다.', 'board-move-test', {
+      action: { label: '되돌리기', onClick: () => undefined },
+    });
+    await screen.findByRole('button', { name: '되돌리기' });
+    notifyDone('되돌렸습니다.', 'board-move-test');
+    await screen.findByText('되돌렸습니다.');
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '되돌리기' })).toBeNull();
+    });
+  });
+
+  it('takes a completion toast down by its key', async () => {
+    render(FeedbackHost);
+    notifyDone('옮겼습니다.', 'dismiss-test', {
+      action: { label: '되돌리기', onClick: () => undefined },
+    });
+    await screen.findByRole('button', { name: '되돌리기' });
+    dismissDone('dismiss-test');
+    await waitFor(() => {
+      expect(screen.queryByText('옮겼습니다.')).toBeNull();
+    });
+  });
+
   it('shows a connection banner until the server answers again', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', () => Promise.resolve(new Response('{}', { status: 200 })));
     render(FeedbackHost);
     reportConnectionLost();
     await vi.waitFor(() => {
-      expect(screen.getByTestId('connection-banner').getAttribute('role')).toBe('status');
+      expect(screen.getByTestId('connection-banner').parentElement).toHaveAttribute(
+        'role',
+        'status',
+      );
     });
     await vi.advanceTimersByTimeAsync(5_000);
     await vi.waitFor(() => {
       expect(screen.queryByTestId('connection-banner')).toBeNull();
     });
+  });
+
+  it('updates a repeated error and dismisses banners without changing connection or session state', async () => {
+    render(FeedbackHost);
+    notifyError('연결 오류', 'same-error');
+    notifyError('연결 오류 갱신', 'same-error');
+    await waitFor(() => {
+      expect(screen.getAllByText('연결 오류 갱신')).toHaveLength(1);
+    });
+    // 같은 key는 첫 토스트를 고쳐 쓴다. 새 토스트가 하나 더 생기면 첫 글이 남는다(R5 B 최종 FB-2).
+    expect(screen.queryByText('연결 오류')).toBeNull();
+    expect(
+      [...document.querySelectorAll('[data-sonner-toast]')].filter((toast) =>
+        toast.textContent.includes('연결 오류'),
+      ),
+    ).toHaveLength(1);
+    auth.expired = true;
+    connection.lost = true;
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: '닫기' })).toHaveLength(2);
+    });
+    for (const button of screen.getAllByRole('button', { name: '닫기' }))
+      await fireEvent.click(button);
+    expect(screen.queryByTestId('connection-banner')).toBeNull();
+    expect(screen.queryByTestId('session-banner')).toBeNull();
+    expect(connection.lost).toBe(true);
+    expect(auth.expired).toBe(true);
+    auth.expired = false;
   });
 });
 

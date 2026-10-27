@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CourseView, EpisodeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
+import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -47,11 +48,14 @@ function course(position: number | null): CourseView {
 // 전에는 'abc'가 0초로, '12:xx'가 지우기로 저장됐다.
 describe('episode watch position input', () => {
   beforeEach(async () => {
+    me.userId = 'user-a';
+    localStorage.clear();
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
     vi.spyOn(api, 'course').mockResolvedValue(course(420));
   });
   afterEach(() => {
+    me.userId = '';
     vi.restoreAllMocks();
   });
 

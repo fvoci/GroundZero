@@ -70,3 +70,4 @@ describe('event dialog base version after a rule save', () => {
     expect(await saveRuleThenForm(event(2, '처음 제목'))).toBe(2);
   });
 });
+import './fixtures/event-user';

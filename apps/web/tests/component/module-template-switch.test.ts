@@ -6,6 +6,7 @@ import type { ItemView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,11 +14,11 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'write',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'member',
-  access: 'write',
   is_owner: false,
   realtime_enabled: false,
 };

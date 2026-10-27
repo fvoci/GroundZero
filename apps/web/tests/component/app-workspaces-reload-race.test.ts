@@ -4,8 +4,11 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 import App from '../../src/app/App.svelte';
 
@@ -31,11 +34,11 @@ const me: Me = {
 
 function workspace(id: string, name: string, realtime: boolean): Workspace {
   return {
+    access: 'owner',
     id,
     organization_id: 'org-1',
     name,
     role: 'admin',
-    access: 'owner',
     is_owner: true,
     realtime_enabled: realtime,
   };
@@ -66,7 +69,9 @@ beforeEach(async () => {
     ),
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
-  vi.spyOn(api, 'notifications').mockResolvedValue([]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
+  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
   vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);
   vi.spyOn(api, 'modules').mockResolvedValue([]);
@@ -132,8 +137,15 @@ describe('workspace list reload and the realtime setting', () => {
     router.navigate(`/w/${WS}`);
     await screen.findByRole('checkbox', { name: LABEL });
     expect(checkbox().checked).toBe(false);
+    const done = vi.spyOn(feedback, 'notifyDone');
     await fireEvent.click(checkbox());
-    await screen.findByText('실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.');
+    // 저장이 끝나면 완료 토스트를 띄운다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        '실시간 공동 편집을 켰습니다. 문서를 다시 열면 함께 고칠 수 있습니다.',
+        'workspace-realtime',
+      );
+    });
     expect(serverRealtime).toBe(true);
 
     // 켜기 전에 보낸 목록 요청의 응답이 이제 도착한다.

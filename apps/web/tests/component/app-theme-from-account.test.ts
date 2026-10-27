@@ -8,6 +8,8 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 import { applyTheme, THEME_KEY } from '$lib/theme.svelte';
 
+import { TEST_ORGANIZATION } from './fixtures/organization';
+
 import App from '../../src/app/App.svelte';
 
 // 화면 밝기의 정본은 계정(D-109)이다. 다른 기기에서 어둡게로 바꿨으면, 이 브라우저의 사본(첫 그림용)이 밝게여도 로그인하면
@@ -46,7 +48,9 @@ beforeEach(async () => {
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
   vi.spyOn(api, 'workspaces').mockResolvedValue([]);
-  vi.spyOn(api, 'notifications').mockResolvedValue([]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
+  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
   vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'deletedWorkspaces').mockResolvedValue([]);
 });

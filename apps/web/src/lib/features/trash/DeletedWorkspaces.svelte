@@ -6,6 +6,7 @@
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
@@ -18,7 +19,8 @@
 
   let list = $state<DeletedWorkspaceView[]>([]);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
+  // 되살리기·영구 삭제를 한 번이라도 했는지. 마지막 워크스페이스를 처리해 목록이 비어도 절을 남겨 제목으로 초점을 옮긴다.
+  let acted = $state(false);
   let confirmPurge = $state<string | undefined>(undefined);
   let reloadKey = $state(0);
   let seq = 0;
@@ -41,7 +43,9 @@
     error = undefined;
     try {
       await action();
-      status = done;
+      // 일반 완료는 토스트다(D-82).
+      notifyDone(done);
+      acted = true;
       confirmPurge = undefined;
       reloadKey += 1;
       onchanged();
@@ -62,7 +66,7 @@
   const when = (iso: string): string => formatInstant(iso);
 </script>
 
-{#if list.length > 0 || error !== undefined || status !== ''}
+{#if list.length > 0 || error !== undefined || acted}
   <section class="flex flex-col gap-3" aria-labelledby="deleted-workspaces-heading">
     <h2 id="deleted-workspaces-heading" class="font-semibold" tabindex="-1">
       {m.trash_workspaces_heading()}
@@ -70,11 +74,9 @@
     <p class="text-sm text-muted-foreground">
       {m.trash_workspaces_hint()}
     </p>
-    <!-- 오류는 따로 알리고(alert), 완료 알림은 처음부터 있는 polite 영역에서 바뀐다(알림 영역을 겹치지 않는다). -->
     {#if error !== undefined}
       <p role="alert" class="text-sm text-destructive">{error}</p>
     {/if}
-    <p aria-live="polite" class="text-sm empty:sr-only">{error === undefined ? status : ''}</p>
     <ul class="flex flex-col gap-2" data-testid="deleted-workspaces">
       {#each list as w (w.id)}
         <li class="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">

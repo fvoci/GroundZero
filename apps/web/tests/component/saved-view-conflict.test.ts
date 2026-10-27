@@ -1,10 +1,15 @@
+import * as feedback from '$lib/features/feedback/feedback.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { itemViewPath, router } from '$lib/router.svelte';
+import { me } from '$lib/me.svelte';
 
 // D-103(감사 P-26): 이미 있는 보기는 목록에서 읽은 판으로 고친다(`PUT /api/views/{id}`). 그사이 다른 탭이 저장했으면
 // 서버는 409와 최신 보기를 돌려주고 아무것도 바꾸지 않는다. 화면은 지금 설정과 이름을 그대로 두고 목록을 다시 읽어,
@@ -109,7 +114,125 @@ function viewServer(
 }
 
 describe('saved view save on a stale version', () => {
+  it('reuses the saved view request id after a lost response and explicit draft restore', async () => {
+    const saved: Stored[] = [];
+    vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve(saved));
+    const create = vi.spyOn(api, 'createView').mockImplementation(() => {
+      saved.push({ id: 'created', name: '응답 유실', config: {}, version: 1 });
+      return Promise.reject(new Error('response lost'));
+    });
+    const update = vi.spyOn(api, 'updateView');
+    const props = { item, workspaces: [], openTaskId: undefined };
+    const first = render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '응답 유실' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledOnce();
+    });
+    const id = create.mock.calls[0]?.[1];
+    first.unmount();
+    render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 되살리기' }));
+    expect(create).toHaveBeenCalledOnce();
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+    expect(create.mock.calls[1]?.[1]).toBe(id);
+    expect(update).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '다른 보기' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(3);
+    });
+    expect(create.mock.calls[2]?.[1]).not.toBe(id);
+  });
+  // R5 F-3(⑱·D-97): 응답을 잃은 저장 뒤 이탈 확인에서 버리면 요청까지 버린다. 남으면 버린 보기 초안을 다시 제안했다.
+  it('drops the pending view request when leaving with discard after a lost response', async () => {
+    const saved: Stored[] = [];
+    vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve(saved));
+    const create = vi.spyOn(api, 'createView').mockImplementation(() => {
+      saved.push({ id: 'created', name: '버릴 보기', config: {}, version: 1 });
+      return Promise.reject(new Error('response lost'));
+    });
+    const props = { item, workspaces: [], openTaskId: undefined };
+    const first = render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '버릴 보기' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '지금 보기 저장' }));
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledOnce();
+    });
+    router.navigate('/view-discarded');
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_discard_confirm() }));
+    expect(router.path).toBe('/view-discarded');
+    first.unmount();
+    render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+  });
+  // R5 F-4(D-121): 보기 초안을 되살리면 보기 전환처럼 주소도 바꾼다. 주소는 칸반인데 화면만 목록이 되던 것을 막는다.
+  it('moves the address to the restored view of a view draft', async () => {
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    // 주소의 보기가 저장 문맥보다 앞서도록 경로로 읽히는 id를 쓴다.
+    const ws = '00000000-0000-4000-8000-0000000000a1';
+    const routed = { ...item, id: '00000000-0000-4000-8000-0000000000b1', workspace_id: ws };
+    const props = { item: routed, workspaces: [], openTaskId: undefined };
+    router.navigate(itemViewPath(ws, routed.id, 'board'));
+    const first = render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: '목록' }));
+    expect(router.path).toBe(itemViewPath(ws, routed.id, 'list'));
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '목록 보기' },
+    });
+    first.unmount();
+    router.navigate(itemViewPath(ws, routed.id, 'board'));
+    render(TaskBoard, props);
+    expect(screen.getByRole('button', { name: '칸반' })).toHaveAttribute('aria-pressed', 'true');
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 되살리기' }));
+    expect(screen.getByRole('textbox', { name: '보기 이름' })).toHaveValue('목록 보기');
+    expect(router.path).toBe(itemViewPath(ws, routed.id, 'list'));
+    expect(screen.getByRole('button', { name: '목록' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '칸반' })).toHaveAttribute('aria-pressed', 'false');
+  });
+  it('offers an unsaved view name after remount and restores it without sending a save', async () => {
+    const sent = viewServer([]);
+    const props = { item, workspaces: [], openTaskId: undefined };
+    const first = render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await fireEvent.input(screen.getByRole('textbox', { name: '보기 이름' }), {
+      target: { value: '집중할 업무' },
+    });
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    feedback.accountSafety.switching = true;
+    const switchingUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(switchingUnload);
+    expect(switchingUnload.defaultPrevented).toBe(false);
+    feedback.accountSafety.switching = false;
+    first.unmount();
+    render(TaskBoard, props);
+    await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
+    await screen.findByTestId('form-draft-offer');
+    expect(screen.getByRole('textbox', { name: '보기 이름' })).toHaveValue('');
+    await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
+    expect(screen.getByRole('textbox', { name: '보기 이름' })).toHaveValue('집중할 업무');
+    expect(sent).toEqual([]);
+  });
   beforeEach(async () => {
+    me.userId = 'user-a';
+    localStorage.clear();
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(api, 'tasks').mockResolvedValue([]);
@@ -223,6 +346,7 @@ describe('saved view save on a stale version', () => {
   // CodeRabbit: 저장을 기다리는 사이 목록에서 다른 보기를 고르면 늦은 응답이 선택을 저장한 보기로 되돌렸다(지우기
   // 단추가 화면과 다른 보기를 가리킴). 시작할 때의 선택이 그대로일 때만 선택을 바꾼다.
   it('does not move the selection the user changed while the save was in flight', async () => {
+    const done = vi.spyOn(feedback, 'notifyDone');
     const stored: Stored[] = [
       { id: 'v1', name: '가 보기', config: { view: 'list' }, version: 1 },
       { id: 'v2', name: '나 보기', config: { view: 'calendar' }, version: 1 },
@@ -242,7 +366,9 @@ describe('saved view save on a stale version', () => {
     });
     await fireEvent.change(select, { target: { value: 'v2' } });
     for (const release of control.held ?? []) release();
-    await screen.findByText(/보기 "가 보기"을\(를\) 저장했습니다/);
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('보기 "가 보기"을(를) 저장했습니다.');
+    });
 
     expect(select).toHaveValue('v2');
   });

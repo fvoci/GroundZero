@@ -1,11 +1,15 @@
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HomeTaskView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { myTasksView } from '../../stories/fixtures/personal';
+
+beforeEach(homeExtras);
 
 // 홈의 다음 할 일·최근 문서·최근 업무는 제목을 한 줄로 줄여(truncate) 좁은 화면이나 큰 글자에서 전체 제목을 읽을 길이
 // 없었다. 줄인 줄의 단추에 전체 제목을 둔다(사이드바 문서 트리와 같은 방식).
@@ -14,11 +18,11 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -33,6 +37,7 @@ function task(id: string, title: string, bucket: HomeTaskView['bucket']): HomeTa
     reference: 'DEV-2',
     title,
     status: 'todo',
+    status_category: 'todo',
     due_date: '2026-10-21',
     bucket,
   };
@@ -62,6 +67,7 @@ describe('home full titles', () => {
   it('keeps the full title on rows that truncate it', async () => {
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.mocked(api.myTasks).mockResolvedValue(myTasksView(home));
     vi.spyOn(api, 'calendar').mockResolvedValue({
       tasks: [],
       projected_tasks: [],
@@ -70,10 +76,13 @@ describe('home full titles', () => {
       dates: [],
       items: [],
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
-    for (const suffix of ['(다음)', '(업무)', '(문서)']) {
+    expect(await screen.findByRole('link', { name: `${LONG} (다음)` })).toHaveTextContent(
+      `${LONG} (다음)`,
+    );
+    for (const suffix of ['(업무)', '(문서)']) {
       const full = `${LONG} ${suffix}`;
       const row = await screen.findByRole('button', { name: (name) => name.includes(full) });
       expect(row).toHaveAttribute('title', full);

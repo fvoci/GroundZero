@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,20 +7,22 @@ import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 // 감사 W13: 항목 정보 저장이 연 때의 공개 범위를 늘 보내, 그사이 다른 소유 권한자가 바꾼 공개 범위를 설명만 고친
 // 저장이 되돌렸다. 공개 범위는 체크를 바꿨을 때만 보낸다(서버는 없으면 지금 값 그대로, 0084).
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  me.userId = '';
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -56,6 +59,7 @@ const loaded: ItemView = {
 };
 
 function setup(): void {
+  me.userId = 'u1';
   // 하위 칸(업무·일정·기록 등)의 요청은 끝나지 않게 둔다.
   vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
   vi.spyOn(api, 'item').mockResolvedValue(loaded);

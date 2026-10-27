@@ -2,20 +2,27 @@
   // 글자를 고르면 뜨는 작은 서식 도구 막대(BubbleMenu 요소 안에 그린다). 블록 유형 바꾸기, 굵게·기울임·취소선·
   // 코드, 링크 넣기·고치기·해제·열기. 막대 안 입력란·선택 상자로 초점이 와도 막대는 그대로 남는다.
   import type { Editor } from '@tiptap/core';
+  import { onMount } from 'svelte';
 
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Input } from '$lib/ui/input';
 
   import type { BlockKind } from './block-types';
   import { activeBlockKind, BLOCK_KINDS, blockKindLabel, setBlockKind } from './block-types';
+  import type { LinkDraftControl } from './link-draft-control';
   import { normalizeHref } from './link-href';
 
   interface Props {
     editor: Editor | undefined;
     version: number;
+    draftName?: string | undefined;
+    /** 링크 주소 초안의 제안을 막대 밖에서 그리게 연결을 넘긴다(한 번). */
+    onlinkcontrol?: (control: LinkDraftControl) => void;
   }
 
-  const { editor, version }: Props = $props();
+  const { editor, version, draftName, onlinkcontrol }: Props = $props();
 
   type Mark = 'bold' | 'italic' | 'strike' | 'code';
 
@@ -43,6 +50,45 @@
   let linkValue = $state('');
   let linkError = $state(false);
   let linkInput = $state<HTMLInputElement | null>(null);
+  let linkBaseline = $state('');
+  const linkDirty = $derived(linkValue !== linkBaseline);
+  function resetLink(): void {
+    linkEditing = false;
+    linkValue = '';
+    linkBaseline = '';
+    linkFor = undefined;
+    linkError = false;
+  }
+  const linkDraft = createFormDraft<string>({
+    name: () => (draftName === undefined ? undefined : `editor-link:${draftName}`),
+    snapshot: () => linkValue,
+    parse: (value) => (typeof value === 'string' ? value : undefined),
+    restore: (value) => {
+      startLink();
+      linkValue = value;
+      linkBaseline = '';
+    },
+    reset: resetLink,
+    dirty: () => linkDirty,
+  });
+  onMount(linkDraft.attach);
+
+  // 남은 링크 주소 초안의 제안은 말풍선 밖(편집기 본문 위)에 보인다: 말풍선은 글자를 골라야 나타나 새로고침 뒤 제안을 못
+  // 볼 수 있었다(⑱). 그리는 쪽(TiptapEditor)이 이 연결로 고르고 되살린다.
+  onMount(() => {
+    onlinkcontrol?.({
+      offers: () => linkDraft.offers,
+      restore: (offer) => {
+        linkDraft.restore(offer);
+        // 고른 글자가 있으면 편집기로 초점을 돌려 말풍선의 주소 칸을 다시 보인다.
+        if (editor !== undefined && !editor.state.selection.empty) editor.commands.focus();
+      },
+      discard: (offer) => {
+        linkDraft.discard(offer);
+      },
+      waitsForSelection: () => linkDirty && version >= 0 && editor?.state.selection.empty === true,
+    });
+  });
   // 링크 입력을 열면 주소 칸으로 초점을 옮긴다(조건부로 그려지는 칸에는 autofocus가 듣지 않는다).
   $effect(() => {
     if (linkEditing && linkInput !== null) {
@@ -86,26 +132,30 @@
       const { from, to } = editor.state.selection;
       linkFor = { from, to };
     }
-    linkValue = info?.href ?? '';
+    if (!linkDirty) {
+      linkValue = info?.href ?? '';
+      linkBaseline = linkValue;
+    }
     linkError = false;
     linkEditing = true;
   }
 
   function applyLink(): void {
+    if (editor?.isEditable !== true) return;
     const href = normalizeHref(linkValue);
     if (href === undefined) {
       linkError = true;
       return;
     }
-    editor?.chain().focus().extendMarkRange('link').setLink({ href }).run();
-    linkEditing = false;
-    linkFor = undefined;
+    if (editor.chain().focus().extendMarkRange('link').setLink({ href }).run()) resetLink();
   }
 
   function removeLink(): void {
-    editor?.chain().focus().extendMarkRange('link').unsetLink().run();
-    linkEditing = false;
-    linkFor = undefined;
+    if (editor?.isEditable !== true) return;
+    linkDraft.leave.request(() => {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      resetLink();
+    });
   }
 
   const MARKS = $derived<{ mark: Mark; label: string; short: string; cls: string }[]>([
@@ -137,8 +187,10 @@
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'Escape') {
             e.preventDefault();
-            linkEditing = false;
-            editor?.commands.focus();
+            linkDraft.leave.request(() => {
+              resetLink();
+              editor?.commands.focus();
+            });
           }
         }}
       />
@@ -209,3 +261,9 @@
     </div>
   {/if}
 {/if}
+
+<DiscardChangesConfirm
+  open={linkDraft.leave.open}
+  onkeep={linkDraft.leave.keep}
+  ondiscard={linkDraft.discardAndLeave}
+/>

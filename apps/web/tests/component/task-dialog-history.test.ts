@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +9,7 @@ import { api, NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -40,7 +43,7 @@ function task(id: string, title: string): TaskView {
     reference: `KED-${id}`,
     title,
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,
@@ -51,6 +54,7 @@ function task(id: string, title: string): TaskView {
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 1,
@@ -65,6 +69,7 @@ function task(id: string, title: string): TaskView {
 // 방금 닫은 카드를 다시 연다.
 describe('task dialog and browser history', () => {
   it('closing a card opened from the board goes back instead of adding an entry', async () => {
+    // R5 최종 A FA-4: 보드에서 연 상세는 닫을 때 그 기록으로 돌아간다(D-121 popstate 보호를 거치는 router.back).
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
     vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
@@ -91,6 +96,30 @@ describe('task dialog and browser history', () => {
     });
     expect(push).toHaveBeenCalledTimes(1);
   });
+
+  it('closing a card opened directly by its address navigates to the board path', async () => {
+    // 주소로 바로 연 상세는 돌아갈 보드 기록이 없으므로(다른 사이트일 수 있다) 보드 주소로 옮긴다.
+    await setLocale('ko', { reload: false });
+    window.history.replaceState(null, '', '/w/ws-1/i/i1/tasks/board/t/2');
+    router.path = '/w/ws-1/i/i1/tasks/board/t/2';
+    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(api, 'task').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    const push = vi.spyOn(window.history, 'pushState');
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+
+    render(TaskBoard, { props: { item, workspaces: [], openTaskId: '2' } });
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+    await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    await waitFor(() => {
+      expect(push).toHaveBeenLastCalledWith(null, '', '/w/ws-1/i/i1/tasks/board');
+    });
+    expect(back).not.toHaveBeenCalled();
+  });
 });
 
 // 칸반 맥락(목표 3): 다른 화면에 갔다가 돌아와도(보드가 새로 그려짐) 보기·필터·정렬이 그대로다.
@@ -102,14 +131,18 @@ describe('board context across navigation', () => {
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     const first = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await screen.findByTestId('task-board');
     const status = await screen.findByLabelText('상태');
-    await fireEvent.change(status, { target: { value: 'in_progress' } });
+    await fireEvent.change(status, { target: { value: '진행 중' } });
     await fireEvent.click(screen.getByRole('button', { name: '목록' }));
     first.unmount();
 
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
+    await waitFor(() => {
+      expect(api.taskStatuses).toHaveBeenCalled();
+    });
     const again = await screen.findByLabelText('상태');
-    expect(again instanceof HTMLSelectElement ? again.value : '').toBe('in_progress');
+    expect(again instanceof HTMLSelectElement ? again.value : '').toBe('진행 중');
     expect(screen.getByRole('button', { name: '목록' }).getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -123,7 +156,7 @@ describe('board context across navigation', () => {
     vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.change(await screen.findByLabelText('상태'), {
-      target: { value: 'in_progress' },
+      target: { value: '진행 중' },
     });
     await fireEvent.click(screen.getByRole('button', { name: '목록' }));
 
@@ -134,8 +167,8 @@ describe('board context across navigation', () => {
       expect(status instanceof HTMLSelectElement ? status.value : 'x').toBe('any');
     });
     expect(screen.getByRole('button', { name: '칸반' }).getAttribute('aria-pressed')).toBe('true');
-    const saved: unknown = JSON.parse(window.sessionStorage.getItem('fvoci:board:i2') ?? 'null');
-    expect(JSON.stringify(saved)).not.toContain('in_progress');
+    const saved: unknown = JSON.parse(window.sessionStorage.getItem(org.key('board:i2')) ?? 'null');
+    expect(JSON.stringify(saved)).not.toContain('진행 중');
   });
 });
 
@@ -152,9 +185,9 @@ describe('move menu', () => {
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: 'API 연결 옮기기' }));
-    await fireEvent.click(await screen.findByRole('menuitem', { name: '완료로' }));
+    await fireEvent.click(await screen.findByRole('menuitem', { name: '완료(으)로 옮기기' }));
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('2', 'done', null, undefined);
+      expect(move).toHaveBeenCalledWith(expect.any(String), '2', '완료', null, undefined);
     });
   });
 });
@@ -180,9 +213,19 @@ describe('quick add in a column', () => {
     await fireEvent.input(input, { target: { value: '새 업무' } });
     await fireEvent.submit(input.closest('form') ?? input);
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('9', 'in_progress', null, undefined);
+      expect(create).toHaveBeenCalledWith(
+        expect.any(String),
+        'i1',
+        expect.any(String),
+        '새 업무',
+        null,
+        {
+          status: '진행 중',
+        },
+      );
+      expect(move).not.toHaveBeenCalled();
     });
-    expect(create.mock.calls[0]?.[2]).toBe('새 업무');
+    expect(create.mock.calls[0]?.[3]).toBe('새 업무');
   });
 });
 
@@ -219,7 +262,19 @@ describe('quick add focus, cancel and notice', () => {
     await fireEvent.input(again, { target: { value: '새 업무' } });
     await fireEvent.submit(again.closest('form') ?? again);
     // 전에는 만든 업무가 아직 목록에 없어 ": 옮겼습니다(진행 중)."처럼 제목이 비었다.
-    expect(await screen.findByText('새 업무: 옮겼습니다(진행 중).')).toBeTruthy();
+    await waitFor(() => {
+      expect(api.createTask).toHaveBeenCalledWith(
+        expect.any(String),
+        'i1',
+        expect.any(String),
+        '새 업무',
+        null,
+        {
+          status: '진행 중',
+        },
+      );
+    });
+    expect(api.moveTask).not.toHaveBeenCalled();
   });
 });
 
@@ -286,7 +341,7 @@ describe('drag cancel when the release is not seen', () => {
       clientY: 10,
     });
     await waitFor(() => {
-      expect(move).toHaveBeenCalledWith('2', 'done', null, undefined);
+      expect(move).toHaveBeenCalledWith(expect.any(String), '2', '완료', null, undefined);
     });
   });
 

@@ -1,6 +1,11 @@
 <script lang="ts">
   // 워크스페이스의 모듈 목록과 모듈 만들기(관리자). 같은 유형을 여러 개 둘 수 있다 (D-15).
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, retry } from './draft-values';
 
   import { api, ApiError, MODULE_KINDS, NetworkError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -36,7 +41,7 @@
       : undefined,
   );
 
-  const isAdmin = $derived(workspace.role === 'admin');
+  const isAdmin = $derived(workspace.access === 'owner');
 
   let kind = $state<ModuleKind>('project');
   let name = $state('');
@@ -44,9 +49,45 @@
   let busy = $state(false);
   let formError = $state<string | undefined>(undefined);
   let pending: { requestId: string; signature: string } | undefined;
+  const draft = createFormDraft({
+    name: () => `module-new:${workspace.id}`,
+    snapshot: () => ({ name, key, kind, pending: pending ?? null }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        typeof raw.name !== 'string' ||
+        typeof raw.key !== 'string' ||
+        typeof raw.kind !== 'string' ||
+        !retry(raw.pending)
+      )
+        return undefined;
+      const parsedKind = asKind(raw.kind);
+      return parsedKind === undefined
+        ? undefined
+        : { name: raw.name, key: raw.key, kind: parsedKind, pending: raw.pending };
+    },
+    restore: (value) => {
+      name = value.name;
+      key = value.key;
+      kind = value.kind;
+      pending = value.pending ?? undefined;
+    },
+    reset: () => {
+      name = '';
+      key = '';
+      kind = 'project';
+      pending = undefined;
+      busy = false;
+      formError = undefined;
+    },
+    dirty: () => name !== '' || key !== '' || kind !== 'project',
+    busy: () => busy,
+  });
+  onMount(draft.attach);
 
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (busy || !draft.active || draft.blocked) return;
     const trimmed = name.trim();
     const normalized = normalizeKey(key);
     if (trimmed === '') {
@@ -60,6 +101,11 @@
     const signature = `${kind}|${trimmed}|${normalized}`;
     if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
     busy = true;
+    const attempt = draft.capture();
+    if (attempt === undefined) {
+      busy = false;
+      return;
+    }
     formError = undefined;
     try {
       const created = await api.createModule(workspace.id, {
@@ -68,20 +114,39 @@
         name: trimmed,
         key: normalized,
       });
-      pending = undefined;
-      name = '';
-      key = '';
+      if (!draft.complete(attempt)) return;
       workspaceNav.refreshModules();
       router.navigate(modulePath(workspace.id, created.id));
     } catch (e: unknown) {
+      if (!draft.isCurrent(attempt)) return;
       if (e instanceof NetworkError) formError = m.modules_create_network();
       else if (e instanceof ApiError && e.status === 409) formError = m.modules_key_taken_new();
       else formError = errorText(e, m.modules_create_failed());
     } finally {
-      busy = false;
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 </script>
+
+<!-- 만드는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 키까지 고쳐 다시 내면
+     새 요청 id로 두 번째 모듈을 만든다. -->
+{#each draft.offers as entry (entry.key)}
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      onrestore={() => {
+        draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
+{/each}
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>
 
 <section class="flex flex-col gap-3" aria-labelledby="modules-heading">
   <h2 id="modules-heading" class="text-lg font-semibold">{m.modules_heading()}</h2>
@@ -116,55 +181,59 @@
   {/if}
 
   {#if isAdmin}
-    <form
-      class="flex flex-wrap items-end gap-2"
-      onsubmit={(e) => void create(e)}
-      novalidate
-      aria-label={m.modules_create()}
-    >
-      <div class="flex flex-col gap-1">
-        <span class="text-sm font-medium" id="module-kind-label">{m.modules_kind()}</span>
-        <Select.Root
-          type="single"
-          value={kind}
-          onValueChange={(v: string) => {
-            kind = asKind(v) ?? kind;
-          }}
-        >
-          <Select.Trigger class="w-28" aria-labelledby="module-kind-label"
-            >{kindLabel(kind)}</Select.Trigger
+    <fieldset class="min-w-0" disabled={busy}>
+      <form
+        class="flex flex-wrap items-end gap-2"
+        onsubmit={(e) => void create(e)}
+        novalidate
+        aria-label={m.modules_create()}
+      >
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-medium" id="module-kind-label">{m.modules_kind()}</span>
+          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 따로 잠근다. -->
+          <Select.Root
+            type="single"
+            disabled={busy}
+            value={kind}
+            onValueChange={(v: string) => {
+              kind = asKind(v) ?? kind;
+            }}
           >
-          <Select.Content>
-            {#each MODULE_KINDS as k (k)}
-              <Select.Item value={k} label={kindLabel(k)}>{kindLabel(k)}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex min-w-40 flex-1 flex-col gap-1">
-        <Label for="module-name">{m.modules_name()}</Label>
-        <Input
-          id="module-name"
-          bind:value={name}
-          placeholder={m.modules_name_placeholder()}
-          maxlength={200}
-        />
-      </div>
-      <div class="flex w-28 flex-col gap-1">
-        <Label for="module-key">{m.modules_key()}</Label>
-        <Input
-          id="module-key"
-          bind:value={key}
-          placeholder="DEV"
-          maxlength={10}
-          autocomplete="off"
-          class="font-mono uppercase"
-          aria-invalid={formError !== undefined}
-          aria-describedby={formError !== undefined ? 'module-form-error' : undefined}
-        />
-      </div>
-      <Button type="submit" disabled={busy}>{m.modules_create()}</Button>
-    </form>
+            <Select.Trigger class="w-28" aria-labelledby="module-kind-label"
+              >{kindLabel(kind)}</Select.Trigger
+            >
+            <Select.Content>
+              {#each MODULE_KINDS as k (k)}
+                <Select.Item value={k} label={kindLabel(k)}>{kindLabel(k)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex min-w-40 flex-1 flex-col gap-1">
+          <Label for="module-name">{m.modules_name()}</Label>
+          <Input
+            id="module-name"
+            bind:value={name}
+            placeholder={m.modules_name_placeholder()}
+            maxlength={200}
+          />
+        </div>
+        <div class="flex w-28 flex-col gap-1">
+          <Label for="module-key">{m.modules_key()}</Label>
+          <Input
+            id="module-key"
+            bind:value={key}
+            placeholder="DEV"
+            maxlength={10}
+            autocomplete="off"
+            class="font-mono uppercase"
+            aria-invalid={formError !== undefined}
+            aria-describedby={formError !== undefined ? 'module-form-error' : undefined}
+          />
+        </div>
+        <Button type="submit" disabled={busy}>{m.modules_create()}</Button>
+      </form>
+    </fieldset>
     {#if formError !== undefined}
       <p id="module-form-error" class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}

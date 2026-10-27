@@ -7,7 +7,7 @@ export function formOf(task: TaskDetailView): TaskInput {
   return {
     title: task.title,
     description: task.description,
-    status: task.status_name ?? task.status,
+    status: task.status,
     priority: task.priority,
     start_date: task.start_date,
     due_date: task.due_date,

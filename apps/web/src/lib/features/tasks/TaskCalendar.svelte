@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 항목 업무의 달력 보기(D-31). 업무는 마감일(없으면 시작일) 한 칸에 놓는다. 날짜가 없는 업무는 아래에 따로.
+  // 항목 업무의 달력 보기(D-31). 시작·마감이 있으면 기간 막대, 한 날짜만 있으면 점으로 놓는다. 날짜가 없는 업무는 아래에 따로.
   import type { TaskView } from '$lib/api/client';
   import { isWeekend, monthRange, shiftMonth } from '$lib/features/events/calendar';
   import { displaySettings, formatDay, formatMonth, weekdays } from '$lib/display';
@@ -8,7 +8,6 @@
   import { Button } from '$lib/ui/button';
 
   import { tasksByDay } from './filters';
-  import { STATUS_LABEL } from './labels';
 
   interface Props {
     tasks: TaskView[];
@@ -23,7 +22,7 @@
   const today = dayIn(new Date().toISOString(), settings.timeZone);
   let month = $state(today.slice(0, 7));
   const range = $derived(monthRange(month, settings.weekStart));
-  const byDay = $derived(tasksByDay(tasks));
+  const byDay = $derived(tasksByDay(tasks, range.days));
   const undated = $derived(tasks.filter((t) => t.due_date === null && t.start_date === null));
   const WEEKDAYS = weekdays(settings).map((w) => w.short);
 </script>
@@ -61,7 +60,7 @@
       {@const list = byDay.get(day) ?? []}
       <div
         class={[
-          'group flex min-h-20 flex-col gap-0.5 p-1',
+          'group flex min-h-20 min-w-0 flex-col gap-0.5 p-1',
           day.slice(0, 7) !== month
             ? 'bg-muted text-muted-foreground'
             : isWeekend(day)
@@ -74,8 +73,9 @@
           count: list.length,
         })}
       >
-        <!-- 오늘은 날짜를 채운 원으로(칸 테두리 대신), 만들기 단추는 마우스 화면에서 가리키거나 초점일 때만. -->
-        <span class="flex items-center justify-between">
+        <!-- 오늘은 날짜를 채운 원으로(칸 테두리 대신), 만들기 단추는 마우스 화면에서 가리키거나 초점일 때만. 좁은 칸(375px·200%)에서는
+             만들기 단추가 다음 줄로 내려간다(가로 넘침 금지). -->
+        <span class="flex flex-wrap items-center justify-between">
           <span
             class={[
               'min-w-5 rounded-full px-1.5 text-center tabular-nums',
@@ -101,13 +101,17 @@
             type="button"
             class={[
               'truncate rounded px-1 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-              t.status === 'done' ? 'line-through' : '',
+              t.status_category === 'done' ? 'line-through' : '',
+              t.start_date !== null &&
+                t.due_date !== null &&
+                'rounded-none bg-primary/15 border-y border-primary/30',
             ]}
-            title={`${t.reference ?? ''} ${t.title} · ${STATUS_LABEL[t.status]}`}
-            aria-label={`${t.title} · ${STATUS_LABEL[t.status]}`}
+            data-span={t.start_date !== null && t.due_date !== null ? 'range' : 'point'}
+            title={`${t.start_date ?? t.due_date ?? ''} – ${t.due_date ?? t.start_date ?? ''} · ${t.reference ?? ''} ${t.title} · ${t.status}`}
+            aria-label={`${t.title} · ${t.status}`}
             onclick={() => {
               onopen(t.id);
-            }}>{t.title}</button
+            }}>{t.start_date === null || t.due_date === null ? '• ' : ''}{t.title}</button
           >
         {/each}
       </div>

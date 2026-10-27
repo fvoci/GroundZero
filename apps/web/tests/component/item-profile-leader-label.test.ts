@@ -5,6 +5,7 @@ import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 // 항목 정보 패널의 리더 칸은 입력(`form.leader`)만 보인다. 입력이 "없음"인데 서버의 리더 이름을 보이면, 409 뒤 "내 입력으로
 // 다시 저장"이 화면에 보이지 않게 다른 사람이 정한 리더를 지운다(D-104 흐름에서 드러남).

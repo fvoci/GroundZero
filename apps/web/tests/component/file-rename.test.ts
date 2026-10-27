@@ -1,10 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FileView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
+import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
+
+vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
+  notifyDone: vi.fn(),
+}));
 
 // 첨부 이름 바꾸기(D-82, 감사 W36): 서버가 이름을 거절하면 입력한 이름이 남고 오류가 칸 옆에 보인다.
 // 성공한 뒤에만 입력 칸을 닫는다.
@@ -24,10 +31,15 @@ const file: FileView = {
 describe('file rename', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    localStorage.clear();
     vi.spyOn(api, 'itemFiles').mockResolvedValue([file]);
   });
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
+    me.userId = '';
+    localStorage.clear();
   });
 
   async function openRename(): Promise<HTMLElement> {
@@ -37,6 +49,19 @@ describe('file rename', () => {
     await fireEvent.input(input, { target: { value: 'report/final.pdf' } });
     return input;
   }
+
+  it('offers the unfinished file name after remount without renaming automatically', async () => {
+    const rename = vi.spyOn(api, 'renameFile');
+    await openRename();
+    cleanup();
+    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
+    await fireEvent.click(await screen.findByRole('button', { name: '입력 되살리기' }));
+    expect(await screen.findByRole('textbox', { name: '새 이름' })).toHaveValue('report/final.pdf');
+    expect(rename).not.toHaveBeenCalled();
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+  });
 
   it('keeps the typed name and shows the error beside it when the server rejects it', async () => {
     const rename = vi
@@ -86,6 +111,7 @@ describe('file rename', () => {
     if (form === null) throw new Error('form');
     await fireEvent.submit(form);
     await fireEvent.click(screen.getByRole('button', { name: 'notes.txt 이름 바꾸기' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '변경 버리고 닫기' }));
     const second = screen.getByRole('textbox', { name: '새 이름' });
     expect(second).toHaveValue('notes.txt');
 
@@ -108,6 +134,7 @@ describe('file rename', () => {
     if (form === null) throw new Error('form');
     await fireEvent.submit(form);
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '변경 버리고 닫기' }));
     expect(screen.queryByRole('textbox', { name: '새 이름' })).toBeNull();
 
     pending.reject(new ApiError(400, 'bad_request', 'invalid file name'));
@@ -125,6 +152,7 @@ describe('file rename', () => {
     if (form === null) throw new Error('form');
     await fireEvent.submit(form);
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    await fireEvent.click(await screen.findByRole('button', { name: '변경 버리고 닫기' }));
     await fireEvent.click(screen.getByRole('button', { name: 'report.pdf 이름 바꾸기' }));
     const again = screen.getByRole('textbox', { name: '새 이름' });
     await fireEvent.input(again, { target: { value: 'report-v2.pdf' } });
@@ -143,7 +171,7 @@ describe('file rename', () => {
 
     resolve({ ...file, name: 'report/final.pdf' });
     await vi.waitFor(() => {
-      expect(screen.getByText('이름을 바꿨습니다: report/final.pdf')).toBeTruthy();
+      expect(notifyDone).toHaveBeenCalledWith('이름을 바꿨습니다: report/final.pdf');
     });
     expect(screen.getByRole('textbox', { name: '새 이름' })).toHaveValue('report-v2.pdf');
   });

@@ -2,6 +2,7 @@
   // 저장하지 않은 입력이 있는 화면에서 DiscardChangesConfirm을 부르는 합성 예. 업무·일정 대화상자처럼 입력이 바뀌었을
   // 때만 묻고, 계속 편집하면 입력과 초점을 그대로 돌려준다.
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
@@ -17,7 +18,7 @@
 
   let value = $state('');
   let saved = $state('');
-  let asking = $state(false);
+  const leaveGuard = createLeaveGuard({ dirty: () => value !== saved });
   let box = $state<HTMLInputElement | null>(null);
 
   $effect.pre(() => {
@@ -33,20 +34,19 @@
     <Button
       variant="outline"
       onclick={() => {
-        if (value !== saved) asking = true;
+        leaveGuard.request(() => {
+          value = saved;
+          ondiscard();
+        });
       }}>닫기</Button
     >
   </div>
 </div>
 
 <DiscardChangesConfirm
-  open={asking}
-  onkeep={() => (asking = false)}
-  ondiscard={() => {
-    asking = false;
-    value = saved;
-    ondiscard();
-  }}
+  open={leaveGuard.open}
+  onkeep={leaveGuard.keep}
+  ondiscard={leaveGuard.discard}
   returnFocus={() => box}
   {description}
   {confirmLabel}

@@ -38,11 +38,11 @@ function summary(id: string, title: string, parent: string | null): SummaryView 
 }
 const workspaces: Workspace[] = [
   {
-    id: 'ws-1',
-    organization_id: 'org-1',
-    name: '모듈 예제',
-    role: 'member',
     access: 'write',
+    id: 'ws-1',
+    name: '모듈 예제',
+    organization_id: 'org-1',
+    role: 'member',
     is_owner: false,
     realtime_enabled: false,
   },

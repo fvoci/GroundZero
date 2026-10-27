@@ -147,3 +147,4 @@ describe('event rule saved from a stale rule', () => {
     expect(gets).toBe(1);
   });
 });
+import './fixtures/event-user';

@@ -39,6 +39,17 @@ export function str(v: unknown, key: string): string {
   return v[key];
 }
 
+/** 날짜처럼 저장 전 null일 수 있는 계약 칸. 잘못된 타입은 계속 거절한다. */
+export function nullableStr(v: unknown, key: string): string | null {
+  if (isRecord(v) && v[key] === null) return null;
+  return str(v, key);
+}
+
+export function listField(v: unknown, key: string): unknown[] {
+  if (!isRecord(v)) throw new Error(`missing object for ${key}`);
+  return list(v[key]);
+}
+
 /** 응답 객체의 숫자 칸. 없으면 시험 실패. */
 export function num(v: unknown, key: string): number {
   if (!isRecord(v) || typeof v[key] !== 'number') throw new Error(`missing number ${key}`);
@@ -108,19 +119,15 @@ export class Api {
     return (await this.request.get(url)).status();
   }
 
-  /**
-   * 격리 browser 환경의 초기 관리자 조직. 1단계 서버에는 조직 목록 API가 없으므로(2단계 D-126), 초기 관리자가 받은 첫
-   * 워크스페이스(`app_system_claim_initial_admin`)의 `organization_id`에서 읽는다. 조직이 여럿이면 임의로 고르지 않고
-   * 준비를 실패시킨다.
-   */
-  async initialOrganization(): Promise<{ id: string }> {
-    const ids = [
-      ...new Set(list(await this.get('/api/workspaces')).map((w) => str(w, 'organization_id'))),
-    ];
-    const id = ids.at(0);
-    expect(ids, 'isolated initial-admin fixture has exactly one organization').toHaveLength(1);
-    if (id === undefined) throw new Error('no organization');
-    return { id };
+  /** 격리 browser 환경의 최초 관리자 조직. 여러 조직이면 임의 선택하지 않고 준비를 실패시킨다. */
+  async initialOrganization(): Promise<{ id: string; name: string }> {
+    const organizations = list(await this.get('/api/me/organizations'));
+    expect(
+      organizations,
+      'isolated initial-admin fixture has exactly one organization',
+    ).toHaveLength(1);
+    const organization = organizations[0];
+    return { id: str(organization, 'id'), name: str(organization, 'name') };
   }
 
   async createWorkspace(name: string): Promise<string> {
@@ -168,12 +175,33 @@ export class Api {
   }
 
   /** 관리자가 이메일로 초대한다. 받는 사람은 그 이메일이 확인된 계정으로 로그인해 받아들인다. */
-  /**
-   * test-user-2는 최초에 조직이 없고, 워크스페이스 초대는 조직 멤버만 수락할 수 있다(D-114). 조직 초대를 만들어(2단계에서
-   * 가져온 경로) 받아들이게 한 뒤에만 공간 초대를 준비한다.
-   */
+  async invite(
+    workspace: string,
+    email: string,
+    role: 'admin' | 'member' | 'readonly',
+  ): Promise<void> {
+    await this.send('POST', `/api/workspaces/${workspace}/invitations`, { email, role });
+  }
+
+  /** 이 워크스페이스에서 받은 초대를 받아들인다. */
+  async acceptInvitation(workspace: string): Promise<void> {
+    const invitation = list(await this.get('/api/invitations')).find(
+      (i) => str(i, 'kind') === 'workspace' && str(i, 'workspace_id') === workspace,
+    );
+    const accepted = await this.send(
+      'POST',
+      `/api/invitations/${str(invitation, 'id')}/accept`,
+      {},
+    );
+    expect(str(accepted, 'kind')).toBe('workspace');
+    expect(str(accepted, 'workspace_id')).toBe(workspace);
+  }
+
+  /** test-user-2는 최초에 조직이 없다. 조직 초대 수락 뒤에만 공간 초대를 준비한다. */
   async ensureOrganizationMember(member: Api, email: string): Promise<void> {
     const organization = await this.initialOrganization();
+    const memberships = list(await member.get('/api/me/organizations'));
+    if (memberships.some((o) => str(o, 'id') === organization.id)) return;
     await this.send('POST', `/api/organizations/${organization.id}/invitations`, {
       email,
       role: 'member',
@@ -188,25 +216,9 @@ export class Api {
     );
     expect(str(accepted, 'kind')).toBe('organization');
     expect(str(accepted, 'organization_id')).toBe(organization.id);
-  }
-
-  async invite(workspace: string, email: string, role: 'member' | 'readonly'): Promise<void> {
-    await this.send('POST', `/api/workspaces/${workspace}/invitations`, { email, role });
-  }
-
-  /** 이 워크스페이스에서 받은 초대를 받아들인다. */
-  /** 이 워크스페이스에서 받은 초대를 받아들인다. */
-  async acceptInvitation(workspace: string): Promise<void> {
-    const invitation = list(await this.get('/api/invitations')).find(
-      (i) => str(i, 'kind') === 'workspace' && str(i, 'workspace_id') === workspace,
-    );
-    const accepted = await this.send(
-      'POST',
-      `/api/invitations/${str(invitation, 'id')}/accept`,
-      {},
-    );
-    expect(str(accepted, 'kind')).toBe('workspace');
-    expect(str(accepted, 'workspace_id')).toBe(workspace);
+    expect(
+      list(await member.get('/api/me/organizations')).some((o) => str(o, 'id') === organization.id),
+    ).toBe(true);
   }
 
   async createTask(item: string, title: string, fields: Record<string, unknown> = {}) {
@@ -229,6 +241,28 @@ export interface Session {
    * trace에 들어가지 않는다. 그때까지의 기록은 시험이 실패하면 남는다.
    */
   endTrace: () => Promise<void>;
+}
+
+/** 개인 화면은 저장소 주입 없이 실제 전환기로 조직을 고른다. 좁은 화면에서는 서랍을 연다. */
+export async function selectOrganization(
+  page: Page,
+  organization: { id: string; name: string },
+): Promise<void> {
+  const switcher = page.getByTestId('organization-switcher');
+  const narrow = (page.viewportSize()?.width ?? 1280) < 768;
+  if (narrow) await page.getByRole('button', { name: '사이드바 열고 닫기' }).click();
+  await switcher.click();
+  await page.getByRole('menuitem').filter({ hasText: organization.name }).click();
+  await expect(switcher).toContainText(organization.name);
+  if (narrow) {
+    // 서랍(dialog)은 닫기 단추로 닫는다(메뉴 항목을 고른 직후의 Escape는 서랍을 닫지 못해 열린 채 남았다). 닫히면 초점이
+    // 여닫기 단추로 되돌아오므로 그 뒤에 끝낸다. 그 전에 다음 조작이 초점을 옮기면 서랍의 초점 가둠·되돌리기가 그것을 덮는다
+    // (375px 대표 경로의 Tab 왕복 실패).
+    const drawer = page.getByRole('dialog', { name: '탐색 메뉴' });
+    await drawer.getByRole('button', { name: '메뉴 닫기' }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.getByRole('button', { name: '사이드바 열고 닫기' })).toBeFocused();
+  }
 }
 
 /** 실패 증거를 남길 브라우저 컨텍스트(이름은 증거 파일 이름에 쓴다). */

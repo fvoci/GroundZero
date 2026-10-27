@@ -1,18 +1,18 @@
 <script lang="ts">
   // 달력의 날짜에서 업무 만들기 (D-31·D-80). 만들 대상(항목)을 분명히 한다: 항목 범위면 그 항목, 모듈 범위면 그 모듈의
   // 항목 가운데, 워크스페이스 범위면 모듈과 항목을 고른다(쓸 수 있는 것만: 보관·서식이 아니고 읽기 전용이 아닌 항목).
-  // 저장은 기존 흐름 그대로다: 업무 만들기(`createTask`, 같은 입력의 재시도는 같은 요청 id) 뒤 그 업무에 마감일을 넣는다
-  // (`updateTask`). 날짜를 넣지 못하면 업무는 이미 있으므로 다시 만들지 않고 날짜만 다시 넣게 한다.
+  // 제목·마감은 한 번의 생성 요청으로 저장한다(#104).
   import type { Module } from '@fvoci/api-client';
-  import { untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
 
   import type { ItemView, TaskDetailView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+  import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { RetryKey } from '$lib/api/retry-key';
-  import { formOf } from '$lib/features/tasks/form';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, request } from './input-drafts';
   import { m } from '$lib/paraglide/messages.js';
-  import { itemTaskPath, router } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
@@ -26,43 +26,99 @@
     item?: { id: string; title: string } | undefined;
     /** 모듈 범위: 이 모듈의 항목 가운데 고른다. */
     moduleId?: string | undefined;
-    /** 창을 닫는다. `created`는 업무는 만들었지만 마감일을 넣지 못한 채 닫았는지(부르는 쪽이 목록을 다시 읽게). */
+    /** 생성은 원자적이므로 부분 생성 상태는 없다. */
     onclose: (created: boolean) => void;
     oncreated: (task: TaskDetailView) => void;
   }
 
   const { workspaceId, day, item, moduleId, onclose, oncreated }: Props = $props();
+  let activeDay = $state(untrack(() => day));
 
   const writable = (i: ItemView): boolean => i.access !== 'read' && !i.archived && !i.is_template;
 
-  let date = $state('');
+  let accountBlocked = $state(false);
+  let date = $state(untrack(() => activeDay ?? ''));
   let title = $state('');
-  let pickedModule = $state('');
-  let pickedItem = $state('');
+  let pickedModule = $state(untrack(() => moduleId ?? ''));
+  let pickedItem = $state(untrack(() => item?.id ?? ''));
   let modules = $state<Module[] | undefined>(undefined);
   let items = $state<ItemView[] | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
-  // 만들었지만 날짜를 넣지 못한 업무(다시 시도는 날짜만).
-  let made = $state<TaskDetailView | undefined>(undefined);
-  const key = new RetryKey();
-
-  // 창을 열 때마다 처음부터.
-  $effect(() => {
-    if (day === undefined) return;
-    date = day;
+  let retry = $state<{ id: string; payload: string } | null>(null);
+  interface Draft {
+    date: string;
+    title: string;
+    module: string;
+    item: string;
+    retry: typeof retry;
+  }
+  // 항목 목록을 읽으며 자동으로 고른 항목. 사용자가 고친 것이 아니므로 수정 판단의 기준값이다.
+  let autoItem = $state('');
+  function reset(): void {
+    date = activeDay ?? '';
     title = '';
-    error = undefined;
-    made = undefined;
+    // 모듈이 그대로면 목록을 다시 읽지 않으므로 자동으로 고른 항목으로 돌린다.
+    if (pickedModule !== (moduleId ?? '')) autoItem = '';
     pickedModule = moduleId ?? '';
-    pickedItem = item?.id ?? '';
-    key.done();
+    pickedItem = item?.id ?? autoItem;
+    retry = null;
+    error = undefined;
+    accountBlocked = false;
+    busy = false;
+  }
+  const draft = createFormDraft<Draft>({
+    name: () =>
+      activeDay === undefined
+        ? undefined
+        : `calendar-task:${workspaceId}:${item?.id ?? moduleId ?? 'workspace'}:${activeDay}`,
+    snapshot: () => ({ date, title, module: pickedModule, item: pickedItem, retry }),
+    parse: (value) => {
+      const o = object(value);
+      if (!o) return;
+      const retry = request(o.retry);
+      if (
+        typeof o.date !== 'string' ||
+        typeof o.title !== 'string' ||
+        typeof o.module !== 'string' ||
+        typeof o.item !== 'string' ||
+        retry === undefined
+      )
+        return;
+      return { date: o.date, title: o.title, module: o.module, item: o.item, retry };
+    },
+    restore: (value) => {
+      date = value.date;
+      title = value.title;
+      pickedModule = value.module;
+      pickedItem = value.item;
+      retry = value.retry;
+    },
+    reset,
+    dirty: () =>
+      title !== '' ||
+      date !== (activeDay ?? '') ||
+      pickedModule !== (moduleId ?? '') ||
+      pickedItem !== (item?.id ?? autoItem),
+    busy: () => busy,
+  });
+  onMount(draft.attach);
+  $effect(() => {
+    const next = day;
+    untrack(() => {
+      if (next !== activeDay) {
+        draft.leave.keep();
+        draft.leave.request(() => {
+          activeDay = next;
+        });
+      }
+    });
   });
 
   // 워크스페이스 범위: 모듈 목록.
   $effect(() => {
-    if (day === undefined || item !== undefined || moduleId !== undefined) return;
+    if (activeDay === undefined || item !== undefined || moduleId !== undefined) return;
     let cancelled = false;
     modules = undefined;
     api
@@ -80,13 +136,9 @@
   // 고른 모듈의 쓸 수 있는 항목.
   $effect(() => {
     const mod = pickedModule;
-    if (day === undefined || item !== undefined) return;
+    if (activeDay === undefined || item !== undefined) return;
     items = undefined;
     loadError = undefined;
-    // 다른 모듈을 고르면 앞 모듈의 항목 선택은 버린다(새 목록을 읽는 사이 앞 항목에 만들지 않게).
-    untrack(() => {
-      pickedItem = '';
-    });
     if (mod === '') return;
     let cancelled = false;
     api
@@ -94,7 +146,8 @@
       .then((list) => {
         if (cancelled) return;
         items = list.filter(writable);
-        if (!items.some((i) => i.id === pickedItem)) pickedItem = items[0]?.id ?? '';
+        autoItem = items[0]?.id ?? '';
+        if (!items.some((i) => i.id === pickedItem)) pickedItem = autoItem;
       })
       .catch((e: unknown) => {
         if (!cancelled) loadError = errorText(e, m.events_task_targets_failed());
@@ -111,32 +164,19 @@
   /** 닫기. 보내는 중에는 닫지 않는다(늦게 온 결과가 다시 연 창의 날짜로 저장되지 않게). */
   function close(): void {
     if (busy) return;
-    onclose(made !== undefined);
-  }
-
-  async function putDate(task: TaskDetailView, due: string): Promise<void> {
-    const result = await api.updateTask(
-      task.id,
-      task.version,
-      { ...formOf(task), due_date: due },
-      [],
-    );
-    if (result.kind !== 'updated') {
-      // 막 만든 업무를 그사이 누가 고쳤다. 지금 판으로 다시 넣을 수 있게 둔다.
-      made = result.current;
-      error = m.events_task_date_failed();
-      return;
-    }
-    made = undefined;
-    oncreated(result.task);
+    draft.leave.request(() => {
+      onclose(false);
+    });
   }
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (busy) return;
+    if (busy || accountBlocked) return;
+    const attempt = draft.capture();
+    if (attempt === undefined) return;
     error = undefined;
     const name = title.trim();
-    if (made === undefined && (name === '' || targetId === '')) {
+    if (name === '' || targetId === '') {
       error = name === '' ? m.events_task_title_required() : m.events_task_target_required();
       return;
     }
@@ -148,33 +188,27 @@
     const due = date;
     busy = true;
     try {
-      if (made !== undefined) {
-        // 업무는 이미 있다. 날짜만 다시 넣는다(최신 판으로).
-        await putDate(await api.task(made.id), due);
-        return;
-      }
-      const requestId = key.for({ item: targetId, title: name });
-      const created = await api.createTask(targetId, requestId, name);
-      key.done(requestId);
-      made = created;
-      try {
-        await putDate(created, due);
-      } catch (e: unknown) {
-        error = `${m.events_task_date_failed()} ${errorText(e, '')}`.trim();
-      }
+      const payload = JSON.stringify({ item: targetId, title: name, due });
+      if (retry?.payload !== payload) retry = { id: newRequestId(), payload };
+      const saving = draft.capture();
+      if (saving === undefined) return;
+      const created = await api.createTask(attempt.userId, targetId, retry.id, name, null, {
+        due_date: due,
+      });
+      if (!draft.complete(saving)) return;
+      oncreated(created);
     } catch (e: unknown) {
-      error = errorText(
-        e,
-        made === undefined ? m.events_task_create_failed() : m.events_task_date_failed(),
-      );
+      if (!draft.isOwner(attempt)) return;
+      if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
+      error = errorText(e, m.events_task_create_failed());
     } finally {
-      busy = false;
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 </script>
 
 <Dialog.Root
-  open={day !== undefined}
+  open={activeDay !== undefined}
   onOpenChange={(o: boolean) => {
     if (!o) close();
   }}
@@ -193,14 +227,35 @@
       <Dialog.Title>{m.events_task_create_title()}</Dialog.Title>
       <Dialog.Description>{m.events_task_create_description()}</Dialog.Description>
     </Dialog.Header>
-    <form class="flex flex-col gap-3" onsubmit={(e) => void submit(e)} novalidate>
+    {#if accountBlocked || !draft.active}<p role="alert">
+        {m.tasks_account_changed()}
+      </p>{/if}
+    <form
+      hidden={accountBlocked || !draft.active}
+      class="flex flex-col gap-3"
+      onsubmit={(e) => void submit(e)}
+      novalidate
+    >
+      <!-- 저장하는 동안 초안을 되살리면 생긴 업무를 버리고 새 요청 ID로 하나 더 만들었다(D2-F-1). 입력과 함께 잠근다. -->
+      {#each draft.offers as offer (offer.key)}
+        <fieldset class="contents" disabled={busy}>
+          <FormDraftOffer
+            onrestore={() => {
+              draft.restore(offer);
+            }}
+            ondiscard={() => {
+              draft.discard(offer);
+            }}
+          />
+        </fieldset>
+      {/each}
       {#if item !== undefined}
         <p class="text-sm">{m.events_task_in_item({ title: item.title })}</p>
       {:else}
         {#if moduleId === undefined}
           <label class="flex flex-col gap-1 text-sm">
             {m.events_scope_module()}
-            <NativeSelect class="w-full" bind:value={pickedModule} disabled={made !== undefined}>
+            <NativeSelect class="w-full" bind:value={pickedModule} disabled={busy}>
               <option value="">{m.events_task_pick_module()}</option>
               {#each modules ?? [] as mod (mod.id)}
                 <option value={mod.id}>{mod.name} ({mod.key})</option>
@@ -213,7 +268,7 @@
           <NativeSelect
             class="w-full"
             bind:value={pickedItem}
-            disabled={made !== undefined || items === undefined || items.length === 0}
+            disabled={busy || items === undefined || items.length === 0}
           >
             {#each items ?? [] as it (it.id)}
               <option value={it.id}>{it.title}</option>
@@ -236,28 +291,11 @@
       </label>
       <label class="flex flex-col gap-1 text-sm">
         {m.events_task_name()}
-        <Input
-          bind:value={title}
-          required
-          disabled={busy || made !== undefined}
-          autocomplete="off"
-        />
+        <Input bind:value={title} required disabled={busy} autocomplete="off" />
       </label>
       {#if error !== undefined}
         <div role="alert" class="flex flex-col gap-1 text-sm text-destructive">
           <p>{error}</p>
-          {#if made !== undefined}
-            {@const task = made}
-            <a
-              class="underline"
-              href={itemTaskPath(workspaceId, task.item_id, task.id)}
-              onclick={(e: MouseEvent) => {
-                e.preventDefault();
-                close();
-                router.navigate(itemTaskPath(workspaceId, task.item_id, task.id));
-              }}>{m.events_task_open({ title: task.title })}</a
-            >
-          {/if}
         </div>
       {/if}
       <Dialog.Footer>
@@ -265,9 +303,14 @@
           >{m.events_task_cancel()}</Button
         >
         <Button type="submit" disabled={busy}>
-          {made === undefined ? m.events_task_create() : m.events_task_retry_date()}
+          {m.events_task_create()}
         </Button>
       </Dialog.Footer>
     </form>
+    <DiscardChangesConfirm
+      open={draft.leave.open}
+      onkeep={draft.leave.keep}
+      ondiscard={draft.discardAndLeave}
+    />
   </Dialog.Content>
 </Dialog.Root>

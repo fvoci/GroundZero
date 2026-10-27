@@ -1,11 +1,15 @@
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CalendarView, HomeTaskView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { myTasksView } from '../../stories/fixtures/personal';
+
+beforeEach(homeExtras);
 
 // 감사 W23: Up Next는 서버가 묶음마다 50개까지 주고 묶음별 전체 수(`up_next_counts`)를 함께 준다. 화면은 목록의
 // 길이가 아니라 그 수를 보이고, 잘렸으면 알린다.
@@ -14,11 +18,11 @@ afterEach(() => {
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -31,6 +35,7 @@ function task(n: number, due: string, bucket: HomeTaskView['bucket']): HomeTaskV
     reference: `DEV-${String(n)}`,
     title: `${bucket ?? ''} ${String(n)}`,
     status: 'todo',
+    status_category: 'todo',
     due_date: due,
     bucket,
   };
@@ -60,16 +65,20 @@ describe('home up next counts', () => {
       favorites: [],
     };
     vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.mocked(api.myTasks).mockResolvedValue(myTasksView(home));
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const headings = await screen.findAllByRole('heading', { level: 3 });
     const texts = headings.map((h) => h.textContent.replace(/\s+/g, ' ').trim());
     expect(texts).toContain('기한 지남 73');
     expect(texts).toContain('오늘 2');
-    expect(screen.getByText('마감이 이른 50개만 보입니다(모두 73개).')).toBeTruthy();
-    // 잘리지 않은 묶음에는 알림이 없다.
-    expect(screen.getAllByText(/개만 보입니다/)).toHaveLength(1);
+    expect(screen.getByRole('link', { name: '내 업무 모두 보기' })).toHaveAttribute(
+      'href',
+      '/tasks',
+    );
+    // 홈 미리보기 수(5)가 아니라 서버의 전체 수(73)를 표시한다.
+    expect(screen.getAllByRole('link', { name: /^overdue / })).toHaveLength(5);
   });
 });

@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -5,20 +6,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemProfileView, ItemView, SummaryView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
+import { openItemGroup, resetRoute } from './fixtures/item-groups';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
+  resetRoute();
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -102,6 +108,7 @@ describe('item screen results after switching items', () => {
   it('drops a late save of the previous item', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
@@ -117,7 +124,8 @@ describe('item screen results after switching items', () => {
     await settle();
 
     expect(heading()).toHaveTextContent('항목 B');
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    // 일반 완료는 토스트다(D-82). 앞 항목의 늦은 저장을 알리지 않는다.
+    expect(done).not.toHaveBeenCalled();
   });
 
   it('drops a late archive of the previous item', async () => {
@@ -171,6 +179,7 @@ describe('item screen results after switching items', () => {
   it('does not carry the previous item "saved" message over', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
@@ -178,11 +187,13 @@ describe('item screen results after switching items', () => {
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await screen.findByText('저장했습니다.');
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('저장했습니다.');
+    });
 
     await view.rerender({ workspace, itemId: 'B', workspaces: [workspace] });
     await screen.findByRole('heading', { name: '항목 B' });
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    expect(done).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -220,6 +231,7 @@ describe('item screen results after leaving and coming back to the same item', (
   it('drops a late save sent before leaving', async () => {
     await setLocale('ko', { reload: false });
     quietServer();
+    const done = vi.spyOn(feedback, 'notifyDone');
     vi.spyOn(api, 'item').mockImplementation((id: string) =>
       Promise.resolve(item(id === 'A' ? 'A' : 'B')),
     );
@@ -233,7 +245,8 @@ describe('item screen results after leaving and coming back to the same item', (
     write.resolve({ kind: 'updated', item: item('A') });
     await settle();
 
-    expect(screen.queryByText('저장했습니다.')).toBeNull();
+    // 일반 완료는 토스트다(D-82). 이 화면에서 하지 않은 저장을 알리지 않는다.
+    expect(done).not.toHaveBeenCalled();
   });
 
   it('drops a late save failure from before leaving', async () => {
@@ -310,6 +323,8 @@ describe('item screen results after leaving and coming back to the same item', (
     // 옮기기가 실패해도 목록은 다시 읽는다. 이 테스트는 그 다시 읽기만 본다.
     vi.spyOn(api, 'setParent').mockRejectedValue(new Error('conflict'));
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    // 항목 문서 목록은 문서 묶음에 있다(D-121).
+    await openItemGroup('문서');
     const rows = await screen.findAllByRole('treeitem');
     const second = rows[1];
     if (second === undefined) throw new Error('no second tree item');
@@ -319,6 +334,7 @@ describe('item screen results after leaving and coming back to the same item', (
     });
 
     await leaveAndComeBack(view, '항목 A');
+    await openItemGroup('문서');
     await screen.findByText('셋째 문서');
     // 떠나기 전에 읽은 옛 목록.
     reload.resolve(two);

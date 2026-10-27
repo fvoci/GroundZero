@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(homeExtras);
 
 // 홈을 받기 전(불러오는 중)이나 받지 못했을 때(실패) 고정·즐겨찾기·진행 중인 항목·알림 칸이 "없습니다"라고 말해,
 // 데이터를 받아 비어 있는 것처럼 읽혔다. 빈 칸 안내는 홈을 받은 뒤에만 보인다(Storybook Screens/Home에서 찾음).
@@ -22,15 +25,15 @@ beforeEach(async () => {
     dates: [],
     items: [],
   });
-  vi.spyOn(api, 'notifications').mockResolvedValue([]);
+  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };

@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "comments_heading": "댓글",
+  "comments_archived": "보관된 항목이라 쓸 수 없습니다.",
   "comments_load_failed": "댓글을 불러오지 못했습니다.",
   "comments_action_failed": "처리하지 못했습니다.",
   "comments_posted": "댓글을 달았습니다.",
@@ -26,5 +27,7 @@
   "comments_delete": "지우기",
   "comments_delete_confirm_label": "댓글 지우기 확인",
   "comments_delete_confirm": "이 댓글을 지울까요?",
-  "comments_loading": "불러오는 중…"
+  "comments_loading": "불러오는 중…",
+  "comments_discard_reply": "이 답글 입력을 버릴까요? 다른 댓글 입력은 남습니다.",
+  "comments_discard_edit": "이 댓글의 수정 입력을 버릴까요? 다른 댓글 입력은 남습니다."
 }

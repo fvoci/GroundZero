@@ -8,7 +8,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const running: TimeEntryView = {
+type Started = TimeEntryView & { stopped_entry_id: string | null };
+const running: Started = {
+  stopped_entry_id: null,
   id: 't1',
   started_at: '2026-10-19T00:00:00Z',
   ended_at: null,
@@ -48,7 +50,7 @@ describe('timer', () => {
   });
 
   it('does not let a read started during a start hide the started timer', async () => {
-    let resolveStart: (entry: TimeEntryView) => void = () => undefined;
+    let resolveStart: (entry: Started) => void = () => undefined;
     vi.spyOn(api, 'startTimer').mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -69,7 +71,7 @@ describe('timer', () => {
   it('shows the running timer when a later start fails while an earlier one succeeds', async () => {
     vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
     await timer.load();
-    let resolveFirst: (entry: TimeEntryView) => void = () => undefined;
+    let resolveFirst: (entry: Started) => void = () => undefined;
     vi.spyOn(api, 'startTimer')
       .mockImplementationOnce(
         () =>

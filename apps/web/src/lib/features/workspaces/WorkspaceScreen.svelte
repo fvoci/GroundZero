@@ -4,7 +4,9 @@
 
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import type { CreateFormContext } from '$lib/features/common/form-draft';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { moveThenReload } from '$lib/features/documents/tree';
   import { m } from '$lib/paraglide/messages.js';
@@ -40,6 +42,9 @@
       : undefined,
   );
   let templateId = $state('');
+  // 새 문서를 보내는 동안 템플릿 선택을 잠근다. 그 값도 초안(draftContext)이라 바꾸면 성공한 만들기를 버리고, 다시 내면
+  // 새 요청 id로 두 번째 문서가 생긴다.
+  let creating = $state(false);
   // 워크스페이스를 옮겨도 이 화면은 다시 만들어지지 않는다. 앞 워크스페이스에서 고른 템플릿으로 새 문서를 만들지 않게
   // 워크스페이스가 바뀌면 비운다(같은 워크스페이스의 정보만 새로 오면 그대로 둔다).
   let templateWorkspace: string | undefined;
@@ -49,10 +54,12 @@
     templateId = '';
   });
 
-  const canWrite = $derived(workspace.role !== 'readonly');
+  // 쓰기·관리 여부는 역할이 아니라 서버의 접근 등급(app_access)에서 온다(D-113).
+  const canWrite = $derived(workspace.access !== 'read');
 
   // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
   let realtime = $state(false);
+  // 바꾸기 실패 안내(성공은 토스트).
   let realtimeMessage = $state('');
   // 안내가 어느 워크스페이스의 것인지. 같은 워크스페이스의 새 값(바꾼 뒤 앱이 목록을 고침)으로는 안내를 지우지 않는다.
   let messageFor = '';
@@ -73,8 +80,12 @@
       await api.setWorkspaceRealtime(id, on);
       onrealtimechanged?.(id, on);
       if (workspace.id !== id) return;
-      messageFor = id;
-      realtimeMessage = on ? m.workspaces_realtime_on() : m.workspaces_realtime_off();
+      // 일반 완료는 토스트다(D-82). 화면 안 영역에는 앞선 실패만 남아 있었으므로 비운다.
+      realtimeMessage = '';
+      notifyDone(
+        on ? m.workspaces_realtime_on() : m.workspaces_realtime_off(),
+        'workspace-realtime',
+      );
     } catch (e: unknown) {
       if (workspace.id !== id) return;
       realtime = before;
@@ -93,7 +104,7 @@
   <p class="text-sm text-muted-foreground">
     {m.workspaces_admin_notice()}
   </p>
-  {#if workspace.role === 'admin'}
+  {#if workspace.access === 'owner'}
     <div class="flex flex-col gap-1 text-sm">
       <label class="flex items-center gap-2">
         <input
@@ -148,22 +159,32 @@
     />
   {/if}
   {#if canWrite}
-    <TemplatePicker workspaceId={workspace.id} id="new-document-template" bind:value={templateId} />
+    <TemplatePicker
+      workspaceId={workspace.id}
+      id="new-document-template"
+      bind:value={templateId}
+      disabled={creating}
+    />
     <CreateForm
       id="new-document"
+      draftName={`wiki-new:${workspace.id}`}
+      bind:draftContext={templateId}
+      bind:busy={creating}
       label={m.workspaces_new_doc_title()}
       placeholder={m.workspaces_new_doc_placeholder()}
       submitLabel={m.workspaces_create_doc()}
-      create={async (requestId: string, title: string) => {
+      create={async (requestId: string, title: string, context: CreateFormContext) => {
+        const workspaceId = workspace.id;
         const doc = await api.createWikiDocument(
-          workspace.id,
+          workspaceId,
           requestId,
           title,
           null,
           templateId === '' ? null : templateId,
         );
+        if (!context.saved()) return;
         workspaceNav.refreshDocs();
-        router.navigate(documentPath(workspace.id, doc.id));
+        router.navigate(documentPath(workspaceId, doc.id));
       }}
     />
   {/if}

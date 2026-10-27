@@ -5,6 +5,7 @@ import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -63,8 +64,8 @@ function mockPanel(...lists: RecordView[][]): void {
   vi.spyOn(api, 'members').mockResolvedValue({
     members: [],
     my_role: 'member',
-    i_am_owner: false,
     can_manage_members: false,
+    i_am_owner: false,
     pending_owner: null,
   });
   vi.spyOn(api, 'itemFiles').mockResolvedValue([]);

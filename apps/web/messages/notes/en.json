@@ -1,4 +1,5 @@
 {
+  "notes_organization_scope": "Documents shared with you in {name}",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "notes_shared_load_failed": "Couldn't load the list.",
   "notes_shared_heading": "Shared with me",

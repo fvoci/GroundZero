@@ -62,11 +62,9 @@ export const Board: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByTestId('task-board');
-    await expect(within(lane(canvasElement, 'todo')).getAllByRole('listitem')).toHaveLength(4);
-    await expect(within(lane(canvasElement, 'in_progress')).getAllByRole('listitem')).toHaveLength(
-      2,
-    );
-    await expect(within(lane(canvasElement, 'done')).getAllByRole('listitem')).toHaveLength(1);
+    await expect(within(lane(canvasElement, '할 일')).getAllByRole('listitem')).toHaveLength(4);
+    await expect(within(lane(canvasElement, '진행 중')).getAllByRole('listitem')).toHaveLength(2);
+    await expect(within(lane(canvasElement, '완료')).getAllByRole('listitem')).toHaveLength(1);
   },
 };
 
@@ -122,13 +120,15 @@ async function expectFocusOnFirst(canvasElement: HTMLElement): Promise<void> {
   );
 }
 
-/** 옮기면 카드가 먼저 옮겨지고 저장되면 확정·되돌리기 제안이 나온다. 초점은 옮긴 카드에 남는다. */
+/**
+ * 옮기면 카드가 먼저 옮겨지고 저장되면 확정된다. 완료와 되돌리기 단추는 토스트로 알린다(D-82, 이 이야기 밖의
+ * FeedbackHost). 초점은 옮긴 카드에 남는다.
+ */
 export const MoveSaved: Story = {
   play: async ({ canvasElement }) => {
     await moveFirstRight(canvasElement);
-    const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('button', { name: /되돌리기/ })).toBeInTheDocument();
-    await expect(within(lane(canvasElement, 'done')).getByText(FIRST.title)).toBeInTheDocument();
+    await waitFor(() => expect(canvasElement.querySelector('[data-save-state]')).toBeNull());
+    await expect(within(lane(canvasElement, '완료')).getByText(FIRST.title)).toBeInTheDocument();
     await expectFocusOnFirst(canvasElement);
   },
 };
@@ -159,9 +159,7 @@ export const SaveFailed: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('button', { name: '다시 시도' })).toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: '그대로 두기' })).toBeInTheDocument();
-    await expect(
-      within(lane(canvasElement, 'in_progress')).getByText(FIRST.title),
-    ).toBeInTheDocument();
+    await expect(within(lane(canvasElement, '진행 중')).getByText(FIRST.title)).toBeInTheDocument();
   },
 };
 
@@ -216,8 +214,26 @@ export const ManySameTitle: Story = {
           ...FIRST,
           id: `${FIRST.id}-${String(i)}`,
           reference: `DEVU-${String(100 + i)}`,
-          status: 'todo' as const,
+          status: '할 일',
         })),
       ),
   }),
+};
+export const LightDesktop: Story = {
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop', isRotated: false } },
+};
+export const DarkDesktop: Story = {
+  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop', isRotated: false } },
+};
+export const Light375: Story = {
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'narrow375', isRotated: false } },
+};
+export const Dark375: Story = {
+  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'narrow375', isRotated: false } },
+};
+export const Font200: Story = {
+  globals: { theme: 'light', fontScale: '200', viewport: { value: 'desktop', isRotated: false } },
+};
+export const Dark375Font200: Story = {
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375', isRotated: false } },
 };

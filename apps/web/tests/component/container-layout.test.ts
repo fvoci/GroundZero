@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import './fixtures/task-statuses';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -28,11 +30,11 @@ beforeEach(async () => {
 describe('multi-column layouts follow the content width', () => {
   it('splits the home dashboard by the container, not the window', async () => {
     const workspace: Workspace = {
+      access: 'owner',
       id: 'ws-1',
       organization_id: 'org-1',
       name: '공간',
       role: 'admin',
-      access: 'owner',
       is_owner: true,
       realtime_enabled: false,
     };
@@ -55,10 +57,10 @@ describe('multi-column layouts follow the content width', () => {
       dates: [],
       items: [],
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
-    const grid = document.querySelector('[aria-labelledby="up-next-heading"]')?.parentElement;
+    const grid = document.querySelector('[aria-labelledby="week-heading"]')?.parentElement;
     if (!(grid instanceof HTMLElement)) throw new Error('no dashboard grid');
     await waitFor(() => {
       expect(grid).toHaveClass('@2xl:grid-cols-2');
@@ -115,7 +117,7 @@ describe('content panels split by the content width', () => {
 // UI 감사: 업무 목록 보기의 여섯 칸 표가 좁은 화면에서 본문 밖으로 넘쳤다. 기록 표처럼 표만 가로로 스크롤한다.
 describe('task list table on narrow screens', () => {
   it('scrolls the table sideways instead of widening the page', async () => {
-    window.sessionStorage.setItem('fvoci:board:i1', JSON.stringify({ view: 'list' }));
+    window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'list' }));
     const item: ItemView = {
       id: 'i1',
       module_id: 'm1',

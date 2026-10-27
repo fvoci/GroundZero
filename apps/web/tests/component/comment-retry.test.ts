@@ -1,12 +1,19 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, NetworkError } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
+beforeEach(() => {
+  me.userId = 'user-a';
+  localStorage.clear();
+});
 afterEach(() => {
   vi.restoreAllMocks();
+  me.userId = '';
+  localStorage.clear();
 });
 
 // 응답을 잃은 뒤 글을 고쳐 다시 달면 새 요청 id여야 한다. 같은 id면 서버가 처음 댓글을 돌려줘 고친 글이 사라진다.
@@ -20,7 +27,7 @@ describe('comment retry', () => {
       .mockRejectedValueOnce(new NetworkError('lost'))
       .mockRejectedValueOnce(new NetworkError('lost'))
       .mockResolvedValue('c1');
-    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' } } });
+    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' }, canWrite: true } });
     const box = screen.getByLabelText(/새 댓글/);
     const submit = screen.getByRole('button', { name: '댓글 달기' });
 

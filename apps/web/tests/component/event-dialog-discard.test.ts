@@ -148,6 +148,7 @@ describe('closing the event dialog with unsaved input', () => {
     expect(confirmBox()).toBeNull();
   });
 
+  // F-4(R5 B): D-97 구현 해석과 업무 폼(`tasks/form.ts`의 `edited`)처럼 서버가 떼는 앞뒤 공백만 바뀐 것은 수정이 아니다.
   it('does not count spaces the server trims as a change', async () => {
     stub();
     const onclose = vi.fn();
@@ -157,6 +158,26 @@ describe('closing the event dialog with unsaved input', () => {
     field(m.events_title()).focus();
     await escape();
     expect(onclose).toHaveBeenCalledTimes(1);
+    expect(confirmBox()).toBeNull();
+    expect(Object.keys(localStorage).filter((key) => key.includes(':form-draft:'))).toEqual([]);
+  });
+
+  // 실제 수정이 있으면 초안은 서버가 떼기 전의 원문(앞뒤 공백 포함)을 남긴다(D-27).
+  it('keeps the raw spaced input in the draft when another field really changed', async () => {
+    stub();
+    const view = render(EventDialog, {
+      props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
+    });
+    await screen.findByDisplayValue('회의');
+    await typeTitle('  회의　');
+    await fireEvent.input(field(m.events_description()), { target: { value: '  안건 \n' } });
+    view.unmount();
+    render(EventDialog, {
+      props: { eventId: 'A', onclose: () => undefined, onchanged: () => undefined },
+    });
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+    expect(field(m.events_title()).value).toBe('  회의　');
+    expect(field(m.events_description()).value).toBe('  안건 \n');
   });
 
   it('asks before Escape drops a changed title, and Escape on the question keeps the input and focus', async () => {
@@ -433,7 +454,7 @@ describe('closing the event dialog with unsaved input', () => {
     expect(field(m.events_title()).value).toBe('내 제목');
   });
 
-  it('drops the question when another event opens, and does not close or carry over to it', async () => {
+  it('requires discarding before another event opens, and does not carry input over to it', async () => {
     stub();
     const onclose = vi.fn();
     const { reopen } = await open(onclose);
@@ -442,6 +463,10 @@ describe('closing the event dialog with unsaved input', () => {
     await escape();
     await findConfirm();
     await reopen('B');
+    expect(field(m.events_title()).value).toBe('새 회의');
+    await fireEvent.click(
+      within(await findConfirm()).getByRole('button', { name: m.common_discard_confirm() }),
+    );
     await screen.findByDisplayValue('다른 회의');
     await waitFor(() => {
       expect(confirmBox()).toBeNull();
@@ -453,3 +478,4 @@ describe('closing the event dialog with unsaved input', () => {
     expect(onclose).toHaveBeenCalledTimes(1);
   });
 });
+import './fixtures/event-user';

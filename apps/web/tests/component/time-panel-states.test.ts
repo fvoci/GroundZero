@@ -43,7 +43,7 @@ describe('time panels', () => {
       .spyOn(api, 'itemTime')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue({ estimate_minutes: 0, kinds: [] });
-    render(ItemTimePanel, { props: { itemId: 'i-1', moduleKind: 'project', canTrack: true } });
+    render(ItemTimePanel, { props: { itemId: 'i-1' } });
 
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toBeInTheDocument();

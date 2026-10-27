@@ -10,7 +10,12 @@
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { switchAccount } from '$lib/features/feedback/feedback.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
+  import {
+    accountSwitching,
+    markAccountSwitch,
+    switchAccount,
+  } from '$lib/features/feedback/feedback.svelte';
   import { uploadFile } from '$lib/features/files/upload';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { me } from '$lib/me.svelte';
@@ -214,7 +219,10 @@
         next.provider.disconnect();
         stopped = stop;
         if (!hasPending() || keepDraft()) switchAccount();
-        else accountUnsavedLost = true;
+        else {
+          accountUnsavedLost = true;
+          markAccountSwitch();
+        }
         return;
       }
       const kept = keepUnsaved();
@@ -271,7 +279,7 @@
   }
 
   // "편집 버리고 다시 연결"의 확인. 남기지 못한 편집이 있을 때만 그 단추를 보인다.
-  let confirmDiscard = $state(false);
+  const leaveGuard = createLeaveGuard({ dirty: () => true });
 
   /**
    * 남기지 못한 편집을 버리고 다시 연다. 버린 편집은 저장소에 쓰지 않고, 이미 남아 있는 초안(다른 문서·다른 계정·고를
@@ -279,7 +287,6 @@
    * (`handedOff`), 이 자리에서 다시 열면 버린 편집이 더는 반영되지 않은 편집으로 남지 않게 한다(그 뒤 새로 고친 것은 남긴다).
    */
   function discardAndReopen(): void {
-    confirmDiscard = false;
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
     title = savedTitle;
@@ -313,18 +320,37 @@
   }
 
   open();
-  // 창을 떠나거나 다시 읽을 때(계정 전환으로 다시 읽기 포함: 저장 API의 409 `account_changed`, 창 복귀 확인) 반영되지 않은
-  // 편집을 초안으로 남긴다. 남기지 못하면(저장 공간 부족 등) 떠나기를 경고해 화면의 내용을 지킨다.
+  // 창 초점 확인에서 계정 변경을 알았을 때도 별도 WebSocket 재연결을 멈춘다(D-96).
+  $effect(() => {
+    if (!accountSwitching()) return;
+    untrack(() => {
+      keepIfDirty();
+      if (keepTimer !== undefined) clearTimeout(keepTimer);
+      keepTimer = undefined;
+      stopped = 'account';
+      session?.provider.disconnect();
+    });
+  });
+  // 서버에 반영되지 않은(확인 응답 전) 편집이 있으면 앱 안 이동과 창 닫기를 다른 폼과 같은 규칙으로 경고하고 초안을 남긴다(D-27
+  // 개정 2026-10-27, #141 R8 A). 반영 대기가 없으면 묻지 않는다. 떠나도 반영되지 않은 편집은 초안으로 남는다(`keepIfDirty`).
+  // 계정 전환으로 다시 읽을 때(저장 API의 409 `account_changed`, 창 복귀 확인)는 초안을 남겼으면 막지 않고, 남기지
+  // 못했으면(저장 공간 부족 등) 경고해 화면의 내용을 지킨다(D-96). 부모에게 맡긴 뒤로는 남기지도 묻지도 않는다(맡길 때
+  // 남겼거나 버렸다).
+  let leaveKept = $state(true);
+  const navigationGuard = createLeaveGuard({
+    dirty: () => !handedOff && !accountSwitching() && hasPending(),
+    onAsk: () => {
+      leaveKept = keepDraft();
+    },
+  });
   onMount(() => {
-    const beforeUnload = (event: BeforeUnloadEvent): void => {
-      // 부모에게 맡긴 뒤로는 남기지 않는다(맡길 때 남겼거나 버렸다). 남기면 다시 열 때 또 나온다.
-      if (handedOff || !hasPending() || keepDraft()) return;
-      event.preventDefault();
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', beforeUnload);
-    };
+    return navigationGuard.attach({
+      beforeUnload: () => {
+        if (handedOff || !hasPending()) return false;
+        const kept = keepDraft();
+        return !leavingWithDrafts() || !kept;
+      },
+    });
   });
   onDestroy(() => {
     if (!handedOff) keepIfDirty();
@@ -460,7 +486,7 @@
           variant="ghost"
           disabled={handedOff}
           onclick={() => {
-            confirmDiscard = true;
+            leaveGuard.request(discardAndReopen);
           }}>{m.documents_live_discard_reconnect()}</Button
         >
       {/if}
@@ -494,11 +520,10 @@
   </form>
   {#if unsaved === 'lost'}
     <p role="alert" class="text-sm text-destructive">{m.documents_live_unsaved_lost()}</p>
-  {:else if unsaved === 'kept' && found === undefined}
-    <p role="status" aria-live="polite" class="text-sm text-destructive">
-      {m.documents_live_unsaved_kept()}
-    </p>
   {/if}
+  <p role="status" aria-live="polite" class="text-sm text-destructive empty:hidden">
+    {#if unsaved === 'kept' && found === undefined}{m.documents_live_unsaved_kept()}{/if}
+  </p>
   {#if found !== undefined}
     <div
       class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
@@ -526,6 +551,7 @@
   {#if session !== undefined}
     {#key epoch}
       <TiptapEditor
+        draftName={start.id}
         content={start.body}
         editable={start.can_edit && stopped === undefined && !handedOff}
         label={m.documents_body_label()}
@@ -542,13 +568,24 @@
     {m.documents_live_hint()}
   </p>
   <DiscardChangesConfirm
-    open={confirmDiscard}
+    open={leaveGuard.open}
     description={m.documents_live_discard_description()}
     confirmLabel={m.documents_live_discard_reconnect()}
     onkeep={() => {
-      confirmDiscard = false;
+      leaveGuard.keep();
     }}
-    ondiscard={discardAndReopen}
+    ondiscard={leaveGuard.discard}
     returnFocus={() => document.getElementById('live-discard-reconnect')}
+  />
+  <DiscardChangesConfirm
+    open={navigationGuard.open}
+    description={leaveKept
+      ? m.documents_live_leave_description()
+      : m.documents_live_leave_lost_description()}
+    confirmLabel={m.documents_live_leave()}
+    onkeep={() => {
+      navigationGuard.keep();
+    }}
+    ondiscard={navigationGuard.discard}
   />
 </section>

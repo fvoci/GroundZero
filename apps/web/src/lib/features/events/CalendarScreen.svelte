@@ -36,8 +36,12 @@
     onchanged?: () => void;
     /** 항목 범위에서 날짜 칸으로 업무를 만들 항목. 쓸 수 없으면 만들기 단추를 보이지 않는다. */
     item?: ItemView | undefined;
-    /** 날짜 칸에서 업무를 만들었다(같은 화면의 업무 목록이 다시 읽게). */
-    ontaskcreated?: () => void;
+    /**
+     * 범위의 항목이나 모듈이 보관됐다. 항목·모듈 등급은 보관을 반영하지 않으므로(D-113) 업무 만들기를 감춘다(서버도
+     * 55000으로 거부한다). 일정은 서버가 보관을 반영해 일정 등급을 read로 내려 보내므로(`app_grade_under_item`) 그
+     * 등급(EventDialog `canEdit`)으로 고치기가 감춰진다. 이 값은 함께 넘겨 같은 결과를 겹쳐 둔다.
+     */
+    locked?: boolean;
   }
 
   const {
@@ -47,14 +51,15 @@
     version = 0,
     onchanged,
     item,
-    ontaskcreated,
+    locked = false,
   }: Props = $props();
 
   // 날짜 칸에서 업무 만들기(D-31·D-80). 항목 범위면 그 항목(쓸 수 있을 때만), 모듈·워크스페이스 범위면 창에서 고른다.
   const canCreate = $derived(
-    scope?.itemId === undefined
-      ? true
-      : item !== undefined && item.access !== 'read' && !item.archived && !item.is_template,
+    !locked &&
+      (scope?.itemId === undefined
+        ? true
+        : item !== undefined && item.access !== 'read' && !item.archived && !item.is_template),
   );
   let createDay = $state<string | undefined>(undefined);
   let root = $state<HTMLElement | undefined>(undefined);
@@ -373,7 +378,6 @@
     // 업무는 만들었지만 마감일을 넣지 못한 채 닫았다: 그 업무가 보이게 다시 읽는다.
     if (created) {
       reloadKey += 1;
-      ontaskcreated?.();
     }
     if (day !== undefined) void focusCreate(day);
   }}
@@ -389,12 +393,12 @@
       }),
     );
     reloadKey += 1;
-    ontaskcreated?.();
   }}
 />
 
 <EventDialog
   eventId={openEvent}
+  {locked}
   occurrence={openOccurrence}
   onclose={() => (openEvent = undefined)}
   onchanged={() => {

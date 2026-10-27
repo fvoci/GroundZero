@@ -3,13 +3,14 @@
 // 같을 때만 건너뛴다. 조각마다 SHA-256을 함께 보내 서버가 확인한다.
 import type { FileTarget, UploadView } from '$lib/api/client';
 import { api, ApiError, NetworkError } from '$lib/api/client';
+import { scopedKey } from '$lib/storage';
 
 export interface UploadProgress {
   sent: number;
   total: number;
 }
 
-const STORE = 'fvoci.uploads';
+const STORE = 'uploads';
 
 /** n번째 조각(1부터)의 [시작, 끝) 바이트. */
 export function partRange(n: number, chunk: number, size: number): [number, number] {
@@ -42,9 +43,11 @@ async function sha256Hex(blob: Blob): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function readStore(): Record<string, string> {
+function readStore(userId: string): Record<string, string> {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(STORE) ?? '{}');
+    const raw: unknown = JSON.parse(
+      localStorage.getItem(scopedKey(STORE, userId, undefined)) ?? '{}',
+    );
     if (typeof raw !== 'object' || raw === null) return {};
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(raw)) if (typeof v === 'string') out[k] = v;
@@ -54,43 +57,45 @@ function readStore(): Record<string, string> {
   }
 }
 
-function writeStore(next: Record<string, string>): void {
+function writeStore(userId: string, next: Record<string, string>): void {
   try {
-    localStorage.setItem(STORE, JSON.stringify(next));
+    localStorage.setItem(scopedKey(STORE, userId, undefined), JSON.stringify(next));
   } catch {
     // 저장할 수 없으면 이어 올리기만 못 한다.
   }
 }
 
-function remember(key: string): string {
-  const store = readStore();
+function remember(userId: string, key: string): string {
+  const store = readStore(userId);
   const existing = store[key];
   if (existing !== undefined) return existing;
   const id = crypto.randomUUID();
-  writeStore({ ...store, [key]: id });
+  writeStore(userId, { ...store, [key]: id });
   return id;
 }
 
-function forget(key: string): void {
-  const store = readStore();
+function forget(userId: string, key: string): void {
+  const store = readStore(userId);
   if (key in store) {
-    writeStore(Object.fromEntries(Object.entries(store).filter(([k]) => k !== key)));
+    writeStore(userId, Object.fromEntries(Object.entries(store).filter(([k]) => k !== key)));
   }
 }
 
 // 업로드마다 서버에 보낸 조각의 SHA-256(조각 번호 → 해시)과 그 업로드의 기한. 이어 올릴 때 서버가 받은 조각이 지금
 // 파일의 그 부분과 같은지 확인한다. 이름·크기·수정 시각이 같아도 내용이 다를 수 있다. 기한이 지난 업로드는 이어 올릴
 // 수 없으므로 그 해시는 다음에 적을 때 버린다(그만둔 업로드가 저장소에 쌓이지 않게).
-const PARTS = 'fvoci.upload-parts';
+const PARTS = 'upload-parts';
 
 interface SentParts {
   expires: string;
   hashes: Record<string, string>;
 }
 
-function readParts(): Record<string, SentParts> {
+function readParts(userId: string): Record<string, SentParts> {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(PARTS) ?? '{}');
+    const raw: unknown = JSON.parse(
+      localStorage.getItem(scopedKey(PARTS, userId, undefined)) ?? '{}',
+    );
     if (typeof raw !== 'object' || raw === null) return {};
     const out: Record<string, SentParts> = {};
     const entries = (o: object): [string, unknown][] => Object.entries(o);
@@ -109,28 +114,28 @@ function readParts(): Record<string, SentParts> {
   }
 }
 
-function writeParts(next: Record<string, SentParts>): void {
+function writeParts(userId: string, next: Record<string, SentParts>): void {
   try {
-    localStorage.setItem(PARTS, JSON.stringify(next));
+    localStorage.setItem(scopedKey(PARTS, userId, undefined), JSON.stringify(next));
   } catch {
     // 적지 못한 조각은 이어 올릴 때 다시 보낸다.
   }
 }
 
-function recordPart(up: UploadView, n: number, hash: string): void {
+function recordPart(userId: string, up: UploadView, n: number, hash: string): void {
   const now = Date.now();
-  const live = Object.entries(readParts()).filter(([, e]) => Date.parse(e.expires) > now);
+  const live = Object.entries(readParts(userId)).filter(([, e]) => Date.parse(e.expires) > now);
   const all = Object.fromEntries(live);
-  writeParts({
+  writeParts(userId, {
     ...all,
     [up.id]: { expires: up.expires_at, hashes: { ...all[up.id]?.hashes, [String(n)]: hash } },
   });
 }
 
-function forgetParts(uploadId: string): void {
-  const all = readParts();
+function forgetParts(userId: string, uploadId: string): void {
+  const all = readParts(userId);
   if (uploadId in all) {
-    writeParts(Object.fromEntries(Object.entries(all).filter(([k]) => k !== uploadId)));
+    writeParts(userId, Object.fromEntries(Object.entries(all).filter(([k]) => k !== uploadId)));
   }
 }
 
@@ -170,7 +175,7 @@ export async function uploadFile(
   const start = (): Promise<UploadView> =>
     api.createUpload({
       expectedUser: opts.expectedUser,
-      requestId: remember(key),
+      requestId: remember(opts.expectedUser, key),
       ...(opts.target === undefined ? {} : { target: opts.target }),
       ...(opts.fileId === undefined ? {} : { fileId: opts.fileId }),
       name: file.name,
@@ -180,21 +185,21 @@ export async function uploadFile(
     });
   let up = await start();
   if (up.state === 'done') {
-    forget(key);
-    forgetParts(up.id);
+    forget(opts.expectedUser, key);
+    forgetParts(opts.expectedUser, up.id);
     return up;
   }
   if (up.state === 'completing') {
     // 앞선 마치기가 끊겼다: 다시 올리지 않고 결과를 기다린다.
     const done = await finish(up.id);
-    forget(key);
-    forgetParts(up.id);
+    forget(opts.expectedUser, key);
+    forgetParts(opts.expectedUser, up.id);
     return done;
   }
   if (up.state !== 'uploading' || Date.parse(up.expires_at) <= Date.now()) {
     // 기한이 지났거나 그만둔 업로드면 새로 시작한다.
-    forget(key);
-    forgetParts(up.id);
+    forget(opts.expectedUser, key);
+    forgetParts(opts.expectedUser, up.id);
     up = await start();
   }
   const id = up.id;
@@ -204,19 +209,25 @@ export async function uploadFile(
       await sendParts(file, up, opts);
       try {
         const done = await finish(id);
-        forget(key);
-        forgetParts(id);
+        forget(opts.expectedUser, key);
+        forgetParts(opts.expectedUser, id);
         return done;
       } catch (e: unknown) {
-        if (!(e instanceof ApiError) || e.status !== 409 || round >= 1) throw e;
+        if (
+          !(e instanceof ApiError) ||
+          e.status !== 409 ||
+          e.code === 'account_changed' ||
+          round >= 1
+        )
+          throw e;
         up = await api.upload(id);
         if (up.state !== 'uploading') throw e;
       }
     }
   } catch (e: unknown) {
     if (opts.signal?.aborted === true) {
-      forget(key);
-      forgetParts(id);
+      forget(opts.expectedUser, key);
+      forgetParts(opts.expectedUser, id);
       await api.abortUpload(id).catch(() => undefined);
     }
     throw e;
@@ -226,11 +237,11 @@ export async function uploadFile(
 async function sendParts(
   file: File,
   up: UploadView,
-  opts: { onProgress?: (p: UploadProgress) => void; signal?: AbortSignal },
+  opts: { expectedUser: string; onProgress?: (p: UploadProgress) => void; signal?: AbortSignal },
 ): Promise<void> {
   // 서버가 받은 조각은 이 브라우저가 보낸 해시와 지금 파일의 그 부분이 같을 때만 건너뛴다. 나머지는 다시 보낸다
   // (같은 번호를 다시 보내면 서버가 바꾼다).
-  const known = readParts()[up.id]?.hashes ?? {};
+  const known = readParts(opts.expectedUser)[up.id]?.hashes ?? {};
   const trusted: number[] = [];
   for (const n of up.received) {
     opts.signal?.throwIfAborted();
@@ -252,7 +263,7 @@ async function sendParts(
     const piece = file.slice(from, to);
     const hash = await sha256Hex(piece);
     await withRetry(() => api.putUploadPart(up.id, n, piece, hash), opts.signal);
-    recordPart(up, n, hash);
+    recordPart(opts.expectedUser, up, n, hash);
     sent += to - from;
     opts.onProgress?.({ sent: Math.min(file.size, sent), total: file.size });
   }
@@ -264,7 +275,12 @@ async function finish(id: string): Promise<UploadView> {
     try {
       return await api.completeUpload(id);
     } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 409 && attempt < 20) {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        e.code !== 'account_changed' &&
+        attempt < 20
+      ) {
         const now = await api.upload(id);
         if (now.state === 'done') return now;
         if (now.state === 'completing') {

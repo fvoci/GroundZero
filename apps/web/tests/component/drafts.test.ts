@@ -12,6 +12,10 @@ import {
   withoutApplied,
 } from '$lib/features/documents/drafts';
 import { me } from '$lib/me.svelte';
+import { org } from '$lib/org.svelte';
+import { scopedKey } from '$lib/storage';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 const body = { type: 'doc', content: [{ type: 'paragraph' }] };
 const draft = { baseRevision: 3, title: 'A의 초안', body, savedAt: '2026-10-19T00:00:00Z' };
@@ -36,15 +40,41 @@ describe('drafts are per user', () => {
     expect(loadDraft('doc-1')?.title).toBe('A의 초안');
   });
 
-  it('drops drafts stored without a user and keeps nothing before login', () => {
+  // R5 P2 F-3(⑱·D-27): 문서 초안은 사용자·탭·문서로만 묶는다. 개인 노트는 조직과 무관하므로, 한 조직에서 남긴 초안을
+  // 다른 조직이나 조직을 고르지 않은 문맥에서도 되살릴 수 있고, 편집 중 조직 선택이 바뀌어도 같은 키에 쓴다.
+  it('keeps the same draft across organization contexts', () => {
+    const second = { ...TEST_ORGANIZATION, id: 'org-2' };
+    org.load('user-a', [TEST_ORGANIZATION, second], TEST_ORGANIZATION.id);
+    me.userId = 'user-a';
+    storeDraft('doc-note', draft);
+    org.select(second.id);
+    expect(loadDraft('doc-note')?.title).toBe('A의 초안');
+    storeDraft('doc-note', { ...draft, title: '조직을 바꾼 뒤' });
+    org.load('user-a', [TEST_ORGANIZATION, second], null);
+    expect(org.currentId).toBeUndefined();
+    expect(loadDraft('doc-note')?.title).toBe('조직을 바꾼 뒤');
+    expect(
+      Object.keys(window.localStorage).filter(
+        (k) => k.includes(':draft:') && k.includes('doc-note'),
+      ),
+    ).toHaveLength(1);
+    expect(queueDraft('doc-note').map((d) => d.title)).toEqual(['조직을 바꾼 뒤']);
+  });
+
+  it('ignores legacy keys and keeps nothing before login', () => {
     window.localStorage.setItem('fvoci:draft:doc-2', JSON.stringify(draft));
     me.userId = 'user-b';
     expect(loadDraft('doc-2')).toBeUndefined();
-    expect(window.localStorage.getItem('fvoci:draft:doc-2')).toBeNull();
+    expect(window.localStorage.getItem('fvoci:draft:doc-2')).not.toBeNull();
 
     me.userId = '';
+    const storageEntries = () =>
+      Object.keys(window.localStorage)
+        .sort()
+        .map((key) => ({ key, value: window.localStorage.getItem(key) }));
+    const beforeAnonymousWrite = storageEntries();
     storeDraft('doc-3', draft);
-    expect(window.localStorage.length).toBe(0);
+    expect(storageEntries()).toEqual(beforeAnonymousWrite);
   });
 });
 
@@ -117,7 +147,7 @@ describe('drafts per tab', () => {
 describe('orphaned tab drafts', () => {
   it('adopts only drafts of tabs that are no longer alive', async () => {
     me.userId = 'user-a';
-    const prefix = 'fvoci:draft:user-a:doc-8';
+    const prefix = scopedKey('draft:doc-8', 'user-a', undefined);
     window.localStorage.setItem(
       `${prefix}:tab:tab-live`,
       JSON.stringify({ ...draft, title: '살아 있는 탭' }),
@@ -186,7 +216,7 @@ describe('two tabs queueing at once', () => {
     ) {
       if (this === window.sessionStorage) return fromSession(k);
       const value = fromLocal(k);
-      if (armed && k.startsWith('fvoci:draft:user-a:doc-7')) {
+      if (armed && k.startsWith(scopedKey('draft:doc-7', 'user-a', undefined))) {
         armed = false;
         window.sessionStorage.setItem('fvoci:tab', 'tab-b');
         queueDraft('doc-7');
@@ -205,27 +235,12 @@ describe('two tabs queueing at once', () => {
   });
 });
 
-describe('queue stored by an older version', () => {
-  it('reads the old single-key list and moves it to per-draft keys', () => {
-    me.userId = 'user-a';
-    const old = [
-      { ...draft, title: '옛 첫째', savedAt: '2026-10-19T00:00:01Z' },
-      { ...draft, title: '옛 둘째', savedAt: '2026-10-19T00:00:02Z' },
-    ];
-    window.localStorage.setItem('fvoci:draft:user-a:doc-8:offers', JSON.stringify(old));
-    expect(loadOffers('doc-8').map((d) => d.title)).toEqual(['옛 첫째', '옛 둘째']);
-    expect(window.localStorage.getItem('fvoci:draft:user-a:doc-8:offers')).toBeNull();
-    removeOffer('doc-8', old[0] ?? draft);
-    expect(loadOffers('doc-8').map((d) => d.title)).toEqual(['옛 둘째']);
-  });
-});
-
 // 검토 4번: 탭 복제는 sessionStorage(탭 id)까지 복사한다. 원래 탭이 살아 있으면 복제한 탭은 새 탭 id를 써야 한다
 // (같은 id면 두 탭이 같은 초안 키를 서로 덮어쓴다).
 describe('duplicated tab', () => {
   it('takes a new tab id when a live tab already holds this one', async () => {
     window.sessionStorage.setItem('fvoci:tab', 'tab-1');
-    const prefix = 'fvoci:draft:user-a:doc-10';
+    const prefix = scopedKey('draft:doc-10', 'user-a', undefined);
     window.localStorage.setItem(
       `${prefix}:tab:tab-1`,
       JSON.stringify({ ...draft, title: '원래 탭' }),
@@ -254,84 +269,5 @@ describe('duplicated tab', () => {
     } finally {
       Reflect.deleteProperty(navigator, 'locks');
     }
-  });
-});
-
-// 검토(2차) 4번: 옛 목록을 옮기다 저장소가 가득 차 일부만 옮겼으면, 옮긴 것은 옛 목록에서 빠져야 한다(남으면 다음에
-// 읽을 때 다시 옮겨, 버린 초안이 되살아난다). 옮긴 옛 초안은 그 뒤에 더한 것보다 앞에 둔다.
-describe('partial move of an old queue', () => {
-  it('does not bring back a dismissed draft and keeps old drafts first', () => {
-    me.userId = 'user-a';
-    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
-    const old = [
-      { ...draft, title: '옛 첫째', savedAt: '2026-10-19T00:00:01Z' },
-      { ...draft, title: '옛 둘째', savedAt: '2026-10-19T00:00:02Z' },
-    ];
-    window.localStorage.setItem('fvoci:draft:user-a:doc-11:offers', JSON.stringify(old));
-    storeDraft('doc-11', { ...draft, title: '새 초안', savedAt: '2026-10-19T00:00:03Z' });
-    queueDraft('doc-11');
-    // 옛 목록을 옮길 때 둘째 쓰기만 실패한다.
-    const original = Storage.prototype.setItem.bind(window.localStorage);
-    let offerWrites = 0;
-    const setItem = vi
-      .spyOn(Storage.prototype, 'setItem')
-      .mockImplementation((k: string, v: string) => {
-        if (k.includes(':offer:') && ++offerWrites === 2) {
-          throw new DOMException('full', 'QuotaExceededError');
-        }
-        original(k, v);
-      });
-    loadOffers('doc-11');
-    setItem.mockRestore();
-    removeOffer('doc-11', old[0] ?? draft);
-    expect(loadOffers('doc-11').map((d) => d.title)).toEqual(['옛 둘째', '새 초안']);
-  });
-});
-
-// 검토(3차) 3번: 옛 목록을 일부만 옮긴 뒤 새로고침하면(같은 밀리초 순번이 처음부터) 나머지가 앞의 것보다 앞에 오면 안
-// 된다. 순서가 무작위 id에 달리지 않게 여러 문서로 본다.
-describe('old queue moved across a reload', () => {
-  it('keeps the old order when the move finishes after a reload', async () => {
-    window.sessionStorage.setItem('fvoci:tab', 'tab-1');
-    const docs = Array.from({ length: 8 }, (_, i) => `doc-r${String(i)}`);
-    const old = [
-      { ...draft, title: '옛 첫째', savedAt: '2026-10-19T00:00:01Z' },
-      { ...draft, title: '옛 둘째', savedAt: '2026-10-19T00:00:02Z' },
-    ];
-    for (const doc of docs) {
-      window.localStorage.setItem(`fvoci:draft:user-a:${doc}:offers`, JSON.stringify(old));
-    }
-    // 첫 페이지: 옮기다 둘째 쓰기에서 저장소가 가득 찬다.
-    let fresh = await import('$lib/features/documents/drafts');
-    let who = await import('$lib/me.svelte');
-    who.me.userId = 'user-a';
-    const original = Storage.prototype.setItem.bind(window.localStorage);
-    let full = false;
-    const setItem = vi
-      .spyOn(Storage.prototype, 'setItem')
-      .mockImplementation((k: string, v: string) => {
-        if (full && k.includes(':offer:')) throw new DOMException('full', 'QuotaExceededError');
-        original(k, v);
-      });
-    for (const doc of docs) {
-      full = false;
-      // 첫 초안을 옮긴 뒤부터 가득 찬다.
-      setItem.mockImplementation((k: string, v: string) => {
-        if (full && k.includes(':offer:')) throw new DOMException('full', 'QuotaExceededError');
-        original(k, v);
-        if (k.includes(':offer:')) full = true;
-      });
-      fresh.loadOffers(doc);
-    }
-    setItem.mockRestore();
-    // 새로고침: 모듈을 새로 읽는다.
-    vi.resetModules();
-    fresh = await import('$lib/features/documents/drafts');
-    who = await import('$lib/me.svelte');
-    who.me.userId = 'user-a';
-    for (const doc of docs) {
-      expect(fresh.loadOffers(doc).map((d) => d.title)).toEqual(['옛 첫째', '옛 둘째']);
-    }
-    who.me.userId = '';
   });
 });

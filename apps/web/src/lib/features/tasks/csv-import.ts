@@ -4,7 +4,8 @@
 // 보낸다(응답을 잃은 만들기가 서버에 반영됐으면 그 업무를 돌려받고 새로 만들지 않는다).
 import type { TaskView } from '$lib/api/client';
 import { newRequestId } from '$lib/api/client';
-import { canonicalJson } from '$lib/features/documents/drafts';
+import { canonicalJson, tabId } from '$lib/features/documents/drafts';
+import { readLocal, writeLocal } from '$lib/storage';
 
 import type { TaskRow } from './csv';
 
@@ -30,6 +31,104 @@ export interface RowPair {
 
 export interface RowStep extends RowPair {
   progress: RowProgress;
+}
+
+/** #84: 요청을 보내기 전 id를 저장한다. 응답을 못 받아도 같은 id로 재개한다. */
+export function importTabKey(key: string): string {
+  return `${key}:tab:${tabId()}`;
+}
+
+export function saveImport(key: string, text: string, rows: readonly RowProgress[]): boolean {
+  const raw =
+    text === '' && rows.length === 0
+      ? null
+      : JSON.stringify({ text, rows, savedAt: new Date().toISOString() });
+  writeLocal(importTabKey(key), raw);
+  return readLocal(importTabKey(key)) === raw;
+}
+
+export function restoreImport(key: string): { text: string; rows: RowProgress[] } {
+  const value = parseImport(readLocal(importTabKey(key)));
+  return value === undefined ? { text: '', rows: [] } : { text: value.text, rows: value.rows };
+}
+
+export interface ImportDraft {
+  key: string;
+  value: { text: string; rows: RowProgress[]; savedAt: string };
+}
+
+function parseImport(rawText: string | null): ImportDraft['value'] | undefined {
+  try {
+    const raw: unknown = JSON.parse(rawText ?? 'null');
+    if (
+      typeof raw !== 'object' ||
+      raw === null ||
+      !('text' in raw) ||
+      typeof raw.text !== 'string' ||
+      !('rows' in raw) ||
+      !Array.isArray(raw.rows)
+    )
+      return undefined;
+    const rows: RowProgress[] = [];
+    for (const value of raw.rows) {
+      const row: unknown = value;
+      if (
+        typeof row !== 'object' ||
+        row === null ||
+        !('requestId' in row) ||
+        typeof row.requestId !== 'string' ||
+        !('title' in row) ||
+        typeof row.title !== 'string'
+      )
+        return undefined;
+      const applied = 'applied' in row ? row.applied : undefined;
+      if (applied !== undefined && typeof applied !== 'string') return undefined;
+      rows.push({ requestId: row.requestId, title: row.title, applied });
+    }
+    return {
+      text: raw.text,
+      rows,
+      savedAt: 'savedAt' in raw && typeof raw.savedAt === 'string' ? raw.savedAt : '',
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** 이전 탭과 현재 탭의 보류 입력을 함께 제안한다. 읽는 것만으로 다른 탭의 키를 바꾸지 않는다. */
+export function listImportDrafts(key: string): ImportDraft[] {
+  const entries: ImportDraft[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const candidate = localStorage.key(i);
+      if (
+        candidate === null ||
+        !(candidate.startsWith(`${key}:tab:`) || candidate.startsWith(`${key}:held:`))
+      )
+        continue;
+      const value = parseImport(readLocal(candidate));
+      if (value !== undefined && (value.text !== '' || value.rows.length > 0))
+        entries.push({ key: candidate, value });
+    }
+  } catch {
+    return [];
+  }
+  return entries.sort((a, b) => b.value.savedAt.localeCompare(a.value.savedAt));
+}
+
+/** 현재 탭의 기존 입력만 보류 키로 옮긴다. 실패하면 원본 키를 예약해 둔다. */
+export function holdImportDraft(key: string, entry: ImportDraft): ImportDraft {
+  if (entry.key !== importTabKey(key)) return entry;
+  const held = `${key}:held:${crypto.randomUUID()}`;
+  const raw = JSON.stringify(entry.value);
+  writeLocal(held, raw);
+  if (readLocal(held) !== raw) return entry;
+  writeLocal(entry.key, null);
+  return { key: held, value: entry.value };
+}
+
+export function removeImportDraft(key: string): void {
+  writeLocal(key, null);
 }
 
 /**

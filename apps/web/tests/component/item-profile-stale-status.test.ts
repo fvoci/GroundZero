@@ -1,11 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import { m } from '$lib/paraglide/messages.js';
+import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
+import './fixtures/authenticated';
+
+vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
+  notifyDone: vi.fn(),
+}));
 
 // 앞서 저장에 성공한 안내("항목 정보를 저장했습니다.")가 다음 저장의 409 알림 옆에 남으면, 입력이 저장된 것처럼 보여 보존한
 // 입력을 두고 떠나게 한다(실제 브라우저 확인 w-browser2 B에서 드러남). 저장을 보낼 때 앞선 안내를 지운다.
@@ -62,6 +70,7 @@ function serve(replies: [number, unknown][]): void {
 }
 
 beforeEach(async () => {
+  vi.mocked(notifyDone).mockClear();
   await setLocale('ko', { reload: false });
   Element.prototype.hasPointerCapture = (): boolean => false;
   Element.prototype.setPointerCapture = (): void => undefined;
@@ -86,7 +95,9 @@ describe('item profile status line', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByText('항목 정보를 저장했습니다.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(notifyDone).toHaveBeenCalledWith('항목 정보를 저장했습니다.');
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
@@ -215,7 +226,9 @@ describe('item profile status line', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByText('항목 정보를 저장했습니다.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(notifyDone).toHaveBeenCalledWith('항목 정보를 저장했습니다.');
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     const start = document.querySelector<HTMLInputElement>('#item-starts');
@@ -226,5 +239,72 @@ describe('item profile status line', () => {
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await screen.findByText(m.modules_period_invalid());
     expect(screen.queryByText('항목 정보를 저장했습니다.')).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: '고치기' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // FC-8: 저장하는 동안 취소는 잠겨 있다(D-97). jsdom은 비활성 단추에도 click을 보내므로 "저장 중 취소 뒤 늦은 오류"는
+  // 브라우저에서 닿지 않는 경로였다. 닿는 경로는 늦은 실패가 열린 폼에 남고, 풀린 뒤의 취소·새 편집이 그 오류를 지우는 것이다.
+  it('keeps cancel locked while saving and clears the late error on cancel and a new edit', async () => {
+    vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
+    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    let fail: (e: Error) => void = () => undefined;
+    const save = vi.spyOn(api, 'setItemProfile').mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledOnce();
+    });
+    expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+    await act(() => {
+      fail(new Error('late failure'));
+    });
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '취소' })).not.toBeDisabled();
+    await fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    // 고친 칸이 없으므로 묻지 않고 닫는다.
+    expect(screen.queryByRole('button', { name: m.common_discard_confirm() })).toBeNull();
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+it('restores all profile text and the original base only for the original account', async () => {
+  vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
+  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  const save = vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
+  const view = render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
+  await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+  const goal = document.querySelector<HTMLTextAreaElement>('#item-goal');
+  if (goal === null) throw new Error('goal');
+  await fireEvent.input(goal, { target: { value: '긴 목표\n다음 줄' } });
+  view.unmount();
+  me.userId = 'other-account';
+  const other = render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
+  await screen.findByRole('button', { name: '고치기' });
+  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  other.unmount();
+  me.userId = 'user-a';
+  vi.mocked(api.itemProfile).mockResolvedValue({ ...profile, version: 9 });
+  render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(document.querySelector('#item-goal')).toHaveValue('긴 목표\n다음 줄');
+  expect(save).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(save).toHaveBeenCalledWith(
+      item.id,
+      1,
+      expect.objectContaining({ goal: '긴 목표\n다음 줄' }),
+    );
   });
 });

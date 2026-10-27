@@ -9,6 +9,8 @@ import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { m } from '$lib/paraglide/messages.js';
+import { router } from '$lib/router.svelte';
 
 // 실시간 연결은 열지 않는다: 접속하지 않는 provider로 같은 모양의 세션을 돌려준다.
 vi.mock(import('$lib/features/documents/live'), async (importOriginal) => {
@@ -35,11 +37,11 @@ vi.mock(import('$lib/features/documents/live'), async (importOriginal) => {
 
 const workspaces: Workspace[] = [
   {
-    id: 'ws-1',
-    organization_id: 'org-1',
-    name: '공간',
-    role: 'member',
     access: 'write',
+    id: 'ws-1',
+    name: '공간',
+    organization_id: 'org-1',
+    role: 'member',
     is_owner: false,
     realtime_enabled: true,
   },
@@ -98,6 +100,26 @@ afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
   me.userId = '';
+});
+
+it('warns and can cancel navigation with only an unsaved document comment', async () => {
+  vi.spyOn(api, 'document').mockResolvedValue({ ...liveDocument('A', 'A 제목'), realtime: false });
+  render(DocumentScreen, { props: { documentId: 'A', workspaces } });
+  const input = await screen.findByLabelText(/새 댓글/);
+  const cleanUnload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(cleanUnload);
+  expect(cleanUnload.defaultPrevented).toBe(false);
+
+  await fireEvent.input(input, { target: { value: '본문과 별개인 댓글 초안' } });
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  const navigate = vi.fn();
+  expect(router.guard?.(navigate)).toBe(false);
+  await screen.findByRole('alertdialog');
+  await fireEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
+  expect(navigate).not.toHaveBeenCalled();
+  expect(input).toHaveValue('본문과 별개인 댓글 초안');
 });
 
 // 감사 W8: 실시간 문서 A의 제목을 고치다 사이드바에서 B를 누르면(제목 칸을 떠나며 A의 제목 저장이 시작됨), 늦게 온

@@ -1,4 +1,6 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
@@ -7,6 +9,11 @@ import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { itemTaskPath, router } from '$lib/router.svelte';
+import { me } from '$lib/me.svelte';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
+import { accountSafety } from '$lib/features/feedback/feedback.svelte';
+import { storeFormDraft } from '$lib/features/common/form-draft';
+import { formOf } from '$lib/features/tasks/form';
 
 // 사용자 결정(2026-10-22): 업무 대화상자는 고친 입력이 있어도 Esc·바깥 클릭·닫기 단추로 말없이 닫혀 입력을 버렸다.
 // 이제 고친 입력이 있으면 "계속 편집 / 변경 버리고 닫기"를 묻고, 버리기를 고를 때만 닫는다. 고친 것이 없으면 바로 닫는다.
@@ -14,9 +21,18 @@ import { itemTaskPath, router } from '$lib/router.svelte';
 afterEach(() => {
   vi.restoreAllMocks();
 });
+let done: MockInstance<typeof feedback.notifyDone>;
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
+  done = vi.spyOn(feedback, 'notifyDone');
 });
+
+/** 업무 저장이 끝났다는 완료 토스트를 기다린다(D-82: 화면 안 완료 문구는 없다). */
+async function savedToast(): Promise<void> {
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+  });
+}
 
 function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView {
   return {
@@ -28,7 +44,7 @@ function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView 
     reference: id === 't1' ? 'KED-1' : 'KED-2',
     title: id === 't1' ? '옛 제목' : '다른 업무',
     description: '',
-    status: 'todo',
+    status: '할 일',
     priority: 'none',
     start_date: null,
     due_date: null,
@@ -39,6 +55,7 @@ function task(id: string, fields: Partial<TaskDetailView> = {}): TaskDetailView 
     series: null,
     occurrence_date: null,
     assignees: [],
+    status_category: 'todo',
     checklist_done: 0,
     checklist_total: 0,
     version: 2,
@@ -124,8 +141,11 @@ async function clickOutside(): Promise<void> {
   await new Promise((r) => setTimeout(r, 30));
 }
 
-/** 보드에서 업무 카드를 눌러 대화상자를 연다. 닫으면 연 기록으로 돌아간다(`history.back`). */
-async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
+/**
+ * 보드에서 업무 카드를 눌러 대화상자를 연다. 보드에서 연 상세는 닫으면 그 기록으로 돌아간다(`history.back`, R5 최종 A FA-4).
+ * `back`은 그 돌아가기를 센다(주소는 그대로이므로 닫힌 것은 `reopen(undefined)`로 흉내 낸다).
+ */
+async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: () => Promise<void>) {
   window.history.replaceState(null, '', '/w/ws-1/i/i1');
   vi.spyOn(api, 'tasks').mockResolvedValue(tasks);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
@@ -139,6 +159,7 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
   const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
   const props = (openTaskId: string | undefined) => ({ item, workspaces: [], openTaskId });
   const view = render(TaskBoard, { props: props(undefined) });
+  await beforeOpen?.();
   await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
   await view.rerender(props('t1'));
   await screen.findByRole('dialog');
@@ -154,6 +175,262 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')]) {
 }
 
 describe('closing the task dialog with unsaved input', () => {
+  it.each(['clean', 'discard'] as const)(
+    'keeps board input when closing the task detail (%s)',
+    async (mode) => {
+      me.userId = 'user-a';
+      window.localStorage.clear();
+      try {
+        const { back, reopen } = await openBoard([task('t1')], async () => {
+          await fireEvent.input(await screen.findByLabelText(m.tasks_new_title()), {
+            target: { value: 'Keep this new title' },
+          });
+          await fireEvent.click(screen.getByTestId('task-filter-toggle'));
+          await fireEvent.input(await screen.findByLabelText(m.tasks_view_name_aria()), {
+            target: { value: 'Keep this view name' },
+          });
+        });
+        if (mode === 'discard') await type('task-description', 'Discard only this detail');
+        await fireEvent.click(closeButton());
+        if (mode === 'discard') {
+          await fireEvent.click(
+            within(await findConfirm()).getByRole('button', { name: m.common_discard_confirm() }),
+          );
+        } else {
+          expect(confirmBox()).toBeNull();
+        }
+        expect(back).toHaveBeenCalledTimes(1);
+        await reopen(undefined);
+        expect(screen.getByLabelText(m.tasks_new_title())).toHaveValue('Keep this new title');
+        expect(screen.getByLabelText(m.tasks_view_name_aria())).toHaveValue('Keep this view name');
+        const path = router.path;
+        router.navigate('/tasks');
+        await findConfirm();
+        expect(router.path).toBe(path);
+      } finally {
+        me.userId = '';
+        window.localStorage.clear();
+      }
+    },
+  );
+
+  it('opens details without discarding new task and view input that stays on the same board', async () => {
+    me.userId = 'user-a';
+    window.localStorage.clear();
+    try {
+      await openBoard([task('t1')], async () => {
+        await fireEvent.input(await screen.findByLabelText(m.tasks_new_title()), {
+          target: { value: 'Keep this new title' },
+        });
+        await fireEvent.click(screen.getByTestId('task-filter-toggle'));
+        await fireEvent.input(await screen.findByLabelText(m.tasks_view_name_aria()), {
+          target: { value: 'Keep this view name' },
+        });
+      });
+      expect(router.path).toBe(itemTaskPath('ws-1', 'i1', 't1'));
+      expect(confirmBox()).toBeNull();
+      expect(screen.getByLabelText(m.tasks_new_title())).toHaveValue('Keep this new title');
+      expect(screen.getByLabelText(m.tasks_view_name_aria())).toHaveValue('Keep this view name');
+      router.navigate('/tasks');
+      await findConfirm();
+      expect(router.path).toBe(itemTaskPath('ws-1', 'i1', 't1'));
+    } finally {
+      me.userId = '';
+      window.localStorage.clear();
+    }
+  });
+
+  it('keeps the account-switch warning when recurrence storage fails beside a reserved task draft', async () => {
+    me.userId = 'user-a';
+    window.localStorage.clear();
+    const initial = task('t1', {
+      start_date: '2026-10-27',
+      series: {
+        id: 'series-1',
+        root_task_id: 't1',
+        timezone: 'Asia/Seoul',
+        rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
+      },
+    });
+    expect(
+      storeFormDraft('task:t1', {
+        baseVersion: initial.version,
+        baseline: formOf(initial),
+        form: { ...formOf(initial), title: 'Previously kept title' },
+        tagsText: '가, 나',
+        estimateText: '30',
+        savedAt: new Date().toISOString(),
+      }),
+    ).toBe(true);
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    });
+    try {
+      await openBoard([initial]);
+      await screen.findByRole('button', { name: m.tasks_draft_restore() });
+      await type('task-recurrence-interval', '2');
+      accountSafety.switching = true;
+      await flush();
+      const unload = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+    } finally {
+      write.mockRestore();
+      accountSafety.switching = false;
+      me.userId = '';
+      window.localStorage.clear();
+    }
+  });
+
+  it('blocks closing and opening another task while recurrence is saving', async () => {
+    me.userId = 'user-a';
+    const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+    const series = {
+      id: 'series-1',
+      root_task_id: 't1',
+      timezone: 'Asia/Seoul',
+      rule,
+    };
+    const initial = task('t1', {
+      start_date: '2026-10-27',
+      series,
+    });
+    const { back } = await openBoard([initial, task('t2', { parent_id: 't1' })]);
+    const pending = deferred<TaskDetailView>();
+    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending.promise);
+    const navigate = vi.spyOn(router, 'navigate');
+    await type('task-recurrence-interval', '2');
+    await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
+    await escape(content());
+    await clickOutside();
+    await fireEvent.click(within(content()).getByRole('button', { name: /KED-2\s*다른 업무/ }));
+    expect(confirmBox()).toBeNull();
+    expect(back).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
+    pending.resolve({
+      ...initial,
+      series: { ...series, rule: { ...rule, interval: 2 } },
+    });
+    await waitFor(() => {
+      expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
+    });
+    await escape(content());
+    expect(back).toHaveBeenCalledTimes(1);
+    me.userId = '';
+  });
+
+  it('guards recurrence-only changes and discards them through the parent confirmation', async () => {
+    me.userId = 'user-a';
+    window.localStorage.clear();
+    try {
+      const { back, reopen } = await openBoard([
+        task('t1', {
+          start_date: '2026-10-27',
+          series: {
+            id: 'series-1',
+            root_task_id: 't1',
+            timezone: 'Asia/Seoul',
+            rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
+          },
+        }),
+      ]);
+      await type('task-recurrence-interval', '2');
+      const unload = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+      await fireEvent.click(closeButton());
+      const box = await findConfirm();
+      await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_confirm() }));
+      expect(back).toHaveBeenCalledTimes(1);
+      await reopen(undefined);
+      await reopen('t1');
+      await waitFor(() => {
+        expect(field('task-recurrence-interval')).toHaveValue('1');
+      });
+      expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    } finally {
+      me.userId = '';
+      window.localStorage.clear();
+    }
+  });
+
+  it.each(['새 댓글', '새 항목'])(
+    'does not close or offer to discard while %s is being saved',
+    async (label) => {
+      me.userId = 'user-a';
+      window.localStorage.clear();
+      const pending = deferred<undefined>();
+      try {
+        const { back } = await openBoard();
+        const save =
+          label === '새 댓글'
+            ? vi.spyOn(api, 'addComment').mockImplementation(async () => {
+                await pending.promise;
+                return 'new-comment';
+              })
+            : vi.spyOn(api, 'addChecklist').mockImplementation(async () => {
+                await pending.promise;
+                return task('t1');
+              });
+        await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
+          target: { value: '저장하는 입력' },
+        });
+        await fireEvent.click(
+          within(content()).getByRole('button', {
+            name: label === '새 댓글' ? '댓글 달기' : '추가',
+          }),
+        );
+        await waitFor(() => {
+          expect(save).toHaveBeenCalledTimes(1);
+        });
+        await escape(content());
+        expect(confirmBox()).toBeNull();
+        expect(back).not.toHaveBeenCalled();
+        expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
+        pending.resolve(undefined);
+        await waitFor(() => {
+          expect(closeButton()).toBeInTheDocument();
+        });
+      } finally {
+        pending.resolve(undefined);
+        me.userId = '';
+        window.localStorage.clear();
+      }
+    },
+  );
+
+  it.each(['새 댓글', '새 항목'])(
+    'discards the %s draft when the parent discard is confirmed',
+    async (label) => {
+      me.userId = 'user-a';
+      window.localStorage.clear();
+      try {
+        const { back, reopen } = await openBoard();
+        const input = await screen.findByLabelText(new RegExp(`^${label}`));
+        await fireEvent.input(input, { target: { value: '명시적으로 버릴 입력' } });
+        const draftValues = () =>
+          Object.keys(window.localStorage).map((key) => window.localStorage.getItem(key));
+        await waitFor(() => {
+          expect(draftValues().some((value) => value?.includes('명시적으로 버릴 입력'))).toBe(true);
+        });
+        await fireEvent.click(closeButton());
+        const box = await findConfirm();
+        await fireEvent.click(
+          within(box).getByRole('button', { name: m.common_discard_confirm() }),
+        );
+        expect(back).toHaveBeenCalledTimes(1);
+        await reopen(undefined);
+        await reopen('t1');
+        await screen.findByLabelText(new RegExp(`^${label}`));
+        expect(draftValues().some((value) => value?.includes('명시적으로 버릴 입력'))).toBe(false);
+      } finally {
+        me.userId = '';
+        window.localStorage.clear();
+      }
+    },
+  );
+
   it('closes at once when nothing was changed', async () => {
     const { back } = await openBoard();
     field('task-title').focus();
@@ -242,7 +519,7 @@ describe('closing the task dialog with unsaved input', () => {
   });
 
   it('closes only after I choose to discard', async () => {
-    const { back } = await openBoard();
+    const { back, reopen } = await openBoard();
     const update = vi.spyOn(api, 'updateTask');
     await type('task-title', '새 제목');
     field('task-title').focus();
@@ -251,6 +528,10 @@ describe('closing the task dialog with unsaved input', () => {
     await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_confirm() }));
     expect(back).toHaveBeenCalledTimes(1);
     expect(update).not.toHaveBeenCalled();
+    await reopen(undefined);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(document.querySelector('[data-task-card="t1"]'));
+    });
   });
 
   // 단추가 아닌 곳(설명 칸, 칸 이름, 대화상자 바탕)을 누른 뒤의 Esc도 같다.
@@ -300,7 +581,7 @@ describe('closing the task dialog with unsaved input', () => {
     const save = document.getElementById('task-save');
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
-    await screen.findByText('저장했습니다.');
+    await savedToast();
     // 저장이 끝나 다시 닫을 수 있게 된 뒤(닫기 단추가 돌아온다).
     await waitFor(() => {
       expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
@@ -331,7 +612,7 @@ describe('closing the task dialog with unsaved input', () => {
     ])
       expect(field(id).disabled, id).toBe(true);
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
-    await screen.findByText('저장했습니다.');
+    await savedToast();
     await waitFor(() => {
       expect(field('task-title').disabled).toBe(false);
     });
@@ -355,7 +636,7 @@ describe('closing the task dialog with unsaved input', () => {
     expect(back).not.toHaveBeenCalled();
     expect(within(content()).queryByRole('button', { name: m.common_close() })).toBeNull();
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
-    await screen.findByText('저장했습니다.');
+    await savedToast();
     await waitFor(() => {
       expect(within(content()).queryByRole('button', { name: m.common_close() })).not.toBeNull();
     });
@@ -477,6 +758,23 @@ describe('opening another task from the dialog with unsaved input', () => {
     expect(confirmBox()).toBeNull();
     expect(navigate).not.toHaveBeenCalled();
     late.resolve({ kind: 'updated', task: task('t1', { title: '새 제목', version: 3 }) });
-    await screen.findByText('저장했습니다.');
+    await savedToast();
   });
+});
+
+it('warns before unloading only while the open task has unsaved input', async () => {
+  const { reopen } = await openBoard();
+  const unloading = (): boolean => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(unloading()).toBe(false);
+  await type('task-title', '새 제목');
+  expect(unloading()).toBe(true);
+  await type('task-title', '옛 제목');
+  expect(unloading()).toBe(false);
+  await type('task-title', '새 제목');
+  await reopen(undefined);
+  expect(unloading()).toBe(false);
 });

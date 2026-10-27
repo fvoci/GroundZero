@@ -1,6 +1,7 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   AssigneeView,
@@ -9,17 +10,35 @@ import type {
   TaskDetailView,
   TaskInput,
 } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
 import { formatDay } from '$lib/display';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { clashRows } from '$lib/features/tasks/labels';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
+import { describeRule } from '$lib/features/events/labels';
 
 // 업무 저장 충돌(409) 뒤 "내 입력으로 다시 저장"(실제 브라우저 점검에서 찾음): 전에는 내 폼 전체를 새 판 번호로 보내,
 // 내가 고치지 않은 칸(다른 사람이 바꾼 제목 등)을 옛 값으로 조용히 되돌렸다. 이제 최신 판 위에 내가 고친 칸만 올리고,
 // 같은 칸을 다른 사람도 다른 값으로 바꿨으면 양쪽 값을 보이고 덮어쓸지 묻는다(D-94).
+let done: MockInstance<typeof feedback.notifyDone>;
+beforeEach(() => {
+  me.userId = 'user-a';
+  done = vi.spyOn(feedback, 'notifyDone');
+});
+
+/** 업무 저장이 끝났다는 완료 토스트가 뜨고 화면 안 완료 문구는 없다(D-82). */
+async function expectSavedToast(): Promise<void> {
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+  });
+  expect(screen.queryByText('저장했습니다.')).toBeNull();
+}
 afterEach(() => {
+  me.userId = '';
   vi.restoreAllMocks();
 });
 
@@ -32,7 +51,7 @@ const v2: TaskDetailView = {
   reference: 'KED-1',
   title: '옛 제목',
   description: '',
-  status: 'todo',
+  status: '할 일',
   priority: 'none',
   start_date: null,
   due_date: null,
@@ -43,6 +62,7 @@ const v2: TaskDetailView = {
   series: null,
   occurrence_date: null,
   assignees: [],
+  status_category: 'todo',
   checklist_done: 0,
   checklist_total: 0,
   version: 2,
@@ -66,12 +86,12 @@ const unchanged: TaskInput = {
   milestone: v2.milestone,
 };
 
-function mount(current: TaskDetailView = v2, people: AssigneeView[] = []): void {
+function mount(current: TaskDetailView = v2, people: AssigneeView[] = []) {
   vi.spyOn(api, 'task').mockResolvedValue(current);
   vi.spyOn(api, 'assignable').mockResolvedValue(people);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
-  render(TaskDetail, {
+  return render(TaskDetail, {
     props: {
       taskId: current.id,
       tasks: [current],
@@ -122,7 +142,7 @@ describe('saving my input after a task conflict', () => {
     mount();
     vi.spyOn(api, 'updateTask').mockResolvedValue({
       kind: 'conflict',
-      current: { ...v2, version: 3, status: 'in_progress', status_name: '검수 대기' },
+      current: { ...v2, version: 3, status: '검수 대기' },
     });
     await screen.findByLabelText('설명');
     await type('task-description', '내 설명');
@@ -142,7 +162,14 @@ describe('saving my input after a task conflict', () => {
     await screen.findByLabelText('설명');
     await type('task-description', 'B 설명');
     await saveIntoConflict();
-    expect(update).toHaveBeenNthCalledWith(1, 't1', 2, { ...unchanged, description: 'B 설명' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      't1',
+      2,
+      { ...unchanged, description: 'B 설명' },
+      [],
+    );
 
     await fireEvent.click(saveMineButton());
     await waitFor(() => {
@@ -151,6 +178,7 @@ describe('saving my input after a task conflict', () => {
     // 겹친 칸이 없으므로 묻지 않고 최신 판 번호로 저장한다.
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       { ...unchanged, title: '새 제목', description: 'B 설명' },
@@ -158,7 +186,7 @@ describe('saving my input after a task conflict', () => {
     );
     expect(screen.queryByRole('alertdialog')).toBeNull();
     // 저장한 판으로 다시 채워 화면이 저장된 내용을 보인다.
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    await expectSavedToast();
     expect(field('task-title').value).toBe('새 제목');
     expect(field('task-description').value).toBe('B 설명');
     expect(screen.queryByRole('button', { name: '내 입력으로 다시 저장' })).toBeNull();
@@ -232,6 +260,7 @@ describe('saving my input after a task conflict', () => {
     });
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       {
@@ -246,7 +275,7 @@ describe('saving my input after a task conflict', () => {
     );
     // 날짜는 최신 판 그대로라 후속 업무 미리보기를 묻지 않는다(옛 날짜로 되돌리는 재배치를 제안하지 않는다).
     expect(preview).not.toHaveBeenCalled();
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    await expectSavedToast();
     expect(field('task-title').value).toBe('내 제목');
     expect(field('task-tags').value).toBe('서버');
     expect(field('task-estimate').value).toBe('45');
@@ -257,7 +286,7 @@ describe('saving my input after a task conflict', () => {
     mount();
     const v3 = { ...v2, version: 3, title: '새 제목' };
     // 다시 저장하려는 사이 또 바뀌었다(제목을 한 번 더, 상태도).
-    const v4: TaskDetailView = { ...v3, version: 4, title: '세 번째 제목', status: 'in_progress' };
+    const v4: TaskDetailView = { ...v3, version: 4, title: '세 번째 제목', status: '진행 중' };
     const v5 = { ...v4, version: 5, description: 'B 설명' };
     const update = vi
       .spyOn(api, 'updateTask')
@@ -273,6 +302,7 @@ describe('saving my input after a task conflict', () => {
     expect(await screen.findByText(/지금 제목: “세 번째 제목”, 상태: 진행 중/)).toBeTruthy();
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       { ...unchanged, title: '새 제목', description: 'B 설명' },
@@ -291,12 +321,13 @@ describe('saving my input after a task conflict', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(update).toHaveBeenNthCalledWith(
       3,
+      expect.any(String),
       't1',
       4,
-      { ...unchanged, title: '세 번째 제목', status: 'in_progress', description: 'B 설명' },
+      { ...unchanged, title: '세 번째 제목', status: '진행 중', description: 'B 설명' },
       [],
     );
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    await expectSavedToast();
   });
 
   it('keeps my input when saving again fails', async () => {
@@ -373,6 +404,7 @@ describe('saving my input after a task conflict', () => {
     });
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       {
@@ -471,7 +503,7 @@ describe('the overwrite question after a task conflict', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    const sent = update.mock.calls[1]?.[2];
+    const sent = update.mock.calls[1]?.[3];
     if (sent === undefined) throw new Error('no second save');
     expect(sent).toEqual({
       ...unchanged,
@@ -501,6 +533,7 @@ describe('the overwrite question after a task conflict', () => {
     await saveIntoConflict();
     expect(update).toHaveBeenNthCalledWith(
       1,
+      expect.any(String),
       't1',
       2,
       { ...unchanged, assignee_ids: ['u2', 'u1'] },
@@ -514,6 +547,7 @@ describe('the overwrite question after a task conflict', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(update).toHaveBeenNthCalledWith(
       2,
+      expect.any(String),
       't1',
       3,
       { ...unchanged, title: '새 제목', assignee_ids: ['u1', 'u2'] },
@@ -602,7 +636,7 @@ describe('the overwrite question after a task conflict', () => {
         .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
         .mockResolvedValueOnce({
           kind: 'conflict',
-          current: { ...v3, version: 4, status: 'done' },
+          current: { ...v3, version: 4, status: '완료' },
         });
       await screen.findByLabelText('마감일');
       if (clash) await type('task-title', '내 제목');
@@ -766,7 +800,14 @@ describe('the overwrite question after the second review', () => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, tags: ['b'] }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, tags: ['b'] },
+      [],
+    );
   });
 
   it('shows and saves my tags without repeats', async () => {
@@ -786,7 +827,14 @@ describe('the overwrite question after the second review', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, tags: ['b', 'a'] }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, tags: ['b', 'a'] },
+      [],
+    );
   });
 
   // 2차 검증: 앞뒤 공백만 친 제목은 저장되는 값이 그대로라 고친 칸이 아니다. 묻지 않고 다른 사람이 바꾼 제목을 따른다.
@@ -805,7 +853,14 @@ describe('the overwrite question after the second review', () => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, title: '남의 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, title: '남의 제목' },
+      [],
+    );
   });
 
   // 2차 검증: 줄 끝 공백만 다른 설명처럼 서로 다른 값이 화면에서 똑같아 보이면 그렇다고 알린다.
@@ -836,7 +891,7 @@ describe('the overwrite question after the second review', () => {
       .mockResolvedValueOnce(titleConflict)
       .mockResolvedValueOnce({
         kind: 'conflict',
-        current: { ...titleConflict.current, version: 4, status: 'done' },
+        current: { ...titleConflict.current, version: 4, status: '완료' },
       });
     await screen.findByLabelText('설명');
     await type('task-description', '내 설명');
@@ -865,7 +920,14 @@ describe('the overwrite question after the second review', () => {
     const ask = await askAboutTitle();
     await fireEvent.click(within(ask).getByRole('button', { name: '내 값으로 덮어쓰고 저장' }));
     expect(await screen.findByText(/지금 제목: “세 번째 제목”/)).toBeTruthy();
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 3, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
     expect(field('task-title').value).toBe('내 제목');
     await waitFor(() => {
       expect(document.activeElement?.id).toBe('task-save-mine');
@@ -878,7 +940,14 @@ describe('the overwrite question after the second review', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(3);
     });
-    expect(update).toHaveBeenNthCalledWith(3, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      3,
+      expect.any(String),
+      't1',
+      4,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 
   // 승인한 덮어쓰기가 실패하면(서버에 닿지 않음) 입력과 충돌 화면이 남는다. 이미 승인한 판 3 위에서 다시 시도하므로
@@ -906,7 +975,14 @@ describe('the overwrite question after the second review', () => {
       expect(update).toHaveBeenCalledTimes(3);
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(update).toHaveBeenNthCalledWith(3, 't1', 3, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      3,
+      expect.any(String),
+      't1',
+      3,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 });
 
@@ -968,7 +1044,14 @@ describe('a late response while the overwrite question is open', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      4,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 
   it('asks again with the reloaded version when it is newer than the conflict', async () => {
@@ -991,7 +1074,14 @@ describe('a late response while the overwrite question is open', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update).toHaveBeenNthCalledWith(2, 't1', 4, { ...unchanged, title: '내 제목' }, []);
+    expect(update).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      't1',
+      4,
+      { ...unchanged, title: '내 제목' },
+      [],
+    );
   });
 
   it('closes the question and returns to saving mine when the newer version no longer clashes', async () => {
@@ -1059,3 +1149,196 @@ describe('long values in the overwrite question', () => {
     expect(field('task-description').value).toBe('내 설명');
   });
 });
+it('preserves and hides task input after account_changed without another save', async () => {
+  await setLocale('ko', { reload: false });
+  mount();
+  const update = vi
+    .spyOn(api, 'updateTask')
+    .mockRejectedValue(new ApiError(409, 'account_changed', 'account_changed'));
+  await screen.findByLabelText('제목');
+  await type('task-title', '계정 A의 비공개 입력');
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await screen.findByText(/계정이 바뀌어 입력을 숨겼습니다/);
+  expect(field('task-title')).toHaveValue('계정 A의 비공개 입력');
+  expect(field('task-title')).not.toBeVisible();
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it('keeps recurrence input on 409, shows the latest rule and explicitly resaves once', async () => {
+  await setLocale('ko', { reload: false });
+  const base = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+  const latest = { ...base, interval: 3 };
+  const initial = {
+    ...v2,
+    due_date: '2026-10-26',
+    series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule: base },
+  };
+  mount(initial);
+  const save = vi
+    .spyOn(api, 'setTaskRecurrence')
+    .mockRejectedValueOnce(
+      new TaskRuleConflict({ ...initial, series: { ...initial.series, rule: latest } }),
+    )
+    .mockReturnValueOnce(new Promise(() => undefined));
+  await screen.findByLabelText('간격');
+  await fireEvent.input(screen.getByLabelText('간격'), { target: { value: '2' } });
+  await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+  await screen.findByText(/그사이 다른 사람이 반복 규칙/);
+  expect(screen.getByLabelText('간격')).toHaveValue('2');
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(save.mock.calls[0]?.[4]).toEqual(base);
+  await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
+  await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(save.mock.calls[1]?.[2]).toEqual({ ...base, interval: 2 });
+  expect(save.mock.calls[1]?.[4]).toEqual(latest);
+});
+
+it('restores a recurrence draft with its original base and requires an explicit conflict retry', async () => {
+  await setLocale('ko', { reload: false });
+  window.localStorage.clear();
+  const base = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+  const latest = { ...base, interval: 3 };
+  const initial = {
+    ...v2,
+    due_date: '2026-10-26',
+    series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule: base },
+  };
+  const first = mount(initial);
+  try {
+    await screen.findByLabelText('간격');
+    await type('task-recurrence-interval', '2');
+    await waitFor(() => {
+      expect(
+        Object.values(window.localStorage).some((value: string) =>
+          value.includes('"interval":"2"'),
+        ),
+      ).toBe(true);
+    });
+    first.unmount();
+    const current = { ...initial, series: { ...initial.series, rule: latest } };
+    mount(current);
+    const save = vi
+      .spyOn(api, 'setTaskRecurrence')
+      .mockRejectedValueOnce(new TaskRuleConflict(current))
+      .mockResolvedValueOnce({
+        ...current,
+        series: { ...current.series, rule: { ...base, interval: 2 } },
+      });
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+    expect(screen.getByLabelText('간격')).toHaveValue('2');
+    expect(save).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+    await screen.findByText(/그사이 다른 사람이 반복 규칙/);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]?.[4]).toEqual(base);
+    await fireEvent.click(screen.getByRole('button', { name: '반복 규칙: 내 입력으로 다시 저장' }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(2);
+    });
+    expect(save.mock.calls[1]?.[4]).toEqual(latest);
+  } finally {
+    window.localStorage.clear();
+  }
+});
+
+it.each(['success', 'conflict'] as const)(
+  'ignores a late recurrence %s after switching accounts',
+  async (result) => {
+    await setLocale('ko', { reload: false });
+    window.localStorage.clear();
+    const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+    const initial = {
+      ...v2,
+      due_date: '2026-10-26',
+      series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule },
+    };
+    mount(initial);
+    let resolve!: (value: TaskDetailView) => void;
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<TaskDetailView>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending);
+    await screen.findByLabelText('간격');
+    await type('task-recurrence-interval', '2');
+    await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+    me.userId = 'user-b';
+    await waitFor(() => expect(field('task-title')).not.toBeVisible());
+    const fresh = {
+      ...initial,
+      version: 3,
+      title: 'late result',
+      series: { ...initial.series, rule: { ...rule, interval: 7 } },
+    };
+    if (result === 'success') resolve(fresh);
+    else reject(new TaskRuleConflict(fresh));
+    await pending.catch(() => undefined);
+    me.userId = 'user-a';
+    await waitFor(() => expect(field('task-title')).toBeVisible());
+    expect(field('task-title')).toHaveValue(v2.title);
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+    expect(screen.getByLabelText('간격')).toHaveValue('2');
+    expect(screen.queryByText(/그사이 다른 사람이 반복 규칙/)).toBeNull();
+    expect(screen.queryByText(describeRule({ ...rule, interval: 7 }), { exact: false })).toBeNull();
+    window.localStorage.clear();
+  },
+);
+
+it.each(['success', 'conflict'] as const)(
+  'ignores a late recurrence %s after opening another task',
+  async (result) => {
+    await setLocale('ko', { reload: false });
+    const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+    const initial = {
+      ...v2,
+      due_date: '2026-10-26',
+      series: { id: 'series', root_task_id: v2.id, timezone: 'Asia/Seoul', rule },
+    };
+    const view = mount(initial);
+    let resolve!: (value: TaskDetailView) => void;
+    let reject!: (error: unknown) => void;
+    const pending = new Promise<TaskDetailView>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending);
+    await screen.findByLabelText('간격');
+    await type('task-recurrence-interval', '2');
+    await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+    const other = {
+      ...initial,
+      id: 't2',
+      title: '다른 업무',
+      series: {
+        ...initial.series,
+        id: 'other-series',
+        root_task_id: 't2',
+        rule: { ...rule, interval: 4 },
+      },
+    };
+    vi.mocked(api.task).mockResolvedValue(other);
+    await view.rerender({
+      taskId: other.id,
+      tasks: [initial, other],
+      workspaces: [],
+      onchanged: () => undefined,
+      onopen: () => undefined,
+    });
+    await waitFor(() => expect(field('task-title')).toHaveValue(other.title));
+    const fresh = {
+      ...initial,
+      version: 3,
+      title: 'late result',
+      series: { ...initial.series, rule: { ...rule, interval: 7 } },
+    };
+    if (result === 'success') resolve(fresh);
+    else reject(new TaskRuleConflict(fresh));
+    await pending.catch(() => undefined);
+    await waitFor(() => expect(screen.getByLabelText('간격')).toHaveValue('4'));
+    expect(field('task-title')).toHaveValue(other.title);
+    expect(screen.queryByText(/그사이 다른 사람이 반복 규칙/)).toBeNull();
+    expect(screen.queryByText(describeRule({ ...rule, interval: 7 }), { exact: false })).toBeNull();
+  },
+);

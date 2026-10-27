@@ -34,3 +34,9 @@ export const LongKorean: Story = { args: { variant: 'secondary', children: text(
 export const NoSpaceString: Story = { args: { variant: 'outline', children: text(NO_SPACE) } };
 
 export const NumbersAndEmoji: Story = { args: { children: text(`${NUMBERS} ${EMOJI}`) } };
+
+export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
+export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
+export const BrandNarrowLargeText: Story = {
+  globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
+};

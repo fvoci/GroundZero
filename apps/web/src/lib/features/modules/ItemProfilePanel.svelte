@@ -2,6 +2,11 @@
   // 항목 정보(D-33·D-34·D-36·D-38): 상태·기간·리더·목표·범위와 종류별 정보, 비공개 항목의 멤버(사람·그룹).
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import { object, strings } from './draft-values';
 
   import type {
     AssigneeView,
@@ -12,6 +17,7 @@
   } from '$lib/api/client';
   import { api, ITEM_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -29,20 +35,22 @@
     kind: ModuleKind;
     /** 상태·기간이 바뀌면 항목을 다시 읽는다. */
     onchanged: () => void;
+    /** 앱 안 이동의 다음 경로에서도 이 패널이 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
+    stays?: ((next: string) => boolean) | undefined;
   }
 
-  const { item, kind, onchanged }: Props = $props();
+  const { item, kind, onchanged, stays }: Props = $props();
 
   let profile = $state<ItemProfileView | undefined>(undefined);
   let people = $state<AssigneeView[]>([]);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let editing = $state(false);
   // 편집을 연 때의 판(D-104). 편집 중에 패널을 다시 읽어도 옮기지 않는다(옮기면 그사이 다른 사람이 고친 것을 덮는다).
-  let editBase = 0;
+  let editBase = $state(0);
   // 편집을 열거나 취소할 때마다 오른다. 저장을 기다리는 동안 취소하고 다시 연 편집을 앞선 저장이 닫지 않게 한다.
   let editSession = 0;
-  // 편집을 연 때의 리더. 고를 수 있는 사람 목록에 없어도 입력의 리더 이름을 보인다.
+  // 편집을 연 때의 리더, 그 뒤 고른 리더. 고를 수 있는 사람 목록에 없어도(못 읽음·되살린 초안) 입력의 리더 이름을
+  // 보이도록 초안에도 남긴다.
   let editLeader = $state<PersonRefView | null>(null);
   // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
   let conflict = $state<ItemProfileView | undefined>(undefined);
@@ -73,6 +81,92 @@
   let groupIds = $state<string[]>([]);
   let candidates = $state<{ id: string; name: string }[]>([]);
   let groupChoices = $state<{ id: string; name: string }[]>([]);
+  let baseline = $state('');
+  let busy = $state(false);
+  const draft = createFormDraft({
+    name: () => `item-profile:${item.id}:${kind}`,
+    snapshot: () => ({ form, base: editBase, baseline, leader: editLeader }),
+    parse: (raw) => {
+      if (
+        !object(raw) ||
+        !object(raw.form) ||
+        typeof raw.base !== 'number' ||
+        typeof raw.baseline !== 'string'
+      )
+        return undefined;
+      // 리더 이름이 없는 초안(이전 형식)은 이름 없이 되살린다.
+      const leader =
+        object(raw.leader) &&
+        typeof raw.leader.user_id === 'string' &&
+        typeof raw.leader.display_name === 'string'
+          ? { user_id: raw.leader.user_id, display_name: raw.leader.display_name }
+          : null;
+      const value = raw.form;
+      const status = ITEM_STATUSES.find((candidate) => candidate === value.status);
+      if (
+        status === undefined ||
+        typeof value.leader !== 'string' ||
+        typeof value.goal !== 'string' ||
+        typeof value.scope !== 'string' ||
+        typeof value.starts_on !== 'string' ||
+        typeof value.ends_on !== 'string' ||
+        typeof value.keywords !== 'string' ||
+        !strings(value.values)
+      )
+        return undefined;
+      return {
+        form: {
+          status,
+          leader: value.leader,
+          goal: value.goal,
+          scope: value.scope,
+          starts_on: value.starts_on,
+          ends_on: value.ends_on,
+          keywords: value.keywords,
+          values: value.values,
+        },
+        base: raw.base,
+        baseline: raw.baseline,
+        leader,
+      };
+    },
+    restore: (value) => {
+      form = value.form;
+      editBase = value.base;
+      baseline = value.baseline;
+      editLeader = value.leader;
+      editing = true;
+      editSession += 1;
+      // 편집 열기(startEdit)처럼 고를 수 있는 사람을 읽는다. 그사이 편집을 닫거나 새로 열었으면 버린다.
+      const session = editSession;
+      void api
+        .assignable(item.id)
+        .then((list) => {
+          if (session === editSession) people = list;
+        })
+        .catch(() => undefined);
+    },
+    reset: () => {
+      editing = false;
+      busy = false;
+      conflict = undefined;
+      editSession += 1;
+      form = {
+        status: 'active',
+        leader: '',
+        goal: '',
+        scope: '',
+        starts_on: '',
+        ends_on: '',
+        keywords: '',
+        values: {},
+      };
+      baseline = '';
+    },
+    dirty: () => editing && JSON.stringify(form) !== baseline,
+    stays: (next) => stays?.(next) === true,
+  });
+  onMount(draft.attach);
 
   // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
   const leaderLabel = $derived.by(() => {
@@ -101,6 +195,7 @@
   });
 
   async function startEdit(p: ItemProfileView): Promise<void> {
+    error = undefined;
     editSession += 1;
     editBase = p.version;
     editLeader = p.leader;
@@ -115,6 +210,7 @@
       keywords: (p.details.keywords ?? []).join(', '),
       values: Object.fromEntries(fields.map((f) => [f.key, p.details[f.key] ?? ''])),
     };
+    baseline = JSON.stringify(form);
     editing = true;
     people = await api.assignable(item.id).catch(() => []);
   }
@@ -126,14 +222,17 @@
 
   /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
   async function submit(base: number): Promise<void> {
+    if (busy) return;
+    const attempt = draft.capture();
+    if (attempt === undefined) return;
     // 앞선 저장의 안내가 이번 결과(날짜 오류·409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
-    status = '';
     if (form.starts_on !== '' && form.ends_on !== '' && form.starts_on > form.ends_on) {
       error = m.modules_period_invalid();
       return;
     }
     error = undefined;
     const session = editSession;
+    busy = true;
     try {
       const result = await api.setItemProfile(item.id, base, {
         leader_id: form.leader === '' ? null : form.leader,
@@ -144,6 +243,7 @@
         status: form.status,
         details: toDetails(kind, form.values, form.keywords),
       });
+      if (!draft.isCurrent(attempt)) return;
       if (result.kind === 'conflict') {
         // 기다리는 동안 취소했거나 편집을 새로 열었으면 그 화면을 바꾸지 않는다(이 저장은 아무것도 바꾸지 않았다).
         if (session !== editSession) return;
@@ -155,6 +255,7 @@
       // 저장은 새 판을 주지 않으므로(204) 다시 읽은 뒤에 편집을 닫는다. 먼저 닫으면 다시 읽기 전에 연 편집이 옛 판을
       // 기준으로 삼아 다음 저장이 거짓 409가 된다.
       const fresh = await api.itemProfile(item.id).catch(() => undefined);
+      if (!draft.isOwner(attempt)) return;
       onchanged();
       if (session !== editSession && editing) {
         // 기다리는 동안 취소하고 편집을 새로 열었다. 그 편집은 닫거나 바꾸지 않는다(그 편집의 판이 지났으면 저장이
@@ -162,15 +263,19 @@
         return;
       }
       if (session === editSession) {
+        if (!draft.complete(attempt)) return;
         conflict = undefined;
         editing = false;
-        status = m.modules_profile_saved();
+        notifyDone(m.modules_profile_saved());
       }
       // 다시 읽지 못하면 정보를 비우고 다시 읽기를 맡긴다. 옛 판이 남아 있으면 그 판으로 편집을 다시 열 수 있다.
       profile = fresh;
       if (fresh === undefined) reloadKey += 1;
     } catch (err: unknown) {
-      error = errorText(err, m.modules_save_failed());
+      if (session === editSession && draft.isOwner(attempt))
+        error = errorText(err, m.modules_save_failed());
+    } finally {
+      if (draft.isOwner(attempt)) busy = false;
     }
   }
 
@@ -198,17 +303,37 @@
 
   async function saveMembers(): Promise<void> {
     error = undefined;
-    status = '';
     try {
       await api.setItemMembers(item.id, memberIds, groupIds);
       managing = false;
-      status = m.modules_people_saved({ label: labels.members });
+      notifyDone(m.modules_people_saved({ label: labels.members }));
       reloadKey += 1;
     } catch (err: unknown) {
       error = errorText(err, m.modules_save_failed());
     }
   }
 </script>
+
+<!-- 저장하는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 기준 판을 옮기지 않은
+     다음 저장이 자기 저장과 409로 부딪친다. -->
+{#each draft.offers as entry (entry.key)}
+  <fieldset class="contents" disabled={busy}>
+    <FormDraftOffer
+      restorable={profile?.can_edit === true && !accountSwitching()}
+      onrestore={() => {
+        if (profile?.can_edit === true && !accountSwitching()) draft.restore(entry);
+      }}
+      ondiscard={() => {
+        draft.discard(entry);
+      }}
+    />
+  </fieldset>
+{/each}
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>
 
 <section class="flex flex-col gap-3" aria-labelledby="item-profile-heading">
   <div class="flex items-center gap-2">
@@ -221,123 +346,134 @@
     {/if}
   </div>
   {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-  <p aria-live="polite" class="text-sm">{status}</p>
   {#if profile === undefined}
     <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
   {:else if editing}
-    {#if conflict !== undefined}
-      {@const latest = conflict}
-      <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 다시 편집하거나 내 입력으로 다시 저장한다. -->
-      <div
-        class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
-        data-profile-conflict
-      >
-        <p role="alert">{m.modules_profile_conflict()}</p>
-        <ItemProfileSummary profile={latest} {kind} />
-        <div class="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onclick={() => {
-              void startEdit(latest);
-            }}>{m.modules_profile_conflict_load()}</Button
-          >
-          <Button size="sm" onclick={() => void submit(latest.version)}
-            >{m.modules_profile_conflict_save_mine()}</Button
-          >
-        </div>
-      </div>
-    {/if}
-    <form class="grid gap-3 @xl:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
-      <div class="flex flex-col gap-1">
-        <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
-        <Select.Root
-          type="single"
-          value={form.status}
-          onValueChange={(v: string) => {
-            form.status = ITEM_STATUSES.find((s) => s === v) ?? form.status;
-          }}
+    <fieldset class="flex min-w-0 flex-col gap-3" disabled={busy}>
+      {#if conflict !== undefined}
+        {@const latest = conflict}
+        <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 다시 편집하거나 내 입력으로 다시 저장한다. -->
+        <div
+          class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
+          data-profile-conflict
         >
-          <Select.Trigger class="w-32" aria-labelledby="item-status-label"
-            >{itemStatusLabel(form.status)}</Select.Trigger
-          >
-          <Select.Content>
-            {#each ITEM_STATUSES as s (s)}
-              <Select.Item value={s} label={itemStatusLabel(s)}>{itemStatusLabel(s)}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex flex-col gap-1">
-        <span id="item-leader-label" class="text-sm font-medium">{labels.leader}</span>
-        <Select.Root
-          type="single"
-          value={form.leader === '' ? 'none' : form.leader}
-          onValueChange={(v: string) => {
-            form.leader = v === 'none' ? '' : v;
-          }}
-        >
-          <Select.Trigger class="w-48" aria-labelledby="item-leader-label"
-            >{leaderLabel}</Select.Trigger
-          >
-          <Select.Content>
-            <Select.Item value="none" label={m.modules_none()}>{m.modules_none()}</Select.Item>
-            {#each people as p (p.user_id)}
-              <Select.Item value={p.user_id} label={p.display_name}>{p.display_name}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
-      </div>
-      <div class="flex flex-col gap-1">
-        <Label for="item-starts">{m.modules_starts_on()}</Label>
-        <Input id="item-starts" type="date" bind:value={form.starts_on} />
-      </div>
-      <div class="flex flex-col gap-1">
-        <Label for="item-ends">{m.modules_ends_on()}</Label>
-        <Input id="item-ends" type="date" bind:value={form.ends_on} />
-      </div>
-      <div class="flex flex-col gap-1 @xl:col-span-2">
-        <Label for="item-goal">{m.modules_goal()}</Label>
-        <Textarea id="item-goal" rows={2} maxlength={4000} bind:value={form.goal} />
-      </div>
-      <div class="flex flex-col gap-1 @xl:col-span-2">
-        <Label for="item-scope">{m.modules_scope()}</Label>
-        <Textarea id="item-scope" rows={2} maxlength={4000} bind:value={form.scope} />
-      </div>
-      {#if kind === 'research'}
-        <div class="flex flex-col gap-1 @xl:col-span-2">
-          <Label for="item-keywords">{m.modules_keywords_input()}</Label>
-          <Input id="item-keywords" bind:value={form.keywords} />
+          <p role="alert">{m.modules_profile_conflict()}</p>
+          <ItemProfileSummary profile={latest} {kind} />
+          <div class="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={() => {
+                void startEdit(latest);
+              }}>{m.modules_profile_conflict_load()}</Button
+            >
+            <Button size="sm" onclick={() => void submit(latest.version)}
+              >{m.modules_profile_conflict_save_mine()}</Button
+            >
+          </div>
         </div>
       {/if}
-      {#each fields as f (f.key)}
-        <div class={['flex flex-col gap-1', f.multiline ? '@xl:col-span-2' : '']}>
-          <Label for={`item-detail-${f.key}`}>{f.label}</Label>
-          {#if f.multiline}
-            <Textarea
-              id={`item-detail-${f.key}`}
-              rows={2}
-              maxlength={2000}
-              bind:value={form.values[f.key]}
-            />
-          {:else}
-            <Input id={`item-detail-${f.key}`} maxlength={2000} bind:value={form.values[f.key]} />
-          {/if}
+      <form class="grid gap-3 @xl:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
+        <div class="flex flex-col gap-1">
+          <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 저장 중에는 따로 잠근다(상태·리더). -->
+          <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
+          <Select.Root
+            type="single"
+            disabled={busy}
+            value={form.status}
+            onValueChange={(v: string) => {
+              form.status = ITEM_STATUSES.find((s) => s === v) ?? form.status;
+            }}
+          >
+            <Select.Trigger class="w-32" aria-labelledby="item-status-label"
+              >{itemStatusLabel(form.status)}</Select.Trigger
+            >
+            <Select.Content>
+              {#each ITEM_STATUSES as s (s)}
+                <Select.Item value={s} label={itemStatusLabel(s)}>{itemStatusLabel(s)}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
         </div>
-      {/each}
-      <div class="flex gap-2 @xl:col-span-2">
-        <Button type="submit">{m.common_save()}</Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onclick={() => {
-            editSession += 1;
-            editing = false;
-            conflict = undefined;
-          }}>{m.common_cancel()}</Button
-        >
-      </div>
-    </form>
+        <div class="flex flex-col gap-1">
+          <span id="item-leader-label" class="text-sm font-medium">{labels.leader}</span>
+          <Select.Root
+            type="single"
+            disabled={busy}
+            value={form.leader === '' ? 'none' : form.leader}
+            onValueChange={(v: string) => {
+              form.leader = v === 'none' ? '' : v;
+              const picked = people.find((p) => p.user_id === v);
+              if (picked !== undefined)
+                editLeader = { user_id: picked.user_id, display_name: picked.display_name };
+            }}
+          >
+            <Select.Trigger class="w-48" aria-labelledby="item-leader-label"
+              >{leaderLabel}</Select.Trigger
+            >
+            <Select.Content>
+              <Select.Item value="none" label={m.modules_none()}>{m.modules_none()}</Select.Item>
+              {#each people as p (p.user_id)}
+                <Select.Item value={p.user_id} label={p.display_name}>{p.display_name}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex flex-col gap-1">
+          <Label for="item-starts">{m.modules_starts_on()}</Label>
+          <Input id="item-starts" type="date" bind:value={form.starts_on} />
+        </div>
+        <div class="flex flex-col gap-1">
+          <Label for="item-ends">{m.modules_ends_on()}</Label>
+          <Input id="item-ends" type="date" bind:value={form.ends_on} />
+        </div>
+        <div class="flex flex-col gap-1 @xl:col-span-2">
+          <Label for="item-goal">{m.modules_goal()}</Label>
+          <Textarea id="item-goal" rows={2} maxlength={4000} bind:value={form.goal} />
+        </div>
+        <div class="flex flex-col gap-1 @xl:col-span-2">
+          <Label for="item-scope">{m.modules_scope()}</Label>
+          <Textarea id="item-scope" rows={2} maxlength={4000} bind:value={form.scope} />
+        </div>
+        {#if kind === 'research'}
+          <div class="flex flex-col gap-1 @xl:col-span-2">
+            <Label for="item-keywords">{m.modules_keywords_input()}</Label>
+            <Input id="item-keywords" bind:value={form.keywords} />
+          </div>
+        {/if}
+        {#each fields as f (f.key)}
+          <div class={['flex flex-col gap-1', f.multiline ? '@xl:col-span-2' : '']}>
+            <Label for={`item-detail-${f.key}`}>{f.label}</Label>
+            {#if f.multiline}
+              <Textarea
+                id={`item-detail-${f.key}`}
+                rows={2}
+                maxlength={2000}
+                bind:value={form.values[f.key]}
+              />
+            {:else}
+              <Input id={`item-detail-${f.key}`} maxlength={2000} bind:value={form.values[f.key]} />
+            {/if}
+          </div>
+        {/each}
+        <div class="flex gap-2 @xl:col-span-2">
+          <Button type="submit">{m.common_save()}</Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onclick={() => {
+              draft.leave.request(() => {
+                editSession += 1;
+                editing = false;
+                busy = false;
+                conflict = undefined;
+                error = undefined;
+              });
+            }}>{m.common_cancel()}</Button
+          >
+        </div>
+      </form>
+    </fieldset>
   {:else}
     <ItemProfileSummary {profile} {kind} />
   {/if}

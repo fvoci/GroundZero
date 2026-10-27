@@ -3,17 +3,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 // 멤버 화면: 첫 읽기 실패 뒤 다시 시도, 그룹 삭제 확인, 초대·받은 초대의 중복 요청 막기.
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '연구실',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -40,9 +43,13 @@ const pending = <T>(): Promise<T> => new Promise<T>(() => undefined);
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
+  me.userId = 'u1';
+  localStorage.clear();
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  me.userId = '';
+  localStorage.clear();
 });
 
 describe('members screen', () => {
@@ -98,7 +105,8 @@ describe('members screen', () => {
     expect(screen.getByRole('button', { name: '초대' })).toBeDisabled();
   });
 
-  it('completion notice changes inside a status region that is always present', async () => {
+  // 일반 완료는 토스트다(D-82). 화면 안 완료 문구(상태 영역)를 두지 않는다.
+  it('reports a sent invitation once as a toast, not in the page', async () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
@@ -108,18 +116,43 @@ describe('members screen', () => {
       role: 'member',
       expires_at: '2026-11-01T00:00:00Z',
     });
+    const done = vi.spyOn(feedback, 'notifyDone');
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
 
-    const status = screen.getByRole('status');
-    expect(status.textContent).toBe('');
     const input = await screen.findByLabelText('이메일');
     await fireEvent.input(input, { target: { value: 'kim@lab.example' } });
     const form = input.closest('form');
     if (form === null) throw new Error('form');
     await fireEvent.submit(form);
     await waitFor(() => {
-      expect(status.textContent).toContain('kim@lab.example');
+      expect(done).toHaveBeenCalledOnce();
     });
+    expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
+  });
+
+  it('reports an accepted ownership once as a toast, not in the page', async () => {
+    vi.spyOn(api, 'members').mockResolvedValue({
+      ...view,
+      i_am_owner: false,
+      pending_owner: 'u1',
+    });
+    vi.spyOn(api, 'groups').mockResolvedValue([]);
+    vi.spyOn(api, 'invitations').mockResolvedValue([]);
+    vi.spyOn(api, 'acceptOwnership').mockResolvedValue(undefined);
+    const done = vi.spyOn(feedback, 'notifyDone');
+    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+
+    await fireEvent.click(
+      await screen.findByRole('button', { name: m.members_accept_ownership() }),
+    );
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith(m.members_became_owner());
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(m.members_became_owner())).toBeNull();
   });
 });
 

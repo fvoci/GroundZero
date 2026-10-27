@@ -5,6 +5,7 @@ import type { ItemView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import './fixtures/authenticated';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,8 +50,8 @@ describe('records panel loading', () => {
     vi.spyOn(api, 'members').mockResolvedValue({
       members: [],
       my_role: 'member',
-      i_am_owner: false,
       can_manage_members: false,
+      i_am_owner: false,
       pending_owner: null,
     });
     render(RecordsPanel, { props: { item, kind: 'project', canWrite: true } });
@@ -95,8 +96,8 @@ describe('records panel loading', () => {
     vi.spyOn(api, 'members').mockResolvedValue({
       members: [],
       my_role: 'member',
-      i_am_owner: false,
       can_manage_members: false,
+      i_am_owner: false,
       pending_owner: null,
     });
     vi.spyOn(api, 'itemFiles').mockResolvedValue([]);
@@ -119,8 +120,8 @@ describe('records panel loading', () => {
     vi.spyOn(api, 'members').mockResolvedValue({
       members: [],
       my_role: 'member',
-      i_am_owner: false,
       can_manage_members: false,
+      i_am_owner: false,
       pending_owner: null,
     });
     render(RecordsPanel, { props: { item, kind: 'course', canWrite: true } });

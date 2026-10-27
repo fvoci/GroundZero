@@ -1,0 +1,7 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "feedback_account_changed_title": "로그인 계정이 바뀌었습니다",
+  "feedback_account_switching": "로그인 계정이 바뀌어 이전 화면과 입력을 가렸습니다. 지금 계정으로 다시 읽어 계속해 주세요.",
+  "feedback_reload": "지금 계정으로 다시 읽기",
+  "feedback_new_version": "새 버전이 배포되었습니다. 입력한 내용을 저장한 뒤 페이지를 새로고침해 주세요."
+}

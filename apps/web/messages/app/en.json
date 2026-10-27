@@ -47,5 +47,12 @@
   "app_nav_collapse": "Collapse {title}",
   "app_nav_close": "Close menu",
   "app_nav_account": "Account menu",
-  "app_nav_unread": "{count} unread notifications"
+  "app_nav_unread": "{count} unread notifications",
+  "app_nav_organization_switch": "Switch organization",
+  "app_nav_organization_choose": "Choose an organization",
+  "app_nav_organization_none": "You are not in any organization yet. Invitations appear in your notifications.",
+  "app_nav_organization_role_admin": "Organization admin",
+  "app_nav_organization_role_member": "Organization member",
+  "app_nav_my_tasks": "My tasks",
+  "app_organization_required": "This screen is scoped to the current organization. Choose one at the top of the sidebar."
 }

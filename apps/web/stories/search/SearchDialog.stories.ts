@@ -45,6 +45,7 @@ const meta = {
   component: SearchHost,
   args: { workspace: { id: WORKSPACE.id, name: WORKSPACE.name } },
   beforeEach: story({ search: () => Promise.resolve(ALL) }),
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
 } satisfies Meta<typeof SearchHost>;
 
 export default meta;
@@ -143,4 +144,11 @@ export const EscapeReturnsFocus: Story = {
     await userEvent.keyboard('{Enter}');
     await expect(await screen.findByRole('searchbox', { name: '검색어' })).toHaveValue('세미나');
   },
+};
+
+export const Dark: Story = { ...Opened, globals: { theme: 'dark' } };
+export const Narrow375: Story = { ...Opened, globals: { viewport: { value: 'narrow375' } } };
+export const LargeText: Story = {
+  ...Opened,
+  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
 };

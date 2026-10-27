@@ -9,11 +9,11 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 
 const workspaces: Workspace[] = [
   {
-    id: 'ws-1',
-    organization_id: 'org-1',
-    name: '공간',
-    role: 'admin',
     access: 'owner',
+    id: 'ws-1',
+    name: '공간',
+    organization_id: 'org-1',
+    role: 'admin',
     is_owner: true,
     realtime_enabled: false,
   },

@@ -71,14 +71,14 @@ describe('search module filter', () => {
     await waitFor(() => {
       expect(search).toHaveBeenCalled();
     });
-    expect(search.mock.calls.at(-1)?.[2]).not.toHaveProperty('moduleId');
+    expect(search.mock.calls.at(-1)?.[3]).not.toHaveProperty('moduleId');
     // 메뉴가 열린 상태에서: 보관하지 않은 모듈만 고를 수 있다.
     await openModules();
     expect(await screen.findByRole('option', { name: '출시' })).toBeTruthy();
     expect(screen.queryByRole('option', { name: '옛 모듈' })).toBeNull();
     await pick('출시', true);
     await waitFor(() => {
-      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[2];
+      const last: SearchFilters | undefined = search.mock.calls.at(-1)?.[3];
       expect(last?.moduleId).toBe('m-1');
     });
   });
@@ -95,7 +95,7 @@ describe('search module filter', () => {
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
     await pick('출시');
     await waitFor(() => {
-      expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+      expect(search.mock.calls.at(-1)?.[3]?.moduleId).toBe('m-1');
     });
     // 새 워크스페이스의 모듈 목록이 오기 전이라도 옛 모듈로 검색하지 않는다(목록 응답을 미룬다).
     let giveModules: (list: Module[]) => void = () => undefined;
@@ -111,7 +111,7 @@ describe('search module filter', () => {
       workspace: { id: 'ws-2', name: '다른 공간' },
     });
     await waitFor(() => {
-      expect(search.mock.calls.at(-1)?.[2]).not.toHaveProperty('moduleId');
+      expect(search.mock.calls.at(-1)?.[3]).not.toHaveProperty('moduleId');
     });
     giveModules([]);
     expect(screen.getByText('모든 모듈')).toBeTruthy();
@@ -137,7 +137,7 @@ describe('search module filter', () => {
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의' } });
     await pick('출시');
     await waitFor(() => {
-      expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+      expect(search.mock.calls.at(-1)?.[3]?.moduleId).toBe('m-1');
     });
     expect(trigger().textContent.trim()).toBe('출시');
     await view.rerender({
@@ -165,15 +165,15 @@ describe('search module filter', () => {
     // 목록이 오기 전에 찾아도 버튼이 말하는 대로 그 모듈로 좁힌다.
     await fireEvent.input(screen.getByTestId('search-input'), { target: { value: '회의록' } });
     await waitFor(() => {
-      expect(search.mock.calls.at(-1)?.[0]).toBe('회의록');
+      expect(search.mock.calls.at(-1)?.[1]).toBe('회의록');
     });
-    expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+    expect(search.mock.calls.at(-1)?.[3]?.moduleId).toBe('m-1');
     expect(trigger().textContent.trim()).toBe('출시');
     giveModules([module('m-1', '출시')]);
     await waitFor(() => {
       expect(trigger().textContent.trim()).toBe('출시');
     });
-    expect(search.mock.calls.at(-1)?.[2]?.moduleId).toBe('m-1');
+    expect(search.mock.calls.at(-1)?.[3]?.moduleId).toBe('m-1');
   });
 });
 
@@ -199,9 +199,9 @@ describe('search client module parameter', () => {
           new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }),
         ),
       );
-    await api.search('회의', null, { moduleId: 'm-1' });
+    await api.search('org-1', '회의', null, { moduleId: 'm-1' });
     expect(urlOf(fetchSpy.mock.calls[0]?.[0])).toContain('module_id=m-1');
-    await api.search('회의', null, {});
+    await api.search('org-1', '회의', null, {});
     expect(urlOf(fetchSpy.mock.calls[1]?.[0])).not.toContain('module_id');
   });
 });

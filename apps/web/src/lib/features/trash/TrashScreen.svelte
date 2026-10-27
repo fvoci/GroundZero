@@ -2,14 +2,19 @@
   // 휴지통 (D-39, D-41): 워크스페이스 휴지통(관리자는 전부, 작성자는 자기가 지운 것) 또는 내 개인 노트 휴지통.
   // 보존 기간이 지나면 되살릴 수 없고 "만료"로 남는다. 영구 삭제는 관리자(개인 노트는 소유자)가 한다.
   import type { Workspace } from '@fvoci/api-client';
+  import { onMount, untrack } from 'svelte';
 
   import type { TrashEntryView, TrashView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
+  import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
+  import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
   import { Input } from '$lib/ui/input';
@@ -24,12 +29,14 @@
 
   let trash = $state<TrashView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let confirmPurge = $state<string | undefined>(undefined);
   let days = $state('');
-  let editingDays = false;
+  let editingDays = $state(false);
+  // undefined는 아직 모르는 서버 값이다. 빈 문자열 초안을 서버와 같다고 지우지 않는다.
+  let savedDays = $state<string | undefined>();
   let versionDays = $state('');
-  let editingVersionDays = false;
+  let editingVersionDays = $state(false);
+  let savedVersionDays = $state<string | undefined>();
   // 보존 기간 칸의 입력·저장 오류는 그 칸 옆에 보인다(D-82).
   let daysError = $state<string | undefined>(undefined);
   let versionDaysError = $state<string | undefined>(undefined);
@@ -37,30 +44,147 @@
   // 덮지 않게 한다.
   let daysSeq = 0;
   let versionDaysSeq = 0;
+  // 보존 기간을 저장하는 동안 그 폼의 입력·되살리기·단추를 잠근다(D-97). 그사이 바뀐 입력은 실패를 숨겼다(FC-4).
+  let daysSaving = $state(false);
+  let versionDaysSaving = $state(false);
   let reloadKey = $state(0);
 
-  const isAdmin = $derived(workspace === undefined || workspace.role === 'admin');
-  const request = $derived({ ws: workspace?.id ?? null, key: reloadKey });
+  const isAdmin = $derived(workspace === undefined || workspace.access === 'owner');
+  const context = $derived({ ws: workspace?.id ?? null, userId: me.userId, admin: isAdmin });
+  const request = $derived({ context, key: reloadKey });
+  let loadedContext: typeof context | undefined;
   let seq = 0;
 
   $effect(() => {
-    const { ws } = request;
+    const { context: owner } = request;
+    // 부모의 같은 워크스페이스 객체 교체는 편집 세션 전환이 아니다.
+    if (
+      loadedContext?.ws !== owner.ws ||
+      loadedContext.userId !== owner.userId ||
+      loadedContext.admin !== owner.admin
+    ) {
+      loadedContext = owner;
+      untrack(() => {
+        trash = undefined;
+        savedDays = savedVersionDays = undefined;
+        days = versionDays = '';
+        editingDays = editingVersionDays = false;
+        daysError = versionDaysError = error = undefined;
+        confirmPurge = undefined;
+      });
+    }
     const mine = ++seq;
     api
-      .trash(ws)
+      .trash(owner.ws)
       .then((t) => {
-        if (mine !== seq) return;
+        if (mine !== seq || owner !== context) return;
         trash = t;
         // 입력 중인 보존 기간을 다시 불러온 값으로 덮지 않는다(처음과 저장한 뒤에만 채운다).
-        if (days === '' || !editingDays) days = String(t.retention_days);
-        if (!editingVersionDays)
-          versionDays = t.version_retention_days === null ? '' : String(t.version_retention_days);
+        savedDays = String(t.retention_days);
+        savedVersionDays =
+          t.version_retention_days === null ? '' : String(t.version_retention_days);
+        if (!editingDays) days = savedDays;
+        if (!editingVersionDays) versionDays = savedVersionDays;
         error = undefined;
       })
       .catch((e: unknown) => {
-        if (mine === seq) error = errorText(e, m.trash_load_failed());
+        if (mine === seq && owner === context) error = errorText(e, m.trash_load_failed());
       });
+    return () => {
+      seq += 1;
+    };
   });
+
+  // 제출 전의 원문만 보존한다. 두 설정은 각각 저장하므로 초안·성공 처리도 서로 독립적이다(⑱C).
+  const daysDraft = createFormDraft({
+    name: () =>
+      workspace !== undefined && isAdmin ? `trash-retention:${workspace.id}` : undefined,
+    snapshot: () => days,
+    parse: (raw) => (typeof raw === 'string' ? raw : undefined),
+    restore: (value) => {
+      days = value;
+      editingDays = true;
+      daysError = undefined;
+    },
+    reset: () => {
+      days = savedDays ?? '';
+      editingDays = false;
+      daysSaving = false;
+      daysError = undefined;
+    },
+    dirty: () => editingDays && days !== savedDays,
+  });
+  const versionDraft = createFormDraft({
+    name: () =>
+      workspace !== undefined && isAdmin ? `trash-version-retention:${workspace.id}` : undefined,
+    snapshot: () => versionDays,
+    parse: (raw) => (typeof raw === 'string' ? raw : undefined),
+    restore: (value) => {
+      versionDays = value;
+      editingVersionDays = true;
+      versionDaysError = undefined;
+    },
+    reset: () => {
+      versionDays = savedVersionDays ?? '';
+      editingVersionDays = false;
+      versionDaysSaving = false;
+      versionDaysError = undefined;
+    },
+    dirty: () => editingVersionDays && versionDays !== savedVersionDays,
+  });
+  onMount(daysDraft.attach);
+  onMount(versionDraft.attach);
+
+  async function saveRetention(version: boolean): Promise<void> {
+    const draft = version ? versionDraft : daysDraft;
+    const ws = workspace?.id;
+    if (ws === undefined || !isAdmin || !draft.active || draft.blocked) return;
+    if (version ? versionDaysSaving : daysSaving) return;
+    const mine = version ? ++versionDaysSeq : ++daysSeq;
+    const raw = (version ? versionDays : days).trim();
+    const n = version && raw === '' ? null : Number(raw);
+    if (n !== null && (!Number.isInteger(n) || n < 1 || n > 3650)) {
+      if (version) versionDaysError = m.trash_version_retention_invalid();
+      else daysError = m.trash_retention_invalid();
+      return;
+    }
+    const attempt = draft.capture();
+    if (attempt === undefined) return;
+    if (version) versionDaysError = undefined;
+    else daysError = undefined;
+    const current = (): boolean =>
+      draft.isOwner(attempt) && mine === (version ? versionDaysSeq : daysSeq);
+    if (version) versionDaysSaving = true;
+    else daysSaving = true;
+    try {
+      if (version) await api.setVersionRetention(ws, n);
+      else if (n !== null) await api.setTrashRetention(ws, n);
+      if (!current()) return;
+      if (version) savedVersionDays = n === null ? '' : String(n);
+      else savedDays = String(n);
+      // 제출했던 입력만 처리한다. 저장 중 추가로 친 원문은 그대로 보존한다.
+      draft.complete(attempt);
+      draft.persist();
+      notifyDone(
+        n === null
+          ? m.trash_versions_forever()
+          : version
+            ? m.trash_versions_days({ days: n })
+            : m.trash_retention_changed({ days: n }),
+      );
+      reloadKey += 1;
+    } catch (e: unknown) {
+      if (!current() || !draft.isCurrent(attempt)) return;
+      const text = errorText(e, m.trash_action_failed());
+      if (version) versionDaysError = text;
+      else daysError = text;
+    } finally {
+      if (draft.isOwner(attempt)) {
+        if (version) versionDaysSaving = false;
+        else daysSaving = false;
+      }
+    }
+  }
 
   /** `fail`이 있으면 실패 문구를 화면 위 공용 알림 대신 그쪽(칸 옆)에 보인다. */
   async function run(
@@ -71,7 +195,6 @@
     error = undefined;
     try {
       await action();
-      status = done;
       notifyDone(done);
       confirmPurge = undefined;
       reloadKey += 1;
@@ -147,42 +270,43 @@
       {/if}
     </p>
   {/if}
-  <p class="sr-only" aria-live="polite">{status}</p>
 
   {#if workspace !== undefined && isAdmin}
     <form
       class="flex flex-wrap items-end gap-2"
       onsubmit={(e) => {
         e.preventDefault();
-        const mine = ++daysSeq;
-        const n = Number(days.trim());
-        if (!Number.isInteger(n) || n < 1 || n > 3650) {
-          daysError = m.trash_retention_invalid();
-          return;
-        }
-        daysError = undefined;
-        void run(
-          () => api.setTrashRetention(workspace.id, n),
-          m.trash_retention_changed({ days: n }),
-          (text: string) => {
-            if (mine === daysSeq) daysError = text;
-          },
-        );
+        void saveRetention(false);
       }}
     >
-      <div class="flex flex-col gap-1">
-        <Label for="trash-retention">{m.trash_retention_label()}</Label>
-        <Input
-          id="trash-retention"
-          class="w-28"
-          inputmode="numeric"
-          bind:value={days}
-          oninput={() => (editingDays = true)}
-          aria-invalid={daysError !== undefined}
-          aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
-        />
-      </div>
-      <Button type="submit" variant="outline">{m.trash_change()}</Button>
+      <fieldset class="contents" disabled={daysSaving}>
+        {#each daysDraft.offers as entry (entry.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              daysDraft.restore(entry);
+            }}
+            ondiscard={() => {
+              daysDraft.discard(entry);
+            }}
+          />
+        {/each}
+        <div class="flex flex-col gap-1">
+          <Label for="trash-retention">{m.trash_retention_label()}</Label>
+          <Input
+            id="trash-retention"
+            class="w-28"
+            inputmode="numeric"
+            bind:value={days}
+            disabled={!daysDraft.active}
+            oninput={() => (editingDays = true)}
+            aria-invalid={daysError !== undefined}
+            aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
+          />
+        </div>
+        <Button type="submit" variant="outline" disabled={!daysDraft.active || daysDraft.blocked}
+          >{m.trash_change()}</Button
+        >
+      </fieldset>
       {#if daysError !== undefined}
         <p id="trash-retention-error" role="alert" class="w-full text-sm text-destructive">
           {daysError}
@@ -194,36 +318,41 @@
       aria-label={m.trash_version_retention_region()}
       onsubmit={(e) => {
         e.preventDefault();
-        const mine = ++versionDaysSeq;
-        const raw = versionDays.trim();
-        const n = raw === '' ? null : Number(raw);
-        if (n !== null && (!Number.isInteger(n) || n < 1 || n > 3650)) {
-          versionDaysError = m.trash_version_retention_invalid();
-          return;
-        }
-        versionDaysError = undefined;
-        void run(
-          () => api.setVersionRetention(workspace.id, n),
-          n === null ? m.trash_versions_forever() : m.trash_versions_days({ days: n }),
-          (text: string) => {
-            if (mine === versionDaysSeq) versionDaysError = text;
-          },
-        );
+        void saveRetention(true);
       }}
     >
-      <div class="flex flex-col gap-1">
-        <Label for="version-retention">{m.trash_version_retention_label()}</Label>
-        <Input
-          id="version-retention"
-          class="w-28"
-          inputmode="numeric"
-          bind:value={versionDays}
-          oninput={() => (editingVersionDays = true)}
-          aria-invalid={versionDaysError !== undefined}
-          aria-describedby={versionDaysError !== undefined ? 'version-retention-error' : undefined}
-        />
-      </div>
-      <Button type="submit" variant="outline">{m.trash_change()}</Button>
+      <fieldset class="contents" disabled={versionDaysSaving}>
+        {#each versionDraft.offers as entry (entry.key)}
+          <FormDraftOffer
+            onrestore={() => {
+              versionDraft.restore(entry);
+            }}
+            ondiscard={() => {
+              versionDraft.discard(entry);
+            }}
+          />
+        {/each}
+        <div class="flex flex-col gap-1">
+          <Label for="version-retention">{m.trash_version_retention_label()}</Label>
+          <Input
+            id="version-retention"
+            class="w-28"
+            inputmode="numeric"
+            bind:value={versionDays}
+            disabled={!versionDraft.active}
+            oninput={() => (editingVersionDays = true)}
+            aria-invalid={versionDaysError !== undefined}
+            aria-describedby={versionDaysError !== undefined
+              ? 'version-retention-error'
+              : undefined}
+          />
+        </div>
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={!versionDraft.active || versionDraft.blocked}>{m.trash_change()}</Button
+        >
+      </fieldset>
       {#if versionDaysError !== undefined}
         <p id="version-retention-error" role="alert" class="w-full text-sm text-destructive">
           {versionDaysError}
@@ -234,6 +363,17 @@
       </p>
     </form>
   {/if}
+
+  <DiscardChangesConfirm
+    open={daysDraft.leave.open}
+    onkeep={daysDraft.leave.keep}
+    ondiscard={daysDraft.discardAndLeave}
+  />
+  <DiscardChangesConfirm
+    open={versionDraft.leave.open}
+    onkeep={versionDraft.leave.keep}
+    ondiscard={versionDraft.discardAndLeave}
+  />
 
   {#if isAdmin && expiredCount > 0}
     <div class="flex flex-wrap items-center gap-2 text-sm">

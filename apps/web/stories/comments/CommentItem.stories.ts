@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, fn, userEvent, within } from 'storybook/test';
 
 import CommentItem from '$lib/features/comments/CommentItem.svelte';
+import { me } from '$lib/me.svelte';
 
 import { comment, WRITER_NAME } from '../fixtures/comments';
 import { EMOJI, LONG_KO, NO_SPACE, NUMBERS } from '../fixtures/text';
@@ -15,6 +16,12 @@ const meta = {
     busy: false,
     onedit: fn(() => Promise.resolve(true)),
     ondelete: fn(),
+  },
+  beforeEach: () => {
+    me.userId = 'story-comment-item';
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('fvoci:story-comment-item:')) localStorage.removeItem(key);
+    }
   },
 } satisfies Meta<typeof CommentItem>;
 
@@ -84,6 +91,8 @@ export const EditCancel: Story = {
     await userEvent.click(canvas.getByRole('button', { name: '고치기' }));
     await userEvent.type(canvas.getByRole('textbox', { name: '댓글 고치기' }), ' 추가');
     await userEvent.click(canvas.getByRole('button', { name: '취소' }));
+    const confirmation = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+    await userEvent.click(within(confirmation).getByRole('button', { name: '변경 버리고 닫기' }));
     await expect(canvas.queryByRole('textbox')).toBeNull();
     await expect(args.onedit).not.toHaveBeenCalled();
   },

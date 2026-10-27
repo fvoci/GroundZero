@@ -1,3 +1,4 @@
+import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -91,7 +92,7 @@ describe('comment boxes use the shared Textarea', () => {
         can_resolve: false,
       },
     ]);
-    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' } } });
+    render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' }, canWrite: true } });
     await screen.findByText('첫 댓글');
     expect(screen.getByRole('textbox', { name: /새 댓글/ })).toHaveAttribute(
       'data-slot',
@@ -109,7 +110,7 @@ describe('comment boxes use the shared Textarea', () => {
 // 리뷰: 공통 Textarea는 내용만큼 자라므로(field-sizing), 긴 CSV·Markdown을 붙여넣는 칸은 높이를 막고 칸 안에서 스크롤한다.
 describe('paste boxes stay bounded', () => {
   it('caps the task CSV and checklist paste boxes and scrolls inside them', async () => {
-    render(TaskCsvImport, { itemId: 'i1', onimported: () => Promise.resolve() });
+    render(TaskCsvImport, { itemId: 'i1', statuses: [], onimported: () => Promise.resolve() });
     expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveClass('max-h-96', 'overflow-y-auto');
     render(ChecklistForm, {
       idPrefix: 't',

@@ -3,13 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
 import { api, parseTask } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { formOf } from '$lib/features/tasks/form';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
-// 1단계 계약(D-116): 업무 상태는 항목이 정의한 이름이고 화면 열은 서버가 함께 주는 범주로 맞춘다. 다른 칸만 고쳐 저장할 때
-// 범주로 맞춘 기본 이름(`in_progress`)이 아니라 서버가 준 원래 이름(`review`)을 돌려보내야 상태가 조용히 바뀌지 않는다
-// (CodeRabbit #139 df376f7c 지적).
+// D-116: 업무 상태는 항목이 정의한 이름이고 완료 판단·기본 열은 범주다. 다른 칸만 고쳐 저장할 때 서버가 준 이름(`review`)을
+// 그대로 돌려보내야 상태가 조용히 바뀌지 않는다(1단계 소비자의 같은 결함을 CodeRabbit #139 df376f7c가 지적; 이 단계는
+// 상태 이름 문자열을 쓰므로 회귀 시험으로 둔다).
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -71,31 +72,25 @@ function element(id: string): HTMLElement {
 }
 
 describe('custom task status names survive a save of other fields', () => {
-  it('parses an item-defined name into its category lane and keeps the name', () => {
-    const task: TaskDetailView = { ...parseTask(raw), checklist: [] };
-    expect(task.status).toBe('in_progress');
-    expect(task.status_name).toBe('review');
+  it('parses an item-defined name as the status and keeps it in the form', () => {
+    const task = detail();
+    expect(task.status).toBe('review');
+    expect(task.status_category).toBe('doing');
     expect(formOf(task).status).toBe('review');
-    // 기본 이름은 그대로다.
-    const plain: TaskDetailView = {
-      ...parseTask({ ...raw, status: 'done', status_category: 'done' }),
-      checklist: [],
-    };
-    expect(plain.status).toBe('done');
-    expect(formOf(plain).status).toBe('done');
   });
 
   it('sends the original name when only the title changed', async () => {
     await setLocale('ko', { reload: false });
     const current = detail();
     const sent: TaskInput[] = [];
-    vi.spyOn(api, 'updateTask').mockImplementation((_id, _base, input) => {
+    vi.spyOn(api, 'updateTask').mockImplementation((_user, _id, _base, input) => {
       sent.push(input);
       return Promise.resolve({
         kind: 'updated',
-        task: { ...current, title: input.title, version: 2, status_name: 'review' },
+        task: { ...current, title: input.title, version: 2 },
       });
     });
+    const done = vi.spyOn(feedback, 'notifyDone');
     mount(current);
     const title = await screen.findByDisplayValue('검토 중인 업무');
     await fireEvent.input(title, { target: { value: '검토 끝낸 업무' } });
@@ -105,6 +100,11 @@ describe('custom task status names survive a save of other fields', () => {
     });
     expect(sent[0]?.status).toBe('review');
     expect(sent[0]?.title).toBe('검토 끝낸 업무');
-    expect(await screen.findByText('저장했습니다.')).toBeTruthy();
+    // 일반 완료는 토스트 한 번이고 화면 안 완료 문구는 없다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledOnce();
+    });
+    expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+    expect(screen.queryByText('저장했습니다.')).toBeNull();
   });
 });

@@ -1,22 +1,25 @@
 import type { Workspace } from '@fvoci/api-client';
 import { render, waitFor } from '@testing-library/svelte';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CalendarView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeExtras } from './fixtures/home';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+beforeEach(homeExtras);
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 const workspace: Workspace = {
+  access: 'owner',
   id: 'ws-1',
   organization_id: 'org-1',
   name: '공간',
   role: 'admin',
-  access: 'owner',
   is_owner: true,
   realtime_enabled: false,
 };
@@ -60,7 +63,7 @@ describe('home layout at narrow widths', () => {
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
-    vi.spyOn(api, 'notifications').mockResolvedValue([]);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const week = document.querySelector('[aria-labelledby="week-heading"]');
