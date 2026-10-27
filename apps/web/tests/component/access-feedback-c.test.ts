@@ -143,7 +143,7 @@ describe('organization public links and allow_copy', () => {
     vi.spyOn(api, 'shares').mockResolvedValue([]);
     vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
     const personal = { ...ACCESS_DOCUMENT, workspace_id: null };
-    vi.spyOn(api, 'document').mockResolvedValue(personal);
+    const read = vi.spyOn(api, 'document').mockResolvedValue(personal);
     const view = render(DocumentActions, {
       doc: personal,
       workspaces: [ACCESS_WORKSPACE],
@@ -157,7 +157,7 @@ describe('organization public links and allow_copy', () => {
 
     // 문서의 조직(org-1)은 켰고 지금 고른 조직(org-2)은 껐다: 문서 조직을 따른다.
     org.load('u1', [TEST_ORGANIZATION, other], other.id);
-    vi.mocked(api.document).mockResolvedValue(ACCESS_DOCUMENT);
+    read.mockResolvedValue(ACCESS_DOCUMENT);
     render(DocumentActions, {
       doc: ACCESS_DOCUMENT,
       workspaces: [ACCESS_WORKSPACE],

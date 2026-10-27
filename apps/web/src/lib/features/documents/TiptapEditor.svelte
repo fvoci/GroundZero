@@ -35,6 +35,7 @@
     setBlockKind,
   } from './block-types';
   import BubbleToolbar from './BubbleToolbar.svelte';
+  import type { LinkDraftControl } from './link-draft-control';
   import { canonicalJson } from './drafts';
   import { schemaExtensions } from './editor-schema';
   import type { LiveSession } from './live';
@@ -73,7 +74,7 @@
   let version = $state(0);
   let container = $state<HTMLDivElement | undefined>();
   let bubbleEl = $state<HTMLDivElement | undefined>();
-  let bubbleToolbar = $state<ReturnType<typeof BubbleToolbar> | undefined>();
+  let linkDraft = $state<LinkDraftControl | undefined>();
   let menuRequest = $state<number | undefined>(undefined);
   // 붙여넣기·입력에서 문서 규칙에 맞춰 바꾼 것의 안내, Markdown 원문에서 저장할 수 없는 것의 안내.
   let contentNotice = $state('');
@@ -636,17 +637,17 @@
     />
   {/each}
   <!-- 링크 주소 초안의 제안은 말풍선(글자를 골라야 보임) 대신 여기에 둔다. -->
-  {#each bubbleToolbar?.linkOffers() ?? [] as offer (offer.key)}
+  {#each linkDraft?.offers() ?? [] as offer (offer.key)}
     <FormDraftOffer
       onrestore={() => {
-        bubbleToolbar?.restoreLinkOffer(offer);
+        linkDraft?.restore(offer);
       }}
       ondiscard={() => {
-        bubbleToolbar?.discardLinkOffer(offer);
+        linkDraft?.discard(offer);
       }}
     />
   {/each}
-  {#if bubbleToolbar?.linkWaitsForSelection() === true}
+  {#if linkDraft?.waitsForSelection() === true}
     <p role="status" class="text-sm text-muted-foreground">{m.documents_link_select_text()}</p>
   {/if}
   {#if math !== undefined}
@@ -769,7 +770,14 @@
     aria-label={m.documents_bubble_label()}
     data-testid="bubble-toolbar"
   >
-    <BubbleToolbar bind:this={bubbleToolbar} editor={editorRef} {version} {draftName} />
+    <BubbleToolbar
+      editor={editorRef}
+      {version}
+      {draftName}
+      onlinkcontrol={(control: LinkDraftControl) => {
+        linkDraft = control;
+      }}
+    />
   </div>
 {/if}
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import BubbleToolbar from '$lib/features/documents/BubbleToolbar.svelte';
 import { schemaExtensions } from '$lib/features/documents/editor-schema';
+import type { LinkDraftControl } from '$lib/features/documents/link-draft-control';
 import TiptapEditor from '$lib/features/documents/TiptapEditor.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -37,13 +38,21 @@ describe('formatting bar link field', () => {
     });
     cleanup();
     editor.commands.setTextSelection({ from: 7, to: 13 });
-    // 제안은 편집기 본문 위(TiptapEditor)가 그린다. 여기서는 막대가 내보내는 되살리기를 바로 부른다.
-    const { component } = render(BubbleToolbar, {
-      props: { editor, version: 2, draftName: 'doc-a' },
+    // 제안은 편집기 본문 위(TiptapEditor)가 그린다. 여기서는 막대가 넘기는 연결로 바로 되살린다.
+    let control: LinkDraftControl | undefined;
+    render(BubbleToolbar, {
+      props: {
+        editor,
+        version: 2,
+        draftName: 'doc-a',
+        onlinkcontrol: (value: LinkDraftControl) => {
+          control = value;
+        },
+      },
     });
-    const [offer] = component.linkOffers();
-    if (offer === undefined) throw new Error('missing link offer');
-    component.restoreLinkOffer(offer);
+    const [offer] = control?.offers() ?? [];
+    if (control === undefined || offer === undefined) throw new Error('missing link offer');
+    control.restore(offer);
     expect(await screen.findByRole('textbox', { name: '링크 주소' })).toHaveValue(
       'https://example.test/',
     );
