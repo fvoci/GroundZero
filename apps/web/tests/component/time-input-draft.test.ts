@@ -349,7 +349,9 @@ it.each([new NetworkError('offline'), new ApiError(403, 'forbidden', 'forbidden'
   },
 );
 
-it('ignores a late same-account save when the input changed during the request', async () => {
+// 저장 중에는 입력이 잠긴다(F-8, `save-input-lock.test.ts`). 잠금을 지나 입력이 바뀐 경우(UI로는 생기지 않는다)에도
+// 옛 스냅숏의 결과로 새 입력을 덮지 않고 그 입력을 초안에 남기는지 지키는 방어 시험이다.
+it('keeps input that changed past the save lock instead of applying the older snapshot', async () => {
   let finish: ((value: Awaited<ReturnType<typeof api.updateTimeEntry>>) => void) | undefined;
   vi.spyOn(api, 'updateTimeEntry').mockReturnValue(
     new Promise((resolve) => {
