@@ -19,6 +19,7 @@ describe('router popstate guard', () => {
     router.hash = '';
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     router.guard = undefined;
     window.history.replaceState(null, '', '/');
     router.path = '/';
@@ -82,6 +83,34 @@ describe('router popstate guard', () => {
     popTo('/shared');
     expect(guard).toHaveBeenCalledTimes(1);
     expect(router.path).toBe('/shared');
+  });
+
+  // RA-1: 가드가 허락한 back()의 popstate는 다시 묻지 않는다. 그다음 뒤로 가기는 다시 묻는다.
+  it('does not ask again for the popstate of an allowed back, but asks for the next one', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const guard = vi.fn(() => true);
+    router.guard = guard;
+    expect(router.back()).toBe(true);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(guard).toHaveBeenCalledTimes(1);
+    guard.mockReturnValue(false);
+    popTo('/shared');
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(router.path).toBe('/shared');
+    popTo('/time');
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(router.path).toBe('/shared');
+  });
+
+  it('does not skip the next popstate when the guard refuses back', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const guard = vi.fn(() => false);
+    router.guard = guard;
+    expect(router.back()).toBe(false);
+    expect(back).not.toHaveBeenCalled();
+    popTo('/shared');
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(router.path).toBe('/notes');
   });
 
   // 가드는 갈 경로를 받는다(다음 경로에서도 마운트된 채인 폼은 묻지 않고 통과한다, D-121).

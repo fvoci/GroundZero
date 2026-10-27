@@ -861,12 +861,13 @@
     undated: UndatedTaskView[] = [],
     /** 다시 계산해 보니 밀릴 업무가 없어 묻지 않고 저장했다(저장한 뒤 알린다, D-125). */
     noShiftNeeded = false,
-  ): Promise<void> {
-    if (task === undefined) return;
     // 후속 업무 미리보기에서 승인한 저장(덮어쓰기 뒤 미리보기 승인 등)이 다시 409면, 패널과 함께 누른 단추가 없어져
     // 초점이 문서로 빠지므로 "내 입력으로 다시 저장"으로 돌린다. 폼의 "저장"은 그대로 있으므로 두고(2차 검증 nit),
-    // "내 입력으로 다시 저장"·덮어쓰기에서 바로 보낸 저장은 `saveMerged`가 돌린다.
-    const refocus = pending !== undefined;
+    // "내 입력으로 다시 저장"·덮어쓰기에서 바로 보낸 저장은 `saveMerged`가 돌린다. 미리보기를 비운 뒤의 재시도는
+    // 처음 저장의 값을 넘겨받는다(RA-2).
+    refocus = pending !== undefined,
+  ): Promise<void> {
+    if (task === undefined) return;
     const result = await api.updateTask(
       editingUser,
       task.id,
@@ -886,7 +887,7 @@
       const plan = await api.previewSchedule(task.id, input.start_date, input.due_date);
       if (plan.shifts.length === 0) {
         pending = undefined;
-        await save(input, baseVersion, [], plan.undated, true);
+        await save(input, baseVersion, [], plan.undated, true, refocus);
         return;
       }
       pending = {

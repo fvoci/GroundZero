@@ -34,7 +34,10 @@ test('saving a title keeps an item-defined status name', async ({ signIn }) => {
 
   await dialog.getByLabel('제목', { exact: true }).fill(`${title} (제목만 고침)`);
   await dialog.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(dialog.getByText('저장했습니다.')).toBeVisible();
+  // 일반 완료는 토스트다(D-82).
+  await expect(
+    page.locator('[data-sonner-toast]').filter({ hasText: '저장했습니다.' }),
+  ).toBeVisible();
   const saved = await api.get(`/api/tasks/${task}`);
   expect(str(saved, 'title')).toBe(`${title} (제목만 고침)`);
   expect(str(saved, 'status')).toBe('review');
