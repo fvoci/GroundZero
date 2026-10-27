@@ -132,12 +132,9 @@
   "events_task_due": "마감일",
   "events_task_name": "업무 제목",
   "events_task_cancel": "취소",
-  "events_task_retry_date": "마감일 다시 넣기",
   "events_task_title_required": "업무 제목을 적어 주세요.",
   "events_task_target_required": "업무를 만들 항목을 고르세요.",
   "events_task_date_required": "날짜를 고르세요.",
   "events_task_create_failed": "업무를 만들지 못했습니다.",
-  "events_task_date_failed": "업무는 만들었지만 마감일을 넣지 못했습니다. 다시 넣거나 업무를 열어 고치세요.",
-  "events_task_open": "{title} 열기",
   "events_task_created": "업무를 만들었습니다: {title} (마감 {day})"
 }
