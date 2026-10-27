@@ -13,7 +13,7 @@ description: fvoci 기준 SQL(crates/server/migrations/202610250001_initial_stat
 
 ## 바꿀 때 지킬 것
 
-- 오버홀 동안은 새 마이그레이션 파일을 더하지 않고 기준 파일을 고친다(D-126). 기준 번호를 바꾸면 `crates/server/src/db/admin.rs`의 `BASELINE_VERSION`·마커도 맞춘다.
+- 정식 `v1.0.0` 원격 태그 전의 오버홀 동안은 새 마이그레이션 파일을 더하지 않고 기준 파일을 고친다. 그 뒤에는 새 번호로 더한다(D-107, D-131). 기준 번호를 바꾸면 `crates/server/src/db/admin.rs`의 `BASELINE_VERSION`·마커도 맞춘다.
 - 함수 시그니처(인자·반환·id 개수)를 바꾸면 같은 파일의 `ALTER FUNCTION ... OWNER`와 `REVOKE`/`GRANT` 줄, Rust 호출부, 시험을 함께 고친다. API가 바뀌면 `cargo xtask openapi`와 `pnpm run generate:api`.
 - 권한 검사는 서버가 아니라 SQL 함수와 RLS에 둔다. 거부 경로 시험은 앱 역할(`state.db.begin_as`)로 돌리고 기대값을 `app_access`에서 유도하지 않는다.
 

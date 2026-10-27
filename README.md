@@ -1,7 +1,7 @@
 # fvoci
 
 통합 작업·지식·학습 관리 앱. 제품 원칙과 제안의 상태, 공통 규칙은 [결정 기록](docs/decisions.md)과
-[AGENTS.md](AGENTS.md)를 읽는다. 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
+[AGENTS.md](AGENTS.md)를 읽는다. 달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
 [제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은
 역사 기록이다. 과거 실행·감사 기록은 필요한 SHA만 확인하며, 현재 정책이나 검증 완료로 해석하지 않는다.
 
