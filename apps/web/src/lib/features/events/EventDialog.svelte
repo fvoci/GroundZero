@@ -527,6 +527,7 @@
               idPrefix="event-edit"
               draftName={`event:${current.id}`}
               attachGuard={false}
+              disabled={busy}
               onrestorebase={(base: EventView) => {
                 formBase = base;
                 formVersion = base.version;
@@ -551,6 +552,7 @@
             <RecurrenceEditor
               bind:this={ruleEditor}
               idPrefix="event-recurrence"
+              disabled={busy}
               draftName={`event-recurrence:${current.id}`}
               onunsaved={(value: boolean) => {
                 ruleUnsaved = value;

@@ -37,6 +37,11 @@
     oncancel?: (() => void) | undefined;
     /** 연 때와 다르게 고친 칸이 있는지 바뀔 때마다 알린다. */
     onunsaved?: ((unsaved: boolean) => void) | undefined;
+    /**
+     * 부모가 저장하는 동안 잠근다. 부모의 fieldset이 입력 칸은 잠그지만 bits-ui Select는 조상 fieldset을 보지 않고 자기
+     * disabled만 보므로 따로 받는다(R5 delta2 확인 필요 1).
+     */
+    disabled?: boolean;
   }
 
   const {
@@ -51,6 +56,7 @@
     onrestorebase,
     onsaved,
     ondraftkept,
+    disabled = false,
   }: Props = $props();
 
   /** 오늘(사용자 시간대, D-81). */
@@ -318,6 +324,7 @@
     <span class="text-sm font-medium" id={`${idPrefix}-kind-label`}>{m.events_kind()}</span>
     <Select.Root
       type="single"
+      disabled={busy || disabled}
       value={f.kind}
       onValueChange={(v: string) => {
         const k = EVENT_KINDS.find((x) => x === v);

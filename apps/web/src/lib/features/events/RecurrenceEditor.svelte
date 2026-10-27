@@ -30,6 +30,8 @@
     ondraftkept?: (value: boolean) => void;
     onsaving?: (value: boolean) => void;
     untilError?: string | undefined;
+    /** 부모가 저장하는 동안 잠근다. bits-ui Select는 조상 fieldset을 보지 않아 따로 받는다(R5 delta2 확인 필요 1). */
+    disabled?: boolean;
   }
 
   const {
@@ -43,6 +45,7 @@
     onunsaved,
     ondraftkept,
     onsaving,
+    disabled = false,
   }: Props = $props();
 
   const FREQ_LABEL: Record<Frequency | 'none', string> = {
@@ -221,6 +224,7 @@
         >
         <Select.Root
           type="single"
+          disabled={busy || disabled}
           value={f.freq}
           onValueChange={(v: string) => {
             const found = FREQUENCIES.find((x) => x === v);

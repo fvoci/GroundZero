@@ -130,6 +130,7 @@
           initial={undefined}
           submitLabel={m.events_create()}
           onsubmit={create}
+          disabled={creating}
           onsaved={() => {
             adding = false;
           }}

@@ -144,6 +144,9 @@ describe('creating while a request is in flight', () => {
     });
     expect(title).toBeDisabled();
     expect(screen.getByLabelText(m.events_description())).toBeDisabled();
+    // bits-ui Select는 조상 fieldset의 disabled를 보지 않고 자기 disabled만 본다(pointerdown으로 연다). 그래서 종류
+    // 선택은 fieldset이 아니라 자기 disabled로 잠겨야 한다(R5 delta2 확인 필요 1).
+    expect(screen.getByRole('button', { name: m.events_kind() })).toHaveAttribute('data-disabled');
     request.resolve({
       id: 'e1',
       item_id: item.id,
