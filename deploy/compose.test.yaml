@@ -85,11 +85,12 @@ services:
     ports:
       - '127.0.0.1::8080'
     healthcheck:
-      # 이미지에 curl이 없어 bash의 /dev/tcp로 관리 포트(9000)의 ready 상태를 확인한다.
+      # 이미지에 curl이 없어 bash의 /dev/tcp로 관리 포트(9000)의 ready 상태를 확인한다. 응답 본문이 아니라 첫 줄의 HTTP 상태 코드가 200인지로 판정한다
+      # (준비 전에는 503이고, 본문에는 개별 검사의 "UP"이 섞일 수 있다). Compose가 $를 풀지 않도록 $$로 적는다.
       test:
         [
           'CMD-SHELL',
-          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && read -r line <&3 && [[ $$line == 'HTTP/'*' 200'* ]]",
         ]
       interval: 5s
       timeout: 5s

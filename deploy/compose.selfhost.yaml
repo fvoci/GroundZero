@@ -141,13 +141,14 @@ services:
       default:
         aliases: ['auth.localhost']
     healthcheck:
-      # 이미지에 curl·wget이 없어 bash로 관리 포트(9000)의 준비 상태를 묻는다. 첫 시작은 렐름 가져오기로 오래 걸린다.
+      # 이미지에 curl·wget이 없어 bash로 관리 포트(9000)의 준비 상태를 묻는다. 응답 본문이 아니라 첫 줄의 HTTP 상태 코드가 200인지로 판정한다
+      # (준비 전에는 503이고, 본문에는 개별 검사의 "UP"이 섞일 수 있다). 첫 시작은 렐름 가져오기로 오래 걸린다. Compose가 $를 풀지 않도록 $$로 적는다.
       test:
         [
           'CMD',
           'bash',
           '-c',
-          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && read -r line <&3 && [[ $$line == 'HTTP/'*' 200'* ]]",
         ]
       interval: 5s
       timeout: 5s

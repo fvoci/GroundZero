@@ -37,7 +37,7 @@
 
 `cargo xtask check`는 외부 서비스를 띄우지 않는다. 데이터베이스가 필요한 통합 테스트는 `cargo xtask test`에서만 돌고, `DATABASE_URL`이 없으면 건너뛰지 않고 실패한다.
 
-`cargo xtask down`은 이 체크아웃의 개발·시험·브라우저·Supabase 시험 프로젝트의 컨테이너와 DB·검색·Keycloak 볼륨을 지운다. `cargo xtask test --supabase --keep`으로 남긴 시험 DB도 사라진다.
+`cargo xtask down`은 이 체크아웃의 개발·시험·브라우저·Supabase 시험 프로젝트의 컨테이너·Compose 프로젝트 네트워크와 DB·검색·Keycloak 볼륨을 지운다. `cargo xtask test --supabase --keep`으로 남긴 시험 DB도 사라진다.
 `target/dev-files` 첨부는 남는다. 기존 데이터를 지우기 전에 보존 범위와 사용자 승인을 확인한다.
 
 SQL을 변경할 때는 결정 기록의 D-88·D-107·D-126을 먼저 본다. 제품 SQL 정본은 `crates/server/migrations/` 하나다.
