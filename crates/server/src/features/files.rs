@@ -5,6 +5,8 @@
 //! 읽어 크기와 SHA-256을 확인하고 파일·버전을 만든다. 내려받기는 권한을 확인한 뒤 서버를 거쳐 흘려보낸다. 브라우저
 //! 안에서 여는 것은 이미지·PDF·텍스트만이고 나머지는 늘 내려받기로 보낸다.
 
+use std::fmt::Write as _;
+
 use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, Query, State};
@@ -896,7 +898,7 @@ fn disposition(inline: bool, name: &str) -> String {
         if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
             encoded.push(b as char);
         } else {
-            encoded.push_str(&format!("%{b:02X}"));
+            let _ignored = write!(encoded, "%{b:02X}");
         }
     }
     format!(

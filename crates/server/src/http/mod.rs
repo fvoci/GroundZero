@@ -786,7 +786,7 @@ impl utoipa::Modify for SessionSecurity {
 /// 라우터를 조립한다.
 /// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
 async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let Ok(_permit) = state.upload_permits.clone().acquire_owned().await else {
+    let Ok(_permit) = Arc::clone(&state.upload_permits).acquire_owned().await else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     next.run(req).await

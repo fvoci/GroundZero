@@ -47,6 +47,8 @@ panic = "unwind"
 unsafe_code = "forbid"
 unused_must_use = "deny"
 missing_debug_implementations = "warn"
+# 그룹은 개별 lint 설정보다 우선순위를 낮춰야 개별 설정이 이긴다.
+rust_2018_idioms = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
@@ -60,3 +62,14 @@ let_underscore_future = "deny"
 allow_attributes_without_reason = "deny"
 large_futures = "warn"
 await_holding_lock = "deny"
+# #170: BeautifulRust 모범 사례에서 고른 규칙(D-09 개정 2026-10-27). #[allow] 대신 이유를 단 #[expect]를 쓴다.
+allow_attributes = "deny"
+cast_sign_loss = "deny"
+cast_possible_truncation = "deny"
+string_add = "warn"
+redundant_clone = "warn"
+rc_buffer = "warn"
+wildcard_imports = "warn"
+clone_on_ref_ptr = "warn"
+fn_params_excessive_bools = "warn"
+format_push_string = "warn"

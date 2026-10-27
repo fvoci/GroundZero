@@ -4,6 +4,7 @@
 //! PR(`pull_request`)만 좁힌다. 체크아웃된 병합 커밋과 그 첫 부모(기준 브랜치)를 비교한다. 그 밖의 이벤트(`push: main`)와
 //! 판별할 수 없는 경우는 전체를 돈다. 아래 표에 없는 경로도 전체를 돈다(허용 목록).
 
+use std::fmt::Write as _;
 use std::fs::OpenOptions;
 use std::io::Write as _;
 use std::path::Path;
@@ -183,7 +184,7 @@ impl Plan {
                 .join(", ")
         );
         if deciding.len() > 5 {
-            basis.push_str(&format!(" 외 {}개", deciding.len() - 5));
+            let _ignored = write!(basis, " 외 {}개", deciding.len() - 5);
         }
         Self { area, basis }
     }
@@ -200,7 +201,7 @@ impl Plan {
     fn outputs(&self) -> String {
         let mut out = format!("docs_only={}\n", self.docs_only());
         for job in Job::ALL {
-            out.push_str(&format!("{}={}\n", job.name(), self.runs(job)));
+            let _ignored = writeln!(out, "{}={}", job.name(), self.runs(job));
         }
         out
     }
@@ -217,16 +218,17 @@ impl Plan {
             "| check | 실행 | |\n"
         });
         for job in Job::ALL {
-            out.push_str(&if self.runs(job) {
-                format!("| {} | 실행 | |\n", job.name())
+            let _ignored = if self.runs(job) {
+                writeln!(out, "| {} | 실행 | |", job.name())
             } else {
-                format!(
-                    "| {} | {} | {} |\n",
+                writeln!(
+                    out,
+                    "| {} | {} | {} |",
                     job.name(),
                     job.skipped_label(),
                     job.skip_reason()
                 )
-            });
+            };
         }
         out
     }

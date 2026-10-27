@@ -10,6 +10,7 @@
 //! - 공개 URL 기본값은 Vite 원점 `http://127.0.0.1:5173`이며 `FVOCI_PUBLIC_URL`로 바꾼다. 쿠키·리다이렉트가 이
 //!   원점에 맞춰진다.
 
+use std::fmt::Write as _;
 use std::path::Path;
 use std::process::{Child, Command};
 
@@ -194,9 +195,9 @@ fn seed_file(
             bail!("{name}: the value for {key} contains {SEED_QUOTE}");
         }
         // SET은 결과 행을 찍지 않는다(SELECT set_config는 값 전체를 출력한다).
-        sql.push_str(&format!("SET {key} = {SEED_QUOTE}{value}{SEED_QUOTE};\n"));
+        let _ignored = writeln!(sql, "SET {key} = {SEED_QUOTE}{value}{SEED_QUOTE};");
     }
-    sql.push_str(&format!("{}\n{}", read("dev-ids.sql")?, read(name)?));
+    let _ignored = write!(sql, "{}\n{}", read("dev-ids.sql")?, read(name)?);
     let command: Vec<String> = [
         "psql",
         "--quiet",

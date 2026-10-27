@@ -7,14 +7,14 @@
 //! 수집)은 여기 넣지 않고 `tests/` 바로 아래에 각자의 실행 파일로 둔다. 실행 파일은 차례로 돌므로 그 파일들은 전처럼
 //! 다른 파일의 시험과 겹치지 않는다. 새 DB를 만들어 그 안에서만 그런 작업을 하는 시험(`shutdown`·`backup` 등)은 여기 둔다.
 
-#[allow(
+#[expect(
     clippy::unwrap_used,
     clippy::expect_used,
     reason = "shared integration fixtures panic when setup or response decoding fails"
 )]
 #[path = "../common/mod.rs"]
 mod common;
-#[allow(
+#[expect(
     clippy::unwrap_used,
     clippy::expect_used,
     reason = "shared integration fixtures panic when setup or response decoding fails"
