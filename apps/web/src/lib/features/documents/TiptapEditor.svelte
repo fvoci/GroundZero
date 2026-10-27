@@ -181,8 +181,11 @@
     math = undefined;
     mathBaseline = '';
   }
+  // 수식 폼은 편집할 수 있을 때만 그린다. 편집할 수 없게 되면(실시간 연결 중단·권한 변화) 보이지 않는 입력으로 이탈을
+  // 묻지 않고, 이름을 같은 갱신에서 비워 이 탭에 남긴 입력을 지우지 않는다(다시 편집할 수 있으면 되살리기 제안으로 고른다,
+  // D3B-F-2와 같은 규칙, R5 B 최종 C-6).
   const mathDraft = createFormDraft<MathDraft | null>({
-    name: () => (draftName === undefined ? undefined : `editor-math:${draftName}`),
+    name: () => (draftName === undefined || !editable ? undefined : `editor-math:${draftName}`),
     snapshot: () => (math === undefined ? null : { kind: math.kind, latex: math.latex }),
     parse: (value) => {
       if (value === null) return null;
@@ -202,7 +205,7 @@
       mathBaseline = '';
     },
     reset: resetMath,
-    dirty: () => math !== undefined && math.latex !== mathBaseline,
+    dirty: () => editable && math !== undefined && math.latex !== mathBaseline,
   });
   onMount(mathDraft.attach);
 
