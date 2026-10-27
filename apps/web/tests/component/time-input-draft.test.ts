@@ -5,10 +5,13 @@ import { api, ApiError, NetworkError, type TimeEntryView } from '$lib/api/client
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
+import { org } from '$lib/org.svelte';
 import { router } from '$lib/router.svelte';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 const entry: TimeEntryView = {
   id: 'entry-a',
@@ -291,8 +294,24 @@ it('retains input and leave warnings when storage fails', async () => {
   expect(event.defaultPrevented).toBe(true);
 });
 
+// 확인 필요 2(R5 B): 시간 기록은 조직 인자가 없는 본인 기록이고(D-117) 초안 키는 사용자별·탭별이다(D-27, 공통
+// `form-draft.ts`). 조직 A에서 쓰다 만 수동 기록이 조직 B에서 제안되지 않았다. 수동 기록에는 조직 범위 값이 없다.
+it('offers an unfinished manual entry in another organization of the same user', async () => {
+  render(TimeScreen);
+  await memo('manual across organizations');
+  cleanup();
+  org.load(
+    'user-a',
+    [TEST_ORGANIZATION, { ...TEST_ORGANIZATION, id: 'org-2', name: '둘째' }],
+    'org-2',
+  );
+  render(TimeScreen);
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(screen.getByLabelText(m.time_memo())).toHaveValue('manual across organizations');
+});
+
 it('successful manual save removes only its own draft and retains another tab offer', async () => {
-  const name = 'time-manual:org-1';
+  const name = 'time-manual';
   const key = formDraftTabKey(name);
   if (key === undefined) throw new Error('missing draft key');
   const sibling = `${key}:sibling`;

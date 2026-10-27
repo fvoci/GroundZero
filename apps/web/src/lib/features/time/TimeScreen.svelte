@@ -143,7 +143,9 @@
     manualBusy = false;
   }
   const manualDraft = createFormDraft<ManualDraft>({
-    name: () => (org.currentId === undefined ? undefined : `time-manual:${org.currentId}`),
+    // 시간 기록은 조직 인자가 없는 본인 기록이고(D-117) 수동 기록 입력에 조직 범위 값이 없다. 초안은 사용자별·탭별이라
+    // (D-27) 이름에 조직을 넣지 않는다. 조직을 고르기 전에는 폼이 없으므로 보존하지 않는다.
+    name: () => (org.currentId === undefined ? undefined : 'time-manual'),
     snapshot: () => ({ form: { ...manual }, zone: manualZone, pending }),
     parse: (value) => {
       if (
