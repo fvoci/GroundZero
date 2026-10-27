@@ -129,9 +129,7 @@
   // 줄별 진행 상태는 이 탭에 남고(요청 id 포함), 돌아오면 되살려 같은 요청으로 이어 간다. 지우는 것은 제안의 버리기뿐이다.
   const unsaved = (): boolean => me.userId === editingUser && (busy || text.trim() !== '');
   const leave = createLeaveGuard({ dirty: unsaved, identity: () => loadedKey });
-  $effect(() =>
-    leave.attach({ beforeUnload: () => unsaved() && (!accountSwitching() || !kept) }),
-  );
+  $effect(() => leave.attach({ beforeUnload: () => unsaved() && (!accountSwitching() || !kept) }));
 
   const parsed = $derived(
     text.trim() === '' ? undefined : parseTasksCsv(text, assignable, statuses),

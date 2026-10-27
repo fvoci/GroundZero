@@ -25,8 +25,7 @@ export function activityText(activity: Activity): string {
     typeof detail.title === 'string'
       ? detail.title
       : '';
-  const target =
-    title || (TARGET_LABEL[activity.target_kind] ?? m.home_activity_target_item)();
+  const target = title || (TARGET_LABEL[activity.target_kind] ?? m.home_activity_target_item)();
   switch (activity.kind) {
     case 'comment':
       return m.home_activity_comment({ who, target });

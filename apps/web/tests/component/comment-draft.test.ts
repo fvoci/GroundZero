@@ -166,11 +166,15 @@ describe('comment drafts', () => {
     vi.mocked(api.comments).mockResolvedValue([comment('c1')]);
     const edit = vi.spyOn(api, 'editComment').mockRejectedValue(new NetworkError('offline'));
     const first = render(CommentsPanel, { props });
-    await fireEvent.input(screen.getByLabelText(/새 댓글/), { target: { value: '읽기 전용 입력' } });
+    await fireEvent.input(screen.getByLabelText(/새 댓글/), {
+      target: { value: '읽기 전용 입력' },
+    });
     const root = (await screen.findByText('원댓글 c1')).closest('li');
     if (root === null) throw new Error('comment root');
     await fireEvent.click(within(root).getByRole('button', { name: '고치기' }));
-    await fireEvent.input(screen.getByLabelText('댓글 고치기'), { target: { value: '고친 원댓글' } });
+    await fireEvent.input(screen.getByLabelText('댓글 고치기'), {
+      target: { value: '고친 원댓글' },
+    });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => {
       expect(edit).toHaveBeenCalledTimes(1);
