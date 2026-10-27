@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { beforeEach } from 'vitest';
 
 import { org } from '$lib/org.svelte';
-// 작업자 C: 시험마다 새 페이지처럼 계정 전환 안전 상태를 초기화한다.
+// 시험마다 새 페이지처럼 계정 전환 안전 상태를 초기화한다.
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 
 import { TEST_ORGANIZATION } from './component/fixtures/organization';

@@ -299,7 +299,7 @@
       // 저장소를 쓸 수 없으면 기억하지 않는다.
     }
   });
-  // 작업자 A: 경로의 보기는 저장 문맥보다 우선하며 경로 없는 진입은 주소를 바꾸지 않는다.
+  // 경로의 보기는 저장 문맥보다 우선하며 경로 없는 진입은 주소를 바꾸지 않는다.
   function applyUrl(): void {
     const route = router.route;
     if (routeView !== undefined) view = routeView;
