@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -75,6 +76,7 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 it("ignores another account's late record success without changing the new input or status", async () => {
+  const done = vi.spyOn(feedback, 'notifyDone');
   let finish: ((value: string) => void) | undefined;
   const pending = new Promise<string>((resolve) => {
     finish = resolve;
@@ -92,7 +94,8 @@ it("ignores another account's late record success without changing the new input
   await pending;
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(input('title')).toHaveValue('user-b input');
-  expect(screen.queryByText(m.records_added({ label: '위험' }))).not.toBeInTheDocument();
+  // 일반 완료는 토스트다(D-82). 다른 계정의 늦은 성공은 알리지 않는다.
+  expect(done).not.toHaveBeenCalled();
 });
 
 it('restores raw numeric and long text input without sending, and warns on cancel and browser exit', async () => {

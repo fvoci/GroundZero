@@ -14,7 +14,7 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { me } from '$lib/me.svelte';
   import { errorText } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
@@ -51,7 +51,6 @@
   let plan = $state<StudyPlanView | undefined>(undefined);
   let participants = $state<StudyParticipantView[]>([]);
   let error = $state<string | undefined>(undefined);
-  let status = $state('');
   let timerBusy = $state(false);
   async function startUnit(id: string): Promise<void> {
     if (timerBusy) return;
@@ -314,7 +313,7 @@
     error = undefined;
     try {
       await action();
-      status = done;
+      notifyDone(done);
       reloadKey += 1;
       return true;
     } catch (e: unknown) {
@@ -437,7 +436,7 @@
       // Closing this target makes isOwner false, so release its busy state first.
       savingUnit = false;
       if (unitDraft.complete(attempt)) editingUnit = undefined;
-      status = m.study_unit_saved({ title });
+      notifyDone(m.study_unit_saved({ title }));
       reloadKey += 1;
     } catch (e: unknown) {
       if (!unitDraft.isOwner(attempt)) return;
@@ -506,7 +505,7 @@
       await api.addStudyUnits(itemId, [{ request_id: requestId, ...unit }]);
       if (!newDraft.isOwner(attempt)) return;
       newDraft.complete(attempt);
-      status = m.study_unit_added();
+      notifyDone(m.study_unit_added());
       reloadKey += 1;
     } catch (e: unknown) {
       if (newDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
@@ -544,7 +543,7 @@
         mineBase = JSON.stringify(sent);
         mineDraft.persist();
       }
-      status = m.study_progress_saved({ title: u.title });
+      notifyDone(m.study_progress_saved({ title: u.title }));
       reloadKey += 1;
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
@@ -563,7 +562,6 @@
 {/each}
 
 {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-<p aria-live="polite" class="text-sm">{status}</p>
 
 {#if plan !== undefined && progress !== undefined && owner === me.userId && !accountSwitching()}
   {@const p = progress}

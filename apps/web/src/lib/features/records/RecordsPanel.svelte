@@ -11,6 +11,7 @@
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
@@ -46,7 +47,6 @@
   let loadError = $state<string | undefined>(undefined);
   /** 회차 목록(D-123)만 못 읽었다. 기록은 보이고 회차 이름·선택이 빈다. */
   let episodeError = $state<string | undefined>(undefined);
-  let status = $state('');
   let creating = $state(false);
   let editingId = $state<string | undefined>(undefined);
   /**
@@ -279,7 +279,7 @@
         savedStatus = m.records_updated({ label: recordKindLabel(def) });
       } else return;
       if (!draft.complete(attempt)) return;
-      status = savedStatus;
+      notifyDone(savedStatus);
       creating = false;
       editingId = undefined;
       conflict = undefined;
@@ -304,7 +304,7 @@
     confirming = undefined;
     try {
       await api.deleteRecord(r.id);
-      status = m.records_deleted();
+      notifyDone(m.records_deleted());
       reloadKey += 1;
     } catch (e: unknown) {
       error = errorText(e, m.records_delete_failed());
@@ -383,7 +383,6 @@
       </div>
     {/if}
     {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-    <p aria-live="polite" class="text-sm">{status}</p>
     {#if current !== undefined}
       {@const def = current}
       {@const kindLabel = recordKindLabel(def)}

@@ -1,11 +1,13 @@
 import type { Module, Workspace } from '@fvoci/api-client';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventView, ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
+import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
 import ItemCopy from '$lib/features/modules/ItemCopy.svelte';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
@@ -15,6 +17,7 @@ import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
+import { ACCESS_FILE } from '../../stories/fixtures/access';
 
 // D2-F-5(R5 2차): F-16·F-8 처분 (1)은 저장 중 입력과 **초안 되살리기**를 잠근다. 다른 탭에서 남긴 초안을 저장 중에
 // 되살리면 스냅숏이 바뀌어 성공을 버리고(만들기는 다시 내면 새 요청 id로 하나 더 생김, 고치기는 기준 판을 못 옮김) 만다.
@@ -131,6 +134,7 @@ describe('draft offers while a create request is in flight', () => {
       pending: null,
     });
     vi.spyOn(api, 'modules').mockResolvedValue([mod]);
+    const done = vi.spyOn(feedback, 'notifyDone');
     const request = held<Awaited<ReturnType<typeof api.copyItem>>>();
     const copy = vi.spyOn(api, 'copyItem').mockReturnValue(request.promise);
     render(ItemCopy, { item, module: mod });
@@ -143,7 +147,16 @@ describe('draft offers while a create request is in flight', () => {
     });
     expectOfferLocked();
     request.resolve({ item_id: 'copied', skipped_documents: 0 });
-    await screen.findByRole('link', { name: m.modules_copy_open() });
+    // 일반 완료는 토스트이고 새 항목 열기는 그 동작 단추다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        m.modules_copy_done(),
+        'item-copy:copied',
+        expect.objectContaining({
+          action: expect.objectContaining({ label: m.modules_copy_open() }),
+        }),
+      );
+    });
     expect(screen.getByRole('button', { name: m.common_draft_restore() })).not.toBeDisabled();
   });
 
@@ -281,5 +294,70 @@ describe('draft offers while an edit request is in flight', () => {
       expect(add).toHaveBeenCalledOnce();
     });
     expectOfferLocked();
+  });
+});
+
+// FC-2(R5 P1 F-11): 쓸 수 없게 된 대상에는 다른 탭·이전에 남긴 입력의 되살리기 대신 읽기 전용 안내와 버리기만 보인다.
+// 되살리면 저장할 수 없는 편집 상태가 열렸다(ItemProfilePanel은 편집을 열었다).
+describe('draft offers after write access is withdrawn', () => {
+  async function expectReadOnlyOffer(): Promise<void> {
+    const offer = await screen.findByTestId('form-draft-offer');
+    expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+    expect(offer).toHaveTextContent(m.common_draft_read_only());
+    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_discard() }));
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+  }
+
+  it('shows the item profile offer read-only', async () => {
+    const form = {
+      status: 'active',
+      leader: '',
+      goal: '권한 철회 전 목표',
+      scope: '',
+      starts_on: '',
+      ends_on: '',
+      keywords: '',
+      values: {},
+    };
+    otherTabDraft(`item-profile:${item.id}:project`, {
+      form,
+      base: 1,
+      baseline: JSON.stringify({ ...form, goal: '' }),
+      leader: null,
+    });
+    vi.spyOn(api, 'itemProfile').mockResolvedValue({ ...profile, can_edit: false });
+    const assignable = vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });
+    await expectReadOnlyOffer();
+    expect(screen.queryByLabelText(m.modules_goal())).toBeNull();
+    expect(assignable).not.toHaveBeenCalled();
+  });
+
+  it('shows the create-from-template offer read-only', async () => {
+    otherTabDraft(`module-template:${mod.id}`, {
+      title: '권한 철회 전 항목',
+      source: '',
+      pending: null,
+    });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(mod);
+    vi.spyOn(api, 'items').mockResolvedValue([{ ...item, id: 'template' }]);
+    render(ModuleScreen, { workspace: { ...workspace, access: 'read' }, moduleId: mod.id });
+    await expectReadOnlyOffer();
+  });
+
+  it('shows the attachment rename offer read-only', async () => {
+    otherTabDraft('attachment-rename:item:i1', {
+      id: ACCESS_FILE.id,
+      name: '권한 철회 전 이름.pdf',
+      baseline: ACCESS_FILE.name,
+    });
+    vi.spyOn(api, 'itemFiles').mockResolvedValue([ACCESS_FILE]);
+    const rename = vi.spyOn(api, 'renameFile');
+    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: false } });
+    await screen.findByText(ACCESS_FILE.name);
+    await expectReadOnlyOffer();
+    expect(screen.queryByDisplayValue('권한 철회 전 이름.pdf')).toBeNull();
+    expect(rename).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -122,6 +123,7 @@ describe('item info save on a stale version', () => {
   it('keeps the input, shows the latest and saves mine again on the latest version', async () => {
     await setLocale('ko', { reload: false });
     mockItem(item());
+    const done = vi.spyOn(feedback, 'notifyDone');
     const latest = item({ title: '다른 사람 제목', description: '다른 사람 설명', version: 2 });
     const sent = serve('/api/items/i1', [
       [409, { error: 'conflict', current: latest }],
@@ -155,7 +157,10 @@ describe('item info save on a stale version', () => {
       expect(sent).toHaveLength(2);
     });
     expect(sent[1]).toMatchObject({ base_version: 2, title: '내 제목', description: '내 설명' });
-    expect(await screen.findByText('저장했습니다.')).toBeInTheDocument();
+    // 일반 완료는 토스트다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith('저장했습니다.');
+    });
     expect(document.querySelector('[data-item-conflict]')).toBeNull();
   });
 

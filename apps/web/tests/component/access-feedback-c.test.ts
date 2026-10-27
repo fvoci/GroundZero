@@ -169,15 +169,17 @@ describe('organization public links and allow_copy', () => {
     expect(screen.queryByText('조직이 공개 링크를 껐습니다.')).toBeNull();
   });
 
+  // 서버 can_download(app_file_can_download)가 문서의 allow_copy를 이미 적용한다. 웹은 그 값만 따른다(D-113).
   it.each([true, false])(
-    'gates downloads, including old versions, with allowCopy=%s',
+    'gates downloads, including old versions, with the server can_download=%s',
     async (allowCopy) => {
-      vi.spyOn(api, 'documentFiles').mockResolvedValue([ACCESS_FILE]);
+      vi.spyOn(api, 'documentFiles').mockResolvedValue([
+        { ...ACCESS_FILE, can_download: allowCopy },
+      ]);
       render(AttachmentsPanel, {
         props: {
           target: { kind: 'document', id: ACCESS_DOCUMENT.id },
           canWrite: true,
-          allowCopy,
         },
       });
       await screen.findByText(ACCESS_FILE.name);
@@ -195,7 +197,7 @@ describe('organization public links and allow_copy', () => {
         created_at: '2026-10-25T00:00:00Z',
       };
       vi.spyOn(api, 'file').mockResolvedValue({
-        file: { ...ACCESS_FILE, current_version: 2 },
+        file: { ...ACCESS_FILE, current_version: 2, can_download: allowCopy },
         versions: [
           { ...version, version: 2 },
           { ...version, version: 1 },

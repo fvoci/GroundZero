@@ -4,6 +4,7 @@ import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, NetworkError } from '$lib/api/client';
 import { formDraftTabKey } from '$lib/features/common/form-draft';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { accountSafety, markAccountSwitch } from '$lib/features/feedback/feedback.svelte';
 import ZoteroImport from '$lib/features/records/ZoteroImport.svelte';
 import { me } from '$lib/me.svelte';
@@ -322,7 +323,9 @@ it('isolates accounts and item targets and ignores late success from a previous 
   expect(field('id')).toHaveValue(' 00123 ');
 });
 
-it('preserves additional input typed during an import and completes only the submitted current snapshot', async () => {
+// FC-3: 가져오는 동안(그리고 컬렉션을 읽는 동안) 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 완료를 버리고 옛 설정의
+// 결과를 보이게 했다. 결과 수는 토스트로 알린다(D-82, FC-1).
+it('locks the inputs during an import and reports the result counts as a toast', async () => {
   let finish: ((value: typeof result) => void) | undefined;
   vi.mocked(api.zoteroImport).mockImplementation(
     () =>
@@ -330,18 +333,53 @@ it('preserves additional input typed during an import and completes only the sub
         finish = resolve;
       }),
   );
+  const done = vi.spyOn(feedback, 'notifyDone');
   mount();
   await open();
   await fill();
   await run();
-  await edit('id', '00999');
+  for (const id of ['type', 'id', 'key']) expect(field(id)).toBeDisabled();
   finish?.(result);
   await waitFor(() => {
     expect(imported).toHaveBeenCalledOnce();
   });
-  expect(field('id')).toHaveValue('00999');
-  expect(values()).toContain('00999');
-  expect(unload()).toBe(true);
+  expect(done).toHaveBeenCalledWith(m.records_zotero_result(result));
+  expect(field('id')).not.toBeDisabled();
+  // 보낸 입력 그대로 끝났으므로 폼을 비운다.
+  expect(field('id')).toHaveValue('');
+  expect(unload()).toBe(false);
+});
+
+it('locks the inputs and the restore offer while collections are read', async () => {
+  const own = formDraftTabKey(name);
+  if (own === undefined) throw new Error('missing owner');
+  localStorage.setItem(
+    `${own}-other`,
+    JSON.stringify({
+      savedAt: '2026-10-27T00:00:00.000Z',
+      input: { libraryType: 'user', libraryId: '42', collection: '' },
+    }),
+  );
+  let answer: ((value: { key: string; name: string }[]) => void) | undefined;
+  vi.mocked(api.zoteroCollections).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  const done = vi.spyOn(feedback, 'notifyDone');
+  mount();
+  await open();
+  await fill();
+  await read();
+  expect(field('id')).toBeDisabled();
+  expect(screen.getByRole('button', { name: m.common_draft_restore() })).toBeDisabled();
+  expect(screen.getByRole('button', { name: m.common_draft_discard() })).toBeDisabled();
+  answer?.([{ key: 'COL-A', name: 'Collection A' }]);
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledWith(m.records_zotero_collections_read({ count: 1 }));
+  });
+  expect(field('id')).not.toBeDisabled();
 });
 
 it('keeps other tabs and offered drafts when the current import succeeds', async () => {

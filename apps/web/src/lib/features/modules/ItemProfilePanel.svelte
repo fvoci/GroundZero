@@ -17,7 +17,7 @@
   } from '$lib/api/client';
   import { api, ITEM_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -319,8 +319,9 @@
 {#each draft.offers as entry (entry.key)}
   <fieldset class="contents" disabled={busy}>
     <FormDraftOffer
+      restorable={profile?.can_edit === true && !accountSwitching()}
       onrestore={() => {
-        draft.restore(entry);
+        if (profile?.can_edit === true && !accountSwitching()) draft.restore(entry);
       }}
       ondiscard={() => {
         draft.discard(entry);

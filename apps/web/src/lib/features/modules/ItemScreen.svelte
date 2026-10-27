@@ -14,6 +14,7 @@
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
@@ -214,7 +215,6 @@
   let description = $state('');
   let shared = $state(false);
   let formError = $state<string | undefined>(undefined);
-  let saved = $state(false);
   let docTemplate = $state('');
   // 새 항목 문서를 보내는 동안 템플릿 선택을 잠근다. 그 값도 초안(draftContext)이라 바꾸면 성공한 만들기를 버리고, 다시
   // 내면 새 요청 id로 두 번째 문서가 생긴다(NotesScreen·WorkspaceScreen과 같다).
@@ -325,9 +325,8 @@
     mod = undefined;
     chosen = undefined;
     error = undefined;
-    // 앞 항목의 "저장했습니다."·오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
+    // 앞 항목의 오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
     // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
-    saved = false;
     formError = undefined;
     conflict = undefined;
     docTemplate = '';
@@ -393,7 +392,6 @@
       return;
     }
     formError = undefined;
-    saved = false;
     const id = item.id;
     const mine = loadSeq;
     // 공개 범위는 체크를 바꿨을 때만 보낸다. 늘 보내면 연 뒤 다른 소유 권한자가 바꾼 공개 범위를 되돌렸다(감사 W13).
@@ -421,9 +419,9 @@
       }
       conflict = undefined;
       refresh(result.item, sent, true);
-      // 더 고친 칸이 남아 있으면 "저장했습니다."를 보이지 않는다(그 입력은 아직 저장되지 않았다).
-      saved =
-        title === filled.title && description === filled.description && shared === filled.shared;
+      // 일반 완료는 토스트다(D-82). 더 고친 칸이 남아 있으면 알리지 않는다(그 입력은 아직 저장되지 않았다).
+      if (title === filled.title && description === filled.description && shared === filled.shared)
+        notifyDone(m.common_saved());
     } catch (e: unknown) {
       if (stillOn(id, mine) && infoDraft.isOwner(attempt))
         formError = errorText(e, m.modules_save_failed());
@@ -479,8 +477,9 @@
 
 {#each item === undefined ? [] : infoDraft.offers as entry (entry.key)}
   <FormDraftOffer
+    restorable={canEdit && !accountSwitching()}
     onrestore={() => {
-      infoDraft.restore(entry);
+      if (canEdit && !accountSwitching()) infoDraft.restore(entry);
     }}
     ondiscard={() => {
       infoDraft.discard(entry);
@@ -631,9 +630,6 @@
         </div>
       {/if}
     {/if}
-    <p class="text-sm empty:hidden" role="status">
-      {#if saved}{m.common_saved()}{/if}
-    </p>
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}

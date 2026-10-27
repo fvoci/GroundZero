@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventView, ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
+import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
 import ItemCopy from '$lib/features/modules/ItemCopy.svelte';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
@@ -89,6 +90,7 @@ const item: ItemView = {
 describe('creating while a request is in flight', () => {
   it('locks item copy input and shows the copy once it succeeds', async () => {
     vi.spyOn(api, 'modules').mockResolvedValue([mod]);
+    const done = vi.spyOn(feedback, 'notifyDone');
     const request = held<Awaited<ReturnType<typeof api.copyItem>>>();
     const copy = vi.spyOn(api, 'copyItem').mockReturnValue(request.promise);
     render(ItemCopy, { item, module: mod });
@@ -102,7 +104,16 @@ describe('creating while a request is in flight', () => {
     expect(title).toBeDisabled();
     expect(screen.getByLabelText(m.modules_copy_module())).toBeDisabled();
     request.resolve({ item_id: 'copied', skipped_documents: 0 });
-    await screen.findByRole('link', { name: m.modules_copy_open() });
+    // 일반 완료는 토스트이고 새 항목 열기는 그 동작 단추다(D-82).
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(
+        m.modules_copy_done(),
+        'item-copy:copied',
+        expect.objectContaining({
+          action: expect.objectContaining({ label: m.modules_copy_open() }),
+        }),
+      );
+    });
     expect(screen.queryByLabelText(m.modules_copy_new_title())).toBeNull();
     expect(copy).toHaveBeenCalledOnce();
   });

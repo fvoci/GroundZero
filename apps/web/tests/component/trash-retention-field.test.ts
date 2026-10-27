@@ -85,6 +85,41 @@ describe('trash retention field errors', () => {
     expect(input).toHaveValue('90');
   });
 
+  // FC-4: 저장하는 동안 그 폼의 입력·단추를 잠근다(D-97). 잠그지 않으면 그사이 고친 입력이 실패 문구를 숨겼다.
+  it('locks the retention form while saving and shows a late failure beside the field', async () => {
+    let reject: (e: unknown) => void = () => undefined;
+    const set = vi.spyOn(api, 'setTrashRetention').mockImplementation(
+      () =>
+        new Promise<undefined>((_, no: (e: unknown) => void) => {
+          reject = no;
+        }),
+    );
+    render(TrashScreen, { props: { workspace } });
+    const input = await screen.findByLabelText('보존 기간(일)');
+    await vi.waitFor(() => {
+      expect(input).toHaveValue('30');
+    });
+    await fireEvent.input(input, { target: { value: '40' } });
+    const form = input.closest('form');
+    if (form === null) throw new Error('form');
+    await fireEvent.submit(form);
+    expect(set).toHaveBeenCalledOnce();
+    expect(input).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: '바꾸기' })[0]).toBeDisabled();
+    // 다른 칸(버전 보존)은 따로 저장하므로 잠그지 않는다.
+    expect(screen.getByLabelText('이전 파일 버전 보존(일, 비우면 영구)')).not.toBeDisabled();
+    await fireEvent.submit(form);
+    expect(set).toHaveBeenCalledOnce();
+
+    reject(new ApiError(400, 'bad_request', 'days must be 1..3650'));
+    await vi.waitFor(() => {
+      expect(input).not.toBeDisabled();
+    });
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(describedText(input)).not.toBeUndefined();
+    expect(input).toHaveValue('40');
+  });
+
   // 리뷰 지적: 같은 칸을 연달아 저장하면, 앞 저장의 늦은 실패가 뒤 저장이 성공한 칸에 오류로 남았다.
   async function saveTwiceThenFailFirst(
     label: string,

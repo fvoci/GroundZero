@@ -5,11 +5,33 @@
 import { toast } from 'svelte-sonner';
 import { flushSync } from 'svelte';
 
+/** 완료 토스트의 동작 단추 하나(복제한 새 항목 열기 등). */
+export interface DoneAction {
+  label: string;
+  onClick: () => void;
+}
+
 /**
  * 완료 알림. 같은 `key`(없으면 문구)는 쌓지 않고 하나를 새로 고친다. 화면 낭독기는 토스트 영역(aria-live)으로 읽는다.
+ * `action`이 있으면 그 단추를 붙이고, 사용자가 닿을 수 있게 닫을 때까지 둔다(D-82: 닫기 단추와 Alt+T로 키보드로 닿고
+ * 닫는다).
  */
-export function notifyDone(message: string, key: string = message): void {
-  toast.success(message, { id: key });
+export function notifyDone(
+  message: string,
+  key: string = message,
+  options: { action?: DoneAction } = {},
+): void {
+  const action = options.action;
+  toast.success(
+    message,
+    action === undefined
+      ? { id: key }
+      : {
+          id: key,
+          duration: Number.POSITIVE_INFINITY,
+          action: { label: action.label, onClick: action.onClick },
+        },
+  );
 }
 
 /** 같은 실패는 한 토스트에서 갱신한다. 저장 오류는 호출 화면에 남긴다(D-82). */

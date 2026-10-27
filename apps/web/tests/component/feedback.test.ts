@@ -38,6 +38,17 @@ describe('user feedback (D-82)', () => {
     expect(document.querySelector('[data-close-button]')).not.toBeNull();
   });
 
+  // FC-1: 복제의 "새 항목 열기"처럼 완료 토스트에 동작 단추 하나를 붙인다. 닫을 때까지 남고 닫기 단추로 닫는다.
+  it('adds one action button to a completion toast and keeps it until closed', async () => {
+    const onClick = vi.fn();
+    render(FeedbackHost);
+    notifyDone('복제했습니다.', 'copy', { action: { label: '새 항목 열기', onClick } });
+    const action = await screen.findByRole('button', { name: '새 항목 열기' });
+    expect(document.querySelector('[data-close-button]')).not.toBeNull();
+    await fireEvent.click(action);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
   it('shows a connection banner until the server answers again', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', () => Promise.resolve(new Response('{}', { status: 200 })));
