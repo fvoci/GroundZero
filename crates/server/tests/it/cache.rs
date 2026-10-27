@@ -10,8 +10,8 @@ use crate::common;
 use axum::Router;
 use axum::http::{HeaderMap, Method, StatusCode};
 use common::{TestUser, add_member, create_doc, create_workspace, doc_body, login, new_request_id};
+use fvoci_http::session::EXPECTED_USER_HEADER;
 use fvoci_server::app::build_state;
-use fvoci_server::features::accounts::EXPECTED_USER_HEADER;
 use serde_json::{Value, json};
 
 fn header(h: &HeaderMap, name: &str) -> Option<String> {

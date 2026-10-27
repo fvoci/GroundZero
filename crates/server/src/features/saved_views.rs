@@ -11,11 +11,11 @@ use serde_json::{Map, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::{UserTx, is_unique_violation};
+use fvoci_http::session::CurrentUser;
 
 /// 저장한 보기.
 #[derive(Debug, Serialize, ToSchema)]

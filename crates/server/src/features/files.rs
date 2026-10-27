@@ -17,12 +17,12 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::http::AppState;
 use crate::storage::{Assembled, Part, sha256_hex};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, FileId, ItemId, UploadId, UserId};
 use fvoci_db::{UserTx, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 조각 본문의 SHA-256(16진수) 헤더.
 pub const PART_SHA256_HEADER: &str = "x-content-sha256";

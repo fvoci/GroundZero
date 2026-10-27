@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use axum::extract::{DefaultBodyLimit, FromRef, MatchedPath, Request, State};
-use axum::http::{HeaderValue, Method, StatusCode, header};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
@@ -19,6 +19,7 @@ use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_db::Db;
+use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
@@ -97,49 +98,10 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
-/// 공개 원점 문자열(`scheme://host[:port]`). Origin 검사는 미들웨어 상태에서 `FromRef`로 꺼낸다.
-#[derive(Debug, Clone)]
-pub struct PublicOrigin(pub String);
-
 impl FromRef<AppState> for PublicOrigin {
     fn from_ref(state: &AppState) -> Self {
         Self(state.config.public_origin())
     }
-}
-
-/// 상태를 바꾸는 요청은 브라우저의 `Origin`이 공개 원점과 같아야 한다 (CSRF 방지).
-/// SameSite=Lax 쿠키만으로는 JSON API의 교차 출처 요청을 다 막지 못한다.
-async fn require_same_origin(
-    State(public): State<PublicOrigin>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let safe = matches!(
-        *request.method(),
-        Method::GET | Method::HEAD | Method::OPTIONS
-    );
-    if !safe {
-        let origin = request
-            .headers()
-            .get(header::ORIGIN)
-            .and_then(|v| v.to_str().ok());
-        if origin != Some(public.0.as_str()) {
-            let mut response = (
-                StatusCode::FORBIDDEN,
-                Json(ErrorBody {
-                    error: "bad_origin",
-                    message: "cross-origin request rejected".into(),
-                    request_id: fvoci_core::logging::current_request_id(),
-                }),
-            )
-                .into_response();
-            response
-                .extensions_mut()
-                .insert(fvoci_core::logging::ErrorCode("bad_origin"));
-            return response;
-        }
-    }
-    next.run(request).await
 }
 
 /// 요청과 그 오류를 잇는 id(D-83). 앞단 프록시가 준 `x-request-id`가 안전한 모양이면 그대로, 아니면 새로 만든다.
@@ -1493,7 +1455,7 @@ mod tests {
                 .as_array()
                 .and_then(|ps| {
                     ps.iter()
-                        .find(|p| p["name"] == crate::features::accounts::EXPECTED_USER_HEADER)
+                        .find(|p| p["name"] == fvoci_http::session::EXPECTED_USER_HEADER)
                 })
                 .cloned()
                 .unwrap_or_default();

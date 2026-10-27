@@ -13,12 +13,12 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, UserId};
 use fvoci_db::{UserTx, is_unique_violation, new_ids};
+use fvoci_http::session::CurrentUser;
 
 time::serde::format_description!(day, Date, "[year]-[month]-[day]");
 

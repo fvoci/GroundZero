@@ -13,12 +13,12 @@ use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::records::{RecordFileInput, validate};
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::UserTx;
+use fvoci_http::session::CurrentUser;
 
 /// 한 번에 가져오는 최대 문헌 수.
 const MAX_ITEMS: usize = 2000;

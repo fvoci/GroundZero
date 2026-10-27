@@ -10,12 +10,12 @@ use time::Date;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, ModuleId, UserId};
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
+use fvoci_http::session::CurrentUser;
 
 time::serde::format_description!(day, Date, "[year]-[month]-[day]");
 

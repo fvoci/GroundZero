@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::tasks::EXPECTED_TASK_USER_DOC;
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::{UserTx, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 상태 이름 상한(글자 수). 열 머리에 들어가는 짧은 라벨이다.
 const MAX_STATUS_NAME: usize = 50;

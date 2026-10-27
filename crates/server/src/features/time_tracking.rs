@@ -17,12 +17,12 @@ use time::{Date, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::tasks::{format_date, parse_date, validate_text};
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::WorkspaceId;
 use fvoci_db::{UserTx, is_unique_violation, new_ids};
+use fvoci_http::session::CurrentUser;
 
 const MAX_MEMO_CHARS: usize = 2_000;
 /// 목록·집계 한 번의 최대 기간(일).

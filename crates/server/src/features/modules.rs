@@ -18,7 +18,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::access::Grade;
-use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
     Access, CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION,
     SUMMARY_COLUMNS, SummaryRow, TREE_ORDER, initial_body, load_with_access, max_depth,
@@ -27,6 +26,7 @@ use crate::features::documents::{
 use crate::features::workspaces::validate_title;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
+use fvoci_http::session::CurrentUser;
 
 time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;

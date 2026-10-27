@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::events::{Event, EventConflict};
 use crate::features::tasks::{
     EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, format_date, load_detail, parse_date,
@@ -24,6 +23,7 @@ use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::{needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 반복 주기.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

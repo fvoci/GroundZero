@@ -21,12 +21,12 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::search_text::plain_text;
 use crate::http::AppState;
 use crate::storage::Storage;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, WorkspaceId};
+use fvoci_http::session::CurrentUser;
 
 /// 응답으로 보내는 조각 크기.
 const CHUNK: usize = 64 * 1024;

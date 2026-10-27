@@ -15,7 +15,6 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
@@ -24,6 +23,7 @@ use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 설명 글자 수 상한.
 const MAX_DESCRIPTION_CHARS: usize = 10_000;

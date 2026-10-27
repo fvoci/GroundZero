@@ -6,11 +6,10 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use fvoci_core::ids::UserId;
+use fvoci_http::session::EXPECTED_USER_HEADER;
 use fvoci_server::app::build_state;
 use fvoci_server::config::Config;
-use fvoci_server::features::accounts::{
-    EXPECTED_USER_HEADER, SESSION_COOKIE, VerifiedIdentity, start_session,
-};
+use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
 use fvoci_server::http::{AppState, router};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};

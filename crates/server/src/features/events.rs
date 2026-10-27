@@ -15,7 +15,6 @@ use time::{Date, Duration, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::tasks::{format_date, parse_date, validate_text};
@@ -24,6 +23,7 @@ use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, WorkspaceId};
 use fvoci_db::{UserTx, is_unique_violation, new_ids};
+use fvoci_http::session::CurrentUser;
 
 const MAX_DESCRIPTION_CHARS: usize = 10_000;
 /// 일정 하나의 최대 길이(일).

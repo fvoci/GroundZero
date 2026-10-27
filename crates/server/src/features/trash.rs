@@ -13,12 +13,12 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::tasks::EXPECTED_TASK_USER_DOC;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_db::{UserTx, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 지운 결과(되살릴 때 쓰는 휴지통 묶음).
 #[derive(Debug, Serialize, ToSchema)]

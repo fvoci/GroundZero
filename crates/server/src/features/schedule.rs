@@ -19,7 +19,6 @@ use time::{Date, Duration};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::tasks::{
     DATE_YEARS, EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail,
     format_date, load_detail, parse_date,
@@ -28,6 +27,7 @@ use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::UserId;
 use fvoci_db::UserTx;
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 업무의 날짜 칸.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

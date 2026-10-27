@@ -16,7 +16,6 @@ use uuid::Uuid;
 
 use crate::collab::room::RestoreRequest;
 use crate::config::Limits;
-use crate::features::accounts::CurrentUser;
 use crate::features::documents::{
     ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
     load_with_access, lock_limit_error, to_document, validate_body,
@@ -26,6 +25,7 @@ use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
 use fvoci_db::Db;
+use fvoci_http::session::CurrentUser;
 
 /// 한 번에 돌려주는 리비전 수.
 const PAGE: i64 = 100;

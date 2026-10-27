@@ -12,10 +12,11 @@ use tokio::sync::mpsc;
 
 use super::lease::Lease;
 use super::room::{self, CloseReason, Outbound, Peer};
-use crate::features::accounts::{self, CurrentUser};
+use crate::features::accounts;
 use crate::http::AppState;
 use fvoci_core::error::AppError;
 use fvoci_core::ids::DocumentId;
+use fvoci_http::session::CurrentUser;
 
 /// 연결로 보낼 것이 이만큼 쌓이면 느린 연결로 보고 닫는다.
 const OUTBOX: usize = 512;
@@ -47,7 +48,11 @@ pub async fn connect(
     // 다르면(다른 탭에서 계정을 바꾼 뒤 앞 계정의 화면이 새 쿠키로 다시 붙음) 문서를 보거나 방에 들어가기 전에 4412로
     // 닫는다. 브라우저는 업그레이드 거절의 HTTP 상태를 읽지 못하고 y-websocket은 끝없이 다시 붙으므로, 열고 닫기 코드로
     // 알린다. 값은 비교에만 쓰고 권한은 세션의 사용자로만 본다.
-    match accounts::check_expected_user(user, query.expected_user.as_deref(), "expected_user") {
+    match fvoci_http::session::check_expected_user(
+        user,
+        query.expected_user.as_deref(),
+        "expected_user",
+    ) {
         Ok(()) => {}
         Err(AppError::AccountChanged) => {
             return Ok(ws.on_upgrade(|mut socket| async move {

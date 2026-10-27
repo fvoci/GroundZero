@@ -1,6 +1,5 @@
 //! 협업 활동(D-119). 감사로그와 별개이며 SQL이 대상 접근을 확인한다.
 use crate::access::{self, Kind};
-use crate::features::accounts::CurrentUser;
 use crate::features::notifications::CursorQuery;
 use crate::features::organizations::OrgScope;
 use crate::http::AppState;
@@ -8,6 +7,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, UserId};
+use fvoci_http::session::CurrentUser;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};

@@ -23,13 +23,13 @@ use uuid::Uuid;
 use crate::collab::room::MoveRequest;
 use crate::collab::visibility::CommittedMove;
 use crate::config::Limits;
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::http::cache;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
 use fvoci_db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;

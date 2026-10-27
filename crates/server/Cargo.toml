@@ -21,6 +21,7 @@ bytes = "1"
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 fvoci-core.workspace = true
 fvoci-db.workspace = true
+fvoci-http.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 hmac = "0.13"
@@ -30,7 +31,7 @@ rand = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "stream"] }
 serde.workspace = true
 serde_json.workspace = true
-sha2 = "0.11"
+sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time = { version = "0.3", features = ["serde", "formatting", "parsing"] }

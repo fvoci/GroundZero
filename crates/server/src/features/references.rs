@@ -11,12 +11,12 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::features::accounts::CurrentUser;
 use crate::features::documents::access;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, WorkspaceId};
 use fvoci_db::UserTx;
+use fvoci_http::session::CurrentUser;
 
 /// 종류별 후보 수 상한.
 const CANDIDATES_PER_KIND: i64 = 8;
