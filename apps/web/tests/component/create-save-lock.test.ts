@@ -2,7 +2,7 @@ import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import RecurrenceEditor from '$lib/features/events/RecurrenceEditor.svelte';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
@@ -53,6 +53,28 @@ function expectOfferLocked(): void {
   expect(screen.getByRole('button', { name: m.common_draft_discard() })).toBeDisabled();
 }
 
+/** 붙잡아 둔 요청. 잠금을 본 뒤 풀어 저장이 끝나면 잠금도 풀리는지 본다(R5 B 최종 C-7, D4-F-1과 같은 기준). */
+function held<T>(): { promise: Promise<T>; reject: (error: unknown) => void } {
+  let reject: ((error: unknown) => void) | undefined;
+  const promise = new Promise<T>((_ok, fail) => {
+    reject = fail;
+  });
+  if (reject === undefined) throw new Error('promise');
+  return { promise, reject };
+}
+
+// 연결 실패로 푼다: 폼이 남고, 해제가 소유자 조건·finally를 거친다.
+const offline = (): NetworkError => new NetworkError('offline');
+
+/** 저장이 끝난 뒤 제안과 주어진 입력이 다시 쓸 수 있는지. */
+async function expectReleased(...inputs: (() => HTMLElement)[]): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: m.common_draft_restore() })).toBeEnabled();
+    expect(screen.getByRole('button', { name: m.common_draft_discard() })).toBeEnabled();
+    for (const input of inputs) expect(input()).toBeEnabled();
+  });
+}
+
 /** bits-ui Select는 pointerdown에서 연다. 열렸는지는 트리거의 aria-expanded로 본다. */
 async function opens(labelledBy: string): Promise<boolean> {
   const el = document.querySelector<HTMLElement>(`[aria-labelledby="${labelledBy}"]`);
@@ -82,7 +104,8 @@ describe('create forms while the request is in flight', () => {
     otherTabDraft('home-quick-task:org-1', { title: '다른 탭 업무', item: item.id, pending: null });
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
-    const add = vi.spyOn(api, 'createQuickTask').mockReturnValue(new Promise(() => undefined));
+    const request = held<never>();
+    const add = vi.spyOn(api, 'createQuickTask').mockReturnValue(request.promise);
     render(HomeDashboard, { workspaces: [] });
     await fireEvent.click(await screen.findByRole('button', { name: m.home_quick_add() }));
     await fireEvent.input(await screen.findByLabelText(m.home_title()), {
@@ -93,6 +116,9 @@ describe('create forms while the request is in flight', () => {
       expect(add).toHaveBeenCalledOnce();
     });
     expectOfferLocked();
+    request.reject(offline());
+    await expectReleased(() => screen.getByLabelText(m.home_title()));
+    expect(add).toHaveBeenCalledOnce();
   });
 
   it('locks the new module form and its draft offer', async () => {
@@ -103,7 +129,8 @@ describe('create forms while the request is in flight', () => {
       kind: 'project',
       pending: null,
     });
-    const create = vi.spyOn(api, 'createModule').mockReturnValue(new Promise(() => undefined));
+    const request = held<never>();
+    const create = vi.spyOn(api, 'createModule').mockReturnValue(request.promise);
     render(ModulesSection, { workspace });
     const name = screen.getByLabelText(m.modules_name());
     const key = screen.getByLabelText(m.modules_key());
@@ -117,11 +144,19 @@ describe('create forms while the request is in flight', () => {
     expect(key).toBeDisabled();
     expect(await opens('module-kind-label')).toBe(false);
     expectOfferLocked();
+    request.reject(offline());
+    await expectReleased(
+      () => name,
+      () => key,
+    );
+    expect(await opens('module-kind-label')).toBe(true);
+    expect(create).toHaveBeenCalledOnce();
   });
 
   it('locks the shared create form draft offer', async () => {
     otherTabDraft('test:lock:container', { name: '다른 탭 이름', requestId: null, context: '' });
-    const create = vi.fn(() => new Promise<void>(() => undefined));
+    const request = held<undefined>();
+    const create = vi.fn(() => request.promise);
     render(CreateForm, {
       id: 'new',
       label: 'Name',
@@ -138,6 +173,9 @@ describe('create forms while the request is in flight', () => {
       expect(create).toHaveBeenCalledOnce();
     });
     expectOfferLocked();
+    request.reject(offline());
+    await expectReleased(() => screen.getByRole('textbox', { name: 'Name' }));
+    expect(create).toHaveBeenCalledOnce();
   });
 });
 
@@ -152,7 +190,8 @@ describe('recurrence editor while a save is in flight', () => {
       count: '',
     };
     otherTabDraft('rule-lock', { fields, baseFields: { ...fields, interval: '1' }, base: null });
-    const onsave = vi.fn(() => new Promise<void>(() => undefined));
+    const request = held<undefined>();
+    const onsave = vi.fn(() => request.promise);
     render(RecurrenceEditor, {
       idPrefix: 'rule',
       rule: { freq: 'daily', interval: 1, weekdays: [], until: null, count: null },
@@ -170,6 +209,10 @@ describe('recurrence editor while a save is in flight', () => {
     expect(interval).toBeDisabled();
     expect(await opens('rule-freq-label')).toBe(false);
     expectOfferLocked();
+    request.reject(offline());
+    await expectReleased(() => interval);
+    expect(await opens('rule-freq-label')).toBe(true);
+    expect(onsave).toHaveBeenCalledOnce();
   });
 });
 
@@ -181,7 +224,8 @@ describe('template pickers while a document is being created', () => {
   it('locks the note template while the note is created', async () => {
     vi.spyOn(api, 'myNotes').mockResolvedValue([]);
     vi.spyOn(api, 'documentTemplates').mockResolvedValue([template]);
-    const create = vi.spyOn(api, 'createNote').mockReturnValue(new Promise(() => undefined));
+    const request = held<never>();
+    const create = vi.spyOn(api, 'createNote').mockReturnValue(request.promise);
     render(NotesScreen);
     const picker = await screen.findByLabelText(m.documents_template_label());
     await fireEvent.input(screen.getByLabelText(m.notes_new_title_label()), {
@@ -192,14 +236,19 @@ describe('template pickers while a document is being created', () => {
       expect(create).toHaveBeenCalledOnce();
     });
     expect(picker).toBeDisabled();
+    request.reject(offline());
+    await waitFor(() => {
+      expect(picker).toBeEnabled();
+    });
+    expect(screen.getByLabelText(m.notes_new_title_label())).toBeEnabled();
+    expect(create).toHaveBeenCalledOnce();
   });
 
   it('locks the wiki template while the document is created', async () => {
     vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
     vi.spyOn(api, 'documentTemplates').mockResolvedValue([template]);
-    const create = vi
-      .spyOn(api, 'createWikiDocument')
-      .mockReturnValue(new Promise(() => undefined));
+    const request = held<never>();
+    const create = vi.spyOn(api, 'createWikiDocument').mockReturnValue(request.promise);
     render(WorkspaceScreen, { workspace });
     const picker = await screen.findByLabelText(m.documents_template_label());
     await fireEvent.input(screen.getByLabelText(m.workspaces_new_doc_title()), {
@@ -210,5 +259,11 @@ describe('template pickers while a document is being created', () => {
       expect(create).toHaveBeenCalledOnce();
     });
     expect(picker).toBeDisabled();
+    request.reject(offline());
+    await waitFor(() => {
+      expect(picker).toBeEnabled();
+    });
+    expect(screen.getByLabelText(m.workspaces_new_doc_title())).toBeEnabled();
+    expect(create).toHaveBeenCalledOnce();
   });
 });
