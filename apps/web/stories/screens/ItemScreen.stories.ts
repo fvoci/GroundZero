@@ -214,8 +214,13 @@ export const SwitchWithKeyboard: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const groups = await canvas.findByRole('navigation', { name: '항목 묶음' });
+    const links = within(groups).getAllByRole('link');
     const docs = within(groups).getByRole('link', { name: '문서' });
-    docs.focus();
+    // 첫 묶음 링크에서 Tab으로 "문서"까지 간다(초점을 바로 주지 않는다, R5 B 최종 FC-10).
+    links[0]?.focus();
+    for (let i = 0; i < links.length && document.activeElement !== docs; i += 1)
+      await userEvent.tab();
+    await expect(docs).toHaveFocus();
     await userEvent.keyboard('{Enter}');
     await expect(docs).toHaveAttribute('aria-current', 'page');
     await waitFor(() => expect(canvasElement.querySelector('#item-docs-heading')).not.toBeNull());
