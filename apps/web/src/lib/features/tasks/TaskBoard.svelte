@@ -1079,8 +1079,11 @@
       return 'stopped';
     }
     if (result.kind === 'shift_conflict') {
-      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다(이제 옮길 것이 없으면 그대로 저장).
+      // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
+      // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
       const plan = await api.previewSchedule(t.id, input.start_date, input.due_date);
+      if (plan.shifts.length === 0)
+        return saveSchedule(t, input, baseVersion, [], done, plan.undated, true);
       ganttAsk = {
         task: t,
         input,
