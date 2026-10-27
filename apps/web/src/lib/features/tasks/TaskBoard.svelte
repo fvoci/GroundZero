@@ -46,10 +46,10 @@
     removeFormDraftAt,
     storeFormDraft,
   } from '$lib/features/common/form-draft';
-  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay, formatInstant } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
@@ -781,17 +781,17 @@
 
   $effect(() =>
     leave.attach({
-      // 다른 계정으로 바뀌어 다시 읽는 중: 고친 입력이 앞 계정의 초안으로 남았으면 막지 않는다(D-96·#88: 막고 남으면 앞 계정의
+      // 다른 계정으로 바뀌었거나 새 버전 배포로 다시 읽는 중(`leavingWithDrafts`): 고친 입력이 앞 계정의 초안으로 남았으면 막지 않는다(D-96·#88: 막고 남으면 앞 계정의
       // 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 남기지 못했으면(저장소 사용 불가·용량 초과) 보통 떠나기처럼 경고해
       // 입력을 잃지 않게 한다 — 문서 편집기(DocumentEditor)와 같은 규칙. 전환이 아니면 전처럼 경고한다.
       beforeUnload: () => {
         if (openTaskId === undefined)
-          return accountSwitching()
+          return leavingWithDrafts()
             ? (viewDirty && !viewDraft.kept) || [...newKept.values()].some((kept) => !kept)
             : newDirty.size > 0 || viewDirty;
         // 편집 가능 여부(canEdit)와 무관하게 "고친 입력이 있는데 초안을 남기지 못했는지"만 본다(TaskDetail이 알린다; 고친 칸이
         // 없거나 폼이 사라지면 true). 저장이 409 account_changed로 끝나 폼이 잠긴 뒤에도 입력은 지켜야 한다.
-        if (accountSwitching())
+        if (leavingWithDrafts())
           return (
             !detailDraftKept ||
             (viewDirty && !viewDraft.kept) ||

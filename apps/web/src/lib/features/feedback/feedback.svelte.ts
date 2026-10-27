@@ -59,6 +59,17 @@ export function sessionExpiries(): number {
   return expiries;
 }
 
+/**
+ * 새 버전 배포(배너). 옛 청크를 못 읽었는데 이 창을 다시 읽지 않기로 했을 때(이미 한 번 다시 읽었다, 미저장 입력을
+ * 초안으로 남기지 못했다) 저장한 뒤 새로고침하라고 알린다. `times`는 알린 횟수로, 닫은 뒤 다시 실패하면 다시 보인다.
+ */
+export const newVersion = $state({ times: 0 });
+
+/** 새 버전 배너를 띄운다(`new-version.ts`). */
+export function reportNewVersion(): void {
+  newVersion.times += 1;
+}
+
 /** API가 응답 없이 실패했을 때(NetworkError) 부른다. */
 export function reportConnectionLost(): void {
   connection.lost = true;

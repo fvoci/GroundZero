@@ -3,6 +3,7 @@ import type { Preview } from '@storybook/svelte';
 
 import { asLocale, type DisplayLocale } from '$lib/display';
 import { applyDocFont } from '$lib/doc-font';
+import { watchPreloadErrors } from '$lib/features/common/preload-reload';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { applyTheme } from '$lib/theme.svelte';
@@ -27,6 +28,11 @@ globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Respo
   }
   return realFetch(input, init);
 };
+
+// 브랜치 미리보기는 push마다 같은 주소에 새 해시 파일로 덮어쓴다. 이미 열린 탭이 스토리를 바꾸다 사라진 옛 청크를
+// 동적 import해 404가 나면(`vite:preloadError`) 이 미리보기 창을 한 번만 다시 읽는다. 다시 읽은 뒤에도 나면 오류를 그대로
+// 둔다(무한 다시 읽기 방지, `preload-reload.ts`).
+watchPreloadErrors();
 
 /** 브라우저 글자 크기 설정을 흉내 낸다(rem 기준 크기 확인). 실제 브라우저·OS 설정 시험과는 다르다. */
 const FONT_SCALES = ['100', '150', '200'];

@@ -10,7 +10,7 @@
   import { errorText, untilBeforeStart } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
+  import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -89,7 +89,7 @@
   onMount(() =>
     leaveGuard.attach({
       beforeUnload: () =>
-        (unsaved || ruleUnsaved) && (!accountSwitching() || !formKept || !ruleKept),
+        (unsaved || ruleUnsaved) && (!leavingWithDrafts() || !formKept || !ruleKept),
     }),
   );
   const confirmClose = $derived(leaveGuard.open);
