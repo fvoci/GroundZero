@@ -1,6 +1,5 @@
 #![expect(
     clippy::unwrap_used,
-    clippy::expect_used,
     reason = "integration assertions fail the test on invalid setup or response"
 )]
 //! 시스템 API 계약(D-96, PR3, D-131).

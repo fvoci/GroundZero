@@ -293,10 +293,6 @@ async fn send_entries(
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::unwrap_used,
-    reason = "unit fixture decoding must fail the test on malformed output"
-)]
 mod tests {
     use super::*;
     use crate::state::{ByteStream, IoFuture};

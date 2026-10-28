@@ -133,25 +133,7 @@ pub async fn clean_storage(
         match result {
             Ok(()) => done += 1,
             Err(err) => {
-                if attempts >= 9 {
-                    tracing::error!(
-                        event = "storage.cleanup_gave_up",
-                        error_code = err.code(),
-                        detail = fvoci_core::logging::safe_error(&err),
-                        key = key.as_str(),
-                        attempts = attempts + 1,
-                        "storage cleanup gave up after 10 attempts"
-                    );
-                } else {
-                    tracing::warn!(
-                        event = "storage.cleanup_retry",
-                        error_code = err.code(),
-                        detail = fvoci_core::logging::safe_error(&err),
-                        key = key.as_str(),
-                        attempts = attempts + 1,
-                        "storage cleanup failed; will retry"
-                    );
-                }
+                log_cleanup_failure(&key, attempts, &err);
                 sqlx::query("SELECT app_system_storage_retry($1, $2, $3)")
                     .bind(&key)
                     .bind(&upload)
@@ -163,4 +145,26 @@ pub async fn clean_storage(
         tx.commit().await?;
     }
     Ok(done)
+}
+
+fn log_cleanup_failure(key: &str, attempts: i32, err: &AppError) {
+    if attempts >= 9 {
+        tracing::error!(
+            event = "storage.cleanup_gave_up",
+            error_code = err.code(),
+            detail = fvoci_core::logging::safe_error(&err),
+            key,
+            attempts = attempts + 1,
+            "storage cleanup gave up after 10 attempts"
+        );
+    } else {
+        tracing::warn!(
+            event = "storage.cleanup_retry",
+            error_code = err.code(),
+            detail = fvoci_core::logging::safe_error(&err),
+            key,
+            attempts = attempts + 1,
+            "storage cleanup failed; will retry"
+        );
+    }
 }

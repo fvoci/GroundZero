@@ -1,6 +1,5 @@
 #![expect(
     clippy::unwrap_used,
-    clippy::expect_used,
     reason = "integration setup and assertions fail on invalid test data"
 )]
 //! 공간 반출의 스냅샷 뒤 재인가(D-113, 시스템 브리프·PR4a 잠금 경계).
