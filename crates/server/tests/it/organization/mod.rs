@@ -6,6 +6,7 @@
 //! D-20 역할별 공유 상한과 D-112 SR1-14 자기 참여 회수.
 
 mod admin_recovery;
+mod role_sources;
 mod share_ceiling;
 mod share_races;
 mod share_resources;
