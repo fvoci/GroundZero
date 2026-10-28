@@ -883,9 +883,13 @@ CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_use
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   BEGIN
-    PERFORM app_require_organization_admin(p_organization);
+    IF app_access('organization', p_organization) IS DISTINCT FROM 'owner' THEN
+      RETURN 0;
+    END IF;
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
-    PERFORM app_require_organization_admin(p_organization);
+    IF app_access('organization', p_organization) IS DISTINCT FROM 'owner' THEN
+      RETURN 0;
+    END IF;
     PERFORM 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
     IF p_role <> 'member' OR NOT EXISTS (
       SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user AND role = 'admin'
