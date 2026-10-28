@@ -17,12 +17,16 @@ const legacySignature = JSON.stringify({
 const requestId = '11111111-1111-4111-8111-111111111111';
 const recordKey = 'fvoci:user-a:-:form-draft:record:never-opened-item:risk:new:tab:old-tab';
 
-function saved(pending: unknown): string {
+function draft(pending: unknown) {
   const form = { ...emptyForm(), body: 'Keep current long writing' };
-  return JSON.stringify({
+  return {
     savedAt: '2026-10-28T12:00:00Z',
     input: { form, baseline: JSON.stringify(emptyForm()), version: 0, pending },
-  });
+  };
+}
+
+function saved(pending: unknown): string {
+  return JSON.stringify(draft(pending));
 }
 
 async function startWithoutOpeningRecords(): Promise<void> {
@@ -101,6 +105,35 @@ it.each([null, { requestId, signature: 'a'.repeat(64) }])(
     expect(localStorage.getItem(recordKey)).toBe(value);
   },
 );
+
+it.each([
+  ['truncated JSON', saved({ requestId, signature: legacySignature }).slice(0, -4)],
+  ['array envelope', JSON.stringify([draft({ requestId, signature: legacySignature })])],
+  ['missing input', JSON.stringify({ savedAt: 'old', request: legacySignature })],
+  ['non-object input', JSON.stringify({ savedAt: 'old', input: legacySignature })],
+  ['missing pending', JSON.stringify({ savedAt: 'old', input: { request: legacySignature } })],
+  [
+    'broken form with null pending',
+    JSON.stringify({ ...draft(null), input: { ...draft(null).input, form: legacySignature } }),
+  ],
+  [
+    'broken baseline with null pending',
+    JSON.stringify({ ...draft(null), input: { ...draft(null).input, baseline: legacySignature } }),
+  ],
+  [
+    'broken version with null pending',
+    JSON.stringify({ ...draft(null), input: { ...draft(null).input, version: legacySignature } }),
+  ],
+  ['non-UUID request ID', saved({ requestId: legacySignature, signature: 'a'.repeat(64) })],
+  ['non-hex UUID request ID', saved({ requestId: 'g'.repeat(36), signature: 'a'.repeat(64) })],
+  ['non-hex digest', saved({ requestId, signature: 'g'.repeat(64) })],
+])('removes an unverified record draft at startup: %s', async (_name, value) => {
+  localStorage.setItem(recordKey, value);
+
+  await startWithoutOpeningRecords();
+
+  expect(localStorage.getItem(recordKey)).toBeNull();
+});
 
 it('leaves other domains and non-app storage untouched while cleaning a legacy record', async () => {
   const value = saved({ requestId, signature: legacySignature });

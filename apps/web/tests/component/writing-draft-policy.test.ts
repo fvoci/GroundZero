@@ -268,6 +268,83 @@ it('preserves a study note while its amount and replan settings stay on screen',
   expect(field('unit-done-u1')).toHaveValue('0');
 });
 
+it('keeps course episode settings dirty after restoring materials', async () => {
+  render(CoursePanel, { itemId: 'course' });
+  await fireEvent.click(
+    await screen.findByRole('button', { name: m.courses_edit_episode_aria({ number: 1 }) }),
+  );
+  await edit('ep-materials-e1', 'RESTORED MATERIALS');
+  cleanup();
+  render(CoursePanel, { itemId: 'course' });
+  await fireEvent.click(
+    await screen.findByRole('button', { name: m.courses_edit_episode_aria({ number: 1 }) }),
+  );
+  await edit('ep-title-e1', 'UNSAVED EPISODE TITLE');
+  await edit('ep-plan-e1', '2026-11-17');
+  await restore();
+  expect(field('ep-title-e1')).toHaveValue('UNSAVED EPISODE TITLE');
+  expect(field('ep-plan-e1')).toHaveValue('2026-11-17');
+  expect(field('ep-materials-e1')).toHaveValue('RESTORED MATERIALS');
+  expect(stored()).not.toContain('UNSAVED EPISODE TITLE');
+  expect(stored()).not.toContain('2026-11-17');
+  // Once writing returns to its base, only the unsaved settings must still guard leaving.
+  await edit('ep-materials-e1', '');
+  expect(warns()).toBe(true);
+  await edit('ep-title-e1', 'Episode 1');
+  expect(warns()).toBe(true);
+  await edit('ep-plan-e1', '');
+  expect(warns()).toBe(false);
+});
+
+it('keeps course personal settings dirty after restoring a note', async () => {
+  render(CoursePanel, { itemId: 'course' });
+  await fireEvent.click(
+    await screen.findByRole('button', { name: m.courses_notes_aria({ number: 1 }) }),
+  );
+  await edit('mine-note-e1', 'RESTORED COURSE NOTE');
+  cleanup();
+  render(CoursePanel, { itemId: 'course' });
+  await fireEvent.click(
+    await screen.findByRole('button', { name: m.courses_notes_aria({ number: 1 }) }),
+  );
+  await edit('mine-position-e1', '11:22');
+  await edit('mine-planned-e1', '2026-11-18');
+  await restore();
+  expect(field('mine-position-e1')).toHaveValue('11:22');
+  expect(field('mine-planned-e1')).toHaveValue('2026-11-18');
+  expect(field('mine-note-e1')).toHaveValue('RESTORED COURSE NOTE');
+  expect(stored()).not.toContain('11:22');
+  expect(stored()).not.toContain('2026-11-18');
+  await edit('mine-note-e1', '');
+  expect(warns()).toBe(true);
+  await edit('mine-position-e1', '');
+  expect(warns()).toBe(true);
+  await edit('mine-planned-e1', '');
+  expect(warns()).toBe(false);
+});
+
+it('keeps study personal settings dirty after restoring a note', async () => {
+  render(StudyPanel, { itemId: 'study' });
+  await fireEvent.click(await screen.findByRole('button', { name: m.study_mine() }));
+  await edit('unit-note-u1', 'RESTORED STUDY NOTE');
+  cleanup();
+  render(StudyPanel, { itemId: 'study' });
+  await fireEvent.click(await screen.findByRole('button', { name: m.study_mine() }));
+  await edit('unit-done-u1', '17');
+  await edit('unit-plan-u1', '2026-11-19');
+  await restore();
+  expect(field('unit-done-u1')).toHaveValue('17');
+  expect(field('unit-plan-u1')).toHaveValue('2026-11-19');
+  expect(field('unit-note-u1')).toHaveValue('RESTORED STUDY NOTE');
+  expect(stored()).not.toContain('2026-11-19');
+  await edit('unit-note-u1', '');
+  expect(warns()).toBe(true);
+  await edit('unit-done-u1', '0');
+  expect(warns()).toBe(true);
+  await edit('unit-plan-u1', '');
+  expect(warns()).toBe(false);
+});
+
 it('keeps Zotero settings and its API key on screen without any durable copy', async () => {
   render(ZoteroImport, { itemId: 'item', onimported: vi.fn() });
   await fireEvent.click(screen.getByRole('button', { name: m.records_zotero_import() }));
