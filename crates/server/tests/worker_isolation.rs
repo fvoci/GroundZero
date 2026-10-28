@@ -14,9 +14,16 @@ use uuid::Uuid;
 static WORKER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 // nextval survives a failed subtransaction: is_called proves the trigger actually fired.
-async fn install_failure(table: &str, operation: &str, predicate: &str, code: &str) -> String {
+async fn install_failure(
+    table: &str,
+    operation: &str,
+    predicate: &str,
+    code: &str,
+    failures: Option<u32>,
+) -> String {
     let name = format!("worker_failure_{}", Uuid::now_v7().simple());
     let row = if operation == "DELETE" { "OLD" } else { "NEW" };
+    let failures = failures.map_or(i64::MAX, i64::from);
     let mut conn = common::fixture_conn().await;
     sqlx::raw_sql(&format!(
         "CREATE SEQUENCE fvoci.{name};
@@ -24,8 +31,9 @@ async fn install_failure(table: &str, operation: &str, predicate: &str, code: &s
          CREATE FUNCTION fvoci.{name}() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
          SET search_path TO fvoci,pg_temp AS $body$
          BEGIN IF {predicate} THEN
-           PERFORM nextval('fvoci.{name}');
-           RAISE EXCEPTION 'worker isolation injection' USING ERRCODE='{code}';
+           IF nextval('fvoci.{name}') <= {failures} THEN
+             RAISE EXCEPTION 'worker isolation injection' USING ERRCODE='{code}';
+           END IF;
          END IF; RETURN {row}; END $body$;
          CREATE TRIGGER {name} BEFORE {operation} ON fvoci.{table}
          FOR EACH ROW EXECUTE FUNCTION fvoci.{name}();"
@@ -75,6 +83,7 @@ async fn series_failure(code: &str) {
             series[1].0
         ),
         code,
+        None,
     )
     .await;
     // Exercise the production transaction/continue policy, never reproduce the worker loop here.
@@ -109,6 +118,56 @@ async fn worker_continues_after_simulated_lock_timeout() {
 }
 
 #[tokio::test]
+async fn worker_retries_a_series_lock_conflict_with_a_fresh_transaction() {
+    let _guard = WORKER.lock().await;
+    let w = World::new().await;
+    let root = w.task().await;
+    fixture(
+        "UPDATE fvoci.tasks SET due_date=current_date-2 WHERE id=$1",
+        &[root],
+    )
+    .await;
+    let row = one(&w.state, &w.owner,
+        "SELECT series_id AS id FROM fvoci.app_set_task_recurrence($1,'{\"freq\":\"daily\",\"interval\":1,\"weekdays\":[]}','UTC',NULL,@ids)", &[root]).await;
+    let series = id(&row);
+    // 첫 시도의 앞 회차까지 되돌려야 한다. nextval은 트랜잭션 롤백 뒤에도 횟수가 남는다.
+    let injection = install_failure(
+        "tasks",
+        "INSERT",
+        &format!("NEW.series_id='{series}'::uuid AND NEW.occurrence_date=current_date"),
+        "55P03",
+        Some(1),
+    )
+    .await;
+    let result = fvoci_server::worker::run_all_now(&w.state.db, None, None).await;
+    let attempts = one(
+        &w.state,
+        &w.owner,
+        &format!("SELECT last_value FROM fvoci.{injection}"),
+        &[],
+    )
+    .await;
+    assert!(remove_failure(&w, "tasks", &injection).await);
+    result.unwrap();
+    assert_eq!(
+        attempts["last_value"], 2,
+        "SR-201-5 worker did not retry 55P03"
+    );
+    let generated = rows(
+        &w.state,
+        &w.owner,
+        "SELECT id FROM fvoci.tasks WHERE series_id=$1 AND id<>$2",
+        &[series, root],
+    )
+    .await;
+    assert_eq!(
+        generated.len(),
+        3,
+        "the entire series transaction must be retried"
+    );
+}
+
+#[tokio::test]
 async fn worker_purge_rolls_back_one_batch_and_commits_the_other() {
     let _guard = WORKER.lock().await;
     let w = World::new().await;
@@ -132,6 +191,7 @@ async fn worker_purge_rolls_back_one_batch_and_commits_the_other() {
         "DELETE",
         &format!("OLD.id='{bad}'::uuid"),
         "ZY085",
+        None,
     )
     .await;
     fixture(

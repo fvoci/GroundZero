@@ -1,7 +1,9 @@
 use crate::common::{self, TestUser};
 use crate::sql_support::{World, blocked, id, made, on, one, pid, rows};
+use axum::http::{Method, StatusCode};
 use fvoci_core::error::AppError;
-use fvoci_db::UserTx;
+use fvoci_db::{AnonTx, UserTx};
+use sqlx::Connection;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy)]
@@ -27,10 +29,33 @@ impl Entry {
         }
     }
 
-    async fn transaction(self, w: &World) -> UserTx {
+    async fn transaction(self, w: &World) -> SyncTx {
         match self {
-            Self::System => w.state.db.begin_anonymous().await.unwrap(),
-            Self::Item | Self::Series => w.state.db.begin_as(w.owner.id).await.unwrap(),
+            Self::System => SyncTx::System(w.state.db.begin_anonymous().await.unwrap()),
+            Self::Item | Self::Series => {
+                SyncTx::User(w.state.db.begin_as(w.owner.id).await.unwrap())
+            }
+        }
+    }
+}
+
+enum SyncTx {
+    User(UserTx),
+    System(AnonTx),
+}
+
+impl SyncTx {
+    fn conn(&mut self) -> &mut sqlx::PgConnection {
+        match self {
+            Self::User(tx) => tx.conn(),
+            Self::System(tx) => tx.conn(),
+        }
+    }
+
+    async fn commit(self) -> Result<(), AppError> {
+        match self {
+            Self::User(tx) => tx.commit().await,
+            Self::System(tx) => tx.commit().await,
         }
     }
 }
@@ -232,4 +257,114 @@ async fn demotion_counts_single_sync_committed_while_waiting() {
 #[tokio::test]
 async fn demotion_counts_system_sync_committed_while_waiting() {
     sync_before_bound(Entry::System).await;
+}
+
+async fn blocked_waiter(holder: i32) -> i32 {
+    let mut observer = common::fixture_conn().await;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiter: Option<i32> = sqlx::query_scalar(
+                "SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1",
+            )
+            .bind(holder)
+            .fetch_optional(&mut observer)
+            .await
+            .unwrap();
+            if let Some(waiter) = waiter {
+                return waiter;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("SR-201-5 sync did not take the assignee member lock before its lanes")
+}
+
+async fn assign_root(w: &World, root: Uuid, user: &TestUser) {
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_update_task($1,(SELECT version FROM fvoci.tasks WHERE id=$1),'recurrence recovery','','할 일','none',NULL,current_date,NULL,'{}',ARRAY[$2],false,'[]',@ids)",
+        &[root, user.id.0],
+    )
+    .await;
+}
+
+/// 선행 잠금 뒤 바뀐 담당은 열을 쥔 채 기다리지 않고 전체 롤백·409 후 다시 만든다.
+#[tokio::test]
+async fn changed_root_assignee_returns_retryable_conflict_without_waiting_in_a_lane() {
+    let (w, user, series) = assigned_series().await;
+    let first = w.member("member").await;
+    let root = id(&one(
+        &w.state,
+        &w.owner,
+        "SELECT root_task_id AS id FROM fvoci.task_series WHERE id=$1",
+        &[series],
+    )
+    .await);
+    assign_root(&w, root, &first).await;
+    // 관리자 연결은 선행 멤버 잠금의 대기를 고정하는 데만 쓴다. 담당 변경은 실제 명령이다.
+    let mut fixture = common::fixture_conn().await;
+    let mut holder = fixture.begin().await.unwrap();
+    sqlx::query(
+        "SELECT 1 FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE",
+    )
+    .bind(w.ws)
+    .bind(first.id.0)
+    .execute(&mut *holder)
+    .await
+    .unwrap();
+    let holder_pid = pid(&mut holder).await;
+    let app = common::app(&w.state);
+    let actor = w.owner.clone();
+    let uri = format!("/api/items/{}/recurrences/sync", w.item);
+    let sync_uri = uri.clone();
+    let pending = tokio::spawn(async move {
+        common::send(&app, Method::POST, &sync_uri, Some(&actor), None).await
+    });
+    let waiter = blocked_waiter(holder_pid).await;
+    blocked(holder_pid, waiter).await;
+    assign_root(&w, root, &user).await;
+    let mut demotion = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let count = demotion_bound(&mut demotion, &w, &user).await;
+    holder.commit().await.unwrap();
+    let reply = tokio::time::timeout(std::time::Duration::from_secs(10), pending)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(reply.status, StatusCode::CONFLICT, "{:?}", reply.json);
+    assert_eq!(reply.json["code"], "invalid_state");
+    assert!(
+        reply.json["message"]
+            .as_str()
+            .unwrap()
+            .contains("try again")
+    );
+    assert_eq!(
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT id FROM fvoci.tasks WHERE series_id=$1",
+            &[series]
+        )
+        .await
+        .len(),
+        1,
+        "a failed NOWAIT sync must roll back its new occurrence"
+    );
+    demotion_command(&mut demotion, w.org, user.id.0, count)
+        .await
+        .unwrap();
+    demotion.commit().await.unwrap();
+    let retry = common::send(
+        &common::app(&w.state),
+        Method::POST,
+        &uri,
+        Some(&w.owner),
+        None,
+    )
+    .await;
+    assert_eq!(retry.status, StatusCode::OK, "{:?}", retry.json);
+    assert!(retry.json["created"].as_i64().unwrap() > 0);
+    recovered(&w, &user, series).await;
 }
