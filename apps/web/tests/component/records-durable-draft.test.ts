@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import { formDraftTabKey } from '$lib/features/common/form-draft';
 import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
 import { emptyForm } from '$lib/features/records/records';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
@@ -60,7 +61,7 @@ beforeEach(async () => {
       date_label: null,
       fields: [
         { key: 'amount', label: '수량', type: 'number', choices: [] },
-        { key: 'notes', label: '노트', type: 'long_text', choices: [] },
+        { key: 'mitigation', label: '노트', type: 'long_text', choices: [] },
       ],
       file_roles: [],
     },
@@ -76,6 +77,98 @@ beforeEach(async () => {
   });
 });
 afterEach(() => vi.restoreAllMocks());
+
+it('normalizes record form and baseline before holding a draft missed by startup cleanup', async () => {
+  const key = formDraftTabKey('record:draft-item:risk:new');
+  if (key === undefined) throw new Error('missing record draft key');
+  const form = {
+    ...emptyForm(),
+    title: 'SHORT_MISSED_TITLE',
+    occurred_on: '2026-10-28',
+    body: 'Unsent missed body',
+    values: { mitigation: 'Unsent mitigation', amount: 'SHORT_AMOUNT', owner: 'SHORT_PERSON' },
+    people: { attendees: ['SHORT_ATTENDEE'] },
+    files: [{ file_id: 'SHORT_FILE', version: '2', role: 'SHORT_ROLE' }],
+    unreadable: { amount: true },
+  };
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      savedAt: '2026-10-28T12:00:00Z',
+      input: {
+        form,
+        baseline: JSON.stringify({ ...form, title: 'SHORT_BASE_TITLE', body: 'Before editing' }),
+        version: 7,
+        pending: null,
+      },
+    }),
+  );
+  const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+    throw new DOMException('enumeration unavailable', 'SecurityError');
+  });
+  clearLegacyRecordDrafts();
+  enumeration.mockRestore();
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+  const restore = await screen.findByRole('button', { name: m.common_draft_restore() });
+  const heldKey = Object.keys(localStorage).find((value) =>
+    value.startsWith('fvoci:user-a:-:form-draft:record:draft-item:risk:new:held:'),
+  );
+  expect(heldKey).toBeDefined();
+  const held = localStorage.getItem(heldKey ?? '');
+  expect(held).not.toContain('SHORT_');
+  expect(JSON.parse(held ?? 'null')).toEqual({
+    savedAt: '2026-10-28T12:00:00Z',
+    input: {
+      form: {
+        ...emptyForm(),
+        body: 'Unsent missed body',
+        values: { mitigation: 'Unsent mitigation' },
+      },
+      baseline: JSON.stringify({
+        ...emptyForm(),
+        body: 'Before editing',
+        values: { mitigation: 'Unsent mitigation' },
+      }),
+      version: 7,
+      pending: null,
+    },
+  });
+  await fireEvent.click(restore);
+  expect(input('body')).toHaveValue('Unsent missed body');
+  expect(input('mitigation')).toHaveValue('Unsent mitigation');
+});
+
+it.each(['broken baseline', 'unknown form property', 'unknown kind'])(
+  'does not offer a missed record draft with %s',
+  async (problem) => {
+    const kind = problem === 'unknown kind' ? 'unknown_kind' : 'risk';
+    vi.mocked(api.recordKinds).mockResolvedValue([
+      { kind, label: '위험', module_kind: 'project', date_label: null, fields: [], file_roles: [] },
+    ]);
+    const key = `fvoci:user-a:-:form-draft:record:draft-item:${kind}:new:held:old-tab`;
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: '2026-10-28T12:00:00Z',
+        input: {
+          form: {
+            ...emptyForm(),
+            body: 'Untrusted draft',
+            ...(problem === 'unknown form property' ? { extra: 'SHORT_BROKEN' } : {}),
+          },
+          baseline: problem === 'broken baseline' ? '{' : JSON.stringify(emptyForm()),
+          version: 0,
+          pending: null,
+        },
+      }),
+    );
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+
+    expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  },
+);
 
 it.each([
   [
@@ -151,7 +244,7 @@ it('keeps raw numbers on screen, restores only long text and reuses the same ret
   await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
   await fireEvent.input(input('title'), { target: { value: '보존할 제목' } });
   await fireEvent.input(input('amount'), { target: { value: '1e' } });
-  await fireEvent.input(input('notes'), { target: { value: '긴 입력\n두 번째 줄' } });
+  await fireEvent.input(input('mitigation'), { target: { value: '긴 입력\n두 번째 줄' } });
   const unload = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(unload);
   expect(unload.defaultPrevented).toBe(true);
@@ -163,7 +256,7 @@ it('keeps raw numbers on screen, restores only long text and reuses the same ret
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
   expect(input('title')).toHaveValue('');
   expect(input('amount')).toHaveValue('');
-  expect(input('notes')).toHaveValue('긴 입력\n두 번째 줄');
+  expect(input('mitigation')).toHaveValue('긴 입력\n두 번째 줄');
   expect(create).not.toHaveBeenCalled();
   await fireEvent.input(input('title'), { target: { value: '보존할 제목' } });
   await fireEvent.input(input('amount'), { target: { value: '12' } });

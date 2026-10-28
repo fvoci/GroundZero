@@ -118,7 +118,7 @@ beforeEach(async () => {
       module_kind: 'project',
       date_label: null,
       fields: [
-        { key: 'notes', label: 'notes', type: 'long_text', choices: [] },
+        { key: 'mitigation', label: 'notes', type: 'long_text', choices: [] },
         { key: 'amount', label: 'amount', type: 'number', choices: [] },
       ],
       file_roles: [],
@@ -147,7 +147,7 @@ it('preserves record writing without short fields or raw retry payloads and reta
   await edit('record-risk-title', 'SHORT RECORD TITLE');
   await edit('record-risk-amount', '123456');
   await edit('record-risk-body', 'LONG RECORD BODY\nsecond line');
-  await edit('record-risk-notes', 'LONG FIELD NOTES');
+  await edit('record-risk-mitigation', 'LONG FIELD NOTES');
   await waitFor(() => {
     expect(stored()).toContain('LONG RECORD BODY');
   });
@@ -169,7 +169,7 @@ it('preserves record writing without short fields or raw retry payloads and reta
   expect(field('record-risk-title')).toHaveValue('');
   expect(field('record-risk-amount')).toHaveValue('');
   expect(field('record-risk-body')).toHaveValue('LONG RECORD BODY\nsecond line');
-  expect(field('record-risk-notes')).toHaveValue('LONG FIELD NOTES');
+  expect(field('record-risk-mitigation')).toHaveValue('LONG FIELD NOTES');
   await edit('record-risk-title', 'SHORT RECORD TITLE');
   await edit('record-risk-amount', '123456');
   await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));

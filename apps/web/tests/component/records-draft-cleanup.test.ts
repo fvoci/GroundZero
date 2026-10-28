@@ -342,6 +342,32 @@ it('removes a legacy raw retry written by another tab after app startup', async 
   });
 });
 
+it.each(['rewrite', 'remove'])(
+  'keeps newer writing that arrives while an older storage event is normalized (%s)',
+  async (operation) => {
+    await startWithoutOpeningRecords();
+    const old = draft(operation === 'remove' ? { requestId, signature: legacySignature } : null);
+    old.input.form.title = 'SHORT_OLD_EVENT';
+    const value = JSON.stringify(old);
+    const newerDraft = draft(null);
+    newerDraft.input.form.body = 'Newer unsent writing';
+    const newer = JSON.stringify(newerDraft);
+    localStorage.setItem(recordKey, value);
+    const parse = JSON.parse;
+    vi.spyOn(JSON, 'parse').mockImplementation((raw: string) => {
+      const parsed: unknown = parse(raw);
+      if (raw === value) localStorage.setItem(recordKey, newer);
+      return parsed;
+    });
+
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: recordKey, storageArea: localStorage, newValue: value }),
+    );
+
+    expect(localStorage.getItem(recordKey)).toBe(newer);
+  },
+);
+
 it('ignores unrelated storage events and stops record cleanup when App unmounts', async () => {
   await startWithoutOpeningRecords();
   const value = saved({ requestId, signature: legacySignature });
