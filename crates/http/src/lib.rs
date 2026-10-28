@@ -2,7 +2,6 @@
 //! 상태는 조립 crate의 상태에서 `FromRef`로 꺼낸다.
 
 pub mod conflict;
-pub mod org_scope;
 pub mod organization;
 pub mod origin;
 pub mod session;

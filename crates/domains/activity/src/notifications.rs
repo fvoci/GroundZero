@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Query, State};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, WorkspaceId};
-use fvoci_http::org_scope::OrgScope;
+use fvoci_http::organization::OrgScope;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};

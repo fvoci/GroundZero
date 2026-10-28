@@ -6,7 +6,7 @@ use axum::extract::{Path, Query, State};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, UserId};
 use fvoci_db::access::{self, Kind};
-use fvoci_http::org_scope::OrgScope;
+use fvoci_http::organization::OrgScope;
 use fvoci_http::session::CurrentUser;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
