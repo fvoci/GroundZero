@@ -1,8 +1,8 @@
+import { activityApi, type CommentView } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
 
-import type { CommentView } from '$lib/api/client';
-import { api, NetworkError } from '$lib/api/client';
+import { NetworkError } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { formDraftTabKey } from '$lib/features/common/form-draft';
 import { me } from '$lib/me.svelte';
@@ -35,13 +35,13 @@ function never<T>(): Promise<T> {
 
 export const Threads: Story = {
   beforeEach: () => {
-    spyOn(api, 'comments').mockResolvedValue(THREAD);
+    spyOn(activityApi, 'comments').mockResolvedValue(THREAD);
   },
 };
 
 export const Empty: Story = {
   beforeEach: () => {
-    spyOn(api, 'comments').mockResolvedValue([]);
+    spyOn(activityApi, 'comments').mockResolvedValue([]);
   },
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText('댓글이 없습니다.');
@@ -51,7 +51,7 @@ export const Empty: Story = {
 /** 불러오는 중: 목록을 받기 전에는 빈 목록 글 대신 불러오는 중이라고 보인다. */
 export const Loading: Story = {
   beforeEach: () => {
-    spyOn(api, 'comments').mockImplementation(() => never());
+    spyOn(activityApi, 'comments').mockImplementation(() => never());
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -62,7 +62,7 @@ export const Loading: Story = {
 
 export const LoadFailed: Story = {
   beforeEach: () => {
-    spyOn(api, 'comments').mockRejectedValue(new NetworkError('offline'));
+    spyOn(activityApi, 'comments').mockRejectedValue(new NetworkError('offline'));
   },
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByText(/댓글을 불러오지 못했습니다\./);
@@ -72,8 +72,8 @@ export const LoadFailed: Story = {
 /** 달기 중·응답 지연: 응답이 오지 않는 동안 단추를 막고 쓴 글을 지우지 않는다. */
 export const PostingSlow: Story = {
   beforeEach: () => {
-    spyOn(api, 'comments').mockResolvedValue([]);
-    spyOn(api, 'addComment').mockImplementation(() => never());
+    spyOn(activityApi, 'comments').mockResolvedValue([]);
+    spyOn(activityApi, 'addComment').mockImplementation(() => never());
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -91,8 +91,8 @@ export const PostFailedThenRetry: Story = {
   beforeEach: () => {
     let saved: CommentView[] = [];
     sentIds.length = 0;
-    spyOn(api, 'comments').mockImplementation(() => Promise.resolve(saved));
-    spyOn(api, 'addComment').mockImplementation((_target, body, _parent, requestId) => {
+    spyOn(activityApi, 'comments').mockImplementation(() => Promise.resolve(saved));
+    spyOn(activityApi, 'addComment').mockImplementation((_target, body, _parent, requestId) => {
       sentIds.push(requestId);
       if (sentIds.length === 1) return Promise.reject(new NetworkError('lost'));
       saved = [comment({ id: 'c-0100', body })];
@@ -132,7 +132,7 @@ export const BrandNarrowLargeText: Story = {
 
 export const RestoreOffer: Story = {
   beforeEach: () => {
-    spyOn(api, 'comments').mockResolvedValue([]);
+    spyOn(activityApi, 'comments').mockResolvedValue([]);
     const key = formDraftTabKey('comment-compose:document:doc-0001:new');
     if (key === undefined) throw new Error('missing story user');
     localStorage.setItem(

@@ -10,6 +10,23 @@ use crate::error::{AppError, InvalidReason};
 /// 저장할 수 있는 날짜의 연도(터무니없이 먼 날짜는 받지 않는다. 반복 펼치기·달력 계산이 그 거리만큼 커지지 않게).
 pub const DATE_YEARS: RangeInclusive<i32> = 1900..=2200;
 
+/// 이메일 길이 상한(RFC 5321).
+const MAX_EMAIL: usize = 254;
+
+pub fn validate_email(raw: &str) -> Result<String, AppError> {
+    let email = raw.trim().to_lowercase();
+    let valid = email.len() <= MAX_EMAIL
+        && email
+            .split_once('@')
+            .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.'))
+        && !email.chars().any(|c| c.is_whitespace() || c.is_control());
+    if valid {
+        Ok(email)
+    } else {
+        Err(AppError::BadRequest("email is not valid".into()))
+    }
+}
+
 /// 이름·제목 검증. 앞뒤 공백을 지우고 비어 있거나 상한을 넘으면 거부한다.
 pub fn validate_title(raw: &str, max_chars: usize, field: &str) -> Result<String, AppError> {
     let trimmed = raw.trim();
@@ -102,6 +119,18 @@ pub fn format_date(date: Option<Date>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn email_validation() {
+        assert_eq!(
+            validate_email("  Alice@Example.TEST ").unwrap(),
+            "alice@example.test"
+        );
+        assert!(validate_email("no-at-sign").is_err());
+        assert!(validate_email("@example.test").is_err());
+        assert!(validate_email("a@localhost").is_err());
+        assert!(validate_email("a b@example.test").is_err());
+    }
 
     #[test]
     fn dates_are_plain_calendar_dates() {

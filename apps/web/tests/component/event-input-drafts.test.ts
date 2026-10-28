@@ -1,8 +1,10 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api, ApiError, NetworkError, type EventView } from '$lib/api/client';
+import { ApiError, NetworkError } from '$lib/api/client';
 import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import EventForm from '$lib/features/events/EventForm.svelte';
@@ -53,15 +55,17 @@ const mountEvent = () =>
   render(EventDialog, { eventId: event.id, onclose: vi.fn(), onchanged: vi.fn() });
 
 it('loading server event fields preserves edited recurrence text and its original base', async () => {
-  vi.spyOn(api, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
   const latest = {
     ...event,
     version: 4,
     description: 'Server description',
     recurrence: { ...recurrence, interval: 3 },
   };
-  vi.spyOn(api, 'updateEvent').mockResolvedValue({ kind: 'conflict', current: latest });
-  const saveRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue({ ...latest, version: 5 });
+  vi.spyOn(eventsApi, 'updateEvent').mockResolvedValue({ kind: 'conflict', current: latest });
+  const saveRule = vi
+    .spyOn(eventsApi, 'setEventRecurrence')
+    .mockResolvedValue({ ...latest, version: 5 });
   mountEvent();
   const description = await screen.findByLabelText(m.events_description());
   await fireEvent.input(description, { target: { value: 'My description' } });
@@ -84,10 +88,10 @@ it('loading server event fields preserves edited recurrence text and its origina
 it.each(['event', 'recurrence'] as const)(
   'cannot load server fields while an %s save is pending',
   async (kind) => {
-    vi.spyOn(api, 'event').mockResolvedValue(event);
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
     const latest = { ...event, version: 4, title: 'Server title' };
     const update = vi
-      .spyOn(api, 'updateEvent')
+      .spyOn(eventsApi, 'updateEvent')
       .mockResolvedValueOnce({ kind: 'conflict', current: latest });
     mountEvent();
     const description = await screen.findByLabelText(m.events_description());
@@ -106,7 +110,7 @@ it.each(['event', 'recurrence'] as const)(
       });
       await fireEvent.click(screen.getByRole('button', { name: m.events_save_mine() }));
     } else {
-      vi.spyOn(api, 'setEventRecurrence').mockImplementationOnce(async () => {
+      vi.spyOn(eventsApi, 'setEventRecurrence').mockImplementationOnce(async () => {
         await pending;
         return { ...latest, recurrence: { ...recurrence, interval: 2 } };
       });
@@ -160,9 +164,9 @@ it('offers failed calendar creation explicitly after remount and reuses its requ
 });
 
 it('restores event input and its original version after the server advances', async () => {
-  const read = vi.spyOn(api, 'event').mockResolvedValue(event);
+  const read = vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
   const update = vi
-    .spyOn(api, 'updateEvent')
+    .spyOn(eventsApi, 'updateEvent')
     .mockResolvedValue({ kind: 'conflict', current: { ...event, version: 8 } });
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_description()), {
@@ -183,7 +187,7 @@ it('restores event input and its original version after the server advances', as
 });
 
 it('preserves invalid recurrence text and warns for recurrence-only navigation', async () => {
-  vi.spyOn(api, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: 'not a number' },
@@ -314,7 +318,7 @@ it('ignores a late successful creation after the user changes', async () => {
 });
 
 it('suppresses account-reload warnings only when the event and recurrence inputs are durably kept', async () => {
-  vi.spyOn(api, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
   mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: 'bad count' },
@@ -329,7 +333,7 @@ it('suppresses account-reload warnings only when the event and recurrence inputs
 
 // F-14(R5 B): 위 시험의 나머지 반쪽. 입력을 저장소에 남기지 못했으면 계정 전환 다시 읽기 경고를 남긴다.
 it('keeps the account-reload warning when the event inputs cannot be stored', async () => {
-  vi.spyOn(api, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new Error('quota');
   });
@@ -347,7 +351,9 @@ it('keeps the account-reload warning when the event inputs cannot be stored', as
 });
 
 it('keeps the current event until another-target discard is explicitly approved', async () => {
-  vi.spyOn(api, 'event').mockImplementation((id) => Promise.resolve({ ...event, id, title: id }));
+  vi.spyOn(eventsApi, 'event').mockImplementation((id) =>
+    Promise.resolve({ ...event, id, title: id }),
+  );
   const view = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_title()), {
     target: { value: 'Draft before target change' },
@@ -360,8 +366,8 @@ it('keeps the current event until another-target discard is explicitly approved'
 });
 
 it('restores the original recurrence base before an explicit save', async () => {
-  const read = vi.spyOn(api, 'event').mockResolvedValue(event);
-  const save = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(event);
+  const read = vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  const save = vi.spyOn(eventsApi, 'setEventRecurrence').mockResolvedValue(event);
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: '2' },
@@ -443,7 +449,7 @@ it('does not let an old recurrence response unlock a new account save', async ()
 });
 
 it('explicit parent discard removes the only restored copy when storage writes fail', async () => {
-  vi.spyOn(api, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: 'unfinished' },

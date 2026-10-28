@@ -1,3 +1,6 @@
+import { api } from '$lib/api/client';
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
@@ -9,7 +12,7 @@ import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HomeView, ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -58,7 +61,7 @@ describe('multi-column layouts follow the content width', () => {
       dates: [],
       items: [],
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const grid = document.querySelector('[aria-labelledby="week-heading"]')?.parentElement;
@@ -88,7 +91,7 @@ describe('multi-column layouts follow the content width', () => {
       ends_on: null,
     };
     vi.spyOn(work, 'tasks').mockResolvedValue([]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
 
@@ -137,7 +140,7 @@ describe('task list table on narrow screens', () => {
       ends_on: null,
     };
     vi.spyOn(work, 'tasks').mockResolvedValue([]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     const table = await screen.findByTestId('task-list');

@@ -1,12 +1,10 @@
 import {
   EVENT_KINDS,
-  FREQUENCIES,
   parseEvent,
   type EventKind,
   type EventView,
-  type Frequency,
-  type RecurrenceRule,
-} from '$lib/api/client';
+} from '$lib/features/events/model';
+import { FREQUENCIES, type Frequency, type RecurrenceRule } from '$lib/api/client';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

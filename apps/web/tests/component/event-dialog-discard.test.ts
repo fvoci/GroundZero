@@ -1,8 +1,8 @@
+import { type EventInput, type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventInput, EventView } from '$lib/api/client';
-import { api } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -83,8 +83,8 @@ async function findConfirm(): Promise<HTMLElement> {
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 function stub(...results: UpdateResult[]) {
-  vi.spyOn(api, 'event').mockImplementation((id: string) => Promise.resolve(ev(id)));
-  const update = vi.spyOn(api, 'updateEvent');
+  vi.spyOn(eventsApi, 'event').mockImplementation((id: string) => Promise.resolve(ev(id)));
+  const update = vi.spyOn(eventsApi, 'updateEvent');
   for (const r of results) update.mockResolvedValueOnce(r);
   update.mockImplementation((id: string, base: number, input: EventInput) =>
     Promise.resolve({ kind: 'updated', event: ev(id, input, base + 1) }),
@@ -319,9 +319,9 @@ describe('closing the event dialog with unsaved input', () => {
   });
 
   it('neither asks nor closes while saving', async () => {
-    vi.spyOn(api, 'event').mockResolvedValue(ev('A'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A'));
     const late = deferred<UpdateResult>();
-    vi.spyOn(api, 'updateEvent').mockReturnValue(late.promise);
+    vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(late.promise);
     const onclose = vi.fn();
     await open(onclose);
     await typeTitle('새 회의');
@@ -337,9 +337,9 @@ describe('closing the event dialog with unsaved input', () => {
   // CodeRabbit(9e226e0): 저장하는 동안 칸을 고칠 수 있었는데, 저장되면 입력 양식을 저장된 일정으로 다시 그려 그사이 친
   // 글이 말없이 사라졌다. 보내는 동안은 칸을 잠근다.
   it('locks the fields while saving so a late result cannot drop what I type meanwhile', async () => {
-    vi.spyOn(api, 'event').mockResolvedValue(ev('A'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A'));
     const late = deferred<UpdateResult>();
-    vi.spyOn(api, 'updateEvent').mockReturnValue(late.promise);
+    vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(late.promise);
     await open();
     await typeTitle('새 회의');
     await fireEvent.submit(eventForm());
@@ -355,11 +355,11 @@ describe('closing the event dialog with unsaved input', () => {
   // CodeRabbit(7179119): 일정 저장과 반복 규칙 저장이 겹치면 늦게 온 쪽이 더 옛 일정을 다시 놓았다. 한 요청이 가는 동안은
   // 일정 입력과 반복 규칙 입력을 함께 잠가 둘이 겹치지 않게 한다.
   it('locks the rule editor while the event saves and the event fields while the rule saves', async () => {
-    vi.spyOn(api, 'event').mockResolvedValue(ev('A'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A'));
     const lateEvent = deferred<UpdateResult>();
-    vi.spyOn(api, 'updateEvent').mockReturnValue(lateEvent.promise);
+    vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(lateEvent.promise);
     const lateRule = deferred<EventView>();
-    vi.spyOn(api, 'setEventRecurrence').mockReturnValue(lateRule.promise);
+    vi.spyOn(eventsApi, 'setEventRecurrence').mockReturnValue(lateRule.promise);
     await open();
     const frequency = (): HTMLButtonElement => {
       const el = document.querySelector('[aria-labelledby="event-recurrence-freq-label"]');
@@ -393,7 +393,7 @@ describe('closing the event dialog with unsaved input', () => {
   it('does not send "save mine" while a rule save is on its way', async () => {
     const update = stub({ kind: 'conflict', current: ev('A', { description: '다른 사람' }, 6) });
     const lateRule = deferred<EventView>();
-    vi.spyOn(api, 'setEventRecurrence').mockReturnValue(lateRule.promise);
+    vi.spyOn(eventsApi, 'setEventRecurrence').mockReturnValue(lateRule.promise);
     await open();
     await typeTitle('새 회의');
     await fireEvent.submit(eventForm());

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { activityApi } from '$lib/features/activity/api';
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
   import { onMount } from 'svelte';
@@ -150,7 +151,7 @@
     // 늦게 도착한 이전 응답(읽음 처리 전 수)이 새 수를 덮지 않게 한다.
     const mine = ++unreadSeq;
     try {
-      const count = await api.unreadCount(organizationId);
+      const count = await activityApi.unreadCount(organizationId);
       if (mine === unreadSeq) unreadCount = count;
     } catch {
       // 읽지 못했으면 0("알림 없음")으로 보이지 않게 앞의 수를 둔다. 다음 이동·창 초점 때 바로 다시 묻는다.

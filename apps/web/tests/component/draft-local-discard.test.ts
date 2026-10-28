@@ -1,7 +1,7 @@
+import { activityApi, type CommentView } from '$lib/features/activity/api';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api, type CommentView } from '$lib/api/client';
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { me } from '$lib/me.svelte';
@@ -69,9 +69,9 @@ describe('confirm only the local input being discarded', () => {
   });
 
   it('asks before cancelling a reply or edited comment, retaining the other comment input', async () => {
-    vi.spyOn(api, 'comments').mockResolvedValue([comment]);
-    const add = vi.spyOn(api, 'addComment');
-    const edit = vi.spyOn(api, 'editComment');
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([comment]);
+    const add = vi.spyOn(activityApi, 'addComment');
+    const edit = vi.spyOn(activityApi, 'editComment');
     const guard = router.guard;
     render(CommentsPanel, { props: { target: { kind: 'document', id: 'd1' }, canWrite: true } });
     await screen.findByText('원댓글');
@@ -163,7 +163,7 @@ describe('confirm only the local input being discarded', () => {
   });
 
   it('closes unchanged comment editors without asking despite other dirty input', async () => {
-    vi.spyOn(api, 'comments').mockResolvedValue([comment]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([comment]);
     render(CommentsPanel, { props: { target: { kind: 'document', id: 'd1' }, canWrite: true } });
     await screen.findByText('원댓글');
     await fireEvent.input(screen.getByLabelText(/새 댓글/), { target: { value: '다른 입력' } });
@@ -216,7 +216,7 @@ describe('confirm only the local input being discarded', () => {
   it.each([true, false])(
     'reports comment preservation during account switching (storage available: %s)',
     async (available) => {
-      vi.spyOn(api, 'comments').mockResolvedValue([comment]);
+      vi.spyOn(activityApi, 'comments').mockResolvedValue([comment]);
       const onunsaved = vi.fn();
       const ondraftkept = vi.fn();
       render(CommentsPanel, {

@@ -428,7 +428,7 @@ async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
         async move {
             send(
                 &app,
-                Method::PUT,
+                Method::PATCH,
                 &format!("/api/files/{file_id}"),
                 Some(&admin),
                 Some(json!({ "name": "plan-2.csv" })),

@@ -233,12 +233,13 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let detail = send(
         &app,
         Method::GET,
-        &format!("/api/files/{file}"),
+        &format!("/api/files/{file}/versions"),
         Some(&writer),
         None,
     )
     .await;
-    let mut kept: Vec<i64> = detail.json["versions"]
+    let mut kept: Vec<i64> = detail
+        .json
         .as_array()
         .unwrap()
         .iter()

@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,8 +55,8 @@ beforeEach(async () => {
   const none: DOMRectList = Object.assign([], { item: (): DOMRect | null => null });
   Range.prototype.getClientRects = (): DOMRectList => none;
   Element.prototype.scrollIntoView = (): void => undefined;
-  vi.spyOn(api, 'mark').mockResolvedValue({ pin: true, favorite: false });
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'mark').mockResolvedValue({ pin: true, favorite: false });
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   vi.spyOn(api, 'documentFiles').mockResolvedValue([]);
   vi.spyOn(api, 'documentBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);
@@ -119,6 +120,24 @@ describe('document actions menu', () => {
     const menu = await openMore();
     expect(within(menu).queryAllByRole('menuitem')).toHaveLength(0);
     expect(within(menu).getAllByRole('menuitemcheckbox')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: '공유·설정' })).toBeNull();
+  });
+
+  it('shows copy and export when the server permits the creator with copying disabled', async () => {
+    vi.spyOn(api, 'document').mockResolvedValue(
+      documentView({
+        access: 'write',
+        can_edit: true,
+        can_manage: false,
+        can_delete: false,
+        allow_copy: false,
+        can_export: true,
+      }),
+    );
+    render(DocumentScreen, { props: { documentId: 'doc-1', workspaces } });
+    const menu = await openMore();
+    expect(within(menu).getByRole('menuitem', { name: '복제' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: '내보내기' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '공유·설정' })).toBeNull();
   });
 

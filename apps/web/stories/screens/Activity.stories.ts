@@ -1,6 +1,6 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, within, userEvent } from 'storybook/test';
-import { api } from '$lib/api/client';
 import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { ACTIVITY } from '../fixtures/personal';
@@ -14,7 +14,7 @@ const meta = {
   globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
   beforeEach: () => {
     const cleanup = setUpScreen('/');
-    spyOn(api, 'targetActivity').mockResolvedValue({
+    spyOn(activityApi, 'targetActivity').mockResolvedValue({
       activity: ACTIVITY,
       next_before: null,
       next_before_id: null,

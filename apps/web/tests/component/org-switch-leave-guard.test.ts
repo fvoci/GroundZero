@@ -1,3 +1,5 @@
+import { timeData } from '$lib/features/time/data';
+import { activityApi } from '$lib/features/activity/api';
 import type { Me, Workspace } from '@fvoci/api-client';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -89,9 +91,9 @@ beforeEach(async () => {
   vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
   vi.spyOn(api, 'workspaces').mockResolvedValue(workspaces);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION, OTHER]);
-  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
-  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
-  vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+  vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
+  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'deletedWorkspaces').mockResolvedValue([]);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);
   vi.spyOn(api, 'modules').mockResolvedValue([]);
@@ -151,7 +153,7 @@ describe('organization switch and the leave confirmation', () => {
 
   it('applies consecutive switches in order and drops a late count from the earlier organization', async () => {
     const resolvers = new Map<string, (count: number) => void>();
-    vi.spyOn(api, 'unreadCount').mockImplementation(
+    vi.spyOn(activityApi, 'unreadCount').mockImplementation(
       (organizationId: string) =>
         new Promise<number>((resolve) => {
           resolvers.set(organizationId, resolve);

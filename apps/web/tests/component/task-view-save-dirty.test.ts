@@ -1,11 +1,13 @@
+import { type SavedViewView } from '$lib/features/events/saved-views-model';
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemView, SavedViewView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import type { ItemView } from '$lib/api/client';
+
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -46,9 +48,9 @@ async function saveViewWhile(during: () => Promise<void>): Promise<void> {
   vi.spyOn(work, 'tasks').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   const saved: SavedViewView[] = [];
-  vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve([...saved]));
+  vi.spyOn(savedViewsApi, 'savedViews').mockImplementation(() => Promise.resolve([...saved]));
   let release: () => void = () => undefined;
-  const create = vi.spyOn(api, 'createView').mockImplementation(
+  const create = vi.spyOn(savedViewsApi, 'createView').mockImplementation(
     (_item, _id, name, config) =>
       new Promise((resolve) => {
         release = () => {
