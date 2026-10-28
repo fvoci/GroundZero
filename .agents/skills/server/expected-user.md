@@ -4,11 +4,11 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 
 - 웹은 GET·HEAD가 아닌 모든 요청에 `x-fvoci-expected-user`를 붙인다(`apps/web/src/lib/shared/api/index.ts`의 `EXPECTED_USER`).
 - 서버는 처리기 인자에 `ExpectedUser`(`crates/http/src/session.rs`)가 있으면 머리를 꼭 받아 비교한다(없으면 400).
-- 업무·소통활동 라우터(`crates/domains/work/src/lib.rs`·`crates/domains/activity/src/lib.rs`의 `router`)는 공통 처리 `ExpectedUserIfSent`(같은 파일 `session.rs`)를 건다. GET·HEAD가 아닌 모든 업무·소통활동 요청에서 머리가 있으면 늘 비교하고(D-96 2026-10-28 개정 (가)), 없으면 아무것도 하지 않는다. 노르웨이숲 태비의 뒤 조각은 자기 도메인 라우터에 같은 처리를 건다.
+- 업무·소통활동·문서 도메인과 참조 집계 라우터(`crates/domains/{work,activity,documents}/src/lib.rs`·`crates/aggregates/references/src/lib.rs`)는 공통 처리 `ExpectedUserIfSent`(같은 파일 `session.rs`)를 건다. GET·HEAD가 아닌 요청에서 머리가 있으면 늘 비교하고(D-96 2026-10-28 개정 (가)), 없으면 아무것도 하지 않는다. 문서는 기존 개인 노트 생성·본문 PUT만 필수이고 제목 PATCH 등 다른 명령은 선택이다.
 - 그 밖의 처리기(`CurrentUser`만 쓰고 공통 처리를 걸지 않은 라우터)는 머리를 보지 않는다.
 - 줄은 각 처리기 `fn` 줄이다. 코드가 바뀌면 다음으로 다시 찾는다.
   - 적용: `rg -n 'ExpectedUser\(' crates/server/src/features crates/domains`
-  - 전체 쓰기 경로: `rg -n '#\[utoipa::path\((post|put|patch|delete)' crates/server/src crates/domains`
+  - 전체 쓰기 경로: `rg -n '#\[utoipa::path\((post|put|patch|delete)' crates/server/src crates/domains crates/aggregates`
 
 ## 공통 전제와 위험 범례
 
@@ -32,7 +32,10 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 
 | 파일                                           | 처리기(줄)                                                                                       |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `features/documents.rs`                        | `create_note`(617), `save`(806)                                                                  |
+| `crates/domains/documents/src/documents/create.rs` | 필수: `create_note`(167) |
+| `crates/domains/documents/src/documents/save.rs` | 필수: `save`(37) |
+| `crates/domains/documents/src/lib.rs` | 머리는 선택. 문서 생성·제목·설정·공유·복제·이동·부모·템플릿·항목 문서·복원·내보내기·공개 링크 명령 모두 공통 처리가 비교한다 |
+| `crates/aggregates/references/src/lib.rs` | 머리는 선택. `resolve`도 보내면 공통 처리가 비교한다 |
 | `features/files.rs`                            | `create_upload`(217)                                                                             |
 | `features/organizations.rs`                    | `set_settings`(477), `set_workspace_limits`(538)                                                 |
 | `crates/domains/work/src/tasks/write.rs`       | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)                              |
@@ -55,17 +58,14 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `accounts.rs`         | `set_settings`(703, 개인)                                                                                                                                                                                                                                                                                                                                                                                            |
 | `courses.rs`          | `set_details`(298, 귀속), `add_episodes`(328, 귀속), `update_episode`(355, 귀속), `delete_episode`(383, 파괴), `set_progress`(403, 개인)                                                                                                                                                                                                                                                                             |
-| `documents.rs`        | `create_wiki`(539, 귀속), `set_parent`(1008, 귀속), `set_settings`(1049, 설정), `create_share`(1119, 권한), `delete_share`(1151, 권한), `copy`(1186, 귀속), `move_document`(1353, 권한: 이동은 조직 밖 공유를 철회한다), `set_template`(1601, 설정)                                                                                                                                                                  |
 | `events.rs`           | `create`(331, 귀속), `update`(376, 귀속), `delete`(423, 파괴)                                                                                                                                                                                                                                                                                                                                                        |
 | `files.rs`            | `put_part`(301, 귀속), `complete_upload`(369, 귀속), `abort_upload`(597, 파괴), `rename_file`(776, 귀속), `trash_file`(800, 파괴), `delete_version`(821, 파괴)                                                                                                                                                                                                                                                       |
 | `item_profile.rs`     | `set`(318, 귀속), `set_members`(374, 권한), `set_module_icon`(404, 설정), `copy`(486, 귀속), `set_template`(535, 설정)                                                                                                                                                                                                                                                                                               |
 | `members.rs`          | `set_role`(151, 권한), `remove_member`(178, 권한), `leave`(203, 계정), `invite`(265, 권한), `revoke_invitation`(337, 권한), `accept_invitation`(485, 계정), `decline_invitation`(497, 계정), `offer_ownership`(521, 권한), `cancel_ownership_offer`(540, 권한), `accept_ownership`(558, 계정), `create_group`(628, 권한), `delete_group`(658, 권한), `add_group_member`(682, 권한), `remove_group_member`(709, 권한) |
-| `modules.rs`          | `create_module`(378, 귀속), `update_module`(417, 설정), `archive_module`(452, 파괴), `set_description`(483, 귀속), `create_item`(535, 귀속), `update_item`(607, 귀속), `archive_item`(652, 파괴), `create_item_document`(697, 귀속)                                                                                                                                                                                  |
+| `modules.rs`          | `create_module`(378, 귀속), `update_module`(417, 설정), `archive_module`(452, 파괴), `set_description`(483, 귀속), `create_item`(535, 귀속), `update_item`(607, 귀속), `archive_item`(652, 파괴)                                                                                                                                                                                  |
 | `organizations.rs`    | `set_member`(288, 권한), `remove_member`(334, 권한), `invite`(378, 권한), `join_as_admin`(629, 권한), `restore_workspace`(671, 파괴), `offer_workspace_ownership`(694, 권한), `create`(753, 설정: 서버 관리자의 조직 만들기)                                                                                                                                                                                         |
-| `public_links.rs`     | `create`(105, 권한), `revoke`(142, 권한)                                                                                                                                                                                                                                                                                                                                                                             |
 | `records.rs`          | `create`(1019, 귀속), `update`(1069, 귀속), `delete`(1118, 파괴)                                                                                                                                                                                                                                                                                                                                                     |
 | `event_recurrence.rs` | `set_event`(34, 귀속), `exclude_event`(89, 귀속)                                                                                                                                                                                                                                                                                                                                                                     |
-| `revisions.rs`        | `restore`(276, 귀속)                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `saved_views.rs`      | `create`(133, 귀속), `update`(181, 귀속), `delete`(210, 파괴)                                                                                                                                                                                                                                                                                                                                                        |
 | `study.rs`            | `add_units`(248, 귀속), `update_unit`(275, 귀속), `delete_unit`(302, 파괴), `set_progress`(322, 개인), `plan`(348, 귀속)                                                                                                                                                                                                                                                                                             |
 | `time_tracking.rs`    | `start`(278, 개인), `action`(337, 개인), `add`(490, 개인), `update`(534, 개인), `delete`(578, 개인)                                                                                                                                                                                                                                                                                                                  |
@@ -75,8 +75,10 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 
 ## 쓰기가 아닌 POST (표 밖)
 
-- 읽기만 한다: `documents.rs` `move_preview`(1332), `references.rs` `resolve`(365), `zotero.rs` `list_collections`(186). 업무 재배치 미리보기는 위 적용 표의 `schedule/preview.rs`다.
-- 내보내기 감사 한 줄만 남긴다: `revisions.rs` `export`(226).
+- 읽기만 한다: 문서 도메인의 `documents/movement.rs` `move_preview`(107), 참조 집계의 `handlers.rs` `resolve`, `zotero.rs` `list_collections`(186). 문서·참조·업무 미리보기는 위 적용 표처럼 머리를 보내면 비교한다.
+- 내보내기 감사 한 줄만 남긴다: 문서 도메인의 `revisions.rs` `export`(228). 머리를 보내면 비교한다.
 - 세션을 끝낸다: `accounts.rs` `logout`(481).
 
 소통활동 기대 사용자 회귀: `crates/server/tests/it/activity/contracts.rs`의 `every_activity_command_compares_a_sent_user_before_changing_anything`.
+
+문서 기대 사용자 회귀: `crates/server/tests/it/documents/expected_commands.rs`의 `every_document_command_checks_a_sent_expected_user_before_any_write`.
