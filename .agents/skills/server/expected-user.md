@@ -43,7 +43,7 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | `crates/domains/work/src/schedule/links.rs`   | `add_predecessor`(174), `remove_predecessor`(251)                                              |
 | `crates/domains/work/src/schedule/preview.rs` | 머리가 필수는 아니다. 보내면 업무 라우터 공통 처리가 비교한다: `plan`(286), `plan_link`(304)   |
 | `crates/domains/work/src/events.rs`           | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `create`(434), `update`(479), `delete`(520) |
-| `crates/domains/work/src/event_recurrence.rs` | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `set_event`(35), `exclude_event`(89)        |
+| `crates/domains/work/src/event_recurrence.rs` | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `set_event`(36), `exclude_event`(98)        |
 | `crates/domains/work/src/saved_views.rs`      | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `create`(158), `update`(213), `delete`(248) |
 | `collab/ws.rs`                                | 실시간 연결의 질의 `expected_user`(50). 누락·형식 오류는 400, 다르면 닫기 코드 4412            |
 

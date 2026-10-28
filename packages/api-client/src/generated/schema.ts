@@ -7477,6 +7477,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description rule_conflict: current는 최신 일정, changed는 요청 본문의 rule 칸. 다른 상태 충돌은 ErrorBody. */
             409: {
                 headers: {
                     [name: string]: unknown;

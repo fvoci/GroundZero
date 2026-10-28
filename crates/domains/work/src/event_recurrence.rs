@@ -31,7 +31,8 @@ pub struct SetEventRecurrence {
 #[utoipa::path(put, path = "/api/events/{event_id}/recurrence", operation_id = "set_event_recurrence",
     params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = SetEventRecurrence,
     responses((status = 200, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = EventWriteConflict)), tag = "events")]
+              (status = 404, body = ErrorBody), (status = 409, body = EventWriteConflict,
+                  description = "rule_conflict: current는 최신 일정, changed는 요청 본문의 rule 칸. 다른 상태 충돌은 ErrorBody.")), tag = "events")]
 pub async fn set_event(
     State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
@@ -69,12 +70,17 @@ pub async fn set_event(
 }
 
 fn recurrence_conflict(current: Event, rule: Option<serde_json::Value>) -> StaleWrite<Event> {
-    StaleWrite::new(
+    let mut conflict = StaleWrite::new(
         "rule_conflict",
         "the recurrence rule changed",
         current,
         &serde_json::json!({ "recurrence": rule }),
-    )
+    );
+    // 현재 일정의 recurrence와 비교한 뒤 요청 칸(rule)으로 표시한다.
+    for field in &mut conflict.changed {
+        *field = "rule".to_owned();
+    }
+    conflict
 }
 
 /// 반복 일정의 회차 하나 빼기.
