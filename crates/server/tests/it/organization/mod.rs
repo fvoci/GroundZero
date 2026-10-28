@@ -8,6 +8,7 @@
 mod admin_recovery;
 mod admin_security;
 mod last_admin;
+mod recurrence_security;
 mod role_sources;
 mod share_ceiling;
 mod share_races;
