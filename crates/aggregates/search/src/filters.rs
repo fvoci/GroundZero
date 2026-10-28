@@ -16,6 +16,7 @@ const STATUS_CATEGORIES: &[&str] = &["todo", "doing", "done"];
 
 /// 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct SearchQuery {
     #[param(max_length = 200)]
     pub q: String,

@@ -5,6 +5,26 @@ use axum::response::IntoResponse;
 use fvoci_core::secret::Secret;
 use serde_json::{Value, json};
 
+#[test]
+fn search_parameters_stay_in_the_query_and_publish_the_limit() {
+    use utoipa::OpenApi;
+    let schema = serde_json::to_value(crate::SearchApi::openapi()).unwrap();
+    let parameters = schema["paths"]["/api/search"]["get"]["parameters"]
+        .as_array()
+        .unwrap();
+    assert_eq!(parameters.len(), 12);
+    for parameter in parameters {
+        assert_eq!(parameter["in"], "query", "{parameter}");
+        assert_eq!(
+            parameter["required"],
+            parameter["name"] == "q" || parameter["name"] == "organization_id",
+            "{parameter}"
+        );
+    }
+    let query = parameters.iter().find(|p| p["name"] == "q").unwrap();
+    assert_eq!(query["schema"]["maxLength"], 200);
+}
+
 async fn body(error: AppError) -> Value {
     let response = error.into_response();
     assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
