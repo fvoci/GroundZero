@@ -137,8 +137,18 @@ export function watchConnection(): () => void {
 // (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 입력은 앞 계정의 초안(사용자별 키)으로
 // 이미 남아 있다.
 type SafetyReason = 'account' | 'logout' | 'restore' | 'signed-out';
-export const accountSafety = $state<{ switching: boolean; reason: SafetyReason; error: string }>({
+// switching은 세션 미확인·전환 중 요청을 막는다. 같은 사용자 확인 뒤에는 restoring으로 가림을 유지하며 새 읽기만 한다.
+// 가림 전 요청은 새 읽기가 열린 뒤에도 적용하지 않도록 generation을 함께 검사한다.
+export const accountSafety = $state<{
+  switching: boolean;
+  restoring: boolean;
+  generation: number;
+  reason: SafetyReason;
+  error: string;
+}>({
   switching: false,
+  restoring: false,
+  generation: 0,
   reason: 'account',
   error: '',
 });
@@ -146,7 +156,9 @@ export const accountSafety = $state<{ switching: boolean; reason: SafetyReason; 
 /** 세션을 확인하거나 끝내는 동안 portal까지 즉시 가린다. */
 export function hideSession(reason: SafetyReason): void {
   flushSync(() => {
+    accountSafety.generation += 1;
     accountSafety.reason = reason;
+    accountSafety.restoring = reason === 'restore';
     accountSafety.error = '';
     accountSafety.switching = true;
   });
@@ -160,7 +172,7 @@ export function markAccountSwitch(): void {
 
 /** 다른 계정으로 바뀌어 다시 읽는 중인지. */
 export function accountSwitching(): boolean {
-  return accountSafety.switching;
+  return accountSafety.switching || accountSafety.restoring;
 }
 
 // 계정이 바뀐 것을 안 곳(창 복귀 확인 밖, 예: 문서의 배경 저장)에서 이 창을 다시 읽는 방법. FeedbackHost가 정한다.

@@ -1,7 +1,7 @@
 import { untrack } from 'svelte';
 import {
   auth,
-  accountSwitching,
+  accountSafety,
   connection,
   reportConnectionLost,
   reportSessionExpired,
@@ -37,6 +37,20 @@ export class NetworkError extends Error {
 
 export const EXPECTED_USER = 'x-fvoci-expected-user';
 
+function blockedBySafety(method: string, path: string): boolean {
+  return untrack(() => {
+    if (accountSafety.switching) {
+      // #212 1·2행, 코디네이터 추가 지시: 확인 전에는 이 두 정확한 제어 요청만 허용한다.
+      return !(
+        (accountSafety.reason === 'logout' && method === 'POST' && path === '/auth/logout') ||
+        (accountSafety.reason === 'restore' && method === 'GET' && path === '/api/me')
+      );
+    }
+    // 같은 사용자임을 확인한 뒤 화면을 새로 읽는 동안에도 쓰기는 열지 않는다.
+    return accountSafety.restoring && method !== 'GET';
+  });
+}
+
 export async function request(
   method: string,
   path: string,
@@ -49,7 +63,8 @@ export async function request(
   // 전환 상태는 반응형 읽기가 아니다: 화면의 $effect가 요청을 부를 때 여기서 읽은 switching이 그 효과의 의존성이 되면, 전환이
   // 시작되는 순간 그 효과들이 다시 실행돼 화면이 로딩 상태로 돌아가고(DOM·메모리 입력·떠나기 가드가 사라짐) 입력 보존 설계가
   // 깨진다(#88). 그래서 untrack으로 읽는다. 전환 중 요청을 막는 동작은 같다.
-  if (untrack(accountSwitching))
+  const generation = untrack(() => accountSafety.generation);
+  if (blockedBySafety(method, path))
     throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let response: Response;
   const expiriesAtStart = sessionExpiries();
@@ -75,7 +90,7 @@ export async function request(
   }
   const text = await response.text();
   // 진행 중이던 요청도 계정 전환 안전 상태를 벗어나지 못한다.
-  if (untrack(accountSwitching))
+  if (generation !== untrack(() => accountSafety.generation) || blockedBySafety(method, path))
     throw new ApiError(409, 'account_changed', m.common_error_account_changed());
   let json: Json = null;
   if (text !== '') {

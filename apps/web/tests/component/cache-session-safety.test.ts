@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
-import { accountSafety, connection } from '$lib/features/feedback/feedback.svelte';
+import { accountSafety, connection, hideSession } from '$lib/features/feedback/feedback.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import PublicView from '$lib/features/public/PublicView.svelte';
 import { me as currentUser } from '$lib/me.svelte';
@@ -79,6 +79,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
+  hideSession('account');
+  accountSafety.switching = false;
   router.guard = undefined;
   router.navigate('/');
   currentUser.userId = '';
@@ -175,8 +177,9 @@ it('uses account switching when a persisted session belongs to someone else', as
   vi.spyOn(api, 'me').mockResolvedValue({ ...me, id: 'user-b' });
   pageshow();
   await waitFor(() => {
-    expect(reload).toHaveBeenCalledOnce();
+    expect(replace).toHaveBeenCalledWith('/trash');
   });
+  expect(reload).not.toHaveBeenCalled();
   expect(accountSafety.switching).toBe(true);
   expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
 });

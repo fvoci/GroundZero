@@ -21,6 +21,7 @@
     onAccountSwitch,
     watchConnection,
     hideSession,
+    accountSwitching,
   } from './feedback.svelte';
 
   interface Props {
@@ -43,9 +44,10 @@
   }: Props = $props();
 
   const mobile = new IsMobile();
+  const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.
   $effect(() => {
-    document.documentElement.toggleAttribute('data-account-switching', accountSafety.switching);
+    document.documentElement.toggleAttribute('data-account-switching', sessionHidden);
     return () => {
       document.documentElement.removeAttribute('data-account-switching');
     };
@@ -88,12 +90,12 @@
     let active = true;
     const recheck = (): void => {
       const signedIn = currentUser.userId;
-      if (signedIn === '' || accountSafety.switching || checking) return;
+      if (signedIn === '' || sessionHidden || checking) return;
       checking = true;
       void api
         .me()
         .then((now) => {
-          if (!active || accountSafety.switching || currentUser.userId !== signedIn) return;
+          if (!active || accountSwitching() || currentUser.userId !== signedIn) return;
           if (now === undefined) {
             hideSession('signed-out');
             replace(router.path + router.hash);
@@ -125,7 +127,7 @@
 <TimerRestartDialog />
 
 <!-- 이미 열린 대화상자의 초점 덫 위에 안전 상태를 연다. 기존 편집 상태는 그대로 보존한다. -->
-<Dialog.Root open={accountSafety.switching}>
+<Dialog.Root open={sessionHidden}>
   <Dialog.Content
     data-account-safe
     data-testid="account-safe-state"
@@ -165,7 +167,7 @@
   </Dialog.Content>
 </Dialog.Root>
 <div role="status" aria-live="polite" class="empty:hidden">
-  {#if auth.expired && !sessionDismissed && !accountSafety.switching}
+  {#if auth.expired && !sessionDismissed && !sessionHidden}
     <div
       class="sticky top-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-secondary px-4 py-2 text-sm text-secondary-foreground"
       data-testid="session-banner"
@@ -181,7 +183,7 @@
   {/if}
 </div>
 <div role="status" aria-live="polite" class="empty:hidden">
-  {#if connection.lost && !connectionDismissed && !accountSafety.switching}
+  {#if connection.lost && !connectionDismissed && !sessionHidden}
     <div
       class="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b bg-secondary px-4 py-2 text-sm text-secondary-foreground"
       data-testid="connection-banner"
@@ -194,7 +196,7 @@
   {/if}
 </div>
 <div role="status" aria-live="polite" class="empty:hidden">
-  {#if newVersion.times > versionDismissed && !accountSafety.switching}
+  {#if newVersion.times > versionDismissed && !sessionHidden}
     <div
       class="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b bg-secondary px-4 py-2 text-sm text-secondary-foreground"
       data-testid="new-version-banner"

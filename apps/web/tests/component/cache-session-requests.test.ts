@@ -61,7 +61,7 @@ async function appRequests() {
   });
   const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
-    const path = String(input);
+    const path = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (path === '/api/me')
       return Promise.resolve(now === undefined ? new Response('', { status: 401 }) : json(now));
     if (path === '/api/workspaces') {
@@ -168,6 +168,24 @@ it('keeps every request blocked during an account switch', async () => {
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it('does not widen either control request to a path prefix or a different method', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  hideSession('logout');
+  await expect(request('POST', '/auth/logout/extra')).rejects.toMatchObject({
+    code: 'account_changed',
+  });
+  await expect(request('GET', '/auth/logout')).rejects.toMatchObject({ code: 'account_changed' });
+  hideSession('restore');
+  await expect(request('GET', '/api/me/organizations')).rejects.toMatchObject({
+    code: 'account_changed',
+  });
+  await expect(request('GET', '/api/me?extra=1')).rejects.toMatchObject({
+    code: 'account_changed',
+  });
+  await expect(request('POST', '/api/me')).rejects.toMatchObject({ code: 'account_changed' });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 it('still discards a late ordinary response after safety hiding begins', async () => {
   let finish!: (response: Response) => void;
   vi.spyOn(globalThis, 'fetch').mockReturnValue(
@@ -178,6 +196,21 @@ it('still discards a late ordinary response after safety hiding begins', async (
   accountSafety.switching = false;
   const pending = request('GET', '/api/workspaces');
   hideSession('restore');
+  finish(new Response('[]'));
+  await expect(pending).rejects.toMatchObject({ code: 'account_changed' });
+});
+
+it('discards an old response even after reads reopen for the verified user', async () => {
+  let finish!: (response: Response) => void;
+  vi.spyOn(globalThis, 'fetch').mockReturnValue(
+    new Promise<Response>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  accountSafety.switching = false;
+  const pending = request('GET', '/api/workspaces');
+  hideSession('restore');
+  accountSafety.switching = false;
   finish(new Response('[]'));
   await expect(pending).rejects.toMatchObject({ code: 'account_changed' });
 });

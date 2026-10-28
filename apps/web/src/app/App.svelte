@@ -24,12 +24,7 @@
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
   // 계정 전환은 입력을 보존하고(D-96), 로그아웃은 비운다. 둘 다 다시 읽기 전까지 기존 화면을 가린다.
-  import {
-    accountSafety,
-    connection,
-    hideSession,
-    switchAccount,
-  } from '$lib/features/feedback/feedback.svelte';
+  import { accountSafety, connection, hideSession } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   // 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
   import { invitationChanges } from '$lib/features/home/invitations.svelte';
@@ -75,6 +70,7 @@
   let session = $state<Session>({ state: 'loading' });
   let searchOpen = $state(false);
   let displayOpen = $state(false);
+  const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   let sessionSequence = 0;
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
@@ -301,14 +297,14 @@
   }
 
   function hideForCache(event: PageTransitionEvent): void {
-    if (!event.persisted || route.name === 'public' || accountSafety.switching) return;
+    if (!event.persisted || route.name === 'public' || sessionHidden) return;
     restoringUserId = currentUser.userId;
     // 복원 첫 그림에 이전 DOM이 쓰이지 않도록 BFCache에 들어갈 때도 가린다.
     hideSession('restore');
   }
 
   async function restoreSession(): Promise<void> {
-    if (accountSafety.switching && accountSafety.reason !== 'restore') return;
+    if (sessionHidden && accountSafety.reason !== 'restore') return;
     const mine = ++restoreSequence;
     restoringUserId ??= currentUser.userId;
     hideSession('restore');
@@ -319,29 +315,34 @@
         flushSync(clearSession);
         hideSession('signed-out');
         replace(router.path + router.hash);
-      } else if (restoringUserId !== '' && now.id !== restoringUserId) {
-        switchAccount();
+      } else if (now.id !== restoringUserId) {
+        hideSession('account');
+        replace(router.path + router.hash);
       } else {
         // 하위 화면도 새로 마운트해 목록·문서·개인 데이터를 다시 읽는다.
         flushSync(clearSession);
+        // 사용자 ID가 맞았다. 시각적 가림은 유지하고 새 읽기만 연다(공통 request가 쓰기는 계속 막는다).
+        accountSafety.switching = false;
         const loaded = await load(now);
         if (mine !== restoreSequence || !restoring()) return;
         if (loaded) {
           restoringUserId = undefined;
-          accountSafety.switching = false;
+          accountSafety.restoring = false;
         } else {
+          accountSafety.switching = true;
           accountSafety.error = m.feedback_restore_failed();
         }
       }
     } catch (error: unknown) {
       if (mine !== restoreSequence || !restoring()) return;
       flushSync(clearSession);
+      accountSafety.switching = true;
       accountSafety.error = errorText(error, m.feedback_restore_failed());
     }
   }
 
   function restoring(): boolean {
-    return accountSafety.switching && accountSafety.reason === 'restore';
+    return sessionHidden && accountSafety.reason === 'restore';
   }
 
   function restorePage(event: PageTransitionEvent): void {
@@ -408,7 +409,7 @@
 
 <svelte:window onpageshow={restorePage} onpagehide={hideForCache} />
 
-{#if session.state !== 'loading' || accountSafety.switching}
+{#if session.state !== 'loading' || sessionHidden}
   <!-- 표시 언어(D-81)를 정한 뒤에 그린다(토스트 영역 라벨도 그 언어로). -->
   <FeedbackHost
     {replace}
@@ -419,7 +420,7 @@
 {/if}
 
 <!-- 계정 전환 안전 상태. 입력 보존을 위해 조건부 제거하지 않는다. -->
-<div style:display={accountSafety.switching ? 'none' : 'contents'} inert={accountSafety.switching}>
+<div style:display={sessionHidden ? 'none' : 'contents'} inert={sessionHidden}>
   {#if route.name === 'public'}
     <PublicView token={route.token} />
   {:else if session.state === 'loading'}
