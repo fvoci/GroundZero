@@ -1605,7 +1605,7 @@ CREATE FUNCTION fvoci.app_sync_item_series(p_item uuid, p_ids uuid[]) RETURNS in
       ORDER BY s.id
     LOOP
       v_need := app_task_series_bound(v_id);
-      v_made := v_made + app_sync_task_series(v_id, coalesce(p_ids[v_at + 1:v_at + v_need], '{}'::uuid[]));
+      v_made := v_made + app_sync_task_series_as(v_id, false, coalesce(p_ids[v_at + 1:v_at + v_need], '{}'::uuid[]));
       v_at := v_at + v_need;
     END LOOP;
     RETURN v_made;
