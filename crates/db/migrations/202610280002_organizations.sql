@@ -1773,7 +1773,7 @@ CREATE FUNCTION fvoci.app_offer_ownership(p_workspace uuid, p_to uuid, p_ids uui
     IF v_user <> v_ws.owner_id AND app_access('organization', v_ws.organization_id) <> 'owner' THEN
       RAISE EXCEPTION 'only the owner or an organization admin can transfer ownership' USING ERRCODE = '42501';
     END IF;
-    IF p_to = v_ws.owner_id OR NOT EXISTS (
+    IF p_to = v_user OR p_to = v_ws.owner_id OR NOT EXISTS (
       SELECT 1 FROM workspace_members WHERE workspace_id = p_workspace AND user_id = p_to
     ) THEN
       RAISE EXCEPTION 'the recipient must be another member' USING ERRCODE = '22023';
