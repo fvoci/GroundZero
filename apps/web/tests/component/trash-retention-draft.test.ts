@@ -519,3 +519,20 @@ it.each(fields)(
     expect(warnsBeforeUnload()).toBe(true);
   },
 );
+
+it.each(fields)(
+  '%s stays on screen and warns without storing or restoring a draft',
+  async (field) => {
+    await mount();
+    await type(field, field === 'trash-retention' ? ' 1e- ' : '');
+    expect(warnsBeforeUnload()).toBe(true);
+    expect(drafts()).toHaveLength(0);
+    cleanup();
+    await mount();
+    expect(input(field)).toHaveValue(field === 'trash-retention' ? '30' : '90');
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(warnsBeforeUnload()).toBe(false);
+    expect(api.setTrashRetention).not.toHaveBeenCalled();
+    expect(api.setVersionRetention).not.toHaveBeenCalled();
+  },
+);
