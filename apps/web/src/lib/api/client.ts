@@ -14,7 +14,7 @@ export type {
   TaskTimeView,
   ItemTimeView,
 } from '$lib/features/time/model';
-import { EXPECTED_USER, request, expectOk, fail, ApiError } from '$lib/shared/api';
+import { EXPECTED_USER, request, expectOk, fail } from '$lib/shared/api';
 export { ApiError, NetworkError } from '$lib/shared/api';
 import {
   access,
