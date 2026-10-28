@@ -1,25 +1,20 @@
-//! 통합 검색 API (D-39). 문서·업무·항목·일정을 한 번에 찾는다. 볼 수 있는 것만 나온다.
-//!
-//! Meilisearch가 있으면 "현재 조직의 내 워크스페이스 또는 내 개인 노트"로 먼저 좁혀 찾은 뒤
-//! PostgreSQL 접근 함수로 다시 거른다(비공개 항목·지운 것·권한이 바뀐 것 제외). 없으면 제목만 DB에서 찾는다.
-//! 색인은 백그라운드 작업이 반영하므로 바로 직전의 변경은 조금 늦게 보일 수 있다.
-
-use std::collections::HashSet;
-use std::fmt::Write as _;
-
-use axum::Json;
-use axum::extract::{Query, State};
-use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
-use utoipa::{IntoParams, ToSchema};
-use uuid::Uuid;
+//! 검색 집계 읽기: 색인 후보 또는 SQL 제목 검색을 최종 권한으로 거른다.
 
 use crate::SearchState;
-use crate::indexing::{SearchClient, day_number};
+use crate::filters::{Filters, SearchQuery, day_bounds, filters, meili_filters, parse_kinds};
+use crate::indexing::SearchClient;
+use crate::visibility::{
+    file_document, parse_uuid, reference, scope_filter, visible, visible_items,
+};
+use axum::Json;
+use axum::extract::{Query, State};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, UserId, WorkspaceId};
 use fvoci_db::UserTx;
 use fvoci_http::organization::OrgScope;
+use serde::Serialize;
+use utoipa::ToSchema;
+use uuid::Uuid;
 
 /// 한 번에 돌려주는 결과 수.
 const MAX_RESULTS: usize = 20;
@@ -29,182 +24,6 @@ const CANDIDATES: usize = 60;
 const MAX_PAGES: usize = 5;
 /// 검색어 길이 상한.
 const MAX_QUERY_CHARS: usize = 200;
-
-const KINDS: &[&str] = &["document", "task", "item", "event", "file", "record"];
-/// 업무 상태 범주(D-116). 검색 필터는 상태 이름이 아니라 범주만 본다.
-const STATUS_CATEGORIES: &[&str] = &["todo", "doing", "done"];
-
-/// 검색 조건.
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct SearchQuery {
-    pub q: String,
-    /// 이 워크스페이스 안에서만(멤버).
-    #[param(value_type = Option<String>, format = Uuid)]
-    pub workspace_id: Option<WorkspaceId>,
-    /// 쉼표로 구분한 종류(`document,task,item,event,file,record`). 없으면 전부.
-    pub kinds: Option<String>,
-    /// 이 모듈 안의 것만.
-    #[param(value_type = Option<String>, format = Uuid)]
-    pub module_id: Option<Uuid>,
-    /// 업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400.
-    pub status_category: Option<String>,
-    /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
-    pub assignee: Option<String>,
-    /// 날짜 범위 시작(YYYY-MM-DD). 날짜만 있는 값(업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일)은 그 날짜로,
-    /// 실제 시각(문서·항목·파일의 고친 때, 발생일 없는 기록의 고친 때, 시각 일정의 시작)은 `tz`의 그날 0시부터 비교한다.
-    pub from: Option<String>,
-    /// 날짜 범위 끝(YYYY-MM-DD, 포함). 실제 시각은 `tz`의 다음 날 0시 전까지.
-    pub to: Option<String>,
-    /// 날짜 범위의 하루를 정하는 IANA 시간대(예: `Asia/Seoul`). 없으면 저장한 시간대, 그것도 없으면 UTC. 모르는 이름은 400.
-    pub tz: Option<String>,
-    /// 작성자(`me` 또는 사용자 id): 그 사람이 만든 것만(각 대상의 `created_by`). 볼 수 있는 범위는 넓히지 않는다.
-    pub author: Option<String>,
-    /// `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다).
-    pub title_only: Option<bool>,
-}
-
-/// 검색 조건 중 필터.
-#[derive(Debug, Default)]
-struct Filters {
-    organization: Option<OrganizationId>,
-    module: Option<Uuid>,
-    status_category: Option<&'static str>,
-    assignee: Option<Uuid>,
-    /// 날짜만 있는 값과 비교하는 범위(끝 포함).
-    from: Option<time::Date>,
-    to: Option<time::Date>,
-    /// 실제 시각과 비교하는 범위: `from`의 그날 시작부터 `to` 다음 날 시작 전까지(보는 사람 시간대, `day_bounds`).
-    start: Option<OffsetDateTime>,
-    end: Option<OffsetDateTime>,
-    author: Option<Uuid>,
-}
-
-fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppError> {
-    let Some(raw) = raw.filter(|r| !r.trim().is_empty()) else {
-        return Ok(None);
-    };
-    let format = time::macros::format_description!("[year]-[month]-[day]");
-    let day = time::Date::parse(raw.trim(), &format)
-        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))?;
-    // 그날 시작과 다음 날 시작을 시각으로 만들 수 있는 날만(`day_bounds`): 9999-12-31은 다음 날이 `time` 범위 밖이고,
-    // 1년 전은 시간대에 따라 PostgreSQL 시각 범위를 벗어날 수 있다.
-    if day.year() < 1 || day.next_day().is_none() {
-        return Err(AppError::BadRequest(format!("{name} is out of range")));
-    }
-    Ok(Some(day))
-}
-
-fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppError> {
-    let status_category = match query.status_category.as_deref().map(str::trim) {
-        None | Some("") => None,
-        Some(raw) => Some(
-            STATUS_CATEGORIES
-                .iter()
-                .copied()
-                .find(|c| *c == raw)
-                .ok_or_else(|| {
-                    AppError::BadRequest("status_category must be todo, doing or done".to_owned())
-                })?,
-        ),
-    };
-    let person = |raw: Option<&str>, name: &str| -> Result<Option<Uuid>, AppError> {
-        match raw.map(str::trim) {
-            None | Some("") => Ok(None),
-            Some("me") => Ok(Some(me.0)),
-            Some(raw) => Uuid::parse_str(raw)
-                .map(Some)
-                .map_err(|_| AppError::BadRequest(format!("{name} must be me or a user id"))),
-        }
-    };
-    let assignee = person(query.assignee.as_deref(), "assignee")?;
-    let author = person(query.author.as_deref(), "author")?;
-    Ok(Filters {
-        organization: None,
-        module: query.module_id,
-        status_category,
-        assignee,
-        from: parse_day(query.from.as_deref(), "from")?,
-        to: parse_day(query.to.as_deref(), "to")?,
-        start: None,
-        end: None,
-        author,
-    })
-}
-
-/// 날짜 범위를 보는 사람 시간대의 시각 범위로 바꾼다(D-101). 시작은 `from`의 그날 시작, 끝은 `to` 다음 날의 시작(제외)이라
-/// 여름시간으로 23·25시간인 날도 그대로 맞다. 색인 경로와 대체 경로가 이 값을 함께 쓴다. 시간대를 보내지 않으면 저장한
-/// 시간대(D-81), 그것도 없으면 UTC. 모르는 시간대는 400.
-async fn day_bounds(tx: &mut UserTx, f: &mut Filters, tz: Option<&str>) -> Result<(), AppError> {
-    if f.from.is_none() && f.to.is_none() {
-        return Ok(());
-    }
-    let tz: String = match tz.map(str::trim).filter(|t| !t.is_empty()) {
-        Some(tz) => tz.to_owned(),
-        None => sqlx::query_scalar(
-            "SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')",
-        )
-        .fetch_one(tx.conn())
-        .await?,
-    };
-    sqlx::query("SELECT app_check_timezone($1)")
-        .bind(&tz)
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    // 하루의 시작은 그날 0시가 처음 오는 시점이다(0시가 두 번 오는 날은 앞의 0시, 없는 날은 건너뛴 직후). 시간 기록의 날
-    // 경계(`time_tracking.rs`, 감사 S21)와 같은 식.
-    let (start, end): (Option<OffsetDateTime>, Option<OffsetDateTime>) = sqlx::query_as(
-        "SELECT coalesce(app_local_instant($1::date::timestamp, $3), $1::date::timestamp AT TIME ZONE $3),
-                coalesce(app_local_instant(($2::date + 1)::timestamp, $3), ($2::date + 1)::timestamp AT TIME ZONE $3)",
-    )
-    .bind(f.from)
-    .bind(f.to)
-    .bind(&tz)
-    .fetch_one(tx.conn())
-    .await
-    .map_err(AppError::from_db_function)?;
-    f.start = start;
-    f.end = end;
-    Ok(())
-}
-
-/// Meilisearch 필터에 더할 조건(값은 UUID·고정 낱말·숫자뿐이라 따옴표 밖으로 나갈 수 없다).
-fn meili_filters(f: &Filters) -> String {
-    let mut out = String::new();
-    if let Some(m) = f.module {
-        let _ignored = write!(out, " AND module_id = \"{m}\"");
-    }
-    if let Some(c) = f.status_category {
-        // 범주는 고정 낱말 셋 가운데 하나다(D-116). 상태 이름으로는 거르지 않는다.
-        let _ignored = write!(out, " AND status_category = \"{c}\"");
-    }
-    if let Some(a) = f.assignee {
-        let _ignored = write!(out, " AND assignee_ids = \"{a}\"");
-    }
-    // 한 문서에는 `at`(실제 시각)·`date`(날짜만) 가운데 하나만 있다. 대체 경로와 같은 조건.
-    let mut at = Vec::new();
-    let mut date = Vec::new();
-    if let (Some(start), Some(d)) = (f.start, f.from) {
-        at.push(format!("at >= {}", start.unix_timestamp()));
-        date.push(format!("date >= {}", day_number(d)));
-    }
-    if let (Some(end), Some(d)) = (f.end, f.to) {
-        at.push(format!("at < {}", end.unix_timestamp()));
-        date.push(format!("date <= {}", day_number(d)));
-    }
-    if !at.is_empty() {
-        let _ignored = write!(
-            out,
-            " AND (({}) OR ({}))",
-            at.join(" AND "),
-            date.join(" AND ")
-        );
-    }
-    if let Some(a) = f.author {
-        let _ignored = write!(out, " AND created_by = \"{a}\"");
-    }
-    out
-}
 
 /// 검색 결과 한 건.
 #[derive(Debug, Serialize, ToSchema)]
@@ -224,125 +43,6 @@ pub struct SearchResult {
     pub document_id: Option<Uuid>,
     /// 본문에서 찾은 곳 근처 글자(일반 글자, 강조 표시 없음).
     pub snippet: Option<String>,
-}
-
-fn quote(values: impl IntoIterator<Item = String>) -> String {
-    // 값은 모두 UUID 문자열이라 따옴표 밖으로 나갈 수 없다.
-    let parts: Vec<String> = values.into_iter().map(|v| format!("\"{v}\"")).collect();
-    format!("[{}]", parts.join(", "))
-}
-
-fn parse_kinds(raw: Option<&str>) -> Result<Vec<&'static str>, AppError> {
-    let Some(raw) = raw.filter(|r| !r.trim().is_empty()) else {
-        return Ok(KINDS.to_vec());
-    };
-    raw.split(',')
-        .map(|k| {
-            KINDS
-                .iter()
-                .copied()
-                .find(|known| *known == k.trim())
-                .ok_or_else(|| AppError::BadRequest(format!("unknown kind {k}")))
-        })
-        .collect()
-}
-
-async fn scope_filter(
-    tx: &mut UserTx,
-    workspace: Option<WorkspaceId>,
-    kinds: &[&str],
-    organization: OrganizationId,
-) -> Result<String, AppError> {
-    let kind_filter = format!("kind IN {}", quote(kinds.iter().map(|k| (*k).to_owned())));
-    if let Some(ws) = workspace {
-        fvoci_db::access::require_visible(tx, fvoci_db::access::Kind::Workspace, ws).await?;
-        return Ok(format!("({kind_filter}) AND workspace_id = \"{}\"", ws.0));
-    }
-    let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids($1)")
-        .bind(organization)
-        .fetch_all(tx.conn())
-        .await?;
-    let mut scope = vec![format!("owner_user_id = \"{}\"", tx.user().0)];
-    if !workspaces.is_empty() {
-        scope.push(format!(
-            "workspace_id IN {}",
-            quote(workspaces.iter().map(Uuid::to_string))
-        ));
-    }
-    Ok(format!("({kind_filter}) AND ({})", scope.join(" OR ")))
-}
-
-async fn visible(
-    tx: &mut UserTx,
-    candidates: &[(String, Uuid)],
-    organization: Option<OrganizationId>,
-) -> Result<HashSet<(String, Uuid)>, AppError> {
-    let kinds: Vec<&str> = candidates.iter().map(|(k, _)| k.as_str()).collect();
-    let ids: Vec<Uuid> = candidates.iter().map(|(_, id)| *id).collect();
-    let rows: Vec<(String, Uuid)> =
-        sqlx::query_as("SELECT v.kind, v.id FROM app_search_visible($1, $2) v
-             LEFT JOIN documents d ON v.kind = 'document' AND d.id = v.id
-             LEFT JOIN tasks t ON v.kind = 'task' AND t.id = v.id
-             LEFT JOIN items i ON v.kind = 'item' AND i.id = v.id
-             LEFT JOIN events e ON v.kind = 'event' AND e.id = v.id
-             LEFT JOIN files f ON v.kind = 'file' AND f.id = v.id
-             LEFT JOIN documents fd ON fd.id = f.document_id
-             LEFT JOIN item_records r ON v.kind = 'record' AND r.id = v.id
-             WHERE coalesce(d.workspace_id,t.workspace_id,i.workspace_id,e.workspace_id,f.workspace_id,r.workspace_id)
-                       IN (SELECT app_my_workspace_ids($3))
-                OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())
-                OR (f.workspace_id IS NULL AND fd.owner_user_id = app_user_id())")
-            .bind(&kinds)
-            .bind(&ids)
-            .bind(organization)
-            .fetch_all(tx.conn())
-            .await?;
-    Ok(rows.into_iter().collect())
-}
-
-/// 이 항목들 가운데 그 사람이 볼 수 있는 것(호출자 권한, 항목 RLS).
-async fn visible_items(tx: &mut UserTx, ids: &[Uuid]) -> Result<HashSet<Uuid>, AppError> {
-    if ids.is_empty() {
-        return Ok(HashSet::new());
-    }
-    let rows: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM items WHERE id = ANY($1)")
-        .bind(ids)
-        .fetch_all(tx.conn())
-        .await?;
-    Ok(rows.into_iter().collect())
-}
-
-/// 파일이 붙은 문서(파일 결과에서 문서로 열 때).
-async fn file_document(tx: &mut UserTx, kind: &str, id: Uuid) -> Result<Option<Uuid>, AppError> {
-    if kind != "file" {
-        return Ok(None);
-    }
-    Ok(
-        sqlx::query_scalar("SELECT document_id FROM files WHERE id = $1")
-            .bind(id)
-            .fetch_optional(tx.conn())
-            .await?
-            .flatten(),
-    )
-}
-
-/// 번호 표시. 호출자 권한으로 읽어 키를 볼 수 없는 사람(멤버가 아닌 공유 대상)에게는 없다.
-async fn reference(tx: &mut UserTx, kind: &str, id: Uuid) -> Result<Option<String>, AppError> {
-    let sql = match kind {
-        "document" => "SELECT app_document_reference($1)",
-        "task" => "SELECT app_task_reference($1)",
-        "item" => "SELECT app_item_reference($1)",
-        _ => return Ok(None),
-    };
-    Ok(sqlx::query_scalar(sql)
-        .bind(id)
-        .fetch_optional(tx.conn())
-        .await?
-        .flatten())
-}
-
-fn parse_uuid(raw: Option<&str>) -> Option<Uuid> {
-    raw.and_then(|r| Uuid::parse_str(r).ok())
 }
 
 /// 통합 검색(로그인한 사람). 볼 수 있는 것만, 최대 20건.
@@ -416,7 +116,6 @@ async fn indexed(
     title_only: bool,
     wanted: &Filters,
 ) -> Result<Option<Vec<SearchResult>>, AppError> {
-    let module = wanted.module;
     let mut results = Vec::new();
     for page in 0..MAX_PAGES {
         let hits = match client
@@ -444,57 +143,69 @@ async fn indexed(
             }
         };
         let last_page = hits.len() < CANDIDATES;
-        let candidates: Vec<(String, Uuid)> = hits
-            .iter()
-            .filter_map(|h| Some((h.kind.clone(), Uuid::parse_str(&h.id).ok()?)))
-            .collect();
         let mut tx = state.db.begin_as(user).await?;
-        let allowed = visible(&mut tx, &candidates, wanted.organization).await?;
-        // 항목 id·모듈은 그 항목을 볼 수 있는 사람에게만 쓴다(감사 델타 SD4). 공유로만 문서·첨부를 보는 사람에게는 항목
-        // id를 주지 않고, 모듈로 거를 때는 대체(DB) 경로처럼 그 결과를 내지 않는다.
-        let item_ids: Vec<Uuid> = hits
-            .iter()
-            .filter_map(|h| parse_uuid(h.item_id.as_deref()))
-            .collect();
-        let seen_items = visible_items(&mut tx, &item_ids).await?;
-        for h in hits {
-            let Some(id) = Uuid::parse_str(&h.id).ok() else {
-                continue;
-            };
-            let key = (h.kind.clone(), id);
-            let item = parse_uuid(h.item_id.as_deref()).filter(|i| seen_items.contains(i));
-            if results.len() == MAX_RESULTS
-                || !allowed.contains(&key)
-                || (module.is_some() && h.item_id.is_some() && item.is_none())
-            {
-                continue;
-            }
-            let snippet = h
-                .formatted
-                .as_ref()
-                .and_then(|f| f.get("text"))
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-                .filter(|s| !s.is_empty());
-            let reference = reference(&mut tx, &h.kind, id).await?;
-            let document_id = file_document(&mut tx, &h.kind, id).await?;
-            results.push(SearchResult {
-                kind: h.kind,
-                id,
-                title: h.title,
-                reference,
-                workspace_id: parse_uuid(h.workspace_id.as_deref()),
-                item_id: item,
-                snippet,
-                document_id,
-            });
-        }
+        append_hits(&mut tx, &mut results, hits, wanted).await?;
         tx.commit().await?;
         if results.len() == MAX_RESULTS || last_page {
             break;
         }
     }
     Ok(Some(results))
+}
+
+/// 한 쪽의 후보를 호출자 권한으로 확인한 뒤 응답에 넣는다.
+async fn append_hits(
+    tx: &mut UserTx,
+    results: &mut Vec<SearchResult>,
+    hits: Vec<crate::indexing::Hit>,
+    wanted: &Filters,
+) -> Result<(), AppError> {
+    let module = wanted.module;
+    let candidates: Vec<(String, Uuid)> = hits
+        .iter()
+        .filter_map(|h| Some((h.kind.clone(), Uuid::parse_str(&h.id).ok()?)))
+        .collect();
+    let allowed = visible(tx, &candidates, wanted.organization).await?;
+    // 항목 id·모듈은 그 항목을 볼 수 있는 사람에게만 쓴다(감사 델타 SD4). 공유로만 문서·첨부를 보는 사람에게는 항목
+    // id를 주지 않고, 모듈로 거를 때는 대체(DB) 경로처럼 그 결과를 내지 않는다.
+    let item_ids: Vec<Uuid> = hits
+        .iter()
+        .filter_map(|h| parse_uuid(h.item_id.as_deref()))
+        .collect();
+    let seen_items = visible_items(tx, &item_ids).await?;
+    for h in hits {
+        let Some(id) = Uuid::parse_str(&h.id).ok() else {
+            continue;
+        };
+        let key = (h.kind.clone(), id);
+        let item = parse_uuid(h.item_id.as_deref()).filter(|i| seen_items.contains(i));
+        if results.len() == MAX_RESULTS
+            || !allowed.contains(&key)
+            || (module.is_some() && h.item_id.is_some() && item.is_none())
+        {
+            continue;
+        }
+        let snippet = h
+            .formatted
+            .as_ref()
+            .and_then(|f| f.get("text"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+            .filter(|s| !s.is_empty());
+        let reference = reference(tx, &h.kind, id).await?;
+        let document_id = file_document(tx, &h.kind, id).await?;
+        results.push(SearchResult {
+            kind: h.kind,
+            id,
+            title: h.title,
+            reference,
+            workspace_id: parse_uuid(h.workspace_id.as_deref()),
+            item_id: item,
+            snippet,
+            document_id,
+        });
+    }
+    Ok(())
 }
 
 /// Meilisearch가 없을 때: 제목만 DB에서 찾고 같은 접근 함수로 거른다.
@@ -505,6 +216,39 @@ async fn fallback(
     kinds: &[&str],
     wanted: &Filters,
 ) -> Result<Vec<SearchResult>, AppError> {
+    let rows = fallback_rows(tx, q, workspace, kinds, wanted).await?;
+    let candidates: Vec<(String, Uuid)> = rows.iter().map(|r| (r.0.clone(), r.1)).collect();
+    let allowed = visible(tx, &candidates, wanted.organization).await?;
+    let mut results = Vec::new();
+    for (kind, id, title, workspace_id, item_id) in rows {
+        if results.len() == MAX_RESULTS || !allowed.contains(&(kind.clone(), id)) {
+            continue;
+        }
+        let reference = reference(tx, &kind, id).await?;
+        let document_id = file_document(tx, &kind, id).await?;
+        results.push(SearchResult {
+            kind,
+            id,
+            title,
+            reference,
+            workspace_id,
+            item_id,
+            snippet: None,
+            document_id,
+        });
+    }
+    Ok(results)
+}
+
+type FallbackRow = (String, Uuid, String, Option<Uuid>, Option<Uuid>);
+
+async fn fallback_rows(
+    tx: &mut UserTx,
+    q: &str,
+    workspace: Option<WorkspaceId>,
+    kinds: &[&str],
+    wanted: &Filters,
+) -> Result<Vec<FallbackRow>, AppError> {
     if let Some(ws) = workspace {
         fvoci_db::access::require_visible(tx, fvoci_db::access::Kind::Workspace, ws).await?;
     }
@@ -514,8 +258,7 @@ async fn fallback(
             .replace('%', "\\%")
             .replace('_', "\\_")
     );
-    type Row = (String, Uuid, String, Option<Uuid>, Option<Uuid>);
-    let rows: Vec<Row> = sqlx::query_as(
+    let rows: Vec<FallbackRow> = sqlx::query_as(
         // 항목 id는 그 항목을 볼 수 있는 사람에게만 준다(공유로만 문서·첨부를 보는 사람에게 비공개 항목을 드러내지 않는다,
         // 문서 조회와 같은 규칙). 감사 델타 SD4.
         // 날짜: 실제 시각(`at`)은 보는 사람 시간대의 범위($9·$10)로, 날짜만 있는 값(`on_day`)은 날짜($7·$8)로 본다. 한 행에는
@@ -582,106 +325,5 @@ async fn fallback(
     .bind(wanted.organization)
     .fetch_all(tx.conn())
     .await?;
-    let candidates: Vec<(String, Uuid)> = rows.iter().map(|r| (r.0.clone(), r.1)).collect();
-    let allowed = visible(tx, &candidates, wanted.organization).await?;
-    let mut results = Vec::new();
-    for (kind, id, title, workspace_id, item_id) in rows {
-        if results.len() == MAX_RESULTS || !allowed.contains(&(kind.clone(), id)) {
-            continue;
-        }
-        let reference = reference(tx, &kind, id).await?;
-        let document_id = file_document(tx, &kind, id).await?;
-        results.push(SearchResult {
-            kind,
-            id,
-            title,
-            reference,
-            workspace_id,
-            item_id,
-            snippet: None,
-            document_id,
-        });
-    }
-    Ok(results)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 검색 필터는 상태 이름이 아니라 범주만 본다(D-116): 세 낱말 가운데 하나만 받고 그대로 필터 식에 넣는다.
-    #[test]
-    fn status_category_is_one_of_three_fixed_words() {
-        let filter = Filters {
-            status_category: Some("doing"),
-            ..Filters::default()
-        };
-        assert_eq!(meili_filters(&filter), " AND status_category = \"doing\"");
-        let me = UserId(Uuid::from_u128(1));
-        let query = |raw: &str| -> SearchQuery {
-            serde_json::from_value(serde_json::json!({ "q": "x", "status_category": raw })).unwrap()
-        };
-        assert_eq!(
-            filters(&query(" done "), me).unwrap().status_category,
-            Some("done")
-        );
-        assert_eq!(filters(&query(""), me).unwrap().status_category, None);
-        assert!(matches!(
-            filters(&query("late"), me),
-            Err(AppError::BadRequest(_))
-        ));
-        assert!(matches!(
-            filters(&query("검토"), me),
-            Err(AppError::BadRequest(_))
-        ));
-    }
-
-    /// 날짜 범위는 그날 시작과 다음 날 시작을 시각으로 만든다. 다음 날이 없는 날(9999-12-31)이나 1년 전은 그 시각을
-    /// 나타낼 수 없어(`time`·PostgreSQL 범위 밖) 500이 되던 것을 400으로 거절한다(CodeRabbit #99).
-    #[test]
-    fn days_without_a_representable_boundary_are_rejected() {
-        for raw in ["9999-12-31", "0000-12-31", "-0001-01-01"] {
-            assert!(
-                matches!(parse_day(Some(raw), "to"), Err(AppError::BadRequest(_))),
-                "{raw}"
-            );
-        }
-        for raw in ["9999-12-30", "0001-01-01", "2026-03-08"] {
-            assert!(matches!(parse_day(Some(raw), "to"), Ok(Some(_))), "{raw}");
-        }
-    }
-
-    #[test]
-    fn date_ranges_compare_instants_and_dates_separately() {
-        let day = |s: &str| {
-            time::Date::parse(s, time::macros::format_description!("[year]-[month]-[day]")).ok()
-        };
-        let at = |s: i64| OffsetDateTime::from_unix_timestamp(s).ok();
-        let author = Uuid::from_u128(7);
-        let both = Filters {
-            from: day("2026-03-08"),
-            to: day("2026-03-08"),
-            start: at(1_772_946_000),
-            end: at(1_773_028_800),
-            author: Some(author),
-            ..Filters::default()
-        };
-        assert_eq!(
-            meili_filters(&both),
-            format!(
-                " AND ((at >= 1772946000 AND at < 1773028800) OR (date >= 20260308 AND date <= 20260308)) \
-                 AND created_by = \"{author}\""
-            )
-        );
-        let from_only = Filters {
-            from: day("2026-03-09"),
-            start: at(1_773_028_800),
-            ..Filters::default()
-        };
-        assert_eq!(
-            meili_filters(&from_only),
-            " AND ((at >= 1773028800) OR (date >= 20260309))"
-        );
-        assert_eq!(meili_filters(&Filters::default()), "");
-    }
+    Ok(rows)
 }

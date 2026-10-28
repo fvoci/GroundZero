@@ -1,7 +1,12 @@
 //! 통합 검색 집계와 색인 작업 본문. 일정과 텍스트 추출기는 조립 crate가 제공한다.
 
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
 pub mod api;
+mod client;
+mod filters;
 pub mod indexing;
+mod visibility;
 
 use axum::Router;
 use axum::extract::FromRef;
