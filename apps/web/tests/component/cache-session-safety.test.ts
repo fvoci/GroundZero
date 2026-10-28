@@ -32,6 +32,11 @@ const me: Me = {
 };
 const replace = vi.fn();
 const reload = vi.fn();
+const sessionKey = 'fvoci:auth-session';
+
+function signalSession(userId: string | null): void {
+  localStorage.setItem(sessionKey, JSON.stringify({ userId, sequence: crypto.randomUUID() }));
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -48,6 +53,7 @@ function pageshow(persisted = true): void {
 }
 
 beforeEach(async () => {
+  localStorage.removeItem(sessionKey);
   await setLocale('ko', { reload: false });
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
@@ -85,6 +91,7 @@ afterEach(() => {
   router.navigate('/');
   currentUser.userId = '';
   connection.lost = false;
+  localStorage.removeItem(sessionKey);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -98,6 +105,91 @@ async function logout(): Promise<void> {
   await fireEvent.click(screen.getByTestId('user-menu'));
   await fireEvent.click(await screen.findByRole('menuitem', { name: '로그아웃' }));
 }
+
+// SR-221-1 / D-96 / #88: 불일치 표식은 네트워크 응답보다 먼저 가린다. 순번은 비교하지 않는다.
+it('publishes the shell identity and a fresh signed-out marker before each logout attempt', async () => {
+  const send = vi.spyOn(api, 'logout').mockImplementation(() => {
+    expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
+    return Promise.reject(new Error('offline'));
+  });
+  await signedIn();
+  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: me.id });
+  await logout();
+  await screen.findByRole('alert');
+  const first = localStorage.getItem(sessionKey);
+  await fireEvent.click(screen.getByRole('button', { name: '로그아웃 다시 하기' }));
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+  expect(localStorage.getItem(sessionKey)).not.toBe(first);
+});
+
+it('publishes an anonymous shell result without making public views publish a marker', async () => {
+  vi.spyOn(api, 'me').mockResolvedValue(undefined);
+  const view = render(App, { replace, reload });
+  await screen.findByRole('link', { name: '로그인', exact: true });
+  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
+  view.unmount();
+  localStorage.removeItem(sessionKey);
+  router.navigate('/public/public-token');
+  vi.spyOn(api, 'publicDocument').mockResolvedValue(publicDoc);
+  render(App, { replace, reload });
+  await screen.findByText(publicDoc.title);
+  expect(localStorage.getItem(sessionKey)).toBeNull();
+});
+
+it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
+  'hides synchronously on a mismatched marker at %s and remounts only after verification',
+  async (event) => {
+    await signedIn();
+    const check = deferred<Me | undefined>();
+    vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
+    signalSession('user-b');
+    if (event === 'visibilitychange') {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      document.dispatchEvent(new Event(event));
+    } else if (event === 'storage') {
+      window.dispatchEvent(new StorageEvent(event, { key: sessionKey }));
+    } else if (event === 'pageshow') pageshow(false);
+    else window.dispatchEvent(new Event(event));
+    expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
+    expect(accountSafety.switching).toBe(true);
+    expect(api.workspaces).toHaveBeenCalledTimes(1);
+    vi.mocked(api.deletedWorkspaces).mockResolvedValue([]);
+    check.resolve(me);
+    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeVisible());
+    expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+    expect(api.workspaces).toHaveBeenCalledTimes(2);
+  },
+);
+
+it('keeps a signed-out marker hidden through a failed verification and offers retry', async () => {
+  await signedIn();
+  signalSession(null);
+  vi.spyOn(api, 'me').mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
+  await screen.findByRole('alert');
+  expect(replace).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/trash'));
+  expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+});
+
+it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
+  'preserves the same user screen and inputs at %s even when the network fails',
+  async (event) => {
+    await signedIn();
+    signalSession(me.id);
+    vi.spyOn(api, 'me').mockRejectedValue(new Error('offline'));
+    if (event === 'visibilitychange') document.dispatchEvent(new Event(event));
+    else if (event === 'storage')
+      window.dispatchEvent(new StorageEvent(event, { key: sessionKey }));
+    else if (event === 'pageshow') pageshow(false);
+    else window.dispatchEvent(new Event(event));
+    expect(screen.getByText('이전 비밀 목록')).toBeVisible();
+    expect(accountSafety.switching).toBe(false);
+    expect(replace).not.toHaveBeenCalled();
+  },
+);
 
 // #212 1~3, 부조종사 2026-10-29 00:25: 응답·이동보다 먼저 이전 화면을 가린다.
 it('clears session and organization before sending logout, and replaces history', async () => {

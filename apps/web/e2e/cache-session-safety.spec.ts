@@ -3,6 +3,53 @@ import { expect, str, test, unique } from './fixtures';
 // 실제 BFCache 복원은 이 실행기의 BackForwardCacheDisabledForDelegate로 재현되지 않았다.
 // 코디네이터 승인: 여기서는 일반 기록 이동, persisted=true 복원은 컴포넌트 시험이 검증한다.
 
+test('another tab hides without focus while its session verification is held', async ({
+  signIn,
+}) => {
+  const owner = await signIn('test-user');
+  const observer = await owner.context.newPage();
+  await observer.goto('/notes');
+  await expect(observer.getByTestId('user-menu')).toBeVisible();
+  await owner.page.goto('/notes');
+  await expect(owner.page.getByTestId('user-menu')).toBeVisible();
+  await owner.endTrace();
+  await observer.evaluate(() => {
+    document.documentElement.dataset.focusCount = '0';
+    window.addEventListener('focus', () => {
+      const root = document.documentElement;
+      root.dataset.focusCount = String(Number(root.dataset.focusCount) + 1);
+    });
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let checking!: () => void;
+  const checked = new Promise<void>((resolve) => {
+    checking = resolve;
+  });
+  await observer.route('**/api/me', async (route) => {
+    checking();
+    await held;
+    await route.continue();
+  });
+  await owner.page.route('**/auth/logout', async (route) => {
+    await held;
+    await route.continue();
+  });
+  try {
+    await owner.page.getByTestId('user-menu').click();
+    await owner.page.getByRole('menuitem', { name: '로그아웃' }).click();
+    await expect(observer.getByTestId('user-menu')).toBeHidden();
+    await checked;
+    await expect(observer.getByTestId('account-safe-state')).toBeVisible();
+    await expect(observer.locator('html')).toHaveAttribute('data-focus-count', '0');
+  } finally {
+    release();
+  }
+  await expect(owner.page.getByRole('link', { name: '로그인', exact: true })).toBeVisible();
+});
+
 test('logout hides private data while pending and after going back', async ({ signIn }) => {
   const { page, api, endTrace } = await signIn('test-user');
   const secret = `로그아웃 비밀 ${unique()}`;
