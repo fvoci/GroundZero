@@ -206,6 +206,30 @@ async fn rules_expand_with_skips_counts_and_limits() {
     }
 }
 
+/// #76: 반복 끝이 첫 회차보다 앞서면 400 `bad_request`에 칸(`until`)과 안정된 이유를 싣는다. 업무 반복과 일정이 같은 서버
+/// 오류 대응을 쓴다(일정 쪽은 `moving_a_repeating_event_past_its_until_is_refused`).
+#[tokio::test]
+async fn a_task_rule_ending_before_its_first_occurrence_names_the_until_field() {
+    let _tick = LANE_TICK.read().await;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "반복 끝").await;
+    let item = module_item(&app, &admin, &ws, "UNT").await;
+    let root = dated_task(&app, &admin, &item, "월간 정산", "2026-11-10").await;
+    let early =
+        json!({"freq":"weekly","interval":1,"weekdays":[],"until":"2026-11-01","count":null});
+    let (status, body) = repeat(&app, &admin, &root, early).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "bad_request");
+    assert_eq!(body["reason"], "until_before_first_occurrence");
+    assert_eq!(body["field"], "until");
+    assert_eq!(
+        body["message"],
+        "until must not be before the first occurrence"
+    );
+}
+
 #[tokio::test]
 async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule() {
     let _tick = LANE_TICK.read().await;
@@ -787,6 +811,8 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
     assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
     // #76: 웹(apps/web/src/lib/api/errors.ts의 untilBeforeStart)이 이 경우를 `error`와 `message`의 고정 값으로 알아본다.
     assert_eq!(moved.json["error"], "bad_request");
+    assert_eq!(moved.json["reason"], "until_before_first_occurrence");
+    assert_eq!(moved.json["field"], "until");
     assert_eq!(
         moved.json["message"],
         "until must not be before the first occurrence"
@@ -833,6 +859,7 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
             "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Pacific/Kiritimati" }))).await;
     assert_eq!(zone.status, StatusCode::BAD_REQUEST, "{:?}", zone.json);
     assert_eq!(zone.json["error"], "bad_request");
+    assert_eq!(zone.json["reason"], "until_before_first_occurrence");
     assert_eq!(
         zone.json["message"],
         "until must not be before the first occurrence"

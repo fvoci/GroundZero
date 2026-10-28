@@ -12880,7 +12880,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NewChecklistItem"
-            }
+            },
+            "maxItems": 200
           }
         }
       },
@@ -13736,7 +13737,8 @@
             "description": "담당자(그 항목을 볼 수 있는 멤버)."
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "due_date": {
             "type": [
@@ -13749,7 +13751,8 @@
               "integer",
               "null"
             ],
-            "format": "int32"
+            "format": "int32",
+            "minimum": 0
           },
           "milestone": {
             "type": "boolean",
@@ -13787,10 +13790,12 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "maxItems": 20
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`."
           }
         }
       },
@@ -14381,9 +14386,23 @@
             "type": "string",
             "description": "기계가 읽는 오류 코드."
           },
+          "field": {
+            "type": "string",
+            "description": "거절된 입력 칸 이름(요청 본문의 칸 이름, 예: `title`·`until`)."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "넘은 한도(글자 수·개수·최댓값). 실행 설정으로 정해지는 한도(제목 `FVOCI_MAX_TITLE_CHARS`)도 여기서 알린다.",
+            "minimum": 0
+          },
           "message": {
             "type": "string",
             "description": "사람이 읽는 설명. 내부 세부는 담지 않는다."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/InvalidReason",
+            "description": "칸 검증 실패(400 `bad_request`)의 안정된 이유. 화면은 `message` 대신 이 값으로 문구를 고른다(D-83, #76·#79)."
           },
           "request_id": {
             "type": "string",
@@ -15112,6 +15131,19 @@
           }
         }
       },
+      "InvalidReason": {
+        "type": "string",
+        "description": "칸 검증 실패의 이유(언어와 상관없는 코드).",
+        "enum": [
+          "required",
+          "too_long",
+          "too_many",
+          "control_characters",
+          "invalid_format",
+          "out_of_range",
+          "until_before_first_occurrence"
+        ]
+      },
       "Invitation": {
         "type": "object",
         "description": "관리자가 보는 초대.",
@@ -15505,7 +15537,9 @@
           },
           "lag_days": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
           }
         }
       },
@@ -15523,7 +15557,9 @@
           "lag_days": {
             "type": "integer",
             "format": "int32",
-            "description": "0 이상의 달력 날짜 수."
+            "description": "0 이상의 달력 날짜 수.",
+            "maximum": 3650,
+            "minimum": 0
           }
         }
       },
@@ -16314,7 +16350,8 @@
             "format": "uuid"
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "항목 글. 상한은 제목과 같다(`limits.max_title_chars`)."
           }
         }
       },
@@ -16499,7 +16536,9 @@
             "type": "string"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1
           }
         }
       },
@@ -17497,7 +17536,8 @@
             ],
             "format": "int32",
             "description": "첫 회차를 포함한 횟수(1~1000).",
-            "minimum": 0
+            "maximum": 1000,
+            "minimum": 1
           },
           "freq": {
             "$ref": "#/components/schemas/Frequency"
@@ -17506,7 +17546,8 @@
             "type": "integer",
             "format": "int32",
             "description": "1~99.",
-            "minimum": 0
+            "maximum": 99,
+            "minimum": 1
           },
           "until": {
             "type": [
@@ -17522,7 +17563,8 @@
               "format": "int32",
               "minimum": 0
             },
-            "description": "매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일."
+            "description": "매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일.",
+            "maxItems": 7
           }
         }
       },
@@ -18295,13 +18337,16 @@
           },
           "lag_days": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
           },
           "successor_shifts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SuccessorShift"
-            }
+            },
+            "maxItems": 500
           }
         }
       },
@@ -19159,7 +19204,9 @@
           },
           "lag_days": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
           },
           "task_id": {
             "type": "string",
@@ -19687,7 +19734,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "항목 글. 상한은 제목과 같다(`limits.max_title_chars`)."
           }
         }
       },
@@ -19883,7 +19931,8 @@
             "format": "int32"
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "due_date": {
             "type": [
@@ -19896,7 +19945,8 @@
               "integer",
               "null"
             ],
-            "format": "int32"
+            "format": "int32",
+            "minimum": 0
           },
           "milestone": {
             "type": "boolean",
@@ -19919,16 +19969,19 @@
             "items": {
               "$ref": "#/components/schemas/SuccessorShift"
             },
-            "description": "미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이\n지났으면 아무것도 바꾸지 않고 409(`shift_conflict`)."
+            "description": "미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이\n지났으면 아무것도 바꾸지 않고 409(`shift_conflict`).",
+            "maxItems": 500
           },
           "tags": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "maxItems": 20
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`."
           }
         }
       },
@@ -19955,7 +20008,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "maxLength": 50,
+            "minLength": 1
           },
           "position": {
             "type": [

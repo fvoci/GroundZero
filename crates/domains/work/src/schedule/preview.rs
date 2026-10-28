@@ -16,7 +16,7 @@ use super::planner::{
 };
 use crate::state::WorkState;
 use crate::tasks::MAX_SHIFTS;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::UserId;
 use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::UserTx;
@@ -251,9 +251,12 @@ pub(super) fn check_lag(lag_days: i32) -> Result<(), AppError> {
     if (0..=MAX_LAG_DAYS).contains(&lag_days) {
         Ok(())
     } else {
-        Err(AppError::BadRequest(format!(
-            "lag_days must be between 0 and {MAX_LAG_DAYS}"
-        )))
+        Err(AppError::invalid(
+            "lag_days",
+            InvalidReason::OutOfRange,
+            Some(MAX_LAG_DAYS.unsigned_abs().into()),
+            format!("lag_days must be between 0 and {MAX_LAG_DAYS}"),
+        ))
     }
 }
 

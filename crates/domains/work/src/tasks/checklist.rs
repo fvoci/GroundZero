@@ -11,7 +11,7 @@ use super::model::{
 };
 use super::read::load_detail;
 use crate::state::WorkState;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::validate::validate_title;
 use fvoci_db::new_ids;
 use fvoci_http::session::ExpectedUser;
@@ -29,9 +29,12 @@ pub async fn add_checklist(
     Json(input): Json<AddChecklist>,
 ) -> Result<Json<TaskDetail>, AppError> {
     if input.items.len() > MAX_CHECKLIST_BATCH {
-        return Err(AppError::BadRequest(format!(
-            "at most {MAX_CHECKLIST_BATCH} items at once"
-        )));
+        return Err(AppError::invalid(
+            "items",
+            InvalidReason::TooMany,
+            Some(MAX_CHECKLIST_BATCH as u64),
+            format!("at most {MAX_CHECKLIST_BATCH} items at once"),
+        ));
     }
     let mut items = Vec::with_capacity(input.items.len());
     for item in input.items {

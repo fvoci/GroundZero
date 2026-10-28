@@ -208,11 +208,11 @@ async fn json_rejections(request: Request, next: Next) -> Response {
     };
     let mut out = (
         parts.status,
-        Json(ErrorBody {
+        Json(ErrorBody::new(
             error,
             message,
-            request_id: fvoci_core::logging::current_request_id(),
-        }),
+            fvoci_core::logging::current_request_id(),
+        )),
     )
         .into_response();
     out.extensions_mut()

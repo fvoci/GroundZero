@@ -17,7 +17,7 @@ use crate::state::WorkState;
 use crate::tasks::{
     EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, load_detail,
 };
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::UserId;
 use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::UserTx;
@@ -28,6 +28,7 @@ use fvoci_http::session::ExpectedUser;
 pub struct LinkInput {
     pub kind: LinkKind,
     /// 0 이상의 달력 날짜 수.
+    #[schema(minimum = 0, maximum = 3650)]
     pub lag_days: i32,
 }
 
@@ -37,10 +38,12 @@ pub struct LinkInput {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SetPredecessor {
     pub kind: LinkKind,
+    #[schema(minimum = 0, maximum = 3650)]
     pub lag_days: i32,
     #[serde(default)]
     pub base: Option<LinkBase>,
     #[serde(default)]
+    #[schema(max_items = 500)]
     pub successor_shifts: Vec<SuccessorShift>,
 }
 
@@ -48,6 +51,7 @@ pub struct SetPredecessor {
 #[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
 pub struct LinkBase {
     pub kind: LinkKind,
+    #[schema(minimum = 0, maximum = 3650)]
     pub lag_days: i32,
 }
 
@@ -57,6 +61,7 @@ pub struct TaskLink {
     #[schema(value_type = String, format = Uuid)]
     pub task_id: Uuid,
     pub kind: LinkKind,
+    #[schema(minimum = 0, maximum = 3650)]
     pub lag_days: i32,
 }
 
@@ -65,9 +70,12 @@ pub(crate) fn approved_shifts(
     input: &[SuccessorShift],
 ) -> Result<(serde_json::Value, Vec<(Uuid, Span)>), AppError> {
     if input.len() > MAX_SHIFTS {
-        return Err(AppError::BadRequest(format!(
-            "at most {MAX_SHIFTS} successor shifts"
-        )));
+        return Err(AppError::invalid(
+            "successor_shifts",
+            InvalidReason::TooMany,
+            Some(MAX_SHIFTS as u64),
+            format!("at most {MAX_SHIFTS} successor shifts"),
+        ));
     }
     let mut json = Vec::with_capacity(input.len());
     let mut spans = Vec::with_capacity(input.len());

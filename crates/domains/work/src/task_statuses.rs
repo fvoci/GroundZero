@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::state::WorkState;
 use crate::tasks::EXPECTED_TASK_USER_DOC;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::ItemId;
 use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, new_ids};
@@ -69,6 +69,7 @@ pub struct TaskStatus {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct NewTaskStatus {
+    #[schema(min_length = 1, max_length = 50)]
     pub name: String,
     #[serde(default)]
     pub color: String,
@@ -77,6 +78,7 @@ pub struct NewTaskStatus {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateTaskStatus {
+    #[schema(min_length = 1, max_length = 50)]
     pub name: Option<String>,
     pub color: Option<String>,
     pub category: Option<StatusCategory>,
@@ -128,8 +130,11 @@ fn validate_color(raw: &str) -> Result<String, AppError> {
             .strip_prefix('#')
             .is_some_and(|hex| hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()));
     if !valid {
-        return Err(AppError::BadRequest(
-            "color must be empty or #rrggbb".to_owned(),
+        return Err(AppError::invalid(
+            "color",
+            InvalidReason::InvalidFormat,
+            None,
+            "color must be empty or #rrggbb",
         ));
     }
     Ok(color)

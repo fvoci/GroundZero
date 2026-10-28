@@ -3207,6 +3207,7 @@ export interface components {
             /** @description 상태 이름(항목이 정의한 문자열). 비우면 항목의 기본 상태(todo 범주 첫 상태)다(개정 2026-10-26 ⑪: 기본 이름은 서버가 정하지 않는다). */
             status?: string | null;
             tags?: string[];
+            /** @description 제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`. */
             title: string;
         };
         /** @description 업로드 시작. `file_id`가 있으면 그 파일의 새 버전, 없으면 `target`에 새 파일. */
@@ -3417,8 +3418,17 @@ export interface components {
         ErrorBody: {
             /** @description 기계가 읽는 오류 코드. */
             error: string;
+            /** @description 거절된 입력 칸 이름(요청 본문의 칸 이름, 예: `title`·`until`). */
+            field?: string;
+            /**
+             * Format: int64
+             * @description 넘은 한도(글자 수·개수·최댓값). 실행 설정으로 정해지는 한도(제목 `FVOCI_MAX_TITLE_CHARS`)도 여기서 알린다.
+             */
+            limit?: number;
             /** @description 사람이 읽는 설명. 내부 세부는 담지 않는다. */
             message: string;
+            /** @description 칸 검증 실패(400 `bad_request`)의 안정된 이유. 화면은 `message` 대신 이 값으로 문구를 고른다(D-83, #76·#79). */
+            reason?: components["schemas"]["InvalidReason"];
             /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다). 운영 로그에서 같은 요청의 줄을 찾을 때 쓴다(D-83). */
             request_id?: string;
         };
@@ -3642,6 +3652,11 @@ export interface components {
             /** @description 제목·이름 상한(`FVOCI_MAX_TITLE_CHARS`). 업무 CSV의 각 행에도 적용된다. */
             max_title_chars: number;
         };
+        /**
+         * @description 칸 검증 실패의 이유(언어와 상관없는 코드).
+         * @enum {string}
+         */
+        InvalidReason: "required" | "too_long" | "too_many" | "control_characters" | "invalid_format" | "out_of_range" | "until_before_first_occurrence";
         /** @description 관리자가 보는 초대. */
         Invitation: {
             email: string;
@@ -4070,6 +4085,7 @@ export interface components {
             checked?: boolean;
             /** Format: uuid */
             request_id: string;
+            /** @description 항목 글. 상한은 제목과 같다(`limits.max_title_chars`). */
             text: string;
         };
         /** @description 댓글 달기. `document_id`나 `task_id` 하나, 답글이면 `parent_id`. */
@@ -5219,6 +5235,7 @@ export interface components {
         /** @description 체크리스트 항목 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 둘 다 없으면 400. */
         UpdateChecklistItem: {
             checked?: boolean | null;
+            /** @description 항목 글. 상한은 제목과 같다(`limits.max_title_chars`). */
             text?: string | null;
         };
         /** @description 기록 고치기. `base_version`이 지났으면 409와 서버 최신본. */
@@ -5301,6 +5318,7 @@ export interface components {
              */
             successor_shifts?: components["schemas"]["SuccessorShift"][];
             tags: string[];
+            /** @description 제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`. */
             title: string;
         };
         UpdateTaskStatus: {

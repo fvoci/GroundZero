@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::state::WorkState;
 use crate::tasks::{EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, load_detail};
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::ItemId;
 use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::{needed_ids, new_ids};
@@ -38,12 +38,15 @@ pub enum Frequency {
 pub struct RecurrenceRule {
     pub freq: Frequency,
     /// 1~99.
+    #[schema(minimum = 1, maximum = 99)]
     pub interval: u16,
     /// 매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일.
+    #[schema(max_items = 7)]
     pub weekdays: Vec<u8>,
     /// 이 날짜까지(포함). `count`와 함께 쓸 수 없다.
     pub until: Option<String>,
     /// 첫 회차를 포함한 횟수(1~1000).
+    #[schema(minimum = 1, maximum = 1000)]
     pub count: Option<u16>,
 }
 
@@ -51,14 +54,16 @@ impl RecurrenceRule {
     /// 확인한 뒤 DB에 넘길 JSON.
     pub fn validated(&self) -> Result<serde_json::Value, AppError> {
         if !(1..=99).contains(&self.interval) {
-            return Err(AppError::BadRequest("interval must be 1 to 99".into()));
+            return Err(out_of_range("interval", 99, "interval must be 1 to 99"));
         }
         let mut weekdays = self.weekdays.clone();
         weekdays.sort_unstable();
         weekdays.dedup();
         if weekdays.iter().any(|d| !(1..=7).contains(d)) {
-            return Err(AppError::BadRequest(
-                "weekdays must be 1 (Monday) to 7 (Sunday)".into(),
+            return Err(out_of_range(
+                "weekdays",
+                7,
+                "weekdays must be 1 (Monday) to 7 (Sunday)",
             ));
         }
         if self.freq != Frequency::Weekly && !weekdays.is_empty() {
@@ -72,7 +77,7 @@ impl RecurrenceRule {
             ));
         }
         if self.count.is_some_and(|c| !(1..=1000).contains(&c)) {
-            return Err(AppError::BadRequest("count must be 1 to 1000".into()));
+            return Err(out_of_range("count", 1000, "count must be 1 to 1000"));
         }
         let until = format_date(parse_date(self.until.as_deref(), "until")?);
         Ok(serde_json::json!({
@@ -89,6 +94,11 @@ impl RecurrenceRule {
         serde_json::from_value(value)
             .map_err(|e| AppError::Config(format!("stored recurrence rule is invalid: {e}")))
     }
+}
+
+/// 반복 규칙 칸이 범위(1..=`max`) 밖이다.
+fn out_of_range(field: &str, max: u64, message: &str) -> AppError {
+    AppError::invalid(field, InvalidReason::OutOfRange, Some(max), message)
 }
 
 /// 업무 반복 정하기. `rule`이 없으면 반복을 멈춘다(이미 만든 회차는 남는다).

@@ -9,7 +9,7 @@ use crate::recurrence::RecurrenceRule;
 use crate::schedule::TaskLink;
 use crate::state::WorkState;
 use fvoci_core::access::Grade as Access;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_core::validate::{parse_date, validate_text, validate_title};
 
@@ -156,12 +156,14 @@ pub struct TaskDetail {
 pub struct CreateTask {
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
+    /// 제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`.
     pub title: String,
     /// 하위 업무로 만들 때 상위 업무(같은 항목, 한 단계).
     #[serde(default)]
     #[schema(value_type = Option<String>, format = Uuid)]
     pub parent_id: Option<Uuid>,
     #[serde(default)]
+    #[schema(max_length = 10000)]
     pub description: String,
     /// 상태 이름(항목이 정의한 문자열). 비우면 항목의 기본 상태(todo 범주 첫 상태)다(개정 2026-10-26 ⑪: 기본 이름은 서버가 정하지 않는다).
     #[serde(default)]
@@ -173,8 +175,10 @@ pub struct CreateTask {
     #[serde(default)]
     pub due_date: Option<String>,
     #[serde(default)]
+    #[schema(minimum = 0)]
     pub estimate_minutes: Option<i32>,
     #[serde(default)]
+    #[schema(max_items = 20)]
     pub tags: Vec<String>,
     /// 담당자(그 항목을 볼 수 있는 멤버).
     #[serde(default)]
@@ -188,13 +192,17 @@ pub struct CreateTask {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateTask {
     pub base_version: i32,
+    /// 제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`.
     pub title: String,
+    #[schema(max_length = 10000)]
     pub description: String,
     pub status: String,
     pub priority: TaskPriority,
     pub start_date: Option<String>,
     pub due_date: Option<String>,
+    #[schema(minimum = 0)]
     pub estimate_minutes: Option<i32>,
+    #[schema(max_items = 20)]
     pub tags: Vec<String>,
     /// 담당자 전체 목록(빠지면 지우는 것이므로 생략할 수 없다).
     pub assignee_ids: Vec<UserId>,
@@ -203,6 +211,7 @@ pub struct UpdateTask {
     /// 미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이
     /// 지났으면 아무것도 바꾸지 않고 409(`shift_conflict`).
     #[serde(default)]
+    #[schema(max_items = 500)]
     pub successor_shifts: Vec<SuccessorShift>,
 }
 
@@ -243,6 +252,7 @@ pub struct SetTaskParent {
 pub struct NewChecklistItem {
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
+    /// 항목 글. 상한은 제목과 같다(`limits.max_title_chars`).
     pub text: String,
     #[serde(default)]
     pub checked: bool,
@@ -251,6 +261,7 @@ pub struct NewChecklistItem {
 /// 체크리스트 덧붙이기(Markdown에서 펼친 항목을 사용자가 확인한 뒤 한 번에).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AddChecklist {
+    #[schema(max_items = 200)]
     pub items: Vec<NewChecklistItem>,
 }
 
@@ -258,6 +269,7 @@ pub struct AddChecklist {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateChecklistItem {
     #[serde(default)]
+    /// 항목 글. 상한은 제목과 같다(`limits.max_title_chars`).
     pub text: Option<String>,
     #[serde(default)]
     pub checked: Option<bool>,
@@ -303,8 +315,11 @@ pub(super) fn check_fields(
     let start = parse_date(start_date, "start_date")?;
     let due = parse_date(due_date, "due_date")?;
     if estimate_minutes.is_some_and(|m| m < 0) {
-        return Err(AppError::BadRequest(
-            "estimate_minutes must not be negative".into(),
+        return Err(AppError::invalid(
+            "estimate_minutes",
+            InvalidReason::OutOfRange,
+            None,
+            "estimate_minutes must not be negative",
         ));
     }
     let tags = validate_tags(tags)?;
@@ -319,7 +334,12 @@ pub(super) fn check_fields(
 
 fn validate_tags(tags: &[String]) -> Result<Vec<String>, AppError> {
     if tags.len() > MAX_TAGS {
-        return Err(AppError::BadRequest(format!("at most {MAX_TAGS} tags")));
+        return Err(AppError::invalid(
+            "tags",
+            InvalidReason::TooMany,
+            Some(MAX_TAGS as u64),
+            format!("at most {MAX_TAGS} tags"),
+        ));
     }
     let mut out: Vec<String> = Vec::new();
     for tag in tags {
