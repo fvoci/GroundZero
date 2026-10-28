@@ -245,6 +245,19 @@ it('clears a draft whose record kind is absent from the offline field definition
   expect(localStorage.getItem(unknown)).toBeNull();
 });
 
+it('clears a legacy full form if its sanitized replacement cannot be stored', async () => {
+  const old = draft(null);
+  old.input.form.title = 'SHORT_UNWRITABLE_TITLE';
+  localStorage.setItem(recordKey, JSON.stringify(old));
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new DOMException('storage unavailable', 'QuotaExceededError');
+  });
+
+  await startWithoutOpeningRecords();
+
+  expect(localStorage.getItem(recordKey)).toBeNull();
+});
+
 it('keeps app startup working when browser storage cannot be enumerated', async () => {
   vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
     throw new DOMException('storage unavailable', 'SecurityError');
