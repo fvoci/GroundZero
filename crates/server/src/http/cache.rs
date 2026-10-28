@@ -1,6 +1,6 @@
 //! 캐시 범위와 조건부 요청(D-77). CDN이 없는 셀프호스트와 CDN 뒤에서 같은 머리글을 낸다.
 //!
-//! - `/api`·`/auth`·`/healthz`: 핸들러가 재검증을 허용한 GET·HEAD의 200·304(문서 단건 조회)만
+//! - `/api`·`/auth`·`/healthz`: 정확한 문서 단건 GET·HEAD의 200·304만
 //!   `private, no-cache, no-transform`, 나머지는 모두 `no-store, no-transform`. 공유 캐시에 남지 않고, 중간 장치가
 //!   본문을 압축·변환하며 ETag를 약하게 바꾸지 않게 한다.
 //! - 해시 파일명 정적 자원(`/assets/*`, `/rhwp/<입력 해시>/*`): `public, max-age=31536000, immutable`.
@@ -25,6 +25,42 @@ enum Scope {
     Api,
     Immutable,
     Revalidate,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DocumentCache {
+    Read,
+    LegacyWrite,
+    None,
+}
+
+fn document_cache(method: &Method, path: &str) -> DocumentCache {
+    let Some(rest) = path.strip_prefix("/api/documents/") else {
+        return DocumentCache::None;
+    };
+    if rest.is_empty() {
+        return DocumentCache::None;
+    }
+    if !rest.contains('/') {
+        return match *method {
+            Method::GET | Method::HEAD => DocumentCache::Read,
+            Method::PUT => DocumentCache::LegacyWrite,
+            _ => DocumentCache::None,
+        };
+    }
+    if *method == Method::POST
+        && let Some((id, tail)) = rest.split_once('/')
+        && !id.is_empty()
+        && let Some(revision) = tail
+            .strip_prefix("revisions/")
+            .and_then(|tail| tail.strip_suffix("/restore"))
+        && !revision.is_empty()
+        && !revision.contains('/')
+    {
+        DocumentCache::LegacyWrite
+    } else {
+        DocumentCache::None
+    }
 }
 
 fn under(path: &str, prefix: &str) -> bool {
@@ -53,18 +89,20 @@ fn scope(path: &str) -> Scope {
 /// 모든 응답의 마지막에 범위별 `Cache-Control`을 정한다(라우터 맨 바깥 층).
 pub async fn policy(request: Request, next: Next) -> Response {
     let scope = scope(request.uri().path());
-    let safe = matches!(*request.method(), Method::GET | Method::HEAD);
+    let document = document_cache(request.method(), request.uri().path());
     let mut response = next.run(request).await;
     let status = response.status();
     let ok = status == StatusCode::OK || status == StatusCode::NOT_MODIFIED;
     let headers = response.headers_mut();
     let value = match scope {
         Scope::Api => {
-            let revalidate = safe
-                && ok
-                && headers
-                    .get(header::CACHE_CONTROL)
-                    .is_some_and(|v| v == PRIVATE_REVALIDATE);
+            let revalidate = document == DocumentCache::Read && ok;
+            // #212 5행, PR4c가 본문 PUT을 지울 때 이 예외도 지운다.
+            // 정확한 PUT 단건·POST 리비전 복원 200만 다음 If-Match용 ETag를 남긴다.
+            let legacy_etag = document == DocumentCache::LegacyWrite && status == StatusCode::OK;
+            if !revalidate && !legacy_etag {
+                headers.remove(header::ETAG);
+            }
             if revalidate {
                 PRIVATE_REVALIDATE
             } else {
