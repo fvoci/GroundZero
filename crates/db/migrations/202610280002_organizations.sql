@@ -877,7 +877,7 @@ CREATE FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uu
 
 ALTER FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- D-88·SR1-14: id 산정부터 조직·대상 멤버 잠금을 유지해 참여·공유와 강등을 직렬화한다.
+-- D-88·SR1-14: id 산정부터 명령과 같은 조직·멤버·공간·문서 잠금을 유지한다.
 CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -896,6 +896,15 @@ CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_use
     ) THEN
       RETURN 1;
     END IF;
+    PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
+    PERFORM 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE w.organization_id = p_organization AND m.user_id = p_user AND m.role_source = 'admin_join'
+      ORDER BY m.workspace_id FOR UPDATE OF m;
+    PERFORM 1 FROM documents d
+      WHERE EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                    WHERE m.workspace_id = d.workspace_id AND w.organization_id = p_organization
+                      AND m.user_id = p_user AND m.role_source = 'admin_join' AND m.previous_role IS NULL)
+      ORDER BY d.id FOR UPDATE;
     RETURN 1 + coalesce((SELECT sum(1 + 2 * app_unseen_assignees_bound(NULL, m.workspace_id, p_user)
       + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
          WHERE d.workspace_id = m.workspace_id AND s.grantee_user_id = p_user))
