@@ -3,3 +3,13 @@
 mod command_contracts;
 mod command_support;
 mod expected_commands;
+
+mod cache;
+mod expected_user;
+mod first_flow;
+mod public_links;
+mod references;
+mod revisions;
+mod sharing;
+mod templates;
+mod tree;
