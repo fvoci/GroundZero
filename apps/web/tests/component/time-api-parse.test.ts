@@ -18,7 +18,13 @@ it('parses the actual personal-only time response and stopped entry id', async (
         ),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ...running, stopped_entry_id: 'old-entry' })),
+        new Response(
+          JSON.stringify({
+            ...running,
+            target: { kind: 'task', id: 'task-1' },
+            stopped_entry_id: 'old-entry',
+          }),
+        ),
       ),
   );
   expect(await timeData.taskTime('task-1')).toEqual({ mine_seconds: 30, estimate_minutes: null });

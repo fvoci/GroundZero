@@ -201,7 +201,7 @@ describe('event and time entry conflicts', () => {
     ]);
   });
 
-  it('turns a stale time entry version (409 TimeEntryConflict) into a conflict with the latest entry', async () => {
+  it('turns a stale time entry version (409 StaleWrite<TimeEntry>) into a conflict with the latest entry', async () => {
     const seen = reply(409, {
       error: 'conflict',
       message: 'the time entry changed',
@@ -219,7 +219,7 @@ describe('event and time entry conflicts', () => {
   });
 
   it('sends the time entry target as given', async () => {
-    const seen = reply(200, { ...entry, target: { kind: 'task', id: 'b', label: '구현' } });
+    const seen = reply(200, { ...entry, target: { kind: 'task', id: 'b' } });
     const result = await timeData.updateTimeEntry('t1', 2, {
       ...entryInput,
       target: { kind: 'task', id: 'b' },
