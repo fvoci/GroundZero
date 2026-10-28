@@ -54,6 +54,7 @@ mod my_tasks;
 mod notifications;
 mod oidc;
 mod openapi_review;
+mod organization;
 mod organization_removal_lock_order;
 mod organizations_api;
 mod personal_scope;
