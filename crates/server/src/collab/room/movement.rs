@@ -1,6 +1,9 @@
 //! 이동 트랜잭션과 커밋 전 수신 편집의 보존.
 
-use super::*;
+use super::{
+    AppError, CHECKPOINT_LIMIT, Change, CloseReason, Command, CommittedMove, EditAuthorization,
+    HashSet, Instant, MoveReply, MoveRequest, Outbound, ROOM_QUEUE, Room, documents, mpsc, oneshot,
+};
 
 impl Room {
     /// 확인하지도 않음). 옮겼으면 거짓(방을 닫는다).

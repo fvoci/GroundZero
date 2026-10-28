@@ -1,6 +1,10 @@
 //! 저장 상태 불러오기, 확인과 리비전 체크포인트.
 
-use super::*;
+use super::{
+    AppError, Attribution, CHECKPOINT_LIMIT, Change, CloseReason, Decode, Doc, Encode, FRAGMENT,
+    LoadRow, MSG_PERSISTED, Map, Message, Outbound, ReadTxn, Room, StateVector, Transact, Update,
+    UserId, Uuid, Value, convert, documents, new_document,
+};
 
 impl Room {
     /// 방이 아직 문서를 불러오지 않았으면 불러온다(옮기기·복원하는 사람의 권한으로). 방을 연 연결의 참여 요청보다 이동·복원
@@ -148,6 +152,35 @@ impl Room {
             tracing::warn!(event = "collab.invalid_document", document = %self.doc_id.0, "live document failed checks; not saved as a revision");
             return false;
         }
+        for author in self.snapshot_authors(fallback) {
+            match self.write_snapshot(author, &body).await {
+                Ok(Some(revision)) => {
+                    self.base_revision = revision;
+                    self.base_body = body;
+                    self.dirty_since_snapshot = false;
+                    self.edited_since.clear();
+                    self.dirty_state = true;
+                    // 리비전 번호와 상태가 어긋난 채로 멈추지 않도록 바로 저장한다.
+                    self.persist().await;
+                    return true;
+                }
+                Ok(None) => {
+                    self.reopen_changed_document();
+                    return true;
+                }
+                Err(AppError::Forbidden | AppError::NotFound) => {}
+                Err(err) => {
+                    tracing::warn!(event = "collab.save_failed", document = %self.doc_id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not save the live document as a revision");
+                    return false;
+                }
+            }
+        }
+        tracing::warn!(event = "collab.no_editor", document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
+        false
+    }
+
+    /// 최근 편집자 → 연결된 작성자 → 허용된 대리 저장자 순서를 유지한다(D-95).
+    fn snapshot_authors(&self, fallback: Option<UserId>) -> Vec<UserId> {
         let mut authors = self.editors.clone();
         for c in self
             .conns
@@ -161,39 +194,19 @@ impl Room {
         if let Some(admin) = fallback.filter(|a| !authors.contains(a)) {
             authors.push(admin);
         }
-        for author in authors {
-            match self.write_snapshot(author, &body).await {
-                Ok(Some(revision)) => {
-                    self.base_revision = revision;
-                    self.base_body = body;
-                    self.dirty_since_snapshot = false;
-                    self.edited_since.clear();
-                    self.dirty_state = true;
-                    // 리비전 번호와 상태가 어긋난 채로 멈추지 않도록 바로 저장한다.
-                    self.persist().await;
-                    return true;
-                }
-                Ok(None) => {
-                    // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
-                    self.changed_outside = true;
-                    tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
-                    for (_, c) in self.conns.drain() {
-                        let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
-                    }
-                    self.dirty_since_snapshot = false;
-                    self.edited_since.clear();
-                    self.dirty_state = false;
-                    return true;
-                }
-                Err(AppError::Forbidden | AppError::NotFound) => {}
-                Err(err) => {
-                    tracing::warn!(event = "collab.save_failed", document = %self.doc_id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not save the live document as a revision");
-                    return false;
-                }
-            }
+        authors
+    }
+
+    fn reopen_changed_document(&mut self) {
+        // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
+        self.changed_outside = true;
+        tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
+        for (_, c) in self.conns.drain() {
+            let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
         }
-        tracing::warn!(event = "collab.no_editor", document = %self.doc_id.0, "no editor can save the live document; keeping the live state");
-        false
+        self.dirty_since_snapshot = false;
+        self.edited_since.clear();
+        self.dirty_state = false;
     }
 
     /// 옮기거나 복원하기 전 체크포인트: 리비전으로 남기지 않은 편집을 남긴다. 작성자는 편집한 사람, 그다음 연결된 작성자

@@ -1,6 +1,10 @@
 //! 수신 메시지 해석과 검증 후 CRDT 변경 반영.
 
-use super::*;
+use super::{
+    AppError, CloseReason, Decode, DecoderV1, Doc, EditAuthorization, Encode, FRAGMENT, HashMap,
+    Instant, Limits, MAX_MESSAGES_PER_FRAME, Message, MessageReader, Pending, ReadTxn, Room,
+    StateVector, SyncMessage, Transact, Update, UserId, Verdict, convert, documents, lineage_of,
+};
 
 impl Room {
     pub(super) fn incoming(&mut self, conn: u64, data: &[u8]) {
@@ -85,31 +89,11 @@ impl Room {
             }
         }
     }
-    /// 모인 변경을 연결마다 합쳐 검사(블로킹 작업)한 뒤 방 문서에 넣고 다른 연결에 보낸다.
+    /// 연결별 수신 순서로 합치고, 검증 전후의 권한 확인을 각각 거쳐 반영한다.
     pub(super) async fn flush(&mut self) {
-        if self.pending.is_empty() {
-            return;
-        }
-        let pending = std::mem::take(&mut self.pending);
-        let mut order: Vec<u64> = Vec::new();
-        let mut by_conn: HashMap<u64, Vec<Pending>> = HashMap::new();
-        for item in pending {
-            if !order.contains(&item.conn) {
-                order.push(item.conn);
-            }
-            by_conn.entry(item.conn).or_default().push(item);
-        }
-        for conn in order {
-            let Some(edits) = by_conn.remove(&conn) else {
-                continue;
-            };
+        for (conn, edits) in ordered_edits(std::mem::take(&mut self.pending)) {
             let Some(first) = edits.first() else { continue };
-            let user = first.user;
-            if !self.conns.get(&conn).is_some_and(|c| {
-                edits
-                    .iter()
-                    .all(|edit| edit.authorization.allows(&c.peer.access))
-            }) {
+            if !self.edits_authorized(conn, &edits) {
                 continue;
             }
             let Ok(merged) = yrs::merge_updates_v1(edits.iter().map(|edit| edit.update.as_slice()))
@@ -117,89 +101,112 @@ impl Room {
                 self.close(conn, CloseReason::Invalid);
                 continue;
             };
-            let Some(doc) = &self.doc else {
-                return;
-            };
+            let Some(doc) = &self.doc else { return };
             let state = doc
                 .transact()
                 .encode_state_as_update_v1(&StateVector::default());
-            let limits = self.limits;
-            let lineage = self.lineage.clone();
-            let max_state = self.max_state_bytes();
-            let candidate = merged.clone();
-            let verdict = tokio::task::spawn_blocking(move || {
-                check_update(&state, &candidate, &lineage, &limits, max_state)
-            })
-            .await
-            .unwrap_or(Verdict::Invalid("check task failed".into()));
-            match verdict {
-                Verdict::Ok => {}
-                Verdict::Reload => {
-                    self.close(conn, CloseReason::Reload);
-                    continue;
-                }
-                Verdict::Invalid(reason) => {
-                    // 이유는 우리가 붙인 고정 분류다(문서 내용은 담지 않는다, D-83).
-                    tracing::warn!(
-                        event = "collab.edit_rejected",
-                        document = %self.doc_id.0,
-                        reason,
-                        "rejected a live edit that fails document checks"
-                    );
-                    self.close(conn, CloseReason::Invalid);
-                    continue;
-                }
-            }
-            // 새 위치 거부와 달리 검사 중 세션이 끝났거나 DB로 확인하지 못하면 대리 저장도 받지 않는다.
-            if matches!(first.authorization, EditAuthorization::BeforeMove { .. }) {
-                let Some(peer) = self
-                    .conns
-                    .get(&conn)
-                    .map(|connection| connection.peer.clone())
-                else {
-                    continue;
-                };
-                if let Err(reason) = first.authorization.check_session(&self.db, &peer).await {
-                    self.close(conn, reason);
-                    continue;
-                }
-            }
-            // 본문 검사 동안 기한이 지나거나 권한이 철회됐을 수 있다.
-            if !self.conns.get(&conn).is_some_and(|c| {
-                edits
-                    .iter()
-                    .all(|edit| edit.authorization.allows(&c.peer.access))
-            }) {
+            let verdict = self.validate_update(state, merged.clone()).await;
+            if !self.accept_verdict(conn, verdict) {
                 continue;
             }
-            let Some(doc) = &self.doc else {
+            if !self.recheck_edit_session(conn, &first.authorization).await {
+                continue;
+            }
+            // 본문 검사 동안 기한이 지나거나 권한이 철회됐을 수 있다. 검증 전 검사와 합치지 않는다.
+            if !self.edits_authorized(conn, &edits) {
+                continue;
+            }
+            if self.doc.is_none() {
                 return;
-            };
-            // 다시 붙을 때 이미 반영된 Yjs 지움 기록이 와도 조용한 시간을 다시 세지 않는다.
-            let before = doc.transact().state_vector();
-            let applied = Update::decode_v1(&merged).ok().and_then(|u| {
-                let mut txn = doc.transact_mut();
-                txn.apply_update(u).ok()?;
-                Some(!txn.delete_set().is_empty())
-            });
-            let Some(deleted) = applied else {
-                self.close(conn, CloseReason::Invalid);
-                continue;
-            };
-            if !deleted && doc.transact().state_vector() == before {
-                continue;
             }
-            self.file_refs.observe(doc, Some(user));
-            self.dirty_state = true;
-            self.dirty_since_snapshot = true;
-            self.last_change = Instant::now();
-            for list in [&mut self.editors, &mut self.edited_since] {
-                list.retain(|u| *u != user);
-                list.insert(0, user);
-            }
-            let message = Message::Sync(SyncMessage::Update(merged)).encode_v1();
-            self.broadcast(&message, Some(conn));
+            self.apply_update(conn, first.user, merged);
         }
+    }
+
+    fn edits_authorized(&self, conn: u64, edits: &[Pending]) -> bool {
+        self.conns.get(&conn).is_some_and(|c| {
+            edits
+                .iter()
+                .all(|edit| edit.authorization.allows(&c.peer.access))
+        })
+    }
+
+    async fn validate_update(&self, state: Vec<u8>, candidate: Vec<u8>) -> Verdict {
+        let limits = self.limits;
+        let lineage = self.lineage.clone();
+        let max_state = self.max_state_bytes();
+        tokio::task::spawn_blocking(move || {
+            check_update(&state, &candidate, &lineage, &limits, max_state)
+        })
+        .await
+        .unwrap_or(Verdict::Invalid("check task failed".into()))
+    }
+
+    fn accept_verdict(&mut self, conn: u64, verdict: Verdict) -> bool {
+        match verdict {
+            Verdict::Ok => true,
+            Verdict::Reload => {
+                self.close(conn, CloseReason::Reload);
+                false
+            }
+            Verdict::Invalid(reason) => {
+                // 이유는 우리가 붙인 고정 분류다(문서 내용은 담지 않는다, D-83).
+                tracing::warn!(
+                    event = "collab.edit_rejected",
+                    document = %self.doc_id.0,
+                    reason,
+                    "rejected a live edit that fails document checks"
+                );
+                self.close(conn, CloseReason::Invalid);
+                false
+            }
+        }
+    }
+
+    async fn recheck_edit_session(&mut self, conn: u64, authorization: &EditAuthorization) -> bool {
+        // 새 위치 거부와 달리 검사 중 세션이 끝났거나 DB로 확인하지 못하면 대리 저장도 받지 않는다.
+        if matches!(authorization, EditAuthorization::BeforeMove { .. }) {
+            let Some(peer) = self
+                .conns
+                .get(&conn)
+                .map(|connection| connection.peer.clone())
+            else {
+                return false;
+            };
+            if let Err(reason) = authorization.check_session(&self.db, &peer).await {
+                self.close(conn, reason);
+                return false;
+            }
+        }
+        true
+    }
+
+    fn apply_update(&mut self, conn: u64, user: UserId, merged: Vec<u8>) {
+        let Some(doc) = &self.doc else { return };
+        // 다시 붙을 때 이미 반영된 Yjs 지움 기록이 와도 조용한 시간을 다시 세지 않는다.
+        let before = doc.transact().state_vector();
+        let applied = Update::decode_v1(&merged).ok().and_then(|u| {
+            let mut txn = doc.transact_mut();
+            txn.apply_update(u).ok()?;
+            Some(!txn.delete_set().is_empty())
+        });
+        let Some(deleted) = applied else {
+            self.close(conn, CloseReason::Invalid);
+            return;
+        };
+        if !deleted && doc.transact().state_vector() == before {
+            return;
+        }
+        self.file_refs.observe(doc, Some(user));
+        self.dirty_state = true;
+        self.dirty_since_snapshot = true;
+        self.last_change = Instant::now();
+        for list in [&mut self.editors, &mut self.edited_since] {
+            list.retain(|u| *u != user);
+            list.insert(0, user);
+        }
+        let message = Message::Sync(SyncMessage::Update(merged)).encode_v1();
+        self.broadcast(&message, Some(conn));
     }
 }
 
@@ -250,4 +257,20 @@ fn check_update(
         Err(AppError::BadRequest(reason)) => Verdict::Invalid(reason),
         Err(other) => Verdict::Invalid(other.code().into()),
     }
+}
+
+/// 연결이 처음 나타난 순서와 각 연결 안의 편집 순서를 보존한다.
+fn ordered_edits(pending: Vec<Pending>) -> Vec<(u64, Vec<Pending>)> {
+    let mut order = Vec::new();
+    let mut by_conn: HashMap<u64, Vec<Pending>> = HashMap::new();
+    for item in pending {
+        if !order.contains(&item.conn) {
+            order.push(item.conn);
+        }
+        by_conn.entry(item.conn).or_default().push(item);
+    }
+    order
+        .into_iter()
+        .filter_map(|conn| by_conn.remove(&conn).map(|edits| (conn, edits)))
+        .collect()
 }

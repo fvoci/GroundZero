@@ -1,6 +1,11 @@
 //! 열린 방 목록, 참가와 보류·종료 조정.
 
-use super::*;
+use super::{
+    AppError, Change, CloseReason, ClosingGuard, Command, Db, DocumentId, Duration, Handle,
+    HashMap, HashSet, HoldGuard, Instant, Limits, Membership, MoveReply, MoveRequest, Ordering,
+    Peer, ROOM_QUEUE, RestoreRequest, Room, Rooms, TrySendError, UserId, Uuid, documents, mpsc,
+    oneshot, recovery,
+};
 
 impl Drop for HoldGuard {
     fn drop(&mut self) {
@@ -106,74 +111,96 @@ impl Rooms {
         peer: Peer,
     ) -> Result<Membership, AppError> {
         for _ in 0..5 {
-            let handle = {
-                let mut rooms = self.lock();
-                // 실시간을 끄는 중이면 열지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 꺼졌으면 4410을 받는다.
-                if workspace.is_some_and(|w| self.closing_set().contains_key(&w)) {
-                    return Err(AppError::Upstream(
-                        "live editing is being turned off".into(),
-                    ));
-                }
-                // 옮기거나 방 없이 복원하는 중이면 들어가지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 새 자리의
-                // 권한·설정(복원했으면 복원한 본문)으로 연다.
-                if self.held_set().contains_key(&doc) {
-                    return Err(AppError::Upstream(
-                        "the document is being moved or restored".into(),
-                    ));
-                }
-                if let Some(h) = rooms.get(&doc).filter(|h| !h.tx.is_closed()) {
-                    h.clone()
-                } else {
-                    let generation = self.next.fetch_add(1, Ordering::Relaxed);
-                    let (tx, rx) = mpsc::channel(ROOM_QUEUE);
-                    let handle = Handle {
-                        generation,
-                        workspace,
-                        tx,
-                    };
-                    rooms.insert(doc, handle.clone());
-                    let room = Room::new(
-                        doc,
-                        generation,
-                        db.clone(),
-                        *limits,
-                        recheck_every,
-                        self.clone(),
-                    );
-                    tokio::spawn(recovery::run(room, rx));
-                    handle
-                }
-            };
-            let conn = self.next.fetch_add(1, Ordering::Relaxed);
-            let (reply, answer) = oneshot::channel();
-            if handle
-                .tx
-                .send(Command::Join {
-                    conn,
-                    peer: peer.clone(),
-                    reply,
-                })
-                .await
-                .is_err()
-            {
-                continue;
-            }
-            match answer.await {
-                Ok(Ok(())) => {
-                    return Ok(Membership {
-                        conn,
-                        tx: handle.tx.clone(),
-                        access: peer.access.clone(),
-                    });
-                }
-                Ok(Err(err)) => return Err(err),
-                // 방이 닫히는 중이었다(답 없이 버려짐). 새로 연다.
-                Err(_) => tokio::task::yield_now().await,
+            let handle = self.acquire_room(db, limits, recheck_every, doc, workspace)?;
+            if let Some(membership) = self.request_join(&handle, &peer).await? {
+                return Ok(membership);
             }
         }
         Err(AppError::Upstream(
             "could not open the live editing room".into(),
         ))
+    }
+
+    /// 방 목록 잠금 안에서 참가 가능 여부를 확인하고 기존 방을 찾거나 연다.
+    fn acquire_room(
+        &self,
+        db: &Db,
+        limits: &Limits,
+        recheck_every: Duration,
+        doc: DocumentId,
+        workspace: Option<Uuid>,
+    ) -> Result<Handle, AppError> {
+        let mut rooms = self.lock();
+        // 실시간을 끄는 중이면 열지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 꺼졌으면 4410을 받는다.
+        if workspace.is_some_and(|w| self.closing_set().contains_key(&w)) {
+            return Err(AppError::Upstream(
+                "live editing is being turned off".into(),
+            ));
+        }
+        // 옮기거나 방 없이 복원하는 중이면 들어가지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 새 자리의
+        // 권한·설정(복원했으면 복원한 본문)으로 연다.
+        if self.held_set().contains_key(&doc) {
+            return Err(AppError::Upstream(
+                "the document is being moved or restored".into(),
+            ));
+        }
+        if let Some(h) = rooms.get(&doc).filter(|h| !h.tx.is_closed()) {
+            Ok(h.clone())
+        } else {
+            let generation = self.next.fetch_add(1, Ordering::Relaxed);
+            let (tx, rx) = mpsc::channel(ROOM_QUEUE);
+            let handle = Handle {
+                generation,
+                workspace,
+                tx,
+            };
+            rooms.insert(doc, handle.clone());
+            let room = Room::new(
+                doc,
+                generation,
+                db.clone(),
+                *limits,
+                recheck_every,
+                self.clone(),
+            );
+            tokio::spawn(recovery::run(room, rx));
+            Ok(handle)
+        }
+    }
+
+    /// 방 목록 잠금 밖에서 참가 답을 기다린다. 닫히던 방이면 호출자가 다시 확보한다.
+    async fn request_join(
+        &self,
+        handle: &Handle,
+        peer: &Peer,
+    ) -> Result<Option<Membership>, AppError> {
+        let conn = self.next.fetch_add(1, Ordering::Relaxed);
+        let (reply, answer) = oneshot::channel();
+        if handle
+            .tx
+            .send(Command::Join {
+                conn,
+                peer: peer.clone(),
+                reply,
+            })
+            .await
+            .is_err()
+        {
+            return Ok(None);
+        }
+        match answer.await {
+            Ok(Ok(())) => {
+                return Ok(Some(Membership {
+                    conn,
+                    tx: handle.tx.clone(),
+                    access: peer.access.clone(),
+                }));
+            }
+            Ok(Err(err)) => return Err(err),
+            // 방이 닫히는 중이었다(답 없이 버려짐). 새로 연다.
+            Err(_) => tokio::task::yield_now().await,
+        }
+        Ok(None)
     }
 
     /// 방이 문서를 다른 워크스페이스로 옮겼다. 방이 닫히기까지 그 워크스페이스에 속하게 한다(실시간 끄기·파일 버전

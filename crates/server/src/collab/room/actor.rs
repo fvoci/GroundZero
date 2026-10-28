@@ -1,6 +1,10 @@
 //! 방 작업의 수명과 명령 분배.
 
-use super::*;
+use super::{
+    AppError, Attribution, Change, CloseReason, Command, Connection, Db, DocumentId, Duration,
+    FLUSH_EVERY, HashMap, HashSet, Instant, Limits, Outbound, PERSIST_EVERY, Peer, RestoreRequest,
+    Room, Rooms, SNAPSHOT_IDLE, UserId, Value, mpsc, oneshot,
+};
 
 impl Room {
     pub(super) fn new(
@@ -87,39 +91,7 @@ impl Room {
     /// 거짓이면 방을 닫는다. `rx`: 문서를 옮긴 뒤 대기열에 쌓인 것을 비울 때 쓴다.
     pub(super) async fn handle(&mut self, cmd: Command, rx: &mut mpsc::Receiver<Command>) -> bool {
         match cmd {
-            Command::Join { conn, peer, reply } => {
-                if self.doc.is_none() {
-                    match self.load(peer.user).await {
-                        Ok(doc) => self.doc = Some(doc),
-                        Err(err) => {
-                            let _ignored = reply.send(Err(err));
-                            return false;
-                        }
-                    }
-                }
-                if peer.access.permission().is_none() {
-                    let _ignored = reply.send(Err(AppError::Unauthorized));
-                    return true;
-                }
-                let start = self.start_messages();
-                if start
-                    .into_iter()
-                    .all(|frame| peer.out.try_send(Outbound::Binary(frame)).is_ok())
-                {
-                    self.conns.insert(
-                        conn,
-                        Connection {
-                            peer,
-                            clients: HashSet::new(),
-                            window: Instant::now(),
-                            messages: 0,
-                            bytes: 0,
-                        },
-                    );
-                }
-                let _ignored = reply.send(Ok(()));
-                true
-            }
+            Command::Join { conn, peer, reply } => self.join(conn, peer, reply).await,
             Command::Incoming { conn, data, .. } => {
                 self.incoming(conn, &data);
                 true
@@ -144,69 +116,121 @@ impl Room {
                 true
             }
             Command::Move { request, done } => self.move_document(request, done, rx).await,
-            Command::Restore { request, done } => {
-                if let Err(err) = self.ensure_loaded(request.user).await {
-                    let _ignored = done.send(Err(err));
-                    return false;
-                }
-                self.flush().await;
-                // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
-                // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
-                // 남길 수 있는 사람은 고친 사람과 연결된 작성자다(연결된 복원하는 사람도 든다, `checkpoint`).
-                if self.dirty_since_snapshot
-                    && let Some(reason) = self.checkpoint(Change::Restore, request.user).await
-                {
-                    let _ignored = done.send(Err(AppError::Conflict(reason.into())));
-                    return true;
-                }
-                let outcome =
-                    crate::features::revisions::restore_in_db(&self.db, &self.limits, &request)
-                        .await;
-                // 본문이 바뀌었으면 방을 닫아 복원된 본문으로 다시 열게 한다. 이 명령 뒤에 들어와 있던 편집은 방과 함께
-                // 버려진다(받았다고 확인하지 않았으므로 클라이언트가 초안으로 남긴다).
-                let restored = matches!(outcome.as_deref(), Ok("restored"));
-                if restored {
-                    for (_, c) in self.conns.drain() {
-                        let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
-                    }
-                }
-                let _ignored = done.send(outcome);
-                !restored
-            }
+            Command::Restore { request, done } => self.restore(request, done).await,
             Command::Shutdown {
                 reason,
                 snapshot,
                 saved,
                 fallback,
-            } => {
-                // 리비전을 남기면 그때 상태를 저장하고 확인을 보낸다(`snapshot_with`).
-                let kept = if snapshot {
-                    self.flush().await;
-                    self.snapshot_with(fallback).await
-                } else {
-                    true
-                };
-                // 실시간을 끄려는데 리비전을 남기지 못했으면 방을 닫지 않는다. 끄기는 거절되고(켜진 채), 편집은 방에
-                // 그대로 남아 다음 시도에서 다시 리비전으로 남긴다(방이 계속 지니므로 평소처럼 저장·확인한다).
-                if !kept && reason == CloseReason::RealtimeOff {
-                    self.persist().await;
-                    if let Some(saved) = saved {
-                        let _ignored = saved.send(false);
-                    }
-                    return true;
+            } => self.shutdown(reason, snapshot, saved, fallback).await,
+        }
+    }
+
+    async fn join(
+        &mut self,
+        conn: u64,
+        peer: Peer,
+        reply: oneshot::Sender<Result<(), AppError>>,
+    ) -> bool {
+        if self.doc.is_none() {
+            match self.load(peer.user).await {
+                Ok(doc) => self.doc = Some(doc),
+                Err(err) => {
+                    let _ignored = reply.send(Err(err));
+                    return false;
                 }
-                for (_, c) in self.conns.drain() {
-                    let _ignored = c.peer.out.try_send(Outbound::Close(reason));
-                }
-                // 리비전으로 남기지 못한 편집은 확인하지 않는다: 연결을 닫은 뒤에 상태만 저장한다(#71).
-                if snapshot {
-                    self.persist().await;
-                }
-                if let Some(saved) = saved {
-                    let _ignored = saved.send(kept);
-                }
-                false
             }
         }
+        if peer.access.permission().is_none() {
+            let _ignored = reply.send(Err(AppError::Unauthorized));
+            return true;
+        }
+        let start = self.start_messages();
+        if start
+            .into_iter()
+            .all(|frame| peer.out.try_send(Outbound::Binary(frame)).is_ok())
+        {
+            self.conns.insert(
+                conn,
+                Connection {
+                    peer,
+                    clients: HashSet::new(),
+                    window: Instant::now(),
+                    messages: 0,
+                    bytes: 0,
+                },
+            );
+        }
+        let _ignored = reply.send(Ok(()));
+        true
+    }
+
+    async fn restore(
+        &mut self,
+        request: RestoreRequest,
+        done: oneshot::Sender<Result<String, AppError>>,
+    ) -> bool {
+        if let Err(err) = self.ensure_loaded(request.user).await {
+            let _ignored = done.send(Err(err));
+            return false;
+        }
+        self.flush().await;
+        // 리비전으로 남기지 않은 편집을 먼저 남긴다. 남겼는지 확인되지 않으면 복원하지 않는다(그 편집은 방에 남는다).
+        // 남겼으면 그 리비전 때문에 화면의 기준이 지나 아래 복원이 충돌로 알린다(사람이 지금 내용을 보고 다시 한다).
+        // 남길 수 있는 사람은 고친 사람과 연결된 작성자다(연결된 복원하는 사람도 든다, `checkpoint`).
+        if self.dirty_since_snapshot
+            && let Some(reason) = self.checkpoint(Change::Restore, request.user).await
+        {
+            let _ignored = done.send(Err(AppError::Conflict(reason.into())));
+            return true;
+        }
+        let outcome =
+            crate::features::revisions::restore_in_db(&self.db, &self.limits, &request).await;
+        // 본문이 바뀌었으면 방을 닫아 복원된 본문으로 다시 열게 한다. 이 명령 뒤에 들어와 있던 편집은 방과 함께
+        // 버려진다(받았다고 확인하지 않았으므로 클라이언트가 초안으로 남긴다).
+        let restored = matches!(outcome.as_deref(), Ok("restored"));
+        if restored {
+            for (_, c) in self.conns.drain() {
+                let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
+            }
+        }
+        let _ignored = done.send(outcome);
+        !restored
+    }
+
+    async fn shutdown(
+        &mut self,
+        reason: CloseReason,
+        snapshot: bool,
+        saved: Option<oneshot::Sender<bool>>,
+        fallback: Option<UserId>,
+    ) -> bool {
+        // 리비전을 남기면 그때 상태를 저장하고 확인을 보낸다(`snapshot_with`).
+        let kept = if snapshot {
+            self.flush().await;
+            self.snapshot_with(fallback).await
+        } else {
+            true
+        };
+        // 실시간을 끄려는데 리비전을 남기지 못했으면 방을 닫지 않는다. 끄기는 거절되고(켜진 채), 편집은 방에
+        // 그대로 남아 다음 시도에서 다시 리비전으로 남긴다(방이 계속 지니므로 평소처럼 저장·확인한다).
+        if !kept && reason == CloseReason::RealtimeOff {
+            self.persist().await;
+            if let Some(saved) = saved {
+                let _ignored = saved.send(false);
+            }
+            return true;
+        }
+        for (_, c) in self.conns.drain() {
+            let _ignored = c.peer.out.try_send(Outbound::Close(reason));
+        }
+        // 리비전으로 남기지 못한 편집은 확인하지 않는다: 연결을 닫은 뒤에 상태만 저장한다(#71).
+        if snapshot {
+            self.persist().await;
+        }
+        if let Some(saved) = saved {
+            let _ignored = saved.send(kept);
+        }
+        false
     }
 }

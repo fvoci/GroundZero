@@ -6,6 +6,8 @@
 //! 복원·이동은 방 명령 안에서 처리한다. 공유 목록 오염은 방을 종료하고 저장 상태와 클라이언트 변경으로 재개한다(#172).
 //! 셀프호스트 한 앱 프로세스(role=All)를 전제로 하며 정상 종료에는 모든 방의 리비전을 남긴다.
 
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
