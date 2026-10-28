@@ -76,10 +76,11 @@
 
 <a id="d-86"></a>
 
-- **D-86 Noto Sans KR·Noto Serif KR·D2Coding 서체.** Noto Sans KR 2.004·Noto Serif KR 2.003·D2Coding 1.4.0의 Regular/Bold 여섯 파일에만 OFL-1.1 예외를 허용한다. 다른 파일·라이선스 전체 허용이 아니다. 외부 CDN·글자별 조각 요청은 금지한다. 근거: 사용자(2026-10-18), O-37 해소.
+- **D-86 Noto Sans KR·Noto Serif KR·D2Coding 서체.** Noto Sans KR 2.004·Noto Serif KR 2.003·D2Coding 1.4.0의 Regular/Bold 여섯 파일에만 OFL-1.1 예외를 허용한다. 다른 파일·라이선스 전체 허용이 아니다. 외부 CDN·글자별 조각 요청은 금지한다. 근거: 사용자(2026-10-18), O-37 해소. (개정 2026-10-29: 형식만 WOFF2로 바꾼다.)
   - 원본 파일을 변환/부분집합화하지 않고 assets/fonts에 둔다. notices 검사는 여섯 파일+라이선스 둘(숨김 제외), O-37의 승인 SHA-256 일치, 실제 번들 서체 제한을 확인한다. 출처·판·해시·저작권·상표·원문은 THIRD_PARTY_NOTICES에 보존한다. 파일/해시·라이선스 세부는 O-37의 고정 원문을 따른다.
   - preload 없이 font-display: swap을 쓴다. 본문/UI는 첫 화면에서 Sans Regular/Bold를 받는다. 코드·원문·Markdown/LaTeX/CSV·리비전 비교가 있는 화면에서만 D2Coding을 받는다. 번호/단축키 등 짧은 UI 고정폭은 시스템 서체다. Serif는 이 브라우저의 ‘문서 본문: 명조’ 선택 후 문서를 열 때만 받으며 계정/API/문서 형식을 바꾸지 않는다.
   - 해시 자원에 br·gzip 사본을 만들고 /assets에서 전송하되 원본은 유지한다. KR 파일에 없는 일본어 한자 등은 시스템 일본어 서체로 대체한다. [실제 크기·글자 범위 확인](https://github.com/fvoci/GroundZero/blob/abd545a250ff1fd9cc166b3c078c4dff76846724/docs/decisions.md#L177)은 당시 측정이다.
+  - 개정 2026-10-29: 여섯 파일을 WOFF2로 바꿔 내보낸다(사용자 "OTF를 woff2로 바꾸기만 우선 하자"). 바꾸는 것은 형식뿐이다. 부분집합화·글자별 조각·가변 서체는 하지 않는다(CJK에서는 조각을 나누면 요청이 줄줄이 늘어난다, 사용자). OFL-FAQ 2.2·2.2.1에 따라 원래 서체 데이터는 WOFF2 압축 말고는 바꾸지 않고, WOFF 메타데이터 블록은 넣지 않는다. 이 두 조건을 지키면 수정본이 아니므로 예약 서체 이름(Reserved Font Name) D2Coding·D2Coding-Bold를 그대로 쓴다. 변환은 두 조건을 지키는 도구로 한다. WOFF2를 풀어 복원한 모든 OpenType 표의 데이터가 원본과 같은지(WOFF2 압축 말고는 바뀐 것이 없는지) 시험으로 확인한다. 조건을 지키지 못하면 수정본이 되어 그 이름을 쓸 수 없으므로 적용하지 않는다. assets/fonts의 원본 여섯 파일은 WOFF2 여섯 파일로 바꾸고, notices 검사의 개수는 WOFF2 여섯 파일과 라이선스 둘로 그대로 둔다. 원본 SHA-256은 O-37의 출처 검증 기준으로 보존하고, 변환본의 파일명·SHA-256과 변환 도구·판은 THIRD_PARTY_NOTICES에 함께 고정해 검사한다. WOFF2는 이미 압축된 형식이라 br·gzip 사본을 만들지 않는다. 위의 "원본 파일을 변환하지 않는다"와 서체 원본에 대한 "원본은 유지한다"는 이 개정으로 바뀌고, 다른 해시 자원의 br·gzip 사본은 그대로다. 근거: 사용자(2026-10-29, #214).
 
 <a id="d-87"></a>
 
