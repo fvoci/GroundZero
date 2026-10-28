@@ -280,3 +280,78 @@ it('marks a blank version input clean only after the server confirms permanent r
   expect(input('version-retention')).toHaveValue('');
   expect(api.setVersionRetention).not.toHaveBeenCalled();
 });
+
+it('keeps blank values while the other retention field refreshes the screen', async () => {
+  await mount();
+  await type('trash-retention', '');
+  await type('version-retention', '45');
+  vi.mocked(api.trash).mockResolvedValue({ ...initial, version_retention_days: 45 });
+  await submit('version-retention');
+  await vi.waitFor(() => expect(api.trash).toHaveBeenCalledTimes(2));
+  expect(input('trash-retention')).toHaveValue('');
+  await type('version-retention', '');
+  await type('trash-retention', '45');
+  vi.mocked(api.trash).mockResolvedValue({
+    ...initial,
+    retention_days: 45,
+    version_retention_days: 45,
+  });
+  await submit('trash-retention');
+  await vi.waitFor(() => expect(api.trash).toHaveBeenCalledTimes(3));
+  expect(input('version-retention')).toHaveValue('');
+  expect(drafts()).toHaveLength(0);
+});
+
+it.each(['permission', 'workspace', 'unmount'] as const)(
+  'ignores a submitted retention response after the %s session changes',
+  async (change) => {
+    const pending = deferred<undefined>();
+    vi.mocked(api.setTrashRetention).mockReturnValueOnce(pending.promise);
+    const view = await mount();
+    await type('trash-retention', '45');
+    await submit('trash-retention');
+    if (change === 'permission') {
+      await view.rerender({ workspace: { ...workspace, access: 'read' } });
+      await view.rerender({ workspace });
+    } else if (change === 'workspace') {
+      await view.rerender({ workspace: { ...workspace, id: 'ws-2' } });
+    } else {
+      cleanup();
+      await mount();
+    }
+    await vi.waitFor(() => expect(input('trash-retention')).toHaveValue('30'));
+    await type('trash-retention', 'current input');
+    const loads = vi.mocked(api.trash).mock.calls.length;
+    pending.resolve(undefined);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(input('trash-retention')).toHaveValue('current input');
+    expect(input('trash-retention')).not.toHaveAttribute('aria-invalid', 'true');
+    expect(api.trash).toHaveBeenCalledTimes(loads);
+    expect(drafts()).toHaveLength(0);
+  },
+);
+
+it.each(fields)('saving %s confirms only its own previously unknown baseline', async (field) => {
+  vi.mocked(api.trash).mockReturnValue(new Promise<TrashView>(() => undefined));
+  render(TrashScreen, { props: { workspace } });
+  await type('trash-retention', '');
+  await type('version-retention', '');
+  if (field === 'trash-retention') await type(field, '45');
+  const method = field === 'trash-retention' ? 'setTrashRetention' : 'setVersionRetention';
+  await submit(field);
+  await vi.waitFor(() =>
+    expect(api[method]).toHaveBeenCalledExactlyOnceWith(
+      'ws-1',
+      field === 'trash-retention' ? 45 : null,
+    ),
+  );
+  await type(field, '7');
+  await type(field, field === 'trash-retention' ? '45' : '');
+  expect(warnsBeforeUnload()).toBe(true);
+  const move = vi.fn();
+  router.confirmLeave(move);
+  await screen.findByRole('alertdialog');
+  await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
+  await vi.waitFor(() => expect(move).toHaveBeenCalledOnce());
+  expect(drafts()).toHaveLength(0);
+});
