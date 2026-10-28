@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/db", "crates/domains/work", "crates/http", "crates/server", "xtask"]
+members = ["crates/aggregates/home", "crates/core", "crates/db", "crates/domains/work", "crates/http", "crates/server", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,6 +16,7 @@ clap = { version = "4", features = ["derive"] }
 # `[workspace.package]`의 version을 올리면 함께 올린다.
 fvoci-core = { path = "crates/core", version = "0.1.0" }
 fvoci-db = { path = "crates/db", version = "0.1.0" }
+fvoci-home = { path = "crates/aggregates/home", version = "0.1.0" }
 fvoci-http = { path = "crates/http", version = "0.1.0" }
 fvoci-work = { path = "crates/domains/work", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }

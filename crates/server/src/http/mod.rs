@@ -97,6 +97,14 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+impl FromRef<AppState> for fvoci_home::HomeState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_work::WorkState {
     fn from_ref(state: &AppState) -> Self {
         Self {
@@ -298,8 +306,6 @@ async fn api_not_found() -> AppError {
         time_tracking::task_time,
         time_tracking::item_time,
         // personal scope (2단계 B)
-        home::home,
-        home::my_tasks,
         documents::shared_with_me,
         search_api::search,
         notifications::notifications,
@@ -504,14 +510,8 @@ async fn api_not_found() -> AppError {
         time_tracking::TaskTime,
         time_tracking::ItemTime,
         time_tracking::ItemTimeKind,
-        home::DueBucket,
-        home::HomeTask,
-        home::HomeDocument,
-        home::HomeItem,
         home::MarkTarget,
         home::MarkKind,
-        home::MarkedTarget,
-        home::Home,
         organizations::OrgRole,
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
@@ -528,7 +528,6 @@ async fn api_not_found() -> AppError {
         organizations::CreateOrganization,
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
-        home::UpNextCounts,
         home::SetMark,
         home::MarkState,
         trash::Trashed,
@@ -636,10 +635,6 @@ async fn api_not_found() -> AppError {
         notifications::MarkRead,
         notifications::MarkedNotifications,
         notifications::UnreadCount,
-        home::MyTask,
-        home::MyTaskCounts,
-        home::WorkspaceTasks,
-        home::MyTasks,
         activity::Activity,
         activity::ActivityPage,
         public_links::PublicLink,
@@ -678,6 +673,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_home::HomeApi::openapi());
     }
 }
 
@@ -738,6 +734,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_home::router())
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -1035,8 +1032,6 @@ pub fn router(state: AppState) -> Router {
             post(revisions::export),
         )
         // personal scope (2단계 B)
-        .route("/me/home", get(home::home))
-        .route("/me/tasks", get(home::my_tasks))
         .route("/me/shared", get(documents::shared_with_me))
         .route("/search", get(search_api::search))
         .route("/me/notifications", get(notifications::notifications))

@@ -1144,6 +1144,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-home"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "sqlx",
+ "time",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-http"
 version = "0.1.0"
 dependencies = [
@@ -1170,6 +1185,7 @@ dependencies = [
  "futures-util",
  "fvoci-core",
  "fvoci-db",
+ "fvoci-home",
  "fvoci-http",
  "fvoci-work",
  "hex",

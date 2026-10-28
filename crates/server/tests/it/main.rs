@@ -49,7 +49,6 @@ mod limits_contract;
 mod members;
 mod migration_baseline;
 mod modules;
-mod my_tasks;
 mod notifications;
 mod oidc;
 mod openapi_review;
