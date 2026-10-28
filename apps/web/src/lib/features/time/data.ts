@@ -14,11 +14,18 @@ export function composeEntry(entry: TimeEntryResource, targets: TimeEntryTarget[
     target: { ...link, label: target?.label ?? null, workspace_id: target?.workspace_id ?? null },
   };
 }
+async function readTargets(
+  params: Parameters<typeof timeApi.timeEntryTargets>[0],
+  fallback: TimeEntryTarget[] = [],
+): Promise<TimeEntryTarget[]> {
+  try {
+    return await timeApi.timeEntryTargets(params);
+  } catch {
+    return fallback;
+  }
+}
 async function display(entry: TimeEntryResource): Promise<TimeEntryView> {
-  return composeEntry(
-    entry,
-    entry.target === null ? [] : await timeApi.timeEntryTargets({ entryId: entry.id }),
-  );
+  return composeEntry(entry, entry.target === null ? [] : await readTargets({ entryId: entry.id }));
 }
 
 export const timeData = {
@@ -30,7 +37,7 @@ export const timeData = {
   timeEntries: async (from: string, to: string, tz: string): Promise<TimeEntryView[]> => {
     const [entries, targets] = await Promise.all([
       timeApi.timeEntries(from, to, tz),
-      timeApi.timeEntryTargets({ from, to, tz }),
+      readTargets({ from, to, tz }),
     ]);
     const incomplete = entries.some(
       (entry) =>
@@ -42,7 +49,7 @@ export const timeData = {
             target.id === entry.target.id,
         ),
     );
-    const current = incomplete ? await timeApi.timeEntryTargets({ from, to, tz }) : targets;
+    const current = incomplete ? await readTargets({ from, to, tz }, targets) : targets;
     return entries.map((entry) => composeEntry(entry, current));
   },
   startTimer: async (...args: Parameters<typeof timeApi.startTimer>) => {
