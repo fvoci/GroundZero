@@ -2,8 +2,8 @@
 
 use super::{
     AppError, Attribution, CHECKPOINT_LIMIT, Change, CloseReason, Decode, Doc, Encode, FRAGMENT,
-    LoadRow, MSG_PERSISTED, Map, Message, Outbound, ReadTxn, Room, StateVector, Transact, Update,
-    UserId, Uuid, Value, convert, documents, new_document,
+    LoadRow, MSG_PERSISTED, Map, Message, Outbound, ReadTxn, Room, SnapshotFailure, StateVector,
+    Transact, Update, UserId, Uuid, Value, convert, documents, new_document,
 };
 
 impl Room {
@@ -148,7 +148,7 @@ impl Room {
         let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
         let body = convert::read_doc(&doc.transact(), &fragment);
         if documents::validate_body(&body, &self.limits).is_err() {
-            self.failed_checks = true;
+            self.snapshot_failure = Some(SnapshotFailure::InvalidBody);
             tracing::warn!(event = "collab.invalid_document", document = %self.doc_id.0, "live document failed checks; not saved as a revision");
             return false;
         }
@@ -199,7 +199,7 @@ impl Room {
 
     fn reopen_changed_document(&mut self) {
         // 본문이 다른 길로 바뀌었다(복원). 덮어쓰지 않고 다시 열게 한다.
-        self.changed_outside = true;
+        self.snapshot_failure = Some(SnapshotFailure::ChangedOutside);
         tracing::warn!(event = "collab.changed_outside", document = %self.doc_id.0, "document changed outside live editing; reopening");
         for (_, c) in self.conns.drain() {
             let _ignored = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
@@ -219,23 +219,24 @@ impl Room {
         change: Change,
         user: UserId,
     ) -> Option<&'static str> {
-        self.changed_outside = false;
-        self.failed_checks = false;
+        self.snapshot_failure = None;
         let moving = matches!(change, Change::Move);
         let stand_in = moving.then_some(user);
         let saved = tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(stand_in)).await;
         match saved {
-            Ok(true) if !self.changed_outside => None,
+            Ok(true) if self.snapshot_failure != Some(SnapshotFailure::ChangedOutside) => None,
             Ok(true) if moving => Some(
                 "the document changed outside live editing before its live edits were saved; nothing was moved",
             ),
             Ok(true) => Some(
                 "the document changed outside live editing before its live edits were saved; nothing was restored",
             ),
-            Ok(false) if self.failed_checks && moving => Some(
-                "live edits do not pass the document checks, so they cannot be saved as a revision; nothing was moved",
-            ),
-            Ok(false) if self.failed_checks => Some(
+            Ok(false) if self.snapshot_failure == Some(SnapshotFailure::InvalidBody) && moving => {
+                Some(
+                    "live edits do not pass the document checks, so they cannot be saved as a revision; nothing was moved",
+                )
+            }
+            Ok(false) if self.snapshot_failure == Some(SnapshotFailure::InvalidBody) => Some(
                 "live edits do not pass the document checks, so they cannot be saved as a revision; nothing was restored",
             ),
             Ok(false) if moving => Some(

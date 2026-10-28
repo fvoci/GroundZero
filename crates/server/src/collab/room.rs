@@ -294,10 +294,8 @@ struct Room {
     lineage: String,
     dirty_state: bool,
     dirty_since_snapshot: bool,
-    /// 마지막 리비전 남기기에서 DB 본문이 방이 아는 것과 달라(다른 길로 바뀜) 남기지 않고 닫았는지.
-    changed_outside: bool,
-    /// 마지막 리비전 남기기가 본문 검사를 통과하지 못해 남기지 않았는지(다시 해도 남길 수 없다).
-    failed_checks: bool,
+    /// 마지막 리비전 남기기를 막은 본문 충돌 또는 검사 실패. 체크포인트 시작 때 비운다.
+    snapshot_failure: Option<SnapshotFailure>,
     last_change: Instant,
     /// 마지막으로 DB에 저장한(또는 저장된 것을 불러온) 상태의 스냅숏(v1). 들어오는 연결에 처음 메시지와 함께 보낸다.
     persisted: Option<Vec<u8>>,
@@ -315,6 +313,12 @@ struct Room {
 enum Change {
     Move,
     Restore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SnapshotFailure {
+    ChangedOutside,
+    InvalidBody,
 }
 
 enum Verdict {
