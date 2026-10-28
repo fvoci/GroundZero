@@ -62,16 +62,19 @@ pub async fn set_event(
     let event = crate::events::load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        StaleWrite::new(
-            "rule_conflict",
-            "the recurrence rule changed",
-            event,
-            &serde_json::json!({ "recurrence": rule }),
-        )
-        .into_response()
+        recurrence_conflict(event, rule).into_response()
     } else {
         Json(event).into_response()
     })
+}
+
+fn recurrence_conflict(current: Event, rule: Option<serde_json::Value>) -> StaleWrite<Event> {
+    StaleWrite::new(
+        "rule_conflict",
+        "the recurrence rule changed",
+        current,
+        &serde_json::json!({ "recurrence": rule }),
+    )
 }
 
 /// 반복 일정의 회차 하나 빼기.
