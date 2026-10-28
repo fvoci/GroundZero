@@ -11,4 +11,5 @@ pub mod http;
 pub mod logging;
 pub mod search;
 pub mod storage;
+mod system;
 pub mod worker;

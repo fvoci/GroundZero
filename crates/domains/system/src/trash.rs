@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::http::AppState;
+use crate::SystemState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_db::{UserTx, needed_ids, new_ids};
@@ -150,7 +150,12 @@ async fn entries(
         .collect()
 }
 
-async fn trash_call(state: &AppState, user: UserId, sql: &str, id: Uuid) -> Result<Uuid, AppError> {
+async fn trash_call(
+    state: &SystemState,
+    user: UserId,
+    sql: &str,
+    id: Uuid,
+) -> Result<Uuid, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     // 휴지통 묶음과 감사 기록의 id 2개.
     let batch: Uuid = sqlx::query_scalar(sql)
@@ -169,7 +174,7 @@ async fn trash_call(state: &AppState, user: UserId, sql: &str, id: Uuid) -> Resu
     responses((status = 200, body = Trashed), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "trash")]
 pub async fn trash_document(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Trashed>, AppError> {
@@ -183,7 +188,7 @@ pub async fn trash_document(
     responses((status = 200, body = Trashed), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "trash")]
 pub async fn trash_item(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<ItemId>,
 ) -> Result<Json<Trashed>, AppError> {
@@ -198,7 +203,7 @@ pub async fn trash_item(
     responses((status = 200, body = Trashed), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "trash")]
 pub async fn trash_module(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<ModuleId>,
 ) -> Result<Json<Trashed>, AppError> {
@@ -211,12 +216,12 @@ pub async fn trash_module(
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 200, body = Trash), (status = 404, body = ErrorBody)), tag = "trash")]
 pub async fn workspace_trash(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Trash>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    crate::access::require_visible(&mut tx, ws).await?;
     let (retention_days, version_retention_days): (i32, Option<i32>) = sqlx::query_as(
         "SELECT trash_retention_days, version_retention_days FROM workspaces WHERE id = $1",
     )
@@ -236,7 +241,7 @@ pub async fn workspace_trash(
 #[utoipa::path(get, path = "/api/me/trash", operation_id = "my_trash",
     responses((status = 200, body = Trash)), tag = "trash")]
 pub async fn my_trash(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Trash>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -254,7 +259,7 @@ pub async fn my_trash(
     params(("batch_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "trash")]
 pub async fn restore(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(batch): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -274,7 +279,7 @@ pub async fn restore(
     params(("batch_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "trash")]
 pub async fn purge(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(batch): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -301,12 +306,12 @@ pub struct Purged {
     responses((status = 200, body = Purged), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "trash")]
 pub async fn purge_expired(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    crate::access::require_visible(&mut tx, ws).await?;
     let ids = needed_ids(
         tx.conn(),
         sqlx::query_scalar("SELECT app_purge_expired_ids($1)").bind(ws),
@@ -326,7 +331,7 @@ pub async fn purge_expired(
 #[utoipa::path(post, path = "/api/me/trash/purge-expired", operation_id = "purge_my_expired_trash",
     responses((status = 200, body = Purged)), tag = "trash")]
 pub async fn purge_my_expired(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Purged>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -357,7 +362,7 @@ pub struct SetRetention {
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "trash")]
 pub async fn set_retention(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<SetRetention>,
@@ -388,7 +393,7 @@ pub struct SetVersionRetention {
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "trash")]
 pub async fn set_version_retention(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<SetVersionRetention>,

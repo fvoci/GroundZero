@@ -1,0 +1,26 @@
+[package]
+name = "fvoci-system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+bytes = "1"
+fvoci-core.workspace = true
+fvoci-db.workspace = true
+fvoci-http.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+
+[lints]
+workspace = true

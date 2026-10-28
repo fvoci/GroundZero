@@ -21,9 +21,8 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::features::search_text::plain_text;
-use crate::http::AppState;
-use crate::storage::Storage;
+use crate::SystemState;
+use crate::state::ObjectStore;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, WorkspaceId};
 use fvoci_http::session::CurrentUser;
@@ -123,7 +122,7 @@ fn disposition(name: &str) -> String {
 
 /// 담을 것을 ZIP으로 만들며 바로 응답으로 흘려보낸다. 쓰기는 블로킹 스레드, 저장소 읽기는 비동기 작업.
 fn stream_zip(
-    storage: Storage,
+    storage: Arc<dyn ObjectStore>,
     entries: Vec<Entry>,
     name: &str,
     permit: tokio::sync::OwnedSemaphorePermit,
@@ -247,14 +246,18 @@ fn stream_zip(
 }
 
 /// 반출 자리. 모자라면 409(잠시 뒤 다시).
-fn export_permit(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
+fn export_permit(state: &SystemState) -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
     Arc::clone(&state.export_permits)
         .try_acquire_owned()
         .map_err(|_| AppError::Conflict("other exports are running; try again shortly".into()))
 }
 
 /// 구조 데이터에서 담을 목록을 만든다: `export.json`, 문서 일반 글자, 파일 버전 내용.
-fn entries_from(mut data: Value, docs_key: &str) -> Result<Vec<Entry>, AppError> {
+fn entries_from(
+    mut data: Value,
+    docs_key: &str,
+    plain_text: fn(&Value) -> String,
+) -> Result<Vec<Entry>, AppError> {
     let objects = data
         .as_object_mut()
         .and_then(|o| o.remove("_objects"))
@@ -377,12 +380,12 @@ SELECT json_build_object(
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "export")]
 pub async fn workspace(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    crate::access::require_owner(&mut tx, ws).await?;
     let permit = export_permit(&state)?;
     // 실시간으로 편집 중인 문서는 본문(마지막 리비전)이 뒤처져 있을 수 있다. 읽기 전에 열린 방을 리비전으로 남긴다.
     let docs: Vec<uuid::Uuid> = sqlx::query_scalar(
@@ -394,11 +397,11 @@ pub async fn workspace(
     // 방을 기다리는 동안 DB 연결을 쥐지 않는다(방이 리비전을 남길 때 연결이 필요하다). 다시 열고 권한도 다시 본다.
     tx.commit().await?;
     state
-        .collab
-        .snapshot_documents(&docs.into_iter().map(DocumentId).collect())
+        .snapshots
+        .snapshot(&docs.into_iter().map(DocumentId).collect())
         .await;
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    crate::access::require_owner(&mut tx, ws).await?;
     let data: Value = sqlx::query_scalar(WORKSPACE_JSON)
         .bind(ws)
         .fetch_one(tx.conn())
@@ -414,10 +417,10 @@ pub async fn workspace(
         .await
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
-    let entries = entries_from(data, "documents")?;
+    let entries = entries_from(data, "documents", state.plain_text)?;
     let date = time::OffsetDateTime::now_utc().date();
     Ok(stream_zip(
-        state.storage.clone(),
+        Arc::clone(&state.storage),
         entries,
         &format!("fvoci-{}-{date}.zip", safe_name(&name)),
         permit,
@@ -464,7 +467,7 @@ SELECT json_build_object(
     responses((status = 200, content_type = "application/zip", body = Vec<u8>), (status = 409, body = ErrorBody)),
     tag = "export")]
 pub async fn mine(
-    State(state): State<AppState>,
+    State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Response, AppError> {
     let permit = export_permit(&state)?;
@@ -478,10 +481,10 @@ pub async fn mine(
         .execute(tx.conn())
         .await?;
     tx.commit().await?;
-    let entries = entries_from(data, "notes")?;
+    let entries = entries_from(data, "notes", state.plain_text)?;
     let date = time::OffsetDateTime::now_utc().date();
     Ok(stream_zip(
-        state.storage.clone(),
+        Arc::clone(&state.storage),
         entries,
         &format!("fvoci-mine-{date}.zip"),
         permit,
