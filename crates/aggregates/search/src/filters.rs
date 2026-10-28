@@ -1,7 +1,7 @@
 //! 검색 입력과 공통 날짜·색인 필터.
 
 use crate::indexing::day_number;
-use fvoci_core::error::AppError;
+use fvoci_core::error::{AppError, InvalidReason};
 use fvoci_core::ids::{OrganizationId, UserId, WorkspaceId};
 use fvoci_db::UserTx;
 use serde::Deserialize;
@@ -17,6 +17,7 @@ const STATUS_CATEGORIES: &[&str] = &["todo", "doing", "done"];
 /// 검색 조건.
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct SearchQuery {
+    #[param(max_length = 200)]
     pub q: String,
     /// 이 워크스페이스 안에서만(멤버).
     #[param(value_type = Option<String>, format = Uuid)]
@@ -43,6 +44,72 @@ pub struct SearchQuery {
     pub title_only: Option<bool>,
 }
 
+/// 문자열부터 받아 각 칸의 형식 오류를 공통 400 본문으로 바꾼다. 조직 질의는 OrgScope가 별도로 검사한다.
+#[derive(Debug, Deserialize)]
+pub struct RawSearchQuery {
+    q: Option<String>,
+    workspace_id: Option<String>,
+    kinds: Option<String>,
+    module_id: Option<String>,
+    status_category: Option<String>,
+    assignee: Option<String>,
+    from: Option<String>,
+    to: Option<String>,
+    tz: Option<String>,
+    author: Option<String>,
+    title_only: Option<String>,
+}
+
+fn optional_uuid(raw: Option<String>, field: &str) -> Result<Option<Uuid>, AppError> {
+    raw.map(|raw| {
+        Uuid::parse_str(&raw).map_err(|_| {
+            AppError::invalid(
+                field,
+                InvalidReason::InvalidFormat,
+                None,
+                format!("{field} must be a uuid"),
+            )
+        })
+    })
+    .transpose()
+}
+
+impl TryFrom<RawSearchQuery> for SearchQuery {
+    type Error = AppError;
+
+    fn try_from(raw: RawSearchQuery) -> Result<Self, AppError> {
+        let q = raw.q.ok_or_else(|| {
+            AppError::invalid("q", InvalidReason::Required, None, "q is required")
+        })?;
+        let title_only = raw
+            .title_only
+            .map(|value| {
+                value.parse::<bool>().map_err(|_| {
+                    AppError::invalid(
+                        "title_only",
+                        InvalidReason::InvalidFormat,
+                        None,
+                        "title_only must be true or false",
+                    )
+                })
+            })
+            .transpose()?;
+        Ok(Self {
+            q,
+            workspace_id: optional_uuid(raw.workspace_id, "workspace_id")?.map(WorkspaceId),
+            kinds: raw.kinds,
+            module_id: optional_uuid(raw.module_id, "module_id")?,
+            status_category: raw.status_category,
+            assignee: raw.assignee,
+            from: raw.from,
+            to: raw.to,
+            tz: raw.tz,
+            author: raw.author,
+            title_only,
+        })
+    }
+}
+
 /// 검색 조건 중 필터.
 #[derive(Debug, Default)]
 pub(super) struct Filters {
@@ -64,12 +131,23 @@ fn parse_day(raw: Option<&str>, name: &str) -> Result<Option<time::Date>, AppErr
         return Ok(None);
     };
     let format = time::macros::format_description!("[year]-[month]-[day]");
-    let day = time::Date::parse(raw.trim(), &format)
-        .map_err(|_| AppError::BadRequest(format!("{name} must be YYYY-MM-DD")))?;
+    let day = time::Date::parse(raw.trim(), &format).map_err(|_| {
+        AppError::invalid(
+            name,
+            InvalidReason::InvalidFormat,
+            None,
+            format!("{name} must be YYYY-MM-DD"),
+        )
+    })?;
     // 그날 시작과 다음 날 시작을 시각으로 만들 수 있는 날만(`day_bounds`): 9999-12-31은 다음 날이 `time` 범위 밖이고,
     // 1년 전은 시간대에 따라 PostgreSQL 시각 범위를 벗어날 수 있다.
     if day.year() < 1 || day.next_day().is_none() {
-        return Err(AppError::BadRequest(format!("{name} is out of range")));
+        return Err(AppError::invalid(
+            name,
+            InvalidReason::OutOfRange,
+            None,
+            format!("{name} is out of range"),
+        ));
     }
     Ok(Some(day))
 }
@@ -83,7 +161,12 @@ pub(super) fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppErr
                 .copied()
                 .find(|c| *c == raw)
                 .ok_or_else(|| {
-                    AppError::BadRequest("status_category must be todo, doing or done".to_owned())
+                    AppError::invalid(
+                        "status_category",
+                        InvalidReason::InvalidFormat,
+                        None,
+                        "status_category must be todo, doing or done",
+                    )
                 })?,
         ),
     };
@@ -91,9 +174,14 @@ pub(super) fn filters(query: &SearchQuery, me: UserId) -> Result<Filters, AppErr
         match raw.map(str::trim) {
             None | Some("") => Ok(None),
             Some("me") => Ok(Some(me.0)),
-            Some(raw) => Uuid::parse_str(raw)
-                .map(Some)
-                .map_err(|_| AppError::BadRequest(format!("{name} must be me or a user id"))),
+            Some(raw) => Uuid::parse_str(raw).map(Some).map_err(|_| {
+                AppError::invalid(
+                    name,
+                    InvalidReason::InvalidFormat,
+                    None,
+                    format!("{name} must be me or a user id"),
+                )
+            }),
         }
     };
     let assignee = person(query.assignee.as_deref(), "assignee")?;
@@ -134,7 +222,12 @@ pub(super) async fn day_bounds(
         .bind(&tz)
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(|err| match AppError::from_db_function(err) {
+            AppError::BadRequest(message) => {
+                AppError::invalid("tz", InvalidReason::InvalidFormat, None, message)
+            }
+            other => other,
+        })?;
     // 하루의 시작은 그날 0시가 처음 오는 시점이다(0시가 두 번 오는 날은 앞의 0시, 없는 날은 건너뛴 직후). 시간 기록의 날
     // 경계(`time_tracking.rs`, 감사 S21)와 같은 식.
     let (start, end): (Option<OffsetDateTime>, Option<OffsetDateTime>) = sqlx::query_as(
@@ -200,7 +293,14 @@ pub(super) fn parse_kinds(raw: Option<&str>) -> Result<Vec<&'static str>, AppErr
                 .iter()
                 .copied()
                 .find(|known| *known == k.trim())
-                .ok_or_else(|| AppError::BadRequest(format!("unknown kind {k}")))
+                .ok_or_else(|| {
+                    AppError::invalid(
+                        "kinds",
+                        InvalidReason::InvalidFormat,
+                        None,
+                        format!("unknown kind {k}"),
+                    )
+                })
         })
         .collect()
 }
@@ -228,11 +328,11 @@ mod tests {
         assert_eq!(filters(&query(""), me).unwrap().status_category, None);
         assert!(matches!(
             filters(&query("late"), me),
-            Err(AppError::BadRequest(_))
+            Err(AppError::Invalid(_))
         ));
         assert!(matches!(
             filters(&query("검토"), me),
-            Err(AppError::BadRequest(_))
+            Err(AppError::Invalid(_))
         ));
     }
 
@@ -242,7 +342,7 @@ mod tests {
     fn days_without_a_representable_boundary_are_rejected() {
         for raw in ["9999-12-31", "0000-12-31", "-0001-01-01"] {
             assert!(
-                matches!(parse_day(Some(raw), "to"), Err(AppError::BadRequest(_))),
+                matches!(parse_day(Some(raw), "to"), Err(AppError::Invalid(_))),
                 "{raw}"
             );
         }

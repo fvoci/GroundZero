@@ -17,10 +17,8 @@ async fn body(error: AppError) -> Value {
 #[tokio::test]
 async fn query_length_error_has_reason_field_and_limit() {
     let state = SearchState {
-        db: fvoci_db::Db::connect_lazy(&Secret::new(
-            "postgres://fvoci_app:test@127.0.0.1:1/unused".into(),
-        ))
-        .unwrap(),
+        db: fvoci_db::Db::connect_lazy(&Secret::new("postgres://127.0.0.1:1/unused".into()))
+            .unwrap(),
         search: None,
     };
     let query = serde_json::from_value(json!({"q": "🦀".repeat(201)})).unwrap();
