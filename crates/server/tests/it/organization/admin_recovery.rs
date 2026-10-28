@@ -44,8 +44,8 @@ async fn demotion_removes_self_join_only_and_cleans_shares_and_assignments() {
     let task = w.task().await;
     w.share(doc, &user, "read").await;
     fixture(
-        "INSERT INTO fvoci.task_assignees(task_id,user_id) VALUES($1,$2)",
-        &[task, user.id.0],
+        "INSERT INTO fvoci.task_assignees(task_id,user_id,assigned_by) VALUES($1,$2,$3)",
+        &[task, user.id.0, w.owner.id.0],
     )
     .await;
     demote(&w, &user).await;
