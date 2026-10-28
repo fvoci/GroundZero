@@ -99,18 +99,12 @@ async fn self_offered_ownership_cannot_bypass_admin_join_recovery() {
         &[w.ws, user.id.0],
     )
     .await;
-    match offer {
-        Ok(_) => {
-            rows(
-                &w.state,
-                &user,
-                "SELECT fvoci.app_accept_ownership($1,@ids)",
-                &[w.ws],
-            )
-            .await;
-        }
-        Err(error) => code(&error, "22023"),
-    }
+    let error = offer.expect_err("SR-201-1 self-offered ownership must be rejected");
+    code(&error, "22023");
+    assert_eq!(
+        error.as_database_error().unwrap().message(),
+        "the recipient must be another member"
+    );
     rows(
         &w.state,
         &w.owner,
