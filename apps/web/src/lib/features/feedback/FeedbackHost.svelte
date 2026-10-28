@@ -32,7 +32,9 @@
   }
 
   const {
-    replace = (url) => window.location.replace(url),
+    replace = (url) => {
+      window.location.replace(url);
+    },
     retryLogout,
     retryRestore,
     reload = () => {

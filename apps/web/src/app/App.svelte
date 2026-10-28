@@ -57,8 +57,12 @@
     reload?: () => void;
   }
   const {
-    replace = (url) => window.location.replace(url),
-    reload = () => window.location.reload(),
+    replace = (url) => {
+      window.location.replace(url);
+    },
+    reload = () => {
+      window.location.reload();
+    },
   }: Props = $props();
 
   type Session =
@@ -310,7 +314,7 @@
     hideSession('restore');
     try {
       const now = await api.me();
-      if (mine !== restoreSequence || accountSafety.reason !== 'restore') return;
+      if (mine !== restoreSequence || !restoring()) return;
       if (now === undefined) {
         flushSync(clearSession);
         hideSession('signed-out');
@@ -321,7 +325,7 @@
         // 하위 화면도 새로 마운트해 목록·문서·개인 데이터를 다시 읽는다.
         flushSync(clearSession);
         const loaded = await load(now);
-        if (mine !== restoreSequence || accountSafety.reason !== 'restore') return;
+        if (mine !== restoreSequence || !restoring()) return;
         if (loaded) {
           restoringUserId = undefined;
           accountSafety.switching = false;
@@ -330,10 +334,14 @@
         }
       }
     } catch (error: unknown) {
-      if (mine !== restoreSequence || accountSafety.reason !== 'restore') return;
+      if (mine !== restoreSequence || !restoring()) return;
       flushSync(clearSession);
       accountSafety.error = errorText(error, m.feedback_restore_failed());
     }
+  }
+
+  function restoring(): boolean {
+    return accountSafety.switching && accountSafety.reason === 'restore';
   }
 
   function restorePage(event: PageTransitionEvent): void {

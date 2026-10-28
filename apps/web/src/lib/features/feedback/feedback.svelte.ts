@@ -137,9 +137,9 @@ export function watchConnection(): () => void {
 // (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 입력은 앞 계정의 초안(사용자별 키)으로
 // 이미 남아 있다.
 type SafetyReason = 'account' | 'logout' | 'restore' | 'signed-out';
-export const accountSafety = $state({
+export const accountSafety = $state<{ switching: boolean; reason: SafetyReason; error: string }>({
   switching: false,
-  reason: 'account' as SafetyReason,
+  reason: 'account',
   error: '',
 });
 
