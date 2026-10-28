@@ -198,8 +198,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 서체 파일을 확인하고 고지를 더한다.
-fn fonts(root: &Path, out: &mut String) -> Result<()> {
+/// 외부 원본·네트워크 없이 배포 서체와 라이선스를 확인한다(D-86, #215).
+fn verify_font_assets(root: &Path) -> Result<BTreeSet<&'static str>> {
     let dir = root.join(FONT_DIR);
     let licenses: BTreeSet<&str> = FONTS.iter().map(|f| f.license_file).collect();
     let mut present: BTreeSet<String> = BTreeSet::new();
@@ -222,6 +222,7 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
     }
     for font in FONTS {
         let bytes = fs::read(dir.join(font.file)).with_context(|| format!("read {}", font.file))?;
+        verify_woff2(&bytes).with_context(|| format!("{} must be WOFF2 (#215)", font.file))?;
         let digest = sha256_hex(&bytes);
         if digest != font.sha256 {
             bail!(
@@ -230,6 +231,42 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
             );
         }
     }
+    for (file, expected) in [
+        (
+            "LICENSE-Noto-CJK.txt",
+            "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+        ),
+        (
+            "OFL-D2Coding.txt",
+            "1807e8dec4d65f474cbf9be39f5e2254ecb81702babc320749e272ea66ffcc69",
+        ),
+    ] {
+        if sha256_hex(&fs::read(dir.join(file))?) != expected {
+            bail!("{file} changed from the approved license (O-37)");
+        }
+    }
+    Ok(licenses)
+}
+
+/// WOFF2 header (§3.1): no extended metadata or private data accompanies these fonts.
+fn verify_woff2(bytes: &[u8]) -> Result<()> {
+    if bytes.len() < 48 || &bytes[..4] != b"wOF2" {
+        bail!("missing WOFF2 header");
+    }
+    let length = u32::from_be_bytes(bytes[8..12].try_into()?) as usize;
+    if length != bytes.len() || bytes[14..16] != [0, 0] {
+        bail!("invalid WOFF2 length or reserved field");
+    }
+    if bytes[28..48].iter().any(|byte| *byte != 0) {
+        bail!("WOFF metadata and private blocks are forbidden (D-86, #215)");
+    }
+    Ok(())
+}
+
+/// 서체 파일을 확인하고 고지를 더한다.
+fn fonts(root: &Path, out: &mut String) -> Result<()> {
+    let licenses = verify_font_assets(root)?;
+    let dir = root.join(FONT_DIR);
     // 실제로 나가는 번들(위 npm 단계가 만든 `target/notices-web`)의 서체도 확인한다: 다른 패키지의 CSS가 서체를
     // 끌어오면(예: KaTeX) 고지 없이 나가지 않게, 번들의 서체 파일은 정확히 승인한 여섯이어야 한다.
     let bundle = root.join("target/notices-web/assets");
@@ -537,7 +574,29 @@ fn normalize(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{crate_archive, npm_archive};
+    use super::{crate_archive, npm_archive, verify_font_assets, verify_woff2};
+
+    #[test]
+    fn approved_woff2_fonts_and_licenses_are_verifiable_offline() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask is in the repository root");
+        verify_font_assets(root)
+            .expect("six approved lossless WOFF2 fonts and two licenses (#215)");
+    }
+
+    #[test]
+    fn woff_metadata_and_private_blocks_are_rejected() {
+        let mut header = [0_u8; 48];
+        header[..4].copy_from_slice(b"wOF2");
+        header[8..12].copy_from_slice(&48_u32.to_be_bytes());
+        verify_woff2(&header).expect("header without optional blocks");
+        for offset in 28..48 {
+            let mut with_block = header;
+            with_block[offset] = 1;
+            assert!(verify_woff2(&with_block).is_err(), "header byte {offset}");
+        }
+    }
 
     #[test]
     fn source_archives_point_at_the_exact_version() {
