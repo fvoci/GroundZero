@@ -64,6 +64,7 @@ describe('home up next counts', () => {
       pins: [],
       favorites: [],
     };
+    Object.assign(home, { my_tasks: myTasksView(home) });
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.mocked(api.myTasks).mockResolvedValue(myTasksView(home));
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
@@ -80,5 +81,6 @@ describe('home up next counts', () => {
     );
     // 홈 미리보기 수(5)가 아니라 서버의 전체 수(73)를 표시한다.
     expect(screen.getAllByRole('link', { name: /^overdue / })).toHaveLength(5);
+    expect(api.myTasks).not.toHaveBeenCalled();
   });
 });
