@@ -1,10 +1,8 @@
-//! 회의·발표·행사 일정과 워크스페이스 달력 (D-19, D-31, D-50, D-57).
+//! 회의·발표·행사 일정 자원과 명령(D-31·D-50·D-57).
 //!
-//! 일정은 항목에 속하고 권한은 항목을 따른다(DB 함수 `app_access`). 시각이 있는 일정은 UTC 시각과 일정의
-//! 시간대를 함께 저장하고, 종일 일정은 날짜 그대로 둔다(D-50). 달력은 워크스페이스 단위의 기간 조회로, 볼 수 있는
-//! 업무(시작·마감)와 일정을 함께 돌려준다(홈의 주간 달력도 같은 API를 쓴다).
-//! DB 정의는 `crates/db/migrations/202610280002_organizations.sql`의 `app_access`,
-//! `crates/db/migrations/202610280005_work.sql`의 `app_event_occurrences` 등에 있다.
+//! 일정은 항목에 속하고 권한은 SQL `app_access`를 따른다. 시각이 있는 일정은 UTC 시각과 일정 시간대를 함께 저장하고,
+//! 종일 일정은 날짜 그대로 둔다(D-50). 반복 규칙 명령은 `event_recurrence`에 있고, 달력 집계는 별도 조각이 맡는다.
+//! DB 정의는 `crates/db/migrations/202610280005_work.sql`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -127,11 +125,43 @@ pub struct EventConflict {
     pub current: Event,
 }
 
-struct When {
-    start_date: Option<Date>,
-    end_date: Option<Date>,
-    starts_at: Option<OffsetDateTime>,
-    ends_at: Option<OffsetDateTime>,
+#[derive(Debug, Clone, Copy)]
+enum When {
+    AllDay {
+        start: Date,
+        end: Date,
+    },
+    Timed {
+        start: OffsetDateTime,
+        end: OffsetDateTime,
+    },
+}
+
+impl When {
+    fn start_date(self) -> Option<Date> {
+        match self {
+            Self::AllDay { start, .. } => Some(start),
+            Self::Timed { .. } => None,
+        }
+    }
+    fn end_date(self) -> Option<Date> {
+        match self {
+            Self::AllDay { end, .. } => Some(end),
+            Self::Timed { .. } => None,
+        }
+    }
+    fn starts_at(self) -> Option<OffsetDateTime> {
+        match self {
+            Self::Timed { start, .. } => Some(start),
+            Self::AllDay { .. } => None,
+        }
+    }
+    fn ends_at(self) -> Option<OffsetDateTime> {
+        match self {
+            Self::Timed { end, .. } => Some(end),
+            Self::AllDay { .. } => None,
+        }
+    }
 }
 
 struct Valid {
@@ -175,12 +205,7 @@ fn validate(state: &WorkState, input: &EventInput) -> Result<Valid, AppError> {
         if (end - start).whole_days() >= MAX_EVENT_DAYS {
             return Err(too_long());
         }
-        When {
-            start_date: Some(start),
-            end_date: Some(end),
-            starts_at: None,
-            ends_at: None,
-        }
+        When::AllDay { start, end }
     } else {
         if input.start_date.is_some() || input.end_date.is_some() {
             return Err(AppError::BadRequest(
@@ -197,11 +222,9 @@ fn validate(state: &WorkState, input: &EventInput) -> Result<Valid, AppError> {
         if ends - starts > Duration::days(MAX_EVENT_DAYS) {
             return Err(too_long());
         }
-        When {
-            start_date: None,
-            end_date: None,
-            starts_at: Some(starts),
-            ends_at: Some(ends),
+        When::Timed {
+            start: starts,
+            end: ends,
         }
     };
     Ok(Valid {
@@ -344,11 +367,11 @@ pub async fn create(
         .bind(input.event.kind.as_str())
         .bind(&valid.title)
         .bind(&valid.description)
-        .bind(input.event.all_day)
-        .bind(valid.when.start_date)
-        .bind(valid.when.end_date)
-        .bind(valid.when.starts_at)
-        .bind(valid.when.ends_at)
+        .bind(matches!(valid.when, When::AllDay { .. }))
+        .bind(valid.when.start_date())
+        .bind(valid.when.end_date())
+        .bind(valid.when.starts_at())
+        .bind(valid.when.ends_at())
         .bind(&valid.timezone)
         .bind(new_ids(3))
         .fetch_one(tx.conn())
@@ -388,11 +411,11 @@ pub async fn update(
     .bind(input.event.kind.as_str())
     .bind(&valid.title)
     .bind(&valid.description)
-    .bind(input.event.all_day)
-    .bind(valid.when.start_date)
-    .bind(valid.when.end_date)
-    .bind(valid.when.starts_at)
-    .bind(valid.when.ends_at)
+    .bind(matches!(valid.when, When::AllDay { .. }))
+    .bind(valid.when.start_date())
+    .bind(valid.when.end_date())
+    .bind(valid.when.starts_at())
+    .bind(valid.when.ends_at())
     .bind(&valid.timezone)
     .bind(new_ids(2))
     .fetch_one(tx.conn())
