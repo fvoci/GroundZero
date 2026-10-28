@@ -64,6 +64,10 @@ async fn readonly_saved_views_are_personal_and_follow_item_access() {
     .await;
     assert_eq!(again.status, StatusCode::CONFLICT, "{:?}", again.json);
     assert_eq!(again.json["error"], "exists");
+    assert!(
+        again.json.get("changed").is_none(),
+        "same-name create is not a stale write"
+    );
     assert_eq!(saved.json["version"], 1);
     assert_eq!(again.json["current"]["id"], saved.json["id"]);
     assert_eq!(again.json["current"]["config"]["sort"], "due");
@@ -232,6 +236,9 @@ async fn a_view_saved_from_a_stale_tab_is_refused_with_the_latest() {
     .await;
     assert_eq!(tab_a.status, StatusCode::CONFLICT, "{:?}", tab_a.json);
     assert_eq!(tab_a.json["error"], "conflict");
+    assert_eq!(tab_a.json["changed"], json!(["config"]));
+    assert!(tab_a.json["message"].is_string());
+    assert!(tab_a.json["request_id"].is_string());
     assert_eq!(tab_a.json["current"]["id"], created["id"]);
     assert_eq!(tab_a.json["current"]["version"], 2);
     assert_eq!(

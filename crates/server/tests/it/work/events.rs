@@ -175,6 +175,19 @@ async fn events_follow_item_access_keep_their_zone_and_guard_versions() {
     .await;
     assert_eq!(r.status, StatusCode::CONFLICT);
     assert_eq!(r.json["current"]["starts_at"], "2026-11-02T01:30:00Z");
+    assert_eq!(r.json["changed"], json!(["starts_at"]));
+    assert!(r.json["message"].is_string());
+    assert!(r.json["request_id"].is_string());
+    // 끝 시각은 +09:00과 UTC 표기가 달라도 같은 시각이라 changed에 넣지 않는다.
+    let (status, current) = {
+        let reply = send(&app, Method::GET, &uri, Some(&admin), None).await;
+        (reply.status, reply.json)
+    };
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        current, r.json["current"],
+        "stale update must leave the event unchanged"
+    );
 
     // 지우기: 독자는 못 하고, 지운 일정은 없는 것과 같다.
     assert_eq!(
@@ -657,4 +670,97 @@ async fn events_under_an_archived_item_or_module_are_read_only() {
         .await;
         assert_eq!(edit.status, edit_status, "{id}: {:?}", edit.json);
     }
+}
+
+#[tokio::test]
+async fn event_field_errors_name_the_field_reason_and_limit_without_creating_rows() {
+    let state = common::state();
+    let app = common::app(&state);
+    let user = login(&state, "event-fields").await;
+    let ws = create_workspace(&app, &user, "event validation").await;
+    let item = module_item(&app, &user, &ws, "EVA", false).await;
+    let base = timed(
+        "meeting",
+        "2026-11-02T09:00:00+09:00",
+        "2026-11-02T10:00:00+09:00",
+        "Asia/Seoul",
+    );
+    let cases = [
+        (
+            "timezone",
+            json!("Mars/Olympus"),
+            "timezone",
+            "invalid_format",
+            None,
+        ),
+        ("timezone", json!(""), "timezone", "required", None),
+        (
+            "timezone",
+            json!("z".repeat(65)),
+            "timezone",
+            "too_long",
+            Some(64),
+        ),
+        ("starts_at", Value::Null, "starts_at", "required", None),
+        (
+            "starts_at",
+            json!("tomorrow"),
+            "starts_at",
+            "invalid_format",
+            None,
+        ),
+        (
+            "ends_at",
+            json!("2026-11-02T08:00:00+09:00"),
+            "ends_at",
+            "out_of_range",
+            Some(366),
+        ),
+        (
+            "ends_at",
+            json!("2028-11-02T10:00:00+09:00"),
+            "ends_at",
+            "out_of_range",
+            Some(366),
+        ),
+        (
+            "start_date",
+            json!("2026-11-02"),
+            "start_date",
+            "invalid_format",
+            None,
+        ),
+        (
+            "description",
+            json!("x".repeat(10_001)),
+            "description",
+            "too_long",
+            Some(10_000),
+        ),
+    ];
+    for (key, value, field, reason, limit) in cases {
+        let mut body = base.clone();
+        body["request_id"] = json!(new_request_id());
+        body[key] = value;
+        let (status, error) = create(&app, &user, &item, body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{key}: {error}");
+        assert_eq!(error["error"], "bad_request", "{key}: {error}");
+        assert_eq!(error["field"], field, "{key}: {error}");
+        assert_eq!(error["reason"], reason, "{key}: {error}");
+        assert_eq!(
+            error.get("limit").and_then(Value::as_u64),
+            limit,
+            "{key}: {error}"
+        );
+    }
+    let list = send(
+        &app,
+        Method::GET,
+        &format!("/api/items/{}/events", item["id"].as_str().unwrap()),
+        Some(&user),
+        None,
+    )
+    .await;
+    assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
+    assert_eq!(list.json, json!([]));
 }
