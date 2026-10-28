@@ -153,3 +153,44 @@ async fn demotion_preserves_a_role_changed_by_another_workspace_admin() {
         "admin"
     );
 }
+
+#[tokio::test]
+async fn demotion_preserves_accepted_ownership_and_its_independent_admin_grant() {
+    let w = World::new().await;
+    let user = w.member("member").await;
+    join(&w, &user).await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_offer_ownership($1,$2,@ids)",
+        &[w.ws, user.id.0],
+    )
+    .await;
+    rows(
+        &w.state,
+        &user,
+        "SELECT fvoci.app_accept_ownership($1,@ids)",
+        &[w.ws],
+    )
+    .await;
+    demote(&w, &user).await;
+    let member = one(&w.state, &w.owner,
+        "SELECT to_jsonb(m) AS membership FROM fvoci.workspace_members m WHERE workspace_id=$1 AND user_id=$2",
+        &[w.ws,user.id.0]).await;
+    assert_eq!(member["membership"]["role"], "admin");
+    assert_eq!(member["membership"]["role_source"], "admin_assigned");
+    assert_eq!(
+        member["membership"]["previous_role"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        one(
+            &w.state,
+            &user,
+            "SELECT owner_id FROM fvoci.workspaces WHERE id=$1",
+            &[w.ws]
+        )
+        .await["owner_id"],
+        user.id.0.to_string()
+    );
+}
