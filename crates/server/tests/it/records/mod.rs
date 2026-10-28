@@ -3,6 +3,7 @@
 mod contracts;
 mod courses;
 mod http;
+mod private_progress;
 mod study;
 mod support;
 mod zotero;
