@@ -1,6 +1,9 @@
 //! 홈·내 업무 집계. 도메인 crate에 기대지 않고 DB와 공통 HTTP 문맥을 사용한다.
 
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
 pub mod dashboard;
+mod queries;
 pub mod tasks;
 
 use axum::Router;

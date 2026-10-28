@@ -10,6 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::HomeState;
+use crate::queries::{self, TaskRow};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, OrganizationId, WorkspaceId};
 use fvoci_core::module::ModuleKind;
@@ -114,17 +115,6 @@ pub struct UpNextCounts {
 /// Up Next가 묶음마다 보이는 최대 수. 묶음마다 따로 세어, 밀린 업무가 많아도 오늘·다가오는 일이 빠지지 않는다.
 pub const UP_NEXT_PER_BUCKET: i64 = 50;
 
-/// Up Next 후보: 내 업무(내가 담당이거나, 담당자가 없고 내가 만든 것) 중 이번 주($1 + 7)까지 마감인 미완료.
-/// 보관된 항목·모듈의 업무는 뺀다.
-const UP_NEXT_MINE: &str = "SELECT t.id, t.item_id, t.workspace_id, t.title, s.name AS status, s.category AS status_category, t.due_date, t.number
-     FROM tasks t JOIN task_statuses s ON s.id = t.status_id JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
-     WHERE s.category <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
-       AND i.archived_at IS NULL AND m.archived_at IS NULL
-       AND t.workspace_id IN (SELECT app_my_workspace_ids($2))
-       AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
-            OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
-                AND t.created_by = app_user_id()))";
-
 /// 홈.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Home {
@@ -146,17 +136,6 @@ pub struct Home {
 pub struct HomeQuery {
     pub tz: Option<String>,
 }
-
-type TaskRow = (
-    Uuid,
-    ItemId,
-    WorkspaceId,
-    Option<String>,
-    String,
-    String,
-    String,
-    Option<Date>,
-);
 
 fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
     let (id, item_id, workspace_id, reference, title, status, status_category, due) = row;
@@ -240,97 +219,13 @@ pub async fn home(
     Query(query): Query<HomeQuery>,
 ) -> Result<Json<Home>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    // 빈 `tz=`는 없는 것과 같다(검색과 같은 규칙): 저장된 시간대, 없으면 UTC.
-    let tz = match query.tz.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
-        Some(tz) => tz.to_owned(),
-        None => sqlx::query_scalar(
-            "SELECT coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC')",
-        ).fetch_one(tx.conn()).await?,
-    };
-    sqlx::query("SELECT app_check_timezone($1)")
-        .bind(&tz)
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    let today: Date = sqlx::query_scalar("SELECT (now() AT TIME ZONE $1)::date")
-        .bind(&tz)
-        .fetch_one(tx.conn())
-        .await?;
+    let today = queries::today(&mut tx, query.tz).await?;
     // 묶음마다 따로 자른다. 한 번에 50개로 자르면 밀린 업무가 많을 때 오늘·다가오는 일이 빠졌다(감사 W23).
-    let up_next: Vec<TaskRow> = sqlx::query_as(&format!(
-        "WITH mine AS ({UP_NEXT_MINE}),
-         ranked AS (
-           SELECT mine.*, row_number() OVER (
-                    PARTITION BY CASE WHEN due_date < $1 THEN 0 WHEN due_date = $1 THEN 1 ELSE 2 END
-                    ORDER BY due_date, number, id) AS rn
-           FROM mine
-         )
-         SELECT id, item_id, workspace_id, app_task_reference(id), title, status, status_category, due_date
-         FROM ranked WHERE rn <= $3 ORDER BY due_date, number, id"
-    ))
-    .bind(today)
-    .bind(organization)
-    .bind(UP_NEXT_PER_BUCKET)
-    .fetch_all(tx.conn())
-    .await?;
-    let (overdue, due_today, upcoming): (i64, i64, i64) = sqlx::query_as(&format!(
-        "WITH mine AS ({UP_NEXT_MINE})
-         SELECT count(*) FILTER (WHERE due_date < $1), count(*) FILTER (WHERE due_date = $1),
-                count(*) FILTER (WHERE due_date > $1)
-         FROM mine"
-    ))
-    .bind(today)
-    .bind(organization)
-    .fetch_one(tx.conn())
-    .await?;
-    let recent_tasks: Vec<TaskRow> = sqlx::query_as(
-        "SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id), t.title, s.name AS status, s.category AS status_category, t.due_date
-         FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.updated_by = app_user_id() AND t.workspace_id IN (SELECT app_my_workspace_ids($1)) ORDER BY t.updated_at DESC, t.id LIMIT 8",
-    )
-    .bind(organization)
-    .fetch_all(tx.conn())
-    .await?;
-    type DocRow = (
-        Uuid,
-        String,
-        Option<String>,
-        Option<WorkspaceId>,
-        Option<ItemId>,
-        OffsetDateTime,
-    );
-    let recent_documents: Vec<DocRow> = sqlx::query_as(
-        "SELECT d.id, d.title, app_document_reference(d.id), d.workspace_id, d.item_id, d.updated_at
-         FROM documents d WHERE d.updated_by = app_user_id() AND (d.workspace_id IN (SELECT app_my_workspace_ids($1)) OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())) ORDER BY d.updated_at DESC, d.id LIMIT 8",
-    )
-    .bind(organization)
-    .fetch_all(tx.conn())
-    .await?;
-    type ItemRow = (
-        ItemId,
-        WorkspaceId,
-        String,
-        Option<String>,
-        String,
-        i64,
-        i64,
-        String,
-    );
-    let active_items: Vec<ItemRow> = sqlx::query_as(
-        "SELECT i.id, i.workspace_id, m.kind, app_item_reference(i.id), i.title, c.done, c.total,
-                app_access('item', i.id)
-         FROM items i JOIN modules m ON m.id = i.module_id
-         CROSS JOIN LATERAL (
-           SELECT count(*) FILTER (WHERE s.category = 'done') AS done, count(*) AS total, max(t.updated_at) AS active
-           FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.item_id = i.id
-         ) c
-         WHERE i.archived_at IS NULL AND m.archived_at IS NULL
-           AND i.workspace_id IN (SELECT app_my_workspace_ids($1))
-         ORDER BY greatest(i.updated_at, c.active) DESC, i.id
-         LIMIT 8",
-    )
-    .bind(organization)
-    .fetch_all(tx.conn())
-    .await?;
+    let up_next = queries::up_next(&mut tx, today, organization).await?;
+    let (overdue, due_today, upcoming) = queries::counts(&mut tx, today, organization).await?;
+    let recent_tasks = queries::recent_tasks(&mut tx, organization).await?;
+    let recent_documents = queries::documents(&mut tx, organization).await?;
+    let active_items = queries::active_items(&mut tx, organization).await?;
     let (pins, favorites) = marks(&mut tx, organization).await?;
     tx.commit().await?;
     Ok(Json(Home {
