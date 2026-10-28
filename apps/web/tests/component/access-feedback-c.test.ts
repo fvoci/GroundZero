@@ -103,6 +103,7 @@ describe('organization public links and allow_copy', () => {
         can_manage: access === 'owner',
         can_delete: access === 'owner',
         allow_copy: allowCopy,
+        can_export: allowed,
       });
       vi.spyOn(api, 'documentFiles').mockResolvedValue([]);
       vi.spyOn(api, 'documentBacklinks').mockResolvedValue([]);

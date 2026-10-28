@@ -114,7 +114,7 @@ async fn deletion(insertion: Inserter) {
         calls: AtomicUsize::new(0),
     });
     let mut files = FilesState::from_ref(&w.state);
-    files.collab = flush.clone();
+    files.collab = Arc::<Flush>::clone(&flush);
     let state = State {
         files,
         session: SessionState::from_ref(&w.state),

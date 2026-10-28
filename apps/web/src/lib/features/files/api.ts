@@ -12,7 +12,7 @@ async function withExpected<T>(
   method: string,
   path: string,
   parse: (v: Json) => T,
-  body: Json | undefined,
+  body: Json,
   expectedUser: string | undefined,
 ): Promise<T> {
   const { status, json } = await request(

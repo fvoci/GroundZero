@@ -32,66 +32,61 @@ afterEach(() => {
   me.userId = '';
 });
 
+interface SeenRequest {
+  url: string;
+  init: RequestInit;
+}
+function capture(reply: (url: string, init: RequestInit) => Response): SeenRequest[] {
+  const seen: SeenRequest[] = [];
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const options = init ?? {};
+    seen.push({ url, init: options });
+    return Promise.resolve(reply(url, options));
+  });
+  return seen;
+}
+function json(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 describe('file resource requests', () => {
   it('reads metadata and the version collection independently', async () => {
-    const fetch = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
-      Promise.resolve(
-        new Response(JSON.stringify(String(_input).endsWith('/versions') ? [] : file), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
-    vi.stubGlobal('fetch', fetch);
+    const seen = capture((url) => json(url.endsWith('/versions') ? [] : file));
     expect(await api.file('f1')).toEqual(file);
     expect(await api.fileVersions('f1')).toEqual([]);
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
-      '/api/files/f1',
-      '/api/files/f1/versions',
-    ]);
+    expect(seen.map((call) => call.url)).toEqual(['/api/files/f1', '/api/files/f1/versions']);
   });
 
   it('renames with PATCH and carries the expected user', async () => {
     me.userId = 'editor';
-    const fetch = vi.fn(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(file), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    );
-    vi.stubGlobal('fetch', fetch);
+    const seen = capture(() => json(file));
     await api.renameFile('f1', 'own.txt');
-    const call = fetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(call[0]).toBe('/api/files/f1');
-    expect(call[1].method).toBe('PATCH');
-    expect(JSON.parse(String(call[1].body))).toEqual({ name: 'own.txt' });
-    expect(new Headers(call[1].headers).get('x-fvoci-expected-user')).toBe('editor');
+    const call = seen[0];
+    if (call === undefined) throw new Error('missing rename request');
+    expect(call.url).toBe('/api/files/f1');
+    expect(call.init.method).toBe('PATCH');
+    const body = call.init.body;
+    if (typeof body !== 'string') throw new Error('expected JSON request body');
+    const sent: unknown = JSON.parse(body);
+    expect(sent).toEqual({ name: 'own.txt' });
+    expect(new Headers(call.init.headers).get('x-fvoci-expected-user')).toBe('editor');
   });
 
   it('keeps the uploading user on parts, completion and abort after the visible account changes', async () => {
     me.userId = 'new-account';
-    const seen: RequestInit[] = [];
-    vi.stubGlobal('fetch', (_input: RequestInfo | URL, init: RequestInit) => {
-      seen.push(init);
-      return Promise.resolve(
-        init.method === 'POST'
-          ? new Response(JSON.stringify(upload), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            })
-          : new Response(null, { status: 204 }),
-      );
-    });
+    const seen = capture((url) =>
+      url.endsWith('/complete') ? json(upload) : new Response(null, { status: 204 }),
+    );
     await api.putUploadPart('up1', 1, new Blob(['abc']), '0'.repeat(64), 'original-uploader');
     await api.completeUpload('up1', 'original-uploader');
     await api.abortUpload('up1', 'original-uploader');
     expect(seen).toHaveLength(3);
-    expect(seen.map((init) => new Headers(init.headers).get('x-fvoci-expected-user'))).toEqual([
-      'original-uploader',
-      'original-uploader',
-      'original-uploader',
-    ]);
+    expect(seen.map((call) => new Headers(call.init.headers).get('x-fvoci-expected-user'))).toEqual(
+      ['original-uploader', 'original-uploader', 'original-uploader'],
+    );
   });
 });
