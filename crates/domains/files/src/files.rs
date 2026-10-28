@@ -17,12 +17,18 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::http::AppState;
-use crate::storage::{Assembled, Part, sha256_hex};
+use crate::FilesState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, FileId, ItemId, UploadId, UserId};
 use fvoci_db::{UserTx, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
+use fvoci_storage::{Assembled, Part, sha256_hex};
+
+const EXPECTED_USER_DOC: &str = "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 \
+    아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 \
+    아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), \
+    업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. \
+    실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다";
 
 /// 조각 본문의 SHA-256(16진수) 헤더.
 pub const PART_SHA256_HEADER: &str = "x-content-sha256";
@@ -209,17 +215,17 @@ async fn view(tx: &mut UserTx, row: UploadRow) -> Result<UploadView, AppError> {
 /// 기대 사용자 머리가 필요하다(`ExpectedUser`). 웹은 만료된 업로드를 스스로 다시 시작하므로, 그사이 다른 탭에서 계정을
 /// 바꿨으면 새 계정의 업로드를 만들지 않고 409 `account_changed`.
 #[utoipa::path(post, path = "/api/uploads", operation_id = "create_upload", request_body = CreateUpload,
-    params(("x-fvoci-expected-user" = String, Header, format = Uuid, description = crate::features::documents::EXPECTED_USER_DOC)),
+    params(("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_USER_DOC)),
     responses((status = 201, body = UploadView), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "저장량 한도 초과(`invalid_state`) 또는 `account_changed`(기대 사용자가 세션의 사용자와 다름, 아무것도 만들지 않음)")),
     tag = "files")]
 pub async fn create_upload(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     ExpectedUser(user): ExpectedUser,
     Json(input): Json<CreateUpload>,
 ) -> Result<(StatusCode, Json<UploadView>), AppError> {
-    let limits = state.config.files;
+    let limits = state.limits;
     let (kind, target) = match (&input.file_id, &input.target) {
         (Some(_), None) => (None, None),
         (None, Some(t)) => (Some(t.kind.clone()), Some(t.id)),
@@ -280,7 +286,7 @@ pub async fn create_upload(
     params(("upload_id" = String, Path, format = Uuid)),
     responses((status = 200, body = UploadView), (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn get_upload(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<UploadId>,
 ) -> Result<Json<UploadView>, AppError> {
@@ -299,7 +305,7 @@ pub async fn get_upload(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "files")]
 pub async fn put_part(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path((id, number)): Path<(UploadId, i32)>,
     headers: HeaderMap,
@@ -367,7 +373,7 @@ pub async fn put_part(
     responses((status = 200, body = UploadView), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "files")]
 pub async fn complete_upload(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<UploadId>,
 ) -> Result<Json<UploadView>, AppError> {
@@ -426,7 +432,7 @@ pub async fn complete_upload(
 
 /// 저장소에서 조각을 합치고 내용을 확인한 뒤 파일·버전을 기록한다.
 async fn finish(
-    state: &AppState,
+    state: &FilesState,
     user: UserId,
     id: UploadId,
     row: UploadRow,
@@ -475,7 +481,7 @@ async fn finish(
 
 /// 이은 내용을 확인하고, 점유를 쥔 채 최종 키로 게시한 뒤 파일·버전을 기록한다.
 async fn record(
-    state: &AppState,
+    state: &FilesState,
     user: UserId,
     id: UploadId,
     row: &UploadRow,
@@ -515,7 +521,7 @@ async fn record(
     let finished = sqlx::query("SELECT app_finish_upload($1, $2, $3, $4)")
         .bind(id)
         .bind(&sha256)
-        .bind(i64::try_from(state.config.files.max_storage_bytes).unwrap_or(i64::MAX))
+        .bind(i64::try_from(state.limits.max_storage_bytes).unwrap_or(i64::MAX))
         .bind(new_ids(3))
         .execute(tx.conn())
         .await;
@@ -540,7 +546,7 @@ async fn record(
 
 /// 멈춘 마무리의 점유를 푼다(이 시도의 점유일 때만, 0088). 실패해도 원래 오류를 돌려주는 게 우선이라 기록만
 /// 남긴다(5분 뒤 넘겨받기는 그대로 된다).
-async fn release_claim(state: &AppState, user: UserId, id: UploadId, claim: OffsetDateTime) {
+async fn release_claim(state: &FilesState, user: UserId, id: UploadId, claim: OffsetDateTime) {
     let released = async {
         let mut tx = state.db.begin_as(user).await?;
         sqlx::query("SELECT app_release_upload_claim($1, $2)")
@@ -576,7 +582,7 @@ async fn hold_claim(tx: &mut UserTx, id: UploadId, claim: OffsetDateTime) -> Res
 }
 
 async fn fail(
-    state: &AppState,
+    state: &FilesState,
     user: UserId,
     id: UploadId,
     claim: OffsetDateTime,
@@ -598,7 +604,7 @@ async fn fail(
     params(("upload_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "files")]
 pub async fn abort_upload(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<UploadId>,
 ) -> Result<StatusCode, AppError> {
@@ -665,12 +671,12 @@ fn file_view(row: FileRow) -> FileView {
     params(("document_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [FileView]), (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn document_files(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(doc): Path<DocumentId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Document, doc).await?;
+    fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Document, doc).await?;
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
         "{FILE_SELECT} WHERE f.document_id = $1 AND f.deleted_at IS NULL ORDER BY f.name, f.id"
     ))
@@ -686,12 +692,12 @@ pub async fn document_files(
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [FileView]), (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn item_files(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<FileView>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Item, item).await?;
+    fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Item, item).await?;
     let rows: Vec<FileRow> = sqlx::query_as(&format!(
         "{FILE_SELECT} WHERE f.item_id = $1 AND f.deleted_at IS NULL ORDER BY f.name, f.id"
     ))
@@ -717,7 +723,7 @@ async fn one_file(tx: &mut UserTx, id: FileId) -> Result<FileView, AppError> {
     params(("file_id" = String, Path, format = Uuid)),
     responses((status = 200, body = FileDetail), (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn get_file(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<FileId>,
 ) -> Result<Json<FileDetail>, AppError> {
@@ -777,7 +783,7 @@ pub async fn get_file(
     responses((status = 200, body = FileView), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn rename_file(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<FileId>,
     Json(input): Json<RenameFile>,
@@ -801,7 +807,7 @@ pub async fn rename_file(
     responses((status = 200, body = FileTrashed), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "files")]
 pub async fn trash_file(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<FileId>,
 ) -> Result<Json<FileTrashed>, AppError> {
@@ -822,7 +828,7 @@ pub async fn trash_file(
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "files")]
 pub async fn delete_version(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path((id, version)): Path<(FileId, i32)>,
 ) -> Result<StatusCode, AppError> {
@@ -916,7 +922,7 @@ fn disposition(inline: bool, name: &str) -> String {
     responses((status = 200, content_type = "application/octet-stream", body = Vec<u8>),
               (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn content(
-    State(state): State<AppState>,
+    State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<FileId>,
     Query(query): Query<ContentQuery>,

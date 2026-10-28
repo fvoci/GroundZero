@@ -1144,6 +1144,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-files"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "fvoci-storage",
+ "serde",
+ "sqlx",
+ "time",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-http"
 version = "0.1.0"
 dependencies = [
@@ -1170,10 +1188,11 @@ dependencies = [
  "futures-util",
  "fvoci-core",
  "fvoci-db",
+ "fvoci-files",
  "fvoci-http",
+ "fvoci-storage",
  "fvoci-work",
  "hex",
- "hmac 0.13.0",
  "http-body-util",
  "openidconnect",
  "pdf-extract",
@@ -1187,7 +1206,6 @@ dependencies = [
  "time",
  "tokio",
  "tokio-tungstenite 0.30.0",
- "tokio-util",
  "tower",
  "tower-http 0.7.1",
  "tracing",
@@ -1197,6 +1215,25 @@ dependencies = [
  "uuid",
  "yrs",
  "zip",
+]
+
+[[package]]
+name = "fvoci-storage"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "fvoci-core",
+ "hex",
+ "hmac 0.13.0",
+ "reqwest",
+ "sha2 0.11.1",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]

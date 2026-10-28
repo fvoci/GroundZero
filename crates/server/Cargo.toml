@@ -23,9 +23,10 @@ fvoci-core.workspace = true
 fvoci-db.workspace = true
 fvoci-http.workspace = true
 fvoci-work.workspace = true
+fvoci-files.workspace = true
+fvoci-storage.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
-hmac = "0.13"
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "native-tls"] }
 pdf-extract = "0.12.1"
 rand = "0.10"
@@ -37,7 +38,6 @@ sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio.workspace = true
-tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 tower-http = { version = "0.7", default-features = false, features = ["fs"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

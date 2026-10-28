@@ -97,6 +97,27 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+impl fvoci_files::PersistWorkspace for crate::collab::Rooms {
+    fn persist_workspace(
+        &self,
+        workspace: uuid::Uuid,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(crate::collab::Rooms::persist_workspace(self, workspace))
+    }
+}
+
+impl FromRef<AppState> for fvoci_files::FilesState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            storage: state.storage.clone(),
+            limits: state.config.files,
+            upload_permits: Arc::clone(&state.upload_permits),
+            collab: Arc::new(state.collab.clone()),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_work::WorkState {
     fn from_ref(state: &AppState) -> Self {
         Self {
@@ -231,6 +252,18 @@ async fn api_not_found() -> AppError {
     modifiers(&SessionSecurity, &DomainApis),
     security(("session_https" = []), ("session_http" = [])),
     paths(
+        files::create_upload,
+        files::get_upload,
+        files::put_part,
+        files::complete_upload,
+        files::abort_upload,
+        files::document_files,
+        files::item_files,
+        files::get_file,
+        files::rename_file,
+        files::trash_file,
+        files::content,
+        files::delete_version,
         healthz,
         accounts::login,
         accounts::callback,
@@ -322,18 +355,6 @@ async fn api_not_found() -> AppError {
         trash::purge_my_expired,
         trash::set_retention,
         trash::set_version_retention,
-        files::create_upload,
-        files::get_upload,
-        files::put_part,
-        files::complete_upload,
-        files::abort_upload,
-        files::document_files,
-        files::item_files,
-        files::get_file,
-        files::rename_file,
-        files::trash_file,
-        files::content,
-        files::delete_version,
         export::workspace,
         export::mine,
         audit::workspace,
@@ -423,6 +444,14 @@ async fn api_not_found() -> AppError {
         members::remove_group_member,
     ),
     components(schemas(
+        files::UploadTarget,
+        files::CreateUpload,
+        files::UploadView,
+        files::VersionView,
+        files::FileView,
+        files::FileDetail,
+        files::RenameFile,
+        files::FileTrashed,
         members::Member,
         members::MembersView,
         members::SetRole,
@@ -539,14 +568,6 @@ async fn api_not_found() -> AppError {
         trash::SetRetention,
         trash::SetVersionRetention,
         search_api::SearchResult,
-        files::UploadTarget,
-        files::CreateUpload,
-        files::UploadView,
-        files::VersionView,
-        files::FileView,
-        files::FileDetail,
-        files::RenameFile,
-        files::FileTrashed,
         audit::AuditEntry,
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
@@ -714,15 +735,6 @@ impl utoipa::Modify for SessionSecurity {
     }
 }
 
-/// 라우터를 조립한다.
-/// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
-async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let Ok(_permit) = Arc::clone(&state.upload_permits).acquire_owned().await else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    };
-    next.run(req).await
-}
-
 pub fn router(state: AppState) -> Router {
     // JSON 직렬화 여유를 두고 문서 상한보다 조금 크게 받는다. 정확한 상한 검사는 핸들러가 한다.
     let body_limit = state
@@ -732,12 +744,9 @@ pub fn router(state: AppState) -> Router {
         .saturating_mul(2)
         .saturating_add(64 * 1024);
 
-    // 업로드 조각은 설정한 조각 크기만큼(머리글 여유 포함) 받는다.
-    let part_limit = usize::try_from(state.config.files.chunk_bytes)
-        .unwrap_or(usize::MAX)
-        .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_files::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -982,34 +991,6 @@ pub fn router(state: AppState) -> Router {
             put(trash::set_version_retention),
         )
         .route("/me/trash", get(trash::my_trash))
-        .route("/uploads", post(files::create_upload))
-        .route(
-            "/uploads/{upload_id}",
-            get(files::get_upload).delete(files::abort_upload),
-        )
-        .route(
-            "/uploads/{upload_id}/parts/{number}",
-            put(files::put_part)
-                .layer(DefaultBodyLimit::max(part_limit))
-                .layer(middleware::from_fn_with_state(state.clone(), upload_slot)),
-        )
-        .route(
-            "/uploads/{upload_id}/complete",
-            post(files::complete_upload),
-        )
-        .route("/documents/{document_id}/files", get(files::document_files))
-        .route("/items/{item_id}/files", get(files::item_files))
-        .route(
-            "/files/{file_id}",
-            get(files::get_file)
-                .put(files::rename_file)
-                .delete(files::trash_file),
-        )
-        .route("/files/{file_id}/content", get(files::content))
-        .route(
-            "/files/{file_id}/versions/{version}",
-            delete(files::delete_version),
-        )
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))
