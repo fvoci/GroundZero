@@ -293,8 +293,15 @@ async fn send_entries(
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "unit fixture decoding must fail the test on malformed output"
+)]
 mod tests {
     use super::*;
+    use crate::state::{ByteStream, IoFuture};
+    use std::io::Read;
+    use tokio::sync::Semaphore;
 
     #[test]
     fn names_inside_the_archive_stay_inside() {
@@ -302,5 +309,86 @@ mod tests {
         assert_eq!(safe_name("회의록: 1/2"), "회의록_ 1_2");
         assert_eq!(safe_name("  "), "_");
         assert_eq!(safe_name(&"가".repeat(200)).chars().count(), 80);
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum ReadOutcome {
+        Missing,
+        OpenFailure,
+        ReadFailure,
+    }
+    #[derive(Debug)]
+    struct TestStore(ReadOutcome);
+    impl ObjectStore for TestStore {
+        fn get<'a>(&'a self, _key: &'a str) -> IoFuture<'a, Result<ByteStream, AppError>> {
+            Box::pin(async move {
+                match self.0 {
+                    ReadOutcome::Missing => Err(AppError::NotFound),
+                    ReadOutcome::OpenFailure => Err(AppError::Storage("unavailable".into())),
+                    ReadOutcome::ReadFailure => Ok(Box::pin(futures_util::stream::iter([Err(
+                        std::io::Error::other("unavailable"),
+                    )])) as ByteStream),
+                }
+            })
+        }
+        fn delete<'a>(&'a self, _key: &'a str) -> IoFuture<'a, Result<(), AppError>> {
+            Box::pin(async { Ok(()) })
+        }
+        fn abort<'a>(
+            &'a self,
+            _key: &'a str,
+            _upload: &'a str,
+        ) -> IoFuture<'a, Result<(), AppError>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_disappearing_object_is_recorded_in_missing_json_and_releases_the_export_slot() {
+        let slots = Arc::new(Semaphore::new(1));
+        let response = stream_zip(
+            Arc::new(TestStore(ReadOutcome::Missing)),
+            vec![Entry::Object("files/removed.txt".into(), "removed".into())],
+            "test.zip",
+            Arc::clone(&slots).acquire_owned().await.unwrap(),
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert_eq!(archive.len(), 1);
+        let mut note = String::new();
+        archive
+            .by_name("missing.json")
+            .unwrap()
+            .read_to_string(&mut note)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&note).unwrap()["files"],
+            serde_json::json!(["files/removed.txt"])
+        );
+        assert_eq!(slots.available_permits(), 1);
+    }
+
+    #[tokio::test]
+    async fn storage_open_and_read_failures_abort_the_response_instead_of_finishing_a_zip() {
+        for outcome in [ReadOutcome::OpenFailure, ReadOutcome::ReadFailure] {
+            let slots = Arc::new(Semaphore::new(1));
+            let response = stream_zip(
+                Arc::new(TestStore(outcome)),
+                vec![Entry::Object(
+                    "files/unavailable.txt".into(),
+                    "unavailable".into(),
+                )],
+                "test.zip",
+                Arc::clone(&slots).acquire_owned().await.unwrap(),
+            );
+            assert!(
+                axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(slots.available_permits(), 1);
+        }
     }
 }

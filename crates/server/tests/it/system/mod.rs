@@ -2,5 +2,6 @@
 
 mod contracts;
 mod export;
+mod export_snapshot;
 mod restore_lock_order;
 mod trash;
