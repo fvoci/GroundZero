@@ -8,17 +8,22 @@ const RECORD_KIND_KEY =
   /^fvoci:[^:]+:[^:]+:form-draft:record:[^:]+:([^:]+):[^:]+:(?:tab|held):[^:]+$/;
 const LONG_TEXT_KEYS: Readonly<Record<string, readonly string[]>> = longTextKeys;
 
-interface RecordDraft {
-  savedAt: string;
-  input: {
-    form: RecordForm;
-    baseline: string;
-    version: number;
-    pending: { requestId: string; signature: string } | null;
-  };
+interface RecordDraftInput {
+  form: RecordForm;
+  baseline: string;
+  version: number;
+  pending: { requestId: string; signature: string } | null;
 }
 
-type DraftCheck = { state: 'current' } | { state: 'rewrite'; value: RecordDraft };
+interface RecordDraft {
+  savedAt: string;
+  input: RecordDraftInput;
+}
+
+interface DraftCheck {
+  state: 'current' | 'rewrite';
+  value: RecordDraft;
+}
 
 function recordDraftKeys(): string[] {
   const keys: string[] = [];
@@ -66,16 +71,9 @@ function isRecordForm(value: unknown): boolean {
   );
 }
 
-function isRecordDraft(value: unknown): value is RecordDraft {
+function isRecordDraftInput(input: unknown): input is RecordDraftInput {
   if (
-    !object(value) ||
-    !hasKeys(value, ['savedAt', 'input']) ||
-    typeof value.savedAt !== 'string' ||
-    !object(value.input)
-  )
-    return false;
-  const input = value.input;
-  if (
+    !object(input) ||
     !hasKeys(input, ['form', 'baseline', 'version', 'pending']) ||
     !isRecordForm(input.form) ||
     typeof input.baseline !== 'string' ||
@@ -99,24 +97,38 @@ function isWritingOnly(value: RecordForm, keys: readonly string[]): boolean {
   );
 }
 
-function checkWriting(value: unknown, keys: readonly string[]): DraftCheck | undefined {
-  if (!isRecordDraft(value)) return undefined;
-  const baseline = parseRecordForm(JSON.parse(value.input.baseline));
-  if (baseline === undefined) return undefined;
-  if (isWritingOnly(value.input.form, keys) && isWritingOnly(baseline, keys)) {
-    return { state: 'current' };
+/** Normalize every read before it can be held or restored, even if startup cleanup missed its key. */
+export function normalizeRecordDraft(
+  kind: string | undefined,
+  input: unknown,
+): RecordDraftInput | undefined {
+  const keys =
+    kind !== undefined && Object.hasOwn(LONG_TEXT_KEYS, kind) ? LONG_TEXT_KEYS[kind] : undefined;
+  if (keys === undefined) return undefined;
+  try {
+    if (!isRecordDraftInput(input)) return undefined;
+    const baseline = parseRecordForm(JSON.parse(input.baseline));
+    if (baseline === undefined) return undefined;
+    if (isWritingOnly(input.form, keys) && isWritingOnly(baseline, keys)) return input;
+    return {
+      form: recordWriting(input.form, keys),
+      baseline: JSON.stringify(recordWriting(baseline, keys)),
+      version: input.version,
+      pending: input.pending,
+    };
+  } catch {
+    return undefined;
   }
+}
+
+function checkWriting(value: unknown, kind: string | undefined): DraftCheck | undefined {
+  if (!object(value) || !hasKeys(value, ['savedAt', 'input']) || typeof value.savedAt !== 'string')
+    return undefined;
+  const input = normalizeRecordDraft(kind, value.input);
+  if (input === undefined) return undefined;
   return {
-    state: 'rewrite',
-    value: {
-      savedAt: value.savedAt,
-      input: {
-        form: recordWriting(value.input.form, keys),
-        baseline: JSON.stringify(recordWriting(baseline, keys)),
-        version: value.input.version,
-        pending: value.input.pending,
-      },
-    },
+    state: input === value.input ? 'current' : 'rewrite',
+    value: { savedAt: value.savedAt, input },
   };
 }
 
@@ -129,10 +141,7 @@ function checkWriting(value: unknown, keys: readonly string[]): DraftCheck | und
 function clearLegacyRecordDraftAt(key: string): void {
   if (!RECORD_DRAFT_KEY.test(key)) return;
   const kind = RECORD_KIND_KEY.exec(key)?.[1];
-  const keys =
-    kind !== undefined && Object.hasOwn(LONG_TEXT_KEYS, kind) ? LONG_TEXT_KEYS[kind] : undefined;
-  const checked =
-    keys === undefined ? undefined : readDraftAt(key, (value) => checkWriting(value, keys));
+  const checked = readDraftAt(key, (value) => checkWriting(value, kind));
   if (checked === undefined) {
     writeDraftAt(key, undefined);
   } else if (checked.state === 'rewrite' && !writeDraftAt(key, checked.value)) {

@@ -6,7 +6,6 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { object } from '../modules/draft-values';
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
@@ -18,7 +17,7 @@
   import { Button } from '$lib/ui/button';
 
   import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
-  import { isRecordDraftPending } from './legacy-drafts';
+  import { normalizeRecordDraft } from './legacy-drafts';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, parseRecordForm, recordWriting, summary, toInput } from './records';
@@ -104,24 +103,7 @@
       version: editingVersion,
       pending,
     }),
-    parse: (raw) => {
-      if (
-        !object(raw) ||
-        typeof raw.baseline !== 'string' ||
-        typeof raw.version !== 'number' ||
-        !isRecordDraftPending(raw.pending)
-      )
-        return undefined;
-      const parsed = parseRecordForm(raw.form);
-      return parsed === undefined
-        ? undefined
-        : {
-            form: parsed,
-            baseline: raw.baseline,
-            version: raw.version,
-            pending: raw.pending,
-          };
-    },
+    parse: (raw) => normalizeRecordDraft(selected, raw),
     restore: (value) => {
       const currentBase = baseForm();
       let savedBase = emptyForm();
