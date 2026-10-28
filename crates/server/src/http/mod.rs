@@ -106,6 +106,15 @@ impl FromRef<AppState> for fvoci_work::WorkState {
     }
 }
 
+impl FromRef<AppState> for fvoci_references::ReferencesState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
 impl FromRef<AppState> for PublicOrigin {
     fn from_ref(state: &AppState) -> Self {
         Self(state.config.public_origin())
@@ -395,8 +404,6 @@ async fn api_not_found() -> AppError {
         modules::archive_item,
         modules::list_item_documents,
         modules::create_item_document,
-        references::candidates,
-        references::resolve,
         references::document_backlinks,
         references::item_backlinks,
         public_links::list,
@@ -624,11 +631,6 @@ async fn api_not_found() -> AppError {
         modules::UpdateItem,
         modules::ItemConflict,
         modules::ItemSaveConflict,
-        references::ReferenceKind,
-        references::ReferenceCandidate,
-        references::ReferenceInput,
-        references::ResolveReferences,
-        references::ResolvedReference,
         references::Backlink,
         // personal scope (2단계 B)
         notifications::Notification,
@@ -678,6 +680,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_references::ReferencesApi::openapi());
     }
 }
 
@@ -738,6 +741,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_references::router())
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -920,7 +924,6 @@ pub fn router(state: AppState) -> Router {
             get(public_links::list).post(public_links::create),
         )
         .route("/public-links/{link_id}", delete(public_links::revoke))
-        .route("/reference-candidates", get(references::candidates))
         .route(
             "/documents/{document_id}/parent",
             put(documents::set_parent),
@@ -1049,7 +1052,6 @@ pub fn router(state: AppState) -> Router {
         .route("/items/{item_id}/activity", get(activity::item))
         .route("/documents/{document_id}/activity", get(activity::document))
         .route("/tasks/{task_id}/activity", get(activity::task))
-        .route("/references/resolve", post(references::resolve))
         .route(
             "/documents/{document_id}/backlinks",
             get(references::document_backlinks),
