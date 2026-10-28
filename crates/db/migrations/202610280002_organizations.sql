@@ -877,7 +877,7 @@ CREATE FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uu
 
 ALTER FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- D-88·SR1-14: id 산정부터 조직 잠금을 유지해 관리자 참여와 강등을 직렬화한다.
+-- D-88·SR1-14: id 산정부터 조직·대상 멤버 잠금을 유지해 참여·공유와 강등을 직렬화한다.
 CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -886,6 +886,7 @@ CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_use
     PERFORM app_require_organization_admin(p_organization);
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
     PERFORM app_require_organization_admin(p_organization);
+    PERFORM 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
     IF p_role <> 'member' OR NOT EXISTS (
       SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user AND role = 'admin'
     ) THEN
