@@ -130,7 +130,7 @@ it('clears session and organization before sending logout, and replaces history'
 
 it('keeps old data hidden and explains a failed logout', async () => {
   const pending = deferred<string>();
-  vi.spyOn(api, 'logout').mockReturnValue(pending.promise);
+  vi.spyOn(api, 'logout').mockReturnValueOnce(pending.promise).mockResolvedValue('/signed-out');
   await signedIn();
   await logout();
   pending.reject(new Error('failed'));
@@ -140,6 +140,12 @@ it('keeps old data hidden and explains a failed logout', async () => {
   expect(accountSafety.switching).toBe(true);
   expect(screen.queryByText('이전 비밀 목록')).toBeNull();
   expect(replace).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: '로그아웃 다시 하기' }));
+  await waitFor(() => {
+    expect(replace).toHaveBeenCalledWith('/signed-out');
+  });
+  expect(currentUser.userId).toBe('');
+  expect(screen.queryByText('이전 비밀 목록')).toBeNull();
 });
 
 it('hides a persisted app synchronously until the same user and fresh data are loaded', async () => {
