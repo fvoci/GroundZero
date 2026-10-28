@@ -34,6 +34,8 @@
   "members_invite_heading": "Invitations",
   "members_invite_hint": "Invitees can accept only after signing in with an account verified for the same email.",
   "members_email": "Email",
+  "members_email_invalid_format": "Enter a valid email address.",
+  "members_email_too_long": "Email must be at most {limit} bytes.",
   "members_invite_role": "Invitation role",
   "members_invite": "Invite",
   "members_invited": "Invited {email}",

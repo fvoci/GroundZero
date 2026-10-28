@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError, NetworkError } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
@@ -66,8 +67,8 @@ describe('members screen keeps typed input on failure', () => {
     localStorage.clear();
   });
 
-  it('offers invite and group drafts independently after remount without sending them', async () => {
-    const invite = vi.spyOn(api, 'invite');
+  it('keeps short invitation input on screen with a leave warning and does not persist it', async () => {
+    const invite = vi.spyOn(organizationsApi, 'invite');
     const create = vi.spyOn(api, 'createGroup');
     const props = { workspace, meId: 'u1', onchanged: () => undefined };
     render(MembersScreen, { props });
@@ -77,25 +78,51 @@ describe('members screen keeps typed input on failure', () => {
     await fireEvent.input(screen.getByLabelText('새 그룹 이름'), {
       target: { value: '남길 그룹' },
     });
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    expect(JSON.stringify(Object.values(localStorage))).not.toContain('draft@example.test');
     cleanup();
     render(MembersScreen, { props });
     expect(await screen.findByLabelText('이메일')).toHaveValue('');
     const offers = await screen.findAllByTestId('form-draft-offer');
-    expect(offers).toHaveLength(2);
+    expect(offers).toHaveLength(1);
     for (const offer of offers)
       await fireEvent.click(within(offer).getByRole('button', { name: '입력 되살리기' }));
-    expect(screen.getByLabelText('이메일')).toHaveValue('draft@example.test');
+    expect(screen.getByLabelText('이메일')).toHaveValue('');
     expect(screen.getByLabelText('새 그룹 이름')).toHaveValue('남길 그룹');
     expect(invite).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
-    const unload = new Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(unload);
-    expect(unload.defaultPrevented).toBe(true);
   });
+
+  it.each([
+    ['ko', 'invalid_format', undefined, '올바른 이메일 주소를 입력하세요.'],
+    ['en', 'invalid_format', undefined, 'Enter a valid email address.'],
+    ['ko', 'too_long', 254, '이메일은 254바이트 이하여야 합니다.'],
+    ['en', 'too_long', 254, 'Email must be at most 254 bytes.'],
+    ['ko', 'too_long', 240, '이메일은 240바이트 이하여야 합니다.'],
+    ['en', 'too_long', 240, 'Email must be at most 240 bytes.'],
+  ] as const)(
+    'shows the %s email %s field error using the server limit %s',
+    async (locale, reason, limit, text) => {
+      await setLocale(locale, { reload: false });
+      vi.spyOn(organizationsApi, 'invite').mockRejectedValue(
+        new ApiError(400, 'bad_request', 'server diagnostic', undefined, reason, 'email', limit),
+      );
+      render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+      const input = await submitWith(locale === 'ko' ? '이메일' : 'Email', 'kim@lab');
+      await vi.waitFor(() => {
+        expect(describedText(input)).toBe(text);
+      });
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(input).toHaveValue('kim@lab');
+      expect(screen.queryByText('server diagnostic')).toBeNull();
+    },
+  );
 
   it('keeps the invite email and shows the reason beside it when the invite fails', async () => {
     const invite = vi
-      .spyOn(api, 'invite')
+      .spyOn(organizationsApi, 'invite')
       .mockRejectedValueOnce(new ApiError(400, 'bad_request', 'email is not valid'))
       .mockRejectedValueOnce(new NetworkError('Failed to fetch'));
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
@@ -121,11 +148,12 @@ describe('members screen keeps typed input on failure', () => {
   });
 
   it('ignores an invite completion after its screen has unmounted', async () => {
-    let complete: ((value: Awaited<ReturnType<typeof api.invite>>) => void) | undefined;
-    const pending = new Promise<Awaited<ReturnType<typeof api.invite>>>((resolve) => {
+    let complete:
+      ((value: Awaited<ReturnType<typeof organizationsApi.invite>>) => void) | undefined;
+    const pending = new Promise<Awaited<ReturnType<typeof organizationsApi.invite>>>((resolve) => {
       complete = resolve;
     });
-    const invite = vi.spyOn(api, 'invite').mockReturnValue(pending);
+    const invite = vi.spyOn(organizationsApi, 'invite').mockReturnValue(pending);
     const changed = vi.fn();
     const rendered = render(MembersScreen, {
       props: { workspace, meId: 'u1', onchanged: changed },
@@ -149,7 +177,7 @@ describe('members screen keeps typed input on failure', () => {
   });
 
   it('clears the invite email only after the invite succeeds', async () => {
-    vi.spyOn(api, 'invite').mockResolvedValue({
+    vi.spyOn(organizationsApi, 'invite').mockResolvedValue({
       id: 'inv-1',
       email: 'kim@lab.example',
       role: 'member',

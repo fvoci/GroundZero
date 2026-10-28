@@ -34,6 +34,8 @@
   "members_invite_heading": "초대",
   "members_invite_hint": "초대받은 사람은 로그인한 뒤 같은 이메일로 확인된 계정에서만 수락할 수 있습니다.",
   "members_email": "이메일",
+  "members_email_invalid_format": "올바른 이메일 주소를 입력하세요.",
+  "members_email_too_long": "이메일은 {limit}바이트 이하여야 합니다.",
   "members_invite_role": "초대 역할",
   "members_invite": "초대",
   "members_invited": "{email} 초대함",

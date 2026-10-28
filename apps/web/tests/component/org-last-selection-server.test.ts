@@ -1,7 +1,7 @@
 import { waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';
 import { readLocal, scopedKey, writeLocal } from '$lib/storage';
@@ -55,7 +55,7 @@ describe('organization selection follows the account setting', () => {
   it('serializes writes so a slow earlier choice cannot overwrite the latest choice', async () => {
     let finishFirst: (() => void) | undefined;
     const save = vi
-      .spyOn(api, 'setDisplaySettings')
+      .spyOn(organizationsApi, 'setLastOrganization')
       .mockImplementationOnce(
         () =>
           new Promise<undefined>((resolve) => {
@@ -78,15 +78,15 @@ describe('organization selection follows the account setting', () => {
       expect(save).toHaveBeenCalledTimes(2);
     });
     expect(save.mock.calls.map(([value]) => value)).toEqual([
-      { last_organization_id: TEST_ORGANIZATION.id },
-      { last_organization_id: other.id },
+      { organization_id: TEST_ORGANIZATION.id },
+      { organization_id: other.id },
     ]);
   });
 
   it('does not send a queued old-account selection after the account changes', async () => {
     let finishFirst: (() => void) | undefined;
     const save = vi
-      .spyOn(api, 'setDisplaySettings')
+      .spyOn(organizationsApi, 'setLastOrganization')
       .mockImplementationOnce(
         () =>
           new Promise<undefined>((resolve) => {

@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { displaySettings } from '$lib/display';
 import { dayIn, instantOf } from '$lib/features/events/time';
 import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
@@ -32,7 +33,7 @@ beforeEach(async () => {
   me.userId = 'user-a';
   localStorage.clear();
   org.load('user-a', [TEST_ORGANIZATION, { ...TEST_ORGANIZATION, id: 'org-2' }], 'org-1');
-  vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+  vi.spyOn(organizationsApi, 'setDisplaySettings').mockResolvedValue(undefined);
 });
 afterEach(() => {
   cleanup();
