@@ -7,6 +7,7 @@
 
 mod admin_recovery;
 mod admin_security;
+mod ids_races;
 mod members;
 mod organization_removal_lock_order;
 mod organizations_api;
