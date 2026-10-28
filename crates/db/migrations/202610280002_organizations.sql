@@ -1361,6 +1361,7 @@ ALTER FUNCTION fvoci.app_my_invitations() OWNER TO fvoci_migrator;
 
 -- 초대 이메일의 받는 계정(D-51·D-118, #177 SR1-12). 같은 검증 이메일 계정이 여럿이면 가장 먼저 만든 계정 하나다.
 -- 알림(app_notify_invitation)과 수락·거절(app_respond_invitation)이 같은 계정을 가리키도록 이 함수 하나로 고른다.
+-- 개별 공유의 받는 계정(app_share_document)도 같은 규칙이라 이 함수를 쓴다.
 CREATE FUNCTION fvoci.app_invitation_recipient(p_email text) RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'

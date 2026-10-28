@@ -197,8 +197,7 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
     IF position('@' in v_email) < 2 THEN
       RAISE EXCEPTION 'invalid email' USING ERRCODE = '22023';
     END IF;
-    SELECT u.id INTO v_grantee FROM users u WHERE u.email_verified AND lower(u.email) = v_email
-    ORDER BY u.created_at LIMIT 1;
+    v_grantee := app_invitation_recipient(v_email);
     IF v_grantee IS NULL THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
     END IF;
