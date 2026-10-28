@@ -622,8 +622,8 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
                   now() - interval '20 days'
            FROM generate_series(1000, 1501) n
            RETURNING version)
-         INSERT INTO fvoci.document_file_refs (document_id, revision, file_id, version)
-         SELECT $3, 1, $1, version FROM v",
+         INSERT INTO fvoci.document_file_refs (document_id, revision, file_id, version, editor_id)
+         SELECT $3, 1, $1, version, $2 FROM v",
     )
     .bind(pinned)
     .bind(writer.id.0)

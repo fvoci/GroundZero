@@ -9,24 +9,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-/// 고정·즐겨찾기 대상.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MarkTarget {
-    Item,
-    Document,
-    Task,
-}
-
-impl MarkTarget {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Item => "item",
-            Self::Document => "document",
-            Self::Task => "task",
-        }
-    }
-}
+pub use fvoci_core::marks::MarkTarget;
 
 /// 고정 또는 즐겨찾기.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
