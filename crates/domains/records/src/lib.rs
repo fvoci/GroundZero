@@ -1,5 +1,7 @@
 //! 기록·학습 도메인: 기록·강좌·스터디·Zotero 가져오기.
 
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
 pub mod courses;
 pub mod records;
 mod state;

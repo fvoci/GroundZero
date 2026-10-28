@@ -201,6 +201,38 @@ fn text(v: Option<&Value>) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn authors(data: &Value) -> Vec<String> {
+    data.get("creators")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|c| {
+                    text(c.get("name")).or_else(|| {
+                        let last = text(c.get("lastName"))?;
+                        Some(match text(c.get("firstName")) {
+                            Some(first) => format!("{last}, {first}"),
+                            None => last,
+                        })
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn tags(data: &Value) -> Vec<String> {
+    data.get("tags")
+        .and_then(Value::as_array)
+        .map(|t| {
+            t.iter()
+                .filter_map(|x| text(x.get("tag")))
+                .map(|s| s.chars().take(100).collect())
+                .take(50)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Zotero 문헌 하나 → (제목, 서지 칸). 문헌이 아니면 None.
 fn reference_fields(
     item: &Value,
@@ -217,23 +249,7 @@ fn reference_fields(
         return None;
     }
     let mut f = Map::new();
-    let authors: Vec<String> = data
-        .get("creators")
-        .and_then(Value::as_array)
-        .map(|list| {
-            list.iter()
-                .filter_map(|c| {
-                    text(c.get("name")).or_else(|| {
-                        let last = text(c.get("lastName"))?;
-                        Some(match text(c.get("firstName")) {
-                            Some(first) => format!("{last}, {first}"),
-                            None => last,
-                        })
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let authors = authors(data);
     if !authors.is_empty() {
         f.insert(
             "authors".into(),
@@ -290,17 +306,7 @@ fn reference_fields(
             json!(summary.chars().take(10_000).collect::<String>()),
         );
     }
-    let tags: Vec<String> = data
-        .get("tags")
-        .and_then(Value::as_array)
-        .map(|t| {
-            t.iter()
-                .filter_map(|x| text(x.get("tag")))
-                .map(|s| s.chars().take(100).collect())
-                .take(50)
-                .collect()
-        })
-        .unwrap_or_default();
+    let tags = tags(data);
     if !tags.is_empty() {
         f.insert("tags".into(), json!(tags));
     }
@@ -442,51 +448,75 @@ pub async fn import(
         .await?;
     let (mut created, mut updated, mut skipped) = (0, 0, 0);
     for entry in &items {
-        let Some((title, fields)) = reference_fields(entry, &names) else {
-            skipped += 1;
-            continue;
-        };
-        let key = fields
-            .get("zotero_key")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        let found: Option<(Uuid, i32, Value)> = sqlx::query_as(
-            "SELECT id, version, fields FROM item_records
-             WHERE item_id = $1 AND kind = 'reference' AND fields->>'zotero_key' = $2
-             ORDER BY created_at LIMIT 1",
-        )
-        .bind(item)
-        .bind(&key)
-        .fetch_optional(tx.conn())
-        .await?;
-        match found {
-            Some((id, version, old)) => {
-                let old = old.as_object().cloned().unwrap_or_default();
-                let body: Option<String> =
-                    sqlx::query_scalar("SELECT body FROM item_records WHERE id = $1")
-                        .bind(id)
-                        .fetch_optional(tx.conn())
-                        .await?;
-                let occurred: Option<time::Date> =
-                    sqlx::query_scalar("SELECT occurred_on FROM item_records WHERE id = $1")
-                        .bind(id)
-                        .fetch_one(tx.conn())
-                        .await?;
-                let files = existing_files(&mut tx, id).await?;
-                let (fields, files) = validate(
-                    &mut tx,
-                    item,
-                    "reference",
-                    &title,
-                    merged(&old, fields),
-                    Some(&old),
-                    &files,
-                )
-                .await?;
-                sqlx::query_scalar::<_, i32>(
-                    "SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)",
-                )
+        match import_one(&mut tx, item, entry, &names).await? {
+            ImportedEntry::Created => created += 1,
+            ImportedEntry::Updated => updated += 1,
+            ImportedEntry::Skipped => skipped += 1,
+        }
+    }
+    tx.commit().await?;
+    Ok(Json(ZoteroImported {
+        created,
+        updated,
+        skipped,
+    }))
+}
+
+#[derive(Debug)]
+enum ImportedEntry {
+    Created,
+    Updated,
+    Skipped,
+}
+
+async fn import_one(
+    tx: &mut UserTx,
+    item: ItemId,
+    entry: &Value,
+    names: &HashMap<String, String>,
+) -> Result<ImportedEntry, AppError> {
+    let Some((title, fields)) = reference_fields(entry, names) else {
+        return Ok(ImportedEntry::Skipped);
+    };
+    let key = fields
+        .get("zotero_key")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let found: Option<(Uuid, i32, Value)> = sqlx::query_as(
+        "SELECT id, version, fields FROM item_records
+         WHERE item_id = $1 AND kind = 'reference' AND fields->>'zotero_key' = $2
+         ORDER BY created_at LIMIT 1",
+    )
+    .bind(item)
+    .bind(&key)
+    .fetch_optional(tx.conn())
+    .await?;
+    match found {
+        Some((id, version, old)) => {
+            let old = old.as_object().cloned().unwrap_or_default();
+            let body: Option<String> =
+                sqlx::query_scalar("SELECT body FROM item_records WHERE id = $1")
+                    .bind(id)
+                    .fetch_optional(tx.conn())
+                    .await?;
+            let occurred: Option<time::Date> =
+                sqlx::query_scalar("SELECT occurred_on FROM item_records WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(tx.conn())
+                    .await?;
+            let files = existing_files(tx, id).await?;
+            let (fields, files) = validate(
+                tx,
+                item,
+                "reference",
+                &title,
+                merged(&old, fields),
+                Some(&old),
+                &files,
+            )
+            .await?;
+            sqlx::query_scalar::<_, i32>("SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)")
                 .bind(id)
                 .bind(version)
                 .bind(&title)
@@ -497,33 +527,26 @@ pub async fn import(
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
-                updated += 1;
-            }
-            None => {
-                let (fields, files) =
-                    validate(&mut tx, item, "reference", &title, fields, None, &[]).await?;
-                sqlx::query_scalar::<_, Uuid>(
-                    "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)",
-                )
-                .bind(Uuid::now_v7())
-                .bind(item)
-                .bind(&title)
-                .bind(fields)
-                .bind(files)
-                .bind(fvoci_db::new_ids(2))
-                .fetch_one(tx.conn())
-                .await
-                .map_err(AppError::from_db_function)?;
-                created += 1;
-            }
+            Ok(ImportedEntry::Updated)
+        }
+        None => {
+            let (fields, files) =
+                validate(tx, item, "reference", &title, fields, None, &[]).await?;
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)",
+            )
+            .bind(Uuid::now_v7())
+            .bind(item)
+            .bind(&title)
+            .bind(fields)
+            .bind(files)
+            .bind(fvoci_db::new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+            Ok(ImportedEntry::Created)
         }
     }
-    tx.commit().await?;
-    Ok(Json(ZoteroImported {
-        created,
-        updated,
-        skipped,
-    }))
 }
 
 #[cfg(test)]
