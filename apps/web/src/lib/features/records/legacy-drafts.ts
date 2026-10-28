@@ -185,18 +185,25 @@ export function clearLegacyRecordDrafts(): RecordDraftCleanup {
   return state;
 }
 
+export function isRecordDraftStorageEvent(event: StorageEvent): boolean {
+  try {
+    return (
+      event.key !== null &&
+      RECORD_DRAFT_KEY.test(event.key) &&
+      event.storageArea === window.localStorage
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Other tabs can still run an older release; attach for the App lifetime. */
 export function attachRecordDraftCleanup(): () => void {
   function onVisible(): void {
     if (document.visibilityState === 'visible') clearLegacyRecordDrafts();
   }
   function onStorage(event: StorageEvent): void {
-    if (event.key === null) return;
-    try {
-      if (event.storageArea !== window.localStorage) return;
-    } catch {
-      return;
-    }
+    if (!isRecordDraftStorageEvent(event) || event.key === null) return;
     // Normalize this event's value; a newer value is left for its own event.
     clearLegacyRecordDraftAt(event.key, event.newValue);
   }

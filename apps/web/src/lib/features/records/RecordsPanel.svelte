@@ -17,7 +17,11 @@
   import { Button } from '$lib/ui/button';
 
   import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
-  import { clearLegacyRecordDrafts, normalizeRecordDraft } from './legacy-drafts';
+  import {
+    clearLegacyRecordDrafts,
+    isRecordDraftStorageEvent,
+    normalizeRecordDraft,
+  } from './legacy-drafts';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, parseRecordForm, recordWriting, summary, toInput } from './records';
@@ -66,9 +70,13 @@
   let pending = $state<{ requestId: string; signature: string } | null>(null);
   let baseline = $state(JSON.stringify(emptyForm()));
   let busy = $state(false);
-  let draftReadiness = $state<'ready' | 'retry' | 'reading'>(clearLegacyRecordDrafts());
+  const initialDraftReadiness = clearLegacyRecordDrafts();
+  let draftReadiness = $state<'ready' | 'retry' | 'reading'>(initialDraftReadiness);
+  // Once enabled, keep the live draft session even if a later cleanup blocks new entry.
+  let draftEnabled = $state(initialDraftReadiness === 'ready');
   let draftCleanupNotice = $state('');
   let mounted = false;
+  let cleanupAttempt = 0;
   let detachDraft: (() => void) | undefined;
   function baseForm(): RecordForm {
     try {
@@ -99,7 +107,7 @@
   }
   const draft = createFormDraft({
     name: () =>
-      draftReadiness === 'retry' || selected === undefined
+      !draftEnabled || selected === undefined
         ? undefined
         : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
     snapshot: () => ({ form, baseline, version: editingVersion, pending }),
@@ -140,12 +148,22 @@
     busy: () => busy,
   });
   async function retryDraftCleanup(): Promise<void> {
-    if (draftReadiness !== 'retry') return;
-    if (clearLegacyRecordDrafts() === 'retry') return;
+    const attempt = ++cleanupAttempt;
+    if (clearLegacyRecordDrafts() === 'retry') {
+      draftReadiness = 'retry';
+      draftCleanupNotice = m.records_draft_cleanup_failed();
+      return;
+    }
+    if (detachDraft !== undefined) {
+      draftCleanupNotice = '';
+      draftReadiness = 'ready';
+      return;
+    }
+    draftEnabled = true;
     draftReadiness = 'reading';
     // Let the offers read repaired keys before enabling entry.
     await tick();
-    if (!mounted) return;
+    if (!mounted || attempt !== cleanupAttempt) return;
     detachDraft = draft.attach();
     draftCleanupNotice = '';
     draftReadiness = 'ready';
@@ -160,13 +178,19 @@
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') onReturn();
     };
+    const onStorage = (event: StorageEvent): void => {
+      // Recheck every key so one successful event cannot hide another failed cleanup.
+      if (isRecordDraftStorageEvent(event)) onReturn();
+    };
     window.addEventListener('focus', onReturn);
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('storage', onStorage);
     return () => {
       mounted = false;
       detachDraft?.();
       window.removeEventListener('focus', onReturn);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('storage', onStorage);
     };
   });
   let reloadKey = $state(0);

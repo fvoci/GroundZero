@@ -78,6 +78,178 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+const lateDraftKey = 'fvoci:user-a:-:form-draft:record:unopened:risk:new:held:late-offer';
+function lateLegacyDraft(): string {
+  return JSON.stringify({
+    savedAt: '2026-10-28T12:00:00Z',
+    input: {
+      form: {
+        ...emptyForm(),
+        title: 'SHORT_LATE_TITLE',
+        body: 'Unsent late body',
+        values: { mitigation: 'Unsent mitigation' },
+      },
+      baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+      version: 0,
+      pending: null,
+    },
+  });
+}
+
+function failDraftRead(key: string) {
+  const readLocal = localStorage.getItem.bind(localStorage);
+  const readSession = sessionStorage.getItem.bind(sessionStorage);
+  return vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
+    this: Storage,
+    name: string,
+  ) {
+    if (this === localStorage && name === key)
+      throw new DOMException('read unavailable', 'SecurityError');
+    return this === sessionStorage ? readSession(name) : readLocal(name);
+  });
+}
+
+it.each(['focus', 'visibilitychange'])(
+  'blocks entry when %s cleanup fails after the record panel was ready',
+  async (event) => {
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    const create = await screen.findByRole('button', { name: '새 위험' });
+    expect(create).toBeEnabled();
+    const raw = lateLegacyDraft();
+    localStorage.setItem(lateDraftKey, raw);
+    const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new DOMException('enumeration unavailable', 'SecurityError');
+    });
+
+    if (event === 'focus') window.dispatchEvent(new Event(event));
+    else {
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+      document.dispatchEvent(new Event(event));
+    }
+
+    await waitFor(() => {
+      expect(create).toBeDisabled();
+    });
+    expect(screen.getByRole('button', { name: '고치기' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '저장된 기록 초안을 확인하지 못했습니다. 다시 시도해 주세요.',
+    );
+    expect(localStorage.getItem(lateDraftKey)).toBe(raw);
+    enumeration.mockRestore();
+    await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+
+    await waitFor(() => {
+      expect(create).toBeEnabled();
+    });
+    expect(localStorage.getItem(lateDraftKey)).not.toContain('SHORT_LATE_TITLE');
+    expect(localStorage.getItem(lateDraftKey)).toContain('Unsent late body');
+  },
+);
+
+it('blocks ready record entry after storage cleanup fails until all pending drafts are repaired', async () => {
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  const create = await screen.findByRole('button', { name: '새 위험' });
+  expect(create).toBeEnabled();
+  const raw = lateLegacyDraft();
+  localStorage.setItem(lateDraftKey, raw);
+  const unavailable = failDraftRead(lateDraftKey);
+
+  window.dispatchEvent(
+    new StorageEvent('storage', { key: lateDraftKey, newValue: raw, storageArea: localStorage }),
+  );
+
+  await waitFor(() => {
+    expect(create).toBeDisabled();
+  });
+  expect(screen.getByRole('status')).toHaveTextContent(
+    '저장된 기록 초안을 확인하지 못했습니다. 다시 시도해 주세요.',
+  );
+  const otherKey = lateDraftKey.replace('unopened', 'another-record');
+  const current = JSON.stringify({
+    savedAt: 'now',
+    input: {
+      form: { ...emptyForm(), body: 'Current writing', values: { mitigation: '' } },
+      baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+      version: 0,
+      pending: null,
+    },
+  });
+  localStorage.setItem(otherKey, current);
+  window.dispatchEvent(
+    new StorageEvent('storage', { key: otherKey, newValue: current, storageArea: localStorage }),
+  );
+  expect(create).toBeDisabled();
+  unavailable.mockRestore();
+  await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+
+  await waitFor(() => {
+    expect(create).toBeEnabled();
+  });
+  expect(localStorage.getItem(lateDraftKey)).not.toContain('SHORT_LATE_TITLE');
+  expect(localStorage.getItem(lateDraftKey)).toContain('Unsent late body');
+});
+
+it.each(['focus', 'storage'])(
+  'keeps the open record session and long writing when %s cleanup fails and recovers',
+  async (event) => {
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+    await fireEvent.input(input('title'), { target: { value: 'Live short title' } });
+    await fireEvent.input(input('body'), { target: { value: 'Live long body' } });
+    await fireEvent.input(input('mitigation'), { target: { value: 'Live long mitigation' } });
+    const ownKey = formDraftTabKey('record:draft-item:risk:new');
+    if (ownKey === undefined) throw new Error('missing record key');
+    await waitFor(() => {
+      expect(localStorage.getItem(ownKey)).toContain('Live long body');
+    });
+    const raw = lateLegacyDraft();
+    localStorage.setItem(lateDraftKey, raw);
+    const unavailable =
+      event === 'storage'
+        ? failDraftRead(lateDraftKey)
+        : vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+            throw new DOMException('enumeration unavailable', 'SecurityError');
+          });
+
+    if (event === 'focus') window.dispatchEvent(new Event(event));
+    else
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: lateDraftKey,
+          newValue: raw,
+          storageArea: localStorage,
+        }),
+      );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '고치기' })).toBeDisabled();
+    });
+    expect(input('body')).toHaveValue('Live long body');
+    expect(input('mitigation')).toHaveValue('Live long mitigation');
+    expect(input('title')).toHaveValue('Live short title');
+    await fireEvent.input(input('body'), {
+      target: { value: 'More long writing during cleanup failure' },
+    });
+    await waitFor(() => {
+      expect(localStorage.getItem(ownKey)).toContain('More long writing during cleanup failure');
+    });
+    expect(localStorage.getItem(ownKey)).not.toContain('Live short title');
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    unavailable.mockRestore();
+    await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
+    });
+    expect(input('body')).toHaveValue('More long writing during cleanup failure');
+    expect(input('mitigation')).toHaveValue('Live long mitigation');
+    expect(input('title')).toHaveValue('Live short title');
+    expect(localStorage.getItem(lateDraftKey)).not.toContain('SHORT_LATE_TITLE');
+  },
+);
+
 it('defers record draft offers after failed panel cleanup until window return repairs the original held key', async () => {
   const key = 'fvoci:user-a:-:form-draft:record:draft-item:risk:new:held:old-offer';
   const form = {
