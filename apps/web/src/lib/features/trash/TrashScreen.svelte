@@ -9,7 +9,6 @@
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -95,8 +94,9 @@
     };
   });
 
-  // 제출 전의 원문만 보존한다. 두 설정은 각각 저장하므로 초안·성공 처리도 서로 독립적이다(⑱C).
+  // 짧은 설정 칸은 화면 상태와 이탈 경고만 둔다(D-27·#154). 두 설정의 저장은 독립적이다.
   const daysDraft = createFormDraft({
+    preserve: false,
     name: () =>
       workspace !== undefined && isAdmin ? `trash-retention:${workspace.id}` : undefined,
     snapshot: () => days,
@@ -115,6 +115,7 @@
     dirty: () => editingDays && days !== savedDays,
   });
   const versionDraft = createFormDraft({
+    preserve: false,
     name: () =>
       workspace !== undefined && isAdmin ? `trash-version-retention:${workspace.id}` : undefined,
     snapshot: () => versionDays,
@@ -280,16 +281,6 @@
       }}
     >
       <fieldset class="contents" disabled={daysSaving}>
-        {#each daysDraft.offers as entry (entry.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              daysDraft.restore(entry);
-            }}
-            ondiscard={() => {
-              daysDraft.discard(entry);
-            }}
-          />
-        {/each}
         <div class="flex flex-col gap-1">
           <Label for="trash-retention">{m.trash_retention_label()}</Label>
           <Input
@@ -322,16 +313,6 @@
       }}
     >
       <fieldset class="contents" disabled={versionDaysSaving}>
-        {#each versionDraft.offers as entry (entry.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              versionDraft.restore(entry);
-            }}
-            ondiscard={() => {
-              versionDraft.discard(entry);
-            }}
-          />
-        {/each}
         <div class="flex flex-col gap-1">
           <Label for="version-retention">{m.trash_version_retention_label()}</Label>
           <Input
