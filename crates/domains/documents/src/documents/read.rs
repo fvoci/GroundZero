@@ -1,0 +1,141 @@
+//! 문서 자원 읽기와 ETag 표현.
+
+use crate::state::DocumentsState;
+use axum::Json;
+use axum::extract::Path;
+use axum::extract::State;
+use axum::http::HeaderMap;
+use axum::http::HeaderValue;
+use axum::http::StatusCode;
+use axum::http::header;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use fvoci_core::error::AppError;
+use fvoci_core::error::ErrorBody;
+use fvoci_core::ids::DocumentId;
+use fvoci_core::ids::OrganizationId;
+use fvoci_core::ids::UserId;
+use fvoci_http::cache;
+use fvoci_http::session::CurrentUser;
+use time::OffsetDateTime;
+
+use super::{ConflictBody, Document, SharedDocument, load_with_access, to_document};
+
+/// 나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만.
+#[utoipa::path(get, path = "/api/me/shared", operation_id = "shared_with_me",
+    params(("organization_id" = OrganizationId, Query)),
+    responses((status = 200, body = [SharedDocument]), (status = 400, body = ErrorBody),
+              (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn shared_with_me(
+    State(state): State<DocumentsState>,
+    scope: fvoci_http::organization::OrgScope,
+) -> Result<Json<Vec<SharedDocument>>, AppError> {
+    let mut tx = state.db.begin_as(scope.user).await?;
+    let rows: Vec<(DocumentId, String, String, String, OffsetDateTime)> = sqlx::query_as(
+        "SELECT id, title, permission, shared_by, updated_at FROM app_shared_with_me($1)",
+    )
+    .bind(scope.organization)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(
+                |(id, title, permission, shared_by, updated_at)| SharedDocument {
+                    id,
+                    title,
+                    permission,
+                    shared_by,
+                    updated_at,
+                },
+            )
+            .collect(),
+    ))
+}
+
+/// 문서 표현(D-77): 단건 조회가 내보내는 바이트와 그 강한 ETag. 조회·저장·충돌이 같은 계산을 쓴다.
+pub(crate) fn representation(user: UserId, doc: &Document) -> Result<(Vec<u8>, String), AppError> {
+    let bytes = serde_json::to_vec(doc).map_err(|err| AppError::Io(err.into()))?;
+    let etag = cache::strong_etag(user.0.as_bytes(), &bytes);
+    Ok((bytes, etag))
+}
+
+fn with_etag(mut response: Response, etag: &str) -> Response {
+    if let Ok(value) = HeaderValue::from_str(etag) {
+        response.headers_mut().insert(header::ETAG, value);
+    }
+    response
+}
+
+fn json_bytes(bytes: Vec<u8>) -> Response {
+    (
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        )],
+        bytes,
+    )
+        .into_response()
+}
+
+/// 문서 한 건 응답. 본문은 단건 조회와 같은 바이트이고 `ETag`를 붙인다(저장·복원 결과).
+pub(crate) fn document_reply(user: UserId, doc: &Document) -> Result<Response, AppError> {
+    let (bytes, etag) = representation(user, doc)?;
+    Ok(with_etag(json_bytes(bytes), &etag))
+}
+
+/// 문서 조회. 볼 수 없으면 404.
+///
+/// 강한 ETag를 준다(D-77). `If-None-Match`는 세션과 권한을 확인한 뒤에만 비교하고 같으면 304다. 권한이 철회되면
+/// 404, 로그아웃이면 401이라 이전 ETag로 304를 받지 못한다. 브라우저만 저장하고 매번 재검증한다.
+#[utoipa::path(get, path = "/api/documents/{document_id}",
+    params(("document_id" = String, Path, format = Uuid),
+           ("If-None-Match" = Option<String>, Header, description = "앞서 받은 ETag. 같으면 304")),
+    responses((status = 200, body = Document, headers(("ETag" = String, description = "강한 ETag"))),
+              (status = 304, description = "바뀌지 않음", headers(("ETag" = String))),
+              (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn get(
+    State(state): State<DocumentsState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<DocumentId>,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    let (row, access) = load_with_access(&mut tx, id).await?;
+    tx.commit().await?;
+    let (bytes, etag) = representation(user, &to_document(row, access))?;
+    let response = if cache::none_match(&headers, &etag) {
+        StatusCode::NOT_MODIFIED.into_response()
+    } else {
+        json_bytes(bytes)
+    };
+    let mut response = with_etag(response, &etag);
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-cache, no-transform"),
+    );
+    Ok(response)
+}
+
+pub(super) fn conflict_reply(
+    status: StatusCode,
+    error: &'static str,
+    user: UserId,
+    current: Document,
+) -> Result<Response, AppError> {
+    let (_, etag) = representation(user, &current)?;
+    Ok((
+        status,
+        Json(ConflictBody {
+            error,
+            current,
+            etag,
+        }),
+    )
+        .into_response())
+}
+
+/// 409: `base_revision`이 지났다. 서버 최신본과 그 ETag를 준다.
+pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppError> {
+    conflict_reply(StatusCode::CONFLICT, "conflict", user, current)
+}
