@@ -66,7 +66,7 @@ describe('members screen keeps typed input on failure', () => {
     localStorage.clear();
   });
 
-  it('offers invite and group drafts independently after remount without sending them', async () => {
+  it('keeps short invitation input on screen with a leave warning and does not persist it', async () => {
     const invite = vi.spyOn(api, 'invite');
     const create = vi.spyOn(api, 'createGroup');
     const props = { workspace, meId: 'u1', onchanged: () => undefined };
@@ -77,21 +77,45 @@ describe('members screen keeps typed input on failure', () => {
     await fireEvent.input(screen.getByLabelText('새 그룹 이름'), {
       target: { value: '남길 그룹' },
     });
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    expect(JSON.stringify(Object.values(localStorage))).not.toContain('draft@example.test');
     cleanup();
     render(MembersScreen, { props });
     expect(await screen.findByLabelText('이메일')).toHaveValue('');
     const offers = await screen.findAllByTestId('form-draft-offer');
-    expect(offers).toHaveLength(2);
+    expect(offers).toHaveLength(1);
     for (const offer of offers)
       await fireEvent.click(within(offer).getByRole('button', { name: '입력 되살리기' }));
-    expect(screen.getByLabelText('이메일')).toHaveValue('draft@example.test');
+    expect(screen.getByLabelText('이메일')).toHaveValue('');
     expect(screen.getByLabelText('새 그룹 이름')).toHaveValue('남길 그룹');
     expect(invite).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
-    const unload = new Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(unload);
-    expect(unload.defaultPrevented).toBe(true);
   });
+
+  it.each([
+    ['ko', 'invalid_format', undefined, '올바른 이메일 주소를 입력하세요.'],
+    ['en', 'invalid_format', undefined, 'Enter a valid email address.'],
+    ['ko', 'too_long', 254, '이메일은 254바이트 이하여야 합니다.'],
+    ['en', 'too_long', 254, 'Email must be at most 254 bytes.'],
+    ['ko', 'too_long', 240, '이메일은 240바이트 이하여야 합니다.'],
+    ['en', 'too_long', 240, 'Email must be at most 240 bytes.'],
+  ] as const)(
+    'shows the %s email %s field error using the server limit %s',
+    async (locale, reason, limit, text) => {
+      await setLocale(locale, { reload: false });
+      vi.spyOn(api, 'invite').mockRejectedValue(
+        new ApiError(400, 'bad_request', 'server diagnostic', undefined, reason, 'email', limit),
+      );
+      render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+      const input = await submitWith(locale === 'ko' ? '이메일' : 'Email', 'kim@lab');
+      await vi.waitFor(() => expect(describedText(input)).toBe(text));
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(input).toHaveValue('kim@lab');
+      expect(screen.queryByText('server diagnostic')).toBeNull();
+    },
+  );
 
   it('keeps the invite email and shows the reason beside it when the invite fails', async () => {
     const invite = vi
