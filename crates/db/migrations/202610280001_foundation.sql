@@ -745,6 +745,10 @@ ALTER TABLE ONLY fvoci.server_admins
 ALTER TABLE ONLY fvoci.sessions
     ADD CONSTRAINT sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES fvoci.users(id);
 
+-- 기준 적용 중 표시. SQLx는 파일마다 커밋하므로 중간 파일에서 멈추면 이 표시가 남고, 앱은 재생성이 아니라
+-- db migrate를 다시 돌리라고 알린다. 마지막 파일이 최종 세대 표시로 덮어쓴다.
+COMMENT ON TABLE fvoci._sqlx_migrations IS 'fvoci baseline 202610280001 applying';
+
 -- SQLx는 본문 실행 뒤 같은 트랜잭션에서 스키마 없는 _sqlx_migrations 이름에 기록한다.
 -- bootstrap의 스키마를 다시 보이게 해 새 버전·체크섬도 이 원장에 남긴다.
 SET LOCAL search_path = fvoci;

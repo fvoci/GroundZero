@@ -30,6 +30,9 @@ pub const SCHEMA: &str = "fvoci";
 pub const BASELINE_VERSION: i64 = 202_610_280_001;
 /// 마지막 영역 기준 파일이 남기는 세대 표시. 끝까지 적용된 DB에만 있다.
 pub const BASELINE_MARKER: &str = "fvoci baseline 202610280001";
+/// 첫 영역 기준 파일이 남기는 적용 중 표시. 마지막 파일이 [`BASELINE_MARKER`]로 덮어쓰므로, 이 표시가 남은 DB는
+/// 기준 적용이 중간 파일에서 멈춘 것이다.
+pub const BASELINE_APPLYING_MARKER: &str = "fvoci baseline 202610280001 applying";
 
 fn recreation_required() -> AppError {
     AppError::Config(
@@ -80,6 +83,14 @@ pub async fn check_application_baseline(conn: &mut PgConnection) -> Result<(), A
     let (_, marker, has_objects) = schema_state(conn).await?;
     if marker.as_deref() == Some(BASELINE_MARKER) {
         return Ok(());
+    }
+    if marker.as_deref() == Some(BASELINE_APPLYING_MARKER) {
+        return Err(AppError::Config(
+            "the GroundZero SQL baseline was not fully applied (a `db migrate` run stopped partway); \
+             run `fvoci-server db migrate` again to finish it, then start the application. \
+             No data or migration history was changed. See docs/self-hosting.md#db-setup"
+                .into(),
+        ));
     }
     if !has_objects {
         return Err(AppError::Config(

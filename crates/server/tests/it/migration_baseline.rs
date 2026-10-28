@@ -216,6 +216,34 @@ async fn previous_history_and_untracked_objects_are_rejected_without_data_loss()
         .unwrap();
 }
 
+/// SQLx는 영역 파일마다 커밋하므로 중간 파일이 실패하면 앞 파일만 적용된 DB가 남는다. 앱은 재생성이 아니라
+/// `db migrate`를 다시 돌려 끝내라고 알리고, 다시 돌리면 이어서 끝난다.
+#[tokio::test]
+async fn partially_applied_baseline_asks_to_finish_the_migration() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    let mut fixture_admin = PgConnection::connect(&admin_url).await.unwrap();
+    let fixture = common::partial_database(&mut fixture_admin, "partial_guard", 3).await;
+    let mut conn = PgConnection::connect(fixture.db.migration_url.as_ref().unwrap().expose())
+        .await
+        .unwrap();
+    assert_eq!(ledger(&mut conn).await.len(), 3);
+    let error = startup_error(&fixture.app_url).await;
+    assert!(matches!(error, AppError::Config(message)
+            if message.contains("not fully applied")
+                && message.contains("fvoci-server db migrate")
+                && !message.contains("recreation")));
+    admin::migrate(&fixture.db).await.unwrap();
+    assert_eq!(ledger(&mut conn).await.len(), migration_count());
+    let app = Db::connect_lazy(&Secret::new(fixture.app_url.clone())).unwrap();
+    app.check_baseline().await.unwrap();
+    app.close().await;
+    conn.close().await.unwrap();
+    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+        .execute(&mut fixture_admin)
+        .await
+        .unwrap();
+}
+
 /// 영역 기준으로 나누기 전의 한 파일 기준(202610250001)이 든 DB. 원장 행과 그 세대 표시, 표 하나만 흉내 낸다.
 const SINGLE_FILE_BASELINE: &str =
     "INSERT INTO _sqlx_migrations(version, description, success, checksum, execution_time)
