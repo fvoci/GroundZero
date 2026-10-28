@@ -212,7 +212,9 @@ it('warns on unload and routing, keeps input on cancel, and discards only after 
   await screen.findByRole('alertdialog');
   expect(router.path).toBe('/w/ws-1/trash');
   await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
-  await vi.waitFor(() => expect(router.path).toBe('/tasks'));
+  await vi.waitFor(() => {
+    expect(router.path).toBe('/tasks');
+  });
   expect(drafts()).toHaveLength(0);
 });
 
@@ -276,7 +278,9 @@ it('marks a blank version input clean only after the server confirms permanent r
   await type('version-retention', '');
   expect(warnsBeforeUnload()).toBe(true);
   load.resolve({ ...initial, version_retention_days: null });
-  await vi.waitFor(() => expect(warnsBeforeUnload()).toBe(false));
+  await vi.waitFor(() => {
+    expect(warnsBeforeUnload()).toBe(false);
+  });
   expect(input('version-retention')).toHaveValue('');
   expect(api.setVersionRetention).not.toHaveBeenCalled();
 });
@@ -287,7 +291,9 @@ it('keeps blank values while the other retention field refreshes the screen', as
   await type('version-retention', '45');
   vi.mocked(api.trash).mockResolvedValue({ ...initial, version_retention_days: 45 });
   await submit('version-retention');
-  await vi.waitFor(() => expect(api.trash).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => {
+    expect(api.trash).toHaveBeenCalledTimes(2);
+  });
   expect(input('trash-retention')).toHaveValue('');
   await type('version-retention', '');
   await type('trash-retention', '45');
@@ -297,7 +303,9 @@ it('keeps blank values while the other retention field refreshes the screen', as
     version_retention_days: 45,
   });
   await submit('trash-retention');
-  await vi.waitFor(() => expect(api.trash).toHaveBeenCalledTimes(3));
+  await vi.waitFor(() => {
+    expect(api.trash).toHaveBeenCalledTimes(3);
+  });
   expect(input('version-retention')).toHaveValue('');
   expect(drafts()).toHaveLength(0);
 });
@@ -339,12 +347,12 @@ it.each(fields)('saving %s confirms only its own previously unknown baseline', a
   if (field === 'trash-retention') await type(field, '45');
   const method = field === 'trash-retention' ? 'setTrashRetention' : 'setVersionRetention';
   await submit(field);
-  await vi.waitFor(() =>
+  await vi.waitFor(() => {
     expect(api[method]).toHaveBeenCalledExactlyOnceWith(
       'ws-1',
       field === 'trash-retention' ? 45 : null,
-    ),
-  );
+    );
+  });
   await type(field, '7');
   await type(field, field === 'trash-retention' ? '45' : '');
   expect(warnsBeforeUnload()).toBe(true);
@@ -352,6 +360,8 @@ it.each(fields)('saving %s confirms only its own previously unknown baseline', a
   router.confirmLeave(move);
   await screen.findByRole('alertdialog');
   await fireEvent.click(screen.getByRole('button', { name: m.common_discard_confirm() }));
-  await vi.waitFor(() => expect(move).toHaveBeenCalledOnce());
+  await vi.waitFor(() => {
+    expect(move).toHaveBeenCalledOnce();
+  });
   expect(drafts()).toHaveLength(0);
 });

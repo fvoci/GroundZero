@@ -22,14 +22,21 @@ export interface TrashView extends RetentionSettings {
 function parseEntry(value: Json): TrashEntryView {
   const e = rec(value, 'trash batch');
   const kind = str(e, 'kind');
-  if (!['item', 'document', 'task', 'event', 'file', 'module'].includes(kind))
+  if (
+    kind !== 'item' &&
+    kind !== 'document' &&
+    kind !== 'task' &&
+    kind !== 'event' &&
+    kind !== 'file' &&
+    kind !== 'module'
+  )
     throw new TypeError(`unknown trash kind ${kind}`);
   const expiry = str(e, 'expiry');
   if (expiry !== 'active' && expiry !== 'expired' && expiry !== 'kept_for_references')
     throw new TypeError(`unknown trash expiry ${expiry}`);
   return {
     id: str(e, 'id'),
-    kind: kind as TrashEntryView['kind'],
+    kind,
     root_id: str(e, 'root_id'),
     title: str(e, 'title'),
     member_count: int(e, 'member_count'),
