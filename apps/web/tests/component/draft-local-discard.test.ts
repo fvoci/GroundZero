@@ -205,7 +205,9 @@ describe('confirm only the local input being discarded', () => {
     });
     expect(screen.queryByLabelText('항목 A의 새 문구')).toBeNull();
     me.userId = 'user-a';
-    await waitFor(() => expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull());
+    await waitFor(() => {
+      expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
+    });
     expect(screen.queryByLabelText('항목 A의 새 문구')).toBeNull();
     expect(Object.values(localStorage).join('')).not.toContain('A의 수정');
     expect(screen.queryByRole('alertdialog')).toBeNull();
