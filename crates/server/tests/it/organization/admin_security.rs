@@ -311,3 +311,94 @@ async fn demotion_bounds_return_zero_when_authority_is_lost_while_waiting() {
     .await;
     code(&command.unwrap_err(), "42501");
 }
+
+/// SR-201-4: 담당 추가가 멤버 잠금을 먼저 잡으면 ID 산정도 그 커밋 뒤 담당을 세어야 한다.
+#[tokio::test]
+async fn demotion_counts_an_assignment_committed_while_waiting_for_the_workspace_member() {
+    let w = World::new().await;
+    let user = common::login(&w.state, "assigned organization admin").await;
+    common::join_organization(w.org, &user, "admin").await;
+    rows(
+        &w.state,
+        &user,
+        "SELECT fvoci.app_join_workspace_as_admin($1,@ids)",
+        &[w.ws],
+    )
+    .await;
+    let mut assigning = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let task = on(
+        assigning.conn(),
+        "SELECT fvoci.app_create_task($1,$2,'SR-201-4 assigned task',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3],false,@ids) AS id",
+        &[w.item, uuid::Uuid::now_v7(), user.id.0],
+    )
+    .await
+    .unwrap();
+    let task = crate::sql_support::id(&task[0]);
+    let holder = pid(assigning.conn()).await;
+    let mut demotion = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let waiter = pid(demotion.conn()).await;
+    let (organization, member) = (w.org, user.id.0);
+    let pending = tokio::spawn(async move {
+        // 처리기와 같은 두 문장이다. 실제 집계 수만큼 전달해야 FV001 재현을 가리지 않는다.
+        let count: i32 =
+            sqlx::query_scalar("SELECT fvoci.app_set_organization_member_ids($1,$2,'member')")
+                .bind(organization)
+                .bind(member)
+                .fetch_one(demotion.conn())
+                .await?;
+        sqlx::query("SELECT fvoci.app_set_organization_member($1,$2,'member',$3)")
+            .bind(organization)
+            .bind(member)
+            .bind(fvoci_db::new_ids(usize::try_from(count).unwrap()))
+            .execute(demotion.conn())
+            .await?;
+        demotion.commit().await
+    });
+    blocked(holder, waiter).await;
+    assigning.commit().await.unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), pending)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(result.is_ok(), "SR-201-4 demotion failed: {result:?}");
+    assert_eq!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT title FROM fvoci.tasks WHERE id=$1",
+            &[task]
+        )
+        .await["title"],
+        "SR-201-4 assigned task"
+    );
+    assert!(
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT user_id FROM fvoci.task_assignees WHERE task_id=$1 AND user_id=$2",
+            &[task, member]
+        )
+        .await
+        .is_empty()
+    );
+    assert!(
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT role FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
+            &[w.ws, member]
+        )
+        .await
+        .is_empty()
+    );
+    assert_eq!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT role FROM fvoci.organization_members WHERE organization_id=$1 AND user_id=$2",
+            &[organization, member]
+        )
+        .await["role"],
+        "member"
+    );
+}
