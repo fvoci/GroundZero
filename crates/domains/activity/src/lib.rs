@@ -7,11 +7,13 @@ pub mod marks;
 pub mod notifications;
 pub mod retention;
 pub mod state;
+use axum::middleware::from_extractor_with_state;
 use axum::{
     Router,
     extract::FromRef,
     routing::{get, post, put},
 };
+use fvoci_http::session::ExpectedUserIfSent;
 pub use state::ActivityState;
 use utoipa::OpenApi;
 /// 소통·활동 API 계약.
@@ -58,7 +60,7 @@ use utoipa::OpenApi;
 )]
 pub struct ActivityApi;
 /// 소통·활동 경로. 세션 상태는 조립 crate에서 추출한다.
-pub fn router<S>() -> Router<S>
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     ActivityState: FromRef<S>,
@@ -92,4 +94,7 @@ where
             "/me/marks/{target_kind}/{target_id}",
             get(marks::get_mark).put(marks::set_mark),
         )
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

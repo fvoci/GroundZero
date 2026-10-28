@@ -1,4 +1,6 @@
-//! 댓글 (D-27, D-20). 문서와 업무에 다는 한 단계 스레드. 대상을 볼 수 있으면 읽고 쓴다(독자·공유받은 사람 포함).
+//! 댓글(D-27, D-20). 문서·업무의 한 단계 스레드. 읽기는 대상 접근, 쓰기는 SQL의 등급·보관 판단을 따른다.
+
+mod validation;
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -12,7 +14,7 @@ use crate::ActivityState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, UserId};
 use fvoci_db::{UserTx, needed_ids, new_ids};
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 /// 댓글 하나.
 #[derive(Debug, Serialize, ToSchema)]
@@ -51,12 +53,14 @@ pub struct NewComment {
     pub task_id: Option<Uuid>,
     #[schema(value_type = Option<String>, format = Uuid)]
     pub parent_id: Option<Uuid>,
+    #[schema(min_length = 1, max_length = 10000)]
     pub body: String,
 }
 
 /// 댓글 고치기.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct EditComment {
+    #[schema(min_length = 1, max_length = 10000)]
     pub body: String,
 }
 
@@ -180,8 +184,9 @@ pub async fn task_comments(
     Ok(Json(out))
 }
 
-/// 댓글 달기(대상을 볼 수 있는 사람). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다.
-#[utoipa::path(post, path = "/api/comments", operation_id = "add_comment", request_body = NewComment,
+/// 댓글 달기(대상 쓰기 권한). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다.
+#[utoipa::path(post, path = "/api/comments", operation_id = "add_comment",
+    params(("x-fvoci-expected-user" = Option<Uuid>, Header, description = EXPECTED_USER_IF_SENT_DOC)), request_body = NewComment,
     responses((status = 201, body = CommentCreated), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn add(
@@ -207,14 +212,14 @@ pub async fn add(
         .bind(ids)
         .fetch_one(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(|err| validation::command_error(err, Some(&input.body)))?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(CommentCreated { id })))
 }
 
 /// 고치기(쓴 사람만).
 #[utoipa::path(put, path = "/api/comments/{comment_id}", operation_id = "edit_comment",
-    params(("comment_id" = String, Path, format = Uuid)), request_body = EditComment,
+    params(("comment_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<Uuid>, Header, description = EXPECTED_USER_IF_SENT_DOC)), request_body = EditComment,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn edit(
@@ -229,15 +234,15 @@ pub async fn edit(
         .bind(&input.body)
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(|err| validation::command_error(err, Some(&input.body)))?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// 지우기(쓴 사람 또는 대상의 소유 권한).
 #[utoipa::path(delete, path = "/api/comments/{comment_id}", operation_id = "delete_comment",
-    params(("comment_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "comments")]
+    params(("comment_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<Uuid>, Header, description = EXPECTED_USER_IF_SENT_DOC)),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn delete(
     State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
@@ -254,9 +259,9 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// 스레드 해결 표시·해제(스레드를 연 사람 또는 대상에 쓸 수 있는 사람).
+/// 스레드 해결 표시·해제(대상에 쓸 수 있는 사람).
 #[utoipa::path(post, path = "/api/comments/{comment_id}/resolve", operation_id = "resolve_comment",
-    params(("comment_id" = String, Path, format = Uuid)), request_body = ResolveComment,
+    params(("comment_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<Uuid>, Header, description = EXPECTED_USER_IF_SENT_DOC)), request_body = ResolveComment,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn resolve(
@@ -271,7 +276,7 @@ pub async fn resolve(
         .bind(input.resolved)
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(|err| validation::command_error(err, None))?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

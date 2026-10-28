@@ -372,10 +372,11 @@ async fn target_and_thread_validation_name_the_rejected_field() {
     )
     .await;
     assert_eq!(reply.status, StatusCode::CREATED, "{:?}", reply.json);
-    for (uri, input) in [
+    for (uri, input, field) in [
         (
             "/api/comments".to_owned(),
             json!({"request_id":new_request_id(),"task_id":task,"parent_id":reply.json["id"],"body":"nested reply"}),
+            "parent_id",
         ),
         (
             format!(
@@ -383,11 +384,12 @@ async fn target_and_thread_validation_name_the_rejected_field() {
                 reply.json["id"].as_str().unwrap()
             ),
             json!({"resolved":true}),
+            "comment_id",
         ),
     ] {
         let r = send(&app, Method::POST, &uri, Some(&w.owner), Some(input)).await;
         assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
-        assert_eq!(r.json["field"], "parent_id");
+        assert_eq!(r.json["field"], field);
         assert_eq!(r.json["reason"], "invalid_format");
     }
 }

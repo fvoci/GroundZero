@@ -59,32 +59,10 @@ function cursorParams(
   if (limit !== undefined) params.set('limit', String(limit));
 }
 
-export interface NotificationView {
-  id: string;
-  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감)·invite(초대, D-118) */
-  kind: string;
-  /** 알림이 속한 조직. 초대는 어느 조직 문맥에서나 보이므로 현재 조직과 다를 수 있다(D-118). */
-  organization_id: string | null;
-  /** `invite`면 수락·거절할 초대 id. */
-  invitation_id: string | null;
-  document_id: string | null;
-  task_id: string | null;
-  /** 대상(문서 또는 업무) 제목. */
-  // 초대 알림의 대상 제목은 계약대로 null이다(D-118).
-  document_title: string | null;
-  document_reference: string | null;
-  workspace_id: string | null;
-  item_id: string | null;
-  comment_id: string | null;
-  excerpt: string | null;
-  due_date: string | null;
-  /** 항목 알림의 대상 이름(기록 제목·강좌 이름). */
-  subject: string | null;
-  /** 워크스페이스를 함께 쓰지 않거나 자동 알림이면 없다. */
-  actor_name: string | null;
-  created_at: string;
-  read: boolean;
-}
+export type NotificationView = Omit<
+  Required<components['schemas']['Notification']>,
+  'detail' | 'read_at'
+>;
 
 export interface NotificationPageView {
   notifications: NotificationView[];
@@ -126,23 +104,14 @@ export function parseNotification(value: Json): NotificationView {
   };
 }
 
-export type MarkKind = 'pin' | 'favorite';
+export type MarkKind = components['schemas']['MarkKind'];
 
 function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
   const o = rec(value, 'mark state');
   return { pin: bool(o, 'pin'), favorite: bool(o, 'favorite') };
 }
 
-export interface AuditEntryView {
-  id: string;
-  action: string;
-  target_type: string;
-  target_id: string;
-  actor: string | null;
-  actor_name: string | null;
-  detail: unknown;
-  created_at: string;
-}
+export type AuditEntryView = Required<components['schemas']['AuditEntry']>;
 
 function parseAudit(value: Json): AuditEntryView {
   const o = rec(value, 'audit entry');
@@ -158,20 +127,7 @@ function parseAudit(value: Json): AuditEntryView {
   };
 }
 
-export interface CommentView {
-  id: string;
-  parent_id: string | null;
-  body: string;
-  author_id: string;
-  author_name: string | null;
-  created_at: string;
-  edited: boolean;
-  deleted: boolean;
-  resolved: boolean;
-  can_edit: boolean;
-  can_delete: boolean;
-  can_resolve: boolean;
-}
+export type CommentView = Required<components['schemas']['Comment']>;
 
 export interface CommentTarget {
   kind: 'document' | 'task';
