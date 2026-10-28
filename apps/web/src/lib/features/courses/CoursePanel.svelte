@@ -242,7 +242,15 @@
     parse: (raw) => textFields(raw, { ...shared, base: '', version: '' }),
     restore: ({ base, version, materials }) => {
       shared = { ...shared, materials };
-      sharedBase = JSON.stringify({ ...shared, materials: baselineText(base, 'materials') });
+      sharedBase = JSON.stringify({
+        number: baselineText(sharedBase, 'number'),
+        title: baselineText(sharedBase, 'title'),
+        chapter: baselineText(sharedBase, 'chapter'),
+        duration: baselineText(sharedBase, 'duration'),
+        url: baselineText(sharedBase, 'url'),
+        materials: baselineText(base, 'materials'),
+        planned_on: baselineText(sharedBase, 'planned_on'),
+      });
       baseVersion = version;
     },
     reset: resetShared,
@@ -268,7 +276,11 @@
     parse: (raw) => textFields(raw, { ...mine, base: '' }),
     restore: ({ base, note }) => {
       mine = { ...mine, note };
-      mineBase = JSON.stringify({ ...mine, note: baselineText(base, 'note') });
+      mineBase = JSON.stringify({
+        planned_on: baselineText(mineBase, 'planned_on'),
+        position: baselineText(mineBase, 'position'),
+        note: baselineText(base, 'note'),
+      });
     },
     reset: resetMine,
     // D-113 SR1-11: 읽기 전용도 개인 진도는 남긴다. 보관 상태에서는 읽기만 한다.
