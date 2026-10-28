@@ -67,7 +67,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 댓글 달기(대상을 볼 수 있는 사람). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다. */
+        /** 댓글 달기(대상 쓰기 권한). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다. */
         post: operations["add_comment"];
         delete?: never;
         options?: never;
@@ -102,7 +102,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 스레드 해결 표시·해제(스레드를 연 사람 또는 대상에 쓸 수 있는 사람). */
+        /** 스레드 해결 표시·해제(대상에 쓸 수 있는 사람). */
         post: operations["resolve_comment"];
         delete?: never;
         options?: never;
@@ -4830,6 +4830,7 @@ export interface components {
         };
         /** @description 고정·즐겨찾기 켜기·끄기. */
         SetMark: {
+            /** @description 종류마다 현재 보이는 대상 100개까지 표시할 수 있다. */
             mark: components["schemas"]["MarkKind"];
             on: boolean;
         };
@@ -5896,7 +5897,10 @@ export interface operations {
     add_comment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5943,7 +5947,10 @@ export interface operations {
     edit_comment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 comment_id: string;
             };
@@ -5998,7 +6005,10 @@ export interface operations {
     delete_comment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 comment_id: string;
             };
@@ -6011,6 +6021,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -6028,12 +6046,23 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     resolve_comment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 comment_id: string;
             };
@@ -9839,7 +9868,10 @@ export interface operations {
     set_mark: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 target_kind: components["schemas"]["MarkTarget"];
                 target_id: string;
@@ -9869,6 +9901,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10009,7 +10049,10 @@ export interface operations {
             query: {
                 organization_id: components["schemas"]["OrganizationId"];
             };
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10044,6 +10087,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

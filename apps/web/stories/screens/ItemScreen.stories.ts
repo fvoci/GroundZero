@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { ModuleKind } from '@fvoci/api-client';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
@@ -122,8 +123,8 @@ function groupStory({ kind, group }: Args, globals: Story['globals'] = {}): Stor
       spyOn(api, 'itemFiles').mockResolvedValue([]);
       spyOn(api, 'itemEvents').mockResolvedValue([]);
       spyOn(api, 'itemBacklinks').mockResolvedValue([]);
-      spyOn(api, 'mark').mockResolvedValue({ pin: false, favorite: false });
-      spyOn(api, 'targetActivity').mockResolvedValue({
+      spyOn(activityApi, 'mark').mockResolvedValue({ pin: false, favorite: false });
+      spyOn(activityApi, 'targetActivity').mockResolvedValue({
         activity: ACTIVITY,
         next_before: null,
         next_before_id: null,

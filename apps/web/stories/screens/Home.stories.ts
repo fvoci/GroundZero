@@ -18,7 +18,7 @@ import {
 } from '../fixtures/synthetic';
 
 // 홈(src/lib/features/home/HomeDashboard.svelte): 다음 할 일·이번 주·고정·즐겨찾기·진행 중인 항목·최근·알림. 홈은
-// `api.home`·워크스페이스마다 `api.calendar`·`api.notifications`를 부른다. 확인은 보이는 글과 오류만 한다.
+// `api.home`·워크스페이스마다 `api.calendar`·`activityApi.notifications`를 부른다. 확인은 보이는 글과 오류만 한다.
 const meta = {
   title: 'Screens/Home',
   component: HomeDashboard,

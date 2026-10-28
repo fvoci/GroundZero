@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::http::AppState;
+use crate::ActivityState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{UserId, WorkspaceId};
 use fvoci_db::UserTx;
@@ -99,13 +99,13 @@ async fn page(
     responses((status = 200, body = [AuditEntry]), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "audit")]
 pub async fn workspace(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Query(query): Query<AuditQuery>,
 ) -> Result<Json<Vec<AuditEntry>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    fvoci_db::access::require_owner(&mut tx, fvoci_db::access::Kind::Workspace, ws).await?;
     let entries = page(&mut tx, "a.workspace_id = $1", ws.0, query.before).await?;
     tx.commit().await?;
     Ok(Json(entries))
@@ -115,7 +115,7 @@ pub async fn workspace(
 #[utoipa::path(get, path = "/api/me/audit", operation_id = "my_audit", params(AuditQuery),
     responses((status = 200, body = [AuditEntry])), tag = "audit")]
 pub async fn mine(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Query(query): Query<AuditQuery>,
 ) -> Result<Json<Vec<AuditEntry>>, AppError> {

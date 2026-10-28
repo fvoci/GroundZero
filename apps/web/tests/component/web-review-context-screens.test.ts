@@ -1,5 +1,6 @@
 import { type TimeEntryView, type TimeSummaryRowView } from '$lib/features/time/model';
 import { timeData } from '$lib/features/time/data';
+import { activityApi } from '$lib/features/activity/api';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -186,7 +187,7 @@ describe('time organization context', () => {
 it('isolates workspace request IDs by organization and restores the original retry identity', async () => {
   vi.spyOn(api, 'home').mockReturnValue(new Promise(() => undefined));
   vi.spyOn(api, 'myTasks').mockReturnValue(new Promise(() => undefined));
-  vi.spyOn(api, 'recentActivity').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'recentActivity').mockResolvedValue([]);
   vi.spyOn(api, 'myInvitations').mockResolvedValue([]);
   const create = vi.spyOn(api, 'createWorkspace').mockRejectedValue(new Error('response lost'));
   render(HomeScreen, { workspaces: [], oncreated: vi.fn(), onjoined: () => Promise.resolve() });

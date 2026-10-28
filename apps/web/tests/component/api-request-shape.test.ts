@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
@@ -142,7 +143,7 @@ const cases: Case[] = [
   },
   {
     name: 'workspace audit',
-    call: () => api.audit('ws-1'),
+    call: () => activityApi.audit('ws-1'),
     status: 200,
     reply: [],
     method: 'GET',
@@ -150,7 +151,7 @@ const cases: Case[] = [
   },
   {
     name: 'personal audit',
-    call: () => api.audit(null),
+    call: () => activityApi.audit(null),
     status: 200,
     reply: [],
     method: 'GET',
@@ -158,7 +159,7 @@ const cases: Case[] = [
   },
   {
     name: 'workspace audit with a before cursor',
-    call: () => api.audit('ws-1', 'a/1'),
+    call: () => activityApi.audit('ws-1', 'a/1'),
     status: 200,
     reply: [],
     method: 'GET',
@@ -166,7 +167,7 @@ const cases: Case[] = [
   },
   {
     name: 'personal audit with a before cursor',
-    call: () => api.audit(null, 'a1'),
+    call: () => activityApi.audit(null, 'a1'),
     status: 200,
     reply: [],
     method: 'GET',

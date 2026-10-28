@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { vi } from 'vitest';
 import { api } from '$lib/api/client';
 
@@ -7,5 +8,5 @@ export function homeExtras(): void {
     counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 },
     workspaces: [],
   });
-  vi.spyOn(api, 'recentActivity').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'recentActivity').mockResolvedValue([]);
 }

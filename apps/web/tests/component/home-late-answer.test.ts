@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Activity, Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,7 +56,7 @@ describe('home answer after unmount', () => {
     );
     const calendar = vi.spyOn(api, 'calendar');
     const notifications = vi
-      .spyOn(api, 'notifications')
+      .spyOn(activityApi, 'notifications')
       .mockResolvedValue({ notifications: [], next: null });
     const { unmount } = render(HomeDashboard, { props: { workspaces: [workspace] } });
 
@@ -100,7 +101,7 @@ describe('an earlier organization answer that arrives after switching', () => {
         ? first.promise
         : Promise.resolve(titled('다른 조직 항목')),
     );
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [] } });
     org.select(second.id);
     expect(await screen.findAllByText(/다른 조직 항목/)).not.toHaveLength(0);
@@ -137,7 +138,7 @@ describe('an earlier organization answer that arrives after switching', () => {
     const titled = (title: string): Activity[] =>
       ACTIVITY.slice(0, 1).map((a) => ({ ...a, detail: { title } }));
     const first = held<Activity[]>();
-    vi.spyOn(api, 'recentActivity').mockImplementation((organizationId) =>
+    vi.spyOn(activityApi, 'recentActivity').mockImplementation((organizationId) =>
       organizationId === TEST_ORGANIZATION.id
         ? first.promise
         : Promise.resolve(titled('다른 조직 활동')),

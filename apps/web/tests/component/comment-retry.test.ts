@@ -1,7 +1,8 @@
+import { activityApi } from '$lib/features/activity/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api, NetworkError } from '$lib/api/client';
+import { NetworkError } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
@@ -21,9 +22,9 @@ afterEach(() => {
 describe('comment retry', () => {
   it('uses a new request id after the text is edited, the same id when retried as is', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     const add = vi
-      .spyOn(api, 'addComment')
+      .spyOn(activityApi, 'addComment')
       .mockRejectedValueOnce(new NetworkError('lost'))
       .mockRejectedValueOnce(new NetworkError('lost'))
       .mockResolvedValue('c1');
