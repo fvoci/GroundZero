@@ -1,20 +1,10 @@
-//! 문서 하나의 실시간 편집 방(D-70). 방마다 작업 하나가 Yjs 문서를 혼자 맡고(잠금 없음), 연결은 메시지만 주고받는다.
-//!
-//! - **경계**: 쓰기 권한이 있는 연결의 변경만 받는다. 연결마다 모인 변경을 합쳐, 방 문서를 복사한 임시 문서에 먼저
-//!   넣고 편집기 스키마 모양(`convert::check_shape`)과 저장 API의 본문 검사(`validate_body`)를 통과해야 방 문서에 넣고
-//!   다른 연결에 보낸다. 검사는 블로킹 작업으로 돌린다. 통과하지 못하면 버리고 그 연결을 닫는다(4400). 읽기 연결의
-//!   변경은 받지 않고 버린다(편집기가 스스로 고친 것일 수 있어 닫지는 않는다).
-//! - **한도**: 한 프레임의 메시지 수, 연결마다 초당 바이트·메시지 수, Yjs 상태 크기, 참여자 표시 수·크기.
-//! - **저장**: 몇 초마다 Yjs 상태를 저장하고, 60초 조용하거나 마지막 사람이 나가면 저장 API와 같은 길
-//!   (`documents::write_revision`)으로 리비전을 만든다. 마지막으로 고친 사람이 쓸 수 없으면 연결된 다른 작성자로 쓴다.
-//!   작성자가 마지막 리비전 뒤로 고친 사람이 아니면(대신 저장) 고친 사람을 리비전에 따로 적는다(D-95, `edited_by`).
-//!   고친 사람은 저장 대기 상태와 함께 저장해 방이 닫힌 뒤에도 잃지 않는다.
-//!   그 사이 본문이 다른 길(복원)로 바뀌었으면 쓰지 않고 방을 닫는다. 저장 확인(`MSG_PERSISTED`)은 방이 계속 편집을
-//!   지니고 있을 때나 리비전을 남긴 뒤에만 보낸다: 리비전을 남기지 못한 채 연결을 닫을 때는 닫은 뒤에 상태를 저장한다
-//!   (확인받지 못한 편집은 브라우저가 초안으로 지닌다).
-//! - **복원·이동**: 방이 자기 명령 안에서 한다. 그동안 들어온 메시지는 방의 대기열에서 기다린다(넣지도 확인하지도 않음).
-//! - **한 서버**: 방은 메모리에 있다. 셀프호스트의 한 앱 프로세스(`role=All`)를 전제로 한다. 끝낼 때 모든 방의 리비전을
-//!   남긴다.
+//! 문서 하나의 실시간 편집 방(D-70). 한 작업이 Yjs 문서를 맡으며, 연결의 변경은 임시 문서에서 모양·본문·한도를
+//! 검사한 뒤 반영한다. 읽기 연결의 변경은 버리고 잘못된 쓰기는 4400으로 닫는다.
+//! 상태와 편집자·첨부 귀속을 주기적으로 저장하며, 60초 조용하거나 마지막 사람이 나가면 리비전을 남긴다.
+//! 저장자는 최근 편집자 → 연결된 작성자 순이며 대리 저장의 실제 편집자는 edited_by로 구분한다(D-95).
+//! 저장 확인은 DB에 들어간 상태의 스냅숏이다. 확인받지 못한 입력은 브라우저가 보존한다(D-99).
+//! 복원·이동은 방 명령 안에서 처리한다. 공유 목록 오염은 방을 종료하고 저장 상태와 클라이언트 변경으로 재개한다(#172).
+//! 셀프호스트 한 앱 프로세스(role=All)를 전제로 하며 정상 종료에는 모든 방의 리비전을 남긴다.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -32,6 +22,7 @@ use yrs::updates::encoder::Encode;
 use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
+use super::file_refs::{Attribution, LoadRow};
 use super::lease::{Lease, MovePermit, WritePermit};
 use super::visibility::{CommittedMove, Snapshot};
 use crate::config::Limits;
@@ -216,6 +207,7 @@ pub struct Rooms {
     closing: Arc<Mutex<HashMap<Uuid, usize>>>,
     /// 옮기거나 방 없이 복원하는 중인 문서. 이 동안은 그 문서의 방을 새로 열지 않는다(방 목록과 같은 잠금 아래에서 본다).
     held: Arc<Mutex<HashMap<DocumentId, usize>>>,
+    recovery: Arc<recovery::Epoch>,
     next: Arc<AtomicU64>,
 }
 
@@ -224,11 +216,15 @@ pub struct Rooms {
 struct HoldGuard {
     rooms: Rooms,
     doc: DocumentId,
+    epoch: u64,
 }
 
 impl Drop for HoldGuard {
     fn drop(&mut self) {
         let _rooms = self.rooms.lock();
+        if self.epoch != self.rooms.recovery.current() {
+            return;
+        }
         let mut held = self.rooms.held_set();
         if let Some(count) = held.get_mut(&self.doc) {
             *count -= 1;
@@ -244,11 +240,15 @@ impl Drop for HoldGuard {
 pub struct ClosingGuard {
     rooms: Rooms,
     workspace: Uuid,
+    epoch: u64,
 }
 
 impl Drop for ClosingGuard {
     fn drop(&mut self) {
         let _rooms = self.rooms.lock();
+        if self.epoch != self.rooms.recovery.current() {
+            return;
+        }
         let mut closing = self.rooms.closing_set();
         // 같은 워크스페이스를 동시에 끄는 다른 요청이 있으면 그 막음은 남긴다.
         if let Some(count) = closing.get_mut(&self.workspace) {
@@ -299,23 +299,17 @@ impl Drop for Membership {
 
 impl Rooms {
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<DocumentId, Handle>> {
-        self.inner
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        recovery::lock(self)
     }
 
     /// 끄는 중인 워크스페이스 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
     fn closing_set(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, usize>> {
-        self.closing
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        recovery::list(&self.closing, &self.recovery) // 오염된 닫기 막음은 버리고 저장 상태에서 다시 연다(#172).
     }
 
     /// 옮기거나 방 없이 복원하는 중인 문서 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
     fn held_set(&self) -> std::sync::MutexGuard<'_, HashMap<DocumentId, usize>> {
-        self.held
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        recovery::list(&self.held, &self.recovery) // 오염된 이동·복원 막음도 옛 방과 함께 버린다(#172).
     }
 
     /// 열린(닫히는 중이 아닌) 방.
@@ -330,6 +324,7 @@ impl Rooms {
         ClosingGuard {
             rooms: self.clone(),
             workspace,
+            epoch: self.recovery.current(),
         }
     }
 
@@ -378,7 +373,7 @@ impl Rooms {
                         recheck_every,
                         self.clone(),
                     );
-                    tokio::spawn(room.run(rx));
+                    tokio::spawn(recovery::run(room, rx));
                     handle
                 }
             };
@@ -468,6 +463,7 @@ impl Rooms {
             HoldGuard {
                 rooms: self.clone(),
                 doc,
+                epoch: self.recovery.current(),
             },
             room,
         )
@@ -795,9 +791,6 @@ impl EditAuthorization {
     }
 }
 
-/// `app_collab_load`의 한 줄: 문서 리비전, 제목, 본문, 저장된 상태와 그 편집자(상태를 쓸 수 없으면 둘 다 없음).
-type LoadRow = (i32, String, Value, Option<Vec<u8>>, Option<Vec<Uuid>>);
-
 struct Room {
     doc_id: DocumentId,
     generation: u64,
@@ -814,6 +807,7 @@ struct Room {
     /// 방 문서가 이어받은 리비전과 그때의 본문(본문이 다른 길로 바뀌었는지 보려고).
     base_revision: i32,
     base_body: Value,
+    file_refs: Attribution,
     /// 방 문서의 계보 표시. 본문에서 새로 만들 때마다 바뀐다. 예전 계보를 가진 클라이언트가 다시 붙어 옛 내용을
     /// 섞지 않게 그런 연결은 다시 열게 한다(4409).
     lineage: String,
@@ -833,6 +827,7 @@ struct Room {
     edited_since: Vec<UserId>,
     /// 연결의 세션·권한을 다시 확인하는 간격(`FVOCI_COLLAB_RECHECK_SECS`).
     recheck_every: Duration,
+    registry_epoch: tokio::sync::watch::Receiver<u64>,
 }
 
 impl Room {
@@ -849,6 +844,7 @@ impl Room {
             generation,
             db,
             limits,
+            registry_epoch: rooms.recovery.subscribe(),
             rooms,
             doc: None,
             presence: HashMap::new(),
@@ -857,6 +853,7 @@ impl Room {
             pending: Vec::new(),
             base_revision: 0,
             base_body: Value::Null,
+            file_refs: Attribution::default(),
             lineage: String::new(),
             dirty_state: false,
             dirty_since_snapshot: false,
@@ -1246,12 +1243,10 @@ impl Room {
         }
     }
 
-    /// 저장된 Yjs 상태(그 뒤로 본문이 바뀌지 않았을 때) 또는 본문에서 방 문서를 만든다. 들어오는 사람의 권한으로 읽는다.
-    /// 상태를 이어받으면 그 상태의 편집자(마지막 리비전 뒤로 고친 사람)도 이어받는다: 작성자를 고르는 순서의 앞에 두고
-    /// 대신 저장할 때 실제 편집자로 적는다(D-95).
+    /// 들어오는 사람의 권한으로 저장 상태·편집자·귀속을 이어받거나 본문에서 방을 만든다(D-95).
     async fn load(&mut self, user: UserId) -> Result<Doc, AppError> {
         let mut tx = self.db.begin_as(user).await?;
-        let (revision, _title, body, state, editors): LoadRow =
+        let (revision, _title, body, state, editors, file_refs): LoadRow =
             sqlx::query_as("SELECT * FROM app_collab_load($1)")
                 .bind(self.doc_id)
                 .fetch_one(tx.conn())
@@ -1274,11 +1269,13 @@ impl Room {
             self.lineage = lineage_of(&doc).unwrap_or_default();
             self.base_revision = revision;
             self.base_body = body;
+            self.file_refs = Attribution::load(&doc, None)?;
             return Ok(doc);
         }
         self.lineage = lineage_of(&doc).unwrap_or_default();
         self.base_revision = revision;
         self.base_body = body;
+        self.file_refs = Attribution::load(&doc, file_refs)?;
         let editors: Vec<UserId> = editors
             .unwrap_or_default()
             .into_iter()
@@ -1288,9 +1285,7 @@ impl Room {
         self.edited_since = editors;
         // 저장된 상태에서 불러왔으니 이 상태는 이미 DB에 있다.
         self.persisted = Some(doc.transact().snapshot().encode_v1());
-        // 앞선 방이 리비전으로 남기지 못한 편집(이미 확인을 받았을 수 있다)을 이어받았으면 아직 리비전이 아니다: 이 방의
-        // 리비전 남기기(복원·이동 앞의 체크포인트, 닫힐 때)가 그 편집도 남기게 한다(#64 반박 검증). 본문을 Yjs로 옮긴 모양과
-        // 같으면(방을 열기만 함·이미 리비전으로 남김, 편집기가 저장한 본문의 null 속성은 Yjs에 남지 않음) 남길 것이 없다.
+        // 이어받은 미리비전 편집도 다음 체크포인트에 남긴다. Yjs 형태가 본문과 같으면 남길 변경이 없다(#64).
         let live = {
             let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
             convert::read_doc(&doc.transact(), &fragment)
@@ -1554,8 +1549,7 @@ impl Room {
             let Some(doc) = &self.doc else {
                 return;
             };
-            // 다시 붙은 연결의 동기화 답에는 이미 반영된 지움 기록이 늘 함께 오므로(Yjs), 실제로 바뀐 것만 편집으로
-            // 친다. 그렇지 않으면 다시 붙을 때마다 조용한 시간이 처음부터 시작돼 리비전이 남지 않는다.
+            // 다시 붙을 때 이미 반영된 Yjs 지움 기록이 와도 조용한 시간을 다시 세지 않는다.
             let before = doc.transact().state_vector();
             let applied = Update::decode_v1(&merged).ok().and_then(|u| {
                 let mut txn = doc.transact_mut();
@@ -1569,6 +1563,7 @@ impl Room {
             if !deleted && doc.transact().state_vector() == before {
                 continue;
             }
+            self.file_refs.observe(doc, Some(user));
             self.dirty_state = true;
             self.dirty_since_snapshot = true;
             self.last_change = Instant::now();
@@ -1675,7 +1670,7 @@ impl Room {
                 txn.snapshot().encode_v1(),
             )
         };
-        // 리비전이 되지 않은 편집이 있으면 본문도 넘겨, 그 본문이 가리키는 파일 버전을 붙잡게 한다(마이그레이션 0059).
+        // 리비전이 되지 않은 본문의 첨부도 저장 확인 전에 붙잡는다(D-56).
         let body = self.dirty_since_snapshot.then(|| {
             let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
             convert::read_doc(&doc.transact(), &fragment)
@@ -1683,16 +1678,16 @@ impl Room {
         let editors: Vec<Uuid> = self.edited_since.iter().map(|u| u.0).collect();
         let result = async {
             let mut tx = self.db.begin_anonymous().await?;
-            // 리비전으로 아직 남지 않은 편집이 있는지와 그 편집자도 적는다(실시간을 끄기 전·옮기기 전에 남긴다, 마이그레이션
-            // 0050·0094).
+            // 실시간을 끄거나 옮기기 전까지 편집자와 첨부 귀속을 함께 이어받는다.
             let stored: bool =
-                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5, $6)")
+                sqlx::query_scalar("SELECT app_system_collab_store($1, $2, $3, $4, $5, $6, $7)")
                     .bind(self.doc_id)
                     .bind(self.base_revision)
                     .bind(state)
                     .bind(self.dirty_since_snapshot)
                     .bind(body)
                     .bind(editors)
+                    .bind(self.file_refs.json()?)
                     .fetch_one(tx.conn())
                     .await?;
             tx.commit().await?;
@@ -1860,6 +1855,7 @@ impl Room {
             body,
             Uuid::now_v7(),
             edited_by,
+            Some(&self.file_refs.json()?),
         )
         .await?;
         tx.commit().await?;

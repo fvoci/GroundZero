@@ -4,7 +4,7 @@
 
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, header};
+use axum::http::HeaderMap;
 use axum::response::Response;
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde::Deserialize;
@@ -16,6 +16,7 @@ use crate::features::accounts;
 use crate::http::AppState;
 use fvoci_core::error::AppError;
 use fvoci_core::ids::DocumentId;
+use fvoci_http::origin::PublicOrigin;
 use fvoci_http::session::CurrentUser;
 
 /// 연결로 보낼 것이 이만큼 쌓이면 느린 연결로 보고 닫는다.
@@ -34,14 +35,14 @@ pub struct ConnectQuery {
 
 pub async fn connect(
     State(state): State<AppState>,
+    State(public): State<PublicOrigin>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Query(query): Query<ConnectQuery>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Result<Response, AppError> {
-    let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
-    if origin != Some(state.config.public_origin().as_str()) {
+    if !public.matches(&headers) {
         return Err(AppError::Forbidden);
     }
     // 기대 사용자: 없거나 형식이 틀리면 업그레이드 전에 400(값 없는 옛 연결은 받지 않는다, D-92). 세션의 사용자와

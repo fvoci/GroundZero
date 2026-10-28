@@ -3,7 +3,7 @@
 use super::*;
 use crate::sql_support::{World, attachment, fixture, rows};
 
-async fn merged_attachment(inserted_by_reader: bool, forged: bool) {
+async fn merged_attachment(inserted_by_reader: bool, forged: bool, reopen: bool) {
     let w = World::new().await;
     let other = w.member("member").await;
     let source = w.doc().await;
@@ -47,6 +47,21 @@ async fn merged_attachment(inserted_by_reader: bool, forged: bool) {
             .await
     );
     w.state.collab.persist_all().await;
+    if !forged {
+        assert!(
+            !last.text().contains(&inserter.id.0.to_string()),
+            "server attribution must stay outside Yjs"
+        );
+    }
+    let mut restarted = None;
+    if reopen {
+        use fvoci_server::collab::room::recovery::{Registry, poison};
+        poison(&w.state.collab, Registry::Rooms);
+        let mut client = connect(addr, Some(saver), &id, true).await.unwrap();
+        client.paragraph("다시 연 방의 마지막 변경").await;
+        assert!(client.until(acked).await);
+        restarted = Some(client);
+    }
     let mut observer = common::fixture_conn().await;
     let pending: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM fvoci.document_collab_file_refs WHERE document_id=$1 AND file_id=$2",
@@ -70,8 +85,21 @@ async fn merged_attachment(inserted_by_reader: bool, forged: bool) {
     .unwrap();
     let retained: bool = sqlx::query_scalar("SELECT fvoci.app_version_referenced($1,1,(SELECT id FROM fvoci.file_versions WHERE file_id=$1 AND version=1))")
         .bind(file).fetch_one(&mut observer).await.unwrap();
+    let editors: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT coalesce(array_agg(DISTINCT editor_id),'{}'::uuid[]) FROM fvoci.document_file_refs WHERE document_id=$1 AND file_id=$2")
+        .bind(target).bind(file).fetch_one(&mut observer).await.unwrap();
+    assert_eq!(
+        editors,
+        if inserted_by_reader {
+            vec![inserter.id.0]
+        } else {
+            vec![]
+        }
+    );
     first.close().await;
     last.close().await;
+    if let Some(client) = restarted {
+        client.close().await;
+    }
     assert_eq!(
         (pending, saved, retained),
         if inserted_by_reader {
@@ -85,15 +113,25 @@ async fn merged_attachment(inserted_by_reader: bool, forged: bool) {
 
 #[tokio::test]
 async fn reader_inserts_attachment_and_unreadable_author_preserves_it() {
-    merged_attachment(true, false).await;
+    merged_attachment(true, false, false).await;
 }
 
 #[tokio::test]
 async fn unreadable_editor_inserts_attachment_and_readable_author_cannot_lend_access() {
-    merged_attachment(false, false).await;
+    merged_attachment(false, false, false).await;
 }
 
 #[tokio::test]
 async fn unreadable_editor_cannot_forge_the_inserting_users_identity() {
-    merged_attachment(false, true).await;
+    merged_attachment(false, true, false).await;
+}
+
+#[tokio::test]
+async fn readable_inserter_attribution_survives_a_room_restart() {
+    merged_attachment(true, false, true).await;
+}
+
+#[tokio::test]
+async fn unreadable_inserter_cannot_borrow_access_after_a_room_restart() {
+    merged_attachment(false, false, true).await;
 }
