@@ -7,16 +7,14 @@ use fvoci_db::UserTx;
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
-/// Up Next 후보: 내 업무(내가 담당이거나, 담당자가 없고 내가 만든 것) 중 이번 주($1 + 7)까지 마감인 미완료.
+/// Up Next 후보: 내가 담당한 업무 중 이번 주($1 + 7)까지 마감인 미완료(D-120).
 /// 보관된 항목·모듈의 업무는 뺀다.
 const UP_NEXT_MINE: &str = "SELECT t.id, t.item_id, t.workspace_id, t.title, s.name AS status, s.category AS status_category, t.due_date, t.number
      FROM tasks t JOIN task_statuses s ON s.id = t.status_id JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
      WHERE s.category <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= $1 + 7
        AND i.archived_at IS NULL AND m.archived_at IS NULL
        AND t.workspace_id IN (SELECT app_my_workspace_ids($2))
-       AND (EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
-            OR (NOT EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id)
-                AND t.created_by = app_user_id()))";
+       AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())";
 
 pub(super) type TaskRow = (
     Uuid,
@@ -154,7 +152,7 @@ pub(super) async fn active_items(
            SELECT count(*) FILTER (WHERE s.category = 'done') AS done, count(*) AS total, max(t.updated_at) AS active
            FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.item_id = i.id
          ) c
-         WHERE i.archived_at IS NULL AND m.archived_at IS NULL
+         WHERE i.status = 'active' AND i.archived_at IS NULL AND m.archived_at IS NULL
            AND i.workspace_id IN (SELECT app_my_workspace_ids($1))
          ORDER BY greatest(i.updated_at, c.active) DESC, i.id
          LIMIT 8",
