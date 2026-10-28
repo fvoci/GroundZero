@@ -120,7 +120,6 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다. */
         delete: operations["delete_share"];
         options?: never;
         head?: never;
@@ -432,6 +431,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{document_id}/share-recipient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["document_share_recipient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/shares": {
         parameters: {
             query?: never;
@@ -439,10 +454,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 공유 목록(소유 권한자). */
         get: operations["list_shares"];
         put?: never;
-        /** 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다. */
         post: operations["create_share"];
         delete?: never;
         options?: never;
@@ -3246,12 +3259,11 @@ export interface components {
              */
             expires_at?: string | null;
         };
-        /** @description 공유 추가 요청. 같은 이메일이면 권한을 바꾼다. */
+        /** @description 공유 추가 요청. 같은 이메일이면 저장 권한을 바꾼다. */
         CreateShare: {
             email: string;
             organization_id?: null | components["schemas"]["OrganizationId"];
-            /** @description `read` 또는 `write`. */
-            permission: string;
+            permission: components["schemas"]["SharePermission"];
         };
         /**
          * @description 업무 만들기. 제목 밖의 칸은 고치기(`PatchTask`)와 같고 같은 규칙으로 확인해 한 트랜잭션에서 넣는다(D-105): 하나라도
@@ -4911,17 +4923,36 @@ export interface components {
              */
             days?: number | null;
         };
-        /** @description 공유 항목. */
+        /** @description 저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다. */
         Share: {
             display_name: string;
             email?: string | null;
             grantee_user_id: components["schemas"]["UserId"];
             /** Format: uuid */
             id: string;
+            max_permission: components["schemas"]["SharePermission"];
             organization_id: components["schemas"]["OrganizationId"];
-            /** @description `read` 또는 `write`. */
-            permission: string;
+            permission: components["schemas"]["SharePermission"];
+            recipient_role?: null | components["schemas"]["ShareRecipientRole"];
         };
+        /**
+         * @description 개별 공유에 저장하거나 수신자 상한으로 반환하는 권한. owner 등급은 공유로 부여하지 않는다.
+         * @enum {string}
+         */
+        SharePermission: "read" | "write";
+        /** @description 공유할 사람의 계산 역할과 상한. 조회만으로 공유를 만들지 않는다. */
+        ShareRecipient: {
+            display_name: string;
+            email?: string | null;
+            max_permission: components["schemas"]["SharePermission"];
+            recipient_role?: null | components["schemas"]["ShareRecipientRole"];
+            user_id: components["schemas"]["UserId"];
+        };
+        /**
+         * @description 공간 문서 공유 수신자의 계산 역할. 개인 노트의 수신자에는 공간 역할을 적용하지 않는다.
+         * @enum {string}
+         */
+        ShareRecipientRole: "admin" | "member" | "readonly" | "outside_member";
         /** @description 공유받은 문서. */
         SharedDocument: {
             id: components["schemas"]["DocumentId"];
@@ -6023,7 +6054,9 @@ export interface operations {
     delete_share: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 share_id: string;
             };
@@ -6037,6 +6070,14 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6046,6 +6087,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6874,6 +6923,54 @@ export interface operations {
             };
         };
     };
+    document_share_recipient: {
+        parameters: {
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+                email: string;
+            };
+            header?: never;
+            path: {
+                document_id: components["schemas"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareRecipient"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_shares: {
         parameters: {
             query?: never;
@@ -6914,7 +7011,9 @@ export interface operations {
     create_share: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 document_id: string;
             };
@@ -6951,6 +7050,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

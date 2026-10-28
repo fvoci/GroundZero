@@ -519,7 +519,6 @@
         "tags": [
           "documents"
         ],
-        "summary": "공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.",
         "operationId": "delete_share",
         "parameters": [
           {
@@ -530,11 +529,36 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -547,6 +571,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -1849,12 +1883,87 @@
         }
       }
     },
+    "/api/documents/{document_id}/share-recipient": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "operationId": "document_share_recipient",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DocumentId"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrganizationId"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareRecipient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/documents/{document_id}/shares": {
       "get": {
         "tags": [
           "documents"
         ],
-        "summary": "공유 목록(소유 권한자).",
         "operationId": "list_shares",
         "parameters": [
           {
@@ -1907,7 +2016,6 @@
         "tags": [
           "documents"
         ],
-        "summary": "공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.",
         "operationId": "create_share",
         "parameters": [
           {
@@ -1917,6 +2025,21 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
             }
           }
         ],
@@ -1962,6 +2085,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -14038,7 +14171,7 @@
       },
       "CreateShare": {
         "type": "object",
-        "description": "공유 추가 요청. 같은 이메일이면 권한을 바꾼다.",
+        "description": "공유 추가 요청. 같은 이메일이면 저장 권한을 바꾼다.",
         "required": [
           "email",
           "permission"
@@ -14058,8 +14191,7 @@
             ]
           },
           "permission": {
-            "type": "string",
-            "description": "`read` 또는 `write`."
+            "$ref": "#/components/schemas/SharePermission"
           }
         }
       },
@@ -18991,13 +19123,14 @@
       },
       "Share": {
         "type": "object",
-        "description": "공유 항목.",
+        "description": "저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다.",
         "required": [
+          "id",
           "organization_id",
           "grantee_user_id",
           "display_name",
-          "id",
-          "permission"
+          "permission",
+          "max_permission"
         ],
         "properties": {
           "display_name": {
@@ -19016,14 +19149,81 @@
             "type": "string",
             "format": "uuid"
           },
+          "max_permission": {
+            "$ref": "#/components/schemas/SharePermission"
+          },
           "organization_id": {
             "$ref": "#/components/schemas/OrganizationId"
           },
           "permission": {
-            "type": "string",
-            "description": "`read` 또는 `write`."
+            "$ref": "#/components/schemas/SharePermission"
+          },
+          "recipient_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ShareRecipientRole",
+                "description": "개인 노트에는 공간 역할을 적용하지 않아 null이다."
+              }
+            ]
           }
         }
+      },
+      "SharePermission": {
+        "type": "string",
+        "description": "개별 공유에 저장하거나 수신자 상한으로 반환하는 권한. owner 등급은 공유로 부여하지 않는다.",
+        "enum": [
+          "read",
+          "write"
+        ]
+      },
+      "ShareRecipient": {
+        "type": "object",
+        "description": "공유할 사람의 계산 역할과 상한. 조회만으로 공유를 만들지 않는다.",
+        "required": [
+          "user_id",
+          "display_name",
+          "max_permission"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "max_permission": {
+            "$ref": "#/components/schemas/SharePermission"
+          },
+          "recipient_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ShareRecipientRole"
+              }
+            ]
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "ShareRecipientRole": {
+        "type": "string",
+        "description": "공간 문서 공유 수신자의 계산 역할. 개인 노트의 수신자에는 공간 역할을 적용하지 않는다.",
+        "enum": [
+          "admin",
+          "member",
+          "readonly",
+          "outside_member"
+        ]
       },
       "SharedDocument": {
         "type": "object",

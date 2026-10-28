@@ -275,6 +275,7 @@ async fn api_not_found() -> AppError {
         document_shares::list_shares,
         document_shares::create_share,
         document_shares::delete_share,
+        document_shares::recipient,
         documents::copy,
         documents::move_preview,
         documents::move_document,
@@ -461,6 +462,9 @@ async fn api_not_found() -> AppError {
         documents::DocumentSettings,
         document_shares::Share,
         document_shares::CreateShare,
+        document_shares::ShareRecipient,
+        fvoci_core::share::ShareRecipientRole,
+        fvoci_core::share::SharePermission,
         documents::CopyDocument,
         documents::MoveTarget,
         documents::MoveDocument,
@@ -739,6 +743,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(document_shares::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -898,14 +903,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/documents/{document_id}/settings",
             put(documents::set_settings),
-        )
-        .route(
-            "/documents/{document_id}/shares",
-            get(document_shares::list_shares).post(document_shares::create_share),
-        )
-        .route(
-            "/document-shares/{share_id}",
-            delete(document_shares::delete_share),
         )
         .route("/documents/{document_id}/copy", post(documents::copy))
         .route(

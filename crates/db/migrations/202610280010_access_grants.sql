@@ -1140,6 +1140,11 @@ REVOKE ALL ON FUNCTION fvoci.app_grade_document(p_doc uuid, p_user uuid) FROM PU
 REVOKE ALL ON FUNCTION fvoci.app_target_organization(p_kind text, p_id uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_user uuid, p_organization uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_email text, p_organization uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_email text, p_organization uuid) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_document_share_recipient_for_share(p_share uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_document_share_recipient_for_share(p_share uuid) TO fvoci_app;
 GRANT ALL ON FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) FROM PUBLIC;

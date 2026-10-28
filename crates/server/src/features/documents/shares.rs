@@ -1,40 +1,65 @@
-//! 문서 공유 처리기. 역할·권한·감사는 SQL이 검사한다(D-20·D-113·D-114).
+//! 공유 자원 읽기와 명령(D-20·D-113·D-114). 역할·상한은 SQL이 계산한다.
 
-use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{FromRef, Path, Query, State};
 use axum::http::StatusCode;
+use axum::middleware::from_extractor_with_state;
+use axum::routing::{delete, get};
+use axum::{Json, Router};
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{DocumentId, OrganizationId, UserId};
+use fvoci_core::share::{SharePermission, ShareRecipientRole};
 use fvoci_db::new_ids;
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, ExpectedUserIfSent, SessionState};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::require_manager;
 use crate::http::AppState;
 
-/// 공유 항목.
+/// 저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다.
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Share {
-    pub organization_id: OrganizationId,
-    pub grantee_user_id: UserId,
-    pub display_name: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
+    pub organization_id: OrganizationId,
+    pub grantee_user_id: UserId,
     pub email: Option<String>,
-    /// `read` 또는 `write`.
-    pub permission: String,
+    pub display_name: String,
+    pub permission: SharePermission,
+    /// 개인 노트에는 공간 역할을 적용하지 않아 null이다.
+    pub recipient_role: Option<ShareRecipientRole>,
+    pub max_permission: SharePermission,
 }
 
-/// 공유 추가 요청. 같은 이메일이면 권한을 바꾼다.
+/// 공유할 사람의 계산 역할과 상한. 조회만으로 공유를 만들지 않는다.
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
+pub struct ShareRecipient {
+    pub user_id: UserId,
+    pub email: Option<String>,
+    pub display_name: String,
+    pub recipient_role: Option<ShareRecipientRole>,
+    pub max_permission: SharePermission,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ShareRecipientQuery {
+    pub organization_id: OrganizationId,
+    pub email: String,
+}
+
+/// 공유 추가 요청. 같은 이메일이면 저장 권한을 바꾼다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateShare {
     pub organization_id: Option<OrganizationId>,
     pub email: String,
-    /// `read` 또는 `write`.
-    pub permission: String,
+    pub permission: SharePermission,
 }
+
+const SHARE_COLUMNS: &str = "SELECT s.id, s.organization_id, s.grantee_user_id,
+    r.email, r.display_name, s.permission, r.recipient_role, r.max_permission
+    FROM document_shares s CROSS JOIN LATERAL
+    app_document_share_recipient_for_share(s.id) r";
 
 fn share_error(error: sqlx::Error) -> AppError {
     if error.as_database_error().is_some_and(|db| {
@@ -51,7 +76,31 @@ fn share_error(error: sqlx::Error) -> AppError {
     AppError::from_db_function(error)
 }
 
-/// 공유 목록(소유 권한자).
+#[utoipa::path(get, path = "/api/documents/{document_id}/share-recipient",
+    operation_id = "document_share_recipient",
+    params(("document_id" = DocumentId, Path), ShareRecipientQuery),
+    responses((status = 200, body = ShareRecipient), (status = 400, body = ErrorBody),
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+pub async fn recipient(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<DocumentId>,
+    Query(input): Query<ShareRecipientQuery>,
+) -> Result<Json<ShareRecipient>, AppError> {
+    let email = crate::features::members::validate_email(&input.email)?;
+    let mut tx = state.db.begin_as(user).await?;
+    let recipient = sqlx::query_as("SELECT * FROM app_document_share_recipient($1, $2::text, $3)")
+        .bind(id)
+        .bind(email)
+        .bind(input.organization_id)
+        .fetch_optional(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?
+        .ok_or(AppError::NotFound)?;
+    tx.commit().await?;
+    Ok(Json(recipient))
+}
+
 #[utoipa::path(get, path = "/api/documents/{document_id}/shares",
     params(("document_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Share]), (status = 403, body = ErrorBody),
@@ -63,22 +112,22 @@ pub async fn list_shares(
 ) -> Result<Json<Vec<Share>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     require_manager(&mut tx, id).await?;
-    let rows: Vec<Share> = sqlx::query_as(
-        "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission FROM document_shares s
-         JOIN users u ON u.id = s.grantee_user_id WHERE s.document_id = $1 ORDER BY s.created_at",
-    )
+    let shares = sqlx::query_as(&format!(
+        "{SHARE_COLUMNS} WHERE s.document_id = $1 ORDER BY s.created_at"
+    ))
     .bind(id)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
-    Ok(Json(rows))
+    Ok(Json(shares))
 }
 
-/// 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/shares",
-    params(("document_id" = String, Path, format = Uuid)), request_body = CreateShare,
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<UserId>, Header)), request_body = CreateShare,
     responses((status = 201, body = Share), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn create_share(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -89,28 +138,27 @@ pub async fn create_share(
     let mut tx = state.db.begin_as(user).await?;
     let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4, $5)")
         .bind(id)
-        .bind(&email)
-        .bind(&input.permission)
+        .bind(email)
+        .bind(input.permission)
         .bind(input.organization_id)
         .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
         .map_err(share_error)?;
-    let share: Share = sqlx::query_as(
-        "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission
-         FROM document_shares s JOIN users u ON u.id = s.grantee_user_id WHERE s.id = $1",
-    )
-    .bind(share_id)
-    .fetch_one(tx.conn())
-    .await?;
+    let share = sqlx::query_as(&format!("{SHARE_COLUMNS} WHERE s.id = $1"))
+        .bind(share_id)
+        .fetch_one(tx.conn())
+        .await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(share)))
 }
 
-/// 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.
 #[utoipa::path(delete, path = "/api/document-shares/{share_id}",
-    params(("share_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+    params(("share_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<UserId>, Header)),
+    responses((status = 204), (status = 400, body = ErrorBody),
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn delete_share(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -125,4 +173,20 @@ pub async fn delete_share(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// 공유 자원과 명령. 모든 명령에 선택형 기대 사용자 검사를 공통 적용한다(D-96).
+pub fn router(state: &AppState) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/documents/{document_id}/shares",
+            get(list_shares).post(create_share),
+        )
+        .route("/documents/{document_id}/share-recipient", get(recipient))
+        .route("/document-shares/{share_id}", delete(delete_share))
+        .route_layer(
+            from_extractor_with_state::<ExpectedUserIfSent, SessionState>(SessionState::from_ref(
+                state,
+            )),
+        )
 }
