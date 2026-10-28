@@ -1,8 +1,10 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TimeEntryView, TrashEntryView } from '$lib/api/client';
+import type { TrashEntryView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
 import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
@@ -76,7 +78,7 @@ describe('inline delete confirmation focus', () => {
       target: null,
       version: 1,
     };
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
     render(TimeEntryDialog, {
       props: {
         entry: time,

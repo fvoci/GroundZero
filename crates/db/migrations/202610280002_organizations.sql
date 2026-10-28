@@ -1902,7 +1902,7 @@ CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, 
       FROM task_dependencies d
       WHERE v_map ? d.predecessor_id::text AND v_map ? d.successor_id::text;
 
-    -- 항목 문서: 볼 수 있고 복제가 허용된 것(또는 소유 권한), 부모 먼저.
+    -- 항목 문서: 볼 수 있고 D-115의 복제 허용·소유 권한·작성자 예외에 드는 것, 부모 먼저.
     v_map := '{}'::jsonb;
     FOR v_row IN
       WITH RECURSIVE tree AS (
@@ -1915,7 +1915,7 @@ CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, 
       SELECT * FROM tree ORDER BY depth, position
     LOOP
       v_access := app_access('document', v_row.id);
-      IF v_access = 'none' OR (v_access <> 'owner' AND NOT v_row.allow_copy)
+      IF v_access = 'none' OR NOT app_document_can_export(v_row.id)
          OR (v_row.parent_id IS NOT NULL AND NOT v_map ? v_row.parent_id::text) THEN
         v_skipped := v_skipped + 1;
         CONTINUE;

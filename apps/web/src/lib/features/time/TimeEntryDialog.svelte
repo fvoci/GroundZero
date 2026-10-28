@@ -1,9 +1,11 @@
 <script lang="ts">
+  import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/features/time/model';
+  import { parseTimeEntry, TIME_KINDS } from '$lib/features/time/model';
+  import { timeData } from '$lib/features/time/data';
   // 시간 기록 고치기(본인만): 시작·끝(보는 사람 시간대)·멈춘 시간·종류·메모·연결 대상, 수정 이력, 지우기.
   // 기준 버전으로 충돌을 막고, 충돌하면 서버 내용을 보여 준 뒤 다시 고치게 한다.
   import { onMount, untrack } from 'svelte';
-  import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
-  import { api, parseTimeEntry, TIME_KINDS } from '$lib/api/client';
+
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { me } from '$lib/me.svelte';
@@ -249,7 +251,7 @@
       fill(current);
       // 버리기가 폼과 함께 수정 이력도 비웠다. 서버 내용(새 판)의 이력을 다시 읽는다.
       const userId = me.userId;
-      void api
+      void timeData
         .timeEntryRevisions(current.id)
         .then((h) => {
           if (me.userId === userId && base?.id === current.id) history = h;
@@ -295,7 +297,7 @@
       fill(e);
     });
     let cancelled = false;
-    void api
+    void timeData
       .timeEntryRevisions(e.id)
       .then((h) => {
         if (!cancelled && me.userId === userId) history = h;
@@ -352,7 +354,7 @@
     if (attempt === undefined) return;
     busy = true;
     try {
-      const result = await api.updateTimeEntry(base.id, base.version, {
+      const result = await timeData.updateTimeEntry(base.id, base.version, {
         started_at: start.instant,
         ended_at: end === null ? null : end.instant,
         // 진행 중인 타이머와 고치지 않은 멈춘 시간은 원래 초 단위 값 그대로.
@@ -387,7 +389,7 @@
     if (attempt === undefined) return;
     busy = true;
     try {
-      await api.deleteTimeEntry(base.id);
+      await timeData.deleteTimeEntry(base.id);
       if (!draft.isCurrent(attempt)) return;
       draft.complete(attempt);
       onchanged();

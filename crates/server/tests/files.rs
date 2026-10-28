@@ -6,27 +6,23 @@
 //! 파일 첨부·버전·업로드 (D-06, D-35, D-52): 조각 업로드와 이어 올리기, 무결성, 권한, 버전, 한도, 휴지통·영구 삭제.
 
 mod common;
+#[path = "it/files/fixtures.rs"]
+mod fixtures;
+use fixtures::{part, sha, start, state_with, upload_all};
 
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, add_member, config_with, create_doc, create_workspace, fixture_sql, login,
-    new_request_id, send, send_raw,
+    TestUser, add_member, create_doc, create_workspace, fixture_sql, login, new_request_id, send,
+    send_raw,
 };
 use fvoci_server::http::AppState;
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+use serde_json::json;
 
 const MIB: usize = 1024 * 1024;
 
 // 두 시험이 같은 file_versions 테이블에 트리거 DDL을 걸어 서로 교착하지 않게 한다.
 static COMPLETE_TRIGGER_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-fn state_with(overrides: &[(&str, &str)]) -> AppState {
-    let mut all = vec![("FVOCI_UPLOAD_CHUNK_BYTES", "5242880")];
-    all.extend_from_slice(overrides);
-    fvoci_server::app::build_state(config_with(&all)).unwrap()
-}
 
 fn s3_overrides() -> Vec<(&'static str, String)> {
     let env = |k: &str| std::env::var(k).expect("run via `cargo xtask test`");
@@ -38,10 +34,6 @@ fn s3_overrides() -> Vec<(&'static str, String)> {
         ("FVOCI_S3_ACCESS_KEY", env("FVOCI_TEST_S3_ACCESS_KEY")),
         ("FVOCI_S3_SECRET_KEY", env("FVOCI_TEST_S3_SECRET_KEY")),
     ]
-}
-
-fn sha(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
 }
 
 /// 테이블 소유 역할로 연결한다(`database`가 있으면 그 DB). 지울 목록·버전 키를 직접 본다.
@@ -100,59 +92,6 @@ fn content(len: usize, seed: u8) -> Vec<u8> {
         .collect()
 }
 
-async fn start(app: &Router, user: &TestUser, body: Value) -> (StatusCode, Value) {
-    let r = send(app, Method::POST, "/api/uploads", Some(user), Some(body)).await;
-    (r.status, r.json)
-}
-
-async fn part(
-    app: &Router,
-    user: &TestUser,
-    upload: &str,
-    n: usize,
-    bytes: &[u8],
-    hash: &str,
-) -> StatusCode {
-    send_raw(
-        app,
-        Method::PUT,
-        &format!("/api/uploads/{upload}/parts/{n}"),
-        Some(user),
-        &[
-            ("x-content-sha256", hash),
-            ("content-type", "application/octet-stream"),
-        ],
-        bytes.to_vec(),
-    )
-    .await
-    .0
-}
-
-/// 조각으로 나눠 모두 올리고 마친다.
-async fn upload_all(app: &Router, user: &TestUser, body: Value, data: &[u8]) -> Value {
-    let (status, up) = start(app, user, body).await;
-    assert_eq!(status, StatusCode::CREATED, "{up:?}");
-    let id = up["id"].as_str().unwrap();
-    let chunk = usize::try_from(up["chunk_bytes"].as_i64().unwrap()).unwrap();
-    for (i, piece) in data.chunks(chunk).enumerate() {
-        assert_eq!(
-            part(app, user, id, i + 1, piece, &sha(piece)).await,
-            StatusCode::NO_CONTENT
-        );
-    }
-    let done = send(
-        app,
-        Method::POST,
-        &format!("/api/uploads/{id}/complete"),
-        Some(user),
-        None,
-    )
-    .await;
-    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
-    assert_eq!(done.json["state"], "done");
-    done.json
-}
-
 async fn download(
     app: &Router,
     user: &TestUser,
@@ -170,7 +109,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
-    let doc = create_doc(&app, &writer, &ws, "자료").await;
+    let doc = create_doc(&app, &admin, &ws, "자료").await;
     let doc_id = doc["id"].as_str().unwrap();
     let data = content(5 * MIB + 10, 7);
     let request = new_request_id();
@@ -287,7 +226,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     assert_eq!(listed.json[0]["name"], "data.csv");
     assert_eq!(listed.json[0]["can_write"], false);
     assert_eq!(listed.json[0]["size"], data.len());
-    // D-115: 수정 권한도 소유 권한이 아니면 allow_copy가 있어야 내려받는다.
+    // D-115: 문서 작성자가 아닌 수정자·파일 업로더는 allow_copy가 있어야 내려받는다.
     assert_eq!(listed.json[0]["can_download"], false);
     assert_eq!(
         download(&app, &reader, &format!("/api/files/{file_id}/content"))
@@ -404,10 +343,18 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         None,
     )
     .await;
-    assert_eq!(detail.json["file"]["current_version"], 2);
-    assert_eq!(detail.json["file"]["name"], "data.csv");
-    assert_eq!(detail.json["versions"][0]["note"], "고친 값");
-    assert_eq!(detail.json["versions"][1]["sha256"], sha(&data));
+    assert_eq!(detail.json["current_version"], 2);
+    assert_eq!(detail.json["name"], "data.csv");
+    let versions = send(
+        &app,
+        Method::GET,
+        &format!("/api/files/{file_id}/versions"),
+        Some(&reader),
+        None,
+    )
+    .await;
+    assert_eq!(versions.json[0]["note"], "고친 값");
+    assert_eq!(versions.json[1]["sha256"], sha(&data));
     let (_, headers, latest) = download(
         &app,
         &reader,
@@ -437,7 +384,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         async move {
             send(
                 &app,
-                Method::PUT,
+                Method::PATCH,
                 &uri,
                 Some(&user),
                 Some(json!({ "name": name })),
@@ -843,128 +790,6 @@ async fn s3_files_round_trip_and_purge_with_the_document() {
 
 /// 감사 반영: 문서를 다른 워크스페이스로 옮기면 첨부도 함께 옮겨진다. 옛 워크스페이스 관리자는 그 파일의 휴지통
 /// 묶음을 보거나 되살리거나 영구 삭제할 수 없고, 휴지통·저장 용량은 새 워크스페이스 몫이다.
-#[tokio::test]
-async fn moving_a_document_takes_its_attachments_along() {
-    let state = state_with(&[]);
-    let app = common::app(&state);
-    let alice = login(&state, "alice").await;
-    let src = create_workspace(&app, &alice, "첨부 출발").await;
-    let dst = create_workspace(&app, &alice, "첨부 도착").await;
-    let (src_admin, _) = add_member(&app, &state, &alice, &src, "src-admin", "admin").await;
-    let (dst_writer, _) = add_member(&app, &state, &alice, &dst, "dst-writer", "member").await;
-    let doc = create_doc(&app, &alice, &src, "첨부 문서").await;
-    let doc_id = doc["id"].as_str().unwrap().to_owned();
-    let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc_id },
-                       "name": "자료.txt", "size": 3, "content_type": "text/plain" });
-    let done = upload_all(&app, &alice, body, b"abc").await;
-    let file_id = done["file_id"].as_str().unwrap().to_owned();
-    // 옮기기 전에 휴지통에 넣은 첨부의 묶음도 함께 옮겨진다.
-    let body = json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc_id },
-                       "name": "먼저 지움.txt", "size": 3, "content_type": "text/plain" });
-    let early = upload_all(&app, &alice, body, b"xyz").await;
-    let early_trashed = send(
-        &app,
-        Method::DELETE,
-        &format!("/api/files/{}", early["file_id"].as_str().unwrap()),
-        Some(&alice),
-        None,
-    )
-    .await;
-    assert_eq!(
-        early_trashed.status,
-        StatusCode::OK,
-        "{:?}",
-        early_trashed.json
-    );
-    let early_batch = early_trashed.json["batch_id"].as_str().unwrap().to_owned();
-
-    let uri = format!("/api/documents/{doc_id}/move");
-    let preview = send(
-        &app,
-        Method::POST,
-        &uri,
-        Some(&alice),
-        Some(json!({ "target_workspace_id": dst })),
-    )
-    .await;
-    assert_eq!(preview.status, StatusCode::CONFLICT, "{:?}", preview.json);
-    // D-114: 이름 배열 대신 사용자별 등급 변화를 확인한다.
-    let ack = json!({ "changes": preview.json["changes"] });
-    let moved = send(
-        &app,
-        Method::POST,
-        &uri,
-        Some(&alice),
-        Some(json!({ "target_workspace_id": dst, "acknowledged": ack })),
-    )
-    .await;
-    assert_eq!(moved.status, StatusCode::OK, "{:?}", moved.json);
-
-    let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
-    let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
-    let place: (Option<uuid::Uuid>, Option<uuid::Uuid>) =
-        sqlx::query_as("SELECT workspace_id, owner_user_id FROM fvoci.files WHERE id = $1::uuid")
-            .bind(&file_id)
-            .fetch_one(&owner)
-            .await
-            .unwrap();
-    assert_eq!(place.0.map(|w| w.to_string()), Some(dst.clone()));
-    assert_eq!(place.1, None);
-
-    // 새 워크스페이스 작성자가 휴지통에 넣으면 그 묶음은 새 워크스페이스 관리자에게만 보인다.
-    let trashed = send(
-        &app,
-        Method::DELETE,
-        &format!("/api/files/{file_id}"),
-        Some(&dst_writer),
-        None,
-    )
-    .await;
-    assert_eq!(trashed.status, StatusCode::OK, "{:?}", trashed.json);
-    let batch = trashed.json["batch_id"].as_str().unwrap().to_owned();
-    let listed = |user: TestUser, ws: String, batch: String| {
-        let app = app.clone();
-        async move {
-            send(
-                &app,
-                Method::GET,
-                &format!("/api/trash-batches?workspace_id={ws}"),
-                Some(&user),
-                None,
-            )
-            .await
-            .json
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|e| e["id"] == batch.as_str())
-        }
-    };
-    for batch in [batch, early_batch] {
-        assert!(!listed(src_admin.clone(), src.clone(), batch.clone()).await);
-        assert!(listed(alice.clone(), dst.clone(), batch.clone()).await);
-        let restore = send(
-            &app,
-            Method::POST,
-            &format!("/api/trash-batches/{batch}/restore"),
-            Some(&src_admin),
-            None,
-        )
-        .await;
-        assert_eq!(restore.status, StatusCode::NOT_FOUND, "{:?}", restore.json);
-        let purge = send(
-            &app,
-            Method::DELETE,
-            &format!("/api/trash-batches/{batch}"),
-            Some(&src_admin),
-            None,
-        )
-        .await;
-        assert_eq!(purge.status, StatusCode::NOT_FOUND, "{:?}", purge.json);
-    }
-    owner.close().await;
-}
-
 /// 감사 S11: 업로드 마무리 중 일시적 오류(여기서는 파일 버전을 기록할 때의 교착)가 나면 업로드가 'completing'에 남아,
 /// 다시 마치기가 5분 동안 "마치는 중"(409)이었다. 웹은 약 60초만 다시 묻고 실패로 알렸다. 멈춘 마무리의 점유를 바로
 /// 풀어 다음 요청이 이어서 마친다.
@@ -1020,98 +845,6 @@ async fn a_transient_failure_while_finishing_lets_the_next_complete_go_through()
     assert_eq!(first.status, StatusCode::CONFLICT, "{:?}", first.json);
 
     // 바로 다시 마치면 이어서 끝난다.
-    let again = send(&app, Method::POST, &uri, Some(&admin), None).await;
-    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
-    assert_eq!(again.json["state"], "done");
-}
-
-/// 사용자로서 마치기를 시작하고(점유) 그 시도의 점유 시각을 돌려준다.
-async fn begin_complete(
-    state: &AppState,
-    user: &TestUser,
-    upload: uuid::Uuid,
-) -> time::OffsetDateTime {
-    let mut tx = state.db.begin_as(user.id).await.unwrap();
-    let claim: time::OffsetDateTime =
-        sqlx::query_scalar("SELECT state_changed_at FROM app_begin_complete($1)")
-            .bind(upload)
-            .fetch_one(tx.conn())
-            .await
-            .unwrap();
-    tx.commit().await.unwrap();
-    claim
-}
-
-/// 리뷰(감사 S11 후속): 오래 걸린 앞 마치기가 5분 뒤 다른 요청에 넘겨진 다음 늦게 실패해 점유를 풀면, 넘겨받은 요청의
-/// 점유까지 풀려 세 번째 마치기가 동시에 저장소 작업을 시작할 수 있었다(한쪽이 조각을 지우고 업로드를 되돌릴 수 있음).
-/// 점유는 시도마다 구별하고, 늦게 돌아온 시도는 넘겨받은 점유를 건드리지 않는다.
-#[tokio::test]
-async fn a_late_attempt_leaves_a_claim_taken_over_by_another_alone() {
-    let state = common::state();
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "넘겨받은 마무리").await;
-    let doc = create_doc(&app, &admin, &ws, "첨부 문서").await;
-    let data = vec![9_u8; 3229];
-    let (status, up) = start(
-        &app,
-        &admin,
-        json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
-                "name": "자료.bin", "size": data.len(), "content_type": "application/octet-stream" }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{up:?}");
-    let id = up["id"].as_str().unwrap().to_owned();
-    assert_eq!(
-        part(&app, &admin, &id, 1, &data, &sha(&data)).await,
-        StatusCode::NO_CONTENT
-    );
-    let upload: uuid::Uuid = id.parse().unwrap();
-
-    // 첫 시도가 점유한 뒤 오래 걸려, 5분이 지나 다른 요청이 넘겨받는다.
-    let first = begin_complete(&state, &admin, upload).await;
-    let mut o = owner(None).await;
-    sqlx::query(
-        "UPDATE fvoci.uploads SET state_changed_at = state_changed_at - interval '6 minutes' WHERE id = $1",
-    )
-    .bind(upload)
-    .execute(&mut o)
-    .await
-    .unwrap();
-    let second = begin_complete(&state, &admin, upload).await;
-    assert_ne!(first, second);
-
-    // 첫 시도가 늦게 실패해 점유를 풀려 해도 넘겨받은 점유는 그대로다.
-    let mut tx = state.db.begin_as(admin.id).await.unwrap();
-    sqlx::query("SELECT app_release_upload_claim($1, $2)")
-        .bind(upload)
-        .bind(first)
-        .execute(tx.conn())
-        .await
-        .unwrap();
-    let held = |claim: time::OffsetDateTime| {
-        sqlx::query_scalar::<_, bool>("SELECT app_upload_claim_held($1, $2)")
-            .bind(upload)
-            .bind(claim)
-    };
-    let first_holds = held(first).fetch_one(tx.conn()).await.unwrap();
-    let second_holds = held(second).fetch_one(tx.conn()).await.unwrap();
-    tx.commit().await.unwrap();
-    assert!(!first_holds, "the late attempt must not hold the claim");
-    assert!(second_holds, "the take-over keeps its claim");
-    let uri = format!("/api/uploads/{id}/complete");
-    let third = send(&app, Method::POST, &uri, Some(&admin), None).await;
-    assert_eq!(third.status, StatusCode::CONFLICT, "{:?}", third.json);
-
-    // 넘겨받은 시도가 멈춰 스스로 풀면 다음 마치기가 이어서 끝낸다.
-    let mut tx = state.db.begin_as(admin.id).await.unwrap();
-    sqlx::query("SELECT app_release_upload_claim($1, $2)")
-        .bind(upload)
-        .bind(second)
-        .execute(tx.conn())
-        .await
-        .unwrap();
-    tx.commit().await.unwrap();
     let again = send(&app, Method::POST, &uri, Some(&admin), None).await;
     assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
     assert_eq!(again.json["state"], "done");
@@ -1227,123 +960,4 @@ async fn a_dropped_complete_request_still_releases_a_stalled_claim() {
     let again = last.expect("the claim stayed held after the dropped request");
     assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
     assert_eq!(again.json["state"], "done");
-}
-
-/// #65 리뷰(감사 S11 후속): 로컬 저장소는 마칠 때 조각을 임시 파일에 이은 뒤 최종 키로 이름을 바꿨다. 앞 시도가 잇는
-/// 도중 오래 멈춰 5분 뒤 다른 요청이 넘겨받고, 그 요청이 조각 오류로 업로드를 되돌린 뒤 다른 바이트로 다시 받아 마치면,
-/// 늦게 돌아온 앞 시도의 이름 바꾸기가 최종 키를 덮어 저장된 바이트와 기록된 SHA-256이 어긋났다. 최종 키로 게시하는 것은
-/// 점유를 쥔 시도뿐이다. 앞 시도는 첫 조각 자리에 둔 FIFO에서 읽다가 멈춘다.
-#[cfg(unix)]
-#[tokio::test]
-async fn a_late_attempt_cannot_overwrite_what_the_take_over_stored() {
-    let dir = std::env::temp_dir().join(format!("fvoci-files-{}", uuid::Uuid::now_v7().simple()));
-    let state = state_with(&[("FVOCI_STORAGE_DIR", dir.to_str().unwrap())]);
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "늦은 게시").await;
-    let doc = create_doc(&app, &admin, &ws, "첨부 문서").await;
-    let old = vec![3_u8; 3233];
-    let new = vec![4_u8; 3233];
-    let (status, up) = start(
-        &app,
-        &admin,
-        json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
-                "name": "자료.bin", "size": old.len(), "content_type": "application/octet-stream" }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{up:?}");
-    let id = up["id"].as_str().unwrap().to_owned();
-    assert_eq!(
-        part(&app, &admin, &id, 1, &old, &sha(&old)).await,
-        StatusCode::NO_CONTENT
-    );
-    let upload: uuid::Uuid = id.parse().unwrap();
-    let mut o = owner(None).await;
-    let (key, storage_upload): (String, String) =
-        sqlx::query_as("SELECT storage_key, storage_upload_id FROM fvoci.uploads WHERE id = $1")
-            .bind(upload)
-            .fetch_one(&mut o)
-            .await
-            .unwrap();
-    let first_part = dir.join("uploads").join(&storage_upload).join("00001");
-    std::fs::remove_file(&first_part).unwrap();
-    let made = std::process::Command::new("mkfifo")
-        .arg(&first_part)
-        .status()
-        .unwrap();
-    assert!(made.success());
-
-    // 앞 시도가 점유하고 첫 조각을 읽다가 멈춘다(FIFO에 쓰는 쪽이 열리면 읽는 쪽도 열린 것이다).
-    let uri = format!("/api/uploads/{id}/complete");
-    let late = {
-        let (app, admin, uri) = (app.clone(), admin.clone(), uri.clone());
-        tokio::spawn(async move { send(&app, Method::POST, &uri, Some(&admin), None).await })
-    };
-    let writer = {
-        let path = first_part.clone();
-        tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            tokio::task::spawn_blocking(move || std::fs::OpenOptions::new().write(true).open(path)),
-        )
-        .await
-        .expect("the first attempt never started reading the parts")
-        .unwrap()
-        .unwrap()
-    };
-
-    // 5분이 지나 다음 시도가 넘겨받는다. 첫 조각이 없어 잇지 못하고 업로드를 되돌린다.
-    sqlx::query(
-        "UPDATE fvoci.uploads SET state_changed_at = state_changed_at - interval '6 minutes' WHERE id = $1",
-    )
-    .bind(upload)
-    .execute(&mut o)
-    .await
-    .unwrap();
-    std::fs::remove_file(&first_part).unwrap();
-    let take_over = send(&app, Method::POST, &uri, Some(&admin), None).await;
-    assert_eq!(
-        take_over.status,
-        StatusCode::CONFLICT,
-        "{:?}",
-        take_over.json
-    );
-
-    // 다른 바이트를 다시 받아 마친다.
-    assert_eq!(
-        part(&app, &admin, &id, 1, &new, &sha(&new)).await,
-        StatusCode::NO_CONTENT
-    );
-    let done = send(&app, Method::POST, &uri, Some(&admin), None).await;
-    assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
-    assert_eq!(done.json["state"], "done");
-    let recorded: String =
-        sqlx::query_scalar("SELECT sha256 FROM fvoci.file_versions WHERE storage_key = $1")
-            .bind(&key)
-            .fetch_one(&mut o)
-            .await
-            .unwrap();
-    assert_eq!(recorded, sha(&new));
-
-    // 앞 시도가 남은 조각을 다 읽고 늦게 돌아온다. 점유를 잃었으니 최종 키를 덮지 못한다.
-    {
-        use std::io::Write as _;
-        let mut writer = writer;
-        writer.write_all(&old).unwrap();
-    }
-    let late = tokio::time::timeout(std::time::Duration::from_secs(30), late)
-        .await
-        .expect("the first attempt never came back")
-        .unwrap();
-    assert!(!late.status.is_server_error(), "{:?}", late.json);
-    let (stored, size) = state.storage.digest(&key).await.unwrap();
-    assert_eq!(size, new.len() as u64);
-    assert_eq!(
-        stored, recorded,
-        "the late attempt overwrote the stored content"
-    );
-    assert!(
-        !dir.join("uploads").join(&storage_upload).exists(),
-        "the received parts were left behind"
-    );
-    let _ignored = std::fs::remove_dir_all(&dir);
 }

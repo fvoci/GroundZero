@@ -50,17 +50,21 @@ describe('file rename', () => {
     return input;
   }
 
-  it('offers the unfinished file name after remount without renaming automatically', async () => {
+  it('keeps a short file name only on screen, guards leaving, and offers nothing after remount', async () => {
     const rename = vi.spyOn(api, 'renameFile');
     await openRename();
-    cleanup();
-    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
-    await fireEvent.click(await screen.findByRole('button', { name: '입력 되살리기' }));
-    expect(await screen.findByRole('textbox', { name: '새 이름' })).toHaveValue('report/final.pdf');
-    expect(rename).not.toHaveBeenCalled();
+    expect(
+      Object.keys(localStorage).filter((key) => key.includes('attachment-rename')),
+    ).toHaveLength(0);
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
+    cleanup();
+    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
+    await fireEvent.click(await screen.findByRole('button', { name: 'report.pdf 이름 바꾸기' }));
+    expect(screen.queryByRole('button', { name: '입력 되살리기' })).toBeNull();
+    expect(screen.getByRole('textbox', { name: '새 이름' })).toHaveValue('report.pdf');
+    expect(rename).not.toHaveBeenCalled();
   });
 
   it('keeps the typed name and shows the error beside it when the server rejects it', async () => {

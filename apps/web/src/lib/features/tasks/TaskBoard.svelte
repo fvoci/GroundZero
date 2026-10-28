@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { type SavedViewView } from '$lib/features/events/saved-views-model';
+  import { savedViewsApi } from '$lib/features/events/saved-views-api';
   import BoardFilters from './BoardFilters.svelte';
   import BoardCard from './BoardCard.svelte';
   import BoardLane from './BoardLane.svelte';
@@ -13,7 +15,6 @@
 
   import type {
     ItemView,
-    SavedViewView,
     ShiftProposalView,
     TaskDetailView,
     TaskInput,
@@ -22,7 +23,7 @@
     PlanBlockedView,
     UndatedTaskView,
   } from '$lib/api/client';
-  import { api, ApiError, newRequestId } from '$lib/api/client';
+  import { ApiError, newRequestId } from '$lib/api/client';
   import { canonicalJson } from '$lib/features/documents/drafts';
   import { errorText } from '$lib/api/errors';
   import { org } from '$lib/org.svelte';
@@ -322,7 +323,7 @@
 
   async function loadViews(itemId: string, restore = false): Promise<void> {
     const key = contextKey(itemId);
-    const loaded = await api.savedViews(itemId).catch(() => []);
+    const loaded = await savedViewsApi.savedViews(itemId).catch(() => []);
     if (itemId !== item.id || key !== contextKey(item.id)) return;
     views = loaded;
     if (!restore || contextTouched) return;
@@ -402,13 +403,18 @@
     try {
       const result =
         requestedTarget === null
-          ? await api.createView(itemId, requestId, name, config)
-          : await api.updateView(requestedTarget.id, requestId, requestedTarget.version, config);
+          ? await savedViewsApi.createView(itemId, requestId, name, config)
+          : await savedViewsApi.updateView(
+              requestedTarget.id,
+              requestId,
+              requestedTarget.version,
+              config,
+            );
       if (!viewDraft.isOwner(draftAttempt)) return;
       // 응답이 준 보기(저장한 것 또는 409의 최신)는 목록 다시 읽기가 실패해도 남긴다. 비면 다시 저장이 PUT 대신 POST가
       // 되어 또 409였다(CodeRabbit).
       const returned = result.kind === 'saved' ? result.view : result.current;
-      const reread = await api.savedViews(itemId).catch(() => views);
+      const reread = await savedViewsApi.savedViews(itemId).catch(() => views);
       if (item.id !== itemId) return;
       views = withView(reread, returned);
       if (selectedView === selectedAtStart) selectedView = returned.id;
@@ -438,7 +444,7 @@
     if (selectedView === '' || deletingView) return;
     deletingView = true;
     try {
-      await api.deleteView(selectedView);
+      await savedViewsApi.deleteView(selectedView);
       selectedView = '';
       askingViewDelete = false;
       await loadViews(item.id);

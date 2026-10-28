@@ -17,7 +17,6 @@ use crate::search::{SearchClient, drain, prepare};
 use crate::storage::Storage;
 use fvoci_core::error::AppError;
 use fvoci_db::{Db, needed_ids};
-use fvoci_system::cleanup::clean_storage;
 
 /// 한 번 돈 결과(로그·테스트용).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -227,7 +226,7 @@ pub async fn run_all_now_with_retention(
         purged,
         notified,
         cleaned: match storage {
-            Some(storage) => clean_storage(db, storage, crate::backup::STORAGE_LOCK).await?,
+            Some(storage) => clean_storage(db, storage).await?,
             None => 0,
         },
         occurrences,
@@ -258,6 +257,19 @@ async fn drain_all(
     Ok(total)
 }
 
+async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
+    fvoci_files::cleanup::clean_storage(
+        db,
+        storage,
+        crate::backup::STORAGE_LOCK,
+        system_call(
+            db,
+            &[Job::Statement("SELECT app_system_expire_uploads()")],
+            Retention::default(),
+        ),
+    )
+    .await
+}
 /// 일 하나를 작업 id 안에서 하고(그 안의 로그 줄에 `job`·`job_id`, D-83), 실패를 기록하고 0으로 본다. 한 일이
 /// 실패해도(예: 검색 서비스 중단) 다른 일은 계속한다.
 async fn logged(
@@ -316,13 +328,7 @@ pub async fn run_once_with_retention(
     .await;
     TickReport {
         cleaned: match storage {
-            Some(storage) => {
-                logged(
-                    "storage",
-                    clean_storage(db, storage, crate::backup::STORAGE_LOCK),
-                )
-                .await
-            }
+            Some(storage) => logged("storage", clean_storage(db, storage)).await,
             None => 0,
         },
         indexed: match search {

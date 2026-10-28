@@ -1,9 +1,11 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import type { ItemView } from '$lib/api/client';
+
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -56,7 +58,7 @@ describe('item events list', () => {
   it('keeps the newest read when an older read answers later', async () => {
     await setLocale('ko', { reload: false });
     const answers: ((list: EventView[]) => void)[] = [];
-    vi.spyOn(api, 'itemEvents').mockImplementation(
+    vi.spyOn(eventsApi, 'itemEvents').mockImplementation(
       () =>
         new Promise((resolve) => {
           answers.push(resolve);

@@ -97,7 +97,7 @@
   }
 
   async function run(): Promise<void> {
-    if (!doc.can_export || (doc.access !== 'owner' && !doc.allow_copy)) return;
+    if (!doc.can_export) return;
     busy = true;
     error = undefined;
     notes = undefined;

@@ -11,7 +11,7 @@ use futures_util::StreamExt;
 use fvoci_core::error::AppError;
 use fvoci_core::secret::Secret;
 use fvoci_server::config::{S3Config, StorageConfig};
-use fvoci_server::storage::{Part, Storage};
+use fvoci_storage::{Part, Storage};
 use sha2::{Digest, Sha256};
 
 fn local() -> Storage {

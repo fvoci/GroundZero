@@ -1,10 +1,12 @@
 <script lang="ts">
+  import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/features/time/model';
+  import { TIME_KINDS } from '$lib/features/time/model';
+  import { timeData } from '$lib/features/time/data';
   // 내 시간 (D-117): 본인 기록과 날짜·종류별 합계, 수동 기록.
   // 기록은 본인만 본다(워크스페이스 관리자에게도 보이지 않는다). 날짜는 보는 사람 시간대, 기록은 시작한 날에 센다.
   import { onMount, untrack } from 'svelte';
 
-  import type { TimeEntryView, TimeKind, TimeSummaryRowView } from '$lib/api/client';
-  import { api, newRequestId, TIME_KINDS } from '$lib/api/client';
+  import { newRequestId } from '$lib/api/client';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { me } from '$lib/me.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -74,9 +76,9 @@
     const monthFrom = `${today.slice(0, 7)}-01`;
     let cancelled = false;
     Promise.all([
-      api.timeEntries(from, to, zone),
-      api.timeSummary(from, to, zone, 'day'),
-      api.timeSummary(monthFrom, today, zone, 'month'),
+      timeData.timeEntries(from, to, zone),
+      timeData.timeSummary(from, to, zone, 'day'),
+      timeData.timeSummary(monthFrom, today, zone, 'month'),
     ])
       .then(([e, d, mo]) => {
         if (cancelled || userId !== me.userId) return;
@@ -248,7 +250,7 @@
       attempt = manualDraft.capture();
       if (attempt === undefined) return;
       manualBusy = true;
-      await api.addTimeEntry(requestId, entry);
+      await timeData.addTimeEntry(requestId, entry);
       if (!manualDraft.isOwner(attempt)) return;
       // 입력은 보내는 동안 잠겨 있다. 그래도 바뀌었으면 지우지 않고 남긴다.
       if (manualDraft.isCurrent(attempt)) {

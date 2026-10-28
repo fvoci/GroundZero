@@ -1,7 +1,7 @@
+import { type EventInput } from '$lib/features/events/model';
 // 일정 충돌 뒤 "내 입력으로 다시 저장"의 합치기(D-94). 입력을 연 때의 일정(`base`)과 비교해 내가 고친 칸만 내 값으로,
 // 나머지는 서버 최신 값으로 보낸다. 같은 칸을 서버에서도 다른 값으로 바꿨으면 겹친 칸으로 돌려주고, 화면이 양쪽 값을
 // 보여 덮어쓸지 묻는다. 날짜·시각·시간대·종일 여부는 한 묶음(`when`)이다(시작만 내 것, 끝은 서버 것처럼 섞이지 않게).
-import type { EventInput } from '$lib/api/client';
 
 /** 합치는 칸. `when`은 종일 여부·날짜·시각·시간대 묶음. */
 export const EVENT_UNITS = ['kind', 'title', 'description', 'when'] as const;

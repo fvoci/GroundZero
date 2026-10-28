@@ -507,12 +507,13 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let detail = send(
         &app,
         Method::GET,
-        &format!("/api/files/{file}"),
+        &format!("/api/files/{file}/versions"),
         Some(&writer),
         None,
     )
     .await;
-    let mut kept: Vec<i64> = detail.json["versions"]
+    let mut kept: Vec<i64> = detail
+        .json
         .as_array()
         .unwrap()
         .iter()
@@ -1300,7 +1301,7 @@ async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
         async move {
             send(
                 &app,
-                Method::PUT,
+                Method::PATCH,
                 &format!("/api/files/{file_id}"),
                 Some(&admin),
                 Some(json!({ "name": "plan-2.csv" })),

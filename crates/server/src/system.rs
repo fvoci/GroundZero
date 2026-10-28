@@ -1,4 +1,4 @@
-//! 시스템 도메인이 받는 구현 경계. 저장소와 공동 편집은 조립 crate에 남는다.
+//! 시스템 도메인이 받는 구현 경계. 공유 저장소와 공동 편집을 조립 crate가 주입한다.
 
 use crate::{collab::Rooms, http::AppState, storage::Storage};
 use axum::extract::FromRef;
@@ -13,7 +13,7 @@ impl FromRef<AppState> for SystemState {
     fn from_ref(state: &AppState) -> Self {
         Self {
             db: state.db.clone(),
-            storage: Arc::new(state.storage.clone()),
+            storage: Arc::new(SystemStore(state.storage.clone())),
             snapshots: Arc::new(state.collab.clone()),
             plain_text: crate::features::search_text::plain_text,
             export_permits: Arc::clone(&state.export_permits),
@@ -21,15 +21,18 @@ impl FromRef<AppState> for SystemState {
     }
 }
 
-impl ObjectStore for Storage {
+#[derive(Debug)]
+struct SystemStore(Storage);
+
+impl ObjectStore for SystemStore {
     fn get<'a>(&'a self, key: &'a str) -> IoFuture<'a, Result<ByteStream, AppError>> {
-        Box::pin(self.get(key))
+        Box::pin(self.0.get(key))
     }
     fn delete<'a>(&'a self, key: &'a str) -> IoFuture<'a, Result<(), AppError>> {
-        Box::pin(self.delete(key))
+        Box::pin(self.0.delete(key))
     }
     fn abort<'a>(&'a self, key: &'a str, upload: &'a str) -> IoFuture<'a, Result<(), AppError>> {
-        Box::pin(self.abort(key, upload))
+        Box::pin(self.0.abort(key, upload))
     }
 }
 
