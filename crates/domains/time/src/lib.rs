@@ -1,6 +1,15 @@
 //! 개인 시간 기록 도메인. 라우터와 OpenAPI를 조립 crate에 제공한다.
 
-pub mod time_tracking;
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
+pub mod commands;
+pub mod comparison;
+pub mod model;
+pub mod range;
+pub mod read;
+pub mod summary;
+pub mod targets;
+pub mod timer;
 
 use axum::routing::{get, post, put};
 use axum::{Router, extract::FromRef};
@@ -16,39 +25,39 @@ pub struct TimeState {
 #[derive(Debug, OpenApi)]
 #[openapi(
     paths(
-        time_tracking::current,
-        time_tracking::start,
-        time_tracking::action,
-        time_tracking::list,
-        time_tracking::add,
-        time_tracking::update,
-        time_tracking::delete,
-        time_tracking::revisions,
-        time_tracking::summary,
-        time_tracking::task_time,
-        time_tracking::item_time,
+        timer::current,
+        timer::start,
+        timer::action,
+        read::list,
+        commands::add,
+        commands::update,
+        commands::delete,
+        read::revisions,
+        summary::summary,
+        comparison::task_time,
+        comparison::item_time,
     ),
     components(schemas(
-        time_tracking::TimeKind,
-        time_tracking::TargetKind,
-        time_tracking::TargetInput,
-        time_tracking::Target,
-        time_tracking::TimeEntry,
-        time_tracking::StartTimer,
-        time_tracking::TimerStartMode,
-        time_tracking::StartedTimer,
-        time_tracking::TimerAction,
-        time_tracking::TimerActionInput,
-        time_tracking::EntryInput,
-        time_tracking::AddEntry,
-        time_tracking::UpdateEntry,
-        time_tracking::TimeEntryConflict,
-        time_tracking::TimeEntryRevision,
-        time_tracking::SummaryGroup,
-        time_tracking::TimeSummaryRow,
-        time_tracking::TaskTime,
-        time_tracking::ItemTime,
-        time_tracking::ItemTimeKind,
+        model::TimeKind,
+        targets::TargetKind,
+        targets::TargetInput,
+        targets::Target,
+        model::TimeEntry,
+        timer::StartTimer,
+        timer::TimerStartMode,
+        timer::StartedTimer,
+        timer::TimerAction,
+        timer::TimerActionInput,
+        commands::EntryInput,
+        commands::AddEntry,
+        commands::UpdateEntry,
+        commands::TimeEntryConflict,
+        read::TimeEntryRevision,
+        summary::SummaryGroup,
+        summary::TimeSummaryRow,
+        comparison::TaskTime,
+        comparison::ItemTime,
+        comparison::ItemTimeKind,
     ))
 )]
 pub struct TimeApi;
@@ -61,27 +70,15 @@ where
     SessionState: FromRef<S>,
 {
     Router::new()
-        .route(
-            "/me/timer",
-            get(time_tracking::current).post(time_tracking::start),
-        )
-        .route(
-            "/time-entries/{entry_id}/timer",
-            post(time_tracking::action),
-        )
-        .route(
-            "/me/time-entries",
-            get(time_tracking::list).post(time_tracking::add),
-        )
+        .route("/me/timer", get(timer::current).post(timer::start))
+        .route("/time-entries/{entry_id}/timer", post(timer::action))
+        .route("/me/time-entries", get(read::list).post(commands::add))
         .route(
             "/time-entries/{entry_id}",
-            put(time_tracking::update).delete(time_tracking::delete),
+            put(commands::update).delete(commands::delete),
         )
-        .route(
-            "/time-entries/{entry_id}/revisions",
-            get(time_tracking::revisions),
-        )
-        .route("/me/time-summary", get(time_tracking::summary))
-        .route("/tasks/{task_id}/time", get(time_tracking::task_time))
-        .route("/items/{item_id}/time", get(time_tracking::item_time))
+        .route("/time-entries/{entry_id}/revisions", get(read::revisions))
+        .route("/me/time-summary", get(summary::summary))
+        .route("/tasks/{task_id}/time", get(comparison::task_time))
+        .route("/items/{item_id}/time", get(comparison::item_time))
 }
