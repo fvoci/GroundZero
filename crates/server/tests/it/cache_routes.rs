@@ -351,7 +351,7 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
         Some(json!({"enabled": true})),
     )
     .await;
-    assert_eq!(enabled.status, StatusCode::OK);
+    assert_eq!(enabled.status, StatusCode::NO_CONTENT);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -390,10 +390,12 @@ async fn cache_headers_cover_natural_service_unavailable() {
 async fn cache_headers_cover_auth_redirect_with_set_cookie() {
     use axum::routing::get;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let issuer = format!("http://{}", listener.local_addr().unwrap());
+    // Config는 URL을 정규화한다. discovery의 issuer도 끝 슬래시까지 같은 문자열이어야 한다.
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let issuer = format!("{origin}/");
     let metadata = json!({
-        "issuer": issuer, "authorization_endpoint": format!("{issuer}/authorize"),
-        "token_endpoint": format!("{issuer}/token"), "jwks_uri": format!("{issuer}/jwks"),
+        "issuer": issuer, "authorization_endpoint": format!("{origin}/authorize"),
+        "token_endpoint": format!("{origin}/token"), "jwks_uri": format!("{origin}/jwks"),
         "response_types_supported": ["code"], "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["RS256"]
     });
