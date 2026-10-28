@@ -2,6 +2,8 @@
 //! (노르웨이숲 태비 초안 3). 공유 DB 전체 작업을 부르는 업무 시험(`tests/recurrence.rs`의 회차 맞추기 작업 등)은
 //! 실행 파일 머리 주석의 규칙대로 `tests/` 바로 아래에 남는다.
 
+mod patch;
+mod relations;
 mod schedule;
 mod statuses;
 mod tasks;

@@ -40,7 +40,7 @@ impl StatusCategory {
         }
     }
 
-    fn parse(raw: &str) -> Result<Self, AppError> {
+    pub(crate) fn parse(raw: &str) -> Result<Self, AppError> {
         match raw {
             "todo" => Ok(Self::Todo),
             "doing" => Ok(Self::Doing),

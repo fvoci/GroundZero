@@ -44,12 +44,22 @@ pub use state::WorkState;
         recurrence::set_task,
         recurrence::sync_item,
         tasks::trash_task,
+        tasks::patch,
+        tasks::assignees,
+        tasks::dependencies,
+        tasks::series,
+        tasks::checklist_items,
     ),
     components(schemas(
         tasks::TaskPriority,
         tasks::Assignee,
         tasks::ChecklistItem,
+        tasks::TaskWithRelations,
         tasks::Task,
+        tasks::TaskAssignee,
+        tasks::TaskDependency,
+        tasks::PatchTask,
+        tasks::TaskPatchConflict,
         tasks::TaskDetail,
         tasks::CreateTask,
         tasks::UpdateTask,
@@ -111,7 +121,10 @@ where
         .route("/items/{item_id}/assignable", get(tasks::assignable))
         .route(
             "/tasks/{task_id}",
-            get(tasks::get).put(tasks::update).delete(tasks::trash_task),
+            get(tasks::get)
+                .put(tasks::update)
+                .patch(tasks::patch)
+                .delete(tasks::trash_task),
         )
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))
@@ -129,6 +142,10 @@ where
             "/tasks/{task_id}/predecessors/{predecessor_id}",
             put(schedule::add_predecessor).delete(schedule::remove_predecessor),
         )
+        .route("/task-assignees", get(tasks::assignees))
+        .route("/task-dependencies", get(tasks::dependencies))
+        .route("/task-series", get(tasks::series))
+        .route("/checklist-items", get(tasks::checklist_items))
         .route("/tasks/{task_id}/checklist", post(tasks::add_checklist))
         .route(
             "/checklist-items/{item_id}",

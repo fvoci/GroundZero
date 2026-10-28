@@ -189,6 +189,7 @@ fn expects_user(method: &Method, uri: &str) -> bool {
                 | ["", "api", "items", id, "statuses", _]
                 if !id.is_empty()
         ),
+        Method::PATCH => matches!(segments.as_slice(), ["", "api", "tasks", id] if !id.is_empty()),
         _ => false,
     }
 }

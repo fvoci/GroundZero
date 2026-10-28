@@ -61,6 +61,7 @@ async fn every_task_write_requires_the_user_who_started_it() {
     for action in [
         "create",
         "update",
+        "patch",
         "move",
         "parent",
         "add_checklist",
@@ -156,6 +157,12 @@ async fn every_task_write_requires_the_user_who_started_it() {
                 create_uri,
                 json!({"request_id": new_request_id(), "title": "created"}),
                 StatusCode::CREATED,
+            ),
+            "patch" => (
+                Method::PATCH,
+                uri.clone(),
+                json!({"base_version": task["version"], "title": "patched"}),
+                StatusCode::OK,
             ),
             "update" => (
                 Method::PUT,

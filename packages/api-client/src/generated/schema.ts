@@ -20,6 +20,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/checklist-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 체크리스트 항목 모음(업무별 순서). 항목 범위로 읽어 화면이 업무마다 완료 수를 센다(부조종사 결정 2026-10-28 Q2 (나)). */
+        get: operations["list_checklist_items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/checklist-items/{item_id}": {
         parameters: {
             query?: never;
@@ -2010,6 +2027,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/task-assignees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 담당 모음(이름 순). */
+        get: operations["list_task_assignees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 선행 관계 모음(만든 순). 업무 범위면 그 업무가 선행이거나 후속인 관계 모두다. */
+        get: operations["list_task_dependencies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 반복 계열 모음. 업무 범위면 그 업무가 속한 계열(없으면 빈 목록)이다. */
+        get: operations["list_task_series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -2026,7 +2094,11 @@ export interface paths {
         delete: operations["trash_task"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * 업무 고치기(쓰기 권한). 보낸 칸만 바꾸고, 기준 판이 지났으면 409 `conflict`, 승인한 재배치가 맞지 않게 됐으면 409
+         *     `shift_conflict`다(둘 다 아무것도 바꾸지 않고 지금 업무와 바뀐 칸을 준다).
+         */
+        patch: operations["patch_task"];
         trace?: never;
     };
     "/api/tasks/{task_id}/activity": {
@@ -3018,6 +3090,8 @@ export interface components {
             checked: boolean;
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            task_id: string;
             text: string;
         };
         /** @description 고를 수 있는 값. */
@@ -4312,6 +4386,39 @@ export interface components {
             overdue: number;
             user_id: components["schemas"]["UserId"];
         };
+        /** @description 업무 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 날짜·예상 시간은 `null`을 보내면 지운다. */
+        PatchTask: {
+            /** @description 담당자 전체 목록(그 항목을 볼 수 있는 멤버). */
+            assignee_ids?: components["schemas"]["UserId"][] | null;
+            /**
+             * Format: int32
+             * @description 편집을 시작할 때 읽은 업무의 판(`Task.version`).
+             */
+            base_version: number;
+            description?: string | null;
+            /** @description `YYYY-MM-DD`, `null`이면 지운다. */
+            due_date?: string | null;
+            /**
+             * Format: int32
+             * @description 분, `null`이면 지운다.
+             */
+            estimate_minutes?: number | null;
+            /** @description 마일스톤이면 시작일 없이 마감일만. */
+            milestone?: boolean | null;
+            priority?: null | components["schemas"]["TaskPriority"];
+            /** @description `YYYY-MM-DD`, `null`이면 지운다. */
+            start_date?: string | null;
+            /** @description 상태 이름(항목이 정의한 것). */
+            status?: string | null;
+            /**
+             * @description 미리보기에서 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 그사이 맞지 않게 됐으면 아무것도 바꾸지 않고
+             *     409 `shift_conflict`.
+             */
+            successor_shifts?: components["schemas"]["SuccessorShift"][];
+            tags?: string[] | null;
+            /** @description 제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`. */
+            title?: string | null;
+        };
         /** @description 사람(표시 이름). */
         PersonRef: {
             display_name: string;
@@ -4859,6 +4966,71 @@ export interface components {
             task_id: string;
             title: string;
         };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_Task: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 업무. */
+            current: {
+                /** Format: date-time */
+                completed_at?: string | null;
+                description: string;
+                due_date?: string | null;
+                /** Format: int32 */
+                estimate_minutes?: number | null;
+                /** Format: uuid */
+                id: string;
+                item_id: components["schemas"]["ItemId"];
+                /** @description 마일스톤이면 마감일 하나만 쓴다. */
+                milestone: boolean;
+                module_id: components["schemas"]["ModuleId"];
+                /**
+                 * Format: int32
+                 * @description 이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동(`base_move_version`)의 기준.
+                 */
+                move_version: number;
+                /** @description 반복 회차의 날짜(규칙 기준). */
+                occurrence_date?: string | null;
+                /**
+                 * Format: uuid
+                 * @description 하위 업무면 상위 업무.
+                 */
+                parent_id?: string | null;
+                priority: components["schemas"]["TaskPriority"];
+                /** @description 예: `DEV-5`. */
+                reference?: string | null;
+                /**
+                 * Format: uuid
+                 * @description 반복 업무의 회차면 그 반복 계열(`GET /api/task-series`).
+                 */
+                series_id?: string | null;
+                /** @description `YYYY-MM-DD`. 시각 없는 날짜(D-50). */
+                start_date?: string | null;
+                /** @description 상태 이름. 명령(고치기·이동)이 상태를 항목 안에서 겹치지 않는 이름으로 가리키므로(D-116) 이름으로 싣는다. */
+                status: string;
+                /** @description 상태의 범주(완료 판정). 상태 정의(`GET /api/items/{item_id}/statuses`)와 같은 값이다. */
+                status_category: components["schemas"]["StatusCategory"];
+                tags: string[];
+                title: string;
+                /** Format: date-time */
+                updated_at: string;
+                /**
+                 * Format: int32
+                 * @description 칸 고치기의 기준 판(D-94).
+                 */
+                version: number;
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
         /** @description 타이머 시작. */
         StartTimer: {
             kind: components["schemas"]["TimeKind"];
@@ -4965,6 +5137,142 @@ export interface components {
         TargetKind: "task" | "document" | "item" | "episode" | "study_unit";
         /** @description 업무. */
         Task: {
+            /** Format: date-time */
+            completed_at?: string | null;
+            description: string;
+            due_date?: string | null;
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            /** @description 마일스톤이면 마감일 하나만 쓴다. */
+            milestone: boolean;
+            module_id: components["schemas"]["ModuleId"];
+            /**
+             * Format: int32
+             * @description 이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동(`base_move_version`)의 기준.
+             */
+            move_version: number;
+            /** @description 반복 회차의 날짜(규칙 기준). */
+            occurrence_date?: string | null;
+            /**
+             * Format: uuid
+             * @description 하위 업무면 상위 업무.
+             */
+            parent_id?: string | null;
+            priority: components["schemas"]["TaskPriority"];
+            /** @description 예: `DEV-5`. */
+            reference?: string | null;
+            /**
+             * Format: uuid
+             * @description 반복 업무의 회차면 그 반복 계열(`GET /api/task-series`).
+             */
+            series_id?: string | null;
+            /** @description `YYYY-MM-DD`. 시각 없는 날짜(D-50). */
+            start_date?: string | null;
+            /** @description 상태 이름. 명령(고치기·이동)이 상태를 항목 안에서 겹치지 않는 이름으로 가리키므로(D-116) 이름으로 싣는다. */
+            status: string;
+            /** @description 상태의 범주(완료 판정). 상태 정의(`GET /api/items/{item_id}/statuses`)와 같은 값이다. */
+            status_category: components["schemas"]["StatusCategory"];
+            tags: string[];
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: int32
+             * @description 칸 고치기의 기준 판(D-94).
+             */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 업무 담당 한 줄. */
+        TaskAssignee: {
+            display_name: string;
+            /** Format: uuid */
+            task_id: string;
+            user_id: components["schemas"]["UserId"];
+        };
+        /** @description 409 응답: 서버 최신본. */
+        TaskConflict: {
+            current: components["schemas"]["TaskDetail"];
+            error: string;
+        };
+        /** @description 선행 관계 한 줄(D-31·D-91): 선행 업무가 끝나거나 시작한 뒤 후속 업무가 어떻게 이어지는지. */
+        TaskDependency: {
+            kind: components["schemas"]["LinkKind"];
+            /** Format: int32 */
+            lag_days: number;
+            /** Format: uuid */
+            predecessor_id: string;
+            /** Format: uuid */
+            successor_id: string;
+        };
+        /** @description 업무와 체크리스트. */
+        TaskDetail: components["schemas"]["TaskWithRelations"] & {
+            checklist: components["schemas"]["ChecklistItem"][];
+        };
+        /** @description 업무의 선행 관계 하나. */
+        TaskLink: {
+            kind: components["schemas"]["LinkKind"];
+            /** Format: int32 */
+            lag_days: number;
+            /** Format: uuid */
+            task_id: string;
+        };
+        /** @description `PATCH`의 409 본문(계약 문서용). 판 충돌이면 `StaleWrite<Task>`, 기대 사용자 불일치·보관·동시 변경이면 `ErrorBody`. */
+        TaskPatchConflict: components["schemas"]["StaleWrite_Task"] | components["schemas"]["ErrorBody"];
+        /**
+         * @description 우선순위.
+         * @enum {string}
+         */
+        TaskPriority: "none" | "low" | "medium" | "high" | "urgent";
+        /** @description 반복 업무 정보. */
+        TaskSeries: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description 첫 회차(규칙은 여기서 바꾼다).
+             */
+            root_task_id: string;
+            rule?: null | components["schemas"]["RecurrenceRule"];
+            timezone: string;
+        };
+        /** @description 항목의 상태 한 줄. */
+        TaskStatus: {
+            category: components["schemas"]["StatusCategory"];
+            /** @description 색 `#rrggbb`(소문자). 빈 문자열이면 기본. */
+            color: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: double
+             * @description 열 순서(오름차순).
+             */
+            position: number;
+            /**
+             * Format: int32
+             * @description 이 열에 있는(지우지 않은) 업무 수.
+             */
+            task_count: number;
+        };
+        /** @description 업무의 예상 시간과 실제 시간. */
+        TaskTime: {
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            /**
+             * Format: int64
+             * @description 내 기록의 합계(초).
+             */
+            mine_seconds: number;
+        };
+        /**
+         * @description 업무와 그 관계(선행·반복·담당·체크리스트 수·등급)를 함께 싣는 옛 읽기 모양. 새 읽기는 업무 자원(`Task`)과 관계
+         *     모음으로 나뉜다(노르웨이숲 태비 초안 2). 웹이 새 읽기로 옮기면 지운다.
+         */
+        TaskWithRelations: {
             access: components["schemas"]["Access"];
             assignees: components["schemas"]["Assignee"][];
             /** Format: int64 */
@@ -5015,69 +5323,6 @@ export interface components {
              */
             version: number;
             workspace_id: components["schemas"]["WorkspaceId"];
-        };
-        /** @description 409 응답: 서버 최신본. */
-        TaskConflict: {
-            current: components["schemas"]["TaskDetail"];
-            error: string;
-        };
-        /** @description 업무와 체크리스트. */
-        TaskDetail: components["schemas"]["Task"] & {
-            checklist: components["schemas"]["ChecklistItem"][];
-        };
-        /** @description 업무의 선행 관계 하나. */
-        TaskLink: {
-            kind: components["schemas"]["LinkKind"];
-            /** Format: int32 */
-            lag_days: number;
-            /** Format: uuid */
-            task_id: string;
-        };
-        /**
-         * @description 우선순위.
-         * @enum {string}
-         */
-        TaskPriority: "none" | "low" | "medium" | "high" | "urgent";
-        /** @description 반복 업무 정보. */
-        TaskSeries: {
-            /** Format: uuid */
-            id: string;
-            /**
-             * Format: uuid
-             * @description 첫 회차(규칙은 여기서 바꾼다).
-             */
-            root_task_id: string;
-            rule?: null | components["schemas"]["RecurrenceRule"];
-            timezone: string;
-        };
-        /** @description 항목의 상태 한 줄. */
-        TaskStatus: {
-            category: components["schemas"]["StatusCategory"];
-            /** @description 색 `#rrggbb`(소문자). 빈 문자열이면 기본. */
-            color: string;
-            /** Format: uuid */
-            id: string;
-            name: string;
-            /**
-             * Format: double
-             * @description 열 순서(오름차순).
-             */
-            position: number;
-            /**
-             * Format: int32
-             * @description 이 열에 있는(지우지 않은) 업무 수.
-             */
-            task_count: number;
-        };
-        /** @description 업무의 예상 시간과 실제 시간. */
-        TaskTime: {
-            /** Format: int32 */
-            estimate_minutes?: number | null;
-            /**
-             * Format: int64
-             * @description 내 기록의 합계(초).
-             */
-            mine_seconds: number;
         };
         /** @description 업무 쓰기의 409 본문: 최신 업무를 포함한 충돌 또는 계정 변경 등 일반 오류. */
         TaskWriteConflict: components["schemas"]["TaskConflict"] | components["schemas"]["ErrorBody"];
@@ -5481,6 +5726,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthInfo"];
+                };
+            };
+        };
+    };
+    list_checklist_items: {
+        parameters: {
+            query?: {
+                /** @description 이 항목의 모든 업무. */
+                item?: string | null;
+                /** @description 이 업무 하나. */
+                task?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecklistItem"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -8986,7 +9271,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Task"][];
+                    "application/json": components["schemas"]["TaskWithRelations"][];
                 };
             };
             404: {
@@ -11562,6 +11847,126 @@ export interface operations {
             };
         };
     };
+    list_task_assignees: {
+        parameters: {
+            query?: {
+                /** @description 이 항목의 모든 업무. */
+                item?: string | null;
+                /** @description 이 업무 하나. */
+                task?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAssignee"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_task_dependencies: {
+        parameters: {
+            query?: {
+                /** @description 이 항목의 모든 업무. */
+                item?: string | null;
+                /** @description 이 업무 하나. */
+                task?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDependency"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_task_series: {
+        parameters: {
+            query?: {
+                /** @description 이 항목의 모든 업무. */
+                item?: string | null;
+                /** @description 이 업무 하나. */
+                task?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSeries"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     get_task: {
         parameters: {
             query?: never;
@@ -11705,6 +12110,67 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    patch_task: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchTask"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description conflict·shift_conflict면 StaleWrite(지금 업무와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPatchConflict"];
                 };
             };
         };

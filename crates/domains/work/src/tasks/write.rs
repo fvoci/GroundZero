@@ -6,17 +6,18 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use uuid::Uuid;
 
+use super::edit::{Edit, Saved, save_edit};
 use super::model::{
     CheckedFields, CreateTask, EXPECTED_TASK_USER_DOC, MoveTask, SetTaskParent, TaskConflict,
     TaskDetail, TaskWriteConflict, UpdateTask, check_fields, validate_status,
 };
 use super::read::load_detail;
-use crate::schedule::{self, Change, Span};
+
 use crate::state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_core::trash::Trashed;
-use fvoci_db::{is_unique_violation, needed_ids, new_ids};
+use fvoci_db::{is_unique_violation, new_ids};
 use fvoci_http::session::ExpectedUser;
 
 /// 업무 만들기(항목 쓰기 권한). 모든 칸을 한 트랜잭션에서 확인·저장한다(D-105). 같은 `request_id`는 같은 업무를 돌려주고,
@@ -104,79 +105,34 @@ pub async fn update(
         input.estimate_minutes,
         &input.tags,
     )?;
-    let (shifts, approved) = schedule::approved_shifts(&input.successor_shifts)?;
-    let mut tx = state.db.begin_as(user).await?;
-    // 승인 목록을 다시 계산해 볼 때 쓰는 옮기기 전 날짜(이 업무와 옮길 업무).
-    let before = if approved.is_empty() {
-        std::collections::HashMap::new()
-    } else {
-        let ids: Vec<Uuid> = std::iter::once(id)
-            .chain(approved.iter().map(|&(t, _)| t))
-            .collect();
-        schedule::spans_before(&mut tx, &ids).await?
+    let edit = Edit {
+        title,
+        description,
+        status: validate_status(&input.status)?,
+        priority: input.priority,
+        start,
+        due,
+        estimate_minutes: input.estimate_minutes,
+        tags,
+        assignee_ids: input.assignee_ids,
+        milestone: input.milestone,
     };
-    let ids = needed_ids(
-        tx.conn(),
-        sqlx::query_scalar("SELECT app_update_task_ids($1, $2, $3)")
-            .bind(id)
-            .bind(&input.assignee_ids)
-            .bind(&shifts),
+    let saved = save_edit(
+        &state,
+        user,
+        id,
+        input.base_version,
+        &edit,
+        &input.successor_shifts,
     )
     .await?;
-    let outcome: String = sqlx::query_scalar(
-        "SELECT app_update_task($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
-    )
-    .bind(id)
-    .bind(input.base_version)
-    .bind(&title)
-    .bind(&description)
-    .bind(validate_status(&input.status)?)
-    .bind(input.priority.as_str())
-    .bind(start)
-    .bind(due)
-    .bind(input.estimate_minutes)
-    .bind(&tags)
-    .bind(&input.assignee_ids)
-    .bind(input.milestone)
-    .bind(&shifts)
-    .bind(ids)
-    .fetch_one(tx.conn())
-    .await
-    .map_err(AppError::from_db_function)?;
-    // 승인한 재배치가 지금(잠근 뒤) 상태로 다시 세운 계획과 같아야 한다. 그사이 관계·종류·지연일·다른 업무의
-    // 날짜나 완료가 바뀌어 다르면 아무것도 바꾸지 않는다(D-91). 승인 목록이 비면(옮기지 않기로 함) 보지 않는다.
-    if outcome == "updated"
-        && !approved.is_empty()
-        && !schedule::approved_still_planned(
-            &mut tx,
-            id,
-            &before,
-            None,
-            Change::Move {
-                task: id,
-                next: Span { start, due },
-            },
-            &approved,
-        )
-        .await?
-    {
-        drop(tx);
-        return schedule::shift_conflict(&state, user, id).await;
-    }
+    let mut tx = state.db.begin_as(user).await?;
     let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
-    // 반복 업무를 고쳤으면 그 반복의 회차를 맞춘다(별도 트랜잭션). 실패해도 고치기는 이미 끝났으므로 기록만 한다.
-    if outcome == "updated"
-        && let Some(series) = detail.task.series.as_ref().filter(|s| s.rule.is_some())
-        && let Err(e) = crate::recurrence::sync_series(&state, user, series.id).await
-    {
-        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = fvoci_core::logging::safe_error(&e), series = %series.id, "recurrence sync after task update failed");
-    }
-    let error = match outcome.as_str() {
-        "conflict" => "conflict",
-        // 승인할 때 본 후속 업무가 그사이 바뀌었다. 아무것도 바꾸지 않았으니 다시 미리 본다.
-        "shift_conflict" => "shift_conflict",
-        _ => return Ok(Json(detail).into_response()),
+    let error = match saved {
+        Saved::Updated => return Ok(Json(detail).into_response()),
+        Saved::Conflict => "conflict",
+        Saved::ShiftConflict => "shift_conflict",
     };
     Ok((
         StatusCode::CONFLICT,

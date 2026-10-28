@@ -5,7 +5,9 @@ use axum::extract::{Path, State};
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
-use super::model::{Assignee, ChecklistItem, Task, TaskDetail, TaskPriority, TaskSeries};
+use super::model::{
+    Assignee, ChecklistItem, TaskDetail, TaskPriority, TaskSeries, TaskWithRelations,
+};
 use crate::recurrence::RecurrenceRule;
 use crate::schedule::{LinkKind, TaskLink};
 use crate::state::WorkState;
@@ -96,7 +98,7 @@ async fn assignees_of(tx: &mut UserTx, ids: &[Uuid]) -> Result<Vec<(Uuid, Assign
         .collect())
 }
 
-async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppError> {
+async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<TaskWithRelations>, AppError> {
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let mut assignees = assignees_of(tx, &ids).await?;
     rows.into_iter()
@@ -152,7 +154,7 @@ async fn to_tasks(tx: &mut UserTx, rows: Vec<TaskRow>) -> Result<Vec<Task>, AppE
                     })
                 })
                 .collect::<Result<Vec<_>, AppError>>()?;
-            Ok(Task {
+            Ok(TaskWithRelations {
                 id,
                 item_id,
                 module_id,
@@ -214,7 +216,12 @@ pub(crate) async fn load_detail(tx: &mut UserTx, id: Uuid) -> Result<TaskDetail,
         task,
         checklist: checklist
             .into_iter()
-            .map(|(id, text, checked)| ChecklistItem { id, text, checked })
+            .map(|(entry, text, checked)| ChecklistItem {
+                id: entry,
+                task_id: id,
+                text,
+                checked,
+            })
             .collect(),
     })
 }
@@ -222,12 +229,12 @@ pub(crate) async fn load_detail(tx: &mut UserTx, id: Uuid) -> Result<TaskDetail,
 /// 항목의 업무 목록(칸반 열 순서, 열 안은 위치 순). 항목을 볼 수 없으면 404.
 #[utoipa::path(get, path = "/api/items/{item_id}/tasks", operation_id = "list_tasks",
     params(("item_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = [Task]), (status = 404, body = ErrorBody)), tag = "tasks")]
+    responses((status = 200, body = [TaskWithRelations]), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn list(
     State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
-) -> Result<Json<Vec<Task>>, AppError> {
+) -> Result<Json<Vec<TaskWithRelations>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let visible: bool = sqlx::query_scalar("SELECT app_access('item', $1) <> 'none'")
         .bind(item)

@@ -138,7 +138,7 @@ pub(crate) async fn approved_still_planned(
 }
 
 /// 승인 목록이 그사이 맞지 않게 됐을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
-pub(crate) async fn shift_conflict(
+pub(super) async fn shift_conflict(
     state: &WorkState,
     user: UserId,
     task: Uuid,
@@ -157,7 +157,7 @@ pub(crate) async fn shift_conflict(
 }
 
 /// 편집을 시작한 관계(`base`)가 그사이 바뀌었을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
-pub(crate) async fn link_conflict(
+pub(super) async fn link_conflict(
     state: &WorkState,
     user: UserId,
     task: Uuid,

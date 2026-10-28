@@ -14,7 +14,7 @@ use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_core::validate::{parse_date, validate_text, validate_title};
 
 /// 설명 글자 수 상한.
-const MAX_DESCRIPTION_CHARS: usize = 10_000;
+pub(super) const MAX_DESCRIPTION_CHARS: usize = 10_000;
 /// 태그 수·길이 상한.
 const MAX_TAGS: usize = 20;
 const MAX_TAG_CHARS: usize = 50;
@@ -76,13 +76,16 @@ pub struct Assignee {
 pub struct ChecklistItem {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
+    #[schema(value_type = String, format = Uuid)]
+    pub task_id: Uuid,
     pub text: String,
     pub checked: bool,
 }
 
-/// 업무.
+/// 업무와 그 관계(선행·반복·담당·체크리스트 수·등급)를 함께 싣는 옛 읽기 모양. 새 읽기는 업무 자원(`Task`)과 관계
+/// 모음으로 나뉜다(노르웨이숲 태비 초안 2). 웹이 새 읽기로 옮기면 지운다.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct Task {
+pub struct TaskWithRelations {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
     pub item_id: ItemId,
@@ -144,7 +147,7 @@ pub struct TaskSeries {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TaskDetail {
     #[serde(flatten)]
-    pub task: Task,
+    pub task: TaskWithRelations,
     pub checklist: Vec<ChecklistItem>,
 }
 
@@ -314,14 +317,7 @@ pub(super) fn check_fields(
     let description = validate_text(description, MAX_DESCRIPTION_CHARS, "description")?;
     let start = parse_date(start_date, "start_date")?;
     let due = parse_date(due_date, "due_date")?;
-    if estimate_minutes.is_some_and(|m| m < 0) {
-        return Err(AppError::invalid(
-            "estimate_minutes",
-            InvalidReason::OutOfRange,
-            None,
-            "estimate_minutes must not be negative",
-        ));
-    }
+    check_estimate(estimate_minutes)?;
     let tags = validate_tags(tags)?;
     Ok(CheckedFields {
         title,
@@ -332,7 +328,20 @@ pub(super) fn check_fields(
     })
 }
 
-fn validate_tags(tags: &[String]) -> Result<Vec<String>, AppError> {
+/// 예상 시간(분)은 0 이상이다.
+pub(super) fn check_estimate(estimate_minutes: Option<i32>) -> Result<Option<i32>, AppError> {
+    if estimate_minutes.is_some_and(|m| m < 0) {
+        return Err(AppError::invalid(
+            "estimate_minutes",
+            InvalidReason::OutOfRange,
+            None,
+            "estimate_minutes must not be negative",
+        ));
+    }
+    Ok(estimate_minutes)
+}
+
+pub(super) fn validate_tags(tags: &[String]) -> Result<Vec<String>, AppError> {
     if tags.len() > MAX_TAGS {
         return Err(AppError::invalid(
             "tags",

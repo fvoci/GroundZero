@@ -18,7 +18,7 @@ pub use links::{
     __path_add_predecessor, __path_remove_predecessor, LinkBase, LinkInput, PredecessorConflict,
     SetPredecessor, TaskLink, add_predecessor, remove_predecessor,
 };
-pub(crate) use links::{approved_shifts, approved_still_planned, shift_conflict, spans_before};
+pub(crate) use links::{approved_shifts, approved_still_planned, spans_before};
 pub use planner::{
     Change, Link, LinkKind, MAX_LAG_DAYS, Plan, PlanBlockReason, Planned, Span, plan_shifts,
 };
