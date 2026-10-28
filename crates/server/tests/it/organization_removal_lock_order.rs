@@ -183,3 +183,77 @@ async fn a_document_moved_while_the_share_waits_is_refused() {
     code(&joined(sharing).await.unwrap_err(), "55000");
     assert_eq!(shares_of(&w, doc, &member).await, 0);
 }
+
+/// 호출이 끝났거나 다른 세션을 기다리는 상태가 될 때까지 조건으로 기다린다.
+async fn finished_or_blocked(call: &Call, waiter: i32) {
+    let url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    let mut observer = sqlx::PgConnection::connect(&url).await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let waiting: bool = sqlx::query_scalar("SELECT cardinality(pg_blocking_pids($1)) > 0")
+                .bind(waiter)
+                .fetch_one(&mut observer)
+                .await
+                .unwrap();
+            if waiting || call.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the call neither finished nor waited for a lock");
+}
+
+/// #177 SR2 참고-1(D-49·D-114): 개인 노트 소유자를 조직에서 빼는 일과 그 소유자가 노트를 공유하는 일이 겹쳐도 그 조직이
+/// 적힌 공유가 남지 않는다. 공유는 받는 사람과 소유자의 멤버 행을 id 순서로 잠그므로 제거와 줄 선다.
+#[tokio::test]
+async fn removing_the_note_owner_while_they_share_leaves_no_share_in_that_organization() {
+    let w = World::new().await;
+    let owner = common::login_with_email(
+        &w.state,
+        "note owner",
+        &common::unique_email("note-owner"),
+        true,
+    )
+    .await;
+    common::join_organization(w.org, &owner, "member").await;
+    let member = w.member("member").await;
+    let note = made(&w.state, &owner, "SELECT fvoci.app_create_personal_note($1,'SQL note',1,'{\"type\":\"doc\",\"content\":[]}',NULL,20,@ids) AS id", &[Uuid::now_v7()]).await;
+    // 받는 사람 멤버 행을 쥐어 공유를 조직 계산 뒤·공유 기록 전에 세운다.
+    let mut holder = common::fixture_conn().await;
+    let mut held = holder.begin().await.unwrap();
+    sqlx::query(
+        "SELECT 1 FROM fvoci.organization_members WHERE organization_id=$1 AND user_id=$2 FOR UPDATE",
+    )
+    .bind(w.org)
+    .bind(member.id.0)
+    .execute(&mut *held)
+    .await
+    .unwrap();
+    let holder_pid = pid(&mut *held).await;
+    let mut share = w.state.db.begin_as(owner.id).await.unwrap();
+    let share_pid = pid(share.conn()).await;
+    let sharing = spawn_call(share, SHARE, vec![note, member.id.0, w.org]);
+    blocked(holder_pid, share_pid).await;
+    let mut remove = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let remove_pid = pid(remove.conn()).await;
+    let removing = spawn_call(remove, REMOVE, vec![w.org, owner.id.0]);
+    finished_or_blocked(&removing, remove_pid).await;
+    held.commit().await.unwrap();
+    let removed = joined(removing).await;
+    assert!(removed.is_ok(), "{removed:?}");
+    if let Err(err) = joined(sharing).await {
+        code(&err, "22023");
+    }
+    let mut observer = common::fixture_conn().await;
+    let left: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.document_shares WHERE document_id=$1 AND organization_id=$2",
+    )
+    .bind(note)
+    .bind(w.org)
+    .fetch_one(&mut observer)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
+}
