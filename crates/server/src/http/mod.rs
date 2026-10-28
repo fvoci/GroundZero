@@ -21,6 +21,7 @@ use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
+use crate::features::documents::shares as document_shares;
 use crate::features::{
     accounts, audit, comments, courses, documents, event_recurrence, events, export, files, home,
     item_profile, members, modules, organizations, public_links, records, references, revisions,
@@ -271,9 +272,9 @@ async fn api_not_found() -> AppError {
         documents::my_notes,
         documents::create_note,
         documents::set_settings,
-        documents::list_shares,
-        documents::create_share,
-        documents::delete_share,
+        document_shares::list_shares,
+        document_shares::create_share,
+        document_shares::delete_share,
         documents::copy,
         documents::move_preview,
         documents::move_document,
@@ -458,8 +459,8 @@ async fn api_not_found() -> AppError {
         documents::Access,
         documents::SharedDocument,
         documents::DocumentSettings,
-        documents::Share,
-        documents::CreateShare,
+        document_shares::Share,
+        document_shares::CreateShare,
         documents::CopyDocument,
         documents::MoveTarget,
         documents::MoveDocument,
@@ -900,11 +901,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/documents/{document_id}/shares",
-            get(documents::list_shares).post(documents::create_share),
+            get(document_shares::list_shares).post(document_shares::create_share),
         )
         .route(
             "/document-shares/{share_id}",
-            delete(documents::delete_share),
+            delete(document_shares::delete_share),
         )
         .route("/documents/{document_id}/copy", post(documents::copy))
         .route(
