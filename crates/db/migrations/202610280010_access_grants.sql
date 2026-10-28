@@ -414,8 +414,8 @@ GRANT ALL ON FUNCTION fvoci.app_create_module(p_workspace uuid, p_request_id uui
 REVOKE ALL ON FUNCTION fvoci.app_create_module_document(p_item uuid, p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_create_module_document(p_item uuid, p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[], p_template uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[], p_template uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) TO fvoci_app;

@@ -624,7 +624,8 @@ pub async fn create_note(
         let mut tx = state.db.begin_as(user).await?;
         let body = initial_body(&mut tx, &input, NewDocumentPlace::PersonalNote).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7)")
+            // 템플릿을 주면 SQL이 그 조직을 노트에 기억한다(#175=1).
+            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
@@ -632,6 +633,7 @@ pub async fn create_note(
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
                 .bind(new_ids(3))
+                .bind(input.template_id)
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

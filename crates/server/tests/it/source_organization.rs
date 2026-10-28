@@ -9,6 +9,8 @@
 use crate::common::{self, TestUser};
 use crate::sql_support::{World, attempt, code, made, workspace};
 
+use axum::http::{Method, StatusCode};
+use serde_json::json;
 use uuid::Uuid;
 
 const COPY_TO_NOTE: &str = "SELECT fvoci.app_copy_document($1,$2,NULL,'사본',@ids) AS id";
@@ -182,4 +184,51 @@ async fn a_note_written_from_scratch_is_not_bound_to_an_organization() {
     attempt(&t.w.state, &t.w.owner, MOVE, &[moved, t.other_ws])
         .await
         .unwrap();
+}
+
+const MARK_TEMPLATE: &str = "SELECT fvoci.app_set_document_template($1,true,@ids)";
+
+/// B(템플릿): 공간 문서 템플릿으로 만든 개인 노트도 출처 조직을 기억한다(#175 댓글 6446915781 경로).
+#[tokio::test]
+async fn a_note_made_from_a_space_template_stays_inside_that_organization() {
+    let t = Two::new().await;
+    let template = t.w.doc().await;
+    run(&t.w, &t.w.owner, MARK_TEMPLATE, &[template]).await;
+    let app = common::app(&t.w.state);
+    let made = common::send(
+        &app,
+        Method::POST,
+        "/api/me/notes",
+        Some(&t.w.owner),
+        Some(json!({"request_id": common::new_request_id(), "title": "템플릿 노트", "template_id": template})),
+    )
+    .await;
+    assert_eq!(made.status, StatusCode::CREATED, "{:?}", made.json);
+    let note = Uuid::parse_str(made.json["id"].as_str().unwrap()).unwrap();
+    kept_out(&t.w, &t.w.owner, note, t.other_ws).await;
+}
+
+/// B(템플릿)·C: 기억한 노트를 템플릿으로 표시해도 다른 조직 공간에 그 템플릿으로 새 문서를 만들 수 없다(기존 409).
+#[tokio::test]
+async fn a_remembered_note_used_as_a_template_stays_inside_that_organization() {
+    let t = Two::new().await;
+    let note = note_copy(&t.w, &t.w.owner, t.w.doc().await).await;
+    run(&t.w, &t.w.owner, MARK_TEMPLATE, &[note]).await;
+    let app = common::app(&t.w.state);
+    for (ws, status) in [
+        (t.other_ws, StatusCode::CONFLICT),
+        (t.same_org_ws, StatusCode::CREATED),
+    ] {
+        let reply = common::send(
+            &app,
+            Method::POST,
+            &format!("/api/workspaces/{ws}/wiki/documents"),
+            Some(&t.w.owner),
+            Some(
+                json!({"request_id": common::new_request_id(), "title": "템플릿 문서", "template_id": note}),
+            ),
+        )
+        .await;
+        assert_eq!(reply.status, status, "{ws}: {:?}", reply.json);
+    }
 }

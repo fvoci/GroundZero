@@ -490,6 +490,7 @@ CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_ite
     v_target uuid := coalesce(p_item, p_workspace);
     v_ws     uuid := coalesce(p_workspace, (SELECT i.workspace_id FROM items i WHERE i.id = p_item));
     v_src    documents%ROWTYPE;
+    v_from   uuid;
   BEGIN
     SELECT * INTO v_src FROM documents WHERE id = p_template AND is_template AND deleted_at IS NULL;
     IF v_src.id IS NULL OR app_access('document', p_template) = 'none' THEN
@@ -501,8 +502,10 @@ CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_ite
     IF app_access(v_kind, v_target) = 'none' THEN
       RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
     END IF;
-    IF v_src.workspace_id IS NOT NULL
-       AND app_target_organization('document', p_template) IS DISTINCT FROM app_target_organization(v_kind, v_target) THEN
+    -- 출처 조직을 기억한 개인 노트 템플릿도 그 조직 공간에서만 쓴다(#175=1).
+    v_from := CASE WHEN v_src.workspace_id IS NOT NULL THEN app_target_organization('document', p_template)
+                   ELSE v_src.source_organization_id END;
+    IF v_from IS NOT NULL AND v_from IS DISTINCT FROM app_target_organization(v_kind, v_target) THEN
       RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
     END IF;
     -- 같은 request_id로 다시 보낸 생성은 이미 만든 문서를 돌려받으므로 감사를 다시 남기지 않는다(app_copy_document와 같다).
@@ -914,13 +917,17 @@ CREATE FUNCTION fvoci.app_create_module_document(p_item uuid, p_request_id uuid,
 
 ALTER FUNCTION fvoci.app_create_module_document(p_item uuid, p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) RETURNS uuid
+-- 템플릿(p_template)으로 만든 개인 노트는 템플릿의 조직을 기억한다(#175=1 B). 본문은 서버가 문서 RLS로 읽은 템플릿
+-- 본문이고, 여기서는 그 템플릿을 다시 확인해 조직만 정한다.
+CREATE FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[], p_template uuid DEFAULT NULL::uuid) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_user uuid := app_user_id();
-    v_id   uuid;
+    v_user   uuid := app_user_id();
+    v_id     uuid;
+    v_src    documents%ROWTYPE;
+    v_source uuid;
   BEGIN
     IF v_user IS NULL THEN
       RAISE EXCEPTION 'no current user' USING ERRCODE = '42501';
@@ -929,13 +936,21 @@ CREATE FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, 
     IF v_id IS NOT NULL THEN
       RETURN v_id;
     END IF;
+    IF p_template IS NOT NULL THEN
+      SELECT * INTO v_src FROM documents WHERE id = p_template AND is_template AND deleted_at IS NULL;
+      IF v_src.id IS NULL OR app_access('document', p_template) = 'none' THEN
+        RAISE EXCEPTION 'template not found' USING ERRCODE = 'P0002';
+      END IF;
+      v_source := CASE WHEN v_src.workspace_id IS NOT NULL THEN app_target_organization('workspace', v_src.workspace_id)
+                       ELSE v_src.source_organization_id END;
+    END IF;
     IF p_parent IS NOT NULL THEN
       PERFORM app_lock_tree(NULL, NULL, v_user);
     END IF;
     INSERT INTO documents (id, owner_user_id, placement, scope, number, title, schema_version, body,
-                           revision, created_by, updated_by, request_id, visibility)
+                           revision, created_by, updated_by, request_id, visibility, source_organization_id)
     VALUES (app_id(p_ids, 1), v_user, 'personal', 'NOTE', NULL, btrim(p_title), p_schema_version, p_body,
-            1, v_user, v_user, p_request_id, 'private')
+            1, v_user, v_user, p_request_id, 'private', v_source)
     RETURNING id INTO v_id;
     INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id)
     VALUES (v_id, 1, btrim(p_title), p_schema_version, p_body, v_user, p_request_id);
@@ -948,7 +963,7 @@ CREATE FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, 
   $$;
 
 
-ALTER FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_create_personal_note(p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[], p_template uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_create_wiki_document(p_workspace uuid, p_request_id uuid, p_title text, p_schema_version integer, p_body jsonb, p_parent uuid, p_max_depth integer, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
