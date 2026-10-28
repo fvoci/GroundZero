@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
@@ -386,7 +387,7 @@ describe('task detail assignees while loading', () => {
     let resolve: (p: { user_id: string; display_name: string }[]) => void = () => undefined;
     vi.spyOn(work, 'assignable').mockReturnValue(new Promise((r) => (resolve = r)));
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     render(TaskDetail, {
       props: {
         taskId: '2',
@@ -408,7 +409,7 @@ describe('task detail assignees while loading', () => {
     vi.spyOn(work, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     vi.spyOn(work, 'assignable').mockRejectedValue(new NetworkError('offline'));
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     render(TaskDetail, {
       props: {
         taskId: '2',
