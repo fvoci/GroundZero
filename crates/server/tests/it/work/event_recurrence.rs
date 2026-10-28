@@ -391,7 +391,7 @@ async fn event_rule_saves_from_a_stale_rule_conflict() {
     let stale = put(ten_mondays.clone(), monday.clone()).await;
     assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
     assert_eq!(stale.json["error"], "rule_conflict");
-    assert_eq!(stale.json["changed"], json!(["recurrence"]));
+    assert_eq!(stale.json["changed"], json!(["rule"]));
     assert!(stale.json["message"].is_string());
     assert!(stale.json["request_id"].is_string());
     assert_eq!(

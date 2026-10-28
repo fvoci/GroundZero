@@ -109,3 +109,45 @@ pub async fn exclude_event(
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::EventKind;
+    use fvoci_core::access::Grade;
+    use fvoci_core::ids::{ItemId, WorkspaceId};
+
+    fn event() -> Event {
+        Event {
+            id: Uuid::nil(),
+            item_id: ItemId(Uuid::nil()),
+            workspace_id: WorkspaceId(Uuid::nil()),
+            kind: EventKind::Meeting,
+            title: "meeting".into(),
+            description: String::new(),
+            all_day: true,
+            start_date: Some("2026-11-02".into()),
+            end_date: Some("2026-11-02".into()),
+            starts_at: None,
+            ends_at: None,
+            timezone: "UTC".into(),
+            recurrence: None,
+            excluded_dates: Vec::new(),
+            version: 2,
+            access: Grade::Write,
+        }
+    }
+
+    #[test]
+    fn recurrence_conflicts_name_the_request_field_and_keep_equal_values_empty() {
+        let conflict = recurrence_conflict(
+            event(),
+            Some(serde_json::json!({
+                "freq": "weekly", "interval": 1, "weekdays": [], "until": null, "count": null,
+            })),
+        );
+        assert_eq!(conflict.changed, vec!["rule"]);
+        assert_eq!(conflict.current.title, "meeting");
+        assert!(recurrence_conflict(event(), None).changed.is_empty());
+    }
+}
