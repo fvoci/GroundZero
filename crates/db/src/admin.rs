@@ -305,6 +305,27 @@ async fn check_attributes(
     Ok(())
 }
 
+/// 클러스터 공용 역할의 임시 멤버십을 직렬화하는 키("fvocimig"). 모든 빌림은 `postgres` DB에서 잡는다.
+pub const MIGRATOR_LOCK: i64 = 0x6676_6f63_696d_6967;
+
+/// 대상 DB와 무관하게 고정 유지보수 DB `postgres`에서 세션 권고 잠금을 잡는다. 인증·TLS·pooler 설정은 유지한다.
+/// 반환한 전용 연결을 빌림·반납·대상 트랜잭션 종료까지 보유한다. 닫거나 버리면 잠금도 풀린다.
+pub async fn lock_migrator(admin: &DatabaseUrl) -> Result<PgConnection, AppError> {
+    let options = super::connect_options(admin)?.database("postgres");
+    let mut lock = PgConnection::connect_with(&options).await.map_err(|err| {
+        AppError::Config(format!(
+            "cannot connect to maintenance database postgres for the migrator lock ({}); \
+             DATABASE_ADMIN_URL must allow CONNECT to postgres",
+            fvoci_core::logging::safe_sqlx(&err)
+        ))
+    })?;
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(MIGRATOR_LOCK)
+        .execute(&mut lock)
+        .await?;
+    Ok(lock)
+}
+
 /// [`borrow_migrator`]가 관리자의 직접 멤버십에 한 일. [`release_migrator`]가 이것만 되돌린다.
 #[derive(Debug, Clone)]
 pub enum MigratorBorrow {
@@ -335,6 +356,8 @@ async fn direct_memberships(
 /// 관리자 연결이 마이그레이션 역할(스키마·표 소유자)로 `SET ROLE`할 수 있게 한다. superuser는 이미 할 수 있다.
 /// superuser가 아닌 관리자(PG16부터 역할을 만든 사람은 ADMIN만 받는다)에게는 상속 없는 SET 멤버십을 준다.
 /// 그때는 일이 끝나면 [`release_migrator`]로 원래대로 돌린다.
+/// 호출자는 [`lock_migrator`]의 연결을 보유하고, 대상 트랜잭션 안에서 빌림·작업·반납을 마쳐야 한다.
+/// 임시 멤버십을 커밋하지 않으므로 연결·프로세스가 중단돼도 기존 멤버십으로 롤백된다.
 ///
 /// 어느 레코드가 생기거나 바뀔지는 PostgreSQL이 정한다(grantor는 ADMIN OPTION을 준 역할이라 관리자 자신이
 /// 아닐 수 있고, 같은 grantor의 레코드가 이미 있으면 그 옵션을 바꾼다). 그래서 GRANT 앞뒤의 레코드를 비교한다.
@@ -430,7 +453,20 @@ pub async fn release_migrator_or_reconnect(
 /// 역할은 이미 있어야 한다. 반복해도 같다.
 ///
 /// 스키마 소유자를 정하려면 관리자가 그 역할로 `SET ROLE`할 수 있어야 하므로 그동안만 [`borrow_migrator`]한다.
-pub async fn prepare_database(conn: &mut PgConnection) -> Result<(), AppError> {
+pub async fn prepare_database(
+    conn: &mut PgConnection,
+    admin: &DatabaseUrl,
+) -> Result<(), AppError> {
+    let lock = lock_migrator(admin).await?;
+    let mut tx = conn.begin().await?;
+    prepare_database_locked(&mut tx).await?;
+    tx.commit().await?;
+    lock.close().await?;
+    Ok(())
+}
+
+/// 호출자는 공통 잠금과 대상 트랜잭션을 보유한다. bootstrap은 역할 DDL보다 먼저 잠근다.
+async fn prepare_database_locked(conn: &mut PgConnection) -> Result<(), AppError> {
     let database: String = sqlx::query_scalar("SELECT current_database()")
         .fetch_one(&mut *conn)
         .await?;
@@ -477,6 +513,8 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     let migrator_pw = need(cfg.migrator_password.as_ref(), "FVOCI_DB_MIGRATOR_PASSWORD")?;
     let app_pw = need(cfg.app_password.as_ref(), "FVOCI_DB_APP_PASSWORD")?;
 
+    // 역할 DDL이 잡은 행 잠금을 쥔 채 다른 빌림의 권고 잠금을 기다리지 않게, DDL보다 먼저 잡는다.
+    let lock = lock_migrator(admin).await?;
     let mut conn = PgConnection::connect_with(&super::connect_options(admin)?).await?;
     check_server_version(&mut conn).await?;
     // 역할·멤버십·스키마 DDL은 모두 트랜잭션 안에서 된다. 한 트랜잭션으로 묶어, 어느 단계에서 멈추든 한 역할만
@@ -505,9 +543,10 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     )
     .await?;
     check_migration_requirements(&mut tx, MIGRATOR_ROLE).await?;
-    prepare_database(&mut tx).await?;
+    prepare_database_locked(&mut tx).await?;
     tx.commit().await?;
     conn.close().await?;
+    lock.close().await?;
     Ok(())
 }
 

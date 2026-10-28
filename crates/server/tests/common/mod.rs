@@ -457,9 +457,12 @@ async fn prepared_database(admin: &mut sqlx::PgConnection, label: &str) -> Fresh
         .await
         .unwrap();
     // 운영자 경로(`db bootstrap`)와 같은 준비. superuser가 아닌 관리자(셀프호스트 Supabase)에서도 된다.
-    fvoci_db::admin::prepare_database(&mut db_admin)
-        .await
-        .unwrap();
+    fvoci_db::admin::prepare_database(
+        &mut db_admin,
+        &fvoci_core::secret::Secret::new(admin_url.clone()),
+    )
+    .await
+    .unwrap();
     db_admin.close().await.unwrap();
     let db = fvoci_db::config::DbCommandConfig {
         admin_url: Some(fvoci_core::secret::Secret::new(with_database(

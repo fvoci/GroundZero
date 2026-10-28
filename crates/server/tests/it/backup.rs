@@ -67,18 +67,6 @@ fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
 }
 
-/// 복구는 superuser가 아닌 관리자(셀프호스트 Supabase)에게 `fvoci_migrator` 멤버십을 잠시 빌렸다 돌려준다. 클러스터
-/// 공용 행이라 새 DB 준비와 같은 잠금으로 한 번에 하나씩 한다. 겹치면 앞 복구가 돌려준 멤버십에 기대던 뒤 복구가
-/// `SET ROLE`에서 42501로 실패한다(CI supabase 잡, #183).
-async fn serial_restore(
-    config: &fvoci_server::config::Config,
-    db: &fvoci_db::config::DbCommandConfig,
-    from: &std::path::Path,
-) -> Result<backup::Manifest, fvoci_core::error::AppError> {
-    let _serial = common::PREPARE_DATABASE.lock().await;
-    backup::restore(config, db, from).await
-}
-
 #[tokio::test]
 async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
@@ -453,11 +441,31 @@ async fn wait_for_advisory_waiter(conn: &mut PgConnection, application: &str) ->
 #[tokio::test]
 async fn overlapping_restores_across_databases_keep_their_migrator_membership() {
     tokio::task::LocalSet::new()
-        .run_until(overlapping_restores())
+        .run_until(overlapping_restores(RestoreEnd::Completed))
         .await;
 }
 
-async fn overlapping_restores() {
+#[tokio::test]
+async fn disconnected_restore_rolls_back_membership_and_unblocks_another_database() {
+    tokio::task::LocalSet::new()
+        .run_until(overlapping_restores(RestoreEnd::Disconnected))
+        .await;
+}
+
+#[tokio::test]
+async fn cancelled_restore_rolls_back_membership_and_unblocks_another_database() {
+    tokio::task::LocalSet::new()
+        .run_until(overlapping_restores(RestoreEnd::Cancelled))
+        .await;
+}
+
+enum RestoreEnd {
+    Completed,
+    Disconnected,
+    Cancelled,
+}
+
+async fn overlapping_restores(end: RestoreEnd) {
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
     let mut admin = PgConnection::connect(&admin_url).await.unwrap();
     let source = fresh_database(&mut admin, "overlap_source").await;
@@ -468,8 +476,6 @@ async fn overlapping_restores() {
     let out = temp_dir("overlap-backup");
     backup::create(&config, &source.db, &out).await.unwrap();
 
-    // Supabase 관리자의 멤버십을 쓰는 다른 준비·복구 시험과 섞지 않는다. 이 시험의 두 복구는 병렬로 돈다.
-    let _serial = common::PREPARE_DATABASE.lock().await;
     let superuser: bool =
         sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
             .fetch_one(&mut admin)
@@ -478,9 +484,13 @@ async fn overlapping_restores() {
     let role = format!("fvoci_overlap_{}", uuid::Uuid::now_v7().simple());
     let mut url = url::Url::parse(&admin_url).unwrap();
     if superuser {
-        // 이 실행의 격리 Compose에만 만드는 시험 관리자와 명백한 시험 비밀번호.
+        // 격리 Compose에만 시험 관리자를 만들고 deploy의 기존 시험 비밀번호를 쓴다.
+        let password = url
+            .password()
+            .expect("isolated test admin password")
+            .to_owned();
         sqlx::raw_sql(&format!(
-            "CREATE ROLE {role} LOGIN PASSWORD 'fvoci-overlap-test-password';
+            "CREATE ROLE {role} LOGIN PASSWORD '{password}';
              GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
              GRANT SET ON PARAMETER session_replication_role TO {role}"
         ))
@@ -488,10 +498,28 @@ async fn overlapping_restores() {
         .await
         .unwrap();
         url.set_username(&role).unwrap();
-        url.set_password(Some("fvoci-overlap-test-password"))
-            .unwrap();
     }
     let member = url.username().to_owned();
+    let mut fixture = PgConnection::connect(url.as_str()).await.unwrap();
+    if superuser && matches!(end, RestoreEnd::Cancelled) {
+        // 기존 레코드를 바꾼 빌림도 취소 시 INHERIT를 포함해 그대로 돌아와야 한다.
+        sqlx::raw_sql(&format!(
+            "GRANT fvoci_migrator TO {role} WITH INHERIT TRUE, SET FALSE"
+        ))
+        .execute(&mut fixture)
+        .await
+        .unwrap();
+    }
+    let can_set: bool =
+        sqlx::query_scalar("SELECT pg_has_role(current_user, 'fvoci_migrator', 'SET')")
+            .fetch_one(&mut fixture)
+            .await
+            .unwrap();
+    assert!(
+        !can_set,
+        "the restore must exercise temporary membership borrowing"
+    );
+    fixture.close().await.unwrap();
     let before = migrator_memberships(&mut admin, &member).await;
     let app_a = format!("overlap-a-{}", uuid::Uuid::now_v7().simple());
     let app_b = format!("overlap-b-{}", uuid::Uuid::now_v7().simple());
@@ -533,18 +561,65 @@ async fn overlapping_restores() {
         tokio::task::spawn_local(
             async move { backup::restore(&config_a, &first_db, &first_out).await },
         );
-    wait_for_advisory_waiter(&mut admin, &app_a).await;
+    let first_pid = wait_for_advisory_waiter(&mut admin, &app_a).await;
+    assert_eq!(
+        migrator_memberships(&mut admin, &member).await,
+        before,
+        "the uncommitted borrow must not be visible in another session"
+    );
     let b = tokio::task::spawn_local(async move {
         backup::restore(&config_b, &second_db, &second_out).await
     });
-    wait_for_advisory_waiter(&mut admin, &app_b).await;
+    let second_pid = wait_for_advisory_waiter(&mut admin, &app_b).await;
+    let database: String = sqlx::query_scalar(
+        "SELECT d.datname::text FROM pg_locks l JOIN pg_database d ON d.oid = l.database
+          WHERE l.pid = $1 AND l.locktype = 'advisory' AND NOT l.granted
+            AND ((l.classid::bigint << 32) | l.objid::bigint) = $2",
+    )
+    .bind(second_pid)
+    .bind(fvoci_db::admin::MIGRATOR_LOCK)
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert_eq!(
+        database, "postgres",
+        "both target DBs must use the fixed maintenance DB"
+    );
+    match end {
+        RestoreEnd::Completed => {}
+        RestoreEnd::Disconnected => {
+            let ended: bool = sqlx::query_scalar("SELECT pg_terminate_backend($1)")
+                .bind(first_pid)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+            assert!(ended);
+        }
+        RestoreEnd::Cancelled => a.abort(),
+    }
     block_a.close().await.unwrap();
-    let result_a = a.await.unwrap();
+    let result_a = a.await;
     block_b.close().await.unwrap();
-    let result_b = b.await.unwrap();
+    let result_b = tokio::time::timeout(std::time::Duration::from_secs(30), b)
+        .await
+        .expect("second restore did not acquire the released lock")
+        .unwrap();
     assert_eq!(migrator_memberships(&mut admin, &member).await, before);
-    assert!(result_a.is_ok(), "first restore: {result_a:?}");
+    match end {
+        RestoreEnd::Completed => assert!(result_a.unwrap().is_ok()),
+        RestoreEnd::Disconnected => assert!(result_a.unwrap().is_err()),
+        RestoreEnd::Cancelled => assert!(result_a.unwrap_err().is_cancelled()),
+    }
     assert!(result_b.is_ok(), "second restore: {result_b:?}");
+    let held: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+          WHERE l.locktype = 'advisory' AND a.application_name = ANY($1)",
+    )
+    .bind(vec![app_a, app_b])
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert_eq!(held, 0, "restore sessions left advisory locks behind");
     // DB·시험 역할은 이 실행의 격리 Compose와 함께 xtask가 정리한다.
 }
 
@@ -661,4 +736,15 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
         .execute(&mut admin)
         .await
         .unwrap();
+}
+/// 복구는 superuser가 아닌 관리자(셀프호스트 Supabase)에게 `fvoci_migrator` 멤버십을 잠시 빌렸다 돌려준다. 클러스터
+/// 공용 행이라 새 DB 준비와 같은 잠금으로 한 번에 하나씩 한다. 겹치면 앞 복구가 돌려준 멤버십에 기대던 뒤 복구가
+/// `SET ROLE`에서 42501로 실패한다(CI supabase 잡, #183).
+async fn serial_restore(
+    config: &fvoci_server::config::Config,
+    db: &fvoci_db::config::DbCommandConfig,
+    from: &std::path::Path,
+) -> Result<backup::Manifest, fvoci_core::error::AppError> {
+    let _serial = common::PREPARE_DATABASE.lock().await;
+    backup::restore(config, db, from).await
 }

@@ -257,18 +257,33 @@ pub async fn restore(
         )));
     }
     let url = need(db.admin_url.as_ref(), "DATABASE_ADMIN_URL")?;
+    let lock = fvoci_db::admin::lock_migrator(url).await?;
     let mut conn = PgConnection::connect_with(&fvoci_db::connect_options(url)?).await?;
     // 무엇이든 올리기 전에, 복구 끝에 필요한 관리자 권한(트리거를 잠시 끄는 설정)이 있는지 본다.
     check_replication_role(&mut conn).await?;
     // 표는 마이그레이션 역할(표 소유자)로 읽고 채운다. superuser가 아닌 관리자(셀프호스트 Supabase의 `postgres`)는
     // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
-    let borrow = fvoci_db::admin::borrow_migrator(&mut conn).await?;
-    let result = restore_as_owner(config, &mut conn, from, &manifest).await;
-    let released = fvoci_db::admin::release_migrator_or_reconnect(&mut conn, url, borrow).await;
+    // 임시 멤버십을 커밋하지 않는다. 작업 중 연결·프로세스가 사라져도 PostgreSQL이 원래대로 돌린다.
+    let mut tx = conn.begin().await?;
+    let borrow = fvoci_db::admin::borrow_migrator(&mut tx).await?;
+    let result = restore_as_owner(config, &mut tx, from, &manifest).await;
+    let released = fvoci_db::admin::release_migrator_or_reconnect(&mut tx, url, borrow).await;
+    let finished = if result.is_ok() && released.is_ok() {
+        tx.commit().await
+    } else {
+        tx.rollback().await
+    }
+    .map_err(AppError::from);
     let closed = conn.close().await.map_err(AppError::from);
-    // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·연결 닫기)도 버리지 않고 로그에 남긴다:
-    // 회수 실패(새 관리자 연결로 한 번 더 해 본 뒤)는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
-    for (step, outcome) in [("release_migrator", &released), ("close", &closed)] {
+    let unlocked = lock.close().await.map_err(AppError::from);
+    // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·트랜잭션 종료·연결 닫기)도 로그에 남긴다.
+    // 기존 재연결 회수 경로를 유지하고, 임시 멤버십의 영속화는 바깥 트랜잭션으로 막는다.
+    for (step, outcome) in [
+        ("release_migrator", &released),
+        ("finish_migrator", &finished),
+        ("close", &closed),
+        ("close_migrator_lock", &unlocked),
+    ] {
         if let (Err(_), Err(err)) = (&result, outcome) {
             tracing::error!(
                 event = "backup.restore_cleanup_failed",
@@ -281,7 +296,9 @@ pub async fn restore(
     }
     result?;
     released?;
+    finished?;
     closed?;
+    unlocked?;
     Ok(manifest)
 }
 
@@ -313,6 +330,9 @@ async fn restore_as_owner(
     from: &Path,
     manifest: &Manifest,
 ) -> Result<(), AppError> {
+    // 실패는 이 savepoint로 되돌려, 바깥 트랜잭션에서 빌린 멤버십을 반납할 수 있게 한다.
+    let mut work = conn.begin().await?;
+    let conn = &mut *work;
     sqlx::query("SET ROLE fvoci_migrator")
         .execute(&mut *conn)
         .await?;
@@ -361,7 +381,9 @@ async fn restore_as_owner(
         .bind(STORAGE_LOCK)
         .execute(&mut *conn)
         .await?;
-    result
+    result?;
+    work.commit().await?;
+    Ok(())
 }
 
 async fn restore_locked(
@@ -397,13 +419,9 @@ async fn restore_locked(
     }
     // 2. 표(한 트랜잭션, 외래 키·트리거를 잠시 끔: 순서와 자기 참조에 상관없이 그대로 넣는다). 검색 색인 다시
     //    만들기도 같은 트랜잭션에서 올린다(실패하면 모두 되돌려 다시 할 수 있게).
-    sqlx::query("BEGIN").execute(&mut *conn).await?;
-    let loaded = load_tables(conn, from, manifest).await;
-    if let Err(err) = loaded {
-        sqlx::query("ROLLBACK").execute(&mut *conn).await?;
-        return Err(err);
-    }
-    sqlx::query("COMMIT").execute(&mut *conn).await?;
+    let mut tx = conn.begin().await?;
+    load_tables(&mut tx, from, manifest).await?;
+    tx.commit().await?;
     Ok(())
 }
 
