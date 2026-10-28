@@ -15,6 +15,8 @@ mod sql_support;
 mod collab_file_refs;
 #[path = "it/collab_poison.rs"]
 mod collab_poison;
+#[path = "it/files/flush_refs.rs"]
+mod file_deletion_refs;
 
 use std::net::SocketAddr;
 use std::time::Duration;

@@ -191,7 +191,7 @@ export async function uploadFile(
   }
   if (up.state === 'completing') {
     // 앞선 마치기가 끊겼다: 다시 올리지 않고 결과를 기다린다.
-    const done = await finish(up.id);
+    const done = await finish(up.id, opts.expectedUser);
     forget(opts.expectedUser, key);
     forgetParts(opts.expectedUser, up.id);
     return done;
@@ -208,7 +208,7 @@ export async function uploadFile(
     for (let round = 0; ; round += 1) {
       await sendParts(file, up, opts);
       try {
-        const done = await finish(id);
+        const done = await finish(id, opts.expectedUser);
         forget(opts.expectedUser, key);
         forgetParts(opts.expectedUser, id);
         return done;
@@ -228,7 +228,7 @@ export async function uploadFile(
     if (opts.signal?.aborted === true) {
       forget(opts.expectedUser, key);
       forgetParts(opts.expectedUser, id);
-      await api.abortUpload(id).catch(() => undefined);
+      await api.abortUpload(id, opts.expectedUser).catch(() => undefined);
     }
     throw e;
   }
@@ -262,7 +262,7 @@ async function sendParts(
     const [from, to] = partRange(n, up.chunk_bytes, file.size);
     const piece = file.slice(from, to);
     const hash = await sha256Hex(piece);
-    await withRetry(() => api.putUploadPart(up.id, n, piece, hash), opts.signal);
+    await withRetry(() => api.putUploadPart(up.id, n, piece, hash, opts.expectedUser), opts.signal);
     recordPart(opts.expectedUser, up, n, hash);
     sent += to - from;
     opts.onProgress?.({ sent: Math.min(file.size, sent), total: file.size });
@@ -270,10 +270,10 @@ async function sendParts(
 }
 
 /** 마치기. 다른 요청이 마치는 중이면(409) 잠시 기다렸다가 다시 묻는다. */
-async function finish(id: string): Promise<UploadView> {
+async function finish(id: string, expectedUser: string): Promise<UploadView> {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await api.completeUpload(id);
+      return await api.completeUpload(id, expectedUser);
     } catch (e: unknown) {
       if (
         e instanceof ApiError &&

@@ -31,7 +31,9 @@ async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
     let mut target_admin = PgConnection::connect(&common::with_database(&admin_url, &name))
         .await
         .unwrap();
-    admin::prepare_database(&mut target_admin).await.unwrap();
+    admin::prepare_database(&mut target_admin, &Secret::new(admin_url.clone()))
+        .await
+        .unwrap();
     target_admin.close().await.unwrap();
     let db = DbCommandConfig {
         admin_url: Some(Secret::new(common::with_database(&admin_url, &name))),

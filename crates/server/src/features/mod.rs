@@ -6,7 +6,6 @@ mod document_locks;
 pub mod documents;
 pub mod export;
 pub mod file_text;
-pub mod files;
 pub mod home;
 pub mod item_profile;
 pub mod members;
