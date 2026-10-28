@@ -233,7 +233,11 @@
     parse: (raw) => textFields(raw, { ...mine, base: '' }),
     restore: ({ base, note }) => {
       mine = { ...mine, note };
-      mineBase = JSON.stringify({ ...mine, note: baselineText(base, 'note') });
+      mineBase = JSON.stringify({
+        done_amount: baselineText(mineBase, 'done_amount'),
+        planned_on: baselineText(mineBase, 'planned_on'),
+        note: baselineText(base, 'note'),
+      });
     },
     reset: resetMine,
     // D-113 SR1-11: 읽기 전용도 개인 진도는 남긴다. 보관 상태에서는 읽기만 한다.
