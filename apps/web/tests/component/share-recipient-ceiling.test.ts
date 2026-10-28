@@ -73,7 +73,7 @@ for (const [locale, role, cap] of [
     await fireEvent.input(await screen.findByLabelText(m.documents_email()), {
       target: { value: recipient.email },
     });
-    await fireEvent.click(screen.getByRole('combobox', { name: m.documents_share_permission() }));
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_share_permission() }));
     await screen.findByRole('option', { name: m.documents_permission_read() });
     expect(screen.queryByRole('option', { name: m.documents_permission_write() })).toBeNull();
     expect(await screen.findByText(role)).toBeInTheDocument();
