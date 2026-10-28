@@ -1,6 +1,7 @@
 <script lang="ts">
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
+  import { onMount } from 'svelte';
 
   import { api, ApiError, NetworkError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -9,7 +10,10 @@
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
   import PublicView from '$lib/features/public/PublicView.svelte';
-  import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
+  import {
+    attachRecordDraftCleanup,
+    clearLegacyRecordDrafts,
+  } from '$lib/features/records/legacy-drafts';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
   import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
@@ -47,6 +51,7 @@
 
   // SR-199-1: unopened records must not retain legacy raw retry requests in browser storage.
   clearLegacyRecordDrafts();
+  onMount(attachRecordDraftCleanup);
 
   type Session =
     | { state: 'loading' }

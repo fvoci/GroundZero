@@ -40,6 +40,19 @@ function hasKeys(value: Record<string, unknown>, keys: readonly string[]): boole
   );
 }
 
+/** Stored retries carry only the request UUID and digest, including on the panel read path. */
+export function isRecordDraftPending(
+  value: unknown,
+): value is { requestId: string; signature: string } | null {
+  return (
+    value === null ||
+    (retry(value) &&
+      hasKeys(value, ['requestId', 'signature']) &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.requestId) &&
+      /^[0-9a-f]{64}$/.test(value.signature))
+  );
+}
+
 function isRecordForm(value: unknown): boolean {
   const parsed = parseRecordForm(value);
   return (
@@ -72,14 +85,7 @@ function isRecordDraft(value: unknown): value is RecordDraft {
     input.version < 0
   )
     return false;
-  const pending = input.pending;
-  return (
-    pending === null ||
-    (retry(pending) &&
-      hasKeys(pending, ['requestId', 'signature']) &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pending.requestId) &&
-      /^[0-9a-f]{64}$/.test(pending.signature))
-  );
+  return isRecordDraftPending(input.pending);
 }
 
 function isWritingOnly(value: RecordForm, keys: readonly string[]): boolean {
@@ -120,18 +126,39 @@ function checkWriting(value: unknown, keys: readonly string[]): DraftCheck | und
  * entries cannot be skipped. Verify retry metadata, then normalize both form and baseline with the
  * offline allowlist checked against server kinds. Unknown kinds and unreadable values are discarded.
  */
-export function clearLegacyRecordDrafts(): void {
-  for (const key of recordDraftKeys()) {
-    const kind = RECORD_KIND_KEY.exec(key)?.[1];
-    const keys =
-      kind !== undefined && Object.hasOwn(LONG_TEXT_KEYS, kind) ? LONG_TEXT_KEYS[kind] : undefined;
-    const checked =
-      keys === undefined ? undefined : readDraftAt(key, (value) => checkWriting(value, keys));
-    if (checked === undefined) {
-      writeDraftAt(key, undefined);
-    } else if (checked.state === 'rewrite' && !writeDraftAt(key, checked.value)) {
-      // A failed rewrite must not leave the old short-field snapshot on disk.
-      writeDraftAt(key, undefined);
-    }
+function clearLegacyRecordDraftAt(key: string): void {
+  if (!RECORD_DRAFT_KEY.test(key)) return;
+  const kind = RECORD_KIND_KEY.exec(key)?.[1];
+  const keys =
+    kind !== undefined && Object.hasOwn(LONG_TEXT_KEYS, kind) ? LONG_TEXT_KEYS[kind] : undefined;
+  const checked =
+    keys === undefined ? undefined : readDraftAt(key, (value) => checkWriting(value, keys));
+  if (checked === undefined) {
+    writeDraftAt(key, undefined);
+  } else if (checked.state === 'rewrite' && !writeDraftAt(key, checked.value)) {
+    // A failed rewrite must not leave the old short-field snapshot on disk.
+    writeDraftAt(key, undefined);
   }
+}
+
+export function clearLegacyRecordDrafts(): void {
+  for (const key of recordDraftKeys()) clearLegacyRecordDraftAt(key);
+}
+
+/** Other tabs can still run an older release; attach for the App lifetime. */
+export function attachRecordDraftCleanup(): () => void {
+  function onStorage(event: StorageEvent): void {
+    if (event.key === null) return;
+    try {
+      if (event.storageArea !== window.localStorage) return;
+    } catch {
+      return;
+    }
+    // Re-read the current value, since the event's snapshot can already be outdated.
+    clearLegacyRecordDraftAt(event.key);
+  }
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener('storage', onStorage);
+  };
 }
