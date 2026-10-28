@@ -424,29 +424,34 @@ pub async fn release_migrator(
     Ok(())
 }
 
-/// [`release_migrator`]를 하고, 실패하면 같은 관리자 주소의 새 연결로 한 번 더 한다. 트랜잭션 밖에서 빌린
-/// 멤버십(복구)은 연결이 끊겨도 남기 때문이다. 새 연결에서도 실패하면 그 오류를 돌려준다(멤버십이 남았다는 뜻).
-pub async fn release_migrator_or_reconnect(
-    conn: &mut PgConnection,
+/// 반납 실패 뒤 대상 트랜잭션을 롤백·종료한 다음, 새 연결에서 원래 멤버십인지 확인만 한다.
+/// 반납 오류는 대상 트랜잭션을 중단시킬 수 있으므로 새 연결의 성공으로 그 오류를 덮어쓰면 안 된다.
+pub async fn verify_migrator_returned(
     admin: &DatabaseUrl,
-    borrow: MigratorBorrow,
+    borrow: &MigratorBorrow,
 ) -> Result<(), AppError> {
-    let Err(first) = release_migrator(conn, borrow.clone()).await else {
-        return Ok(());
-    };
     if matches!(borrow, MigratorBorrow::Kept) {
-        return Err(first);
+        return Ok(());
     }
-    tracing::warn!(
-        event = "db.release_migrator_retry",
-        error_code = first.code(),
-        detail = fvoci_core::logging::safe_error(&first),
-        "returning the borrowed migrator membership failed; retrying on a new admin connection"
-    );
     let mut fresh = PgConnection::connect_with(&super::connect_options(admin)?).await?;
-    let released = release_migrator(&mut fresh, borrow).await;
-    let closed = fresh.close().await.map_err(AppError::from);
-    released.and(closed)
+    let memberships = direct_memberships(&mut fresh).await;
+    let closed = fresh.close().await;
+    let memberships = memberships?;
+    closed?;
+    let returned = match borrow {
+        MigratorBorrow::Kept => true,
+        MigratorBorrow::Added { grantor } => !memberships.iter().any(|(g, _, _)| g == grantor),
+        MigratorBorrow::Changed { grantor, inherit } => memberships
+            .iter()
+            .any(|(g, inherited, set)| g == grantor && inherited == inherit && !set),
+    };
+    if !returned {
+        return Err(AppError::Config(
+            "the migrator membership was not restored after rolling back the failed operation"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 /// 이 DB에 두 역할의 접속 권한, 마이그레이션 역할 소유의 스키마 `fvoci`, 두 역할의 `search_path`를 둔다.

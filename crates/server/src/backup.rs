@@ -267,7 +267,8 @@ pub async fn restore(
     let mut tx = conn.begin().await?;
     let borrow = fvoci_db::admin::borrow_migrator(&mut tx).await?;
     let result = restore_as_owner(config, &mut tx, from, &manifest).await;
-    let released = fvoci_db::admin::release_migrator_or_reconnect(&mut tx, url, borrow).await;
+    // 같은 연결의 반납 실패는 트랜잭션 중단을 뜻할 수 있다. 새 연결의 성공으로 이를 덮어쓰지 않는다.
+    let released = fvoci_db::admin::release_migrator(&mut tx, borrow.clone()).await;
     let finished = if result.is_ok() && released.is_ok() {
         tx.commit().await
     } else {
@@ -275,16 +276,24 @@ pub async fn restore(
     }
     .map_err(AppError::from);
     let closed = conn.close().await.map_err(AppError::from);
+    // 롤백·연결 종료 뒤에만 새 연결로 확인한다. 여기서는 GRANT/REVOKE를 다시 실행하지 않는다.
+    let verified = if released.is_err() {
+        fvoci_db::admin::verify_migrator_returned(url, &borrow).await
+    } else {
+        Ok(())
+    };
     let unlocked = lock.close().await.map_err(AppError::from);
     // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·트랜잭션 종료·연결 닫기)도 로그에 남긴다.
-    // 기존 재연결 회수 경로를 유지하고, 임시 멤버십의 영속화는 바깥 트랜잭션으로 막는다.
+    // 재연결은 롤백 결과 확인에만 쓰며, 같은 연결에서 생긴 첫 반납 오류를 그대로 돌려준다.
     for (step, outcome) in [
         ("release_migrator", &released),
         ("finish_migrator", &finished),
+        ("verify_migrator_returned", &verified),
         ("close", &closed),
         ("close_migrator_lock", &unlocked),
     ] {
-        if let (Err(_), Err(err)) = (&result, outcome) {
+        let failed = result.is_err() || (step != "release_migrator" && released.is_err());
+        if let (true, Err(err)) = (failed, outcome) {
             tracing::error!(
                 event = "backup.restore_cleanup_failed",
                 step,
@@ -298,6 +307,7 @@ pub async fn restore(
     released?;
     finished?;
     closed?;
+    verified?;
     unlocked?;
     Ok(manifest)
 }
