@@ -15,11 +15,11 @@ vi.mock('$lib/features/documents/export', async (original) => ({
   ...(await original<typeof exporting>()),
   saveBlob: vi.fn(),
   toMarkdown: vi.fn(() => ({ markdown: '이전 사용자 본문', lossy: [] })),
-  toZip: vi.fn(async () => new Blob(['attachment'])),
+  toZip: vi.fn(() => Promise.resolve(new Blob(['attachment']))),
 }));
 vi.mock('$lib/features/documents/export-print', () => ({
-  printDocumentHtml: vi.fn(async () => '<p>이전 사용자 본문</p>'),
-  printToPdf: vi.fn(async () => undefined),
+  printDocumentHtml: vi.fn(() => Promise.resolve('<p>이전 사용자 본문</p>')),
+  printToPdf: vi.fn(() => Promise.resolve()),
 }));
 
 const doc: DocumentView = {
@@ -95,7 +95,7 @@ async function start(format: 'zip' | 'pdf') {
   const view = render(ExportDialog, props);
   await screen.findByRole('dialog');
   await fireEvent.click(screen.getByRole('radio', { name: format === 'zip' ? /\.zip/ : /PDF/ }));
-  await fireEvent.click(screen.getByRole('button', { name: '내보내기', exact: true }));
+  await fireEvent.click(screen.getByRole('button', { name: '내보내기' }));
   return view;
 }
 
@@ -118,30 +118,46 @@ it.each([
       signal = init?.signal;
       return new Promise<Response>((resolve, reject) => {
         finish = resolve;
-        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
       });
     });
-    const prepare = vi.spyOn(exporting, 'prepareExport');
+    let preparing: Promise<exporting.PreparedExport> | undefined;
+    const prepare = exporting.prepareExport;
+    vi.spyOn(exporting, 'prepareExport').mockImplementation((...args) => {
+      preparing = prepare(...args);
+      return preparing;
+    });
     const view = await start(format);
-    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledOnce();
+    });
     if (change === 'unmount') view.unmount();
-    else if (change === 'close')
-      await fireEvent.click(screen.getAllByRole('button', { name: '닫기' })[0]!);
-    else hideSession(change === 'logout' ? 'logout' : 'restore');
+    else if (change === 'close') {
+      const close = screen.getAllByRole('button', { name: '닫기' })[0];
+      if (close === undefined) throw new Error('close button missing');
+      await fireEvent.click(close);
+    } else hideSession(change === 'logout' ? 'logout' : 'restore');
     flushSync();
     expect.soft(signal?.aborted).toBe(true);
     finish(new Response('old bytes'));
     await act(async () => {
-      await prepare.mock.results[0]?.value;
+      await preparing?.catch(() => undefined);
     });
     expect(exporting.saveBlob).not.toHaveBeenCalled();
     expect(printToPdf).not.toHaveBeenCalled();
   },
 );
 
-it.each(['zip', 'pdf'] as const)(
-  'rechecks the user immediately before the final %s side effect',
-  async (format) => {
+it.each([
+  ['zip', 'user'],
+  ['pdf', 'user'],
+  ['zip', 'generation'],
+  ['pdf', 'generation'],
+] as const)(
+  'rechecks context immediately before the final %s side effect after %s changes',
+  async (format, change) => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('old bytes'));
     let finish!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -158,10 +174,11 @@ it.each(['zip', 'pdf'] as const)(
         return '<p>old bytes</p>';
       });
     await start(format);
-    await waitFor(() =>
-      expect(format === 'zip' ? exporting.toZip : printDocumentHtml).toHaveBeenCalled(),
-    );
-    me.userId = 'user-b';
+    await waitFor(() => {
+      expect(format === 'zip' ? exporting.toZip : printDocumentHtml).toHaveBeenCalled();
+    });
+    if (change === 'user') me.userId = 'user-b';
+    else hideSession('restore');
     await act(async () => {
       finish();
       await held;
@@ -174,6 +191,17 @@ it.each(['zip', 'pdf'] as const)(
 it('saves an attachment export for the unchanged user', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('current bytes'));
   await start('zip');
-  await waitFor(() => expect(exporting.saveBlob).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(exporting.saveBlob).toHaveBeenCalledOnce();
+  });
   expect(printToPdf).not.toHaveBeenCalled();
+});
+
+it('prints an attachment export for the unchanged user', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('current bytes'));
+  await start('pdf');
+  await waitFor(() => {
+    expect(printToPdf).toHaveBeenCalledOnce();
+  });
+  expect(exporting.saveBlob).not.toHaveBeenCalled();
 });

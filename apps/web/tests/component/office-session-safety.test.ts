@@ -9,7 +9,7 @@ import { me } from '$lib/me.svelte';
 
 vi.mock('$lib/features/files/office', async (original) => ({
   ...(await original<typeof import('$lib/features/files/office')>()),
-  xlsxSheets: vi.fn(async () => [{ name: 'old sheet', rows: [['old secret']] }]),
+  xlsxSheets: vi.fn(() => Promise.resolve([{ name: 'old sheet', rows: [['old secret']] }])),
 }));
 afterEach(() => {
   cleanup();
@@ -37,11 +37,13 @@ it('aborts office bytes and discards late content when session safety starts', a
     kind: 'xlsx',
     onclose: () => undefined,
   });
-  await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(fetch).toHaveBeenCalledOnce();
+  });
   hideSession('restore');
   flushSync();
   expect.soft(signal?.aborted).toBe(true);
-  await act(async () => {
+  await act(() => {
     finish(new Response('old bytes'));
   });
   expect(xlsxSheets).not.toHaveBeenCalled();

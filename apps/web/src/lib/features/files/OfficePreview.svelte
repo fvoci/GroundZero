@@ -3,6 +3,8 @@
   import { untrack } from 'svelte';
 
   import { fileContentUrl } from '$lib/api/client';
+  import { accountSafety, accountSwitching } from '$lib/features/feedback/feedback.svelte';
+  import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
@@ -95,6 +97,7 @@
   let sentTo: Window | undefined;
 
   function sendPptx(): void {
+    if (accountSwitching()) return;
     const target = frame?.contentWindow;
     if (!target || pptxBytes === undefined || sentTo === target) return;
     sentTo = target;
@@ -120,7 +123,17 @@
 
   $effect(() => {
     const id = fileId;
+    const generation = accountSafety.generation;
+    const userId = currentUser.userId;
+    const hidden = accountSwitching();
     const mine = ++seq;
+    const controller = new AbortController();
+    const current = (): boolean =>
+      mine === seq &&
+      !controller.signal.aborted &&
+      !accountSwitching() &&
+      accountSafety.generation === generation &&
+      currentUser.userId === userId;
     srcdoc = undefined;
     sheets = undefined;
     pptxBytes = undefined;
@@ -129,35 +142,41 @@
     pptxSlides = undefined;
     clearHwp();
     error = undefined;
+    if (hidden) return;
     if (size > (kind === 'hwp' ? HWP_PREVIEW_MAX_BYTES : OFFICE_PREVIEW_MAX_BYTES)) {
       error = m.files_too_large();
       return;
     }
     void (async () => {
       try {
-        const response = await fetch(fileContentUrl(id), { credentials: 'same-origin' });
+        const response = await fetch(fileContentUrl(id), {
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
         if (!response.ok) throw new Error(String(response.status));
         const bytes = await response.arrayBuffer();
+        if (!current()) return;
         if (kind === 'docx') {
           const html = await docxSrcdoc(bytes);
-          if (mine === seq) srcdoc = html;
+          if (current()) srcdoc = html;
         } else if (kind === 'hwp') {
           await previewHwp(bytes, mine);
         } else if (kind === 'pptx') {
           const doc = await pptxSrcdoc();
-          if (mine === seq) {
+          if (current()) {
             pptxBytes = bytes;
             pptxDoc = doc;
           }
         } else {
           const result = await xlsxSheets(bytes);
-          if (mine === seq) sheets = result;
+          if (current()) sheets = result;
         }
       } catch {
-        if (mine === seq) error = m.files_preview_failed();
+        if (current()) error = m.files_preview_failed();
       }
     })();
     return () => {
+      controller.abort();
       seq += 1;
       clearHwp();
     };

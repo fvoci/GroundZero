@@ -118,14 +118,16 @@ it('publishes the shell identity and a fresh signed-out marker before each logou
   await screen.findByRole('alert');
   const first = localStorage.getItem(sessionKey);
   await fireEvent.click(screen.getByRole('button', { name: '로그아웃 다시 하기' }));
-  await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(send).toHaveBeenCalledTimes(2);
+  });
   expect(localStorage.getItem(sessionKey)).not.toBe(first);
 });
 
 it('publishes an anonymous shell result without making public views publish a marker', async () => {
   vi.spyOn(api, 'me').mockResolvedValue(undefined);
   const view = render(App, { replace, reload });
-  await screen.findByRole('link', { name: '로그인', exact: true });
+  await screen.findByRole('link', { name: '로그인' });
   expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
   view.unmount();
   localStorage.removeItem(sessionKey);
@@ -170,7 +172,9 @@ it('keeps a signed-out marker hidden through a failed verification and offers re
   await screen.findByRole('alert');
   expect(replace).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-  await waitFor(() => expect(replace).toHaveBeenCalledWith('/trash'));
+  await waitFor(() => {
+    expect(replace).toHaveBeenCalledWith('/trash');
+  });
   expect(screen.queryByText('이전 비밀 목록')).toBeNull();
 });
 
@@ -195,20 +199,20 @@ it('deduplicates return signals during verification and unsubscribes on unmount'
   const view = render(App, { replace, reload });
   await screen.findByText('이전 비밀 목록');
   const check = deferred<Me | undefined>();
-  vi.spyOn(api, 'me').mockReturnValue(check.promise);
+  const read = vi.spyOn(api, 'me').mockReturnValue(check.promise);
   signalSession('user-b');
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
   window.dispatchEvent(new Event('focus'));
   document.dispatchEvent(new Event('visibilitychange'));
   pageshow(false);
-  expect(api.me).toHaveBeenCalledTimes(2);
+  expect(read).toHaveBeenCalledTimes(2);
   view.unmount();
   signalSession(null);
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
   window.dispatchEvent(new Event('focus'));
   document.dispatchEvent(new Event('visibilitychange'));
   pageshow(false);
-  expect(api.me).toHaveBeenCalledTimes(2);
+  expect(read).toHaveBeenCalledTimes(2);
   check.resolve(undefined);
   await Promise.resolve();
   expect(replace).not.toHaveBeenCalled();
@@ -226,7 +230,9 @@ it('keeps authentication usable when session marker reads and writes are denied'
   window.dispatchEvent(new Event('focus'));
   expect(screen.getByText('이전 비밀 목록')).toBeVisible();
   await logout();
-  await waitFor(() => expect(replace).toHaveBeenCalledWith('/signed-out'));
+  await waitFor(() => {
+    expect(replace).toHaveBeenCalledWith('/signed-out');
+  });
 });
 
 // #212 1~3, 부조종사 2026-10-29 00:25: 응답·이동보다 먼저 이전 화면을 가린다.

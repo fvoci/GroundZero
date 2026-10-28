@@ -95,6 +95,7 @@ export interface PreparedExport {
 
 export interface PrepareOptions {
   format: ExportFormat;
+  signal?: AbortSignal;
   /** 참조 대상으로 가는 앱 경로(볼 수 없으면 null). */
   hrefFor: (target: ResolvedReferenceView) => string | null;
   /** 이 앱의 원점(링크를 절대 주소로). */
@@ -159,6 +160,7 @@ export async function prepareExport(
   stored: DocNode,
   options: PrepareOptions,
 ): Promise<PreparedExport> {
+  options.signal?.throwIfAborted();
   const notes: string[] = [];
   const doc = toJson(stored);
 
@@ -193,6 +195,7 @@ export async function prepareExport(
   const missing: string[] = [];
   if (options.format === 'zip' || options.format === 'pdf') {
     for (const [key, f] of fileRefs) {
+      options.signal?.throwIfAborted();
       let name = f.id;
       try {
         name = (await api.file(f.id)).file.name;
@@ -200,8 +203,10 @@ export async function prepareExport(
         // 이름을 볼 수 없으면 id로 둔다(아래 내용 요청도 대부분 실패한다).
       }
       try {
+        options.signal?.throwIfAborted();
         const response = await fetch(fileContentUrl(f.id, f.version), {
           credentials: 'same-origin',
+          signal: options.signal ?? null,
         });
         if (!response.ok) throw new Error(String(response.status));
         if (options.format === 'zip') {
@@ -213,6 +218,7 @@ export async function prepareExport(
           local.set(key, `${options.origin}${fileContentUrl(f.id, f.version)}`);
         }
       } catch {
+        options.signal?.throwIfAborted();
         missing.push(name === f.id ? m.documents_export_unnamed_attachment() : name);
       }
     }
@@ -279,6 +285,7 @@ export async function prepareExport(
   if (hidden > 0) {
     notes.push(m.documents_export_hidden_refs({ count: hidden, label: hiddenReferenceLabel() }));
   }
+  options.signal?.throwIfAborted();
   return { title, revision, body, files, notes };
 }
 
