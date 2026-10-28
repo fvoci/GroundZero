@@ -39,6 +39,12 @@ beforeEach(async () => {
   localStorage.clear();
   me.userId = '';
   router.path = '/';
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   vi.spyOn(api, 'me').mockResolvedValue(undefined);
   vi.spyOn(api, 'authInfo').mockResolvedValue({ oidc_enabled: true });
   vi.spyOn(api, 'recordKinds');
@@ -48,6 +54,7 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   localStorage.clear();
   router.guard = undefined;
 });
