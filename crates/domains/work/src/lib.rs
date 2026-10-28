@@ -2,6 +2,8 @@
 //! (노르웨이숲 태비 초안 2). 라우터와 OpenAPI 조각을 내고, 조립 crate(`fvoci-server`)가 합친다(초안 3).
 //! 처리기는 부분 상태 [`WorkState`]를 조립 crate의 상태에서 `FromRef`로 꺼낸다.
 
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
 pub mod recurrence;
 pub mod schedule;
 pub mod state;
