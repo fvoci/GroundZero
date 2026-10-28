@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -39,7 +40,7 @@ it('offers the quick title and request ID after reload without sending before re
   const created = taskViews()[0];
   if (created === undefined) throw new Error('missing task');
   const add = vi
-    .spyOn(api, 'createQuickTask')
+    .spyOn(work, 'createQuickTask')
     .mockRejectedValueOnce(new NetworkError('offline'))
     .mockResolvedValue({ ...created, checklist: [] });
   await open();
@@ -72,11 +73,11 @@ it('warns on leaving with only a quick-add title', async () => {
 it('keeps the next account input when an earlier account request finishes', async () => {
   const created = taskViews()[0];
   if (created === undefined) throw new Error('missing task');
-  let complete: ((value: Awaited<ReturnType<typeof api.createQuickTask>>) => void) | undefined;
-  const request = new Promise<Awaited<ReturnType<typeof api.createQuickTask>>>((resolve) => {
+  let complete: ((value: Awaited<ReturnType<typeof work.createQuickTask>>) => void) | undefined;
+  const request = new Promise<Awaited<ReturnType<typeof work.createQuickTask>>>((resolve) => {
     complete = resolve;
   });
-  const add = vi.spyOn(api, 'createQuickTask').mockReturnValue(request);
+  const add = vi.spyOn(work, 'createQuickTask').mockReturnValue(request);
   await open();
   await fireEvent.input(screen.getByLabelText(m.home_title()), { target: { value: 'A의 제목' } });
   await fireEvent.click(screen.getByRole('button', { name: m.home_add() }));

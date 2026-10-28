@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -86,7 +87,7 @@ afterEach(() => {
 describe('item profile status line', () => {
   it('drops the earlier "saved" line when the next save conflicts', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     serve([
       [204, undefined],
       [409, { error: 'conflict', current: { ...profile, goal: '다른 탭', version: 2 } }],
@@ -119,7 +120,7 @@ describe('item profile status line', () => {
           }),
       )
       .mockResolvedValue({ ...profile, goal: '새 목표', version: 2 });
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const sent: Record<string, unknown>[] = [];
     vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
       if (input === '/api/items/i1/profile' && init?.method === 'PUT') {
@@ -158,7 +159,7 @@ describe('item profile status line', () => {
           }),
       )
       .mockResolvedValue({ ...profile, version: 2 });
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     serve([[204, undefined]]);
     render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
 
@@ -190,7 +191,7 @@ describe('item profile status line', () => {
             reload = resolve;
           }),
       );
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const sent: Record<string, unknown>[] = [];
     vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) => {
       if (input === '/api/items/i1/profile' && init?.method === 'PUT') {
@@ -220,7 +221,7 @@ describe('item profile status line', () => {
 
   it('drops the earlier "saved" line when the period is invalid', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     serve([[204, undefined]]);
     render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
 
@@ -250,7 +251,7 @@ describe('item profile status line', () => {
   // 브라우저에서 닿지 않는 경로였다. 닿는 경로는 늦은 실패가 열린 폼에 남고, 풀린 뒤의 취소·새 편집이 그 오류를 지우는 것이다.
   it('keeps cancel locked while saving and clears the late error on cancel and a new edit', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     let fail: (e: Error) => void = () => undefined;
     const save = vi.spyOn(api, 'setItemProfile').mockImplementation(
       () =>
@@ -280,7 +281,7 @@ describe('item profile status line', () => {
 });
 it('restores all profile text and the original base only for the original account', async () => {
   vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   const save = vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
   const view = render(ItemProfilePanel, { item, kind: 'project', onchanged: () => undefined });
   await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { workApi as work } from '$lib/features/tasks/api';
   // 업무 CSV 일괄 등록(D-39). 한 줄씩 기존 업무 만들기 API로 넣는다(같은 검증과 권한). 한 줄은 모든 칸을 실은 요청
   // 하나라(D-105) 서버가 한 트랜잭션에서 확인·저장하고, 거절된 줄은 아무것도 남기지 않는다. 줄마다 진행 상태를 기억해
   // 두어(csv-import.ts) 중간에 실패해도 다시 누르면 다 넣은 줄은 건너뛰고 나머지를 같은 요청 id로 보낸다(응답을 잃은 줄이
@@ -85,7 +86,7 @@
       assignable = [];
     });
     if (selected !== undefined) {
-      void api
+      void work
         .assignable(id)
         .then((a) => {
           if (mine === generation) assignable = a;
@@ -184,7 +185,7 @@
         // 상태를 내용이 같은 줄에만 준다).
         if (line.applied !== key) {
           current = step;
-          const task = await api.createTask(
+          const task = await work.createTask(
             editingUser,
             itemId,
             line.requestId,

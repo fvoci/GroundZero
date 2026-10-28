@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,7 +69,7 @@ describe('calendar task creation with another tab draft', () => {
       }),
     );
     const request = held<TaskDetailView>();
-    const create = vi.spyOn(api, 'createTask').mockReturnValueOnce(request.promise);
+    const create = vi.spyOn(work, 'createTask').mockReturnValueOnce(request.promise);
     const oncreated = vi.fn();
     render(CalendarTaskDialog, {
       props: {

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,7 +89,7 @@ function fakeServer() {
   // 새로 만든 업무 id(만든 순서).
   const made: string[] = [];
   const create = vi
-    .spyOn(api, 'createTask')
+    .spyOn(work, 'createTask')
     .mockImplementation(
       async (
         _user: string,
@@ -139,7 +140,7 @@ function fakeServer() {
       },
     );
   // CSV 등록은 고치기를 보내지 않는다(만들기 뒤 따로 고치는 두 단계가 없다).
-  const update = vi.spyOn(api, 'updateTask');
+  const update = vi.spyOn(work, 'updateTask');
   // 다른 사람이 그 업무를 고친 것처럼 설명을 바꾸고 판을 올린다.
   const bump = (id: string): void => {
     const task = tasks.get(id);
@@ -189,7 +190,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
     sessionStorage.clear();
     localStorage.clear();
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'assignable').mockResolvedValue([
+    vi.spyOn(work, 'assignable').mockResolvedValue([
       { user_id: 'u1', display_name: '가람' },
       { user_id: 'u2', display_name: '나래' },
     ]);
@@ -269,7 +270,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 
   it('cancels the in-flight request, retains its id, and stops before the next row', async () => {
     let signal: AbortSignal | undefined;
-    const create = vi.spyOn(api, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {
+    const create = vi.spyOn(work, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {
       signal = s;
       return new Promise((_resolve, reject) =>
         s?.addEventListener('abort', () => {
@@ -295,7 +296,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 
   it('unmount aborts and preserves the request id before the response arrives', async () => {
     let signal: AbortSignal | undefined;
-    const create = vi.spyOn(api, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {
+    const create = vi.spyOn(work, 'createTask').mockImplementation((_u, _i, _r, _t, _p, _f, s) => {
       signal = s;
       return new Promise((_resolve, reject) =>
         s?.addEventListener('abort', () => {
@@ -593,7 +594,7 @@ describe('TaskCsvImport one request per row (D-105)', () => {
 describe('TaskCsvImport new batch after a failure (review)', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
   });
 
   afterEach(() => {

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import type { MembersView, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -542,7 +543,7 @@ describe('task status editor', () => {
       position: String(TEST_STATUSES.length),
     });
     const create = held<never>();
-    vi.spyOn(api, 'createTaskStatus').mockReturnValue(create.promise);
+    vi.spyOn(work, 'createTaskStatus').mockReturnValue(create.promise);
     render(StatusEditor, {
       itemId: 'i',
       statuses: TEST_STATUSES,
@@ -555,7 +556,7 @@ describe('task status editor', () => {
     });
     await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
     await waitFor(() => {
-      expect(api.createTaskStatus).toHaveBeenCalledTimes(1);
+      expect(work.createTaskStatus).toHaveBeenCalledTimes(1);
     });
     expectOffersLocked(1);
     expect(screen.getByLabelText(m.tasks_status_name())).toBeDisabled();

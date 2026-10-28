@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -73,12 +74,12 @@ describe('task board filter disclosure', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([
+    vi.spyOn(work, 'tasks').mockResolvedValue([
       task('1', '자료 정리', 'high'),
       task('2', '문서 검토', 'low'),
     ]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
     vi.restoreAllMocks();

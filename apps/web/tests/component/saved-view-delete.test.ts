@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,8 +39,8 @@ describe('saved view delete', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'tasks').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
     vi.restoreAllMocks();

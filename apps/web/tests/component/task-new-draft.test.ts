@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,9 +89,9 @@ function task(id: string, title: string): TaskView {
 }
 
 async function mount(): Promise<void> {
-  vi.spyOn(api, 'tasks').mockResolvedValue([]);
+  vi.spyOn(work, 'tasks').mockResolvedValue([]);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
   await screen.findByTestId('task-board');
 }
@@ -151,7 +152,7 @@ describe('new task title across reloads and account switches', () => {
 
   it('keeps a typed title for the editing account and reuses the request id of a failed creation after a reload', async () => {
     await mount();
-    const create = vi.spyOn(api, 'createTask').mockRejectedValueOnce(new NetworkError('offline'));
+    const create = vi.spyOn(work, 'createTask').mockRejectedValueOnce(new NetworkError('offline'));
     await fireEvent.input(await input('새 업무 제목'), { target: { value: 'A의 새 업무' } });
     await waitFor(() => {
       expect(stored(A)).toEqual([{ lane: null, name: 'A의 새 업무', requestId: null }]);
@@ -248,7 +249,7 @@ describe('new task title across reloads and account switches', () => {
     const seeded = await input('할 일에 업무 추가');
     expect(seeded.value).toBe('할 일 열의 업무');
     const create = vi
-      .spyOn(api, 'createTask')
+      .spyOn(work, 'createTask')
       .mockResolvedValue({ ...task('9', '할 일 열의 업무'), checklist: [] });
     const form = seeded.closest('form');
     if (form === null) throw new Error('quick add form');

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Activity, ReceivedInvitation } from '@fvoci/api-client';
@@ -153,7 +154,7 @@ describe('organization summaries', () => {
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     const add = vi
-      .spyOn(api, 'createQuickTask')
+      .spyOn(work, 'createQuickTask')
       .mockRejectedValueOnce(new NetworkError('offline'))
       .mockResolvedValue({ ...created, checklist: [] });
     render(HomeDashboard, { workspaces: [] });

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from '$lib/api/client';
@@ -15,7 +16,7 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 it('preserves status name and color, offers them explicitly, and guards closing', async () => {
-  const create = vi.spyOn(api, 'createTaskStatus');
+  const create = vi.spyOn(work, 'createTaskStatus');
   const props = { itemId: 'i', statuses: TEST_STATUSES, archived: false, onchanged: vi.fn() };
   const first = render(StatusEditor, props);
   await fireEvent.click(screen.getByRole('button', { name: '상태 추가' }));
@@ -37,7 +38,7 @@ it('preserves status name and color, offers them explicitly, and guards closing'
 });
 
 it('adds a status, validates fields, and prevents duplicate requests', async () => {
-  const create = vi.spyOn(api, 'createTaskStatus').mockReturnValue(new Promise(() => undefined));
+  const create = vi.spyOn(work, 'createTaskStatus').mockReturnValue(new Promise(() => undefined));
   render(StatusEditor, {
     itemId: 'i',
     statuses: TEST_STATUSES,
@@ -57,7 +58,7 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
   const first = TEST_STATUSES[0];
   if (first === undefined) throw new Error('missing status');
   const update = vi
-    .spyOn(api, 'updateTaskStatus')
+    .spyOn(work, 'updateTaskStatus')
     .mockRejectedValueOnce(new ApiError(400, 'bad_request', 'color rejected'))
     .mockRejectedValueOnce(new ApiError(409, 'invalid_state', 'the item is archived'))
     .mockRejectedValueOnce(new ApiError(409, 'invalid_state', 'a status with this name exists'))
@@ -106,7 +107,7 @@ it('preserves edits on 400 and 409, then saves name, color, category and positio
 });
 
 it('requires another status before deletion and sends its id', async () => {
-  const remove = vi.spyOn(api, 'deleteTaskStatus').mockResolvedValue(3);
+  const remove = vi.spyOn(work, 'deleteTaskStatus').mockResolvedValue(3);
   render(StatusEditor, {
     itemId: 'i',
     statuses: TEST_STATUSES,
@@ -135,7 +136,7 @@ it('disables editing archived items', () => {
 
 // CodeRabbit(#141): 순서 칸을 비우면 Number('')가 0이라 검증을 지나 열이 맨 앞으로 조용히 옮겨졌다. 빈 순서는 거절한다.
 it('rejects an empty position instead of saving 0', async () => {
-  const update = vi.spyOn(api, 'updateTaskStatus');
+  const update = vi.spyOn(work, 'updateTaskStatus');
   render(StatusEditor, {
     itemId: 'i',
     statuses: TEST_STATUSES,

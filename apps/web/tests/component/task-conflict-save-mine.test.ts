@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
@@ -87,8 +88,8 @@ const unchanged: TaskInput = {
 };
 
 function mount(current: TaskDetailView = v2, people: AssigneeView[] = []) {
-  vi.spyOn(api, 'task').mockResolvedValue(current);
-  vi.spyOn(api, 'assignable').mockResolvedValue(people);
+  vi.spyOn(work, 'task').mockResolvedValue(current);
+  vi.spyOn(work, 'assignable').mockResolvedValue(people);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   return render(TaskDetail, {
@@ -140,7 +141,7 @@ describe('saving my input after a task conflict', () => {
   it('shows the latest custom status name in the conflict notice', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'updateTask').mockResolvedValue({
+    vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'conflict',
       current: { ...v2, version: 3, status: '검수 대기' },
     });
@@ -156,7 +157,7 @@ describe('saving my input after a task conflict', () => {
     const v3 = { ...v2, version: 3, title: '새 제목' };
     const v4 = { ...v3, version: 4, description: 'B 설명' };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockResolvedValueOnce({ kind: 'updated', task: v4 });
     await screen.findByLabelText('설명');
@@ -196,7 +197,7 @@ describe('saving my input after a task conflict', () => {
     await setLocale('ko', { reload: false });
     mount();
     const preview = vi
-      .spyOn(api, 'previewSchedule')
+      .spyOn(work, 'previewSchedule')
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const v3: TaskDetailView = {
       ...v2,
@@ -209,7 +210,7 @@ describe('saving my input after a task conflict', () => {
     };
     const v4 = { ...v3, version: 4, title: '내 제목', estimate_minutes: 45 };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockResolvedValueOnce({ kind: 'updated', task: v4 });
     await screen.findByLabelText('설명');
@@ -289,7 +290,7 @@ describe('saving my input after a task conflict', () => {
     const v4: TaskDetailView = { ...v3, version: 4, title: '세 번째 제목', status: '진행 중' };
     const v5 = { ...v4, version: 5, description: 'B 설명' };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockResolvedValueOnce({ kind: 'conflict', current: v4 })
       .mockResolvedValueOnce({ kind: 'updated', task: v5 });
@@ -335,7 +336,7 @@ describe('saving my input after a task conflict', () => {
     mount();
     const v3 = { ...v2, version: 3, title: '새 제목' };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockRejectedValueOnce(new Error('boom'));
     await screen.findByLabelText('설명');
@@ -375,12 +376,12 @@ describe('saving my input after a task conflict', () => {
       ],
     };
     const preview = vi
-      .spyOn(api, 'previewSchedule')
+      .spyOn(work, 'previewSchedule')
       .mockResolvedValueOnce({ shifts: [], undated: [], blocked: null })
       .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null });
     const v3 = { ...dated, version: 3, title: '새 제목' };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockResolvedValueOnce({
         kind: 'updated',
@@ -422,7 +423,7 @@ describe('saving my input after a task conflict', () => {
     mount();
     const v3 = { ...v2, version: 3, title: '새 제목', description: 'A 설명' };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 });
     await screen.findByLabelText('설명');
     await type('task-description', 'B 설명');
@@ -474,12 +475,12 @@ describe('the overwrite question after a task conflict', () => {
     const dated: TaskDetailView = { ...v2, start_date: '2026-10-01', due_date: '2026-10-10' };
     mount(dated);
     const preview = vi
-      .spyOn(api, 'previewSchedule')
+      .spyOn(work, 'previewSchedule')
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     // 다른 사람이 마일스톤으로 바꿨다(마일스톤에는 시작일이 없다).
     const v3: TaskDetailView = { ...dated, version: 3, start_date: null, milestone: true };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockResolvedValueOnce({
         kind: 'updated',
@@ -526,7 +527,7 @@ describe('the overwrite question after a task conflict', () => {
     // 다른 사람이 제목을 바꾸고 '가나'도 지정했다. 서버는 담당자를 이름순으로 돌려준다.
     const v3: TaskDetailView = { ...current, version: 3, title: '새 제목', assignees: [ga, na] };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
       .mockResolvedValueOnce({ kind: 'updated', task: { ...v3, version: 4 } });
     await fireEvent.click(await screen.findByRole('checkbox', { name: '가나' }));
@@ -560,7 +561,7 @@ describe('the overwrite question after a task conflict', () => {
     await setLocale('ko', { reload: false });
     mount();
     const theirs = `${'가'.repeat(100)}\n끝 A`;
-    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+    vi.spyOn(work, 'updateTask').mockResolvedValueOnce({
       kind: 'conflict',
       current: { ...v2, version: 3, description: theirs },
     });
@@ -583,7 +584,7 @@ describe('the overwrite question after a task conflict', () => {
   it('locks the rest of the task while asking, but not the question or the notice', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'updateTask').mockResolvedValueOnce(titleConflict);
+    vi.spyOn(work, 'updateTask').mockResolvedValueOnce(titleConflict);
     const ask = await askAboutTitle();
     const locked = [
       screen.getByText('KED-1'),
@@ -627,12 +628,12 @@ describe('the overwrite question after a task conflict', () => {
         due_date: '2026-10-27',
         causes: [],
       };
-      vi.spyOn(api, 'previewSchedule')
+      vi.spyOn(work, 'previewSchedule')
         .mockResolvedValueOnce({ shifts: [], undated: [], blocked: null })
         .mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
       const v3: TaskDetailView = { ...dated, version: 3, title: '남의 제목' };
       const update = vi
-        .spyOn(api, 'updateTask')
+        .spyOn(work, 'updateTask')
         .mockResolvedValueOnce({ kind: 'conflict', current: v3 })
         .mockResolvedValueOnce({
           kind: 'conflict',
@@ -688,15 +689,15 @@ describe('the overwrite question inside the task dialog', () => {
   it('cancels with Escape without closing the dialog', async () => {
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
-    vi.spyOn(api, 'tasks').mockResolvedValue([v2]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([v2]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    vi.spyOn(api, 'task').mockResolvedValue(v2);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'task').mockResolvedValue(v2);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
-    const update = vi.spyOn(api, 'updateTask').mockResolvedValueOnce(titleConflict);
+    const update = vi.spyOn(work, 'updateTask').mockResolvedValueOnce(titleConflict);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
     await view.rerender({ item, workspaces: [], openTaskId: 't1' });
@@ -725,15 +726,15 @@ describe('the overwrite question inside the task dialog', () => {
   it('keeps focus in the question after a click on its text, so Escape only cancels it', async () => {
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
-    vi.spyOn(api, 'tasks').mockResolvedValue([v2]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([v2]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    vi.spyOn(api, 'task').mockResolvedValue(v2);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'task').mockResolvedValue(v2);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
-    const update = vi.spyOn(api, 'updateTask').mockResolvedValueOnce(titleConflict);
+    const update = vi.spyOn(work, 'updateTask').mockResolvedValueOnce(titleConflict);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: /^KED-1\s*옛 제목$/ }));
     await view.rerender({ item, workspaces: [], openTaskId: 't1' });
@@ -770,7 +771,7 @@ describe('the overwrite question after the second review', () => {
     };
     const bo: AssigneeView = { user_id: 'u3', display_name: '보라' };
     mount(v2, [alexA, alexB, bo]);
-    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+    vi.spyOn(work, 'updateTask').mockResolvedValueOnce({
       kind: 'conflict',
       current: { ...v2, version: 3, assignees: [alexB] },
     });
@@ -789,7 +790,7 @@ describe('the overwrite question after the second review', () => {
     await setLocale('ko', { reload: false });
     mount({ ...v2, tags: ['a'] });
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: { ...v2, version: 3, tags: ['b'] } })
       .mockResolvedValueOnce({ kind: 'updated', task: { ...v2, version: 4, tags: ['b'] } });
     await screen.findByLabelText('설명');
@@ -814,7 +815,7 @@ describe('the overwrite question after the second review', () => {
     await setLocale('ko', { reload: false });
     mount();
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: { ...v2, version: 3, tags: ['x'] } })
       .mockResolvedValueOnce({ kind: 'updated', task: { ...v2, version: 4, tags: ['b', 'a'] } });
     await screen.findByLabelText('설명');
@@ -842,7 +843,7 @@ describe('the overwrite question after the second review', () => {
     await setLocale('ko', { reload: false });
     mount();
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce(titleConflict)
       .mockResolvedValueOnce({ kind: 'updated', task: { ...titleConflict.current, version: 4 } });
     await screen.findByLabelText('설명');
@@ -867,7 +868,7 @@ describe('the overwrite question after the second review', () => {
   it('says so when the two values look the same', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+    vi.spyOn(work, 'updateTask').mockResolvedValueOnce({
       kind: 'conflict',
       current: { ...v2, version: 3, description: '가 \n나' },
     });
@@ -887,7 +888,7 @@ describe('the overwrite question after the second review', () => {
   it('leaves focus on the form save button when saving the form conflicts again', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'updateTask')
+    vi.spyOn(work, 'updateTask')
       .mockResolvedValueOnce(titleConflict)
       .mockResolvedValueOnce({
         kind: 'conflict',
@@ -913,7 +914,7 @@ describe('the overwrite question after the second review', () => {
     mount();
     const v4: TaskDetailView = { ...titleConflict.current, version: 4, title: '세 번째 제목' };
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce(titleConflict)
       .mockResolvedValueOnce({ kind: 'conflict', current: v4 })
       .mockResolvedValueOnce({ kind: 'updated', task: { ...v4, version: 5, title: '내 제목' } });
@@ -956,7 +957,7 @@ describe('the overwrite question after the second review', () => {
     await setLocale('ko', { reload: false });
     mount();
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce(titleConflict)
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce({
@@ -999,10 +1000,10 @@ describe('a late response while the overwrite question is open', () => {
   async function askWithLateChecklist(
     conflictWith: TaskDetailView,
     reloaded: TaskDetailView,
-  ): Promise<{ finish: () => void; update: MockInstance<typeof api.updateTask> }> {
+  ): Promise<{ finish: () => void; update: MockInstance<typeof work.updateTask> }> {
     mount(listed);
     let finish: () => void = () => undefined;
-    vi.spyOn(api, 'updateChecklistItem').mockReturnValue(
+    vi.spyOn(work, 'updateChecklistItem').mockReturnValue(
       new Promise<undefined>((resolve) => {
         finish = () => {
           resolve(undefined);
@@ -1010,12 +1011,12 @@ describe('a late response while the overwrite question is open', () => {
       }),
     );
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'conflict', current: conflictWith })
       .mockResolvedValueOnce({ kind: 'updated', task: { ...reloaded, version: 9 } });
     await screen.findByLabelText('설명');
     await fireEvent.click(screen.getByRole('checkbox', { name: '미완료 항목: 검토' }));
-    vi.mocked(api.task).mockResolvedValue(reloaded);
+    vi.mocked(work.task).mockResolvedValue(reloaded);
     await type('task-title', '내 제목');
     await saveIntoConflict();
     await fireEvent.click(saveMineButton());
@@ -1121,7 +1122,7 @@ describe('long values in the overwrite question', () => {
     vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(240);
     mount();
     const long = Array.from({ length: 80 }, (_, i) => `${String(i + 1)}번째 줄`).join('\n');
-    vi.spyOn(api, 'updateTask').mockResolvedValueOnce({
+    vi.spyOn(work, 'updateTask').mockResolvedValueOnce({
       kind: 'conflict',
       current: { ...v2, version: 3, description: long },
     });
@@ -1153,7 +1154,7 @@ it('preserves and hides task input after account_changed without another save', 
   await setLocale('ko', { reload: false });
   mount();
   const update = vi
-    .spyOn(api, 'updateTask')
+    .spyOn(work, 'updateTask')
     .mockRejectedValue(new ApiError(409, 'account_changed', 'account_changed'));
   await screen.findByLabelText('제목');
   await type('task-title', '계정 A의 비공개 입력');
@@ -1175,7 +1176,7 @@ it('keeps recurrence input on 409, shows the latest rule and explicitly resaves 
   };
   mount(initial);
   const save = vi
-    .spyOn(api, 'setTaskRecurrence')
+    .spyOn(work, 'setTaskRecurrence')
     .mockRejectedValueOnce(
       new TaskRuleConflict({ ...initial, series: { ...initial.series, rule: latest } }),
     )
@@ -1219,7 +1220,7 @@ it('restores a recurrence draft with its original base and requires an explicit 
     const current = { ...initial, series: { ...initial.series, rule: latest } };
     mount(current);
     const save = vi
-      .spyOn(api, 'setTaskRecurrence')
+      .spyOn(work, 'setTaskRecurrence')
       .mockRejectedValueOnce(new TaskRuleConflict(current))
       .mockResolvedValueOnce({
         ...current,
@@ -1260,7 +1261,7 @@ it.each(['success', 'conflict'] as const)(
       resolve = yes;
       reject = no;
     });
-    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending);
+    vi.spyOn(work, 'setTaskRecurrence').mockReturnValue(pending);
     await screen.findByLabelText('간격');
     await type('task-recurrence-interval', '2');
     await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
@@ -1303,7 +1304,7 @@ it.each(['success', 'conflict'] as const)(
       resolve = yes;
       reject = no;
     });
-    vi.spyOn(api, 'setTaskRecurrence').mockReturnValue(pending);
+    vi.spyOn(work, 'setTaskRecurrence').mockReturnValue(pending);
     await screen.findByLabelText('간격');
     await type('task-recurrence-interval', '2');
     await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
@@ -1318,7 +1319,7 @@ it.each(['success', 'conflict'] as const)(
         rule: { ...rule, interval: 4 },
       },
     };
-    vi.mocked(api.task).mockResolvedValue(other);
+    vi.mocked(work.task).mockResolvedValue(other);
     await view.rerender({
       taskId: other.id,
       tasks: [initial, other],

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,8 +51,8 @@ function detail(): TaskDetailView {
 }
 
 function mount(current: TaskDetailView): void {
-  vi.spyOn(api, 'task').mockResolvedValue(current);
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'task').mockResolvedValue(current);
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
@@ -83,7 +84,7 @@ describe('custom task status names survive a save of other fields', () => {
     await setLocale('ko', { reload: false });
     const current = detail();
     const sent: TaskInput[] = [];
-    vi.spyOn(api, 'updateTask').mockImplementation((_user, _id, _base, input) => {
+    vi.spyOn(work, 'updateTask').mockImplementation((_user, _id, _base, input) => {
       sent.push(input);
       return Promise.resolve({
         kind: 'updated',

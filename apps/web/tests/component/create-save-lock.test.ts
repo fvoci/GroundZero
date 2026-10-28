@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -106,7 +107,7 @@ describe('create forms while the request is in flight', () => {
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     const request = held<never>();
-    const add = vi.spyOn(api, 'createQuickTask').mockReturnValue(request.promise);
+    const add = vi.spyOn(work, 'createQuickTask').mockReturnValue(request.promise);
     render(HomeDashboard, { workspaces: [] });
     await fireEvent.click(await screen.findByRole('button', { name: m.home_quick_add() }));
     await fireEvent.input(await screen.findByLabelText(m.home_title()), {

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -98,7 +99,7 @@ afterEach(() => {
 describe('item profile leader label', () => {
   it('keeps showing "none" after a conflict whose latest has a leader', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([leader]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([leader]);
     const latest: ItemProfileView = { ...profile, leader, version: 2 };
     const sent = serve([
       [409, { error: 'conflict', current: latest }],
@@ -124,7 +125,7 @@ describe('item profile leader label', () => {
 
   it('shows "none" once the leader is cleared in the form', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue({ ...profile, leader });
-    vi.spyOn(api, 'assignable').mockResolvedValue([leader]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([leader]);
     const sent = serve([[204, undefined]]);
     render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
 
@@ -145,7 +146,7 @@ describe('item profile leader label', () => {
     const other = { user_id: 'u2', display_name: 'Second User' };
     vi.spyOn(api, 'itemProfile').mockResolvedValue({ ...profile, leader });
     // 고를 수 있는 사람 목록에 입력의 리더가 없어도(목록을 못 읽음) 그 이름을 보인다.
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     serve([[409, { error: 'conflict', current: { ...profile, leader: other, version: 2 } }]]);
     render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
 
@@ -166,7 +167,7 @@ describe('item member badges', () => {
       members: [{ user_id: 'u2', display_name: long }],
       groups: [{ id: 'g1', name: '2026학년도2학기대학원연구실공동세미나' }],
     });
-    vi.spyOn(api, 'assignable').mockResolvedValue([leader]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([leader]);
     render(ItemProfilePanel, { props: { item, kind: 'project', onchanged: () => undefined } });
 
     const name = await screen.findByText(long);

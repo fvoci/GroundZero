@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,8 +21,8 @@ beforeEach(async () => {
   router.guard = undefined;
   router.path = itemPath(WORKSPACE.id, TASK_ITEM.id);
   window.history.replaceState(null, '', router.path);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-  vi.spyOn(api, 'tasks').mockResolvedValue(taskViews());
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'tasks').mockResolvedValue(taskViews());
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
 });
 afterEach(() => {
@@ -41,7 +42,7 @@ it('accepts custom status names and requires a valid completion category', () =>
 });
 
 it('orders columns by definitions and only the owner sees the status editor', async () => {
-  vi.mocked(api.taskStatuses).mockResolvedValue([
+  vi.mocked(work.taskStatuses).mockResolvedValue([
     { id: 'b', name: '검토', color: '', position: 3, category: 'doing', task_count: 0 },
     { id: 'a', name: '접수', color: '', position: 1, category: 'todo', task_count: 0 },
   ]);

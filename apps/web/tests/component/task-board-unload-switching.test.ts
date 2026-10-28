@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,11 +76,11 @@ function unloadPrevented(): boolean {
 }
 
 async function mountWithOpenTask(): Promise<HTMLElement> {
-  vi.spyOn(api, 'tasks').mockResolvedValue([detail]);
+  vi.spyOn(work, 'tasks').mockResolvedValue([detail]);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-  vi.spyOn(api, 'task').mockResolvedValue(detail);
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'task').mockResolvedValue(detail);
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });
@@ -93,7 +94,7 @@ describe('task board unload warning while the account is switching', () => {
     });
     await mountWithOpenTask();
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '남기지 못함' } });
-    vi.spyOn(api, 'updateTask').mockRejectedValue(
+    vi.spyOn(work, 'updateTask').mockRejectedValue(
       new ApiError(409, 'account_changed', '계정이 바뀌었습니다'),
     );
     const save = document.getElementById('task-save');
@@ -203,7 +204,7 @@ describe('task board unload warning while the account is switching', () => {
       expect(quota).toHaveBeenCalled();
     });
     // 저장이 409 account_changed로 끝나면 폼은 잠기지만(canEdit=false) 고친 입력은 그대로 있다.
-    vi.spyOn(api, 'updateTask').mockRejectedValue(
+    vi.spyOn(work, 'updateTask').mockRejectedValue(
       new ApiError(409, 'account_changed', '계정이 바뀌었습니다'),
     );
     const save = document.getElementById('task-save');
@@ -218,14 +219,14 @@ describe('task board unload warning while the account is switching', () => {
     const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('quota exceeded (test)', 'QuotaExceededError');
     });
-    vi.spyOn(api, 'tasks').mockResolvedValue([
+    vi.spyOn(work, 'tasks').mockResolvedValue([
       detail,
       { ...detail, id: 't-2', title: '다음 업무' },
     ]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    const task = vi.spyOn(api, 'task').mockResolvedValue(detail);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+    const task = vi.spyOn(work, 'task').mockResolvedValue(detail);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     const { rerender } = render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });

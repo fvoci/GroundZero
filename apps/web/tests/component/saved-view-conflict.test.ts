@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -235,8 +236,8 @@ describe('saved view save on a stale version', () => {
     localStorage.clear();
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'tasks').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
     vi.restoreAllMocks();

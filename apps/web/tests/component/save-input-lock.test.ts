@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -234,7 +235,7 @@ const entry: TimeEntryView = {
 describe('saving edits while a request is in flight', () => {
   it('locks the item profile form and closes it on its own save', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const request = held<Awaited<ReturnType<typeof api.setItemProfile>>>();
     const save = vi.spyOn(api, 'setItemProfile').mockReturnValue(request.promise);
     render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });

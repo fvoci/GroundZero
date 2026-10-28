@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 // 화면 단위 story(Screens/)의 준비: 경로(router.path), 사이드바가 같이 쓰는 목록(workspaceNav), 서버 응답(`api` 함수)과
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
 import { spyOn } from 'storybook/test';
@@ -39,14 +40,14 @@ export interface ScreenApi {
   myInvitations: typeof api.myInvitations;
   currentTimer: typeof api.currentTimer;
   // 업무 보기는 서버 상태 정의를 함께 읽는다.
-  taskStatuses: typeof api.taskStatuses;
-  tasks: typeof api.tasks;
+  taskStatuses: typeof work.taskStatuses;
+  tasks: typeof work.tasks;
   savedViews: typeof api.savedViews;
-  syncRecurrences: typeof api.syncRecurrences;
-  task: typeof api.task;
-  moveTask: typeof api.moveTask;
+  syncRecurrences: typeof work.syncRecurrences;
+  task: typeof work.task;
+  moveTask: typeof work.moveTask;
   members: typeof api.members;
-  assignable: typeof api.assignable;
+  assignable: typeof work.assignable;
   search: typeof api.search;
   myOrganizations: typeof api.myOrganizations;
   unreadCount: typeof api.unreadCount;
@@ -150,15 +151,15 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'notifications').mockImplementation(stubs.notifications);
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
   spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
-  spyOn(api, 'tasks').mockImplementation(stubs.tasks);
+  spyOn(work, 'tasks').mockImplementation(stubs.tasks);
   // 실제 상태 정의 조회도 합성 응답으로 격리한다.
-  spyOn(api, 'taskStatuses').mockImplementation(stubs.taskStatuses);
+  spyOn(work, 'taskStatuses').mockImplementation(stubs.taskStatuses);
   spyOn(api, 'savedViews').mockImplementation(stubs.savedViews);
-  spyOn(api, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);
-  spyOn(api, 'task').mockImplementation(stubs.task);
-  spyOn(api, 'moveTask').mockImplementation(stubs.moveTask);
+  spyOn(work, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);
+  spyOn(work, 'task').mockImplementation(stubs.task);
+  spyOn(work, 'moveTask').mockImplementation(stubs.moveTask);
   spyOn(api, 'members').mockImplementation(stubs.members);
-  spyOn(api, 'assignable').mockImplementation(stubs.assignable);
+  spyOn(work, 'assignable').mockImplementation(stubs.assignable);
   spyOn(api, 'search').mockImplementation(stubs.search);
   spyOn(api, 'myOrganizations').mockImplementation(stubs.myOrganizations);
   spyOn(api, 'unreadCount').mockImplementation(stubs.unreadCount);

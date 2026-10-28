@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -72,11 +73,11 @@ describe('task dialog and browser history', () => {
     // R5 최종 A FA-4: 보드에서 연 상세는 닫을 때 그 기록으로 돌아간다(D-121 popstate 보호를 거치는 router.back).
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    vi.spyOn(api, 'task').mockReturnValue(new Promise(() => undefined));
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'task').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const push = vi.spyOn(window.history, 'pushState');
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
 
@@ -102,11 +103,11 @@ describe('task dialog and browser history', () => {
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1/tasks/board/t/2');
     router.path = '/w/ws-1/i/i1/tasks/board/t/2';
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    vi.spyOn(api, 'task').mockReturnValue(new Promise(() => undefined));
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'task').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const push = vi.spyOn(window.history, 'pushState');
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
 
@@ -127,9 +128,9 @@ describe('board context across navigation', () => {
   it('restores the view and filter when the board is shown again', async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const first = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByTestId('task-board');
     const status = await screen.findByLabelText('상태');
@@ -139,7 +140,7 @@ describe('board context across navigation', () => {
 
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await waitFor(() => {
-      expect(api.taskStatuses).toHaveBeenCalled();
+      expect(work.taskStatuses).toHaveBeenCalled();
     });
     const again = await screen.findByLabelText('상태');
     expect(again instanceof HTMLSelectElement ? again.value : '').toBe('진행 중');
@@ -151,9 +152,9 @@ describe('board context across navigation', () => {
   it('opens another item without its own context at the defaults', async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.change(await screen.findByLabelText('상태'), {
       target: { value: '진행 중' },
@@ -177,11 +178,11 @@ describe('move menu', () => {
   it('moves a card to the chosen column through the same move call', async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: 'API 연결 옮기기' }));
@@ -197,14 +198,14 @@ describe('quick add in a column', () => {
   it('creates the task and puts it in that column', async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const create = vi
-      .spyOn(api, 'createTask')
+      .spyOn(work, 'createTask')
       .mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     const lane = await screen.findByRole('region', { name: /진행 중/ });
@@ -231,9 +232,9 @@ describe('quick add in a column', () => {
 
 function boardMocks(list: TaskView[] | Promise<TaskView[]>): void {
   window.sessionStorage.clear();
-  vi.spyOn(api, 'tasks').mockReturnValue(Promise.resolve(list));
+  vi.spyOn(work, 'tasks').mockReturnValue(Promise.resolve(list));
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
 }
 
 // 빠른 추가(Kaneo·Focalboard 비교): 누른 단추가 입력란으로 바뀌므로 초점이 그 입력란으로 가야 키보드로 이어 쓸 수 있고,
@@ -242,8 +243,8 @@ describe('quick add focus, cancel and notice', () => {
   it('focuses the input, closes on Escape back to the button, and names the task it moved', async () => {
     await setLocale('ko', { reload: false });
     boardMocks([]);
-    vi.spyOn(api, 'createTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
-    vi.spyOn(api, 'moveTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
+    vi.spyOn(work, 'createTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
+    vi.spyOn(work, 'moveTask').mockResolvedValue({ ...task('9', '새 업무'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     const lane = await screen.findByRole('region', { name: /진행 중/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
@@ -263,7 +264,7 @@ describe('quick add focus, cancel and notice', () => {
     await fireEvent.submit(again.closest('form') ?? again);
     // 전에는 만든 업무가 아직 목록에 없어 ": 옮겼습니다(진행 중)."처럼 제목이 비었다.
     await waitFor(() => {
-      expect(api.createTask).toHaveBeenCalledWith(
+      expect(work.createTask).toHaveBeenCalledWith(
         expect.any(String),
         'i1',
         expect.any(String),
@@ -274,7 +275,7 @@ describe('quick add focus, cancel and notice', () => {
         },
       );
     });
-    expect(api.moveTask).not.toHaveBeenCalled();
+    expect(work.moveTask).not.toHaveBeenCalled();
   });
 });
 
@@ -298,11 +299,11 @@ describe('board loading state', () => {
 describe('drag cancel when the release is not seen', () => {
   async function startDragOver(
     laneName: RegExp,
-  ): Promise<{ move: MockInstance<typeof api.moveTask> }> {
+  ): Promise<{ move: MockInstance<typeof work.moveTask> }> {
     await setLocale('ko', { reload: false });
     boardMocks([task('2', 'API 연결')]);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByText('API 연결');
@@ -381,9 +382,9 @@ describe('drag cancel when the release is not seen', () => {
 describe('task detail assignees while loading', () => {
   it('shows loading instead of the empty message until the people arrive', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
+    vi.spyOn(work, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     let resolve: (p: { user_id: string; display_name: string }[]) => void = () => undefined;
-    vi.spyOn(api, 'assignable').mockReturnValue(new Promise((r) => (resolve = r)));
+    vi.spyOn(work, 'assignable').mockReturnValue(new Promise((r) => (resolve = r)));
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     render(TaskDetail, {
@@ -404,8 +405,8 @@ describe('task detail assignees while loading', () => {
 
   it('ends loading and says so when the people cannot be loaded, without calling the task missing', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
-    vi.spyOn(api, 'assignable').mockRejectedValue(new NetworkError('offline'));
+    vi.spyOn(work, 'task').mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
+    vi.spyOn(work, 'assignable').mockRejectedValue(new NetworkError('offline'));
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     render(TaskDetail, {

@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,9 +64,9 @@ describe('move menu within a column', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -73,7 +74,7 @@ describe('move menu within a column', () => {
 
   it('moves a card up in its column, and offers no move past the top', async () => {
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValue({ ...task('2', 'API 연결'), checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.click(await screen.findByRole('button', { name: '문서 검토 옮기기' }));
@@ -95,9 +96,9 @@ describe('reordering under a non-default sort', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -105,7 +106,7 @@ describe('reordering under a non-default sort', () => {
 
   it('Alt+Up/Down sends no move in title order, while Alt+Right still changes the column', async () => {
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValue({ ...task('1', '문서 검토'), status: '진행 중', checklist: [] });
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByRole('button', { name: '문서 검토 옮기기' });

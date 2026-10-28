@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
 import { readFileSync } from 'node:fs';
@@ -86,9 +87,9 @@ describe('multi-column layouts follow the content width', () => {
       starts_on: null,
       ends_on: null,
     };
-    vi.spyOn(api, 'tasks').mockResolvedValue([]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
 
     const board = await screen.findByTestId('task-board');
@@ -135,9 +136,9 @@ describe('task list table on narrow screens', () => {
       starts_on: null,
       ends_on: null,
     };
-    vi.spyOn(api, 'tasks').mockResolvedValue([]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     const table = await screen.findByTestId('task-list');
     expect(table.parentElement).toHaveClass('overflow-x-auto');

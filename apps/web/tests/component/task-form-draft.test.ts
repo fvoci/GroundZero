@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -84,8 +85,8 @@ function mount(
   server: TaskDetailView,
   onunsaved: (dirty: boolean) => void = (): void => undefined,
 ): void {
-  vi.spyOn(api, 'task').mockResolvedValue(server);
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'task').mockResolvedValue(server);
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
@@ -140,8 +141,8 @@ describe('task form input across reloads and account switches', () => {
     const changed = vi.fn();
     mount(detail(), changed);
     await typeDescription('권한 철회 전 입력');
-    vi.mocked(api.task).mockResolvedValue(detail({ access: 'read', version: 2 }));
-    vi.spyOn(api, 'addChecklist').mockResolvedValue(detail());
+    vi.mocked(work.task).mockResolvedValue(detail({ access: 'read', version: 2 }));
+    vi.spyOn(work, 'addChecklist').mockResolvedValue(detail());
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '항목' } });
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
     await waitFor(() => {
@@ -259,7 +260,7 @@ describe('task form input across reloads and account switches', () => {
     });
     reloadLike();
 
-    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+    const update = vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail({ description: EDIT, version: 2 }),
     });
@@ -347,7 +348,7 @@ describe('task form input across reloads and account switches', () => {
     });
     reloadLike();
 
-    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+    const update = vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail({ title: '설계 (3판)', description: EDIT, version: 4 }),
     });
@@ -409,8 +410,8 @@ describe('relation editor input across reloads', () => {
       due_date: '2026-10-24',
     });
   function mountLinked(server: TaskDetailView = linked()): void {
-    vi.spyOn(api, 'task').mockResolvedValue(server);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'task').mockResolvedValue(server);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     render(TaskDetail, {
@@ -475,9 +476,9 @@ describe('relation editor input across reloads', () => {
     mountLinked();
     await screen.findByTestId('task-draft-offer');
     const preview = vi
-      .spyOn(api, 'previewLink')
+      .spyOn(work, 'previewLink')
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
+    const set = vi.spyOn(work, 'setPredecessor').mockResolvedValue({
       kind: 'updated',
       task: detail({ predecessors: [{ task_id: 't-0', kind: 'FS', lag_days: 3 }], version: 2 }),
     });
@@ -508,8 +509,8 @@ describe('relation editor input across reloads', () => {
 
     mountLinked();
     await screen.findByTestId('task-draft-offer');
-    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
+    vi.spyOn(work, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    const set = vi.spyOn(work, 'setPredecessor').mockResolvedValue({
       kind: 'link_conflict',
       current: detail({ predecessors: [{ task_id: 't-0', kind: 'SS', lag_days: 1 }], version: 2 }),
     });

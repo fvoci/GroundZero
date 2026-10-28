@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -85,8 +86,8 @@ const shift: ShiftProposalView = {
 };
 
 function mount(current: TaskView = build, others: TaskView[] = [design, review]): void {
-  vi.spyOn(api, 'task').mockResolvedValue({ ...current, checklist: [] });
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'task').mockResolvedValue({ ...current, checklist: [] });
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
@@ -134,9 +135,9 @@ describe('task detail dependency kinds', () => {
     const done = vi.spyOn(feedback, 'notifyDone');
     mount();
     const preview = vi
-      .spyOn(api, 'previewLink')
+      .spyOn(work, 'previewLink')
       .mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
+    const set = vi.spyOn(work, 'setPredecessor').mockResolvedValue({
       kind: 'updated',
       task: {
         ...build,
@@ -180,8 +181,8 @@ describe('task detail dependency kinds', () => {
   it('saves nothing when the preview is cancelled and returns focus to the save button', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor');
+    vi.spyOn(work, 'previewLink').mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
+    const set = vi.spyOn(work, 'setPredecessor');
     await editLagTo('3');
     const panel = (await screen.findByRole('heading', { name: /관계를 지키지 못합니다/ })).closest(
       'section',
@@ -204,11 +205,11 @@ describe('task detail dependency kinds', () => {
     mount();
     const moved = { ...shift, start_date: '2026-10-23', due_date: '2026-10-25' };
     const preview = vi
-      .spyOn(api, 'previewLink')
+      .spyOn(work, 'previewLink')
       .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
       .mockResolvedValueOnce({ shifts: [moved], undated: [], blocked: null });
     const set = vi
-      .spyOn(api, 'setPredecessor')
+      .spyOn(work, 'setPredecessor')
       .mockResolvedValue({ kind: 'shift_conflict', current: { ...build, checklist: [] } });
     await editLagTo('3');
     await fireEvent.click(
@@ -226,11 +227,11 @@ describe('task detail dependency kinds', () => {
     const done = vi.spyOn(feedback, 'notifyDone');
     mount();
     const preview = vi
-      .spyOn(api, 'previewLink')
+      .spyOn(work, 'previewLink')
       .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const set = vi
-      .spyOn(api, 'setPredecessor')
+      .spyOn(work, 'setPredecessor')
       .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...build, checklist: [] } })
       .mockResolvedValue({
         kind: 'updated',
@@ -268,11 +269,11 @@ describe('task detail dependency kinds', () => {
     const done = vi.spyOn(feedback, 'notifyDone');
     mount(design, [build, review]);
     const preview = vi
-      .spyOn(api, 'previewSchedule')
+      .spyOn(work, 'previewSchedule')
       .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, checklist: [] } })
       .mockResolvedValue({
         kind: 'updated',
@@ -302,11 +303,11 @@ describe('task detail dependency kinds', () => {
     // 초점을 돌린다. 재시도 전에 미리보기를 비워도 승인한 저장이었다는 것은 잃지 않는다.
     await setLocale('ko', { reload: false });
     mount(design, [build, review]);
-    vi.spyOn(api, 'previewSchedule')
+    vi.spyOn(work, 'previewSchedule')
       .mockResolvedValueOnce({ shifts: [shift], undated: [], blocked: null })
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, checklist: [] } })
       .mockResolvedValueOnce({
         kind: 'conflict',
@@ -333,7 +334,7 @@ describe('task detail dependency kinds', () => {
     // 덮지 않고 최신 관계를 알리며, 입력한 지연일은 그대로 두고 다음 저장은 최신 관계를 기준으로 보낸다.
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    vi.spyOn(work, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const latest = {
       ...build,
       version: 2,
@@ -341,7 +342,7 @@ describe('task detail dependency kinds', () => {
       checklist: [],
     };
     const set = vi
-      .spyOn(api, 'setPredecessor')
+      .spyOn(work, 'setPredecessor')
       .mockResolvedValueOnce({ kind: 'link_conflict', current: latest })
       .mockResolvedValueOnce({
         kind: 'updated',
@@ -374,13 +375,13 @@ describe('task detail dependency kinds', () => {
     await setLocale('ko', { reload: false });
     const done = vi.spyOn(feedback, 'notifyDone');
     mount();
-    vi.spyOn(api, 'previewLink').mockResolvedValue({
+    vi.spyOn(work, 'previewLink').mockResolvedValue({
       shifts: [],
       undated: [{ task_id: 'c', reference: 'KED-c', title: '검토' }],
       blocked: null,
     });
     const set = vi
-      .spyOn(api, 'setPredecessor')
+      .spyOn(work, 'setPredecessor')
       .mockResolvedValue({ kind: 'updated', task: { ...build, checklist: [] } });
     await editLagTo('0');
     await waitFor(() => {
@@ -409,7 +410,7 @@ describe('task detail dependency kinds', () => {
     await setLocale('ko', { reload: false });
     mount();
     const far = { ...shift, start_date: '2201-01-01', due_date: '2201-01-03' };
-    vi.spyOn(api, 'previewLink').mockResolvedValue({
+    vi.spyOn(work, 'previewLink').mockResolvedValue({
       shifts: [far],
       undated: [],
       blocked: {
@@ -422,7 +423,7 @@ describe('task detail dependency kinds', () => {
       },
     });
     const set = vi
-      .spyOn(api, 'setPredecessor')
+      .spyOn(work, 'setPredecessor')
       .mockResolvedValue({ kind: 'updated', task: { ...build, checklist: [] } });
     await editLagTo('3');
     const panel = (
@@ -455,7 +456,7 @@ describe('task detail dependency kinds', () => {
   it('rejects a lag that is not a whole number from 0 to 3650 before asking the server', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    const preview = vi.spyOn(api, 'previewLink');
+    const preview = vi.spyOn(work, 'previewLink');
     for (const bad of ['-1', '1.5', '3651', '']) {
       await editLagTo(bad);
       expect(await screen.findByText('지연일은 0부터 3650까지의 정수로 입력합니다.')).toBeTruthy();
@@ -481,11 +482,11 @@ describe('removing a dependency while editing', () => {
     await setLocale('ko', { reload: false });
     const done = vi.spyOn(feedback, 'notifyDone');
     mount(two, [design, prep]);
-    const remove = vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('a'));
+    const remove = vi.spyOn(work, 'removePredecessor').mockResolvedValue(without('a'));
     const preview = vi
-      .spyOn(api, 'previewLink')
+      .spyOn(work, 'previewLink')
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor');
+    const set = vi.spyOn(work, 'setPredecessor');
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     expect(screen.getByText('고치는 관계: 선행 업무 KED-a 설계 → 이 업무')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
@@ -513,7 +514,7 @@ describe('removing a dependency while editing', () => {
     await setLocale('ko', { reload: false });
     const done = vi.spyOn(feedback, 'notifyDone');
     mount(two, [design, prep]);
-    vi.spyOn(api, 'removePredecessor').mockResolvedValue(without('x'));
+    vi.spyOn(work, 'removePredecessor').mockResolvedValue(without('x'));
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     await fireEvent.input(screen.getByLabelText('지연(일)'), { target: { value: '4' } });
     await fireEvent.click(screen.getByRole('button', { name: 'KED-x 준비 선행 관계 지우기' }));
@@ -527,7 +528,7 @@ describe('removing a dependency while editing', () => {
   it('keeps the link and the unsaved edit when removing fails', async () => {
     await setLocale('ko', { reload: false });
     mount(two, [design, prep]);
-    vi.spyOn(api, 'removePredecessor').mockRejectedValue(new NetworkError('offline'));
+    vi.spyOn(work, 'removePredecessor').mockRejectedValue(new NetworkError('offline'));
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     await fireEvent.input(screen.getByLabelText('지연(일)'), { target: { value: '5' } });
     await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
@@ -542,11 +543,11 @@ describe('removing a dependency while editing', () => {
     await setLocale('ko', { reload: false });
     mount(two, [design, prep]);
     let finish: (v: ReturnType<typeof without>) => void = () => undefined;
-    vi.spyOn(api, 'removePredecessor').mockReturnValue(new Promise((r) => (finish = r)));
+    vi.spyOn(work, 'removePredecessor').mockReturnValue(new Promise((r) => (finish = r)));
     const preview = vi
-      .spyOn(api, 'previewLink')
+      .spyOn(work, 'previewLink')
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor');
+    const set = vi.spyOn(work, 'setPredecessor');
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-a 설계 관계 고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: 'KED-a 설계 선행 관계 지우기' }));
     // 지우기 응답 전에 저장을 눌러도 아무 요청도 가지 않는다.
@@ -574,7 +575,7 @@ describe('task detail completions are toasts', () => {
     const child = { ...review, parent_id: design.id };
     mount(child, [design, build]);
     const set = vi
-      .spyOn(api, 'setTaskParent')
+      .spyOn(work, 'setTaskParent')
       .mockResolvedValue({ ...child, parent_id: null, version: 2, checklist: [] });
     const trigger = await waitFor(() => {
       const el = document.querySelector<HTMLElement>('[aria-labelledby="parent-choose-label"]');
@@ -600,12 +601,12 @@ describe('task detail completions are toasts', () => {
     await setLocale('ko', { reload: false });
     const done = vi.spyOn(feedback, 'notifyDone');
     mount(design, [build, review]);
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+    vi.spyOn(work, 'previewSchedule').mockResolvedValue({
       shifts: [],
       undated: [{ task_id: 'c', reference: 'KED-c', title: '검토' }],
       blocked: null,
     });
-    vi.spyOn(api, 'updateTask').mockResolvedValue({
+    vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: { ...design, due_date: '2026-10-22', version: 2, checklist: [] },
     });

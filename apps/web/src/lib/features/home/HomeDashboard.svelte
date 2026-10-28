@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { workApi as work } from '$lib/features/tasks/api';
   // 홈(D-19·D-120): 현재 조직 요약. 시간 기록 표시는 앱 상단에서 맡는다.
   import FileText from '@lucide/svelte/icons/file-text';
   import SquareCheck from '@lucide/svelte/icons/square-check';
@@ -245,7 +246,7 @@
     if (attempt === undefined) return;
     adding = true;
     try {
-      await api.createQuickTask(attempt.userId, send.item, requestId, title, attempt.userId);
+      await work.createQuickTask(attempt.userId, send.item, requestId, title, attempt.userId);
       if (!quickDraft.isCurrent(attempt)) return;
       writeLocal(storageKey, send.item);
       if (!quickDraft.complete(attempt)) return;

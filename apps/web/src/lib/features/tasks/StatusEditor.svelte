@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { workApi as work } from '$lib/features/tasks/api';
   import { onMount, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import type { StatusCategory, TaskStatusDefinition } from '@fvoci/api-client';
@@ -135,9 +136,9 @@
     busy = true;
     try {
       if (removing && selected !== undefined)
-        await api.deleteTaskStatus(editingUser, itemId, selected.id, moveTo);
+        await work.deleteTaskStatus(editingUser, itemId, selected.id, moveTo);
       else if (selected === undefined)
-        await api.createTaskStatus(
+        await work.createTaskStatus(
           attempt?.userId ?? editingUser,
           itemId,
           name.trim(),
@@ -145,7 +146,7 @@
           category,
         );
       else
-        await api.updateTaskStatus(attempt?.userId ?? editingUser, itemId, selected.id, {
+        await work.updateTaskStatus(attempt?.userId ?? editingUser, itemId, selected.id, {
           name: name.trim(),
           color: color.toLowerCase(),
           category,

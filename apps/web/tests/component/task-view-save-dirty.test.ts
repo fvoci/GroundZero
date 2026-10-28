@@ -1,3 +1,4 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import './fixtures/task-statuses';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -42,8 +43,8 @@ afterEach(() => {
 
 /** 보기 이름을 넣고 저장을 보낸 뒤, 응답을 붙잡은 채 `during`을 하고 응답을 푼다. */
 async function saveViewWhile(during: () => Promise<void>): Promise<void> {
-  vi.spyOn(api, 'tasks').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'tasks').mockResolvedValue([]);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   const saved: SavedViewView[] = [];
   vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve([...saved]));
   let release: () => void = () => undefined;
