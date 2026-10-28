@@ -59,7 +59,7 @@
   // 워크스페이스 관리자는 보관 해제 없이 넓히는 변경까지 할 수 있다(D-113 ⑯, SQL `app_document_can_manage`).
   // 템플릿 지정과 이동은 owner 등급만이다.
   const canManage = $derived(isOwner || doc.can_manage);
-  const canCopy = $derived(isOwner || doc.allow_copy);
+  const canCopy = $derived(doc.can_export);
   // 공개 링크 정책은 문서가 속한 워크스페이스의 조직 것이다(지금 고른 조직이 아니다). 개인 노트에는 조직 정책이 없다
   // (SQL `app_create_public_link`). 그 조직을 알 수 없으면 숨기지 않고 서버의 거절(409)을 그대로 알린다.
   const publicLinksEnabled = $derived.by(() => {
@@ -231,6 +231,7 @@
         ...doc,
         visibility: fresh.visibility,
         allow_copy: fresh.allow_copy,
+        can_export: fresh.can_export,
         is_template: fresh.is_template,
       });
     } catch (e: unknown) {

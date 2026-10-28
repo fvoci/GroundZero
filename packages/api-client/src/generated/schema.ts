@@ -171,8 +171,7 @@ export interface paths {
         delete: operations["trash_document"];
         options?: never;
         head?: never;
-        /** 권한·잠금 → 멱등 재시도 → If-Match → 기준 판 → 같은 제목 확인 → 리비전 저장 순서다. */
-        patch: operations["patch_document_title"];
+        patch?: never;
         trace?: never;
     };
     "/api/documents/{document_id}/activity": {
@@ -262,7 +261,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/documents/{document_id}/move-plan": {
+    "/api/documents/{document_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
+         *     방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
+         *     남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
+         *     옮기지 않는다(문구에 "try again"이 없다). 다른 변경이 문서나 그 자리를 쥐어 잠금 하나를
+         *     한도(`LOCK_LIMIT`)보다 오래 기다리면 옮기지 않고 409다(편집은 방에 남는다, 다시 하면 된다).
+         */
+        post: operations["move_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{document_id}/move/preview": {
         parameters: {
             query?: never;
             header?: never;
@@ -292,29 +314,6 @@ export interface paths {
          *     자기 하위로는 옮길 수 없으며 깊이 한도(`FVOCI_MAX_DOCUMENT_DEPTH`)를 넘을 수 없다.
          */
         put: operations["set_parent"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/documents/{document_id}/placement": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * 이동(소유 권한자). 확인한 미리보기가 없거나 지금 계산한 것과 다르면 409와 새 미리보기를 돌려준다. 실시간 편집 중인
-         *     방의 편집이나 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기지 못하면 옮기지 않고 409(오류 본문)다. 편집은 그대로
-         *     남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
-         *     옮기지 않는다(문구에 "try again"이 없다). 다른 변경이 문서나 그 자리를 쥐어 잠금 하나를
-         *     한도(`LOCK_LIMIT`)보다 오래 기다리면 옮기지 않고 409다(편집은 방에 남는다, 다시 하면 된다).
-         */
-        put: operations["move_document"];
         post?: never;
         delete?: never;
         options?: never;
@@ -384,8 +383,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야
-         *     하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+         *     있어야 하며 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
          *     내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
          */
         post: operations["export_revision"];
@@ -424,13 +423,13 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /** 비공개·복제 허용 설정(소유 권한자). 감사 기록을 남긴다. */
+        put: operations["set_settings"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** 비공개·복제 허용 설정(소유 권한자). 감사 기록을 남긴다. */
-        patch: operations["set_settings"];
+        patch?: never;
         trace?: never;
     };
     "/api/documents/{document_id}/shares": {
@@ -566,16 +565,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 파일과 모든 버전. */
+        /** 파일 메타데이터. 버전은 별도 모음으로 읽는다. */
         get: operations["get_file"];
-        /** 이름 바꾸기(쓸 수 있는 사람). */
-        put: operations["rename_file"];
+        put?: never;
         post?: never;
         /** 휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다. */
         delete: operations["trash_file"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** 이름 바꾸기(쓸 수 있는 사람). */
+        patch: operations["rename_file"];
         trace?: never;
     };
     "/api/files/{file_id}/content": {
@@ -587,6 +586,23 @@ export interface paths {
         };
         /** 내려받기(볼 수 있는 사람). 최신 또는 `version`. `inline=true`는 이미지·PDF·텍스트만 브라우저 안에서 연다. */
         get: operations["file_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{file_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 볼 수 있는 파일의 버전 목록(최신 먼저). */
+        get: operations["file_versions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1549,40 +1565,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/trash": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 내 개인 노트 휴지통(보존 30일). */
-        get: operations["my_trash"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/trash/purge-expired": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 내 개인 노트 휴지통의 만료된 묶음 비우기. */
-        post: operations["purge_my_expired_trash"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/modules/{module_id}": {
         parameters: {
             query?: never;
@@ -2352,7 +2334,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/trash/{batch_id}": {
+    "/api/time-entry-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 본인 기록의 대상 표시 모음. 타인 기록은 서버 관리자에게도 나오지 않는다.
+         *     공통 참조 해석은 강의 회차·스터디 단위를 지원하지 않아 시간의 다섯 대상 종류를 여기서 읽는다.
+         */
+        get: operations["time_entry_targets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trash-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 휴지통 묶음 모음. 공간은 관리자·지운 사람의 범위, 개인은 본인 범위로 읽는다. */
+        get: operations["list_trash_batches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trash-batches/purge-expired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 만료된 묶음을 비운다. 공간은 관리자, 개인은 본인만 가능하다. */
+        post: operations["purge_expired_trash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trash-batches/{batch_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2369,7 +2405,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/trash/{batch_id}/restore": {
+    "/api/trash-batches/{batch_id}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -2753,15 +2789,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/trash": {
+    "/api/workspaces/{workspace_id}/retention": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 워크스페이스 휴지통(관리자는 전부, 작성자는 자기가 지운 것만). */
-        get: operations["workspace_trash"];
+        /** 공간 보존 설정. 공간을 볼 수 있는 사람에게 기존과 같은 설정만 공개한다. */
+        get: operations["workspace_retention"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2770,41 +2806,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/trash-retention": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 휴지통 보존 기간 바꾸기(관리자). 이미 지운 것에도 지금 기간이 적용된다. */
-        put: operations["set_trash_retention"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workspaces/{workspace_id}/trash/purge-expired": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 만료된 묶음 비우기(관리자). */
-        post: operations["purge_expired_trash"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workspaces/{workspace_id}/version-retention": {
+    "/api/workspaces/{workspace_id}/retention/file-versions": {
         parameters: {
             query?: never;
             header?: never;
@@ -2817,6 +2819,23 @@ export interface paths {
          *     문서 리비전이 가리키는 버전은 지우지 않는다.
          */
         put: operations["set_version_retention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{workspace_id}/retention/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 휴지통 보존 기간 바꾸기(관리자). 이미 지운 것에도 지금 기간이 적용된다. */
+        put: operations["set_trash_retention"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3039,7 +3058,7 @@ export interface components {
             /** @description 강의·스터디 계획일, 투고·산출물 날짜(D-80). */
             dates: components["schemas"]["CalendarDate"][];
             /** @description 기간 안에 회차가 있는 일정의 정의. */
-            events: components["schemas"]["Event"][];
+            events: components["schemas"]["CalendarEvent"][];
             items: components["schemas"]["CalendarItem"][];
             occurrences: components["schemas"]["EventOccurrence"][];
             projected_tasks: components["schemas"]["ProjectedTask"][];
@@ -3066,6 +3085,37 @@ export interface components {
          * @enum {string}
          */
         CalendarDateKind: "episode" | "study_unit" | "submission" | "revision_due" | "deliverable";
+        /** @description 일정. */
+        CalendarEvent: {
+            access: components["schemas"]["Access"];
+            /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+            all_day: boolean;
+            description: string;
+            end_date?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /** @description 뺀 회차(일정 시간대 기준 날짜). */
+            excluded_dates: string[];
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            kind: components["schemas"]["CalendarEventKind"];
+            recurrence?: null | components["schemas"]["RecurrenceRule"];
+            start_date?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+            timezone: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * @description 일정 종류.
+         * @enum {string}
+         */
+        CalendarEventKind: "meeting" | "presentation" | "event";
         /** @description 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해). */
         CalendarItem: {
             id: components["schemas"]["ItemId"];
@@ -3355,7 +3405,7 @@ export interface components {
         /** @description 문서 전체. */
         Document: {
             access: components["schemas"]["Access"];
-            /** @description 소유 권한자 외의 사람이 복제할 수 있는지 (D-20). */
+            /** @description 소유 권한자·문서 작성자 외의 사람이 복제·내보내기·내려받기를 할 수 있는지(D-115). */
             allow_copy: boolean;
             /** @description Tiptap JSON. `type`이 `doc`인 객체. */
             body: Record<string, never>;
@@ -3364,8 +3414,8 @@ export interface components {
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             /**
-             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
-             *     문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
+             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.
+             *     그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다.
              */
             can_export: boolean;
             /**
@@ -3429,7 +3479,6 @@ export interface components {
             reference?: string | null;
             title: string;
         };
-        DocumentTitleConflict: components["schemas"]["StaleWrite_Document"] | components["schemas"]["ErrorBody"];
         /**
          * @description Up Next 구분.
          * @enum {string}
@@ -3535,11 +3584,6 @@ export interface components {
             version: number;
             workspace_id: components["schemas"]["WorkspaceId"];
         };
-        /** @description 409 응답: 서버 최신본. */
-        EventConflict: {
-            current: components["schemas"]["Event"];
-            error: string;
-        };
         /** @description 일정 내용(만들기·고치기 공통). */
         EventInput: {
             all_day: boolean;
@@ -3573,6 +3617,8 @@ export interface components {
             /** Format: date-time */
             starts_at?: string | null;
         };
+        /** @description 일정 판 충돌은 최신 자원과 다른 칸, 보관·계정 충돌은 공통 오류다. */
+        EventWriteConflict: components["schemas"]["StaleWrite_Event"] | components["schemas"]["ErrorBody"];
         /** @description 반복 일정의 회차 하나 빼기. */
         ExcludeOccurrence: {
             /** @description 일정 시간대 기준의 회차 날짜. */
@@ -3599,11 +3645,6 @@ export interface components {
          * @enum {string}
          */
         FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course" | "episode";
-        /** @description 파일과 모든 버전(최신 먼저). */
-        FileDetail: {
-            file: components["schemas"]["FileView"];
-            versions: components["schemas"]["VersionView"][];
-        };
         /**
          * Format: uuid
          * @description 첨부 파일 내부 ID (D-06). 새 버전을 올려도 유지된다(D-35).
@@ -3617,8 +3658,8 @@ export interface components {
         /** @description 첨부 파일. */
         FileView: {
             /**
-             * @description 내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의
-             *     `allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.
+             * @description 내려받을 수 있는지(D-115). 문서 첨부는 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+             *     있어야 참이다(수정 권한만으로는 참이 아니다). 항목 첨부는 볼 수 있으면 참이다.
              *     아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
              */
             can_download: boolean;
@@ -4389,15 +4430,6 @@ export interface components {
             overdue: number;
             user_id: components["schemas"]["UserId"];
         };
-        /** @description 제목 명령. 본문은 보내지 않으며 현재 본문을 그대로 유지한다. */
-        PatchDocumentTitle: {
-            /** Format: int32 */
-            base_revision: number;
-            /** Format: uuid */
-            request_id: string;
-            /** @description 글자 수 상한은 서버의 limits.max_title_chars와 400 응답의 limit에 있다. */
-            title: string;
-        };
         /** @description 업무 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 날짜·예상 시간은 `null`을 보내면 지운다. */
         PatchTask: {
             /** @description 담당자 전체 목록(그 항목을 볼 수 있는 멤버). */
@@ -4645,17 +4677,27 @@ export interface components {
         };
         /**
          * @description 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-         *     - `StaleWrite<Document>`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+         *     - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
          *     - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
          *       (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
          */
-        RestoreConflict: components["schemas"]["StaleWrite_Document"] | components["schemas"]["ErrorBody"];
+        RestoreConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
         /** @description 복원 요청. `base_revision`은 사용자가 보고 있던 현재 리비전이다. */
         RestoreRevision: {
             /** Format: int32 */
             base_revision: number;
             /** Format: uuid */
             request_id: string;
+        };
+        /** @description 공간 보존 설정 자원. 목록과 별도로 읽고 화면에서 조합한다. */
+        RetentionSettings: {
+            /** Format: int32 */
+            retention_days: number;
+            /**
+             * Format: int32
+             * @description null이면 이전 파일 버전을 영구 보존한다(D-56).
+             */
+            version_retention_days?: number | null;
         };
         /** @description 리비전 하나(본문 포함). */
         Revision: {
@@ -4730,11 +4772,6 @@ export interface components {
              * @description 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
              */
             version: number;
-        };
-        /** @description 409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다. */
-        SavedViewConflict: {
-            current: components["schemas"]["SavedView"];
-            error: string;
         };
         /** @description 재배치 미리보기: 옮길 후속 업무와, 바뀐 관계가 닿지만 날짜가 없어 계산하지 않은 업무(날짜를 지어내지 않는다). */
         SchedulePlan: {
@@ -4974,53 +5011,37 @@ export interface components {
             title: string;
         };
         /** @description 판 충돌 409 본문. */
-        StaleWrite_Document: {
+        StaleWrite_Event: {
             /**
              * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
              *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
              */
             changed: string[];
-            /** @description 문서 전체. */
+            /** @description 일정. */
             current: {
                 access: components["schemas"]["Access"];
-                /** @description 소유 권한자 외의 사람이 복제할 수 있는지 (D-20). */
-                allow_copy: boolean;
-                /** @description Tiptap JSON. `type`이 `doc`인 객체. */
-                body: Record<string, never>;
-                /** @description 휴지통으로 옮길 수 있는지(문서 소유 권한, 또는 쓰기 권한이 있고 내가 만든 문서). */
-                can_delete: boolean;
-                /** @description 현재 사용자가 고칠 수 있는지. */
-                can_edit: boolean;
-                /**
-                 * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
-                 *     문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
-                 */
-                can_export: boolean;
-                /**
-                 * @description 공유·공개 링크·설정을 관리할 수 있는지.
-                 *     보관된 항목 아래 문서는 `access`가 `read`여도 워크스페이스 관리자·소유자는 참이다.
-                 */
-                can_manage: boolean;
-                id: components["schemas"]["DocumentId"];
-                /** @description 템플릿으로 표시됨(D-27). 읽을 수 있는 사람이 새 문서의 본문으로 쓴다. */
-                is_template: boolean;
-                item_id?: null | components["schemas"]["ItemId"];
-                parent_id?: null | components["schemas"]["DocumentId"];
-                /** @description `wiki`, `module` 또는 `personal`. */
-                placement: string;
-                /** @description 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
-                realtime: boolean;
-                reference?: string | null;
-                /** Format: int32 */
-                revision: number;
-                /** Format: int32 */
-                schema_version: number;
-                title: string;
+                /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+                all_day: boolean;
+                description: string;
+                end_date?: string | null;
                 /** Format: date-time */
-                updated_at: string;
-                /** @description `workspace` 또는 `private` (D-20, D-40). 개인 노트는 항상 `private`. */
-                visibility: string;
-                workspace_id?: null | components["schemas"]["WorkspaceId"];
+                ends_at?: string | null;
+                /** @description 뺀 회차(일정 시간대 기준 날짜). */
+                excluded_dates: string[];
+                /** Format: uuid */
+                id: string;
+                item_id: components["schemas"]["ItemId"];
+                kind: components["schemas"]["EventKind"];
+                recurrence?: null | components["schemas"]["RecurrenceRule"];
+                start_date?: string | null;
+                /** Format: date-time */
+                starts_at?: string | null;
+                /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+                timezone: string;
+                title: string;
+                /** Format: int32 */
+                version: number;
+                workspace_id: components["schemas"]["WorkspaceId"];
             };
             /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
             error: string;
@@ -5069,6 +5090,32 @@ export interface components {
                 root_task_id: string;
                 rule?: null | components["schemas"]["RecurrenceRule"];
                 timezone: string;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_SavedView: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 저장한 보기. */
+            current: {
+                config: Record<string, never>;
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /**
+                 * Format: int32
+                 * @description 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
+                 */
+                version: number;
             };
             /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
             error: string;
@@ -5134,6 +5181,49 @@ export interface components {
                  */
                 version: number;
                 workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_TimeEntry: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 시간 기록. */
+            current: {
+                /**
+                 * Format: date-time
+                 * @description 진행 중이면 없다.
+                 */
+                ended_at?: string | null;
+                /** Format: uuid */
+                id: string;
+                kind: components["schemas"]["TimeKind"];
+                memo: string;
+                /**
+                 * Format: date-time
+                 * @description 일시정지 중이면 그 시각.
+                 */
+                paused_at?: string | null;
+                /** Format: int32 */
+                paused_seconds: number;
+                /**
+                 * Format: int64
+                 * @description 지금까지의 길이(초). 진행 중이면 응답 시각 기준.
+                 */
+                seconds: number;
+                /** Format: date-time */
+                started_at: string;
+                target?: null | components["schemas"]["TargetInput"];
+                /** Format: int32 */
+                version: number;
             };
             /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
             error: string;
@@ -5387,14 +5477,9 @@ export interface components {
             seconds: number;
             /** Format: date-time */
             started_at: string;
-            target?: null | components["schemas"]["Target"];
+            target?: null | components["schemas"]["TargetInput"];
             /** Format: int32 */
             version: number;
-        };
-        /** @description 409 응답: 서버 최신본. */
-        TimeEntryConflict: {
-            current: components["schemas"]["TimeEntry"];
-            error: string;
         };
         /** @description 수정 이력 한 건(고치기 전 값). */
         TimeEntryRevision: {
@@ -5409,6 +5494,13 @@ export interface components {
             /** Format: date-time */
             started_at: string;
         };
+        /** @description 본인 기록의 대상 표시. 기록 자원과 따로 읽어 웹에서 조합한다. */
+        TimeEntryTarget: components["schemas"]["Target"] & {
+            /** Format: uuid */
+            entry_id: string;
+        };
+        /** @description 409 응답: 서버 최신본. */
+        TimeEntryWriteConflict: components["schemas"]["StaleWrite_TimeEntry"] | components["schemas"]["ErrorBody"];
         /**
          * @description 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `hobby`는 취미 활동, `rest`는 휴식.
          * @enum {string}
@@ -5436,17 +5528,6 @@ export interface components {
          * @enum {string}
          */
         TimerStartMode: "continue" | "new";
-        /** @description 휴지통. */
-        Trash: {
-            entries: components["schemas"]["TrashEntry"][];
-            /** Format: int32 */
-            retention_days: number;
-            /**
-             * Format: int32
-             * @description 이전 파일 버전 보존 기간(일, D-56). 없으면 영구 보존. 개인 휴지통에서는 없다.
-             */
-            version_retention_days?: number | null;
-        };
         /** @description 휴지통 묶음. */
         TrashEntry: {
             /** @description 영구 삭제할 수 있는지(관리자·개인 노트 소유자). */
@@ -5455,14 +5536,12 @@ export interface components {
             deleted_at: string;
             deleted_by: components["schemas"]["UserId"];
             deleted_by_name?: string | null;
-            /** @description 보존 기간이 지나 되살릴 수 없다(영구 삭제 대기). */
-            expired: boolean;
             /** Format: date-time */
             expires_at: string;
+            /** @description 만료 여부와 참조 보존을 하나의 상태로 표현한다(D-56·D-69). */
+            expiry: components["schemas"]["TrashExpiry"];
             /** Format: uuid */
             id: string;
-            /** @description 만료됐지만 살아 있는 기록·문서가 참조하는 파일 버전이 있어 자동으로 영구 삭제하지 않는다(D-56). */
-            kept_for_references: boolean;
             kind: components["schemas"]["TrashKind"];
             /**
              * Format: int32
@@ -5473,6 +5552,11 @@ export interface components {
             root_id: string;
             title: string;
         };
+        /**
+         * @description 휴지통 만료 상태. 참조 보존은 만료된 묶음에서만 가능하다(D-56·D-69).
+         * @enum {string}
+         */
+        TrashExpiry: "active" | "expired" | "kept_for_references";
         /**
          * @description 휴지통 묶음의 맨 위 대상 종류.
          * @enum {string}
@@ -5651,6 +5735,15 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        /** @description 보기 생성의 동명 거절 또는 계정 전환 오류. */
+        ViewCreateConflict: components["schemas"]["ViewNameConflict"] | components["schemas"]["ErrorBody"];
+        /** @description 같은 이름의 보기가 이미 있다. 판 충돌과 달리 만들기 요청은 보기를 바꾸지 않는다. */
+        ViewNameConflict: {
+            current: components["schemas"]["SavedView"];
+            error: string;
+        };
+        /** @description 보기 수정의 판 충돌 또는 계정 전환 오류. */
+        ViewWriteConflict: components["schemas"]["StaleWrite_SavedView"] | components["schemas"]["ErrorBody"];
         /** @description 워크스페이스 요약. */
         Workspace: {
             /**
@@ -6119,10 +6212,7 @@ export interface operations {
     delete_share: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 share_id: string;
             };
@@ -6136,14 +6226,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6153,14 +6235,6 @@ export interface operations {
                 };
             };
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6318,7 +6392,10 @@ export interface operations {
     trash_document: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -6332,61 +6409,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Trashed"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    patch_document_title: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description 현재 문서의 강한 ETag. 다르면 412 */
-                "If-Match"?: string | null;
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PatchDocumentTitle"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    ETag?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Document"];
                 };
             };
             400: {
@@ -6418,15 +6440,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocumentTitleConflict"];
-                };
-            };
-            412: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StaleWrite_Document"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -6541,10 +6555,7 @@ export interface operations {
     copy: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6564,14 +6575,6 @@ export interface operations {
                     "application/json": components["schemas"]["Document"];
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6581,14 +6584,6 @@ export interface operations {
                 };
             };
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6627,13 +6622,59 @@ export interface operations {
             };
         };
     };
+    move_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveDocument"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveOutcome"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveConflict"];
+                };
+            };
+        };
+    };
     move_preview: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6651,14 +6692,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MovePreview"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {
@@ -6690,10 +6723,7 @@ export interface operations {
     set_parent: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6735,74 +6765,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    move_document: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MoveDocument"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MoveOutcome"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MoveConflict"];
                 };
             };
         };
@@ -6847,10 +6809,7 @@ export interface operations {
     create_public_link: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -6887,14 +6846,6 @@ export interface operations {
                 };
             };
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6968,10 +6919,7 @@ export interface operations {
     export_revision: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
                 revision: number;
@@ -7016,23 +6964,12 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
         };
     };
     restore_revision: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
                 revision: number;
@@ -7053,14 +6990,6 @@ export interface operations {
                     "application/json": components["schemas"]["Document"];
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7077,7 +7006,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description 기준이 지났으면 StaleWrite<Document>(최신본·바뀐 칸·요청 id), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`) */
+            /** @description 기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7091,10 +7020,7 @@ export interface operations {
     set_settings: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7188,10 +7114,7 @@ export interface operations {
     create_share: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7235,23 +7158,12 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
         };
     };
     set_document_template: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 document_id: string;
             };
@@ -7269,14 +7181,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7286,14 +7190,6 @@ export interface operations {
                 };
             };
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7464,7 +7360,10 @@ export interface operations {
     update_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7513,7 +7412,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EventConflict"];
+                    "application/json": components["schemas"]["EventWriteConflict"];
                 };
             };
         };
@@ -7521,7 +7420,10 @@ export interface operations {
     delete_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7534,6 +7436,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -7564,7 +7474,10 @@ export interface operations {
     exclude_event_occurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7619,7 +7532,10 @@ export interface operations {
     set_event_recurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7663,12 +7579,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description rule_conflict: current는 최신 일정, changed는 요청 본문의 rule 칸. 다른 상태 충돌은 ErrorBody. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EventConflict"];
+                    "application/json": components["schemas"]["EventWriteConflict"];
                 };
             };
         };
@@ -7689,7 +7606,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileDetail"];
+                    "application/json": components["schemas"]["FileView"];
                 };
             };
             404: {
@@ -7702,10 +7619,69 @@ export interface operations {
             };
         };
     };
+    trash_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTrashed"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     rename_file: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 file_id: string;
             };
@@ -7749,36 +7725,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-        };
-    };
-    trash_file: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileTrashed"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7822,10 +7769,42 @@ export interface operations {
             };
         };
     };
-    delete_file_version: {
+    file_versions: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionView"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_file_version: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 file_id: string;
                 version: number;
@@ -7839,6 +7818,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -8213,7 +8200,10 @@ export interface operations {
     trash_item: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -8229,6 +8219,14 @@ export interface operations {
                     "application/json": components["schemas"]["Trashed"];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8238,6 +8236,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8607,10 +8613,7 @@ export interface operations {
     create_item_document: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 item_id: string;
             };
@@ -8753,7 +8756,10 @@ export interface operations {
     create_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9704,7 +9710,10 @@ export interface operations {
     create_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9745,7 +9754,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedViewConflict"];
+                    "application/json": components["schemas"]["ViewCreateConflict"];
                 };
             };
         };
@@ -10552,7 +10561,10 @@ export interface operations {
     add_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10579,6 +10591,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10644,7 +10664,10 @@ export interface operations {
     start_timer: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10685,44 +10708,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    my_trash: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Trash"];
-                };
-            };
-        };
-    };
-    purge_my_expired_trash: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Purged"];
                 };
             };
         };
@@ -10816,7 +10801,10 @@ export interface operations {
     trash_module: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 module_id: string;
             };
@@ -10832,6 +10820,14 @@ export interface operations {
                     "application/json": components["schemas"]["Trashed"];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10841,6 +10837,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11591,10 +11595,7 @@ export interface operations {
     revoke_public_link: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 link_id: string;
             };
@@ -11608,14 +11609,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -11625,14 +11618,6 @@ export interface operations {
                 };
             };
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11815,14 +11800,6 @@ export interface operations {
                     "application/json": components["schemas"]["ReferenceCandidate"][];
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -11836,10 +11813,7 @@ export interface operations {
     resolve: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
@@ -11858,14 +11832,6 @@ export interface operations {
                 };
             };
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13033,7 +12999,10 @@ export interface operations {
     update_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -13074,7 +13043,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TimeEntryConflict"];
+                    "application/json": components["schemas"]["TimeEntryWriteConflict"];
                 };
             };
         };
@@ -13082,7 +13051,10 @@ export interface operations {
     delete_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -13096,7 +13068,23 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13138,7 +13126,10 @@ export interface operations {
     timer_action: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -13156,6 +13147,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    time_entry_targets: {
+        parameters: {
+            query?: {
+                entry_id?: string | null;
+                from?: string | null;
+                to?: string | null;
+                tz?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryTarget"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_trash_batches: {
+        parameters: {
+            query?: {
+                workspace_id?: components["schemas"]["WorkspaceId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashEntry"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    purge_expired_trash: {
+        parameters: {
+            query?: {
+                workspace_id?: components["schemas"]["WorkspaceId"];
+            };
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Purged"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -13179,7 +13295,10 @@ export interface operations {
     purge_trash: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 batch_id: string;
             };
@@ -13192,6 +13311,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -13209,12 +13336,23 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     restore_trash: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 batch_id: string;
             };
@@ -13227,6 +13365,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -13337,7 +13483,10 @@ export interface operations {
     abort_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 upload_id: string;
             };
@@ -13350,6 +13499,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -13372,7 +13529,10 @@ export interface operations {
     complete_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 upload_id: string;
             };
@@ -13386,6 +13546,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -13409,7 +13577,12 @@ export interface operations {
     put_upload_part: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+                /** @description 조각 본문의 SHA-256(16진수) */
+                "x-content-sha256": string;
+            };
             path: {
                 upload_id: string;
                 number: number;
@@ -13457,7 +13630,10 @@ export interface operations {
     update_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 view_id: string;
             };
@@ -13498,7 +13674,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedViewConflict"];
+                    "application/json": components["schemas"]["ViewWriteConflict"];
                 };
             };
         };
@@ -13506,7 +13682,10 @@ export interface operations {
     delete_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 view_id: string;
             };
@@ -13519,6 +13698,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -14457,7 +14644,7 @@ export interface operations {
             };
         };
     };
-    workspace_trash: {
+    workspace_retention: {
         parameters: {
             query?: never;
             header?: never;
@@ -14473,91 +14660,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Trash"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    set_trash_retention: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetRetention"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    purge_expired_trash: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Purged"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["RetentionSettings"];
                 };
             };
             404: {
@@ -14573,7 +14676,10 @@ export interface operations {
     set_version_retention: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 workspace_id: string;
             };
@@ -14615,6 +14721,72 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_trash_retention: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRetention"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     list_wiki: {
@@ -14649,10 +14821,7 @@ export interface operations {
     create_wiki: {
         parameters: {
             query?: never;
-            header?: {
-                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
-            };
+            header?: never;
             path: {
                 workspace_id: string;
             };

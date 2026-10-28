@@ -2,23 +2,16 @@
 
 pub mod accounts;
 pub mod courses;
-pub mod event_recurrence;
-pub mod events;
-pub mod export;
 pub mod file_text;
-pub mod files;
 pub mod home;
 pub mod item_profile;
 pub mod members;
 pub mod modules;
 pub mod organizations;
 pub mod records;
-pub mod saved_views;
 pub mod search_api;
 pub mod search_text;
 pub mod study;
-pub mod time_tracking;
-pub mod trash;
 pub mod workspaces;
 pub mod zotero;
 

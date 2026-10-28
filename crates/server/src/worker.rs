@@ -33,46 +33,42 @@ pub struct TickReport {
     pub notified: i32,
 }
 
-/// 작업 함수 하나. 행을 만드는 함수는 앱이 만든 id 목록을 `$1`로 받고(D-88), 필요한 개수의 상한은 같은
-/// 트랜잭션에서 먼저 `ids`로 묻는다. 행을 만들지 않는 함수는 `ids`가 없다.
+/// 같은 트랜잭션에 조립할 작업. 보존 매개변수는 SQL 문자열이 아니라 작업 종류로 결정한다(#171).
 #[derive(Debug, Clone, Copy)]
-pub struct Job {
-    pub ids: Option<&'static str>,
-    pub call: &'static str,
+pub enum Job {
+    PurgeTrash,
+    PurgeFileVersions,
+    PurgeAudit,
+    PurgeActivity,
+    /// D-88: 같은 트랜잭션에서 상한을 구하고 새 id 배열을 `$1`로 전달한다.
+    WithIds {
+        bound: &'static str,
+        call: &'static str,
+    },
+    /// 매개변수가 없는 작업(시험·운영 점검용).
+    Statement(&'static str),
 }
 
 /// 주기 작업 이름과 간격.
 const PURGE: (&str, &str) = ("trash_purge", "1 hour");
 /// 휴지통 만료와 보존 기간이 지난 이전 파일 버전 정리(D-41, D-56).
 const PURGE_JOBS: &[Job] = &[
-    Job {
-        ids: Some("SELECT app_system_purge_expired_ids()"),
-        call: "SELECT app_system_purge_expired($1)",
-    },
-    Job {
-        ids: None,
-        call: "SELECT app_system_purge_old_versions()",
-    },
-    Job {
-        ids: None,
-        call: "SELECT app_system_purge_audit($1)",
-    },
-    Job {
-        ids: None,
-        call: "SELECT app_system_purge_activity($1)",
-    },
+    Job::PurgeTrash,
+    Job::PurgeFileVersions,
+    Job::PurgeAudit,
+    Job::PurgeActivity,
 ];
 const RECURRENCE: (&str, &str) = ("recurrence_tick", "15 minutes");
 /// 업무 기한 알림(하루 전·당일, 같은 날 같은 업무는 한 번). `current_date`는 트랜잭션 시작 시각 기준이라 개수와
 /// 실제 호출이 같은 날을 본다.
 const DUE: (&str, &str) = ("due_notify", "1 hour");
 const DUE_JOBS: &[Job] = &[
-    Job {
-        ids: Some("SELECT app_system_due_notifications_ids(current_date)"),
+    Job::WithIds {
+        bound: "SELECT app_system_due_notifications_ids(current_date)",
         call: "SELECT app_system_due_notifications(current_date, $1)",
     },
-    Job {
-        ids: Some("SELECT app_system_item_reminders_ids(current_date)"),
+    Job::WithIds {
+        bound: "SELECT app_system_item_reminders_ids(current_date)",
         call: "SELECT app_system_item_reminders(current_date, $1)",
     },
 ];
@@ -128,24 +124,24 @@ async fn system_call_once(db: &Db, jobs: &[Job], retention: Retention) -> Result
     let mut tx = db.begin_anonymous().await?;
     let mut total = 0;
     for job in jobs {
-        let n: i32 = match job.ids {
-            Some(bound) => {
+        // 여러 도메인의 본문을 하나의 트랜잭션에 묶는 일은 조립 crate가 맡는다(D-131).
+        let n: i32 = match *job {
+            Job::PurgeTrash => fvoci_system::cleanup::purge_expired(&mut tx).await?,
+            Job::PurgeFileVersions => fvoci_system::cleanup::purge_old_versions(&mut tx).await?,
+            Job::PurgeAudit => {
+                fvoci_activity::retention::purge_audit(&mut tx, retention.audit_days).await?
+            }
+            Job::PurgeActivity => {
+                fvoci_activity::retention::purge_activity(&mut tx, retention.activity_days).await?
+            }
+            Job::WithIds { bound, call } => {
                 let ids = needed_ids(tx.conn(), sqlx::query_scalar(bound)).await?;
-                sqlx::query_scalar(job.call)
+                sqlx::query_scalar(call)
                     .bind(ids)
                     .fetch_one(tx.conn())
                     .await?
             }
-            None => match job.call {
-                "SELECT app_system_purge_audit($1)" => {
-                    fvoci_activity::retention::purge_audit(&mut tx, retention.audit_days).await?
-                }
-                "SELECT app_system_purge_activity($1)" => {
-                    fvoci_activity::retention::purge_activity(&mut tx, retention.activity_days)
-                        .await?
-                }
-                _ => sqlx::query_scalar(job.call).fetch_one(tx.conn()).await?,
-            },
+            Job::Statement(call) => sqlx::query_scalar(call).fetch_one(tx.conn()).await?,
         };
         total += n;
     }
@@ -261,78 +257,19 @@ async fn drain_all(
     Ok(total)
 }
 
-/// 기한이 지난 업로드를 닫고, 저장소에서 지울 것(영구 삭제한 버전·그만둔 업로드)을 지운다. 실패한 것은
-/// 다시 넣어 다음 주기에 한다(10번까지).
 async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
-    system_call(
+    fvoci_files::cleanup::clean_storage(
         db,
-        &[Job {
-            ids: None,
-            call: "SELECT app_system_expire_uploads()",
-        }],
-        Retention::default(),
+        storage,
+        crate::backup::STORAGE_LOCK,
+        system_call(
+            db,
+            &[Job::Statement("SELECT app_system_expire_uploads()")],
+            Retention::default(),
+        ),
     )
-    .await?;
-    let mut done = 0;
-    // 하나씩 꺼내 지우고 바로 끝낸다(저장소 호출 동안 트랜잭션을 길게 열지 않는다). 한 주기에 200개까지.
-    for _ in 0..200 {
-        let mut tx = db.begin_anonymous().await?;
-        // 백업·복구 중이면 쉰다(복사 중인 내용을 지우지 않게).
-        let free: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock_shared($1)")
-            .bind(crate::backup::STORAGE_LOCK)
-            .fetch_one(tx.conn())
-            .await?;
-        if !free {
-            break;
-        }
-        let Some((key, upload, attempts)): Option<(String, String, i32)> = sqlx::query_as(
-            "SELECT storage_key, storage_upload_id, attempts FROM app_system_storage_claim(1)",
-        )
-        .fetch_optional(tx.conn())
-        .await?
-        else {
-            break;
-        };
-        let result = if upload.is_empty() {
-            storage.delete(&key).await
-        } else {
-            storage.abort(&key, &upload).await
-        };
-        match result {
-            Ok(()) => done += 1,
-            Err(err) => {
-                if attempts >= 9 {
-                    tracing::error!(
-                        event = "storage.cleanup_gave_up",
-                        error_code = err.code(),
-                        detail = fvoci_core::logging::safe_error(&err),
-                        key = key.as_str(),
-                        attempts = attempts + 1,
-                        "storage cleanup gave up after 10 attempts"
-                    );
-                } else {
-                    tracing::warn!(
-                        event = "storage.cleanup_retry",
-                        error_code = err.code(),
-                        detail = fvoci_core::logging::safe_error(&err),
-                        key = key.as_str(),
-                        attempts = attempts + 1,
-                        "storage cleanup failed; will retry"
-                    );
-                }
-                sqlx::query("SELECT app_system_storage_retry($1, $2, $3)")
-                    .bind(&key)
-                    .bind(&upload)
-                    .bind(attempts)
-                    .execute(tx.conn())
-                    .await?;
-            }
-        }
-        tx.commit().await?;
-    }
-    Ok(done)
+    .await
 }
-
 /// 일 하나를 작업 id 안에서 하고(그 안의 로그 줄에 `job`·`job_id`, D-83), 실패를 기록하고 0으로 본다. 한 일이
 /// 실패해도(예: 검색 서비스 중단) 다른 일은 계속한다.
 async fn logged(

@@ -1,6 +1,6 @@
+import type { TimeEntryView } from '$lib/features/time/model';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { TimeEntryView } from '$lib/api/client';
 import { clockText, durationText, liveSeconds } from '$lib/features/time/format';
 import { setLocale } from '$lib/paraglide/runtime.js';
 

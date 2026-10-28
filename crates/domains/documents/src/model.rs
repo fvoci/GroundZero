@@ -53,7 +53,7 @@ pub struct Document {
     pub can_edit: bool,
     /// `workspace` 또는 `private` (D-20, D-40). 개인 노트는 항상 `private`.
     pub visibility: String,
-    /// 소유 권한자 외의 사람이 복제할 수 있는지 (D-20).
+    /// 소유 권한자·문서 작성자 외의 사람이 복제·내보내기·내려받기를 할 수 있는지(D-115).
     pub allow_copy: bool,
     /// 공유·공개 링크·설정을 관리할 수 있는지.
     /// 보관된 항목 아래 문서는 `access`가 `read`여도 워크스페이스 관리자·소유자는 참이다.
@@ -64,8 +64,8 @@ pub struct Document {
     pub is_template: bool,
     /// 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다.
     pub realtime: bool,
-    /// 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
-    /// 문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
+    /// 이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.
+    /// 그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다.
     pub can_export: bool,
 }
 

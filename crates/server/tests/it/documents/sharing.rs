@@ -543,7 +543,7 @@ async fn export_follows_download_permission_and_is_audited() {
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
-    let doc = create_doc(&app, &writer, &ws, "보고서").await;
+    let doc = create_doc(&app, &admin, &ws, "보고서").await;
     assert_eq!(
         save(&app, &writer, &doc, 1, "첫 저장").await.0,
         StatusCode::OK
@@ -557,7 +557,7 @@ async fn export_follows_download_permission_and_is_audited() {
         StatusCode::OK
     );
 
-    // D-115: 수정 권한도 allow_copy가 꺼져 있으면 내보내지 못한다.
+    // D-115: 리비전 작성자여도 문서 작성자가 아닌 수정자는 allow_copy를 따른다.
     assert_eq!(get(&app, &writer, &doc).await.1["can_export"], false);
     assert_eq!(
         export(&app, &writer, &doc, 2, "markdown").await.0,

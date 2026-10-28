@@ -1,5 +1,5 @@
 import type { Workspace } from '@fvoci/api-client';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocumentView } from '$lib/api/client';
@@ -93,6 +93,52 @@ describe('document settings from an out-of-date view', () => {
         expect.objectContaining({ id: 'd1', visibility: 'private', allow_copy: false }),
       );
     });
+  });
+
+  it('hides copy and notifies the parent when reopened settings revoke export', async () => {
+    const initial = documentWith('workspace', true);
+    const fresh = { ...documentWith('workspace', false), can_export: false };
+    vi.spyOn(api, 'document').mockResolvedValueOnce(initial).mockResolvedValue(fresh);
+    const changed = vi.fn<(doc: DocumentView) => void>();
+    const view = render(DocumentActions, {
+      props: { doc: initial, workspaces, onchanged: changed },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await waitFor(() => {
+      expect(changed).toHaveBeenCalledTimes(1);
+    });
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    expect(
+      within(await screen.findByRole('menu')).getByRole('menuitem', { name: '복제' }),
+    ).toBeInTheDocument();
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await waitFor(() => {
+      expect(changed).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: initial.id, allow_copy: false, can_export: false }),
+      );
+    });
+    const received = changed.mock.lastCall?.[0];
+    if (received === undefined) throw new Error('settings refresh did not notify the parent');
+    // 상위 화면이 실제로 받은 문서를 다시 내려 준다.
+    await view.rerender({ doc: received });
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    expect(
+      within(await screen.findByRole('menu')).queryByRole('menuitem', { name: '복제' }),
+    ).toBeNull();
   });
 
   it('does not send a second change built on the first one’s stale value', async () => {

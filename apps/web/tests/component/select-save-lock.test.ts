@@ -1,8 +1,10 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
+import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
@@ -107,8 +109,10 @@ describe('selects while a save is in flight', () => {
   });
 
   it('keeps the time entry kind closed', async () => {
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
-    const update = vi.spyOn(api, 'updateTimeEntry').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
+    const update = vi
+      .spyOn(timeData, 'updateTimeEntry')
+      .mockReturnValue(new Promise(() => undefined));
     render(TimeEntryDialog, { entry, zone: 'UTC', onclose: vi.fn(), onchanged: vi.fn() });
     await fireEvent.input(await screen.findByLabelText(m.time_memo()), {
       target: { value: '고침' },
@@ -121,11 +125,11 @@ describe('selects while a save is in flight', () => {
   });
 
   it('keeps the manual time kind closed', async () => {
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     const add = vi
-      .spyOn(api, 'addTimeEntry')
+      .spyOn(timeData, 'addTimeEntry')
       .mockReturnValue(new Promise<TimeEntryView>(() => undefined));
     render(TimeScreen);
     await fireEvent.input(await screen.findByLabelText(m.time_memo()), {
@@ -139,9 +143,9 @@ describe('selects while a save is in flight', () => {
   });
 
   it('still opens the manual time kind when idle (contrast)', async () => {
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     render(TimeScreen);
     await screen.findByLabelText(m.time_memo());
     expect(await opens(trigger('time-manual-kind-label'))).toBe(true);

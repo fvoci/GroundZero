@@ -268,7 +268,7 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
         send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&admin),
             None
         )
@@ -442,7 +442,7 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     );
 
     // 보존 기간: 관리자만, 1~3650일.
-    let retention = format!("/api/workspaces/{ws}/version-retention");
+    let retention = format!("/api/workspaces/{ws}/retention/file-versions");
     assert_eq!(
         send(
             &app,
@@ -482,7 +482,7 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/workspaces/{ws}/retention"),
         Some(&admin),
         None,
     )
@@ -507,12 +507,13 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let detail = send(
         &app,
         Method::GET,
-        &format!("/api/files/{file}"),
+        &format!("/api/files/{file}/versions"),
         Some(&writer),
         None,
     )
     .await;
-    let mut kept: Vec<i64> = detail.json["versions"]
+    let mut kept: Vec<i64> = detail
+        .json
         .as_array()
         .unwrap()
         .iter()
@@ -555,7 +556,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     let retention = send(
         &app,
         Method::PUT,
-        &format!("/api/workspaces/{ws}/version-retention"),
+        &format!("/api/workspaces/{ws}/retention/file-versions"),
         Some(&admin),
         Some(json!({ "days": 1 })),
     )
@@ -825,18 +826,14 @@ async fn trash_expiry_keeps_files_with_referenced_versions() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await;
-    let entries = trash.json["entries"].as_array().unwrap();
+    let entries = trash.json.as_array().unwrap();
     assert_eq!(entries.len(), 2, "{:?}", trash.json);
-    assert!(
-        entries
-            .iter()
-            .all(|e| e["expired"] == true && e["kept_for_references"] == true)
-    );
+    assert!(entries.iter().all(|e| e["expiry"] == "kept_for_references"));
 
     // 기록이 연결을 놓으면 다음 실행에서 지운다.
     let (_, list) = records(&app, &writer, &item).await;
@@ -1176,7 +1173,7 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
             send(
                 &app,
                 Method::POST,
-                &format!("/api/trash/{batch}/restore"),
+                &format!("/api/trash-batches/{batch}/restore"),
                 Some(&user),
                 None,
             )
@@ -1240,13 +1237,14 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await;
     assert!(
-        trash.json["entries"]
+        trash
+            .json
             .as_array()
             .unwrap()
             .iter()
@@ -1303,7 +1301,7 @@ async fn item_files_are_read_only_while_the_item_or_its_module_is_archived() {
         async move {
             send(
                 &app,
-                Method::PUT,
+                Method::PATCH,
                 &format!("/api/files/{file_id}"),
                 Some(&admin),
                 Some(json!({ "name": "plan-2.csv" })),

@@ -1,9 +1,13 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
+import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
@@ -203,9 +207,9 @@ describe('draft offers while a create request is in flight', () => {
       endChoice: null,
       request: null,
     });
-    vi.spyOn(api, 'itemEvents').mockResolvedValue([]);
+    vi.spyOn(eventsApi, 'itemEvents').mockResolvedValue([]);
     const create = vi
-      .spyOn(api, 'createEvent')
+      .spyOn(eventsApi, 'createEvent')
       .mockReturnValue(new Promise<EventView>(() => undefined));
     render(ItemEvents, { item: { ...item, is_template: false } });
     await fireEvent.click(screen.getByRole('button', { name: m.events_add() }));
@@ -264,8 +268,10 @@ describe('draft offers while an edit request is in flight', () => {
       initial: { start: '2026-10-20T04:00', end: '2026-10-20T05:00', pausedMinutes: '0' },
       zone: 'UTC',
     });
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
-    const update = vi.spyOn(api, 'updateTimeEntry').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
+    const update = vi
+      .spyOn(timeData, 'updateTimeEntry')
+      .mockReturnValue(new Promise(() => undefined));
     render(TimeEntryDialog, { entry, zone: 'UTC', onclose: vi.fn(), onchanged: vi.fn() });
     await screen.findByTestId('time-entry-draft-offer');
     await fireEvent.input(screen.getByLabelText(m.time_memo()), { target: { value: '이 탭' } });
@@ -282,11 +288,11 @@ describe('draft offers while an edit request is in flight', () => {
       zone: 'UTC',
       pending: null,
     });
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     const add = vi
-      .spyOn(api, 'addTimeEntry')
+      .spyOn(timeData, 'addTimeEntry')
       .mockReturnValue(new Promise<TimeEntryView>(() => undefined));
     render(TimeScreen);
     await screen.findByTestId('time-manual-draft-offer');
@@ -368,33 +374,32 @@ describe('draft offers after write access is withdrawn', () => {
     expect(unload.defaultPrevented).toBe(false);
   });
 
-  // RB-2: 이름 바꾸기는 파일마다 서버가 준 `can_write`로 정한다(D-113). 패널의 `canWrite`(새 파일 붙이기)와는 따로 온다.
-  it('shows the attachment rename offer read-only when the file is not writable', async () => {
-    otherTabDraft('attachment-rename:item:i1', {
-      id: ACCESS_FILE.id,
-      name: '권한 철회 전 이름.pdf',
-      baseline: ACCESS_FILE.name,
-    });
-    vi.spyOn(api, 'itemFiles').mockResolvedValue([{ ...ACCESS_FILE, can_write: false }]);
-    const rename = vi.spyOn(api, 'renameFile');
-    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
-    await screen.findByText(ACCESS_FILE.name);
-    await expectReadOnlyOffer();
-    expect(screen.queryByDisplayValue('권한 철회 전 이름.pdf')).toBeNull();
-    expect(rename).not.toHaveBeenCalled();
-  });
-
-  it('restores the attachment rename offer when the file is writable on a read-only target', async () => {
-    otherTabDraft('attachment-rename:item:i1', {
-      id: ACCESS_FILE.id,
-      name: '쓸 수 있는 파일 이름.pdf',
-      baseline: ACCESS_FILE.name,
-    });
-    vi.spyOn(api, 'itemFiles').mockResolvedValue([ACCESS_FILE]);
-    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: false } });
-    await screen.findByText(ACCESS_FILE.name);
-    const offer = await screen.findByTestId('form-draft-offer');
-    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_restore() }));
-    expect(screen.getByLabelText(m.files_new_name())).toHaveValue('쓸 수 있는 파일 이름.pdf');
-  });
+  // D-27·D-113: 옛 이름 초안은 무시하고 직접 편집은 파일의 can_write를 따른다.
+  it.each([false, true])(
+    'ignores legacy attachment-name offers while file can_write=%s',
+    async (writable) => {
+      const oldName = '옛 이름 초안.pdf';
+      otherTabDraft('attachment-rename:item:i1', {
+        id: ACCESS_FILE.id,
+        name: oldName,
+        baseline: ACCESS_FILE.name,
+      });
+      vi.spyOn(api, 'itemFiles').mockResolvedValue([{ ...ACCESS_FILE, can_write: writable }]);
+      const rename = vi.spyOn(api, 'renameFile');
+      render(AttachmentsPanel, {
+        props: { target: { kind: 'item', id: 'i1' }, canWrite: !writable },
+      });
+      await screen.findByText(ACCESS_FILE.name);
+      expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+      const buttonName = m.files_rename_aria({ name: ACCESS_FILE.name });
+      if (writable) {
+        await fireEvent.click(screen.getByRole('button', { name: buttonName }));
+        expect(screen.getByLabelText(m.files_new_name())).toHaveValue(ACCESS_FILE.name);
+      } else {
+        expect(screen.queryByRole('button', { name: buttonName })).toBeNull();
+      }
+      expect(screen.queryByDisplayValue(oldName)).toBeNull();
+      expect(rename).not.toHaveBeenCalled();
+    },
+  );
 });
