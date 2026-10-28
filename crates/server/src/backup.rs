@@ -282,7 +282,7 @@ pub async fn restore(
     } else {
         Ok(())
     };
-    let unlocked = lock.close().await.map_err(AppError::from);
+    let unlocked = fvoci_db::admin::unlock_migrator(lock).await;
     // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·트랜잭션 종료·연결 닫기)도 로그에 남긴다.
     // 재연결은 롤백 결과 확인에만 쓰며, 같은 연결에서 생긴 첫 반납 오류를 그대로 돌려준다.
     for (step, outcome) in [
@@ -290,7 +290,7 @@ pub async fn restore(
         ("finish_migrator", &finished),
         ("verify_migrator_returned", &verified),
         ("close", &closed),
-        ("close_migrator_lock", &unlocked),
+        ("unlock_migrator", &unlocked),
     ] {
         let failed = result.is_err() || (step != "release_migrator" && released.is_err());
         if let (true, Err(err)) = (failed, outcome) {

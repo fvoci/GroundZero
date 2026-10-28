@@ -46,7 +46,7 @@ async fn supabase_admin_is_the_non_superuser_postgres_role() {
 #[tokio::test]
 async fn supabase_migrator_lock_preserves_the_backend_session() {
     use fvoci_core::secret::Secret;
-    use fvoci_db::admin::{MIGRATOR_LOCK, lock_migrator};
+    use fvoci_db::admin::{MIGRATOR_LOCK, lock_migrator, unlock_migrator};
 
     let admin_url = url::Url::parse(&std::env::var("FVOCI_TEST_ADMIN_URL").unwrap()).unwrap();
     let mut endpoint = url::Url::parse(&std::env::var("DATABASE_URL").unwrap()).unwrap();
@@ -108,14 +108,14 @@ async fn supabase_migrator_lock_preserves_the_backend_session() {
                 }
                 tokio::task::yield_now().await;
             }
-            first.close().await.unwrap();
+            unlock_migrator(first).await.unwrap();
         };
     let (second, ()) = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         tokio::join!(lock_migrator(&secret), release)
     })
     .await
     .expect("closing the pooler client did not hand off the advisory lock");
-    second.unwrap().close().await.unwrap();
+    unlock_migrator(second.unwrap()).await.unwrap();
     // pooler의 비동기 세션 정리까지 관찰하고, 시험 연결이 얻은 잠금도 바로 반납한다.
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {

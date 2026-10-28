@@ -326,6 +326,24 @@ pub async fn lock_migrator(admin: &DatabaseUrl) -> Result<PgConnection, AppError
     Ok(lock)
 }
 
+/// 전용 세션에서 잠금을 명시적으로 풀고 연결을 닫는다. 해제 실패·소유하지 않은 잠금도 오류로 돌려준다.
+/// Terminate만 보내는 close는 backend 종료를 기다리지 않으므로, 정상 반납을 그 종료 시점에 기대지 않는다.
+/// 해제 쿼리가 실패해도 연결 닫기는 반드시 시도한다.
+pub async fn unlock_migrator(mut lock: PgConnection) -> Result<(), AppError> {
+    let unlocked = sqlx::query_scalar::<_, bool>("SELECT pg_advisory_unlock($1)")
+        .bind(MIGRATOR_LOCK)
+        .fetch_one(&mut lock)
+        .await;
+    let closed = lock.close().await;
+    if !unlocked? {
+        return Err(AppError::Config(
+            "the maintenance connection no longer holds the migrator advisory lock".into(),
+        ));
+    }
+    closed?;
+    Ok(())
+}
+
 /// [`borrow_migrator`]가 관리자의 직접 멤버십에 한 일. [`release_migrator`]가 이것만 되돌린다.
 #[derive(Debug, Clone)]
 pub enum MigratorBorrow {
@@ -466,7 +484,7 @@ pub async fn prepare_database(
     let mut tx = conn.begin().await?;
     prepare_database_locked(&mut tx).await?;
     tx.commit().await?;
-    lock.close().await?;
+    unlock_migrator(lock).await?;
     Ok(())
 }
 
@@ -551,7 +569,7 @@ pub async fn bootstrap(cfg: &DbCommandConfig) -> Result<(), AppError> {
     prepare_database_locked(&mut tx).await?;
     tx.commit().await?;
     conn.close().await?;
-    lock.close().await?;
+    unlock_migrator(lock).await?;
     Ok(())
 }
 
