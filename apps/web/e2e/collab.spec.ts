@@ -2,6 +2,7 @@
 // 실시간 연결·동기화는 DB 저장이 아니다. 저장 결과는 모두 나간 뒤 서버가 남긴
 // 리비전을 API로 확인하고, 새 컨텍스트에서 다시 열어 본다.
 import type { Page } from '@playwright/test';
+import type { Editor } from '@tiptap/core';
 
 import { expect, test, unique } from './fixtures';
 
@@ -33,6 +34,28 @@ test('two users edit a live document together and the result persists', async ({
 
   await editor(writer.page).click();
   await writer.page.keyboard.press('Control+End');
+  // 원격 본문 표시·키 전송 완료는 selectionchange의 상태 반영 완료가 아니다.
+  // Enter가 쓰는 ProseMirror 선택과 브라우저 선택이 모두 문서 끝인지 확인한다.
+  await expect
+    .poll(() =>
+      editor(writer.page).evaluate((element) => {
+        const tiptap = element.closest<HTMLElement & { editor: Editor }>('.tiptap');
+        if (tiptap === null) return false;
+        const { state, view } = tiptap.editor;
+        const selection = window.getSelection();
+        const end = state.doc.content.size - 1;
+        return (
+          view.hasFocus() &&
+          state.selection.empty &&
+          state.selection.to === end &&
+          selection?.isCollapsed === true &&
+          selection.focusNode !== null &&
+          element.contains(selection.focusNode) &&
+          view.posAtDOM(selection.focusNode, selection.focusOffset) === end
+        );
+      }),
+    )
+    .toBe(true);
   await writer.page.keyboard.press('Enter');
   await writer.page.keyboard.type(second);
   await expect(editor(owner.page)).toContainText(second);
