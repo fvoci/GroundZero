@@ -94,7 +94,7 @@ async fn scenario(name: &str) -> (World, Command) {
             );
         }
         "organization_member" | "remove_organization_member" => {
-            c.path = format!("/api/organizations/{}/members/{}", w.org, member.id);
+            c.path = format!("/api/organizations/{}/members/{}", w.org, member.id.0);
             if name == "organization_member" {
                 c.method = Method::PUT;
                 c.body = Some(json!({"role":"admin"}));
@@ -179,7 +179,7 @@ async fn scenario(name: &str) -> (World, Command) {
             c.success = 200;
         }
         "member_role" | "remove_member" => {
-            c.path = format!("/api/workspaces/{}/members/{}", w.ws, member.id);
+            c.path = format!("/api/workspaces/{}/members/{}", w.ws, member.id.0);
             if name == "member_role" {
                 c.method = Method::PUT;
                 c.body = Some(json!({"role":"readonly"}));
@@ -250,7 +250,7 @@ async fn scenario(name: &str) -> (World, Command) {
             if name == "delete_group" {
                 c.path = format!("/api/groups/{group}");
             } else {
-                c.path = format!("/api/groups/{group}/members/{}", member.id);
+                c.path = format!("/api/groups/{group}/members/{}", member.id.0);
                 if name == "add_group_member" {
                     c.method = Method::PUT;
                 } else {
