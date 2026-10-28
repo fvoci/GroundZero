@@ -102,8 +102,9 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --since 10m 
 
 <a id="sql-baseline-reset"></a>
 
-**통합 SQL 이전의 개발·시험 설치(D-107):** 새 설치는 `202610230001_initial_state.sql`의 새 SQLx 이력으로 시작한다.
-기존 누적 이력(97개 파일, 마지막 버전 98) DB를 자동 이전하지 않는다. `db migrate`와 앱 시작이 재생성 필요를
+**지금 기준 이전의 개발·시험 설치(D-107):** 새 설치는 영역 기준 파일 열 개(`202610280001_foundation.sql`~
+`202610280010_access_grants.sql`)의 새 SQLx 이력으로 시작한다. 그 전 기준(한 파일 기준 `202610250001`·`202610230001`,
+그 전의 누적 이력 97개 파일, 마지막 버전 98)으로 만든 DB를 자동 이전하지 않는다. `db migrate`와 앱 시작이 재생성 필요를
 알리면 기존 DB·볼륨을 보존하고 멈춘다. `_sqlx_migrations`의 행·체크섬을 고치거나 검사를 끄지 않는다.
 
 재생성 전에는 실제 호스트·DB·Compose 프로젝트·볼륨·공유 객체, 삭제할 데이터와 검색 색인,

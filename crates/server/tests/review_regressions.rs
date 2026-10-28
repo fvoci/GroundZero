@@ -424,13 +424,14 @@ async fn purge_does_not_swallow_short_ids() {
     .await
     .unwrap();
     assert_eq!(gone, 2);
-    let checksum: String = sqlx::query_scalar(
-        "SELECT encode(checksum,'hex') FROM fvoci._sqlx_migrations WHERE version=202610250001",
+    let checksums: String = sqlx::query_scalar(
+        "SELECT string_agg(version || ':' || encode(checksum,'hex'), ' ' ORDER BY version)
+         FROM fvoci._sqlx_migrations",
     )
     .fetch_one(&mut migration)
     .await
     .unwrap();
-    eprintln!("review migration checksum: {checksum}");
+    eprintln!("review migration checksums: {checksums}");
     migration.close().await.unwrap();
     state.db.close().await;
     sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fresh.name))

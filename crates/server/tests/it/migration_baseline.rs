@@ -43,7 +43,8 @@ async fn empty_database(label: &str) -> (PgConnection, common::FreshDb) {
     (connection, common::FreshDb { name, db, app_url })
 }
 
-/// 새 설치가 적용하는 마이그레이션 수: 기준(202610250001, 오버홀 재통합 D-126) 하나와 그 뒤에 새 번호로 더한 것.
+/// 새 설치가 적용하는 마이그레이션 수: 영역 기준 파일 열 개(202610280001~0010, 오버홀 재통합 D-126·D-131)와
+/// 그 뒤에 새 번호로 더한 것.
 fn migration_count() -> usize {
     sqlx::migrate!("../db/migrations").migrations.len()
 }
@@ -204,6 +205,43 @@ async fn previous_history_and_untracked_objects_are_rejected_without_data_loss()
     );
     assert!(ledger(&mut conn).await.is_empty());
     let value: String = sqlx::query_scalar("SELECT value FROM preserved_data")
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert_eq!(value, "must remain");
+    conn.close().await.unwrap();
+    sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fixture.name))
+        .execute(&mut fixture_admin)
+        .await
+        .unwrap();
+}
+
+/// 영역 기준으로 나누기 전의 한 파일 기준(202610250001)이 든 DB. 원장 행과 그 세대 표시, 표 하나만 흉내 낸다.
+const SINGLE_FILE_BASELINE: &str =
+    "INSERT INTO _sqlx_migrations(version, description, success, checksum, execution_time)
+          VALUES (202610250001, 'initial state', true, decode('cafe', 'hex'), 1);
+     COMMENT ON TABLE fvoci._sqlx_migrations IS 'fvoci baseline 202610250001';
+     CREATE TABLE fvoci.preserved_data(value text NOT NULL);
+     INSERT INTO fvoci.preserved_data VALUES ('must remain');";
+
+#[tokio::test]
+async fn single_file_baseline_database_is_rejected_for_recreation() {
+    let (mut fixture_admin, fixture) = empty_database("single_file_guard").await;
+    let mut conn = PgConnection::connect(fixture.db.migration_url.as_ref().unwrap().expose())
+        .await
+        .unwrap();
+    conn.ensure_migrations_table().await.unwrap();
+    sqlx::raw_sql(SINGLE_FILE_BASELINE)
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    let before = ledger(&mut conn).await;
+    let error = admin::migrate(&fixture.db).await.unwrap_err();
+    assert!(matches!(error, AppError::Config(message) if message.contains("requires recreation")));
+    assert_eq!(ledger(&mut conn).await, before);
+    let error = startup_error(&fixture.app_url).await;
+    assert!(matches!(error, AppError::Config(message) if message.contains("requires recreation")));
+    let value: String = sqlx::query_scalar("SELECT value FROM fvoci.preserved_data")
         .fetch_one(&mut conn)
         .await
         .unwrap();

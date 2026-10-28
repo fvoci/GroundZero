@@ -1,7 +1,7 @@
 //! 멤버·초대·역할·소유권 인계·그룹 (D-20, D-25, D-51, D-57).
 //!
 //! 변경은 `app_set_member_role`·`app_respond_invitation` 등의 정의자 함수가 권한 확인·불변식·감사 기록을 한 번에 처리한다.
-//! DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`에 있다.
+//! DB 정의는 `crates/db/migrations/202610280002_organizations.sql`에 있다.
 //! 이 모듈은 입력 검증과 응답 변환만 한다. 함수 오류 코드는 `AppError::from_db_function`이 응답으로 바꾼다.
 
 use axum::Json;

@@ -326,6 +326,77 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     }
 }
 
+/// 기준 SQL이 영역 파일 여럿이 된 뒤에도 백업은 마지막으로 적용한 번호를 적고, 복구할 DB의 번호와 같을 때만 복구한다.
+/// 끝까지 적용한 설치의 백업은 같은 릴리스의 새 설치에 복구된다. 한 파일 기준(202610250001)의 백업과 일부 파일만
+/// 적용된 DB의 백업은 복구가 거부되고, 일부만 적용된 DB에는 어떤 백업도 복구되지 않는다.
+#[tokio::test]
+async fn backup_restores_only_into_the_same_fully_applied_baseline() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let migrations = sqlx::migrate!("../db/migrations").migrations;
+    let last = migrations.last().unwrap().version;
+    let partial_at = migrations[4].version;
+    let files = temp_dir("generation-files");
+    let config = config_with(&[("FVOCI_STORAGE_DIR", &files.to_string_lossy())]);
+
+    let source = fresh_database(&mut admin, "generation_src").await;
+    let full = temp_dir("generation-full");
+    let manifest = backup::create(&config, &source.db, &full).await.unwrap();
+    assert_eq!(manifest.migration_version, last);
+    let target = fresh_database(&mut admin, "generation_target").await;
+    backup::restore(&config, &target.db, &full).await.unwrap();
+
+    let rejecting = fresh_database(&mut admin, "generation_rejecting").await;
+    let single_file = temp_dir("generation-single-file");
+    copy_dir(&full, &single_file);
+    let mut listed: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(single_file.join("manifest.json")).unwrap()).unwrap();
+    listed["migration_version"] = json!(202_610_250_001_i64);
+    std::fs::write(
+        single_file.join("manifest.json"),
+        serde_json::to_vec(&listed).unwrap(),
+    )
+    .unwrap();
+    let err = backup::restore(&config, &rejecting.db, &single_file)
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains(&format!("at migration {last} but the backup is at 202610250001")),
+        "{err}"
+    );
+
+    let partial = common::partial_database(&mut admin, "generation_partial", 5).await;
+    let from_partial = temp_dir("generation-partial");
+    let manifest = backup::create(&config, &partial.db, &from_partial)
+        .await
+        .unwrap();
+    assert_eq!(manifest.migration_version, partial_at);
+    let err = backup::restore(&config, &rejecting.db, &from_partial)
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains(&format!("at migration {last} but the backup is at {partial_at}")),
+        "{err}"
+    );
+    let err = backup::restore(&config, &partial.db, &full)
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains(&format!("at migration {partial_at} but the backup is at {last}")),
+        "{err}"
+    );
+
+    for name in [&source.name, &target.name, &rejecting.name, &partial.name] {
+        sqlx::raw_sql(&format!("DROP DATABASE {name} WITH (FORCE)"))
+            .execute(&mut admin)
+            .await
+            .unwrap();
+    }
+}
+
 fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
     std::fs::create_dir_all(to).unwrap();
     for entry in std::fs::read_dir(from).unwrap() {

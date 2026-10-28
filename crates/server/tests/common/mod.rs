@@ -410,9 +410,35 @@ pub struct FreshDb {
 pub static PREPARE_DATABASE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
-    use sqlx::Connection as _;
     // 준비와 마이그레이션은 한 번에 하나씩 한다.
     let _serial = PREPARE_DATABASE.lock().await;
+    let fresh = prepared_database(admin, label).await;
+    fvoci_db::admin::migrate(&fresh.db).await.unwrap();
+    fresh
+}
+
+/// 영역 기준 파일 가운데 앞의 `applied`개만 적용한 DB. SQLx는 파일마다 커밋하므로 중간 파일에서 멈춘 설치가 이렇게 남는다.
+pub async fn partial_database(
+    admin: &mut sqlx::PgConnection,
+    label: &str,
+    applied: usize,
+) -> FreshDb {
+    use sqlx::Connection as _;
+    let _serial = PREPARE_DATABASE.lock().await;
+    let fresh = prepared_database(admin, label).await;
+    let mut migrator = sqlx::migrate!("../db/migrations");
+    migrator.migrations = std::borrow::Cow::Owned(migrator.migrations[..applied].to_vec());
+    let mut conn = sqlx::PgConnection::connect(fresh.db.migration_url.as_ref().unwrap().expose())
+        .await
+        .unwrap();
+    migrator.run(&mut conn).await.unwrap();
+    conn.close().await.unwrap();
+    fresh
+}
+
+/// 빈 DB를 만들고 역할·스키마만 준비한다(마이그레이션 전). [`PREPARE_DATABASE`]를 쥔 채 부른다.
+async fn prepared_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {
+    use sqlx::Connection as _;
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
     let migration_url =
         std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
@@ -444,7 +470,6 @@ pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> Fres
         migrator_password: None,
         app_password: None,
     };
-    fvoci_db::admin::migrate(&db).await.unwrap();
     FreshDb {
         app_url: with_database(&app_url, &name),
         name,
