@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
-import { expect, screen, spyOn, userEvent } from 'storybook/test';
+import { expect, fireEvent, screen, spyOn, userEvent } from 'storybook/test';
 import { api } from '$lib/api/client';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import { org } from '$lib/org.svelte';
@@ -40,7 +40,7 @@ export const OutsideMemberShare: Story = {
     await expect(await screen.findByText('공간 밖 조직원')).toBeInTheDocument();
     await expect(screen.getByText('공유 상한: 읽기')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('이메일'), 'outside@example.test');
-    await userEvent.click(screen.getByRole('button', { name: '공유 권한' }));
+    await fireEvent.keyDown(screen.getByRole('button', { name: '공유 권한' }), { key: 'ArrowDown' });
     await expect(await screen.findByRole('option', { name: '읽기' })).toBeInTheDocument();
     await expect(screen.queryByRole('option', { name: '수정' })).toBeNull();
   },
