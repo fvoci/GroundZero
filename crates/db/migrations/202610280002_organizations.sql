@@ -1661,28 +1661,49 @@ CREATE FUNCTION fvoci.app_remove_member_preview(p_workspace uuid, p_member uuid)
 ALTER FUNCTION fvoci.app_remove_member_preview(p_workspace uuid, p_member uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_remove_member_ids(p_workspace uuid, p_member uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_access('workspace', p_workspace) = 'owner'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member)
-                       + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-                          WHERE d.workspace_id = p_workspace AND s.grantee_user_id = p_member)::integer
-                ELSE 0 END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    -- 공간 → 멤버 순서로 공유·그룹 변경·담당 추가를 막고 커밋된 뒤의 상한을 센다(D-88).
+    PERFORM app_lock_live_workspace(p_workspace);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = p_workspace AND user_id IN (app_user_id(), p_member)
+    ORDER BY user_id FOR UPDATE;
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member)
+      + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+         WHERE d.workspace_id = p_workspace AND s.grantee_user_id = p_member)::integer;
+  END
   $$;
 
 
 ALTER FUNCTION fvoci.app_remove_member_ids(p_workspace uuid, p_member uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_leave_workspace_ids(p_workspace uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_user_id() IS NOT NULL AND app_access('workspace', p_workspace) <> 'none'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, app_user_id())
-                       + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-                          WHERE d.workspace_id = p_workspace AND s.grantee_user_id = app_user_id())::integer
-                ELSE 0 END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) = 'none' THEN
+      RETURN 0;
+    END IF;
+    -- 공간 → 멤버 순서로 공유·그룹 변경·담당 추가를 막고 커밋된 뒤의 상한을 센다(D-88).
+    PERFORM app_lock_live_workspace(p_workspace);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = p_workspace AND user_id = app_user_id() FOR UPDATE;
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) = 'none' THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, app_user_id())
+      + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+         WHERE d.workspace_id = p_workspace AND s.grantee_user_id = app_user_id())::integer;
+  END
   $$;
 
 
@@ -2895,11 +2916,23 @@ CREATE FUNCTION fvoci.app_set_member_role(p_workspace uuid, p_member uuid, p_rol
 ALTER FUNCTION fvoci.app_set_member_role(p_workspace uuid, p_member uuid, p_role text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_set_member_role_ids(p_workspace uuid, p_member uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_access('workspace', p_workspace) = 'owner'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member) ELSE 0 END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    -- 공간 → 멤버 순서로 공유·그룹 변경·담당 추가를 막고 커밋된 뒤의 상한을 센다(D-88).
+    PERFORM app_lock_live_workspace(p_workspace);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = p_workspace AND user_id IN (app_user_id(), p_member)
+    ORDER BY user_id FOR UPDATE;
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member);
+  END
   $$;
 
 
