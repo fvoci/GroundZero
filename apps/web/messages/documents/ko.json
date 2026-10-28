@@ -164,7 +164,7 @@
   "documents_move_gains": "새로 볼 수 있게 되는 사람",
   "documents_move_loses": "더 이상 볼 수 없게 되는 사람",
   "documents_none": "없음",
-  "documents_move_history": "이전 리비전 기록도 함께 옮겨져, 새로 볼 수 있게 되는 사람에게 보입니다.",
+  "documents_move_history": "이전 리비전 기록과 댓글, 첨부 파일(이전 버전 포함)도 함께 옮겨져, 새로 볼 수 있게 되는 사람에게 보입니다.",
   "documents_move_reference_changes": "대상에서 번호가 새로 붙습니다.",
   "documents_move_reference_same": "같은 모듈 안 이동이라 번호가 그대로입니다.",
   "documents_move_children": [

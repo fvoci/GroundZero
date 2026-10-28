@@ -165,7 +165,7 @@
   "documents_move_gains": "Who gains access",
   "documents_move_loses": "Who loses access",
   "documents_none": "None",
-  "documents_move_history": "Earlier revision history moves too and becomes visible to the people gaining access.",
+  "documents_move_history": "Earlier revision history, comments and attachments (including earlier versions) move too and become visible to the people gaining access.",
   "documents_move_reference_changes": "It gets a new number at the destination.",
   "documents_move_reference_same": "It stays in the same module, so the number doesn't change.",
   "documents_move_children": [

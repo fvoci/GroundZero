@@ -1250,7 +1250,7 @@ pub struct MovePreview {
     pub changes: Vec<MoveAccessChange>,
     /// 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18).
     pub reference_changes: bool,
-    /// 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
+    /// 이전 리비전 기록과 댓글, 첨부 파일(이전 버전 포함)도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
     pub history_moves_with_document: bool,
     /// 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
     pub active_public_links: i64,

@@ -3950,7 +3950,7 @@ export interface components {
              * @description 원래 자리에 남는 하위 문서 수(내가 볼 수 있는 것). 이동하는 문서의 원래 부모에 붙는다.
              */
             children_left_behind: number;
-            /** @description 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
+            /** @description 이전 리비전 기록과 댓글, 첨부 파일(이전 버전 포함)도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다. */
             history_moves_with_document: boolean;
             /** @description 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18). */
             reference_changes: boolean;
