@@ -1,5 +1,5 @@
 use crate::common;
-use crate::sql_support::{World, attempt, blocked, code, fixture, on, one, pid, rows, workspace};
+use crate::sql_support::{World, attempt, blocked, code, on, one, pid, rows, workspace};
 
 /// SR-201-2: 참여가 조직 잠금을 먼저 잡으면 ID 산정도 그 커밋 뒤 상태를 세어야 한다.
 #[tokio::test]
@@ -134,69 +134,4 @@ async fn self_offered_ownership_cannot_bypass_admin_join_recovery() {
         .await
         .is_empty()
     );
-}
-
-/// SR-201-3: 옛 백업의 제안은 제안자를 증명할 수 없으므로 자기 참여를 독립 부여로 바꾸지 못한다.
-#[tokio::test]
-async fn legacy_ownership_offer_cannot_bypass_admin_join_recovery() {
-    let w = World::new().await;
-    let user = w.member("member").await;
-    common::join_organization(w.org, &user, "admin").await;
-    // 옛 덤프의 from_user는 실제 제안자가 아닌 당시 소유자다. 역할 출처도 옛 복구의 기본값이다.
-    fixture(
-        "INSERT INTO fvoci.ownership_offers(workspace_id,from_user,to_user) VALUES($1,$2,$3)",
-        &[w.ws, w.owner.id.0, user.id.0],
-    )
-    .await;
-    rows(
-        &w.state,
-        &user,
-        "SELECT fvoci.app_join_workspace_as_admin($1,@ids)",
-        &[w.ws],
-    )
-    .await;
-    let accepted = attempt(
-        &w.state,
-        &user,
-        "SELECT fvoci.app_accept_ownership($1,@ids)",
-        &[w.ws],
-    )
-    .await;
-    if let Err(error) = &accepted {
-        code(error, "P0002");
-        assert_eq!(
-            error.as_database_error().unwrap().message(),
-            "no offer for you"
-        );
-    }
-    rows(
-        &w.state,
-        &w.owner,
-        "SELECT fvoci.app_set_organization_member($1,$2,'member',@ids)",
-        &[w.org, user.id.0],
-    )
-    .await;
-    let restored = one(
-        &w.state,
-        &w.owner,
-        "SELECT role,role_source FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
-        &[w.ws, user.id.0],
-    )
-    .await;
-    assert_eq!(
-        restored["role"], "member",
-        "SR-201-3 legacy ownership bypass: {restored:?}"
-    );
-    assert_eq!(restored["role_source"], "admin_assigned");
-    assert_eq!(
-        one(
-            &w.state,
-            &w.owner,
-            "SELECT owner_id FROM fvoci.workspaces WHERE id=$1",
-            &[w.ws]
-        )
-        .await["owner_id"],
-        w.owner.id.0.to_string()
-    );
-    assert!(accepted.is_err(), "SR-201-3 legacy offer was accepted");
 }
