@@ -584,18 +584,26 @@ CREATE FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_e
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_id uuid;
-    v_ws uuid;
+    v_id  uuid;
+    v_doc documents%ROWTYPE;
   BEGIN
     PERFORM 1 FROM documents WHERE id = p_doc FOR UPDATE;
     PERFORM app_require_document_manager(p_doc);
     IF p_expires_at IS NOT NULL AND p_expires_at <= now() THEN
       RAISE EXCEPTION 'expiry must be in the future' USING ERRCODE = '22023';
     END IF;
-    SELECT workspace_id INTO v_ws FROM documents WHERE id = p_doc;
-    IF v_ws IS NOT NULL AND NOT EXISTS (
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
+    IF v_doc.workspace_id IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM workspaces w JOIN organizations o ON o.id = w.organization_id
-      WHERE w.id = v_ws AND o.public_links_enabled
+      WHERE w.id = v_doc.workspace_id AND o.public_links_enabled
+    ) THEN
+      RAISE EXCEPTION 'public links are turned off for this organization' USING ERRCODE = '55000';
+    END IF;
+    -- 출처 조직을 기억한 개인 노트는 그 조직의 설정을 따르고, 소유자가 그 조직을 떠났거나 조직이 없으면 막는다
+    -- (#175=1 SR1-2·E). 열 때(app_public_document)도 같은 조건이다.
+    IF v_doc.source_organization_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM organizations o JOIN organization_members m ON m.organization_id = o.id
+      WHERE o.id = v_doc.source_organization_id AND o.public_links_enabled AND m.user_id = v_doc.owner_user_id
     ) THEN
       RAISE EXCEPTION 'public links are turned off for this organization' USING ERRCODE = '55000';
     END IF;
@@ -650,6 +658,10 @@ CREATE FUNCTION fvoci.app_public_document(p_token_hash bytea) RETURNS TABLE(titl
       AND (d.workspace_id IS NULL OR EXISTS (
             SELECT 1 FROM workspaces w JOIN organizations o ON o.id = w.organization_id
             WHERE w.id = d.workspace_id AND o.public_links_enabled))
+      -- 출처 조직을 기억한 개인 노트는 만들 때와 같은 조건이다(#175=1 SR1-2·E).
+      AND (d.source_organization_id IS NULL OR EXISTS (
+            SELECT 1 FROM organizations o JOIN organization_members m ON m.organization_id = o.id
+            WHERE o.id = d.source_organization_id AND o.public_links_enabled AND m.user_id = d.owner_user_id))
   $$;
 
 

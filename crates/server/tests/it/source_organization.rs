@@ -7,7 +7,7 @@
 //! 결정 문구 밖의 경우 A~E는 부조종사 결정(#175 댓글 6459867577)을 따른다.
 
 use crate::common::{self, TestUser};
-use crate::sql_support::{World, attempt, code, made, workspace};
+use crate::sql_support::{World, attempt, code, fixture, made, workspace};
 
 use axum::http::{Method, StatusCode};
 use serde_json::json;
@@ -231,4 +231,84 @@ async fn a_remembered_note_used_as_a_template_stays_inside_that_organization() {
         .await;
         assert_eq!(reply.status, status, "{ws}: {:?}", reply.json);
     }
+}
+
+/// 공개 링크를 만들고 그 공개 경로를 돌려준다.
+async fn public_link(
+    app: &axum::Router,
+    user: &TestUser,
+    doc: Uuid,
+    status: StatusCode,
+) -> Option<String> {
+    let reply = common::send(
+        app,
+        Method::POST,
+        &format!("/api/documents/{doc}/public-links"),
+        Some(user),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(reply.status, status, "{doc}: {:?}", reply.json);
+    let url = reply.json["url"].as_str()?;
+    Some(format!("/api/public/{}", url.rsplit('/').next().unwrap()))
+}
+
+async fn opens(app: &axum::Router, public: &str) -> StatusCode {
+    common::send(app, Method::GET, public, None, None)
+        .await
+        .status
+}
+
+/// 조직의 공개 링크 스위치(설정 API 자체는 organizations_api가 시험한다).
+async fn set_public_links(w: &World, enabled: bool) {
+    let sql = if enabled {
+        "UPDATE fvoci.organizations SET public_links_enabled = true WHERE id = $1"
+    } else {
+        "UPDATE fvoci.organizations SET public_links_enabled = false WHERE id = $1"
+    };
+    fixture(sql, &[w.org]).await;
+}
+
+/// SR1-2: 출처 조직이 공개 링크를 끄면 기억한 노트도 새 링크를 만들 수 없고 기존 링크도 응답하지 않는다(공간 문서와
+/// 같이 열 때 조직 설정을 본다). 기억이 없는 노트는 지금대로다(D 지킴).
+#[tokio::test]
+async fn a_note_from_a_link_disabled_organization_follows_that_setting() {
+    let t = Two::new().await;
+    let app = common::app(&t.w.state);
+    let note = note_copy(&t.w, &t.w.owner, t.w.doc().await).await;
+    let fresh = t.w.note().await;
+    let public = public_link(&app, &t.w.owner, note, StatusCode::CREATED)
+        .await
+        .unwrap();
+    assert_eq!(opens(&app, &public).await, StatusCode::OK);
+    set_public_links(&t.w, false).await;
+    assert_eq!(opens(&app, &public).await, StatusCode::NOT_FOUND);
+    public_link(&app, &t.w.owner, note, StatusCode::CONFLICT).await;
+    public_link(&app, &t.w.owner, fresh, StatusCode::CREATED).await;
+    set_public_links(&t.w, true).await;
+    assert_eq!(opens(&app, &public).await, StatusCode::OK);
+}
+
+/// E(떠난 조직): 출처 조직을 떠나면 기억한 노트로 공개 링크를 만들 수 없다. 이미 만든 링크도 같은 조건으로 응답하지
+/// 않는다(막는 쪽으로 읽음).
+#[tokio::test]
+async fn leaving_the_source_organization_blocks_public_links() {
+    let t = Two::new().await;
+    let app = common::app(&t.w.state);
+    let doc = t.w.doc().await;
+    run(&t.w, &t.w.owner, ALLOW_COPY, &[doc]).await;
+    let member = t.w.member("member").await;
+    let note = note_copy(&t.w, &member, doc).await;
+    let public = public_link(&app, &member, note, StatusCode::CREATED)
+        .await
+        .unwrap();
+    run(
+        &t.w,
+        &t.w.owner,
+        "SELECT fvoci.app_remove_organization_member($1,$2,@ids)",
+        &[t.w.org, member.id.0],
+    )
+    .await;
+    assert_eq!(opens(&app, &public).await, StatusCode::NOT_FOUND);
+    public_link(&app, &member, note, StatusCode::CONFLICT).await;
 }
