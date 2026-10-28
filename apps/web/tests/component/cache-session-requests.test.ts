@@ -1,16 +1,135 @@
+import type { Me } from '@fvoci/api-client';
+import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
 import { request } from '$lib/shared/api';
-import { accountSafety, hideSession } from '$lib/features/feedback/feedback.svelte';
+import {
+  accountSafety,
+  accountSwitching,
+  hideSession,
+} from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
+import { router } from '$lib/router.svelte';
+import { setLocale } from '$lib/paraglide/runtime.js';
+
+import { TEST_ORGANIZATION } from './fixtures/organization';
+import App from '../../src/app/App.svelte';
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  router.guard = undefined;
+  router.navigate('/');
   me.userId = '';
   hideSession('account');
   accountSafety.switching = false;
 });
+
+const signedIn: Me = {
+  id: 'user-a',
+  display_name: '이전 사용자',
+  hour_cycle: '',
+  locale: 'ko',
+  time_zone: '',
+  week_start: '',
+  theme: 'system',
+  limits: {
+    max_title_chars: 200,
+    max_document_bytes: 2_000_000,
+    max_references_per_document: 500,
+    max_document_depth: 10,
+  },
+};
+
+/** App도 실제 api.me/workspaces/request를 쓴다. HTTP 응답만 컴포넌트 fixture로 대신한다. */
+async function appRequests() {
+  await setLocale('ko', { reload: false });
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  let now: Me | undefined = signedIn;
+  let reads = 0;
+  let hold = false;
+  let finish!: (response: Response) => void;
+  const fresh = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const path = String(input);
+    if (path === '/api/me')
+      return Promise.resolve(now === undefined ? new Response('', { status: 401 }) : json(now));
+    if (path === '/api/workspaces') {
+      reads += 1;
+      return hold ? fresh : Promise.resolve(json([]));
+    }
+    if (path === '/api/me/organizations') return Promise.resolve(json([TEST_ORGANIZATION]));
+    if (path === '/api/me/timer') return Promise.resolve(json(null));
+    return Promise.resolve(json([]));
+  });
+  const replace = vi.fn();
+  const reload = vi.fn();
+  router.navigate('/trash');
+  render(App, { replace, reload });
+  await screen.findByTestId('user-menu');
+  return {
+    replace,
+    reload,
+    setUser(value: Me | undefined) {
+      now = value;
+    },
+    reads: () => reads,
+    holdFresh() {
+      hold = true;
+    },
+    finishFresh() {
+      finish(json([]));
+    },
+  };
+}
+
+it('opens fresh reads only for the same user and keeps the screen hidden until they finish', async () => {
+  const app = await appRequests();
+  const previous = screen.getByTestId('user-menu');
+  app.holdFresh();
+  window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  expect(previous).not.toBeVisible();
+  await waitFor(() => {
+    expect(app.reads()).toBe(2);
+  });
+  expect(accountSwitching()).toBe(true);
+  await expect(request('PUT', '/api/me/settings', {})).rejects.toMatchObject({
+    code: 'account_changed',
+  });
+  app.finishFresh();
+  await waitFor(() => {
+    expect(screen.getByTestId('user-menu')).toBeVisible();
+  });
+  expect(accountSwitching()).toBe(false);
+  expect(app.replace).not.toHaveBeenCalled();
+});
+
+it.each(['other', 'anonymous'])(
+  'never opens fresh reads for a restored %s session',
+  async (kind) => {
+    const app = await appRequests();
+    app.setUser(kind === 'other' ? { ...signedIn, id: 'user-b' } : undefined);
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    await waitFor(() => {
+      expect(app.replace).toHaveBeenCalledWith('/trash');
+    });
+    expect(app.reads()).toBe(1);
+    expect(accountSwitching()).toBe(true);
+    await expect(request('GET', '/api/workspaces')).rejects.toMatchObject({
+      code: 'account_changed',
+    });
+  },
+);
 
 // #212 1행·00:25: 먼저 가린 실제 api.logout도 서버에 도달하고 응답을 읽어야 한다.
 it('allows only logout through the logout safety state, including its response', async () => {
