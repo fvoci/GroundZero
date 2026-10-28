@@ -23,7 +23,6 @@ pub mod records;
 pub mod references;
 pub mod revisions;
 pub mod saved_views;
-pub mod search_api;
 pub mod search_text;
 pub mod study;
 pub mod time_tracking;

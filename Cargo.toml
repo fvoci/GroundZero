@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aggregates/home", "crates/core", "crates/db", "crates/domains/work", "crates/http", "crates/server", "xtask"]
+members = ["crates/aggregates/home", "crates/aggregates/search", "crates/core", "crates/db", "crates/domains/work", "crates/http", "crates/server", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -18,6 +18,7 @@ fvoci-core = { path = "crates/core", version = "0.1.0" }
 fvoci-db = { path = "crates/db", version = "0.1.0" }
 fvoci-home = { path = "crates/aggregates/home", version = "0.1.0" }
 fvoci-http = { path = "crates/http", version = "0.1.0" }
+fvoci-search = { path = "crates/aggregates/search", version = "0.1.0" }
 fvoci-work = { path = "crates/domains/work", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

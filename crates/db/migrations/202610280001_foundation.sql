@@ -379,6 +379,65 @@ CREATE FUNCTION fvoci.app_search_enqueue_module() RETURNS trigger
 
 ALTER FUNCTION fvoci.app_search_enqueue_module() OWNER TO fvoci_migrator;
 
+-- 검색 제목 대체 경로의 집계 읽기(D-131·태비 초안 1). 호출자 RLS로 후보를 읽는다.
+-- 날짜·작성자·조직 범위와 60개 후보 상한은 색인 경로와 같다(D-101·D-102).
+-- 응답 직전 app_search_visible의 최종 접근 확인은 호출부에서 그대로 한다.
+CREATE FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid)
+    RETURNS TABLE(kind text, id uuid, title text, workspace_id uuid, item_id uuid)
+    LANGUAGE sql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+SELECT kind, id, title, workspace_id,
+                CASE WHEN r.item_id IS NOT NULL AND app_access('item', r.item_id) <> 'none' THEN r.item_id END
+         FROM (
+           SELECT 'document' AS kind, d.id, d.title, d.workspace_id, d.item_id, d.updated_at,
+                  (SELECT module_id FROM items WHERE id = d.item_id) AS module_id, NULL::text AS status_category,
+                  NULL::uuid[] AS assignees, d.updated_at AS at, NULL::date AS on_day, d.created_by
+           FROM documents d WHERE d.title ILIKE p_pattern AND d.deleted_at IS NULL
+           UNION ALL
+           SELECT 'task', t.id, t.title, t.workspace_id, t.item_id, t.updated_at,
+                  (SELECT module_id FROM items WHERE id = t.item_id), s.category,
+                  ARRAY(SELECT user_id FROM task_assignees WHERE task_id = t.id), NULL,
+                  coalesce(t.due_date, t.start_date), t.created_by
+           FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.title ILIKE p_pattern AND t.deleted_at IS NULL
+           UNION ALL
+           SELECT 'item', i.id, i.title, i.workspace_id, NULL, i.updated_at, i.module_id, NULL, NULL,
+                  i.updated_at, NULL, i.created_by
+           FROM items i WHERE i.title ILIKE p_pattern AND i.deleted_at IS NULL
+           UNION ALL
+           SELECT 'event', e.id, e.title, e.workspace_id, e.item_id, e.updated_at,
+                  (SELECT module_id FROM items WHERE id = e.item_id), NULL, NULL,
+                  e.starts_at, e.start_date, e.created_by
+           FROM events e WHERE e.title ILIKE p_pattern AND e.deleted_at IS NULL
+           UNION ALL
+           SELECT 'file', f.id, f.name, f.workspace_id, coalesce(f.item_id, d.item_id), f.updated_at,
+                  (SELECT module_id FROM items WHERE id = coalesce(f.item_id, d.item_id)), NULL, NULL,
+                  f.updated_at, NULL, f.created_by
+           FROM files f LEFT JOIN documents d ON d.id = f.document_id
+           WHERE f.name ILIKE p_pattern AND f.deleted_at IS NULL
+           UNION ALL
+           SELECT 'record', rc.id, rc.title, rc.workspace_id, rc.item_id, rc.updated_at,
+                  (SELECT module_id FROM items WHERE id = rc.item_id), NULL, NULL,
+                  CASE WHEN rc.occurred_on IS NULL THEN rc.updated_at END, rc.occurred_on, rc.created_by
+           FROM item_records rc WHERE rc.title ILIKE p_pattern
+         ) r
+         WHERE r.kind = ANY(p_kinds) AND (p_workspace::uuid IS NULL OR r.workspace_id = p_workspace)
+           AND (p_module::uuid IS NULL OR r.module_id = p_module)
+           AND (p_status_category::text IS NULL OR r.status_category = p_status_category)
+           AND (p_assignee::uuid IS NULL OR p_assignee = ANY (r.assignees))
+           AND ((p_from::date IS NULL AND p_to::date IS NULL)
+                OR (r.at >= coalesce(p_start::timestamptz, '-infinity') AND r.at < coalesce(p_end::timestamptz, 'infinity'))
+                OR (r.on_day >= coalesce(p_from::date, '-infinity') AND r.on_day <= coalesce(p_to::date, 'infinity')))
+           AND (p_author::uuid IS NULL OR r.created_by = p_author)
+           AND (r.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+                OR (r.workspace_id IS NULL AND (
+                    (r.kind = 'document' AND EXISTS (SELECT 1 FROM documents d WHERE d.id = r.id AND d.owner_user_id = app_user_id()))
+                    OR (r.kind = 'file' AND EXISTS (SELECT 1 FROM files f JOIN documents d ON d.id = f.document_id WHERE f.id = r.id AND d.owner_user_id = app_user_id())))))
+         ORDER BY r.updated_at DESC LIMIT 60
+    $$;
+
+ALTER FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid) OWNER TO fvoci_migrator;
+
 CREATE FUNCTION fvoci.app_search_visible(p_kinds text[], p_ids uuid[]) RETURNS TABLE(kind text, id uuid)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'

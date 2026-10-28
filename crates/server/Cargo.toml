@@ -23,6 +23,7 @@ fvoci-core.workspace = true
 fvoci-db.workspace = true
 fvoci-http.workspace = true
 fvoci-home.workspace = true
+fvoci-search.workspace = true
 fvoci-work.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
