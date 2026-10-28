@@ -4,7 +4,7 @@ import { taskData as work } from '$lib/features/tasks/detail-data';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api, NetworkError } from '$lib/api/client';
+import { NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';

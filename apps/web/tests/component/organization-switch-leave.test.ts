@@ -3,7 +3,6 @@ import { activityApi } from '$lib/features/activity/api';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';
 import { m } from '$lib/paraglide/messages.js';
