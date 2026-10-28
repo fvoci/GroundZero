@@ -289,7 +289,7 @@ fn to_any(value: &Value) -> Any {
     }
 }
 
-fn from_any(any: &Any) -> Value {
+pub(super) fn from_any(any: &Any) -> Value {
     match any {
         Any::Null | Any::Undefined | Any::Buffer(_) => Value::Null,
         Any::Bool(b) => Value::Bool(*b),

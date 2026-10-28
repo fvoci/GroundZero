@@ -773,6 +773,10 @@ CREATE FUNCTION fvoci.app_edit_comment(p_comment uuid, p_body text) RETURNS void
     v_body   text := btrim(coalesce(p_body, ''));
     v_access text;
   BEGIN
+    -- 댓글 만들기(답글의 부모 SHARE)와 같은 모듈 → 항목 → 댓글 순서다(#86).
+    PERFORM app_lock_item((SELECT coalesce(d.item_id, t.item_id) FROM comments c
+                          LEFT JOIN documents d ON d.id = c.document_id LEFT JOIN tasks t ON t.id = c.task_id
+                          WHERE c.id = p_comment));
     SELECT * INTO v_c FROM comments WHERE id = p_comment FOR NO KEY UPDATE;
     IF v_c.id IS NULL OR v_c.deleted_at IS NOT NULL OR app_comment_target_access(v_c.document_id, v_c.task_id) = 'none' THEN
       RAISE EXCEPTION 'comment not found' USING ERRCODE = 'P0002';
@@ -781,8 +785,6 @@ CREATE FUNCTION fvoci.app_edit_comment(p_comment uuid, p_body text) RETURNS void
       RAISE EXCEPTION 'only the author can edit a comment' USING ERRCODE = '42501';
     END IF;
     -- 보관과 직렬화(#86): 항목을 공유 잠금한 뒤 등급·보관을 다시 본다. 본인 댓글이라도 쓰기 등급이 필요하다(D-20).
-    PERFORM app_lock_item(coalesce((SELECT d.item_id FROM documents d WHERE d.id = v_c.document_id),
-                                   (SELECT t.item_id FROM tasks t WHERE t.id = v_c.task_id)));
     v_access := app_comment_target_access(v_c.document_id, v_c.task_id);
     IF v_access NOT IN ('owner', 'write') THEN
       IF app_comment_target_archived(v_c.document_id, v_c.task_id) THEN
@@ -808,6 +810,10 @@ CREATE FUNCTION fvoci.app_resolve_comment(p_comment uuid, p_resolved boolean) RE
     v_c      comments%ROWTYPE;
     v_access text;
   BEGIN
+    -- 해결·재개도 모듈 → 항목 → 댓글 순서로 보관 장벽을 잡는다(#86).
+    PERFORM app_lock_item((SELECT coalesce(d.item_id, t.item_id) FROM comments c
+                          LEFT JOIN documents d ON d.id = c.document_id LEFT JOIN tasks t ON t.id = c.task_id
+                          WHERE c.id = p_comment));
     SELECT * INTO v_c FROM comments WHERE id = p_comment FOR NO KEY UPDATE;
     v_access := app_comment_target_access(v_c.document_id, v_c.task_id);
     IF v_c.id IS NULL OR v_access = 'none' THEN
@@ -817,8 +823,6 @@ CREATE FUNCTION fvoci.app_resolve_comment(p_comment uuid, p_resolved boolean) RE
       RAISE EXCEPTION 'resolve the first comment of the thread' USING ERRCODE = '22023';
     END IF;
     -- 보관과 직렬화(#86): 항목을 공유 잠금한 뒤 등급·보관을 다시 본다. 스레드 해결은 쓰기라 쓰기 등급이 필요하다(D-20).
-    PERFORM app_lock_item(coalesce((SELECT d.item_id FROM documents d WHERE d.id = v_c.document_id),
-                                   (SELECT t.item_id FROM tasks t WHERE t.id = v_c.task_id)));
     v_access := app_comment_target_access(v_c.document_id, v_c.task_id);
     IF v_access NOT IN ('owner', 'write') THEN
       IF app_comment_target_archived(v_c.document_id, v_c.task_id) THEN
