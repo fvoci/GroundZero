@@ -129,7 +129,7 @@ it('publishes an anonymous shell result without making public views publish a ma
   expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
   view.unmount();
   localStorage.removeItem(sessionKey);
-  router.navigate('/public/public-token');
+  router.navigate('/p/public-token-1234');
   vi.spyOn(api, 'publicDocument').mockResolvedValue(publicDoc);
   render(App, { replace, reload });
   await screen.findByText(publicDoc.title);
@@ -190,6 +190,44 @@ it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
     expect(replace).not.toHaveBeenCalled();
   },
 );
+
+it('deduplicates return signals during verification and unsubscribes on unmount', async () => {
+  const view = render(App, { replace, reload });
+  await screen.findByText('이전 비밀 목록');
+  const check = deferred<Me | undefined>();
+  vi.spyOn(api, 'me').mockReturnValue(check.promise);
+  signalSession('user-b');
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  window.dispatchEvent(new Event('focus'));
+  document.dispatchEvent(new Event('visibilitychange'));
+  pageshow(false);
+  expect(api.me).toHaveBeenCalledTimes(2);
+  view.unmount();
+  signalSession(null);
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  window.dispatchEvent(new Event('focus'));
+  document.dispatchEvent(new Event('visibilitychange'));
+  pageshow(false);
+  expect(api.me).toHaveBeenCalledTimes(2);
+  check.resolve(undefined);
+  await Promise.resolve();
+  expect(replace).not.toHaveBeenCalled();
+});
+
+it('keeps authentication usable when session marker reads and writes are denied', async () => {
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    throw new Error('denied');
+  });
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('denied');
+  });
+  vi.spyOn(api, 'logout').mockResolvedValue('/signed-out');
+  await signedIn();
+  window.dispatchEvent(new Event('focus'));
+  expect(screen.getByText('이전 비밀 목록')).toBeVisible();
+  await logout();
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/signed-out'));
+});
 
 // #212 1~3, 부조종사 2026-10-29 00:25: 응답·이동보다 먼저 이전 화면을 가린다.
 it('clears session and organization before sending logout, and replaces history', async () => {

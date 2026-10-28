@@ -3,6 +3,7 @@
   // 조작부와 가상 키보드에 가리지 않게 한다. 토스트는 닫기 단추가 있고 Alt+T로 닿는다(svelte-sonner). 배너는 화면
   // 낭독기에 알린다.
   import { api } from '$lib/api/client';
+  import { publishSessionUser } from '$lib/features/auth/session-signal';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -30,6 +31,7 @@
     replace?: (url: string) => void;
     retryLogout?: () => void;
     retryRestore?: () => void;
+    syncSessionSignal?: () => boolean;
   }
 
   const {
@@ -38,6 +40,7 @@
     },
     retryLogout,
     retryRestore,
+    syncSessionSignal,
     reload = () => {
       window.location.reload();
     },
@@ -89,6 +92,7 @@
     let checking = false;
     let active = true;
     const recheck = (): void => {
+      if (syncSessionSignal?.()) return;
       const signedIn = currentUser.userId;
       if (signedIn === '' || sessionHidden || checking) return;
       checking = true;
@@ -96,6 +100,7 @@
         .me()
         .then((now) => {
           if (!active || accountSwitching() || currentUser.userId !== signedIn) return;
+          publishSessionUser(now?.id ?? null);
           if (now === undefined) {
             hideSession('signed-out');
             replace(router.path + router.hash);

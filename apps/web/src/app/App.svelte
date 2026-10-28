@@ -6,6 +6,11 @@
   import { api, ApiError, NetworkError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
+  import {
+    isSessionSignal,
+    publishSessionUser,
+    readSessionUser,
+  } from '$lib/features/auth/session-signal';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
@@ -74,6 +79,7 @@
   let sessionSequence = 0;
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
+  let signaledUser: string | null | undefined;
   onDestroy(() => {
     sessionSequence += 1;
     restoreSequence += 1;
@@ -84,6 +90,8 @@
     try {
       const me = verified ?? (await api.me());
       if (mine !== sessionSequence) return false;
+      if (verified === undefined && router.route.name !== 'public')
+        publishSessionUser(me?.id ?? null);
       if (me === undefined) {
         const info = await api.authInfo();
         if (mine !== sessionSequence) return false;
@@ -199,6 +207,7 @@
   });
   $effect(() => {
     const onFocus = (): void => {
+      if (syncSessionSignal() || sessionHidden) return;
       void refreshUnread();
     };
     window.addEventListener('focus', onFocus);
@@ -281,6 +290,7 @@
   async function logout(): Promise<void> {
     if (loggingOut) return;
     loggingOut = true;
+    publishSessionUser(null);
     restoreSequence += 1;
     restoringUserId = undefined;
     hideSession('logout');
@@ -311,6 +321,8 @@
     try {
       const now = await api.me();
       if (mine !== restoreSequence || !restoring()) return;
+      publishSessionUser(now?.id ?? null);
+      signaledUser = undefined;
       if (now === undefined) {
         flushSync(clearSession);
         hideSession('signed-out');
@@ -326,6 +338,7 @@
         const loaded = await load(now);
         if (mine !== restoreSequence || !restoring()) return;
         if (loaded) {
+          if (syncSessionSignal()) return;
           restoringUserId = undefined;
           accountSafety.restoring = false;
         } else {
@@ -346,7 +359,25 @@
   }
 
   function restorePage(event: PageTransitionEvent): void {
+    if (syncSessionSignal()) return;
     if (event.persisted && route.name !== 'public') void restoreSession();
+  }
+
+  /** 돌아올 때도 storage 배달 전에 읽는다. 사용자 불일치만 가리고 같은 사용자의 입력은 남긴다(D-96/#88). */
+  function syncSessionSignal(): boolean {
+    if (router.route.name === 'public') return false;
+    const expected = restoringUserId ?? currentUser.userId;
+    if (expected === '' || (sessionHidden && accountSafety.reason !== 'restore')) return false;
+    const userId = readSessionUser();
+    if (userId === undefined || userId === expected) return false;
+    if (restoring() && signaledUser === userId) return true;
+    signaledUser = userId;
+    void restoreSession();
+    return true;
+  }
+
+  function sessionSignal(event: StorageEvent): void {
+    if (isSessionSignal(event)) syncSessionSignal();
   }
 
   const route = $derived(router.route);
@@ -407,13 +438,14 @@
   });
 </script>
 
-<svelte:window onpageshow={restorePage} onpagehide={hideForCache} />
+<svelte:window onpageshow={restorePage} onpagehide={hideForCache} onstorage={sessionSignal} />
 
-{#if session.state !== 'loading' || sessionHidden}
+{#if route.name !== 'public' && (session.state !== 'loading' || sessionHidden)}
   <!-- 표시 언어(D-81)를 정한 뒤에 그린다(토스트 영역 라벨도 그 언어로). -->
   <FeedbackHost
     {replace}
     {reload}
+    {syncSessionSignal}
     retryLogout={() => void logout()}
     retryRestore={() => void restoreSession()}
   />
