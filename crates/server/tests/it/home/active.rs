@@ -1,22 +1,9 @@
 //! D-120·D-19와 집계 읽기의 HTTP 계약.
-use crate::common::{self, send};
+use super::fixtures::home;
+use crate::common;
 use crate::sql_support::{World, fixture, made};
-use axum::http::{Method, StatusCode};
-use serde_json::{Value, json};
+use serde_json::json;
 use uuid::Uuid;
-
-async fn home(w: &World, user: &common::TestUser) -> Value {
-    let response = send(
-        &common::app(&w.state),
-        Method::GET,
-        &format!("/api/me/home?organization_id={}&tz=UTC", w.org),
-        Some(user),
-        None,
-    )
-    .await;
-    assert_eq!(response.status, StatusCode::OK, "{:?}", response.json);
-    response.json
-}
 
 #[tokio::test]
 async fn active_items_require_active_status_and_current_organization_access() {
