@@ -280,10 +280,10 @@ it('keeps course episode settings dirty after restoring materials', async () => 
     await screen.findByRole('button', { name: m.courses_edit_episode_aria({ number: 1 }) }),
   );
   await edit('ep-title-e1', 'UNSAVED EPISODE TITLE');
-  await edit('ep-plan-e1', '2026-11-17');
+  await edit('ep-planned-e1', '2026-11-17');
   await restore();
   expect(field('ep-title-e1')).toHaveValue('UNSAVED EPISODE TITLE');
-  expect(field('ep-plan-e1')).toHaveValue('2026-11-17');
+  expect(field('ep-planned-e1')).toHaveValue('2026-11-17');
   expect(field('ep-materials-e1')).toHaveValue('RESTORED MATERIALS');
   expect(stored()).not.toContain('UNSAVED EPISODE TITLE');
   expect(stored()).not.toContain('2026-11-17');
@@ -292,7 +292,7 @@ it('keeps course episode settings dirty after restoring materials', async () => 
   expect(warns()).toBe(true);
   await edit('ep-title-e1', 'Episode 1');
   expect(warns()).toBe(true);
-  await edit('ep-plan-e1', '');
+  await edit('ep-planned-e1', '');
   expect(warns()).toBe(false);
 });
 
