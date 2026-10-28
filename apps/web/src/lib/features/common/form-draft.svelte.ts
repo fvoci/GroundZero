@@ -20,6 +20,8 @@ interface DraftOptions<T> {
   /** Stable form kind and container/parent ID; undefined disables preservation. */
   name: () => string | undefined;
   snapshot: () => T;
+  /** 저장할 칸만 고른다. 요청 완료 여부는 전체 snapshot으로 비교한다(D-27). */
+  storedSnapshot?: () => T;
   parse: (value: unknown) => T | undefined;
   restore: (value: T) => void;
   /** Clear visible input when its owner or target changes. */
@@ -81,7 +83,13 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     const dirty = options.dirty();
     const written = writeFormDraftAt(
       session.key,
-      dirty ? { savedAt: new SvelteDate().toISOString(), input: options.snapshot() } : undefined,
+      dirty
+        ? {
+            savedAt: new SvelteDate().toISOString(),
+            input:
+              options.storedSnapshot === undefined ? options.snapshot() : options.storedSnapshot(),
+          }
+        : undefined,
     );
     kept = !dirty || written;
   }
@@ -190,7 +198,11 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     }
     // Keep the offered copy if storage fails; never destroy the only durable copy.
     options.restore(entry.value.input);
-    const stored = session !== undefined && writeFormDraftAt(session.key, entry.value);
+    const value =
+      options.storedSnapshot === undefined
+        ? entry.value
+        : { ...entry.value, input: options.storedSnapshot() };
+    const stored = session !== undefined && writeFormDraftAt(session.key, value);
     restoredKey = stored ? undefined : entry.key;
     offers = offers.filter((candidate) => candidate.key !== entry.key);
     if (stored && entry.key !== session?.key) removeFormDraftAt(entry.key);
