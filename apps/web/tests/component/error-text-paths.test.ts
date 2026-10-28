@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { errorText } from '$lib/api/errors';
 import { me } from '$lib/me.svelte';
 import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
@@ -21,7 +22,7 @@ describe('error text paths', () => {
     me.weekStart = 'mon';
     me.hourCycle = 'h23';
     const save = vi
-      .spyOn(api, 'setDisplaySettings')
+      .spyOn(organizationsApi, 'setDisplaySettings')
       .mockRejectedValue(new ApiError(401, 'unauthorized', 'Unauthorized'));
     render(DisplaySettingsDialog, { props: { open: true } });
     await fireEvent.click(await screen.findByRole('button', { name: '저장' }));
