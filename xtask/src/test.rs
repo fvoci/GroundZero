@@ -177,6 +177,7 @@ fn supabase_stack(
         .up_services(&sh, &wanted)
         .and_then(|()| {
             let pg_port = services.host_port(&sh, "postgres", 5432)?;
+            compose::check_interrupt()?;
             crate::dev::check_seeds(root, services, &sh, pg_port)?;
             compose::check_interrupt()?;
             let urls = supabase.prepare_database(&sh)?;

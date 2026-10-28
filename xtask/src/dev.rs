@@ -192,6 +192,7 @@ const DEV_KEYCLOAK_PORT: u16 = 8180;
 /// 않는지 본다(`cargo xtask test`, #168). 개발 실행과 같은 [`seed`]를 거친다(파일 목록·순서, `dev-ids.sql` 앞붙임,
 /// 세션 설정, psql 옵션). `compose`는 PostgreSQL 서비스가 뜬 시험 프로젝트이고, DB는 그 서버에 따로 만들어 통합
 /// 시험의 DB를 건드리지 않는다(준비 SQL이 초기 관리자를 정한다). 시험 DB는 tmpfs라 프로젝트를 내릴 때 함께 사라진다.
+/// 하위 단계(새 DB, 기준 SQL, 첫·둘째 적용) 사이마다 중단 신호를 확인해 남은 단계를 건너뛴다.
 pub fn check_seeds(root: &Path, compose: &Compose, sh: &Shell, pg_port: u16) -> Result<()> {
     let database = format!("fvoci_dev_seed_{}", uuid::Uuid::now_v7().simple());
     println!("==> dev seed check on a new database {database}");
@@ -204,10 +205,12 @@ pub fn check_seeds(root: &Path, compose: &Compose, sh: &Shell, pg_port: u16) -> 
         ),
         "",
     )?;
+    compose::check_interrupt()?;
     compose::prepare_database(
         sh,
         &compose::DbUrls::at_database(&format!("127.0.0.1:{pg_port}"), &database),
     )?;
+    compose::check_interrupt()?;
     let issuer = issuer(DEV_KEYCLOAK_PORT);
     let empty = table_digests(compose, sh, &database)?;
     seed(root, compose, sh, &issuer, &database)?;
@@ -215,6 +218,7 @@ pub fn check_seeds(root: &Path, compose: &Compose, sh: &Shell, pg_port: u16) -> 
     if first == empty {
         bail!("dev seed check: the dev seeds changed nothing on a new database");
     }
+    compose::check_interrupt()?;
     println!("==> dev seeds again (must change nothing)");
     seed(root, compose, sh, &issuer, &database)?;
     let second = table_digests(compose, sh, &database)?;
