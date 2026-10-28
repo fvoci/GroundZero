@@ -6,6 +6,8 @@
 
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
+  import { organizationsApi } from '$lib/features/organizations/api';
+  import { invitationEmailError } from '$lib/features/organizations/fields';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
@@ -75,6 +77,7 @@
   const isAdmin = $derived(view?.can_manage_members === true);
 
   const inviteDraft = createFormDraft<{ email: string; role: Role }>({
+    preserve: false,
     name: () => `members-invite:${workspace.id}`,
     snapshot: () => ({ email: inviteEmail, role: inviteRole }),
     parse: (value) => {
@@ -154,7 +157,7 @@
     inviteError = undefined;
     inviting = true;
     try {
-      await api.invite(wsId, email, role);
+      await organizationsApi.invite(wsId, email, role);
       if (!inviteDraft.isOwner(attempt)) return;
       // 일반 완료는 토스트다(D-82).
       if (inviteDraft.complete(attempt)) notifyDone(m.members_invited({ email }));
@@ -166,7 +169,8 @@
         await load(wsId);
         if (inviteDraft.isOwner(attempt)) onchanged();
       }
-      if (inviteDraft.isCurrent(attempt)) inviteError = errorText(e, m.members_request_failed());
+      if (inviteDraft.isCurrent(attempt))
+        inviteError = invitationEmailError(e) ?? errorText(e, m.members_request_failed());
     } finally {
       if (inviteDraft.isOwner(attempt)) inviting = false;
     }
@@ -418,18 +422,6 @@
         </p>
         <!-- 초대·그룹 만들기는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공 안내와 실패 알림을
              숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
-        {#each inviteDraft.offers as offer (offer.key)}
-          <fieldset class="contents" disabled={inviting}>
-            <FormDraftOffer
-              onrestore={() => {
-                inviteDraft.restore(offer);
-              }}
-              ondiscard={() => {
-                inviteDraft.discard(offer);
-              }}
-            />
-          </fieldset>
-        {/each}
         <fieldset class="min-w-0" disabled={inviting}>
           <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
             <div class="flex min-w-60 flex-1 flex-col gap-1">

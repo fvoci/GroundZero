@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import { me } from '$lib/me.svelte';
@@ -86,7 +87,7 @@ async function submit(input: HTMLElement, value: string): Promise<void> {
 
 describe('members screen after a refresh of the same workspace', () => {
   it('keeps the input after the app passes a new object for the same id and reports the invite once as a toast', async () => {
-    const invite = vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    const invite = vi.spyOn(organizationsApi, 'invite').mockResolvedValue(invitation);
     const done = vi.spyOn(feedback, 'notifyDone');
     renderWithAppRefresh();
     const email = await screen.findByLabelText('이메일');
@@ -132,7 +133,7 @@ describe('members screen after a refresh of the same workspace', () => {
   });
 
   it('starts over when only the user changes on the same workspace', async () => {
-    vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    vi.spyOn(organizationsApi, 'invite').mockResolvedValue(invitation);
     const done = vi.spyOn(feedback, 'notifyDone');
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
     const email = await screen.findByLabelText('이메일');
@@ -153,7 +154,7 @@ describe('members screen after a refresh of the same workspace', () => {
   });
 
   it('still starts over for another workspace', async () => {
-    vi.spyOn(api, 'invite').mockResolvedValue(invitation);
+    vi.spyOn(organizationsApi, 'invite').mockResolvedValue(invitation);
     const done = vi.spyOn(feedback, 'notifyDone');
     const view = render(MembersScreen, {
       props: { workspace, meId: 'u1', onchanged: () => undefined },
