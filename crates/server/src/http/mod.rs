@@ -24,7 +24,7 @@ use fvoci_http::origin::{PublicOrigin, require_same_origin};
 use crate::features::{
     accounts, audit, comments, courses, documents, event_recurrence, events, export, files, home,
     item_profile, members, modules, organizations, public_links, records, references, revisions,
-    saved_views, search_api, study, time_tracking, trash, workspaces, zotero,
+    saved_views, study, time_tracking, trash, workspaces, zotero,
 };
 use crate::features::{activity, notifications};
 
@@ -102,6 +102,15 @@ impl FromRef<AppState> for fvoci_work::WorkState {
         Self {
             db: state.db.clone(),
             max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_search::SearchState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            search: state.search.clone(),
         }
     }
 }
@@ -301,7 +310,6 @@ async fn api_not_found() -> AppError {
         home::home,
         home::my_tasks,
         documents::shared_with_me,
-        search_api::search,
         notifications::notifications,
         notifications::unread_count,
         notifications::mark_read,
@@ -538,7 +546,6 @@ async fn api_not_found() -> AppError {
         trash::Purged,
         trash::SetRetention,
         trash::SetVersionRetention,
-        search_api::SearchResult,
         files::UploadTarget,
         files::CreateUpload,
         files::UploadView,
@@ -678,6 +685,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_search::SearchApi::openapi());
     }
 }
 
@@ -738,6 +746,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_search::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -1038,7 +1047,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/home", get(home::home))
         .route("/me/tasks", get(home::my_tasks))
         .route("/me/shared", get(documents::shared_with_me))
-        .route("/search", get(search_api::search))
         .route("/me/notifications", get(notifications::notifications))
         .route(
             "/me/notifications/unread-count",

@@ -14,12 +14,12 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::features::organizations::OrgScope;
-use crate::http::AppState;
-use crate::search::{SearchClient, day_number};
+use crate::SearchState;
+use crate::indexing::{SearchClient, day_number};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, UserId, WorkspaceId};
 use fvoci_db::UserTx;
+use fvoci_http::organization::OrgScope;
 
 /// 한 번에 돌려주는 결과 수.
 const MAX_RESULTS: usize = 20;
@@ -255,7 +255,7 @@ async fn scope_filter(
 ) -> Result<String, AppError> {
     let kind_filter = format!("kind IN {}", quote(kinds.iter().map(|k| (*k).to_owned())));
     if let Some(ws) = workspace {
-        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
+        fvoci_db::access::require_visible(tx, fvoci_db::access::Kind::Workspace, ws).await?;
         return Ok(format!("({kind_filter}) AND workspace_id = \"{}\"", ws.0));
     }
     let workspaces: Vec<Uuid> = sqlx::query_scalar("SELECT app_my_workspace_ids($1)")
@@ -350,7 +350,7 @@ fn parse_uuid(raw: Option<&str>) -> Option<Uuid> {
     responses((status = 200, body = [SearchResult]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "search")]
 pub async fn search(
-    State(state): State<AppState>,
+    State(state): State<SearchState>,
     OrgScope { user, organization }: OrgScope,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<SearchResult>>, AppError> {
@@ -369,7 +369,8 @@ pub async fn search(
     let mut tx = state.db.begin_as(user).await?;
     day_bounds(&mut tx, &mut wanted, query.tz.as_deref()).await?;
     if let Some(workspace) = query.workspace_id {
-        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, workspace).await?;
+        fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Workspace, workspace)
+            .await?;
         let in_scope: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = $1 AND organization_id = $2)",
         )
@@ -407,7 +408,7 @@ pub async fn search(
 /// 작성자·날짜 등 조건은 `filter`에 이미 들어 있고(D-102), 여기서는 호출자 권한으로 볼 수 있는지만 다시 본다(P-14).
 /// Meilisearch를 기다리는 동안 DB 트랜잭션을 열어 두지 않는다.
 async fn indexed(
-    state: &AppState,
+    state: &SearchState,
     client: &SearchClient,
     user: UserId,
     q: &str,
@@ -505,7 +506,7 @@ async fn fallback(
     wanted: &Filters,
 ) -> Result<Vec<SearchResult>, AppError> {
     if let Some(ws) = workspace {
-        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
+        fvoci_db::access::require_visible(tx, fvoci_db::access::Kind::Workspace, ws).await?;
     }
     let pattern = format!(
         "%{}%",

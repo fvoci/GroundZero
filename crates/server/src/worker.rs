@@ -13,10 +13,11 @@ use std::time::Duration;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-use crate::search::{SearchClient, drain, prepare};
+use crate::search::{SearchClient, TextExtractor};
 use crate::storage::Storage;
 use fvoci_core::error::AppError;
 use fvoci_db::{Db, needed_ids};
+use fvoci_search::indexing::{drain, prepare};
 
 /// 한 번 돈 결과(로그·테스트용).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -257,7 +258,7 @@ async fn drain_all(
 ) -> Result<i32, AppError> {
     let mut total = 0;
     for _ in 0..20 {
-        let n = drain(db, client, storage).await?;
+        let n = drain(db, client, &TextExtractor(storage)).await?;
         total += n;
         if n == 0 {
             break;
