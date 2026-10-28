@@ -68,39 +68,42 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
     print_recovery(&compose);
 
     // 기동이 중간에 실패하거나 중단돼도 일부 뜬 컨테이너를 아래에서 정리한다.
-    let result = compose.up(&sh).and_then(|()| {
-        let pg_port = compose.host_port(&sh, "postgres", 5432)?;
-        println!("==> postgres on 127.0.0.1:{pg_port}");
-        let urls = DbUrls::local(pg_port);
-        compose::prepare_database(&sh, &urls)?;
-        compose::check_interrupt()?;
-        crate::dev::check_seeds(root, &compose, &sh, pg_port)?;
-        let _env = sh.push_env("DATABASE_URL", &urls.app);
-        // 시험 데이터의 시각을 옮기는 일(예: 휴지통 만료)에만 쓰는 테스트 전용 마이그레이션 역할 주소.
-        let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
-        let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
-        let meili = compose.host_port(&sh, "meilisearch", 7700)?;
-        println!("==> meilisearch on 127.0.0.1:{meili}");
-        let _search = sh.push_env("FVOCI_TEST_SEARCH_URL", format!("http://127.0.0.1:{meili}"));
-        let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
-        let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
-        let s3 = compose.host_port(&sh, "seaweedfs", 8333)?;
-        println!("==> seaweedfs s3 on 127.0.0.1:{s3}");
-        let _s3 = sh.push_env("FVOCI_TEST_S3_ENDPOINT", format!("http://127.0.0.1:{s3}"));
-        let _s3_env = push_s3_credentials(&sh);
-        let _env2 = if oidc {
-            let kc = compose.host_port(&sh, "keycloak", 8080)?;
-            println!("==> keycloak on 127.0.0.1:{kc}");
-            Some(sh.push_env(
-                "FVOCI_TEST_OIDC_ISSUER",
-                format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM),
-            ))
-        } else {
-            None
-        };
-        compose::check_interrupt()?;
-        run_tests(&sh, oidc, true, false)
-    });
+    let result = compose::check_interrupt()
+        .and_then(|()| compose.up(&sh))
+        .and_then(|()| {
+            let pg_port = compose.host_port(&sh, "postgres", 5432)?;
+            println!("==> postgres on 127.0.0.1:{pg_port}");
+            let urls = DbUrls::local(pg_port);
+            compose::check_interrupt()?;
+            compose::prepare_database(&sh, &urls)?;
+            compose::check_interrupt()?;
+            crate::dev::check_seeds(root, &compose, &sh, pg_port)?;
+            let _env = sh.push_env("DATABASE_URL", &urls.app);
+            // 시험 데이터의 시각을 옮기는 일(예: 휴지통 만료)에만 쓰는 테스트 전용 마이그레이션 역할 주소.
+            let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
+            let _admin = sh.push_env("FVOCI_TEST_ADMIN_URL", &urls.admin);
+            let meili = compose.host_port(&sh, "meilisearch", 7700)?;
+            println!("==> meilisearch on 127.0.0.1:{meili}");
+            let _search = sh.push_env("FVOCI_TEST_SEARCH_URL", format!("http://127.0.0.1:{meili}"));
+            let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
+            let _search_key = sh.push_env("FVOCI_TEST_SEARCH_KEY", compose::SEARCH_TEST_KEY);
+            let s3 = compose.host_port(&sh, "seaweedfs", 8333)?;
+            println!("==> seaweedfs s3 on 127.0.0.1:{s3}");
+            let _s3 = sh.push_env("FVOCI_TEST_S3_ENDPOINT", format!("http://127.0.0.1:{s3}"));
+            let _s3_env = push_s3_credentials(&sh);
+            let _env2 = if oidc {
+                let kc = compose.host_port(&sh, "keycloak", 8080)?;
+                println!("==> keycloak on 127.0.0.1:{kc}");
+                Some(sh.push_env(
+                    "FVOCI_TEST_OIDC_ISSUER",
+                    format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM),
+                ))
+            } else {
+                None
+            };
+            compose::check_interrupt()?;
+            run_tests(&sh, oidc, true, false)
+        });
 
     let cleanup = if keep {
         println!(
@@ -157,6 +160,7 @@ fn supabase_stack(
         wanted.push("keycloak");
     }
     if session_pooler {
+        compose::check_interrupt()?;
         println!("==> kept Supavisor role-preparation regression (independent temporary stack)");
         cmd!(sh, "cargo test --package xtask --locked supabase::tests::kept_pooler_restarts_after_role_preparation -- --ignored --exact --test-threads=1 --nocapture")
             .run()
@@ -173,6 +177,8 @@ fn supabase_stack(
         "==> and this run's Supabase project: {}",
         supabase.recovery_command()
     );
+    // 선택 회귀 시험에서 `?`로 나가면 아직 아무것도 띄우지 않았으므로 정리할 것이 없다.
+    compose::check_interrupt()?;
     let result = services
         .up_services(&sh, &wanted)
         .and_then(|()| {
@@ -219,9 +225,9 @@ fn supabase_stack(
                 let _app = sh.push_env("DATABASE_URL", &urls.app);
                 run_tests(&sh, oidc, true, true)?;
             }
-            compose::check_interrupt()?;
             if session_pooler {
                 let pooler = supabase.host_port(&sh, "supavisor", 5432)?;
+                compose::check_interrupt()?;
                 println!("==> integration tests, app role through the Supavisor session pooler on 127.0.0.1:{pooler}");
                 let _app = sh.push_env("DATABASE_URL", DbUrls::supabase_session_pooler(pooler));
                 // 테넌트는 `postgres` DB 하나만 받는다. 새 DB를 만드는 테스트(백업·검색 대기열 등)는 직접 연결로.
