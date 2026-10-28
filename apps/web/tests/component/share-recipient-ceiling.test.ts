@@ -1,5 +1,5 @@
 import type { Workspace } from '@fvoci/api-client';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
@@ -24,8 +24,8 @@ const recipient = {
   user_id: 'outside-1',
   email: 'outside@example.test',
   display_name: 'Outside',
-  recipient_role: 'outside_member',
-  max_permission: 'read',
+  recipient_role: 'outside_member' as const,
+  max_permission: 'read' as const,
 };
 
 beforeEach(() => {
@@ -123,3 +123,61 @@ for (const [locale, role, cap] of [
     ).toBeInTheDocument();
   });
 }
+
+it('keeps Edit available for personal notes without applying a workspace recipient cap', async () => {
+  await setLocale('ko', { reload: false });
+  render(DocumentActions, {
+    doc: { ...ACCESS_DOCUMENT, placement: 'personal', workspace_id: null, reference: null },
+    workspaces: [],
+    onchanged: () => undefined,
+  });
+  await fireEvent.click(screen.getByRole('button', { name: m.documents_share_settings() }));
+  await fireEvent.input(await screen.findByLabelText(m.documents_email()), {
+    target: { value: recipient.email },
+  });
+  await fireEvent.keyDown(screen.getByRole('button', { name: m.documents_share_permission() }), {
+    key: 'ArrowDown',
+  });
+  expect(
+    await screen.findByRole('option', { name: m.documents_permission_write() }),
+  ).toBeInTheDocument();
+  expect(globalThis.fetch).not.toHaveBeenCalled();
+});
+
+it('ignores an earlier writable recipient reply after selecting an outside member', async () => {
+  await setLocale('ko', { reload: false });
+  let finish: ((response: Response) => void) | undefined;
+  const first = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  const fetch = vi.mocked(globalThis.fetch);
+  fetch.mockImplementationOnce(() => first);
+  render(DocumentActions, {
+    doc: ACCESS_DOCUMENT,
+    workspaces: [workspace],
+    onchanged: () => undefined,
+  });
+  await fireEvent.click(screen.getByRole('button', { name: m.documents_share_settings() }));
+  const email = await screen.findByLabelText(m.documents_email());
+  await fireEvent.input(email, { target: { value: 'writer@example.test' } });
+  await waitFor(() => {
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  await fireEvent.input(email, { target: { value: recipient.email } });
+  await screen.findByText('공간 밖 조직원');
+  finish?.(
+    new Response(
+      JSON.stringify({ ...recipient, recipient_role: 'member', max_permission: 'write' }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    ),
+  );
+  await fireEvent.keyDown(screen.getByRole('button', { name: m.documents_share_permission() }), {
+    key: 'ArrowDown',
+  });
+  await screen.findByRole('option', { name: m.documents_permission_read() });
+  expect(screen.queryByRole('option', { name: m.documents_permission_write() })).toBeNull();
+  expect(screen.getByText('공간 밖 조직원')).toBeInTheDocument();
+});
