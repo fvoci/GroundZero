@@ -62,6 +62,7 @@ mod references;
 mod restore_lock_order;
 mod restore_measure;
 mod revisions;
+mod room_memory_measure;
 mod saved_views;
 mod schedule;
 mod settings_contract;
