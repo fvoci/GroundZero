@@ -877,20 +877,38 @@ CREATE FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uu
 
 ALTER FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- D-88·SR1-14: id 산정부터 조직 잠금을 유지해 관리자 참여와 강등을 직렬화한다.
+-- D-88·SR1-14: id 산정부터 명령과 같은 조직·멤버·공간·문서 잠금을 유지한다.
 CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   BEGIN
-    PERFORM app_require_organization_admin(p_organization);
+    IF app_access('organization', p_organization) IS DISTINCT FROM 'owner' THEN
+      RETURN 0;
+    END IF;
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
-    PERFORM app_require_organization_admin(p_organization);
+    IF app_access('organization', p_organization) IS DISTINCT FROM 'owner' THEN
+      RETURN 0;
+    END IF;
+    PERFORM 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
     IF p_role <> 'member' OR NOT EXISTS (
       SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user AND role = 'admin'
     ) THEN
       RETURN 1;
     END IF;
+    -- 명령이 거절할 마지막 관리자 강등은 공간·문서 작업을 기다리지 않는다.
+    IF (SELECT count(*) FROM organization_members WHERE organization_id = p_organization AND role = 'admin') = 1 THEN
+      RETURN 1;
+    END IF;
+    PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
+    PERFORM 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE w.organization_id = p_organization AND m.user_id = p_user AND m.role_source = 'admin_join'
+      ORDER BY m.workspace_id FOR UPDATE OF m;
+    PERFORM 1 FROM documents d
+      WHERE EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                    WHERE m.workspace_id = d.workspace_id AND w.organization_id = p_organization
+                      AND m.user_id = p_user AND m.role_source = 'admin_join' AND m.previous_role IS NULL)
+      ORDER BY d.id FOR UPDATE;
     RETURN 1 + coalesce((SELECT sum(1 + 2 * app_unseen_assignees_bound(NULL, m.workspace_id, p_user)
       + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
          WHERE d.workspace_id = m.workspace_id AND s.grantee_user_id = p_user))
@@ -2022,7 +2040,7 @@ CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, 
       FROM task_dependencies d
       WHERE v_map ? d.predecessor_id::text AND v_map ? d.successor_id::text;
 
-    -- 항목 문서: 볼 수 있고 복제가 허용된 것(또는 소유 권한), 부모 먼저.
+    -- 항목 문서: 볼 수 있고 D-115의 복제 허용·소유 권한·작성자 예외에 드는 것, 부모 먼저.
     v_map := '{}'::jsonb;
     FOR v_row IN
       WITH RECURSIVE tree AS (
@@ -2035,7 +2053,7 @@ CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, 
       SELECT * FROM tree ORDER BY depth, position
     LOOP
       v_access := app_access('document', v_row.id);
-      IF v_access = 'none' OR (v_access <> 'owner' AND NOT v_row.allow_copy)
+      IF v_access = 'none' OR NOT app_document_can_export(v_row.id)
          OR (v_row.parent_id IS NOT NULL AND NOT v_map ? v_row.parent_id::text) THEN
         v_skipped := v_skipped + 1;
         CONTINUE;

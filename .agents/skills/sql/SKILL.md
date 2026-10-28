@@ -9,7 +9,7 @@ description: fvoci 기준 SQL(crates/db/migrations/의 영역 기준 파일 열 
 
 - 결정 기록: 바꾸려는 영역의 `docs/decisions/<주제>.md` 하나(맨 위 "현재 규칙 요약"). 접근·조직 경계는 `access.md`(D-111~D-115), id·멱등·기준 마이그레이션은 `database.md`(D-88·D-100), 나머지 번호는 `docs/decisions.md` 색인에서 찾는다.
 - `crates/db/migrations/`의 영역 기준 파일 열 개(`202610280001_foundation.sql`~`202610280010_access_grants.sql`, 의존 순서): 첫 파일의 머리말 주석과 바꾸려는 함수의 `CREATE FUNCTION` 본문(`grep -n '^CREATE FUNCTION fvoci.<이름>(' crates/db/migrations/*.sql`). 01 기반(사용자·세션·검색 큐), 02 조직·공간·항목과 접근 계산 전부, 03 문서, 04 파일, 05 업무·일정, 06 기록·학습, 07 시간, 08 댓글·알림·활동·감사, 09 예약 실행·휴지통, 10 RLS·정책·GRANT·REVOKE와 기준 마커다. 접근 등급은 `app_access(kind, id)`(none|read|write|owner) 하나이고, 새 행 id는 앱이 주는 `p_ids`에서 `app_id(p_ids, n)`으로 꺼내며 가변 개수는 짝이 되는 `*_ids` 함수가 센다.
-- 호출부: `crates/server/src/features/*.rs`(`rg -F 'app_<이름>('`)와 `crates/server/tests/`. 시험은 주제별로 `tests/it/<주제>.rs`(실행 파일 하나 `it/main.rs`)에 있고, 공유 DB 전체를 보는 작업을 부르는 시험만 `tests/` 바로 아래 각자의 실행 파일이다(`it/main.rs` 머리 주석). 공통 헬퍼는 `tests/common/mod.rs`, 앱 역할 직접 호출 헬퍼는 `tests/sql_support/mod.rs`, 기준 번호·체크섬 시험은 `tests/it/migration_baseline.rs`.
+- 호출부: `crates/server/src/features/*.rs`·`crates/domains/*/src/*.rs`(`rg -F 'app_<이름>('`)와 `crates/server/tests/`. 시험은 주제별로 `tests/it/<주제>.rs`(실행 파일 하나 `it/main.rs`)에 있고, 공유 DB 전체를 보는 작업을 부르는 시험만 `tests/` 바로 아래 각자의 실행 파일이다(`it/main.rs` 머리 주석). 공통 헬퍼는 `tests/common/mod.rs`, 앱 역할 직접 호출 헬퍼는 `tests/sql_support/mod.rs`, 기준 번호·체크섬 시험은 `tests/it/migration_baseline.rs`.
 
 ## 바꿀 때 지킬 것
 

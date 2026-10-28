@@ -1,6 +1,7 @@
+import { type EventKind, type EventView } from '$lib/features/events/model';
 // 일정 표시 글자. 시각은 보는 사람의 시간대로 보이고, 일정의 시간대가 다르면 그 기준 시각도 함께 적는다(D-50).
 // 글자는 부를 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다, D-81).
-import type { EventKind, EventView, RecurrenceRule } from '$lib/api/client';
+import type { RecurrenceRule } from '$lib/api/client';
 import { displaySettings, formatClock, formatDay, weekdays } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 

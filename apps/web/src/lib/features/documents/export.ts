@@ -195,7 +195,7 @@ export async function prepareExport(
     for (const [key, f] of fileRefs) {
       let name = f.id;
       try {
-        name = (await api.file(f.id)).file.name;
+        name = (await api.file(f.id)).name;
       } catch {
         // 이름을 볼 수 없으면 id로 둔다(아래 내용 요청도 대부분 실패한다).
       }

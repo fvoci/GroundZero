@@ -1718,7 +1718,7 @@
         "tags": [
           "documents"
         ],
-        "summary": "저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야\n하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일\n내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.",
+        "summary": "저장된 리비전 하나를 내보낸다(D-75·D-115). 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이\n있어야 하며 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일\n내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.",
         "operationId": "export_revision",
         "parameters": [
           {
@@ -2465,6 +2465,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -2523,7 +2536,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventConflict"
+                  "$ref": "#/components/schemas/EventWriteConflict"
                 }
               }
             }
@@ -2545,11 +2558,34 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -2598,6 +2634,19 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "uuid"
             }
           }
@@ -2675,6 +2724,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -2729,11 +2791,11 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "rule_conflict: current는 최신 일정, changed는 요청 본문의 rule 칸. 다른 상태 충돌은 ErrorBody.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventConflict"
+                  "$ref": "#/components/schemas/EventWriteConflict"
                 }
               }
             }
@@ -2746,7 +2808,7 @@
         "tags": [
           "files"
         ],
-        "summary": "파일과 모든 버전.",
+        "summary": "파일 메타데이터. 버전은 별도 모음으로 읽는다.",
         "operationId": "get_file",
         "parameters": [
           {
@@ -2765,7 +2827,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileDetail"
+                  "$ref": "#/components/schemas/FileView"
                 }
               }
             }
@@ -2782,7 +2844,90 @@
           }
         }
       },
-      "put": {
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다.",
+        "operationId": "trash_file",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTrashed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
         "tags": [
           "files"
         ],
@@ -2795,6 +2940,19 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "uuid"
             }
           }
@@ -2849,48 +3007,8 @@
                 }
               }
             }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "files"
-        ],
-        "summary": "휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다.",
-        "operationId": "trash_file",
-        "parameters": [
-          {
-            "name": "file_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileTrashed"
-                }
-              }
-            }
           },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "404": {
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -2972,6 +3090,51 @@
         }
       }
     },
+    "/api/files/{file_id}/versions": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "볼 수 있는 파일의 버전 목록(최신 먼저).",
+        "operationId": "file_versions",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VersionView"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/{file_id}/versions/{version}": {
       "delete": {
         "tags": [
@@ -2990,6 +3153,19 @@
             }
           },
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "version",
             "in": "path",
             "required": true,
@@ -3002,6 +3178,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -4501,6 +4687,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -5908,6 +6107,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -5956,7 +6168,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SavedViewConflict"
+                  "$ref": "#/components/schemas/ViewCreateConflict"
                 }
               }
             }
@@ -11842,11 +12054,34 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -11887,6 +12122,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -11896,6 +12144,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -11947,6 +12205,28 @@
             "schema": {
               "type": "integer",
               "format": "int32"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-content-sha256",
+            "in": "header",
+            "description": "조각 본문의 SHA-256(16진수)",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -12018,6 +12298,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -12066,7 +12359,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SavedViewConflict"
+                  "$ref": "#/components/schemas/ViewWriteConflict"
                 }
               }
             }
@@ -12088,11 +12381,34 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "있으면 세션 사용자와 비교한다(D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -14629,7 +14945,7 @@
           "events": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Event"
+              "$ref": "#/components/schemas/CalendarEvent"
             },
             "description": "기간 안에 회차가 있는 일정의 정의."
           },
@@ -14708,6 +15024,112 @@
           "submission",
           "revision_due",
           "deliverable"
+        ]
+      },
+      "CalendarEvent": {
+        "type": "object",
+        "description": "일정.",
+        "required": [
+          "id",
+          "item_id",
+          "workspace_id",
+          "kind",
+          "title",
+          "description",
+          "all_day",
+          "timezone",
+          "excluded_dates",
+          "version",
+          "access"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "all_day": {
+            "type": "boolean",
+            "description": "종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`."
+          },
+          "description": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "excluded_dates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "뺀 회차(일정 시간대 기준 날짜)."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CalendarEventKind"
+          },
+          "recurrence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule",
+                "description": "반복 규칙(없으면 한 번). 회차는 달력에서 펼친다."
+              }
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "일정에 지정한 시간대(IANA). 반복 계산의 기준이다."
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "CalendarEventKind": {
+        "type": "string",
+        "description": "일정 종류.",
+        "enum": [
+          "meeting",
+          "presentation",
+          "event"
         ]
       },
       "CalendarItem": {
@@ -15371,7 +15793,8 @@
           "size": {
             "type": "integer",
             "format": "int64",
-            "description": "전체 크기(바이트)."
+            "description": "전체 크기(바이트).",
+            "minimum": 1
           },
           "target": {
             "oneOf": [
@@ -15558,7 +15981,7 @@
           },
           "allow_copy": {
             "type": "boolean",
-            "description": "소유 권한자 외의 사람이 복제할 수 있는지 (D-20)."
+            "description": "소유 권한자·문서 작성자 외의 사람이 복제·내보내기·내려받기를 할 수 있는지(D-115)."
           },
           "body": {
             "type": "object",
@@ -15574,7 +15997,7 @@
           },
           "can_export": {
             "type": "boolean",
-            "description": "이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서\n문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다."
+            "description": "이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.\n그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다."
           },
           "can_manage": {
             "type": "boolean",
@@ -16058,22 +16481,6 @@
           }
         }
       },
-      "EventConflict": {
-        "type": "object",
-        "description": "409 응답: 서버 최신본.",
-        "required": [
-          "error",
-          "current"
-        ],
-        "properties": {
-          "current": {
-            "$ref": "#/components/schemas/Event"
-          },
-          "error": {
-            "type": "string"
-          }
-        }
-      },
       "EventInput": {
         "type": "object",
         "description": "일정 내용(만들기·고치기 공통).",
@@ -16089,7 +16496,8 @@
             "type": "boolean"
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "end_date": {
             "type": [
@@ -16120,7 +16528,9 @@
             "description": "RFC 3339 시각(오프셋 포함)."
           },
           "timezone": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1
           },
           "title": {
             "type": "string"
@@ -16184,6 +16594,17 @@
             "format": "date-time"
           }
         }
+      },
+      "EventWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_Event"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "일정 판 충돌은 최신 자원과 다른 칸, 보관·계정 충돌은 공통 오류다."
       },
       "ExcludeOccurrence": {
         "type": "object",
@@ -16263,25 +16684,6 @@
           "episode"
         ]
       },
-      "FileDetail": {
-        "type": "object",
-        "description": "파일과 모든 버전(최신 먼저).",
-        "required": [
-          "file",
-          "versions"
-        ],
-        "properties": {
-          "file": {
-            "$ref": "#/components/schemas/FileView"
-          },
-          "versions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VersionView"
-            }
-          }
-        }
-      },
       "FileId": {
         "type": "string",
         "format": "uuid",
@@ -16316,7 +16718,7 @@
         "properties": {
           "can_download": {
             "type": "boolean",
-            "description": "내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의\n`allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.\n아니어도 안전한 형식은 브라우저 안에서 볼 수 있다."
+            "description": "내려받을 수 있는지(D-115). 문서 첨부는 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이\n있어야 참이다(수정 권한만으로는 참이 아니다). 항목 첨부는 볼 수 있으면 참이다.\n아니어도 안전한 형식은 브라우저 안에서 볼 수 있다."
           },
           "can_write": {
             "type": "boolean",
@@ -19285,7 +19687,9 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1
           }
         }
       },
@@ -19588,22 +19992,6 @@
             "type": "integer",
             "format": "int32",
             "description": "고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다."
-          }
-        }
-      },
-      "SavedViewConflict": {
-        "type": "object",
-        "description": "409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다.",
-        "required": [
-          "error",
-          "current"
-        ],
-        "properties": {
-          "current": {
-            "$ref": "#/components/schemas/SavedView"
-          },
-          "error": {
-            "type": "string"
           }
         }
       },
@@ -20426,6 +20814,134 @@
           }
         }
       },
+      "StaleWrite_Event": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "일정.",
+            "required": [
+              "id",
+              "item_id",
+              "workspace_id",
+              "kind",
+              "title",
+              "description",
+              "all_day",
+              "timezone",
+              "excluded_dates",
+              "version",
+              "access"
+            ],
+            "properties": {
+              "access": {
+                "$ref": "#/components/schemas/Access"
+              },
+              "all_day": {
+                "type": "boolean",
+                "description": "종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`."
+              },
+              "description": {
+                "type": "string"
+              },
+              "end_date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ends_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "excluded_dates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "뺀 회차(일정 시간대 기준 날짜)."
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "item_id": {
+                "$ref": "#/components/schemas/ItemId"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/EventKind"
+              },
+              "recurrence": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RecurrenceRule",
+                    "description": "반복 규칙(없으면 한 번). 회차는 달력에서 펼친다."
+                  }
+                ]
+              },
+              "start_date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "starts_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "timezone": {
+                "type": "string",
+                "description": "일정에 지정한 시간대(IANA). 반복 계산의 기준이다."
+              },
+              "title": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "workspace_id": {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
       "StaleWrite_Option_TaskDependency": {
         "type": "object",
         "description": "판 충돌 409 본문.",
@@ -20550,6 +21066,64 @@
                 }
               }
             ]
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
+      "StaleWrite_SavedView": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "저장한 보기.",
+            "required": [
+              "id",
+              "name",
+              "config",
+              "version"
+            ],
+            "properties": {
+              "config": {
+                "type": "object"
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32",
+                "description": "고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다."
+              }
+            }
           },
           "error": {
             "type": "string",
@@ -22217,6 +22791,44 @@
             "format": "int32"
           }
         }
+      },
+      "ViewCreateConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ViewNameConflict"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "보기 생성의 동명 거절 또는 계정 전환 오류."
+      },
+      "ViewNameConflict": {
+        "type": "object",
+        "description": "같은 이름의 보기가 이미 있다. 판 충돌과 달리 만들기 요청은 보기를 바꾸지 않는다.",
+        "required": [
+          "error",
+          "current"
+        ],
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/SavedView"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ViewWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_SavedView"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "보기 수정의 판 충돌 또는 계정 전환 오류."
       },
       "Workspace": {
         "type": "object",

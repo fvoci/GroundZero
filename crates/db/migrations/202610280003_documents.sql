@@ -481,7 +481,7 @@ CREATE FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) RET
 
 ALTER FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) OWNER TO fvoci_migrator;
 
--- 복제(D-23·D-115). 소유 권한이 없으면 allow_copy가 켜진 문서만 복제한다. 템플릿에서 새 문서 만들기는 예외다.
+-- 복제(D-23·D-115). 소유 권한·문서 작성자 예외와 allow_copy를 따른다. 템플릿에서 새 문서 만들기는 예외다.
 -- 공간 간 복제는 같은 조직 안에서만 한다(D-114). 새 id 4: 문서, 원본 감사, 사본 감사, 사본 활동(개인 노트 사본은 3).
 CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
@@ -497,7 +497,7 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
     v_source  uuid;
   BEGIN
     SELECT * INTO v_src FROM documents WHERE id = p_doc;
-    IF v_access <> 'owner' AND NOT v_src.allow_copy AND NOT v_src.is_template THEN
+    IF v_access <> 'owner' AND NOT app_document_can_export(p_doc) AND NOT v_src.is_template THEN
       RAISE EXCEPTION 'copying is not allowed for this document' USING ERRCODE = '42501';
     END IF;
     -- 원본의 조직: 공간 문서는 그 공간의 조직, 개인 노트는 기억한 출처 조직(#175=1, 없으면 NULL).
@@ -599,7 +599,7 @@ CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_ite
 
 ALTER FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- D-115: allow_copy가 꺼진 문서는 소유 권한 외 누구도(수정 권한 포함) 내보내거나 첨부를 내려받지 못한다.
+-- D-115: 볼 수 있는 문서의 소유 권한·작성자는 allow_copy가 꺼져 있어도 내보내고 첨부를 내려받는다.
 CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -613,7 +613,8 @@ CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
     IF v_access = 'owner' THEN
       RETURN true;
     END IF;
-    RETURN coalesce((SELECT allow_copy FROM documents WHERE id = p_doc AND deleted_at IS NULL), false);
+    RETURN coalesce((SELECT allow_copy OR created_by = app_user_id()
+                     FROM documents WHERE id = p_doc AND deleted_at IS NULL), false);
   END
   $$;
 

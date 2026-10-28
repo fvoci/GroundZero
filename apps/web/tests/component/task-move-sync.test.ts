@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
@@ -6,7 +7,7 @@ import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskStatus, TaskView } from '$lib/api/client';
-import { api, ApiError, NetworkError } from '$lib/api/client';
+import { ApiError, NetworkError } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import {
   backTo,
@@ -197,7 +198,7 @@ describe('kanban save states', () => {
     vi.useFakeTimers();
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     done = vi.spyOn(feedback, 'notifyDone');
   });

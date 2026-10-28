@@ -1,6 +1,6 @@
+import { type EventView } from '$lib/features/events/model';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { EventView } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { describeWhen } from '$lib/features/events/labels';
 import { me } from '$lib/me.svelte';

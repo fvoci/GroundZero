@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { org } from '$lib/org.svelte';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
@@ -5,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskView } from '$lib/api/client';
-import { api, NetworkError } from '$lib/api/client';
+import { NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -92,7 +93,7 @@ function task(id: string, title: string): TaskView {
 
 async function mount(): Promise<void> {
   vi.spyOn(work, 'tasks').mockResolvedValue([]);
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
   await screen.findByTestId('task-board');

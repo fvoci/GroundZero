@@ -1,3 +1,7 @@
+import { filesApi } from '$lib/features/files/api';
+export { fileContentUrl } from '$lib/features/files/api';
+export type { FileView, FileVersionView, UploadView, FileTarget } from '$lib/features/files/model';
+import { parseEvent, type EventView } from '$lib/features/events/model';
 import { timeData } from '$lib/features/time/data';
 export { TIME_KINDS, parseTimeEntry } from '$lib/features/time/model';
 export type {
@@ -10,7 +14,7 @@ export type {
   TaskTimeView,
   ItemTimeView,
 } from '$lib/features/time/model';
-import { EXPECTED_USER, request, expectOk, fail, ApiError, NetworkError } from '$lib/shared/api';
+import { EXPECTED_USER, request, expectOk, fail } from '$lib/shared/api';
 export { ApiError, NetworkError } from '$lib/shared/api';
 import {
   access,
@@ -27,7 +31,7 @@ import {
   type Json,
 } from '$lib/shared/api/parse';
 export { statusCategory, parseTaskStatusDefinition } from '$lib/shared/api/parse';
-import { parseRule, type RecurrenceRule, type TaskStatus } from '$lib/features/tasks/model';
+import { type TaskStatus } from '$lib/features/tasks/model';
 export * from '$lib/features/tasks/model';
 // API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
 // 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — D-09 docs/decisions/delivery.md#d-09).
@@ -60,10 +64,6 @@ import type {
   OrgRole,
   StatusCategory,
 } from '@fvoci/api-client';
-
-import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
-import { untrack } from 'svelte';
-import { m } from '$lib/paraglide/messages.js';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {
@@ -127,17 +127,6 @@ function conflictCurrent(status: number, json: Json): DocumentView | undefined {
   }
   const body = rec(json, 'conflict');
   return withEtag(parseDocument(body.current), typeof body.etag === 'string' ? body.etag : null);
-}
-
-/**
- * 일정 반복 저장이 그사이 바뀐 규칙과 부딪혔다(409 `rule_conflict`, 감사 W21). 서버가 거절하며 함께 준 지금 일정을
- * 담는다. 반복 편집기는 저장 실패를 던진 오류로 받으므로 결과 값이 아니라 `ApiError`로 둔다.
- */
-export class RuleConflict extends ApiError {
-  constructor(readonly current: EventView) {
-    super(409, 'rule_conflict', 'rule_conflict');
-    this.name = 'RuleConflict';
-  }
 }
 
 function role(value: string): Role {
@@ -910,24 +899,6 @@ export interface ZoteroLibraryInput {
 
 // --- 저장한 보기 (D-31) ------------------------------------------------------
 
-export interface SavedViewView {
-  id: string;
-  name: string;
-  config: Record<string, unknown>;
-  /** 고칠 때 읽은 판을 보낸다(그사이 다른 탭이 저장했으면 409, D-103). */
-  version: number;
-}
-
-export function parseSavedView(value: Json): SavedViewView {
-  const o = rec(value, 'saved view');
-  return {
-    id: str(o, 'id'),
-    name: str(o, 'name'),
-    config: rec(o.config, 'view config'),
-    version: int(o, 'version'),
-  };
-}
-
 // --- 스터디 계획 (D-36) ------------------------------------------------------
 
 export const STUDY_UNIT_KINDS = ['pages', 'problems', 'minutes', 'items'] as const;
@@ -1123,67 +1094,6 @@ export function parseRevision(value: Json): RevisionView {
     ...parseRevisionSummary(o),
     body: parseDocNode(o.body),
     schema_version: int(o, 'schema_version'),
-  };
-}
-
-export const EVENT_KINDS = ['meeting', 'presentation', 'event'] as const;
-export type EventKind = (typeof EVENT_KINDS)[number];
-
-export interface EventView {
-  id: string;
-  item_id: string;
-  workspace_id: string;
-  kind: EventKind;
-  title: string;
-  description: string;
-  /** 종일이면 날짜(끝 포함), 아니면 UTC 시각. */
-  all_day: boolean;
-  start_date: string | null;
-  end_date: string | null;
-  starts_at: string | null;
-  ends_at: string | null;
-  /** 일정에 지정한 시간대(IANA). */
-  timezone: string;
-  recurrence: RecurrenceRule | null;
-  /** 뺀 회차(일정 시간대 기준 날짜). */
-  excluded_dates: string[];
-  version: number;
-  access: Access;
-}
-
-export interface EventInput {
-  kind: EventKind;
-  title: string;
-  description: string;
-  all_day: boolean;
-  start_date: string | null;
-  end_date: string | null;
-  starts_at: string | null;
-  ends_at: string | null;
-  timezone: string;
-}
-
-export function parseEvent(value: Json): EventView {
-  const o = rec(value, 'event');
-  const kind = EVENT_KINDS.find((k) => k === str(o, 'kind'));
-  if (kind === undefined) throw new TypeError(`unknown event kind ${str(o, 'kind')}`);
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    workspace_id: str(o, 'workspace_id'),
-    kind,
-    title: str(o, 'title'),
-    description: str(o, 'description'),
-    all_day: bool(o, 'all_day'),
-    start_date: optStr(o, 'start_date'),
-    end_date: optStr(o, 'end_date'),
-    starts_at: optStr(o, 'starts_at'),
-    ends_at: optStr(o, 'ends_at'),
-    timezone: str(o, 'timezone'),
-    recurrence: parseRule(o.recurrence),
-    excluded_dates: strings(o.excluded_dates),
-    version: int(o, 'version'),
-    access: access(str(o, 'access')),
   };
 }
 
@@ -1502,134 +1412,6 @@ function parseTrash(value: Json): TrashView {
   };
 }
 
-export interface FileView {
-  id: string;
-  name: string;
-  document_id: string | null;
-  item_id: string | null;
-  current_version: number;
-  size: number;
-  content_type: string;
-  updated_at: string;
-  can_write: boolean;
-  can_download: boolean;
-}
-
-export interface FileVersionView {
-  version: number;
-  size: number;
-  sha256: string;
-  content_type: string;
-  note: string;
-  uploaded_by: string;
-  uploaded_by_name: string | null;
-  created_at: string;
-}
-
-export interface UploadView {
-  id: string;
-  state: string;
-  name: string;
-  size: number;
-  chunk_bytes: number;
-  parts_total: number;
-  received: number[];
-  expires_at: string;
-  file_id: string | null;
-  version: number | null;
-  failure: string | null;
-}
-
-export interface FileTarget {
-  kind: 'document' | 'item';
-  id: string;
-}
-
-function parseFile(value: Json): FileView {
-  const o = rec(value, 'file');
-  return {
-    id: str(o, 'id'),
-    name: str(o, 'name'),
-    document_id: optStr(o, 'document_id'),
-    item_id: optStr(o, 'item_id'),
-    current_version: int(o, 'current_version'),
-    size: int(o, 'size'),
-    content_type: str(o, 'content_type'),
-    updated_at: str(o, 'updated_at'),
-    can_write: bool(o, 'can_write'),
-    can_download: bool(o, 'can_download'),
-  };
-}
-
-function parseVersion(value: Json): FileVersionView {
-  const o = rec(value, 'file version');
-  return {
-    version: int(o, 'version'),
-    size: int(o, 'size'),
-    sha256: str(o, 'sha256'),
-    content_type: str(o, 'content_type'),
-    note: str(o, 'note'),
-    uploaded_by: str(o, 'uploaded_by'),
-    uploaded_by_name: optStr(o, 'uploaded_by_name'),
-    created_at: str(o, 'created_at'),
-  };
-}
-
-function parseUpload(value: Json): UploadView {
-  const o = rec(value, 'upload');
-  const received = Array.isArray(o.received) ? o.received : [];
-  return {
-    id: str(o, 'id'),
-    state: str(o, 'state'),
-    name: str(o, 'name'),
-    size: int(o, 'size'),
-    chunk_bytes: int(o, 'chunk_bytes'),
-    parts_total: int(o, 'parts_total'),
-    received: received.filter((n): n is number => typeof n === 'number'),
-    expires_at: str(o, 'expires_at'),
-    file_id: optStr(o, 'file_id'),
-    version: optInt(o, 'version'),
-    failure: optStr(o, 'failure'),
-  };
-}
-
-/** 파일 내용 주소(같은 원점, 쿠키로 권한 확인). */
-export function fileContentUrl(id: string, version?: number, inline = false): string {
-  const params = new URLSearchParams();
-  if (version !== undefined) params.set('version', String(version));
-  if (inline) params.set('inline', 'true');
-  const query = params.toString();
-  return `/api/files/${encodeURIComponent(id)}/content${query === '' ? '' : `?${query}`}`;
-}
-
-/** 업로드 조각 보내기(날것 본문 + SHA-256 머리글). */
-async function putPart(upload: string, number: number, body: Blob, sha256: string): Promise<void> {
-  // 일반 JSON 요청 밖 업로드 재시도도 계정 전환 시 멈춘다.
-  if (untrack(accountSwitching))
-    throw new ApiError(409, 'account_changed', m.common_error_account_changed());
-  let response: Response;
-  try {
-    response = await fetch(`/api/uploads/${encodeURIComponent(upload)}/parts/${String(number)}`, {
-      method: 'PUT',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/octet-stream', 'x-content-sha256': sha256 },
-      body,
-    });
-  } catch (error: unknown) {
-    throw new NetworkError(error instanceof Error ? error.message : 'network error');
-  }
-  if (response.status !== 204) {
-    const text = await response.text();
-    let json: Json;
-    try {
-      json = text === '' ? null : JSON.parse(text);
-    } catch {
-      json = null;
-    }
-    fail(response.status, json);
-  }
-}
-
 export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
 
 export interface CourseDetailsView {
@@ -1925,58 +1707,7 @@ export const api = {
       (v) => str(rec(v, 'workspace deleted'), 'expires_at'),
       { name },
     ),
-  documentFiles: (id: string) =>
-    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/files`, (v) =>
-      parseList(v, parseFile),
-    ),
-  itemFiles: (id: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(id)}/files`, (v) => parseList(v, parseFile)),
-  file: (id: string) =>
-    expectOk('GET', `/api/files/${encodeURIComponent(id)}`, (v) => {
-      const o = rec(v, 'file detail');
-      return { file: parseFile(o.file), versions: parseList(o.versions, parseVersion) };
-    }),
-  renameFile: (id: string, name: string) =>
-    expectOk('PUT', `/api/files/${encodeURIComponent(id)}`, parseFile, { name }),
-  deleteFileVersion: (id: string, version: number) =>
-    expectOk('DELETE', `/api/files/${encodeURIComponent(id)}/versions/${String(version)}`, none),
-  trashFile: (id: string) => expectOk('DELETE', `/api/files/${encodeURIComponent(id)}`, parseBatch),
-  /**
-   * 업로드 시작. 같은 requestId면 같은 업로드(이어 올리기). `expectedUser`는 올리기를 시작한 화면의 사용자 id(서버가
-   * 세션과 다르면 409 `account_changed`, 만료된 업로드를 스스로 다시 시작할 때 새 계정의 업로드를 만들지 않게).
-   */
-  async createUpload(input: {
-    expectedUser: string;
-    requestId: string;
-    target?: FileTarget;
-    fileId?: string;
-    name: string;
-    note: string;
-    contentType: string;
-    size: number;
-  }): Promise<UploadView> {
-    const { status, json } = await request(
-      'POST',
-      '/api/uploads',
-      {
-        request_id: input.requestId,
-        target: input.target ?? null,
-        file_id: input.fileId ?? null,
-        name: input.name,
-        note: input.note,
-        content_type: input.contentType,
-        size: input.size,
-      },
-      { [EXPECTED_USER]: input.expectedUser },
-    );
-    if (status < 200 || status >= 300) fail(status, json);
-    return parseUpload(json);
-  },
-  upload: (id: string) => expectOk('GET', `/api/uploads/${encodeURIComponent(id)}`, parseUpload),
-  putUploadPart: putPart,
-  completeUpload: (id: string) =>
-    expectOk('POST', `/api/uploads/${encodeURIComponent(id)}/complete`, parseUpload),
-  abortUpload: (id: string) => expectOk('DELETE', `/api/uploads/${encodeURIComponent(id)}`, none),
+  ...filesApi,
   course: (item: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(item)}/course`, parseCourse),
   setCourseDetails: (item: string, details: CourseDetailsView) =>
@@ -2228,52 +1959,6 @@ export const api = {
     ),
   setDocumentTemplate: (id: string, template: boolean) =>
     expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/template`, none, { template }),
-  /** 이 항목의 내 저장한 보기(D-31). config는 화면이 해석한다. */
-  savedViews: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/views`, (v) =>
-      parseList(v, parseSavedView),
-    ),
-  /** 새 보기. 같은 이름이 이미 있으면(다른 탭이 먼저 만듦) 만들지 않고 그 보기를 돌려준다(D-103). */
-  async createView(
-    itemId: string,
-    requestId: string,
-    name: string,
-    config: Record<string, unknown>,
-  ): Promise<{ kind: 'saved'; view: SavedViewView } | { kind: 'exists'; current: SavedViewView }> {
-    const { status, json } = await request(
-      'POST',
-      `/api/items/${encodeURIComponent(itemId)}/views`,
-      {
-        request_id: requestId,
-        name,
-        config: { ...config },
-      },
-    );
-    const current = versionConflict(status, json);
-    if (current !== undefined) return { kind: 'exists', current: parseSavedView(current) };
-    if (status !== 201) fail(status, json);
-    return { kind: 'saved', view: parseSavedView(json) };
-  },
-  /** 기존 보기 고치기. 읽은 판이 지났으면(다른 탭이 저장함) 바꾸지 않고 최신 보기를 돌려준다(D-103). */
-  async updateView(
-    viewId: string,
-    requestId: string,
-    baseVersion: number,
-    config: Record<string, unknown>,
-  ): Promise<
-    { kind: 'saved'; view: SavedViewView } | { kind: 'conflict'; current: SavedViewView }
-  > {
-    const { status, json } = await request('PUT', `/api/views/${encodeURIComponent(viewId)}`, {
-      request_id: requestId,
-      base_version: baseVersion,
-      config: { ...config },
-    });
-    const current = versionConflict(status, json);
-    if (current !== undefined) return { kind: 'conflict', current: parseSavedView(current) };
-    if (status !== 200) fail(status, json);
-    return { kind: 'saved', view: parseSavedView(json) };
-  },
-  deleteView: (id: string) => expectOk('DELETE', `/api/views/${encodeURIComponent(id)}`, none),
   recordKinds: () => expectOk('GET', '/api/record-kinds', (v) => parseList(v, parseRecordKind)),
   itemRecords: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/records`, (v) =>
@@ -2355,58 +2040,6 @@ export const api = {
     expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
     ),
-  itemEvents: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/events`, (v) =>
-      parseList(v, parseEvent),
-    ),
-  event: (id: string) => expectOk('GET', `/api/events/${encodeURIComponent(id)}`, parseEvent),
-  createEvent: (itemId: string, requestId: string, input: EventInput) =>
-    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/events`, parseEvent, {
-      request_id: requestId,
-      ...input,
-    }),
-  /** 일정 고치기. 기준 버전이 지났으면 `{ kind: 'conflict', current }`. */
-  async updateEvent(
-    id: string,
-    baseVersion: number,
-    input: EventInput,
-  ): Promise<{ kind: 'updated'; event: EventView } | { kind: 'conflict'; current: EventView }> {
-    const { status, json } = await request('PUT', `/api/events/${encodeURIComponent(id)}`, {
-      base_version: baseVersion,
-      ...input,
-    });
-    if (status === 409 && isRecord(json) && json.current !== undefined)
-      return { kind: 'conflict', current: parseEvent(rec(json, 'conflict').current) };
-    if (status !== 200) fail(status, json);
-    return { kind: 'updated', event: parseEvent(json) };
-  },
-  deleteEvent: (id: string) => expectOk('DELETE', `/api/events/${encodeURIComponent(id)}`, none),
-  /**
-   * 일정 반복 정하기. `base`는 편집을 시작한 규칙(반복이 없었으면 null)이다. 그사이 규칙이 바뀌었으면 서버가 아무것도
-   * 바꾸지 않고 409 `rule_conflict`와 지금 일정으로 거절한다(`RuleConflict`).
-   */
-  async setEventRecurrence(
-    id: string,
-    rule: RecurrenceRule | null,
-    base: RecurrenceRule | null,
-  ): Promise<EventView> {
-    const { status, json } = await request(
-      'PUT',
-      `/api/events/${encodeURIComponent(id)}/recurrence`,
-      { rule: rule === null ? null : { ...rule }, base: base === null ? null : { ...base } },
-    );
-    if (
-      status === 409 &&
-      isRecord(json) &&
-      json.error === 'rule_conflict' &&
-      json.current !== undefined
-    )
-      throw new RuleConflict(parseEvent(json.current));
-    if (status !== 200) fail(status, json);
-    return parseEvent(json);
-  },
-  excludeOccurrence: (id: string, date: string) =>
-    expectOk('POST', `/api/events/${encodeURIComponent(id)}/exclusions`, none, { date }),
   trashDocument: (id: string) =>
     expectOk('DELETE', `/api/documents/${encodeURIComponent(id)}`, parseBatch),
   trashItem: (id: string) => expectOk('DELETE', `/api/items/${encodeURIComponent(id)}`, parseBatch),
