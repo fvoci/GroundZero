@@ -321,7 +321,7 @@ async fn sharing_and_moving_cannot_cross_organization_boundaries() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{doc}/move/preview"),
+        &format!("/api/documents/{doc}/move-plan"),
         Some(&w.owner),
         Some(json!({"target_workspace_id":destination})),
     )
@@ -331,8 +331,8 @@ async fn sharing_and_moving_cannot_cross_organization_boundaries() {
     assert_eq!(preview.status, StatusCode::CONFLICT, "{}", preview.json);
     let moved = send(
         &app,
-        Method::POST,
-        &format!("/api/documents/{doc}/move"),
+        Method::PUT,
+        &format!("/api/documents/{doc}/placement"),
         Some(&w.owner),
         Some(json!({"target_workspace_id":destination})),
     )

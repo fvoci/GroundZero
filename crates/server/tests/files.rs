@@ -324,7 +324,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     );
     let allowed = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": true })),
@@ -878,10 +878,10 @@ async fn moving_a_document_takes_its_attachments_along() {
     );
     let early_batch = early_trashed.json["batch_id"].as_str().unwrap().to_owned();
 
-    let uri = format!("/api/documents/{doc_id}/move");
+    let uri = format!("/api/documents/{doc_id}/placement");
     let preview = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice),
         Some(json!({ "target_workspace_id": dst })),
@@ -892,7 +892,7 @@ async fn moving_a_document_takes_its_attachments_along() {
     let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice),
         Some(json!({ "target_workspace_id": dst, "acknowledged": ack })),
