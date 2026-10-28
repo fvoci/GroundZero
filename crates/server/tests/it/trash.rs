@@ -375,7 +375,7 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
     .json;
     let bob_email = unique_email("bob");
     let bob = login_with_email(&state, "bob", &bob_email, true).await;
-    // D-114: 공간 밖 공유 대상도 같은 조직에 준비한다.
+    // D-20·D-114: 공간 밖 같은 조직 사람의 read 공유로 휴지통 가림을 확인한다. 본문 쓰기는 이 시험 대상이 아니다.
     let organization = common::organization_of_workspace(&ws).await;
     common::join_organization(organization, &bob, "member").await;
     let r = send(
@@ -383,7 +383,7 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
         Method::POST,
         &format!("/api/documents/{}/shares", doc["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "email": bob_email, "permission": "write", "organization_id": organization })),
+        Some(json!({ "email": bob_email, "permission": "read", "organization_id": organization })),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
@@ -717,13 +717,13 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let shared_uri = format!("/api/documents/{}", shared_doc["id"].as_str().unwrap());
     let carol_email = unique_email("carol");
     let carol = login_with_email(&state, "carol", &carol_email, true).await;
-    // D-114: 모듈 밖 공유도 조직 경계 안에서만 허용한다.
+    // D-20·D-114: 공유가 있다는 조건만 필요하므로 공간 밖 조직원에게 read를 준다.
     let organization = common::organization_of_workspace(&ws).await;
     common::join_organization(organization, &carol, "member").await;
     let r = post(
         &admin,
         format!("{shared_uri}/shares"),
-        json!({ "email": carol_email, "permission": "write", "organization_id": organization }),
+        json!({ "email": carol_email, "permission": "read", "organization_id": organization }),
     )
     .await;
     assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
