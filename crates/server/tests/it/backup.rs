@@ -523,8 +523,10 @@ async fn overlapping_restores(end: RestoreEnd) {
     );
     fixture.close().await.unwrap();
     let before = migrator_memberships(&mut admin, &member).await;
-    let exit_gate = std::sync::Arc::new(ProxyFault::DelaySecondMaintenanceExit {
-        exits: std::sync::atomic::AtomicUsize::new(0),
+    let app_a = format!("overlap-a-{}", uuid::Uuid::now_v7().simple());
+    let app_b = format!("overlap-b-{}", uuid::Uuid::now_v7().simple());
+    let exit_gate = std::sync::Arc::new(ProxyFault::DelayMaintenanceExit {
+        application: app_b.clone(),
         entered: tokio::sync::Notify::new(),
         resume: tokio::sync::Notify::new(),
     });
@@ -535,8 +537,6 @@ async fn overlapping_restores(end: RestoreEnd) {
     } else {
         None
     };
-    let app_a = format!("overlap-a-{}", uuid::Uuid::now_v7().simple());
-    let app_b = format!("overlap-b-{}", uuid::Uuid::now_v7().simple());
     let mut first_url = url.clone();
     first_url.set_path(&format!("/{}", first.name));
     first_url
@@ -630,7 +630,7 @@ async fn overlapping_restores(end: RestoreEnd) {
     assert!(result_b.is_ok(), "second restore: {result_b:?}");
     let mut backend = Vec::new();
     if proxy.is_some() {
-        let ProxyFault::DelaySecondMaintenanceExit { entered, .. } = &*exit_gate else {
+        let ProxyFault::DelayMaintenanceExit { entered, .. } = &*exit_gate else {
             unreachable!()
         };
         tokio::time::timeout(std::time::Duration::from_secs(30), entered.notified())
@@ -660,7 +660,7 @@ async fn overlapping_restores(end: RestoreEnd) {
     .unwrap();
     // 0개 단언은 그대로 둔다. Terminate를 보류한 채 관찰한 뒤 시험 연결을 정리한다.
     if let Some(proxy) = proxy {
-        let ProxyFault::DelaySecondMaintenanceExit { resume, .. } = &*exit_gate else {
+        let ProxyFault::DelayMaintenanceExit { resume, .. } = &*exit_gate else {
             unreachable!()
         };
         resume.notify_one();
@@ -678,14 +678,14 @@ enum ProxyFault {
         key: i64,
         injected: std::sync::atomic::AtomicBool,
     },
-    DelaySecondMaintenanceExit {
-        exits: std::sync::atomic::AtomicUsize,
+    DelayMaintenanceExit {
+        application: String,
         entered: tokio::sync::Notify,
         resume: tokio::sync::Notify,
     },
 }
 
-/// PostgreSQL 프레임에서 첫 반납의 잠금 대기 또는 두 번째 유지보수 Terminate를 조건으로 제어한다.
+/// PostgreSQL 프레임에서 첫 반납의 잠금 대기 또는 지정한 유지보수 Terminate를 조건으로 제어한다.
 /// 제품 경로·DB 객체를 바꾸거나 고정 sleep을 사용하지 않는다.
 async fn postgres_proxy(
     upstream: &url::Url,
@@ -729,6 +729,9 @@ async fn proxy_connection(
     use std::sync::atomic::Ordering;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    // SQLx의 실제 TCP 연결처럼 작은 프로토콜 프레임을 즉시 전달한다.
+    client.set_nodelay(true)?;
+    server.set_nodelay(true)?;
     let (mut client_read, mut client_write) = client.into_split();
     let (mut server_read, mut server_write) = server.into_split();
     let forward = async {
@@ -739,6 +742,16 @@ async fn proxy_connection(
         let maintenance = startup
             .windows(b"database\0postgres\0".len())
             .any(|part| part == b"database\0postgres\0");
+        let pause_exit = match &*fault {
+            ProxyFault::DelayMaintenanceExit { application, .. } => {
+                let parameter = format!("application_name\0{application}\0");
+                maintenance
+                    && startup
+                        .windows(parameter.len())
+                        .any(|part| part == parameter.as_bytes())
+            }
+            ProxyFault::ReturnLock { .. } => false,
+        };
         server_write.write_u32(length).await?;
         server_write.write_all(&startup).await?;
         loop {
@@ -760,11 +773,9 @@ async fn proxy_connection(
                     gated.extend(body);
                     body = gated;
                 }
-                ProxyFault::DelaySecondMaintenanceExit {
-                    exits,
-                    entered,
-                    resume,
-                } if tag == b'X' && maintenance && exits.fetch_add(1, Ordering::SeqCst) == 1 => {
+                ProxyFault::DelayMaintenanceExit {
+                    entered, resume, ..
+                } if tag == b'X' && pause_exit => {
                     entered.notify_one();
                     resume.notified().await;
                 }
@@ -783,6 +794,69 @@ async fn proxy_connection(
     let backward = tokio::io::copy(&mut server_read, &mut client_write);
     tokio::try_join!(forward, backward)?;
     Ok(())
+}
+
+#[tokio::test]
+async fn migrator_lock_release_closes_the_connection_even_when_unlocking_fails() {
+    use fvoci_core::error::AppError;
+    use fvoci_core::secret::Secret;
+    use fvoci_db::admin::{MIGRATOR_LOCK, lock_migrator, unlock_migrator};
+
+    let admin_url = url::Url::parse(&std::env::var("FVOCI_TEST_ADMIN_URL").unwrap()).unwrap();
+    for aborted in [false, true] {
+        let application = format!("unlock-failure-{}", uuid::Uuid::now_v7().simple());
+        let exit_gate = std::sync::Arc::new(ProxyFault::DelayMaintenanceExit {
+            application: application.clone(),
+            entered: tokio::sync::Notify::new(),
+            resume: tokio::sync::Notify::new(),
+        });
+        let mut upstream = admin_url.clone();
+        upstream
+            .query_pairs_mut()
+            .append_pair("application_name", &application);
+        let (endpoint, proxy) = postgres_proxy(&upstream, std::sync::Arc::clone(&exit_gate)).await;
+        let url = Secret::new(endpoint.to_string());
+        let mut lock = lock_migrator(&url).await.unwrap();
+        if aborted {
+            assert!(
+                sqlx::raw_sql("BEGIN; SELECT 1 / 0")
+                    .execute(&mut lock)
+                    .await
+                    .is_err()
+            );
+        } else {
+            let held: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+                .bind(MIGRATOR_LOCK)
+                .fetch_one(&mut lock)
+                .await
+                .unwrap();
+            assert!(held);
+        }
+        let result = unlock_migrator(lock).await;
+        let ProxyFault::DelayMaintenanceExit {
+            entered, resume, ..
+        } = &*exit_gate
+        else {
+            unreachable!()
+        };
+        // 소유하지 않은 잠금(false)과 SQL 오류 모두에서 실제 close가 Terminate를 보냈는지 확인한다.
+        tokio::time::timeout(std::time::Duration::from_secs(30), entered.notified())
+            .await
+            .expect("unlock failure skipped closing the maintenance connection");
+        resume.notify_one();
+        proxy.abort();
+        if aborted {
+            let AppError::Database(err) = result.unwrap_err() else {
+                panic!("expected an aborted transaction error")
+            };
+            assert_eq!(
+                err.as_database_error().and_then(|e| e.code()).as_deref(),
+                Some("25P02")
+            );
+        } else {
+            assert!(matches!(result, Err(AppError::Config(_))));
+        }
+    }
 }
 
 #[tokio::test]
