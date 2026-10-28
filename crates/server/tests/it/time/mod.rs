@@ -1,4 +1,5 @@
 mod contracts;
+mod privacy;
 mod time_tracking;
 mod timer_contention;
 mod timer_http;
