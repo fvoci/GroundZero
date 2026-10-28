@@ -1,3 +1,4 @@
+import { api } from '$lib/api/client';
 import { type SavedViewView } from '$lib/features/events/saved-views-model';
 import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';

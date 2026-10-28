@@ -1,3 +1,4 @@
+import { api } from '$lib/api/client';
 import { type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
 import type { Workspace } from '@fvoci/api-client';

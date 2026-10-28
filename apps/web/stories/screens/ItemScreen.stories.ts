@@ -1,3 +1,4 @@
+import { api } from '$lib/api/client';
 import { eventsApi } from '$lib/features/events/api';
 import type { ModuleKind } from '@fvoci/api-client';
 import type { Meta, StoryObj } from '@storybook/svelte';

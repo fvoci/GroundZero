@@ -6,7 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
-import { ApiError } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';

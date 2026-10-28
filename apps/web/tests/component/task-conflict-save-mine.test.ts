@@ -12,7 +12,7 @@ import type {
   TaskDetailView,
   TaskInput,
 } from '$lib/api/client';
-import { ApiError, TaskRuleConflict } from '$lib/api/client';
+import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { clashRows } from '$lib/features/tasks/labels';

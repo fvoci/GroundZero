@@ -7,7 +7,7 @@ import type { MockInstance } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskView } from '$lib/api/client';
-import { NetworkError } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';

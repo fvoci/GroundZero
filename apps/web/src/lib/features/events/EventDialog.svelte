@@ -8,7 +8,7 @@
   import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
 
   import type { RecurrenceRule } from '$lib/api/client';
-  import { api, ApiError } from '$lib/api/client';
+  import { ApiError } from '$lib/api/client';
   import { errorText, untilBeforeStart } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -128,7 +128,7 @@
     leaveGuard.keep();
     if (id === undefined) return;
     let cancelled = false;
-    api
+    eventsApi
       .event(id)
       .then((e) => {
         if (cancelled || user !== me.userId) return;

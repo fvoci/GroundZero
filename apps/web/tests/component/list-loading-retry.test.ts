@@ -1,3 +1,4 @@
+import { api } from '$lib/api/client';
 import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
