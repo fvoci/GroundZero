@@ -3533,11 +3533,6 @@ export interface components {
             version: number;
             workspace_id: components["schemas"]["WorkspaceId"];
         };
-        /** @description 409 응답: 서버 최신본. */
-        EventConflict: {
-            current: components["schemas"]["Event"];
-            error: string;
-        };
         /** @description 일정 내용(만들기·고치기 공통). */
         EventInput: {
             all_day: boolean;
@@ -3571,6 +3566,8 @@ export interface components {
             /** Format: date-time */
             starts_at?: string | null;
         };
+        /** @description 일정 판 충돌은 최신 자원과 다른 칸, 보관·계정 충돌은 공통 오류다. */
+        EventWriteConflict: components["schemas"]["StaleWrite_Event"] | components["schemas"]["ErrorBody"];
         /** @description 반복 일정의 회차 하나 빼기. */
         ExcludeOccurrence: {
             /** @description 일정 시간대 기준의 회차 날짜. */
@@ -4720,11 +4717,6 @@ export interface components {
              */
             version: number;
         };
-        /** @description 409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다. */
-        SavedViewConflict: {
-            current: components["schemas"]["SavedView"];
-            error: string;
-        };
         /** @description 재배치 미리보기: 옮길 후속 업무와, 바뀐 관계가 닿지만 날짜가 없어 계산하지 않은 업무(날짜를 지어내지 않는다). */
         SchedulePlan: {
             blocked?: null | components["schemas"]["PlanBlocked"];
@@ -4962,6 +4954,46 @@ export interface components {
             title: string;
         };
         /** @description 판 충돌 409 본문. */
+        StaleWrite_Event: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 일정. */
+            current: {
+                access: components["schemas"]["Access"];
+                /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+                all_day: boolean;
+                description: string;
+                end_date?: string | null;
+                /** Format: date-time */
+                ends_at?: string | null;
+                /** @description 뺀 회차(일정 시간대 기준 날짜). */
+                excluded_dates: string[];
+                /** Format: uuid */
+                id: string;
+                item_id: components["schemas"]["ItemId"];
+                kind: components["schemas"]["EventKind"];
+                recurrence?: null | components["schemas"]["RecurrenceRule"];
+                start_date?: string | null;
+                /** Format: date-time */
+                starts_at?: string | null;
+                /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+                timezone: string;
+                title: string;
+                /** Format: int32 */
+                version: number;
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
         StaleWrite_Option_TaskDependency: {
             /**
              * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
@@ -5001,6 +5033,32 @@ export interface components {
                 root_task_id: string;
                 rule?: null | components["schemas"]["RecurrenceRule"];
                 timezone: string;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_SavedView: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 저장한 보기. */
+            current: {
+                config: Record<string, never>;
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /**
+                 * Format: int32
+                 * @description 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
+                 */
+                version: number;
             };
             /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
             error: string;
@@ -5583,6 +5641,15 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        /** @description 보기 생성의 동명 거절 또는 계정 전환 오류. */
+        ViewCreateConflict: components["schemas"]["ViewNameConflict"] | components["schemas"]["ErrorBody"];
+        /** @description 같은 이름의 보기가 이미 있다. 판 충돌과 달리 만들기 요청은 보기를 바꾸지 않는다. */
+        ViewNameConflict: {
+            current: components["schemas"]["SavedView"];
+            error: string;
+        };
+        /** @description 보기 수정의 판 충돌 또는 계정 전환 오류. */
+        ViewWriteConflict: components["schemas"]["StaleWrite_SavedView"] | components["schemas"]["ErrorBody"];
         /** @description 워크스페이스 요약. */
         Workspace: {
             /**
@@ -7160,7 +7227,10 @@ export interface operations {
     update_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7209,7 +7279,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EventConflict"];
+                    "application/json": components["schemas"]["EventWriteConflict"];
                 };
             };
         };
@@ -7217,7 +7287,10 @@ export interface operations {
     delete_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7230,6 +7303,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -7260,7 +7341,10 @@ export interface operations {
     exclude_event_occurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7315,7 +7399,10 @@ export interface operations {
     set_event_recurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7364,7 +7451,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EventConflict"];
+                    "application/json": components["schemas"]["EventWriteConflict"];
                 };
             };
         };
@@ -8446,7 +8533,10 @@ export interface operations {
     create_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9397,7 +9487,10 @@ export interface operations {
     create_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9438,7 +9531,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedViewConflict"];
+                    "application/json": components["schemas"]["ViewCreateConflict"];
                 };
             };
         };
@@ -13090,7 +13183,10 @@ export interface operations {
     update_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 view_id: string;
             };
@@ -13131,7 +13227,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedViewConflict"];
+                    "application/json": components["schemas"]["ViewWriteConflict"];
                 };
             };
         };
@@ -13139,7 +13235,10 @@ export interface operations {
     delete_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 view_id: string;
             };
@@ -13152,6 +13251,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {

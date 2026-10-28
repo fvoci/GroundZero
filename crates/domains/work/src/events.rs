@@ -10,18 +10,19 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
-use time::{Date, Duration, OffsetDateTime};
+use time::{Date, Duration, OffsetDateTime, UtcOffset};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::WorkState;
 use crate::recurrence::RecurrenceRule;
 use fvoci_core::access::Grade;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{ItemId, WorkspaceId};
 use fvoci_core::validate::validate_title;
 use fvoci_core::validate::{format_date, parse_date, validate_text};
 use fvoci_db::{UserTx, is_unique_violation, new_ids};
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::CurrentUser;
 
 const MAX_DESCRIPTION_CHARS: usize = 10_000;
@@ -91,6 +92,7 @@ pub struct Event {
 pub struct EventInput {
     pub kind: EventKind,
     pub title: String,
+    #[schema(max_length = 10_000)]
     pub description: String,
     pub all_day: bool,
     pub start_date: Option<String>,
@@ -98,6 +100,7 @@ pub struct EventInput {
     /// RFC 3339 시각(오프셋 포함).
     pub starts_at: Option<String>,
     pub ends_at: Option<String>,
+    #[schema(min_length = 1, max_length = 64)]
     pub timezone: String,
 }
 
@@ -118,11 +121,12 @@ pub struct UpdateEvent {
     pub event: EventInput,
 }
 
-/// 409 응답: 서버 최신본.
+/// 일정 판 충돌은 최신 자원과 다른 칸, 보관·계정 충돌은 공통 오류다.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct EventConflict {
-    pub error: &'static str,
-    pub current: Event,
+#[serde(untagged)]
+pub enum EventWriteConflict {
+    Stale(Box<StaleWrite<Event>>),
+    State(ErrorBody),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -172,11 +176,18 @@ struct Valid {
 }
 
 fn parse_instant(raw: Option<&str>, field: &str) -> Result<OffsetDateTime, AppError> {
-    raw.and_then(|s| OffsetDateTime::parse(s.trim(), &Rfc3339).ok())
-        .ok_or_else(|| {
-            AppError::BadRequest(format!(
-                "{field} must be a time like 2026-10-17T09:00:00+09:00"
-            ))
+    let raw = raw.ok_or_else(|| {
+        AppError::invalid(field, InvalidReason::Required, None, "a time is required")
+    })?;
+    OffsetDateTime::parse(raw.trim(), &Rfc3339)
+        .map(|instant| instant.to_offset(UtcOffset::UTC))
+        .map_err(|_| {
+            AppError::invalid(
+                field,
+                InvalidReason::InvalidFormat,
+                None,
+                "use an RFC 3339 time with an offset",
+            )
         })
 }
 
@@ -184,48 +195,26 @@ fn validate(state: &WorkState, input: &EventInput) -> Result<Valid, AppError> {
     let title = validate_title(&input.title, state.max_title_chars, "title")?;
     let description = validate_text(&input.description, MAX_DESCRIPTION_CHARS, "description")?;
     let timezone = input.timezone.trim().to_owned();
-    if timezone.is_empty() || timezone.len() > 64 {
-        return Err(AppError::BadRequest("timezone must be an IANA name".into()));
+    if timezone.is_empty() {
+        return Err(AppError::invalid(
+            "timezone",
+            InvalidReason::Required,
+            None,
+            "timezone is required",
+        ));
     }
-    let too_long = || AppError::BadRequest(format!("an event lasts at most {MAX_EVENT_DAYS} days"));
+    if timezone.len() > 64 {
+        return Err(AppError::invalid(
+            "timezone",
+            InvalidReason::TooLong,
+            Some(64),
+            "timezone must be an IANA name",
+        ));
+    }
     let when = if input.all_day {
-        if input.starts_at.is_some() || input.ends_at.is_some() {
-            return Err(AppError::BadRequest(
-                "an all-day event has dates, not times".into(),
-            ));
-        }
-        let start = parse_date(input.start_date.as_deref(), "start_date")?
-            .ok_or_else(|| AppError::BadRequest("start_date is required".into()))?;
-        let end = parse_date(input.end_date.as_deref(), "end_date")?.unwrap_or(start);
-        if end < start {
-            return Err(AppError::BadRequest(
-                "end_date must not be before start_date".into(),
-            ));
-        }
-        if (end - start).whole_days() >= MAX_EVENT_DAYS {
-            return Err(too_long());
-        }
-        When::AllDay { start, end }
+        all_day(input)?
     } else {
-        if input.start_date.is_some() || input.end_date.is_some() {
-            return Err(AppError::BadRequest(
-                "a timed event has times, not dates".into(),
-            ));
-        }
-        let starts = parse_instant(input.starts_at.as_deref(), "starts_at")?;
-        let ends = parse_instant(input.ends_at.as_deref(), "ends_at")?;
-        if ends < starts {
-            return Err(AppError::BadRequest(
-                "ends_at must not be before starts_at".into(),
-            ));
-        }
-        if ends - starts > Duration::days(MAX_EVENT_DAYS) {
-            return Err(too_long());
-        }
-        When::Timed {
-            start: starts,
-            end: ends,
-        }
+        timed(input)?
     };
     Ok(Valid {
         title,
@@ -233,6 +222,98 @@ fn validate(state: &WorkState, input: &EventInput) -> Result<Valid, AppError> {
         when,
         timezone,
     })
+}
+
+fn all_day(input: &EventInput) -> Result<When, AppError> {
+    for (field, value) in [("starts_at", &input.starts_at), ("ends_at", &input.ends_at)] {
+        if value.is_some() {
+            return Err(AppError::invalid(
+                field,
+                InvalidReason::InvalidFormat,
+                None,
+                "an all-day event has dates, not times",
+            ));
+        }
+    }
+    let start = parse_date(input.start_date.as_deref(), "start_date")?.ok_or_else(|| {
+        AppError::invalid(
+            "start_date",
+            InvalidReason::Required,
+            None,
+            "start_date is required",
+        )
+    })?;
+    let end = parse_date(input.end_date.as_deref(), "end_date")?.unwrap_or(start);
+    if end < start || (end - start).whole_days() >= MAX_EVENT_DAYS {
+        return Err(AppError::invalid(
+            "end_date",
+            InvalidReason::OutOfRange,
+            Some(MAX_EVENT_DAYS.unsigned_abs()),
+            "the end date must follow the start within 366 days",
+        ));
+    }
+    Ok(When::AllDay { start, end })
+}
+
+fn timed(input: &EventInput) -> Result<When, AppError> {
+    for (field, value) in [
+        ("start_date", &input.start_date),
+        ("end_date", &input.end_date),
+    ] {
+        if value.is_some() {
+            return Err(AppError::invalid(
+                field,
+                InvalidReason::InvalidFormat,
+                None,
+                "a timed event has times, not dates",
+            ));
+        }
+    }
+    let start = parse_instant(input.starts_at.as_deref(), "starts_at")?;
+    let end = parse_instant(input.ends_at.as_deref(), "ends_at")?;
+    if end < start || end - start > Duration::days(MAX_EVENT_DAYS) {
+        return Err(AppError::invalid(
+            "ends_at",
+            InvalidReason::OutOfRange,
+            Some(MAX_EVENT_DAYS.unsigned_abs()),
+            "the end time must follow the start within 366 days",
+        ));
+    }
+    Ok(When::Timed { start, end })
+}
+
+/// DB에서 돌려주는 UTC 표기와 맞춰 같은 시각의 오프셋 차이를 바뀐 칸으로 세지 않는다.
+fn sent_fields(input: &EventInput, valid: &Valid) -> Result<serde_json::Value, AppError> {
+    let instant = |value: Option<OffsetDateTime>| {
+        value
+            .map(|value| {
+                value
+                    .format(&Rfc3339)
+                    .map_err(|e| AppError::Config(format!("format event time: {e}")))
+            })
+            .transpose()
+    };
+    Ok(serde_json::json!({
+        "kind": input.kind, "title": valid.title, "description": valid.description,
+        "all_day": input.all_day, "start_date": format_date(valid.when.start_date()),
+        "end_date": format_date(valid.when.end_date()), "starts_at": instant(valid.when.starts_at())?,
+        "ends_at": instant(valid.when.ends_at())?, "timezone": valid.timezone
+    }))
+}
+
+fn event_error(error: sqlx::Error) -> AppError {
+    if let Some(db) = error.as_database_error()
+        && db.code().as_deref() == Some("22023")
+        && db.message() == "unknown time zone"
+    {
+        return AppError::invalid(
+            "timezone",
+            InvalidReason::InvalidFormat,
+            None,
+            "unknown time zone",
+        );
+    }
+    AppError::from_db_function(error)
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -347,7 +428,7 @@ pub async fn get(
 
 /// 일정 만들기(항목 쓰기 권한). 같은 `request_id`로 재시도하면 같은 일정을 돌려준다.
 #[utoipa::path(post, path = "/api/items/{item_id}/events", operation_id = "create_event",
-    params(("item_id" = String, Path, format = Uuid)), request_body = CreateEvent,
+    params(("item_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = CreateEvent,
     responses((status = 201, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "events")]
 pub async fn create(
@@ -376,7 +457,7 @@ pub async fn create(
         .bind(new_ids(3))
         .fetch_one(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(event_error)?;
         let event = load(&mut tx, id).await?;
         tx.commit().await?;
         Ok(event)
@@ -392,9 +473,9 @@ pub async fn create(
 
 /// 일정 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본.
 #[utoipa::path(put, path = "/api/events/{event_id}", operation_id = "update_event",
-    params(("event_id" = String, Path, format = Uuid)), request_body = UpdateEvent,
+    params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = UpdateEvent,
     responses((status = 200, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = EventConflict)), tag = "events")]
+              (status = 404, body = ErrorBody), (status = 409, body = EventWriteConflict)), tag = "events")]
 pub async fn update(
     State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
@@ -403,6 +484,7 @@ pub async fn update(
 ) -> Result<Response, AppError> {
     let valid = validate(&state, &input.event)?;
     let mut tx = state.db.begin_as(user).await?;
+    let sent = sent_fields(&input.event, &valid)?;
     let outcome: String = sqlx::query_scalar(
         "SELECT app_update_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
     )
@@ -420,18 +502,11 @@ pub async fn update(
     .bind(new_ids(2))
     .fetch_one(tx.conn())
     .await
-    .map_err(AppError::from_db_function)?;
+    .map_err(event_error)?;
     let event = load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(EventConflict {
-                error: "conflict",
-                current: event,
-            }),
-        )
-            .into_response()
+        StaleWrite::new("conflict", "the event changed", event, &sent).into_response()
     } else {
         Json(event).into_response()
     })
@@ -439,8 +514,8 @@ pub async fn update(
 
 /// 일정 지우기(쓰기 권한). 행은 남기고 목록·달력에서 뺀다.
 #[utoipa::path(delete, path = "/api/events/{event_id}", operation_id = "delete_event",
-    params(("event_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "events")]
 pub async fn delete(
     State(state): State<WorkState>,
@@ -453,7 +528,7 @@ pub async fn delete(
         .bind(new_ids(2))
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(event_error)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

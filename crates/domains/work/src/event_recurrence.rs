@@ -10,11 +10,12 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::WorkState;
-use crate::events::{Event, EventConflict};
+use crate::events::{Event, EventWriteConflict};
 use crate::recurrence::RecurrenceRule;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::validate::parse_date;
 use fvoci_db::new_ids;
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::CurrentUser;
 
 /// 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
@@ -28,9 +29,9 @@ pub struct SetEventRecurrence {
 /// 일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해
 /// 그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).
 #[utoipa::path(put, path = "/api/events/{event_id}/recurrence", operation_id = "set_event_recurrence",
-    params(("event_id" = String, Path, format = Uuid)), request_body = SetEventRecurrence,
+    params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = SetEventRecurrence,
     responses((status = 200, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = EventConflict)), tag = "events")]
+              (status = 404, body = ErrorBody), (status = 409, body = EventWriteConflict)), tag = "events")]
 pub async fn set_event(
     State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
@@ -61,14 +62,13 @@ pub async fn set_event(
     let event = crate::events::load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(EventConflict {
-                error: "rule_conflict",
-                current: event,
-            }),
+        StaleWrite::new(
+            "rule_conflict",
+            "the recurrence rule changed",
+            event,
+            &serde_json::json!({ "recurrence": rule }),
         )
-            .into_response()
+        .into_response()
     } else {
         Json(event).into_response()
     })
@@ -83,7 +83,7 @@ pub struct ExcludeOccurrence {
 
 /// 반복 일정의 회차 하나 빼기(쓰기 권한). 이미 뺐으면 그대로.
 #[utoipa::path(post, path = "/api/events/{event_id}/exclusions", operation_id = "exclude_event_occurrence",
-    params(("event_id" = String, Path, format = Uuid)), request_body = ExcludeOccurrence,
+    params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = ExcludeOccurrence,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "events")]
 pub async fn exclude_event(
@@ -92,8 +92,9 @@ pub async fn exclude_event(
     Path(id): Path<Uuid>,
     Json(input): Json<ExcludeOccurrence>,
 ) -> Result<StatusCode, AppError> {
-    let date = parse_date(Some(&input.date), "date")?
-        .ok_or_else(|| AppError::BadRequest("date is required".into()))?;
+    let date = parse_date(Some(&input.date), "date")?.ok_or_else(|| {
+        AppError::invalid("date", InvalidReason::Required, None, "date is required")
+    })?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_exclude_event_occurrence($1, $2, $3)")
         .bind(id)

@@ -2,9 +2,8 @@ import { expectOk, fail, request } from '$lib/shared/api';
 import { isRecord, parseList, type Json } from '$lib/shared/api/parse';
 import { parseSavedView, type SavedViewView } from './saved-views-model';
 
-function versionConflict(status: number, json: Json): unknown {
-  if (status !== 409 || !isRecord(json) || json.current === undefined) return undefined;
-  return json.current;
+function viewConflict(status: number, json: Json, error: 'exists' | 'conflict'): unknown {
+  return status === 409 && isRecord(json) && json.error === error ? json.current : undefined;
 }
 
 const none = (): undefined => undefined;
@@ -31,7 +30,7 @@ export const savedViewsApi = {
         config: { ...config },
       },
     );
-    const current = versionConflict(status, json);
+    const current = viewConflict(status, json, 'exists');
     if (current !== undefined) return { kind: 'exists', current: parseSavedView(current) };
     if (status !== 201) fail(status, json);
     return { kind: 'saved', view: parseSavedView(json) };
@@ -50,7 +49,7 @@ export const savedViewsApi = {
       base_version: baseVersion,
       config: { ...config },
     });
-    const current = versionConflict(status, json);
+    const current = viewConflict(status, json, 'conflict');
     if (current !== undefined) return { kind: 'conflict', current: parseSavedView(current) };
     if (status !== 200) fail(status, json);
     return { kind: 'saved', view: parseSavedView(json) };

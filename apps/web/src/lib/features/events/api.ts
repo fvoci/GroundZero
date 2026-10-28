@@ -33,7 +33,7 @@ export const eventsApi = {
       base_version: baseVersion,
       ...input,
     });
-    if (status === 409 && isRecord(json) && json.current !== undefined)
+    if (status === 409 && isRecord(json) && json.error === 'conflict' && json.current !== undefined)
       return { kind: 'conflict', current: parseEvent(rec(json, 'conflict').current) };
     if (status !== 200) fail(status, json);
     return { kind: 'updated', event: parseEvent(json) };

@@ -12,9 +12,10 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::WorkState;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::ItemId;
 use fvoci_db::{UserTx, is_unique_violation};
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::CurrentUser;
 
 /// 저장한 보기.
@@ -23,7 +24,7 @@ pub struct SavedView {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
     pub name: String,
-    #[schema(value_type = Object)]
+    #[schema(value_type = Object, additional_properties)]
     pub config: Value,
     /// 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
     pub version: i32,
@@ -50,11 +51,27 @@ pub struct UpdateView {
     pub config: Map<String, Value>,
 }
 
-/// 409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다.
+/// 같은 이름의 보기가 이미 있다. 판 충돌과 달리 만들기 요청은 보기를 바꾸지 않는다.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct SavedViewConflict {
+pub struct ViewNameConflict {
     pub error: &'static str,
     pub current: SavedView,
+}
+
+/// 보기 수정의 판 충돌 또는 계정 전환 오류.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ViewWriteConflict {
+    Stale(Box<StaleWrite<SavedView>>),
+    State(ErrorBody),
+}
+
+/// 보기 생성의 동명 거절 또는 계정 전환 오류.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ViewCreateConflict {
+    Exists(ViewNameConflict),
+    State(ErrorBody),
 }
 
 /// 이 항목의 내 저장한 보기(이름순).
@@ -96,7 +113,12 @@ pub async fn list(
 fn checked_config(config: Map<String, Value>) -> Result<Value, AppError> {
     let config = Value::Object(config);
     if config.to_string().len() > 4000 {
-        return Err(AppError::BadRequest("the view is too large".into()));
+        return Err(AppError::invalid(
+            "config",
+            InvalidReason::TooLong,
+            Some(4000),
+            "the view is too large",
+        ));
     }
     Ok(config)
 }
@@ -115,10 +137,13 @@ async fn load(tx: &mut UserTx, id: Uuid) -> Result<SavedView, AppError> {
     })
 }
 
-fn conflict(error: &'static str, current: SavedView) -> Response {
+fn name_conflict(current: SavedView) -> Response {
     (
         StatusCode::CONFLICT,
-        Json(SavedViewConflict { error, current }),
+        Json(ViewNameConflict {
+            error: "exists",
+            current,
+        }),
     )
         .into_response()
 }
@@ -126,9 +151,9 @@ fn conflict(error: &'static str, current: SavedView) -> Response {
 /// 새 보기(그 항목을 볼 수 있는 사람). 같은 이름이 이미 있으면 바꾸지 않고 409와 그 보기(고치려면 `PUT /api/views/{id}`).
 /// 같은 `request_id`는 처음 만든 보기를 돌려준다.
 #[utoipa::path(post, path = "/api/items/{item_id}/views", operation_id = "create_view",
-    params(("item_id" = String, Path, format = Uuid)), request_body = CreateView,
+    params(("item_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = CreateView,
     responses((status = 201, body = SavedView), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = SavedViewConflict)),
+              (status = 409, body = ViewCreateConflict)),
     tag = "tasks")]
 pub async fn create(
     State(state): State<WorkState>,
@@ -138,8 +163,15 @@ pub async fn create(
 ) -> Result<Response, AppError> {
     let name = input.name.trim().to_owned();
     if !(1..=100).contains(&name.chars().count()) {
-        return Err(AppError::BadRequest(
-            "a view needs a name of 1 to 100 characters".into(),
+        return Err(AppError::invalid(
+            "name",
+            if name.is_empty() {
+                InvalidReason::Required
+            } else {
+                InvalidReason::TooLong
+            },
+            Some(100),
+            "a view needs a name of 1 to 100 characters",
         ));
     }
     let config = checked_config(input.config)?;
@@ -165,7 +197,7 @@ pub async fn create(
         other => other?,
     };
     Ok(if outcome == "exists" {
-        conflict("exists", view)
+        name_conflict(view)
     } else {
         (StatusCode::CREATED, Json(view)).into_response()
     })
@@ -174,9 +206,9 @@ pub async fn create(
 /// 내 보기 고치기. 읽은 판이 지났으면(다른 탭이 저장함) 아무것도 바꾸지 않고 409와 최신 보기. 확인과 고치기는 같은
 /// 트랜잭션이다. 마지막 고치기와 같은 `request_id`면 다시 쓰지 않고 그 결과를 돌려준다.
 #[utoipa::path(put, path = "/api/views/{view_id}", operation_id = "update_view",
-    params(("view_id" = String, Path, format = Uuid)), request_body = UpdateView,
+    params(("view_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = UpdateView,
     responses((status = 200, body = SavedView), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = SavedViewConflict)),
+              (status = 409, body = ViewWriteConflict)),
     tag = "tasks")]
 pub async fn update(
     State(state): State<WorkState>,
@@ -197,7 +229,13 @@ pub async fn update(
     let current = load(&mut tx, view).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        conflict("conflict", current)
+        StaleWrite::new(
+            "conflict",
+            "the saved view changed",
+            current,
+            &serde_json::json!({ "config": config }),
+        )
+        .into_response()
     } else {
         Json(current).into_response()
     })
@@ -205,8 +243,8 @@ pub async fn update(
 
 /// 내 저장한 보기 지우기.
 #[utoipa::path(delete, path = "/api/views/{view_id}", operation_id = "delete_view",
-    params(("view_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 404, body = ErrorBody)), tag = "tasks")]
+    params(("view_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn delete(
     State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
