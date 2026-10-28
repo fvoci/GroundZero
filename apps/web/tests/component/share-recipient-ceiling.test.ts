@@ -213,3 +213,39 @@ it('ignores an earlier writable recipient reply after selecting an outside membe
   expect(screen.queryByRole('option', { name: m.documents_permission_write() })).toBeNull();
   expect(screen.getByText('공간 밖 조직원')).toBeInTheDocument();
 });
+
+for (const outcome of ['success', 'failure'] as const) {
+  it(`keeps an empty recipient live region mounted before lookup and through ${outcome}`, async () => {
+    await setLocale('ko', { reload: false });
+    if (outcome === 'failure') {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'not_found', message: 'Not Found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }
+    render(DocumentActions, {
+      doc: ACCESS_DOCUMENT,
+      workspaces: [workspace],
+      onchanged: () => undefined,
+    });
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_share_settings() }));
+    const email = await screen.findByLabelText(m.documents_email());
+    const fieldset = email.closest('fieldset');
+    const feedback = fieldset?.querySelector('[aria-live="polite"]') ?? null;
+    expect(feedback, 'CR201-A: recipient live region must exist before lookup').toBeInTheDocument();
+    expect(feedback?.textContent?.trim()).toBe('');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    await fireEvent.input(email, { target: { value: recipient.email } });
+    await screen.findByText(
+      outcome === 'success' ? m.members_role_outside_member() : m.documents_recipient_unavailable(),
+    );
+    expect(fieldset?.querySelector('[aria-live="polite"]')).toBe(feedback);
+    await fireEvent.input(email, { target: { value: '' } });
+    await waitFor(() => {
+      expect(feedback?.textContent?.trim()).toBe('');
+    });
+    expect(fieldset?.querySelector('[aria-live="polite"]')).toBe(feedback);
+  });
+}
