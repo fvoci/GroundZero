@@ -4,3 +4,4 @@ mod comment_flags;
 mod contracts;
 mod home_marks;
 mod notifications;
+mod personal_marks;
