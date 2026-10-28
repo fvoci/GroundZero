@@ -9,6 +9,12 @@
 //! API는 제목만, 방을 다시 열어도 내용 유지, 복원하면 방 재시작, 권한·세션이 끝나면 연결 닫힘, 끄면 저장 후 닫힘.
 
 mod common;
+mod sql_support;
+
+#[path = "it/collab_file_refs.rs"]
+mod collab_file_refs;
+#[path = "it/collab_poison.rs"]
+mod collab_poison;
 
 use std::net::SocketAddr;
 use std::time::Duration;

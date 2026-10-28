@@ -40,6 +40,9 @@ use fvoci_core::error::AppError;
 use fvoci_core::ids::{DocumentId, UserId};
 use fvoci_db::Db;
 
+#[doc(hidden)]
+pub mod recovery;
+
 /// 방마다 들어오는 명령·메시지 대기열의 크기.
 const ROOM_QUEUE: usize = 1024;
 /// 작은 변경을 모아 검사하는 간격.
