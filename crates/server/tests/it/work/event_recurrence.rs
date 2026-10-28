@@ -105,6 +105,8 @@ async fn repeating_events_keep_their_wall_clock_across_daylight_saving() {
     assert_eq!(starts(&c), ["2026-10-26T13:00:00Z", "2026-11-09T14:00:00Z"]);
 }
 
+/// 반복 일정의 DST(D-81): 일정 시간대에 없는 현지 시각의 회차는 건너뛰고(건너뜀으로 표시), 두 번 있는 시각은 앞선
+/// 시각에 한 번만. 보는 사람의 시간대가 달라도 회차 시점은 같다.
 #[tokio::test]
 async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_ones() {
     let state = common::state();
@@ -233,6 +235,8 @@ async fn weekly_events_skip_missing_local_times_and_take_the_first_of_repeated_o
     );
 }
 
+/// 감사 S18: 반복 일정의 시작을 규칙의 끝(`until`) 뒤로 옮기면 회차가 하나도 없어 달력에서 사라졌다. 규칙을 정할 때와
+/// 같이 400으로 받지 않는다. 시간대만 바꿔 첫 회차 날짜가 밀리는 경우도 같다.
 #[tokio::test]
 async fn moving_a_repeating_event_past_its_until_is_refused() {
     let state = common::state();
@@ -341,6 +345,9 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
     assert_eq!(inside.status, StatusCode::OK, "{:?}", inside.json);
 }
 
+/// 감사 W21: 일정 반복 정하기가 기준 없이 저장해, 화면을 연 뒤 다른 사람이 바꾼 규칙(수요일 추가)을 옛 규칙으로 말없이
+/// 덮었다. 편집을 시작한 규칙(`base`)이 지금 규칙과 다르면 409 `rule_conflict`(최신 일정)이고 아무것도 바꾸지 않는다.
+/// 규칙만 보므로 그사이 제목만 바뀐 것은 충돌이 아니고, 이미 보낸 규칙과 같으면 같은 요청의 재시도다.
 #[tokio::test]
 async fn event_rule_saves_from_a_stale_rule_conflict() {
     let state = common::state();
