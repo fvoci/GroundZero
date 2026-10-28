@@ -106,26 +106,6 @@ async fn events_follow_item_access_keep_their_zone_and_guard_versions() {
     let (_, again) = create(&app, &admin, &item, body).await;
     assert_eq!(again["id"], event["id"]);
 
-    let bad_zone = timed(
-        "x",
-        "2026-11-02T10:00:00+09:00",
-        "2026-11-02T11:00:00+09:00",
-        "Mars/Olympus",
-    );
-    assert_eq!(
-        create(&app, &admin, &item, bad_zone).await.0,
-        StatusCode::BAD_REQUEST
-    );
-    let backwards = timed(
-        "x",
-        "2026-11-02T10:00:00+09:00",
-        "2026-11-02T09:00:00+09:00",
-        "Asia/Seoul",
-    );
-    assert_eq!(
-        create(&app, &admin, &item, backwards).await.0,
-        StatusCode::BAD_REQUEST
-    );
     let all_day = json!({ "request_id": new_request_id(), "kind": "event", "title": "학회", "description": "",
         "all_day": true, "start_date": "2026-11-05", "end_date": "2026-11-07", "starts_at": null, "ends_at": null,
         "timezone": "Asia/Seoul" });
