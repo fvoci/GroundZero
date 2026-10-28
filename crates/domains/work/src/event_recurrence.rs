@@ -9,13 +9,13 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::events::{Event, EventConflict};
-use crate::http::AppState;
+use crate::WorkState;
+use crate::events::{Event, EventConflict};
+use crate::recurrence::RecurrenceRule;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::validate::parse_date;
 use fvoci_db::new_ids;
 use fvoci_http::session::CurrentUser;
-use fvoci_work::recurrence::RecurrenceRule;
 
 /// 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
 /// 규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.
@@ -32,7 +32,7 @@ pub struct SetEventRecurrence {
     responses((status = 200, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = EventConflict)), tag = "events")]
 pub async fn set_event(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetEventRecurrence>,
@@ -58,7 +58,7 @@ pub async fn set_event(
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let event = crate::features::events::load(&mut tx, id).await?;
+    let event = crate::events::load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
         (
@@ -87,7 +87,7 @@ pub struct ExcludeOccurrence {
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "events")]
 pub async fn exclude_event(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<ExcludeOccurrence>,

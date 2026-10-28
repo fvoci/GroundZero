@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::http::AppState;
+use crate::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::{UserTx, is_unique_violation};
@@ -62,7 +62,7 @@ pub struct SavedViewConflict {
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [SavedView]), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn list(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<SavedView>>, AppError> {
@@ -131,7 +131,7 @@ fn conflict(error: &'static str, current: SavedView) -> Response {
               (status = 409, body = SavedViewConflict)),
     tag = "tasks")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<CreateView>,
@@ -179,7 +179,7 @@ pub async fn create(
               (status = 409, body = SavedViewConflict)),
     tag = "tasks")]
 pub async fn update(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(view): Path<Uuid>,
     Json(input): Json<UpdateView>,
@@ -208,7 +208,7 @@ pub async fn update(
     params(("view_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn delete(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(view): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {

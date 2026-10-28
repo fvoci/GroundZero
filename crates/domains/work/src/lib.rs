@@ -4,7 +4,10 @@
 
 #![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
 
+pub mod event_recurrence;
+pub mod events;
 pub mod recurrence;
+pub mod saved_views;
 pub mod schedule;
 pub mod state;
 pub mod task_statuses;
@@ -23,6 +26,17 @@ pub use state::WorkState;
 #[derive(Debug, OpenApi)]
 #[openapi(
     paths(
+        events::list,
+        events::get,
+        events::create,
+        events::update,
+        events::delete,
+        event_recurrence::set_event,
+        event_recurrence::exclude_event,
+        saved_views::list,
+        saved_views::create,
+        saved_views::update,
+        saved_views::delete,
         task_statuses::list,
         task_statuses::create,
         task_statuses::update,
@@ -50,6 +64,18 @@ pub use state::WorkState;
         tasks::checklist_items,
     ),
     components(schemas(
+        event_recurrence::SetEventRecurrence,
+        event_recurrence::ExcludeOccurrence,
+        events::EventKind,
+        events::Event,
+        events::EventInput,
+        events::CreateEvent,
+        events::UpdateEvent,
+        events::EventConflict,
+        saved_views::SavedView,
+        saved_views::CreateView,
+        saved_views::UpdateView,
+        saved_views::SavedViewConflict,
         tasks::TaskPriority,
         tasks::Assignee,
         tasks::ChecklistItem,
@@ -148,4 +174,28 @@ where
         .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
             state.clone(),
         ))
+        .route(
+            "/items/{item_id}/views",
+            get(saved_views::list).post(saved_views::create),
+        )
+        .route(
+            "/views/{view_id}",
+            put(saved_views::update).delete(saved_views::delete),
+        )
+        .route(
+            "/items/{item_id}/events",
+            get(events::list).post(events::create),
+        )
+        .route(
+            "/events/{event_id}",
+            get(events::get).put(events::update).delete(events::delete),
+        )
+        .route(
+            "/events/{event_id}/recurrence",
+            put(event_recurrence::set_event),
+        )
+        .route(
+            "/events/{event_id}/exclusions",
+            post(event_recurrence::exclude_event),
+        )
 }

@@ -22,9 +22,9 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, audit, comments, courses, documents, event_recurrence, events, export, files, home,
-    item_profile, members, modules, organizations, public_links, records, references, revisions,
-    saved_views, search_api, study, time_tracking, trash, workspaces, zotero,
+    accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
+    members, modules, organizations, public_links, records, references, revisions, search_api,
+    study, time_tracking, trash, workspaces, zotero,
 };
 use crate::features::{activity, notifications};
 
@@ -278,14 +278,7 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
-        events::list,
-        events::get,
-        events::create,
-        events::update,
-        events::delete,
         events::calendar,
-        event_recurrence::set_event,
-        event_recurrence::exclude_event,
         time_tracking::current,
         time_tracking::start,
         time_tracking::action,
@@ -340,10 +333,6 @@ async fn api_not_found() -> AppError {
         audit::mine,
         documents::templates,
         documents::set_template,
-        saved_views::list,
-        saved_views::create,
-        saved_views::update,
-        saved_views::delete,
         study::get,
         study::add_units,
         study::update_unit,
@@ -469,12 +458,6 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        events::EventKind,
-        events::Event,
-        events::EventInput,
-        events::CreateEvent,
-        events::UpdateEvent,
-        events::EventConflict,
         events::CalendarTask,
         events::CalendarItem,
         events::CalendarDate,
@@ -482,8 +465,6 @@ async fn api_not_found() -> AppError {
         events::Calendar,
         events::EventOccurrence,
         events::ProjectedTask,
-        event_recurrence::SetEventRecurrence,
-        event_recurrence::ExcludeOccurrence,
         time_tracking::TimeKind,
         time_tracking::TargetKind,
         time_tracking::TargetInput,
@@ -550,10 +531,6 @@ async fn api_not_found() -> AppError {
         audit::AuditEntry,
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
-        saved_views::SavedView,
-        saved_views::CreateView,
-        saved_views::UpdateView,
-        saved_views::SavedViewConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -807,14 +784,6 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/template",
             put(documents::set_template),
         )
-        .route(
-            "/items/{item_id}/views",
-            get(saved_views::list).post(saved_views::create),
-        )
-        .route(
-            "/views/{view_id}",
-            put(saved_views::update).delete(saved_views::delete),
-        )
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
         .route("/items/{item_id}/study/plan", put(study::plan))
@@ -925,23 +894,7 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/parent",
             put(documents::set_parent),
         )
-        .route(
-            "/items/{item_id}/events",
-            get(events::list).post(events::create),
-        )
-        .route(
-            "/events/{event_id}",
-            get(events::get).put(events::update).delete(events::delete),
-        )
         .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
-        .route(
-            "/events/{event_id}/recurrence",
-            put(event_recurrence::set_event),
-        )
-        .route(
-            "/events/{event_id}/exclusions",
-            post(event_recurrence::exclude_event),
-        )
         .route(
             "/me/timer",
             get(time_tracking::current).post(time_tracking::start),
