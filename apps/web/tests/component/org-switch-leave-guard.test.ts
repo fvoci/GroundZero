@@ -6,6 +6,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { createLeaveGuard } from '$lib/features/common/leave-guard.svelte';
 import { org } from '$lib/org.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -88,7 +89,7 @@ beforeEach(async () => {
     ),
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
-  vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+  vi.spyOn(organizationsApi, 'setLastOrganization').mockResolvedValue(undefined);
   vi.spyOn(api, 'workspaces').mockResolvedValue(workspaces);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION, OTHER]);
   vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(0);
