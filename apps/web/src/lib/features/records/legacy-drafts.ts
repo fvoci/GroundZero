@@ -1,8 +1,24 @@
 import { readDraftAt, writeDraftAt } from '$lib/features/common/draft-storage';
 import { object, retry } from '$lib/features/modules/draft-values';
-import { parseRecordForm } from './records';
+import longTextKeys from './long-text-keys.json';
+import { parseRecordForm, recordWriting, type RecordForm } from './records';
 
 const RECORD_DRAFT_KEY = /^fvoci:[^:]+:[^:]+:form-draft:record:/;
+const RECORD_KIND_KEY =
+  /^fvoci:[^:]+:[^:]+:form-draft:record:[^:]+:([^:]+):[^:]+:(?:tab|held):[^:]+$/;
+const LONG_TEXT_KEYS: Readonly<Record<string, readonly string[]>> = longTextKeys;
+
+interface RecordDraft {
+  savedAt: string;
+  input: {
+    form: RecordForm;
+    baseline: string;
+    version: number;
+    pending: { requestId: string; signature: string } | null;
+  };
+}
+
+type DraftCheck = { state: 'current' } | { state: 'rewrite'; value: RecordDraft };
 
 function recordDraftKeys(): string[] {
   const keys: string[] = [];
@@ -18,13 +34,13 @@ function recordDraftKeys(): string[] {
   return keys;
 }
 
-function hasKeys(value: Record<string, unknown>, keys: string[]): boolean {
+function hasKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return (
     Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
   );
 }
 
-function isCurrentForm(value: unknown): boolean {
+function isRecordForm(value: unknown): boolean {
   const parsed = parseRecordForm(value);
   return (
     object(value) &&
@@ -37,7 +53,7 @@ function isCurrentForm(value: unknown): boolean {
   );
 }
 
-function isCurrentDraft(value: unknown): boolean {
+function isRecordDraft(value: unknown): value is RecordDraft {
   if (
     !object(value) ||
     !hasKeys(value, ['savedAt', 'input']) ||
@@ -48,9 +64,9 @@ function isCurrentDraft(value: unknown): boolean {
   const input = value.input;
   if (
     !hasKeys(input, ['form', 'baseline', 'version', 'pending']) ||
-    !isCurrentForm(input.form) ||
+    !isRecordForm(input.form) ||
     typeof input.baseline !== 'string' ||
-    !isCurrentForm(JSON.parse(input.baseline)) ||
+    !isRecordForm(JSON.parse(input.baseline)) ||
     typeof input.version !== 'number' ||
     !Number.isSafeInteger(input.version) ||
     input.version < 0
@@ -66,14 +82,56 @@ function isCurrentDraft(value: unknown): boolean {
   );
 }
 
+function isWritingOnly(value: RecordForm, keys: readonly string[]): boolean {
+  return (
+    value.title === '' &&
+    value.occurred_on === '' &&
+    value.files.length === 0 &&
+    Object.keys(value.people).length === 0 &&
+    Object.keys(value.unreadable).length === 0 &&
+    hasKeys(value.values, keys)
+  );
+}
+
+function checkWriting(value: unknown, keys: readonly string[]): DraftCheck | undefined {
+  if (!isRecordDraft(value)) return undefined;
+  const baseline = parseRecordForm(JSON.parse(value.input.baseline));
+  if (baseline === undefined) return undefined;
+  if (isWritingOnly(value.input.form, keys) && isWritingOnly(baseline, keys)) {
+    return { state: 'current' };
+  }
+  return {
+    state: 'rewrite',
+    value: {
+      savedAt: value.savedAt,
+      input: {
+        form: recordWriting(value.input.form, keys),
+        baseline: JSON.stringify(recordWriting(baseline, keys)),
+        version: value.input.version,
+        pending: value.input.pending,
+      },
+    },
+  };
+}
+
 /**
  * D-27, SR-199-1: old retries contain the complete request. Remove them before any screen opens,
  * across accounts, organizations, tabs and held offers. Snapshot keys before deleting so adjacent
- * entries cannot be skipped. SR-199-2: only verified current forms may survive, including unsent
- * writing with null pending. The shared reader returns undefined on JSON or schema parsing errors.
+ * entries cannot be skipped. Verify retry metadata, then normalize both form and baseline with the
+ * offline allowlist checked against server kinds. Unknown kinds and unreadable values are discarded.
  */
 export function clearLegacyRecordDrafts(): void {
   for (const key of recordDraftKeys()) {
-    if (readDraftAt(key, isCurrentDraft) !== true) writeDraftAt(key, undefined);
+    const kind = RECORD_KIND_KEY.exec(key)?.[1];
+    const keys =
+      kind !== undefined && Object.hasOwn(LONG_TEXT_KEYS, kind) ? LONG_TEXT_KEYS[kind] : undefined;
+    const checked =
+      keys === undefined ? undefined : readDraftAt(key, (value) => checkWriting(value, keys));
+    if (checked === undefined) {
+      writeDraftAt(key, undefined);
+    } else if (checked.state === 'rewrite' && !writeDraftAt(key, checked.value)) {
+      // A failed rewrite must not leave the old short-field snapshot on disk.
+      writeDraftAt(key, undefined);
+    }
   }
 }

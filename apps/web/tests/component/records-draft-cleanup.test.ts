@@ -245,6 +245,35 @@ it('clears a draft whose record kind is absent from the offline field definition
   expect(localStorage.getItem(unknown)).toBeNull();
 });
 
+it('keeps unsent body for a known kind with no long_text fields while removing people and settings', async () => {
+  const key = recordKey.replace(':risk:', ':research_log:');
+  const old = {
+    ...draft(null),
+    input: {
+      ...draft(null).input,
+      form: {
+        ...emptyForm(),
+        title: 'SHORT_LOG_TITLE',
+        body: 'Unsent research log',
+        values: { log_type: 'feedback' },
+        people: { participants: ['SHORT_PARTICIPANT'] },
+      },
+      baseline: JSON.stringify(emptyForm()),
+    },
+  };
+  localStorage.setItem(key, JSON.stringify(old));
+
+  await startWithoutOpeningRecords();
+
+  const value = localStorage.getItem(key);
+  if (value === null) throw new Error('known body-only kind was discarded');
+  const normalized: unknown = JSON.parse(value);
+  expect(normalized).toEqual({
+    ...old,
+    input: { ...old.input, form: { ...emptyForm(), body: 'Unsent research log' } },
+  });
+});
+
 it('clears a legacy full form if its sanitized replacement cannot be stored', async () => {
   const old = draft(null);
   old.input.form.title = 'SHORT_UNWRITABLE_TITLE';

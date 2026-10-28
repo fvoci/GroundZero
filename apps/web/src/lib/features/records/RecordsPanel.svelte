@@ -20,7 +20,7 @@
   import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
-  import { emptyForm, formOf, parseRecordForm, summary, toInput } from './records';
+  import { emptyForm, formOf, parseRecordForm, recordWriting, summary, toInput } from './records';
   import { recordRequestSignature } from './request-signature';
   import ZoteroImport from './ZoteroImport.svelte';
 
@@ -74,11 +74,10 @@
     }
   }
   function writing(value: RecordForm): RecordForm {
-    const values: Record<string, string> = {};
-    for (const field of defs.find((def) => def.kind === selected)?.fields ?? []) {
-      if (field.type === 'long_text') values[field.key] = value.values[field.key] ?? '';
-    }
-    return { ...emptyForm(), body: value.body, values };
+    const keys = (defs.find((def) => def.kind === selected)?.fields ?? [])
+      .filter((field) => field.type === 'long_text')
+      .map((field) => field.key);
+    return recordWriting(value, keys);
   }
   function settings(value: RecordForm): RecordForm {
     const longKeys = new Set(Object.keys(writing(value).values));
