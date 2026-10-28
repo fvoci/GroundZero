@@ -85,7 +85,10 @@ const plan = {
     },
   ],
 };
-const stored = () => [...Object.values(localStorage), ...Object.values(sessionStorage)].join('\n');
+const stored = () =>
+  [localStorage, sessionStorage]
+    .flatMap((storage) => Object.keys(storage).map((key) => storage.getItem(key) ?? ''))
+    .join('\n');
 function field(id: string): HTMLInputElement | HTMLTextAreaElement {
   const value = document.getElementById(id);
   if (value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement) return value;
@@ -145,12 +148,18 @@ it('preserves record writing without short fields or raw retry payloads and reta
   await edit('record-risk-amount', '123456');
   await edit('record-risk-body', 'LONG RECORD BODY\nsecond line');
   await edit('record-risk-notes', 'LONG FIELD NOTES');
-  await waitFor(() => expect(stored()).toContain('LONG RECORD BODY'));
+  await waitFor(() => {
+    expect(stored()).toContain('LONG RECORD BODY');
+  });
   expect(stored()).not.toContain('SHORT RECORD TITLE');
   expect(stored()).not.toContain('123456');
   await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));
-  await waitFor(() => expect(save).toHaveBeenCalledOnce());
-  await waitFor(() => expect(field('record-risk-title')).not.toBeDisabled());
+  await waitFor(() => {
+    expect(save).toHaveBeenCalledOnce();
+  });
+  await waitFor(() => {
+    expect(field('record-risk-title')).not.toBeDisabled();
+  });
   const requestId = save.mock.calls[0]?.[1];
   expect(stored()).not.toContain('SHORT RECORD TITLE');
   expect(stored()).not.toContain('123456');
@@ -164,7 +173,9 @@ it('preserves record writing without short fields or raw retry payloads and reta
   await edit('record-risk-title', 'SHORT RECORD TITLE');
   await edit('record-risk-amount', '123456');
   await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  await waitFor(() => {
+    expect(save).toHaveBeenCalledTimes(2);
+  });
   expect(save.mock.calls[1]?.[1]).toBe(requestId);
 });
 
@@ -201,7 +212,9 @@ it('preserves course materials while short shared episode fields stay on screen'
   );
   await edit('ep-title-e1', 'SHORT EPISODE TITLE');
   await edit('ep-materials-e1', 'LONG COURSE MATERIALS');
-  await waitFor(() => expect(stored()).toContain('LONG COURSE MATERIALS'));
+  await waitFor(() => {
+    expect(stored()).toContain('LONG COURSE MATERIALS');
+  });
   expect(stored()).not.toContain('SHORT EPISODE TITLE');
   cleanup();
   render(CoursePanel, { itemId: 'course' });
@@ -222,7 +235,9 @@ it('preserves a course note while its position stays on screen', async () => {
   await fireEvent.input(screen.getByLabelText(m.courses_last_position()), {
     target: { value: '12:34' },
   });
-  await waitFor(() => expect(stored()).toContain('LONG PRIVATE COURSE NOTE'));
+  await waitFor(() => {
+    expect(stored()).toContain('LONG PRIVATE COURSE NOTE');
+  });
   expect(stored()).not.toContain('12:34');
   cleanup();
   render(CoursePanel, { itemId: 'course' });
@@ -240,7 +255,9 @@ it('preserves a study note while its amount and replan settings stay on screen',
   await edit('unit-note-u1', 'LONG PRIVATE STUDY NOTE');
   await edit('unit-done-u1', '77777');
   await edit('study-replan-start', '2026-11-05');
-  await waitFor(() => expect(stored()).toContain('LONG PRIVATE STUDY NOTE'));
+  await waitFor(() => {
+    expect(stored()).toContain('LONG PRIVATE STUDY NOTE');
+  });
   expect(stored()).not.toContain('77777');
   expect(stored()).not.toContain('2026-11-05');
   cleanup();
@@ -278,6 +295,8 @@ it('keeps shared checklist entry text on screen and reports unsaved input to its
   });
   const input = screen.getByRole('textbox');
   await fireEvent.input(input, { target: { value: 'SHORT CHECKLIST ENTRY' } });
-  await waitFor(() => expect(unsaved).toHaveBeenLastCalledWith(true));
+  await waitFor(() => {
+    expect(unsaved).toHaveBeenLastCalledWith(true);
+  });
   expect(stored()).not.toContain('SHORT CHECKLIST ENTRY');
 });

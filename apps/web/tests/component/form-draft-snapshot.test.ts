@@ -23,7 +23,9 @@ it('keeps the existing full snapshot behavior when no storedSnapshot option is s
   render(FormDraftSnapshot);
   await input('Long', 'long writing');
   await input('Short', 'short setting');
-  await waitFor(() => expect(stored()).toContain('short setting'));
+  await waitFor(() => {
+    expect(stored()).toContain('short setting');
+  });
   expect(stored()).toContain('long writing');
   cleanup();
   render(FormDraftSnapshot);
@@ -41,7 +43,9 @@ it('stores the selected snapshot while checking completion against the whole liv
   render(FormDraftSnapshot, { props: { filtered: true } });
   await input('Long', 'long writing');
   await input('Short', 'short setting');
-  await waitFor(() => expect(stored()).toContain('long writing'));
+  await waitFor(() => {
+    expect(stored()).toContain('long writing');
+  });
   expect(stored()).not.toContain('short setting');
   await fireEvent.click(screen.getByRole('button', { name: 'Capture' }));
   await input('Short', 'new setting');

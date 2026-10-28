@@ -65,9 +65,9 @@ it('lets a read-only learner edit their course note while shared episode creatio
   expect(document.getElementById('episode-title')).toBeNull();
   await fireEvent.input(note, { target: { value: 'private note' } });
   await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
-  await waitFor(() =>
-    expect(save).toHaveBeenCalledWith('e1', expect.objectContaining({ note: 'private note' })),
-  );
+  await waitFor(() => {
+    expect(save).toHaveBeenCalledWith('e1', expect.objectContaining({ note: 'private note' }));
+  });
 });
 
 it('lets a read-only learner edit their study note and replan privately while shared creation stays hidden', async () => {
@@ -105,7 +105,7 @@ it('lets a read-only learner edit their study note and replan privately while sh
   expect(screen.getByRole('form', { name: '밀린 단위 다시 배정' })).toBeInTheDocument();
   await fireEvent.input(note, { target: { value: 'private note' } });
   await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
-  await waitFor(() =>
-    expect(save).toHaveBeenCalledWith('u1', expect.objectContaining({ note: 'private note' })),
-  );
+  await waitFor(() => {
+    expect(save).toHaveBeenCalledWith('u1', expect.objectContaining({ note: 'private note' }));
+  });
 });
