@@ -168,9 +168,17 @@ async fn shares_from_another_organization_stop_when_a_note_moves() {
         shares,
         vec![json!({"grantee_user_id":y.id.0,"organization_id":orgs[1]})]
     );
-    assert_eq!(rows(&state, &owner,
-        "SELECT id FROM fvoci.activity WHERE target_kind='document' AND target_id=$1 AND kind='unshare' AND detail->>'reason'='moved' AND detail->>'user'=$2::text",
-        &[doc, x.id.0]).await.len(), 1);
+    // SR1-7(D-49·D-114): 철회는 활동에 한 건으로 남지만, 공간 멤버가 읽는 그 행에 다른 조직 사람의 id는 남기지 않는다.
+    assert_eq!(
+        rows(
+            &state,
+            &owner,
+            "SELECT detail FROM fvoci.activity WHERE target_kind='document' AND target_id=$1 AND kind='unshare'",
+            &[doc]
+        )
+        .await,
+        vec![json!({"detail": {"reason": "moved"}})]
+    );
 }
 
 #[tokio::test]

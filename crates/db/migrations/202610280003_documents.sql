@@ -1172,8 +1172,9 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
       AND ((u.target_kind = 'document' AND u.target_id = p_doc)
            OR u.file_id IN (SELECT f.id FROM files f WHERE f.document_id = p_doc));
     -- D-114: 옮긴 자리의 조직 밖 공유는 철회한다(개인 노트를 공간으로 옮길 때 다른 조직에서 준 공유).
+    -- 활동은 공간 멤버가 읽으므로 받는 사람(다른 조직 사람)의 id는 남기지 않는다(SR1-7, D-49).
     FOR v_child IN
-      SELECT s.id, s.grantee_user_id FROM document_shares s
+      SELECT s.id FROM document_shares s
       WHERE s.document_id = p_doc
         AND s.organization_id <> (SELECT w.organization_id FROM workspaces w WHERE w.id = p_target)
       ORDER BY s.id
@@ -1181,7 +1182,7 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
       DELETE FROM document_shares WHERE id = v_child.id;
       v_at := v_at + 1;
       PERFORM app_activity(app_id(p_ids, v_at), p_target, p_item, 'document', p_doc, 'unshare',
-                           jsonb_build_object('user', v_child.grantee_user_id, 'reason', 'moved'));
+                           jsonb_build_object('reason', 'moved'));
     END LOOP;
     -- D-114: 이 문서의 참조 가운데 옮긴 자리의 조직 밖 대상은 지운다(개인 노트는 쓴 사람이 속한 다른 조직의 대상도 참조한다).
     -- 조직이 없는 개인 대상은 참조 기록 규칙대로 남긴다.
