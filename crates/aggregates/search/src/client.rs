@@ -289,3 +289,17 @@ impl SearchClient {
         serde_json::from_value(hits).map_err(|e| AppError::Config(format!("search hits: {e}")))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SearchClient;
+
+    #[test]
+    fn debug_does_not_expose_the_search_key() {
+        let key = "search-debug-test-marker";
+        let client = SearchClient::new("http://localhost:7700", key);
+        for output in [format!("{client:?}"), format!("{client:#?}")] {
+            assert!(!output.contains(key), "Debug must not expose the search key");
+        }
+    }
+}
