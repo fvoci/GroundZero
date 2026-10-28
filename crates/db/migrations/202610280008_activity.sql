@@ -172,7 +172,7 @@ CREATE FUNCTION fvoci.app_notification_visible(p_document uuid, p_task uuid, p_i
       WHEN p_item IS NOT NULL THEN app_access('item', p_item) <> 'none'
       WHEN p_invitation IS NOT NULL THEN EXISTS (
         SELECT 1 FROM invitations i JOIN users me ON me.id = app_user_id()
-        WHERE i.id = p_invitation AND me.email_verified AND lower(me.email) = i.email)
+        WHERE i.id = p_invitation AND app_invitation_recipient(i.email) = me.id)
       ELSE false
     END
   $$;
@@ -245,7 +245,7 @@ CREATE FUNCTION fvoci.app_pending_invitations_count() RETURNS integer
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
     SELECT count(*)::integer FROM invitations i JOIN users me ON me.id = app_user_id()
-    WHERE i.closed_at IS NULL AND i.expires_at > now() AND me.email_verified AND lower(me.email) = i.email
+    WHERE i.closed_at IS NULL AND i.expires_at > now() AND app_invitation_recipient(i.email) = me.id
       AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.invitation_id = i.id AND n.user_id = me.id)
   $$;
 
@@ -266,7 +266,7 @@ CREATE FUNCTION fvoci.app_notify_pending_invitations(p_ids uuid[]) RETURNS integ
     END IF;
     FOR v_inv IN
       SELECT i.id FROM invitations i JOIN users me ON me.id = app_user_id()
-      WHERE i.closed_at IS NULL AND i.expires_at > now() AND me.email_verified AND lower(me.email) = i.email
+      WHERE i.closed_at IS NULL AND i.expires_at > now() AND app_invitation_recipient(i.email) = me.id
         AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.invitation_id = i.id AND n.user_id = me.id)
       ORDER BY i.created_at, i.id
     LOOP

@@ -565,6 +565,57 @@ async fn only_the_notified_account_of_a_shared_email_responds_to_the_invitation(
     );
 }
 
+/// CR183-5(#177 SR1-12 후속, 부조종사 결정 6459733337): 같은 검증 이메일의 나중 계정은 응답할 수 없는 초대를 목록·대기
+/// 건수·초대 알림 표시에서 보지 않고, 로그인 때 대기 초대 알림도 만들지 않는다. 받는 계정(먼저 만든 것)은 지금처럼 본다.
+#[tokio::test]
+async fn only_the_receiving_account_of_a_shared_email_sees_the_invitation() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let email = common::unique_email("shared-list");
+    let older = common::login_with_email(&w.state, "older", &email, true).await;
+    let newer = common::login_with_email(&w.state, "newer", &email, true).await;
+    let inv = expect(
+        &app,
+        Method::POST,
+        &format!("/api/organizations/{}/invitations", w.org),
+        &w.owner,
+        Some(json!({"email":email,"role":"member"})),
+        201,
+    )
+    .await;
+    let id = Uuid::parse_str(inv["id"].as_str().unwrap()).unwrap();
+    for (user, listed, visible) in [(&older, 1, true), (&newer, 0, false)] {
+        let mine = expect(&app, Method::GET, "/api/invitations", user, None, 200).await;
+        assert_eq!(mine.as_array().unwrap().len(), listed);
+        let state = one(
+            &w.state,
+            user,
+            "SELECT fvoci.app_pending_invitations_count() AS pending,
+                    fvoci.app_notification_visible(NULL,NULL,NULL,$1) AS visible",
+            &[id],
+        )
+        .await;
+        assert_eq!(state, json!({"pending": 0, "visible": visible}));
+    }
+    // 나중 계정의 로그인 경로(대기 초대 알림 만들기)는 아무것도 만들지 않고 받는 계정의 알림도 건드리지 않는다.
+    let made = one(
+        &w.state,
+        &newer,
+        "SELECT fvoci.app_notify_pending_invitations(@ids) AS made",
+        &[],
+    )
+    .await;
+    assert_eq!(made["made"], 0);
+    let notified = one(
+        &w.state,
+        &older,
+        "SELECT count(*)::integer AS n FROM fvoci.notifications WHERE invitation_id=$1",
+        &[id],
+    )
+    .await;
+    assert_eq!(notified["n"], 1);
+}
+
 #[tokio::test]
 async fn organization_names_on_create_use_configured_unicode_validation() {
     let state =
