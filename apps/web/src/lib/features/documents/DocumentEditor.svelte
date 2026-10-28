@@ -579,7 +579,13 @@
   {/if}
 
   {#if conflict !== undefined}
-    <DocumentConflictNotice current={conflict} {title} serverBody={conflict.body} mineBody={body}>
+    <DocumentConflictNotice
+      current={conflict}
+      {title}
+      serverBody={conflict.body}
+      mineBody={body}
+      comparisonClass="@2xl:grid-cols-2"
+    >
       <Button size="sm" onclick={() => void keepMineAsCopy()}
         >{m.documents_conflict_keep_copy()}</Button
       >

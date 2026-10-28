@@ -9,9 +9,11 @@
     title: string;
     serverBody?: DocNode;
     mineBody?: DocNode;
+    /** 비교를 놓는 화면이 컨테이너 크기에 따른 열 배치를 정한다. */
+    comparisonClass?: string;
     children: Snippet;
   }
-  const { current, title, serverBody, mineBody, children }: Props = $props();
+  const { current, title, serverBody, mineBody, comparisonClass = '', children }: Props = $props();
   const heading = $props.id();
 </script>
 
@@ -21,7 +23,7 @@
 >
   <h2 id={heading} class="font-semibold">{m.documents_conflict_heading()}</h2>
   <p class="text-sm">{m.documents_conflict_body({ revision: current.revision })}</p>
-  <div class="grid gap-3 @2xl:grid-cols-2">
+  <div class={`grid gap-3 ${comparisonClass}`}>
     <div>
       <h3 class="text-sm font-semibold">{m.documents_conflict_server({ title: current.title })}</h3>
       {#if serverBody !== undefined}
