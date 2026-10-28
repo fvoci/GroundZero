@@ -78,7 +78,7 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-it('repairs an original held key when panel cleanup enumeration fails once but offers enumeration succeeds', async () => {
+it('defers record draft offers after failed panel cleanup until window return repairs the original held key', async () => {
   const key = 'fvoci:user-a:-:form-draft:record:draft-item:risk:new:held:old-offer';
   const form = {
     ...emptyForm(),
@@ -86,13 +86,11 @@ it('repairs an original held key when panel cleanup enumeration fails once but o
     body: 'Unsent transient body',
     values: { mitigation: 'Unsent mitigation' },
   };
-  localStorage.setItem(
-    key,
-    JSON.stringify({
-      savedAt: '2026-10-28T12:00:00Z',
-      input: { form, baseline: JSON.stringify(emptyForm()), version: 3, pending: null },
-    }),
-  );
+  const raw = JSON.stringify({
+    savedAt: '2026-10-28T12:00:00Z',
+    input: { form, baseline: JSON.stringify(emptyForm()), version: 3, pending: null },
+  });
+  localStorage.setItem(key, raw);
   const startupEnumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
     throw new DOMException('startup enumeration unavailable', 'SecurityError');
   });
@@ -103,10 +101,71 @@ it('repairs an original held key when panel cleanup enumeration fails once but o
   });
 
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await screen.findByRole('button', { name: m.common_draft_restore() });
+  await screen.findByRole('button', { name: '새 위험' });
 
   expect(panelEnumeration).toHaveBeenCalled();
+  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  expect(localStorage.getItem(key)).toBe(raw);
+  window.dispatchEvent(new Event('focus'));
+
+  await screen.findByRole('button', { name: m.common_draft_restore() });
   expect(localStorage.getItem(key)).not.toContain('SHORT_TRANSIENT_TITLE');
+  expect(localStorage.getItem(key)).toContain('Unsent transient body');
+});
+
+it('blocks record entry after failed cleanup and repairs drafts before manual retry enables entry', async () => {
+  const key = 'fvoci:user-a:-:form-draft:record:draft-item:risk:new:held:retry-offer';
+  const raw = JSON.stringify({
+    savedAt: '2026-10-28T12:00:00Z',
+    input: {
+      form: { ...emptyForm(), title: 'SHORT_RETRY_TITLE', body: 'Unsent retry body' },
+      baseline: JSON.stringify(emptyForm()),
+      version: 0,
+      pending: null,
+    },
+  });
+  localStorage.setItem(key, raw);
+  const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+    throw new DOMException('enumeration unavailable', 'SecurityError');
+  });
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  const create = await screen.findByRole('button', { name: '새 위험' });
+
+  expect(create).toBeDisabled();
+  expect(screen.getByRole('button', { name: '고치기' })).toBeDisabled();
+  expect(screen.getByText(record.title)).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent(
+    '저장된 기록 초안을 확인하지 못했습니다. 다시 시도해 주세요.',
+  );
+  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  expect(localStorage.getItem(key)).toBe(raw);
+  enumeration.mockRestore();
+
+  await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+
+  await screen.findByRole('button', { name: m.common_draft_restore() });
+  expect(localStorage.getItem(key)).not.toContain('SHORT_RETRY_TITLE');
+  expect(localStorage.getItem(key)).toContain('Unsent retry body');
+  expect(create).toBeEnabled();
+  expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
+  expect(screen.getByRole('status')).toBeEmptyDOMElement();
+});
+
+it('enables new and edit entry immediately on the normal first render', async () => {
+  const disabled = vi.spyOn(HTMLButtonElement.prototype, 'disabled', 'set');
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  const create = await screen.findByRole('button', { name: '새 위험' });
+  const edit = screen.getByRole('button', { name: '고치기' });
+
+  expect(create).toBeEnabled();
+  expect(edit).toBeEnabled();
+  expect(
+    disabled.mock.calls.some(
+      ([value], index) =>
+        value &&
+        (disabled.mock.contexts[index] === create || disabled.mock.contexts[index] === edit),
+    ),
+  ).toBe(false);
 });
 
 it.each(['held:old-offer', 'tab:other-tab'])(
