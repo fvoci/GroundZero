@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type DocumentView } from '$lib/api/client';
 import { documentsApi as api } from '$lib/features/documents/api';
 import { me } from '$lib/me.svelte';
+import { rec } from '$lib/shared/api/parse';
 
 const document: DocumentView = {
   id: 'd1',
@@ -36,9 +37,16 @@ afterEach(() => {
 });
 
 function reply(status: number, body: object) {
-  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status }));
+  const fetch = vi
+    .fn<(_url: string, init?: RequestInit) => Promise<Response>>()
+    .mockResolvedValue(new Response(JSON.stringify(body), { status }));
   vi.stubGlobal('fetch', fetch);
   return fetch;
+}
+
+function sentBody(init?: RequestInit): Record<string, unknown> {
+  if (typeof init?.body !== 'string') throw new Error('missing JSON request body');
+  return rec(JSON.parse(init.body), 'request');
 }
 
 describe('document command contracts (#178, PR3 #189, D-96)', () => {
@@ -64,14 +72,14 @@ describe('document command contracts (#178, PR3 #189, D-96)', () => {
       changed: ['title'],
       requestId: 'title-request',
     });
-    const init = fetch.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(String(init.body))).toEqual({
+    const init = fetch.mock.calls[0]?.[1];
+    expect(sentBody(init)).toEqual({
       request_id: 'title',
       base_revision: 3,
       title: '내 제목',
     });
-    expect(new Headers(init.headers).get('x-fvoci-expected-user')).toBe('editing-user');
-    expect(new Headers(init.headers).has('If-Match')).toBe(false);
+    expect(new Headers(init?.headers).get('x-fvoci-expected-user')).toBe('editing-user');
+    expect(new Headers(init?.headers).has('If-Match')).toBe(false);
   });
 
   it('preserves structured title field validation errors', async () => {
@@ -106,9 +114,9 @@ describe('document command contracts (#178, PR3 #189, D-96)', () => {
       '/api/documents/d%2F1/settings',
       expect.objectContaining({ method: 'PATCH' }),
     );
-    const init = fetch.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(String(init.body))).toEqual({ allow_copy: true });
-    expect(new Headers(init.headers).get('x-fvoci-expected-user')).toBe('user-a');
+    const init = fetch.mock.calls[0]?.[1];
+    expect(sentBody(init)).toEqual({ allow_copy: true });
+    expect(new Headers(init?.headers).get('x-fvoci-expected-user')).toBe('user-a');
   });
 
   it('keeps the full stale restore envelope and does not treat it as a body PUT conflict', async () => {

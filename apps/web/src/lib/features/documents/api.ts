@@ -12,12 +12,12 @@ import { EXPECTED_USER, expectOk, fail, request } from '$lib/shared/api';
 import { isRecord, rec, str, strings, type Json } from '$lib/shared/api/parse';
 
 type StaleWrite = components['schemas']['StaleWrite_Document'];
-export type DocumentConflict = {
+export interface DocumentConflict {
   kind: 'conflict';
   current: DocumentView;
   changed: StaleWrite['changed'];
   requestId: StaleWrite['request_id'];
-};
+}
 
 // Only revision conflicts carry a resource. Room failures and account changes remain ErrorBody.
 function staleWrite(status: number, json: Json): DocumentConflict | undefined {

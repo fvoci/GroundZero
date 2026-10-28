@@ -217,7 +217,9 @@ describe('reconnecting when the edits cannot be kept', () => {
     expect(lostAlert()).not.toBeNull();
     expect(discardButton()).not.toBeNull();
     expect(screen.queryByText(/초안으로 남겼습니다/)).toBeNull();
-    expect(opened.at(-1)?.document.getText('t').toString()).toContain('확인받지 못한 문장');
+    expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+      { insert: '확인받지 못한 문장' },
+    ]);
     expect(titleInput().readOnly).toBe(false);
 
     // 저장소가 다시 쓸 수 있게 됐다. 다시 누르면 남기고 다시 연다.
@@ -238,7 +240,9 @@ describe('reconnecting when the edits cannot be kept', () => {
 
     expect(reload).not.toHaveBeenCalled();
     expect(lostAlert()).not.toBeNull();
-    expect(opened.at(-1)?.document.getText('t').toString()).toContain('확인받지 못한 문장');
+    expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+      { insert: '확인받지 못한 문장' },
+    ]);
     expect(titleInput().readOnly).toBe(false);
     expect(reconnectButton()).toHaveProperty('disabled', false);
   });
@@ -258,7 +262,9 @@ describe('reconnecting when the edits cannot be kept', () => {
       await fireEvent.click(reconnectButton());
       expect(reload).not.toHaveBeenCalled();
       expect(lostAlert()).not.toBeNull();
-      expect(opened.at(-1)?.document.getText('t').toString()).toContain('확인받지 못한 문장');
+      expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+        { insert: '확인받지 못한 문장' },
+      ]);
       expect(loadDraft('d1')).toEqual(EARLIER);
     }
   });
@@ -290,7 +296,9 @@ describe('discarding the edits that cannot be kept', () => {
       });
       expect(reload).not.toHaveBeenCalled();
       expect(lostAlert()).not.toBeNull();
-      expect(opened.at(-1)?.document.getText('t').toString()).toContain('확인받지 못한 문장');
+      expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+        { insert: '확인받지 못한 문장' },
+      ]);
       expect(titleInput().readOnly).toBe(false);
       expect(storage()).toEqual(before);
     });

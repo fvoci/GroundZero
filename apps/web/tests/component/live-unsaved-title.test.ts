@@ -89,7 +89,7 @@ function closeWith(code: number): void {
 
 describe('a screen-only title when live editing ends (D-27)', () => {
   for (const code of [4410, 4403, 4409]) {
-    it(`keeps the title on screen and blocks reopening until it is saved or discarded (${code})`, async () => {
+    it(`keeps the title on screen and blocks reopening until it is saved or discarded (${String(code)})`, async () => {
       const reopen = vi.fn();
       render(LiveDocumentEditor, {
         props: { initial: doc, onrealtimeoff: reopen, onreload: reopen },

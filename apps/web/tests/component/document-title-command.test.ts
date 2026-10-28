@@ -10,6 +10,7 @@ import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelt
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { rec } from '$lib/shared/api/parse';
 
 vi.mock('$lib/features/documents/TiptapEditor.svelte', async () => ({
   default: (await import('./stubs/SilentEditorStub.svelte')).default,
@@ -60,6 +61,11 @@ afterEach(() => {
   me.userId = '';
 });
 
+function sentBody(init?: RequestInit): Record<string, unknown> {
+  if (typeof init?.body !== 'string') throw new Error('missing JSON request body');
+  return rec(JSON.parse(init.body), 'request');
+}
+
 describe('title command and screen-only protection (D-27, #178)', () => {
   it('reuses the title request id after a lost response and sends only one request while saving', async () => {
     let finish: ((response: Response) => void) | undefined;
@@ -90,7 +96,9 @@ describe('title command and screen-only protection (D-27, #178)', () => {
     finish?.(
       new Response(JSON.stringify({ ...doc, title: '내 제목', revision: 4 }), { status: 200 }),
     );
-    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(saved).toHaveBeenCalledOnce();
+    });
   });
 
   it('sends one title PATCH, shows the stale title and revision, and retries only on explicit save', async () => {
@@ -131,24 +139,23 @@ describe('title command and screen-only protection (D-27, #178)', () => {
     const first = fetch.mock.calls[0];
     expect(first?.[0]).toBe('/api/documents/d1');
     expect(first?.[1]?.method).toBe('PATCH');
-    expect(JSON.parse(String(first?.[1]?.body))).toEqual({
-      request_id: expect.any(String),
+    const firstBody = sentBody(first?.[1]);
+    expect(typeof firstBody.request_id).toBe('string');
+    expect(firstBody).toEqual({
+      request_id: firstBody.request_id,
       base_revision: 3,
       title: '내 제목',
     });
     expect(new Headers(first?.[1]?.headers).get('x-fvoci-expected-user')).toBe('user-a');
     expect(saved).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole('button', { name: m.documents_title_save() }));
-    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(saved).toHaveBeenCalledOnce();
+    });
     expect(fetch).toHaveBeenCalledTimes(2);
-    const second = JSON.parse(String(fetch.mock.calls[1]?.[1]?.body)) as {
-      base_revision: number;
-      request_id: string;
-    };
+    const second = sentBody(fetch.mock.calls[1]?.[1]);
     expect(second.base_revision).toBe(4);
-    expect(second.request_id).not.toBe(
-      (JSON.parse(String(first?.[1]?.body)) as { request_id: string }).request_id,
-    );
+    expect(second.request_id).not.toBe(firstBody.request_id);
   });
 
   it('warns on leaving a title-only edit and offers no permanent draft after remount', async () => {
