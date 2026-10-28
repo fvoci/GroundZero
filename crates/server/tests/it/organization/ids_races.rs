@@ -42,7 +42,7 @@ const ADD_GROUP_MEMBER: Change = Change {
     command: "SELECT fvoci.app_set_group_member($1,$2,true,@ids)",
 };
 const SHARE: &str = "SELECT fvoci.app_share_document($1,(SELECT email FROM fvoci.users WHERE id=$2),'read',$3,@ids)";
-const ASSIGN_TASK: &str = "SELECT fvoci.app_create_task($1,$2,'racing task',NULL,'','할 일','none',NULL,NULL,NULL,ARRAY[$3]::uuid[],'{}',false,@ids)";
+const ASSIGN_TASK: &str = "SELECT fvoci.app_create_task($1,$2,'racing task',NULL,'','할 일','none',NULL,NULL,NULL,'{}',ARRAY[$3]::uuid[],false,@ids)";
 const GROUP_MEMBER: &str = "SELECT fvoci.app_set_group_member($1,$2,true,@ids)";
 
 async fn execute(tx: &mut UserTx, change: Change, args: &[Uuid]) -> Result<(), AppError> {
