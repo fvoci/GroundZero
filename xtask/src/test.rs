@@ -4,6 +4,9 @@
 //! "NOT RUN"을 출력한다. S3 저장소 테스트(`s3_`)도 시험용 SeaweedFS가 없으면(외부 서비스 모드에서 주소를 주지 않음)
 //! 같은 방식으로 제외한다. 제외는 명령 선택이며 통과로 간주하지 않는다.
 //!
+//! 통합 테스트 앞에 개발 준비 SQL 시험([`crate::dev::check_seeds`])을 같은 PostgreSQL 서버의 새 DB에서 돈다(#168).
+//! `--external-services`는 그 시험을 돌 수 없어(컨테이너 안 psql이 필요) "NOT RUN"을 출력한다.
+//!
 //! 시험 Compose 프로젝트는 체크아웃마다 하나라서(`--supabase`도 검색·S3에 같은 프로젝트를 쓴다) 같은 체크아웃의 실행은
 //! `target/test/run.lock`으로 한 번에 하나씩 돈다(#130). 잠그지 않으면 나중 실행이 앞 실행의 DB에 `db bootstrap`·
 //! `db migrate`·시험을 겹쳐 돌리고, 먼저 끝난 쪽의 `down`이 다른 쪽 DB를 지운다. SIGINT·SIGTERM·SIGHUP을 받으면 진행 중인
@@ -70,6 +73,8 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
         println!("==> postgres on 127.0.0.1:{pg_port}");
         let urls = DbUrls::local(pg_port);
         compose::prepare_database(&sh, &urls)?;
+        compose::check_interrupt()?;
+        crate::dev::check_seeds(root, &compose, &sh, pg_port)?;
         let _env = sh.push_env("DATABASE_URL", &urls.app);
         // 시험 데이터의 시각을 옮기는 일(예: 휴지통 만료)에만 쓰는 테스트 전용 마이그레이션 역할 주소.
         let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);
@@ -122,8 +127,12 @@ fn print_recovery(compose: &Compose) {
 }
 
 /// 셀프호스트 Supabase(공식 구성의 db·rest·supavisor, D-88)를 DB로 두고 같은 통합 테스트를 돌린다. 검색·S3(·Keycloak)은
-/// 시험 Compose에서 PostgreSQL만 빼고 띄운다. 관리자는 superuser가 아닌 `postgres`다. `session_pooler`면 앱 역할
+/// 시험 Compose에서 띄운다. 관리자는 superuser가 아닌 `postgres`다. `session_pooler`면 앱 역할
 /// 연결을 Supavisor의 session 모드로 바꿔 한 번 더 돌린다(마이그레이션·관리·고정 자료 연결은 직접).
+///
+/// 시험 Compose의 PostgreSQL은 통합 테스트에 쓰지 않고 개발 준비 SQL 시험([`crate::dev::check_seeds`])에만 쓴다. 개발
+/// 실행처럼 그 컨테이너 안의 psql로 준비 SQL을 넣어야 하는데, CI의 `integration`·`oidc` job은 베이스 이미지 안에서 돌아
+/// psql도 Docker도 없으므로 CI에서는 이 경로(`supabase` job)가 그 시험을 돈다(#168).
 pub fn run_supabase(root: &Path, keep: bool, oidc: bool, session_pooler: bool) -> Result<()> {
     let mut services = Compose::new(root, Env::Test);
     if oidc {
@@ -143,7 +152,7 @@ fn supabase_stack(
 ) -> Result<()> {
     let supabase = Supabase::new(root)?;
     let sh = services.shell()?;
-    let mut wanted = vec!["meilisearch", "seaweedfs"];
+    let mut wanted = vec!["postgres", "meilisearch", "seaweedfs"];
     if oidc {
         wanted.push("keycloak");
     }
@@ -154,7 +163,7 @@ fn supabase_stack(
             .context("independent Supavisor regression failed before main stack setup")?;
     }
     println!(
-        "==> compose up ({} without postgres, {})",
+        "==> compose up ({}, {})",
         services.project(),
         supabase.project()
     );
@@ -167,6 +176,10 @@ fn supabase_stack(
     let result = services
         .up_services(&sh, &wanted)
         .and_then(|()| {
+            let pg_port = services.host_port(&sh, "postgres", 5432)?;
+            compose::check_interrupt()?;
+            crate::dev::check_seeds(root, services, &sh, pg_port)?;
+            compose::check_interrupt()?;
             let urls = supabase.prepare_database(&sh)?;
             let db = supabase.host_port(&sh, "db", 5432)?;
             let rest = supabase.host_port(&sh, "rest", 3000)?;
@@ -281,7 +294,11 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let _files = sh.push_env("FVOCI_STORAGE_DIR", root.join("target/test-files"));
     let s3 = std::env::var("FVOCI_TEST_S3_ENDPOINT").is_ok_and(|v| !v.trim().is_empty());
     let _s3_env = push_s3_credentials(&sh);
-    run_tests(&sh, oidc, s3, false)
+    run_tests(&sh, oidc, s3, false)?;
+    println!(
+        "NOT RUN: dev seed check (needs psql in a Compose PostgreSQL container). Use `cargo xtask test` or `--supabase`; CI runs it in the supabase job."
+    );
+    Ok(())
 }
 
 /// 시험용 SeaweedFS의 버킷과 자격 증명(compose.test.yaml과 같은 명백한 테스트 값).
