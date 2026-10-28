@@ -4,6 +4,7 @@
 //! 트랜잭션을 열어 `app.user_id`를 설정하고, 그 안에서만 RLS가 적용된 테이블을 읽고 쓴다.
 //! 로그인·세션 조회처럼 사용자 문맥 이전의 작업은 [`Db::begin_anonymous`]를 쓴다.
 
+pub mod access;
 pub mod admin;
 pub mod config;
 
