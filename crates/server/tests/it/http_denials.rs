@@ -168,7 +168,7 @@ async fn readonly_writes_are_forbidden_and_archived_writes_conflict() {
             json!({"base_version":1,"title":"denied task","description":"","status":"todo","priority":"none","tags":[],"assignee_ids":[],"milestone":false}),
         ),
         (
-            Method::PUT,
+            Method::PATCH,
             format!("/api/files/{file}"),
             json!({"name":"denied.txt"}),
         ),

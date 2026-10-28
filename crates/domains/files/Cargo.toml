@@ -1,0 +1,24 @@
+[package]
+name = "fvoci-files"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+fvoci-core.workspace = true
+fvoci-db.workspace = true
+fvoci-http.workspace = true
+fvoci-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

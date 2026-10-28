@@ -383,8 +383,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야
-         *     하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+         *     있어야 하며 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
          *     내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
          */
         post: operations["export_revision"];
@@ -565,16 +565,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 파일과 모든 버전. */
+        /** 파일 메타데이터. 버전은 별도 모음으로 읽는다. */
         get: operations["get_file"];
-        /** 이름 바꾸기(쓸 수 있는 사람). */
-        put: operations["rename_file"];
+        put?: never;
         post?: never;
         /** 휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다. */
         delete: operations["trash_file"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** 이름 바꾸기(쓸 수 있는 사람). */
+        patch: operations["rename_file"];
         trace?: never;
     };
     "/api/files/{file_id}/content": {
@@ -586,6 +586,23 @@ export interface paths {
         };
         /** 내려받기(볼 수 있는 사람). 최신 또는 `version`. `inline=true`는 이미지·PDF·텍스트만 브라우저 안에서 연다. */
         get: operations["file_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{file_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 볼 수 있는 파일의 버전 목록(최신 먼저). */
+        get: operations["file_versions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3405,7 +3422,7 @@ export interface components {
         /** @description 문서 전체. */
         Document: {
             access: components["schemas"]["Access"];
-            /** @description 소유 권한자 외의 사람이 복제할 수 있는지 (D-20). */
+            /** @description 소유 권한자·문서 작성자 외의 사람이 복제·내보내기·내려받기를 할 수 있는지(D-115). */
             allow_copy: boolean;
             /** @description Tiptap JSON. `type`이 `doc`인 객체. */
             body: Record<string, never>;
@@ -3414,8 +3431,8 @@ export interface components {
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             /**
-             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
-             *     문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
+             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.
+             *     그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다.
              */
             can_export: boolean;
             /**
@@ -3645,11 +3662,6 @@ export interface components {
          * @enum {string}
          */
         FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course" | "episode";
-        /** @description 파일과 모든 버전(최신 먼저). */
-        FileDetail: {
-            file: components["schemas"]["FileView"];
-            versions: components["schemas"]["VersionView"][];
-        };
         /**
          * Format: uuid
          * @description 첨부 파일 내부 ID (D-06). 새 버전을 올려도 유지된다(D-35).
@@ -3663,8 +3675,8 @@ export interface components {
         /** @description 첨부 파일. */
         FileView: {
             /**
-             * @description 내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의
-             *     `allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.
+             * @description 내려받을 수 있는지(D-115). 문서 첨부는 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+             *     있어야 참이다(수정 권한만으로는 참이 아니다). 항목 첨부는 볼 수 있으면 참이다.
              *     아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
              */
             can_download: boolean;
@@ -7598,7 +7610,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileDetail"];
+                    "application/json": components["schemas"]["FileView"];
                 };
             };
             404: {
@@ -7611,10 +7623,69 @@ export interface operations {
             };
         };
     };
+    trash_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTrashed"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     rename_file: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 file_id: string;
             };
@@ -7658,36 +7729,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-        };
-    };
-    trash_file: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileTrashed"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7731,10 +7773,42 @@ export interface operations {
             };
         };
     };
-    delete_file_version: {
+    file_versions: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionView"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_file_version: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 file_id: string;
                 version: number;
@@ -7748,6 +7822,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -13290,7 +13372,10 @@ export interface operations {
     abort_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 upload_id: string;
             };
@@ -13303,6 +13388,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -13325,7 +13418,10 @@ export interface operations {
     complete_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 upload_id: string;
             };
@@ -13339,6 +13435,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -13362,7 +13466,12 @@ export interface operations {
     put_upload_part: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+                /** @description 조각 본문의 SHA-256(16진수) */
+                "x-content-sha256": string;
+            };
             path: {
                 upload_id: string;
                 number: number;
