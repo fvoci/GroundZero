@@ -157,52 +157,34 @@ function storeOthers(): void {
   me.userId = 'user-a';
 }
 
-/** 고칠 것이 없을 때 권한이 바뀌어 멈춘 뒤 제목을 고쳤고, 저장소 쓰기가 실패해 다시 연결이 남기지 못했다. */
+/** 본문을 고친 뒤 권한이 바뀌었고, 저장소 쓰기가 실패해 다시 연결이 남기지 못했다. */
 async function lostAfterDenied(reload: () => void): Promise<void> {
   render(LiveDocumentEditor, { props: { initial: doc, onreload: reload } });
+  await editBody();
   closeWith(4403);
   await screen.findByRole('button', { name: '다시 연결' });
-  await editTitle();
   failDraftWrites();
   await fireEvent.click(reconnectButton());
   expect(lostAlert()).not.toBeNull();
 }
 
 describe('handing the draft over to the parent', () => {
-  const cases: { what: string; edit: () => Promise<void>; title: string; body: DocNode }[] = [
-    { what: 'title only', edit: () => editTitle(), title: EDITED_TITLE, body: doc.body },
-    { what: 'body only', edit: editBody, title: doc.title, body: EDITED_BODY },
-    {
-      what: 'title and body',
-      edit: async () => {
-        await editTitle();
-        await editBody();
-      },
-      title: EDITED_TITLE,
-      body: EDITED_BODY,
-    },
-  ];
-  for (const c of cases) {
-    it(`locks the editor while the parent reopens (${c.what}, 4410)`, async () => {
-      // 부모가 문서를 다시 읽는 중(끝나지 않음).
-      const off = vi.fn();
-      render(LiveDocumentEditor, { props: { initial: doc, onrealtimeoff: off } });
-      await c.edit();
-
-      closeWith(4410);
-      await screen.findByText(/서버에 저장되지 않은 편집이 있어/);
-
-      expect(off).toHaveBeenCalledOnce();
-      expectLocked();
-      expect(loadDraft('d1')).toMatchObject({ title: c.title, body: c.body });
-    });
-  }
+  it('locks the editor while the parent reopens with a body draft (4410)', async () => {
+    const off = vi.fn();
+    render(LiveDocumentEditor, { props: { initial: doc, onrealtimeoff: off } });
+    await editBody();
+    closeWith(4410);
+    await screen.findByText(/서버에 저장되지 않은 편집이 있어/);
+    expect(off).toHaveBeenCalledOnce();
+    expectLocked();
+    expect(loadDraft('d1')).toMatchObject({ title: doc.title, body: EDITED_BODY });
+  });
 
   // 부모가 다시 읽지 못하면 이 편집기를 오류 화면으로 바꾼다(`DocumentScreen`의 reopen). 맡긴 초안은 남아 다음에 열 때 고른다.
   it('leaves the handed-over draft to be offered when the parent fails and replaces the editor (4403)', async () => {
     const reload = vi.fn();
     const live = render(LiveDocumentEditor, { props: { initial: doc, onreload: reload } });
-    await editTitle();
+    await editBody();
     closeWith(4403);
     await screen.findByText(/서버에 저장되지 않은 편집이 있어/);
 
@@ -212,7 +194,7 @@ describe('handing the draft over to the parent', () => {
     expect(screen.getByRole('button', { name: '다시 연결' })).toHaveProperty('disabled', true);
 
     live.unmount();
-    expect(loadDraft('d1')?.title).toBe(EDITED_TITLE);
+    expect(loadDraft('d1')).toMatchObject({ title: doc.title, body: EDITED_BODY });
     render(DocumentEditor, { props: { initial: { ...doc, realtime: false } } });
     expect(await screen.findByRole('region', { name: m.documents_draft_region() })).toBeTruthy();
   });
@@ -222,11 +204,11 @@ describe('reconnecting when the edits cannot be kept', () => {
   it('does not reopen on a failed write, then retries and reopens once it is kept', async () => {
     const reload = vi.fn();
     render(LiveDocumentEditor, { props: { initial: doc, onreload: reload } });
-    // 고칠 것이 없을 때 권한이 바뀌어 멈췄다. 멈춘 뒤 제목을 더 고쳤다.
+    // 본문을 고친 뒤 권한이 바뀌었다.
+    await editBody();
     closeWith(4403);
     await screen.findByRole('button', { name: '다시 연결' });
     expect(discardButton()).toBeNull();
-    await editTitle();
     failDraftWrites();
 
     await fireEvent.click(reconnectButton());
@@ -235,14 +217,16 @@ describe('reconnecting when the edits cannot be kept', () => {
     expect(lostAlert()).not.toBeNull();
     expect(discardButton()).not.toBeNull();
     expect(screen.queryByText(/초안으로 남겼습니다/)).toBeNull();
-    expect(titleInput().value).toBe(EDITED_TITLE);
+    expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+      { insert: '확인받지 못한 문장' },
+    ]);
     expect(titleInput().readOnly).toBe(false);
 
     // 저장소가 다시 쓸 수 있게 됐다. 다시 누르면 남기고 다시 연다.
     vi.restoreAllMocks();
     await fireEvent.click(reconnectButton());
     expect(reload).toHaveBeenCalledOnce();
-    expect(loadDraft('d1')?.title).toBe(EDITED_TITLE);
+    expect(loadDraft('d1')).toMatchObject({ title: doc.title, body: EDITED_BODY });
   });
 
   // #91은 알린 뒤 다시 누르면 남기지 못해도 진행했다(알림을 본 것을 버리기로 봤다). 사용자 결정(2026-10-22)으로 바뀌었다:
@@ -256,7 +240,9 @@ describe('reconnecting when the edits cannot be kept', () => {
 
     expect(reload).not.toHaveBeenCalled();
     expect(lostAlert()).not.toBeNull();
-    expect(titleInput().value).toBe(EDITED_TITLE);
+    expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+      { insert: '확인받지 못한 문장' },
+    ]);
     expect(titleInput().readOnly).toBe(false);
     expect(reconnectButton()).toHaveProperty('disabled', false);
   });
@@ -268,15 +254,17 @@ describe('reconnecting when the edits cannot be kept', () => {
     const reload = vi.fn();
     render(LiveDocumentEditor, { props: { initial: doc, onreload: reload } });
     vi.restoreAllMocks();
+    await editBody();
     closeWith(4403);
     await screen.findByRole('button', { name: '다시 연결' });
-    await editTitle();
 
     for (let press = 0; press < 3; press += 1) {
       await fireEvent.click(reconnectButton());
       expect(reload).not.toHaveBeenCalled();
       expect(lostAlert()).not.toBeNull();
-      expect(titleInput().value).toBe(EDITED_TITLE);
+      expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+        { insert: '확인받지 못한 문장' },
+      ]);
       expect(loadDraft('d1')).toEqual(EARLIER);
     }
   });
@@ -308,7 +296,9 @@ describe('discarding the edits that cannot be kept', () => {
       });
       expect(reload).not.toHaveBeenCalled();
       expect(lostAlert()).not.toBeNull();
-      expect(titleInput().value).toBe(EDITED_TITLE);
+      expect(opened.at(-1)?.document.getText('t').toDelta()).toEqual([
+        { insert: '확인받지 못한 문장' },
+      ]);
       expect(titleInput().readOnly).toBe(false);
       expect(storage()).toEqual(before);
     });
@@ -319,9 +309,8 @@ describe('discarding the edits that cannot be kept', () => {
     const reload = vi.fn();
     const live = render(LiveDocumentEditor, { props: { initial: doc, onreload: reload } });
     failDraftWrites();
-    // 본문과 제목을 고쳤는데 권한이 바뀌어 닫혔고, 이 브라우저에 남기지 못했다.
+    // 본문을 고쳤는데 권한이 바뀌어 닫혔고, 이 브라우저에 남기지 못했다.
     await editBody();
-    await editTitle();
     closeWith(4403);
     await screen.findByRole('button', { name: '다시 연결' });
     expect(lostAlert()).not.toBeNull();
@@ -352,7 +341,6 @@ describe('discarding the edits that cannot be kept', () => {
     const live = render(LiveDocumentEditor, { props: { initial: doc } });
     failDraftWrites();
     await editBody();
-    await editTitle();
     closeWith(4409);
     await screen.findByRole('button', { name: '다시 연결' });
     expect(lostAlert()).not.toBeNull();
@@ -378,10 +366,11 @@ describe('discarding the edits that cannot be kept', () => {
     expect(unload.defaultPrevented).toBe(false);
     expect(storage()).toEqual(before);
 
-    // 다시 연 뒤에 고친 제목은 버린 것이 아니다. 없어질 때 남긴다(버린 본문은 섞지 않는다).
+    // D-27: 다시 연 뒤 제목만 고쳐도 영구 초안을 만들지 않는다(다른 본문 초안은 그대로 둔다).
     await editTitle('다시 연 뒤 고친 제목');
+    expect(titleInput().value).toBe('다시 연 뒤 고친 제목');
     live.unmount();
-    expect(loadDraft('d1')).toMatchObject({ title: '다시 연 뒤 고친 제목', body: doc.body });
+    expect(loadDraft('d1')).toBeUndefined();
     expect(loadDraft('d2')?.title).toBe('다른 문서 초안');
   });
 
@@ -394,7 +383,7 @@ describe('discarding the edits that cannot be kept', () => {
     });
     const snapshot = loadDraft('d1');
     failDraftWrites();
-    await editTitle();
+    await editBody();
     closeWith(4409);
     await screen.findByRole('button', { name: '다시 연결' });
     expect(lostAlert()).not.toBeNull();

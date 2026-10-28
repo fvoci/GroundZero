@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocNode, DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { documentsApi } from '$lib/features/documents/api';
 import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { me } from '$lib/me.svelte';
@@ -131,7 +132,7 @@ describe('a late save for the previous document', () => {
       Promise.resolve(id === 'A' ? liveDocument('A', 'A 제목') : liveDocument('B', 'B 제목')),
     );
     let finishSave: (doc: DocumentView) => void = () => undefined;
-    const save = vi.spyOn(api, 'saveDocument').mockImplementation(
+    const save = vi.spyOn(documentsApi, 'patchTitle').mockImplementation(
       () =>
         new Promise((resolve) => {
           finishSave = (doc: DocumentView) => {
@@ -175,7 +176,7 @@ describe('a late save for the previous document', () => {
     );
     vi.spyOn(api, 'revisions').mockResolvedValue([]);
     let finishSave: (doc: DocumentView) => void = () => undefined;
-    const save = vi.spyOn(api, 'saveDocument').mockImplementation(
+    const save = vi.spyOn(documentsApi, 'patchTitle').mockImplementation(
       () =>
         new Promise((resolve) => {
           finishSave = (doc: DocumentView) => {

@@ -61,7 +61,7 @@ describe('document settings from an out-of-date view', () => {
     // 화면의 문서는 아직 "워크스페이스 공개"다. 서버에서는 그사이 비공개가 됐다.
     vi.spyOn(api, 'document').mockResolvedValue(documentWith('private', true));
     const set = vi
-      .spyOn(api, 'setSettings')
+      .spyOn(documentsApi, 'setSettings')
       .mockImplementation((_id, change) =>
         Promise.resolve(documentWith(change.visibility ?? 'private', change.allow_copy ?? true)),
       );
@@ -98,7 +98,7 @@ describe('document settings from an out-of-date view', () => {
   it('does not send a second change built on the first one’s stale value', async () => {
     vi.spyOn(api, 'document').mockResolvedValue(documentWith('workspace', true));
     let finish: () => void = () => undefined;
-    const set = vi.spyOn(api, 'setSettings').mockImplementation(
+    const set = vi.spyOn(documentsApi, 'setSettings').mockImplementation(
       (_id, change) =>
         new Promise((resolve) => {
           finish = () => {
@@ -129,7 +129,7 @@ describe('document settings from an out-of-date view', () => {
     // 서버의 템플릿 값. 설정 변경은 먼저 처리되어 그때의 값(꺼짐)을 돌려주고, 응답만 늦게 온다.
     let serverTemplate = false;
     let finish: () => void = () => undefined;
-    vi.spyOn(api, 'setSettings').mockImplementation((_id, change) => {
+    vi.spyOn(documentsApi, 'setSettings').mockImplementation((_id, change) => {
       const done: DocumentView = {
         ...documentWith(change.visibility ?? 'workspace', true),
         is_template: serverTemplate,
@@ -181,7 +181,7 @@ describe('a settings save that finishes after the dialog was reopened', () => {
       .spyOn(api, 'document')
       .mockImplementation(() => Promise.resolve(reads.shift() ?? documentWith('private', false)));
     let finish: () => void = () => undefined;
-    vi.spyOn(api, 'setSettings').mockImplementation(
+    vi.spyOn(documentsApi, 'setSettings').mockImplementation(
       () =>
         new Promise((resolve) => {
           // 저장 응답은 저장한 순간의 값(복제 허용)이다.
@@ -276,3 +276,4 @@ describe('a settings save that finishes after the dialog was reopened', () => {
     });
   });
 });
+import { documentsApi } from '$lib/features/documents/api';
