@@ -214,3 +214,19 @@ it('discards an old response even after reads reopen for the verified user', asy
   finish(new Response('[]'));
   await expect(pending).rejects.toMatchObject({ code: 'account_changed' });
 });
+
+it('allows only exact identity verification during live reauthentication safety', async () => {
+  const send = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+  hideSession('reauth');
+  await expect(request('GET', '/api/me')).resolves.toMatchObject({ status: 200 });
+  for (const [method, path] of [
+    ['GET', '/api/workspaces'],
+    ['GET', '/api/me?extra=1'],
+    ['POST', '/api/me'],
+    ['POST', '/auth/logout'],
+  ]) {
+    if (method === undefined || path === undefined) throw new Error('missing request fixture');
+    await expect(request(method, path)).rejects.toMatchObject({ code: 'account_changed' });
+  }
+  expect(send).toHaveBeenCalledOnce();
+});
