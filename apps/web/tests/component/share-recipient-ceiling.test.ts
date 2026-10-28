@@ -144,6 +144,37 @@ it('keeps Edit available for personal notes without applying a workspace recipie
   expect(globalThis.fetch).not.toHaveBeenCalled();
 });
 
+it('offers Edit after the server identifies a workspace member with a write cap', async () => {
+  await setLocale('ko', { reload: false });
+  vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        ...recipient,
+        email: 'member@example.test',
+        recipient_role: 'member',
+        max_permission: 'write',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ),
+  );
+  render(DocumentActions, {
+    doc: ACCESS_DOCUMENT,
+    workspaces: [workspace],
+    onchanged: () => undefined,
+  });
+  await fireEvent.click(screen.getByRole('button', { name: m.documents_share_settings() }));
+  await fireEvent.input(await screen.findByLabelText(m.documents_email()), {
+    target: { value: 'member@example.test' },
+  });
+  await screen.findByText(m.members_role_member());
+  await fireEvent.keyDown(screen.getByRole('button', { name: m.documents_share_permission() }), {
+    key: 'ArrowDown',
+  });
+  expect(
+    await screen.findByRole('option', { name: m.documents_permission_write() }),
+  ).toBeInTheDocument();
+});
+
 it('ignores an earlier writable recipient reply after selecting an outside member', async () => {
   await setLocale('ko', { reload: false });
   let finish: ((response: Response) => void) | undefined;
