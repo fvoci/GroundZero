@@ -1516,8 +1516,6 @@ function parseSearchResult(value: Json): SearchResultView {
   };
 }
 
-const parseBatch = (v: Json): string => str(rec(v, 'trashed'), 'batch_id');
-
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
   workspaceId: string;
