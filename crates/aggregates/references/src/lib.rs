@@ -7,8 +7,9 @@ pub mod state;
 
 use axum::Router;
 use axum::extract::FromRef;
+use axum::middleware::from_extractor_with_state;
 use axum::routing::{get, post};
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use utoipa::OpenApi;
 
 pub use state::ReferencesState;
@@ -26,7 +27,7 @@ pub use state::ReferencesState;
 )]
 pub struct ReferencesApi;
 
-pub fn router<S>() -> Router<S>
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     ReferencesState: FromRef<S>,
@@ -35,4 +36,7 @@ where
     Router::new()
         .route("/reference-candidates", get(handlers::candidates))
         .route("/references/resolve", post(handlers::resolve))
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

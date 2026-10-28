@@ -2,20 +2,13 @@
 
 use crate::state::DocumentsState;
 use axum::Json;
-use axum::extract::Path;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use fvoci_core::error::AppError;
-use fvoci_core::error::ErrorBody;
-use fvoci_core::ids::DocumentId;
-use fvoci_core::ids::ItemId;
-use fvoci_core::ids::WorkspaceId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, ItemId, WorkspaceId};
 use fvoci_core::validate::validate_title;
-use fvoci_db::UserTx;
-use fvoci_db::is_unique_violation;
-use fvoci_db::new_ids;
-use fvoci_http::session::CurrentUser;
-use fvoci_http::session::ExpectedUser;
+use fvoci_db::{UserTx, is_unique_violation, new_ids};
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC, ExpectedUser};
 use serde_json::Value;
 
 use super::{
@@ -92,7 +85,8 @@ pub async fn list_wiki(
 /// 위키 문서 생성. 번호 할당·문서·리비전 1·감사 기록은 정의자 함수 `app_create_wiki_document`가
 /// 한 번에 만든다. 같은 사용자의 같은 `request_id`는 같은 문서를 돌려준다.
 #[utoipa::path(post, path = "/api/workspaces/{workspace_id}/wiki/documents",
-    params(("workspace_id" = String, Path, format = Uuid)), request_body = CreateDocument,
+    params(("workspace_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateDocument,
     responses((status = 201, body = Document), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "다른 조직 공간의 템플릿")), tag = "documents")]

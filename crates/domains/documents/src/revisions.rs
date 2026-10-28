@@ -7,7 +7,10 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use axum::response::Response;
+use fvoci_http::conflict::StaleWrite;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -15,17 +18,14 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::documents::{
-    ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
-    load_with_access, lock_limit_error, to_document, validate_body,
+    Document, SCHEMA_VERSION, access, document_reply, limit_lock_wait, load_with_access,
+    lock_limit_error, stale_reply, to_document, validate_body,
 };
-use crate::state::DocumentLimits as Limits;
-use crate::state::DocumentsState;
-use crate::state::RestoreRequest;
+use crate::state::{DocumentLimits as Limits, DocumentsState, RestoreRequest};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
 use fvoci_core::validate::validate_title;
 use fvoci_db::Db;
-use fvoci_http::session::CurrentUser;
 
 /// 한 번에 돌려주는 리비전 수.
 const PAGE: i64 = 100;
@@ -219,10 +219,12 @@ pub struct ExportRequest {
 /// 하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
 /// 내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/revisions/{revision}/export", operation_id = "export_revision",
-    params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
+    params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
     request_body = ExportRequest,
     responses((status = 200, body = Revision), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn export(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -252,13 +254,13 @@ pub async fn export(
 }
 
 /// 복원의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-/// - `ConflictBody`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
+/// - `StaleWrite<Document>`(`current` 포함): 기준 리비전이 지났다(먼저 남긴 실시간 편집의 리비전 때문일 수 있다).
 /// - `ErrorBody`(`error: "invalid_state"`, `current` 없음): 복원하지 않았다. 실시간 편집을 먼저 리비전으로 남기지 못했거나
 ///   (편집은 남는다), 다른 변경이 문서를 잠금 한도보다 오래 쥐었거나, 방이 바쁘거나 닫혔다.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(untagged)]
 pub enum RestoreConflict {
-    Stale(Box<ConflictBody>),
+    Stale(Box<StaleWrite<Document>>),
     State(ErrorBody),
 }
 
@@ -266,12 +268,14 @@ pub enum RestoreConflict {
 /// 편집이나 방 없이 남은 저장 대기 상태)을 먼저 리비전으로 남기지 못하면 복원하지 않고 409(오류 본문, `invalid_state`)다.
 /// 편집은 남는다. 남겼으면 기준이 지나 최신본과 함께 409다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/revisions/{revision}/restore", operation_id = "restore_revision",
-    params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
+    params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
     request_body = RestoreRevision,
     responses((status = 200, body = Document), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
               (status = 409, body = RestoreConflict,
-               description = "기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`)")),
+               description = "기준이 지났으면 StaleWrite<Document>(최신본·바뀐 칸·요청 id), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`)"),
+              (status = 400, body = ErrorBody)),
     tag = "documents")]
 pub async fn restore(
     State(state): State<DocumentsState>,
@@ -311,10 +315,22 @@ pub async fn restore(
         .await?;
     let mut tx = state.db.begin_as(user).await?;
     let (row, access) = load_with_access(&mut tx, id).await?;
+    let sent = if outcome == "conflict" {
+        let source = fetch_revision(&mut tx, id, revision)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        serde_json::json!({
+            "title": source.title,
+            "body": source.body,
+            "schema_version": SCHEMA_VERSION,
+        })
+    } else {
+        Value::Null
+    };
     tx.commit().await?;
     let doc = to_document(row, access);
     if outcome == "conflict" {
-        return conflict(user, doc);
+        return stale_reply(StatusCode::CONFLICT, "conflict", user, doc, &sent);
     }
     document_reply(user, &doc)
 }

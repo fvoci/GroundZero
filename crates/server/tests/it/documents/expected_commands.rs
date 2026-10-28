@@ -1,8 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    reason = "integration setup and contract assertions must fail the test"
-)]
-
 use super::command_support::{HEADER, call, rename, snapshot};
 use crate::common;
 use crate::sql_support::{self, World};

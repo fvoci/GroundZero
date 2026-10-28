@@ -7,6 +7,7 @@ mod movement;
 mod read;
 mod repository;
 mod save;
+mod title;
 mod validation;
 
 pub use crate::model::{
@@ -52,7 +53,7 @@ pub use movement::{
 pub(crate) use movement::{limit_lock_wait, lock_limit_error};
 use read::conflict_reply;
 pub use read::{__path_get, __path_shared_with_me, get, shared_with_me};
-pub(crate) use read::{conflict, document_reply, representation};
+pub(crate) use read::{conflict, document_reply, representation, stale_reply};
 use repository::load;
 pub use repository::{DocRow, load_for_update, write_revision};
 pub(crate) use repository::{
@@ -61,3 +62,5 @@ pub(crate) use repository::{
 pub use save::{__path_save, save};
 pub(crate) use validation::empty_body;
 pub use validation::validate_body;
+
+pub use title::{__path_patch_title, DocumentTitleConflict, PatchDocumentTitle, patch_title};

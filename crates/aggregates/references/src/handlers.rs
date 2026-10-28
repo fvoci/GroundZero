@@ -2,15 +2,15 @@
 
 use axum::Json;
 use axum::extract::{Query, State};
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::state::ReferencesState;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{ItemId, WorkspaceId};
 use fvoci_db::UserTx;
-use fvoci_http::session::CurrentUser;
 
 /// 종류별 후보 수 상한.
 const CANDIDATES_PER_KIND: i64 = 8;
@@ -73,6 +73,7 @@ pub struct ReferenceInput {
 /// 해석 요청.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ResolveReferences {
+    #[schema(max_items = 100)]
     pub refs: Vec<ReferenceInput>,
 }
 
@@ -225,7 +226,8 @@ async fn by_reference(
 
 /// @ 입력 후보: 사람·항목·문서를 종류별로 찾는다. 볼 수 있는 것만 나온다.
 #[utoipa::path(get, path = "/api/reference-candidates", params(CandidateQuery),
-    responses((status = 200, body = [ReferenceCandidate]), (status = 404, body = ErrorBody)), tag = "references")]
+    responses((status = 200, body = [ReferenceCandidate]), (status = 404, body = ErrorBody),
+              (status = 400, body = ErrorBody)), tag = "references")]
 pub async fn candidates(
     State(state): State<ReferencesState>,
     CurrentUser(user): CurrentUser,
@@ -233,7 +235,12 @@ pub async fn candidates(
 ) -> Result<Json<Vec<ReferenceCandidate>>, AppError> {
     let q = query.q.trim();
     if q.chars().count() > state.max_title_chars {
-        return Err(AppError::BadRequest("query is too long".into()));
+        return Err(AppError::invalid(
+            "q",
+            InvalidReason::TooLong,
+            u64::try_from(state.max_title_chars).ok(),
+            "query is too long",
+        ));
     }
     let mut tx = state.db.begin_as(user).await?;
     // `이름/질의`: 내가 속한 워크스페이스 중 이름이 그렇게 시작하는 곳에서 찾는다(D-18의 `@A/DEV-1`).
@@ -344,17 +351,22 @@ type ResolveRow = (
 );
 
 /// 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. 한 번의 질의로 처리한다.
-#[utoipa::path(post, path = "/api/references/resolve", request_body = ResolveReferences,
-    responses((status = 200, body = [ResolvedReference]), (status = 400, body = ErrorBody)), tag = "references")]
+#[utoipa::path(post,
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), path = "/api/references/resolve", request_body = ResolveReferences,
+    responses((status = 200, body = [ResolvedReference]), (status = 400, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "references")]
 pub async fn resolve(
     State(state): State<ReferencesState>,
     CurrentUser(user): CurrentUser,
     Json(input): Json<ResolveReferences>,
 ) -> Result<Json<Vec<ResolvedReference>>, AppError> {
     if input.refs.len() > MAX_RESOLVE {
-        return Err(AppError::BadRequest(format!(
-            "at most {MAX_RESOLVE} references per request"
-        )));
+        return Err(AppError::invalid(
+            "refs",
+            InvalidReason::TooMany,
+            u64::try_from(MAX_RESOLVE).ok(),
+            format!("at most {MAX_RESOLVE} references per request"),
+        ));
     }
     let ids = |kind: ReferenceKind| -> Vec<Uuid> {
         input

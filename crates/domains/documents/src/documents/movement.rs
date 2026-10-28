@@ -1,26 +1,15 @@
 //! 복제·이동 미리보기와 원자적 배치 명령.
 
-use crate::state::CommittedMove;
-use crate::state::DocumentsState;
-use crate::state::MoveRequest;
+use crate::state::{CommittedMove, DocumentsState, MoveRequest};
 use axum::Json;
-use axum::extract::Path;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::response::Response;
-use fvoci_core::error::AppError;
-use fvoci_core::error::ErrorBody;
-use fvoci_core::ids::DocumentId;
-use fvoci_core::ids::ItemId;
-use fvoci_core::ids::UserId;
-use fvoci_core::ids::WorkspaceId;
+use axum::response::{IntoResponse, Response};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, ItemId, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
-use fvoci_db::Db;
-use fvoci_db::UserTx;
-use fvoci_db::needed_ids;
-use fvoci_db::new_ids;
-use fvoci_http::session::CurrentUser;
+use fvoci_db::{Db, UserTx, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 use super::{
     CopyDocument, Document, LOCK_LIMIT, MoveAccessChange, MoveConflict, MoveDocument, MoveOutcome,
@@ -30,9 +19,12 @@ use super::{
 /// 복제. 새 문서(리비전 1)이며 이후 원본과 동기화하지 않는다 (D-23).
 /// 소유 권한자는 항상, 그 밖의 사람은 원본이 복제를 허용할 때만 할 수 있다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/copy",
-    params(("document_id" = String, Path, format = Uuid)), request_body = CopyDocument,
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CopyDocument,
     responses((status = 201, body = Document), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 404, body = ErrorBody),
+              (status = 400, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn copy(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -106,10 +98,12 @@ async fn preview(
 }
 
 /// 이동 미리보기(소유 권한자).
-#[utoipa::path(post, path = "/api/documents/{document_id}/move/preview",
-    params(("document_id" = String, Path, format = Uuid)), request_body = MoveTarget,
+#[utoipa::path(post, path = "/api/documents/{document_id}/move-plan",
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = MoveTarget,
     responses((status = 200, body = MovePreview), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "documents")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody),
+              (status = 400, body = ErrorBody)), tag = "documents")]
 pub async fn move_preview(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -127,10 +121,12 @@ pub async fn move_preview(
 /// 남고 다시 하면 된다. 한도를 낮춰 그 내용이 본문 검사를 통과하지 못하는 경우처럼 다시 해도 남길 수 없을 때도 같은 409로
 /// 옮기지 않는다(문구에 "try again"이 없다). 다른 변경이 문서나 그 자리를 쥐어 잠금 하나를
 /// 한도(`LOCK_LIMIT`)보다 오래 기다리면 옮기지 않고 409다(편집은 방에 남는다, 다시 하면 된다).
-#[utoipa::path(post, path = "/api/documents/{document_id}/move",
-    params(("document_id" = String, Path, format = Uuid)), request_body = MoveDocument,
+#[utoipa::path(put, path = "/api/documents/{document_id}/placement",
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = MoveDocument,
     responses((status = 200, body = MoveOutcome), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = MoveConflict)), tag = "documents")]
+              (status = 404, body = ErrorBody), (status = 409, body = MoveConflict),
+              (status = 400, body = ErrorBody)), tag = "documents")]
 pub async fn move_document(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,

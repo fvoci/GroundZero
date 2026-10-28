@@ -1,12 +1,8 @@
 //! 문서 행 읽기와 리비전·참조 저장.
 
 use fvoci_core::error::AppError;
-use fvoci_core::ids::DocumentId;
-use fvoci_core::ids::ItemId;
-use fvoci_core::ids::UserId;
-use fvoci_core::ids::WorkspaceId;
-use fvoci_db::UserTx;
-use fvoci_db::needed_ids;
+use fvoci_core::ids::{DocumentId, ItemId, UserId, WorkspaceId};
+use fvoci_db::{UserTx, needed_ids};
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;

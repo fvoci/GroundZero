@@ -2,21 +2,15 @@
 
 use crate::state::DocumentsState;
 use axum::Json;
-use axum::extract::Path;
-use axum::extract::State;
-use axum::http::HeaderMap;
-use axum::http::HeaderValue;
-use axum::http::StatusCode;
-use axum::http::header;
-use axum::response::IntoResponse;
-use axum::response::Response;
-use fvoci_core::error::AppError;
-use fvoci_core::error::ErrorBody;
-use fvoci_core::ids::DocumentId;
-use fvoci_core::ids::OrganizationId;
-use fvoci_core::ids::UserId;
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, OrganizationId, UserId};
 use fvoci_http::cache;
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::CurrentUser;
+use serde_json::Value;
 use time::OffsetDateTime;
 
 use super::{ConflictBody, Document, SharedDocument, load_with_access, to_document};
@@ -138,4 +132,23 @@ pub(super) fn conflict_reply(
 /// 409: `base_revision`이 지났다. 서버 최신본과 그 ETag를 준다.
 pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppError> {
     conflict_reply(StatusCode::CONFLICT, "conflict", user, current)
+}
+
+pub(crate) fn stale_reply(
+    status: StatusCode,
+    error: &'static str,
+    user: UserId,
+    current: Document,
+    sent: &Value,
+) -> Result<Response, AppError> {
+    let (_, etag) = representation(user, &current)?;
+    let mut response = StaleWrite::new(
+        error,
+        "the document changed; reload it before retrying",
+        current,
+        sent,
+    )
+    .into_response();
+    *response.status_mut() = status;
+    Ok(with_etag(response, &etag))
 }

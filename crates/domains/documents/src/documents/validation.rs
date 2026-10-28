@@ -1,7 +1,7 @@
 //! 본문·참조·첨부 주소 검증.
 
 use crate::state::DocumentLimits as Limits;
-use fvoci_core::error::AppError;
+use fvoci_core::error::{AppError, InvalidReason};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -17,18 +17,23 @@ pub fn validate_body(body: &Value, limits: &Limits) -> Result<(), AppError> {
         .and_then(Value::as_str)
         == Some("doc");
     if !is_doc {
-        return Err(AppError::BadRequest(
-            "body must be a document object with type \"doc\"".into(),
+        return Err(invalid_body(
+            "body must be a document object with type \"doc\"",
         ));
     }
     let size = serde_json::to_vec(body)
-        .map_err(|e| AppError::BadRequest(format!("body is not serializable: {e}")))?
+        .map_err(|e| invalid_body(format!("body is not serializable: {e}")))?
         .len();
     if size > limits.max_document_bytes {
-        return Err(AppError::BadRequest(format!(
-            "body is {size} bytes; the limit is {}",
-            limits.max_document_bytes
-        )));
+        return Err(AppError::invalid(
+            "body",
+            InvalidReason::TooLong,
+            u64::try_from(limits.max_document_bytes).ok(),
+            format!(
+                "body is {size} bytes; the limit is {}",
+                limits.max_document_bytes
+            ),
+        ));
     }
     validate_references(body, limits.max_references_per_document)
 }
@@ -51,9 +56,12 @@ fn validate_references(body: &Value, max: usize) -> Result<(), AppError> {
                 if map.get("type").and_then(Value::as_str) == Some("reference") {
                     count += 1;
                     if count > max {
-                        return Err(AppError::BadRequest(format!(
-                            "a document can hold at most {max} references"
-                        )));
+                        return Err(AppError::invalid(
+                            "body",
+                            InvalidReason::TooMany,
+                            u64::try_from(max).ok(),
+                            format!("a document can hold at most {max} references"),
+                        ));
                     }
                     check_reference_node(map)?;
                 }
@@ -76,8 +84,8 @@ fn check_image_node(node: &serde_json::Map<String, Value>) -> Result<(), AppErro
     if is_file_url(src) {
         Ok(())
     } else {
-        Err(AppError::BadRequest(
-            "images must point to an attachment of this service".into(),
+        Err(invalid_body(
+            "images must point to an attachment of this service",
         ))
     }
 }
@@ -127,8 +135,8 @@ fn check_link_mark(mark: &serde_json::Map<String, Value>) -> Result<(), AppError
     if ok && !href.chars().any(char::is_control) {
         Ok(())
     } else {
-        Err(AppError::BadRequest(
-            "links must be http, https, mailto or a relative path".into(),
+        Err(invalid_body(
+            "links must be http, https, mailto or a relative path",
         ))
     }
 }
@@ -136,7 +144,7 @@ fn check_link_mark(mark: &serde_json::Map<String, Value>) -> Result<(), AppError
 /// 참조 노드는 `type`·`attrs`(와 편집기가 붙이는 `marks`)만 가진다. 제목 같은 글자를 노드에 두지 않는다.
 /// id는 하이픈이 있는 36자 표준 형식만 받는다(DB 추출 함수와 같은 규칙).
 fn check_reference_node(node: &serde_json::Map<String, Value>) -> Result<(), AppError> {
-    let bad = || AppError::BadRequest("reference nodes need attrs {kind, id} only".into());
+    let bad = || invalid_body("reference nodes need attrs {kind, id} only");
     if node
         .keys()
         .any(|k| !matches!(k.as_str(), "type" | "attrs" | "marks"))
@@ -169,6 +177,10 @@ fn check_reference_node(node: &serde_json::Map<String, Value>) -> Result<(), App
     Ok(())
 }
 
+fn invalid_body(message: impl Into<String>) -> AppError {
+    AppError::invalid("body", InvalidReason::InvalidFormat, None, message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,7 +208,7 @@ mod tests {
         let big = serde_json::json!({ "type": "doc", "content": "x".repeat(200) });
         assert!(matches!(
             validate_body(&big, &limits(100)),
-            Err(AppError::BadRequest(_))
+            Err(AppError::Invalid(_))
         ));
     }
 

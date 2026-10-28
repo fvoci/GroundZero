@@ -664,8 +664,8 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
-        .merge(fvoci_references::router())
-        .merge(fvoci_documents::router())
+        .merge(fvoci_references::router(&state))
+        .merge(fvoci_documents::router(&state))
         .merge(fvoci_activity::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
@@ -1176,8 +1176,8 @@ mod tests {
     #[test]
     fn the_move_conflict_is_a_preview_or_error_body() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
-        let conflict = &doc["paths"]["/api/documents/{document_id}/move"]["post"]["responses"]["409"]
-            ["content"]["application/json"]["schema"];
+        let conflict = &doc["paths"]["/api/documents/{document_id}/placement"]["put"]["responses"]
+            ["409"]["content"]["application/json"]["schema"];
         assert_eq!(
             conflict,
             &serde_json::json!({ "$ref": "#/components/schemas/MoveConflict" })
@@ -1195,7 +1195,7 @@ mod tests {
         );
     }
 
-    /// CodeRabbit(`fb3a11e`): 복원의 409도 두 모양이다. 기준이 지났으면 `ConflictBody`(최신본), 실시간 편집을 먼저 남기지
+    /// D-62·D-131: 복원의 409도 두 모양이다. 기준이 지났으면 `StaleWrite_Document`(최신본), 실시간 편집을 먼저 남기지
     /// 못했거나 잠금 한도를 넘었으면 `ErrorBody`. 계약이 둘 다 적는다.
     #[test]
     fn the_restore_conflict_is_a_stale_base_or_error_body() {
@@ -1213,7 +1213,7 @@ mod tests {
         assert_eq!(
             one_of,
             [
-                "#/components/schemas/ConflictBody",
+                "#/components/schemas/StaleWrite_Document",
                 "#/components/schemas/ErrorBody"
             ]
         );

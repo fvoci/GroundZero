@@ -13,8 +13,9 @@ pub mod state;
 
 use axum::Router;
 use axum::extract::FromRef;
-use axum::routing::{delete, get, post, put};
-use fvoci_http::session::SessionState;
+use axum::middleware::from_extractor_with_state;
+use axum::routing::{delete, get, patch, post, put};
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use utoipa::OpenApi;
 
 pub use state::{DocumentLimits, DocumentsState};
@@ -26,6 +27,7 @@ pub use state::{DocumentLimits, DocumentsState};
         documents::create_wiki,
         documents::get,
         documents::save,
+        documents::patch_title,
         documents::my_notes,
         documents::create_note,
         documents::set_settings,
@@ -58,6 +60,8 @@ pub use state::{DocumentLimits, DocumentsState};
         documents::Document,
         documents::CreateDocument,
         documents::SaveDocument,
+        documents::PatchDocumentTitle,
+        documents::DocumentTitleConflict,
         documents::ConflictBody,
         documents::SaveConflict,
         documents::Access,
@@ -91,7 +95,7 @@ pub use state::{DocumentLimits, DocumentsState};
 )]
 pub struct DocumentsApi;
 
-pub fn router<S>() -> Router<S>
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     DocumentsState: FromRef<S>,
@@ -113,7 +117,7 @@ where
         )
         .route(
             "/documents/{document_id}/settings",
-            put(documents::set_settings),
+            patch(documents::set_settings),
         )
         .route(
             "/documents/{document_id}/shares",
@@ -125,12 +129,12 @@ where
         )
         .route("/documents/{document_id}/copy", post(documents::copy))
         .route(
-            "/documents/{document_id}/move/preview",
+            "/documents/{document_id}/move-plan",
             post(documents::move_preview),
         )
         .route(
-            "/documents/{document_id}/move",
-            post(documents::move_document),
+            "/documents/{document_id}/placement",
+            put(documents::move_document),
         )
         .route(
             "/documents/{document_id}/public-links",
@@ -174,6 +178,11 @@ where
         .route("/public/{token}", get(public_links::view))
         .route(
             "/documents/{document_id}",
-            get(documents::get).put(documents::save),
+            get(documents::get)
+                .put(documents::save)
+                .patch(documents::patch_title),
         )
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

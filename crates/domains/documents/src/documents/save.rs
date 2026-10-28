@@ -2,14 +2,10 @@
 
 use crate::state::DocumentsState;
 use axum::Json;
-use axum::extract::Path;
-use axum::extract::State;
-use axum::http::HeaderMap;
-use axum::http::StatusCode;
-use axum::http::header;
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
-use fvoci_core::error::AppError;
-use fvoci_core::error::ErrorBody;
+use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
 use fvoci_core::validate::validate_title;
 use fvoci_http::cache;

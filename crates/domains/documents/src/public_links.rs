@@ -4,6 +4,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use fvoci_http::session::EXPECTED_USER_IF_SENT_DOC;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -100,9 +101,11 @@ pub async fn list(
 
 /// 공개 링크 생성(소유 권한자).
 #[utoipa::path(post, path = "/api/documents/{document_id}/public-links", operation_id = "create_public_link",
-    params(("document_id" = String, Path, format = Uuid)), request_body = CreatePublicLink,
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreatePublicLink,
     responses((status = 201, body = CreatedPublicLink), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn create(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -137,8 +140,11 @@ pub async fn create(
 
 /// 공개 링크 철회(소유 권한자). 다음 요청부터 열리지 않는다.
 #[utoipa::path(delete, path = "/api/public-links/{link_id}", operation_id = "revoke_public_link",
-    params(("link_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+    params(("link_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 400, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn revoke(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,

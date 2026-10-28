@@ -7,7 +7,7 @@ use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId};
 use fvoci_core::validate::validate_title;
 use fvoci_db::{is_unique_violation, new_ids};
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 use crate::documents::{
     CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION, SUMMARY_COLUMNS,
@@ -38,7 +38,8 @@ pub async fn list_item_documents(
 
 /// 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다.
 #[utoipa::path(post, path = "/api/items/{item_id}/documents",
-    params(("item_id" = String, Path, format = Uuid)), request_body = CreateDocument,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateDocument,
     responses((status = 201, body = Document), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn create_item_document(

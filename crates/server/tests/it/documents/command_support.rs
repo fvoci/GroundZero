@@ -45,19 +45,28 @@ pub(super) async fn call(
 pub(super) async fn snapshot(w: &World) -> Value {
     let mut conn = common::fixture_conn().await;
     let mut out = serde_json::Map::new();
-    let docs = "SELECT id FROM fvoci.documents WHERE workspace_id=$1 OR owner_user_id=$2";
+    let actors = "SELECT user_id FROM fvoci.organization_members WHERE organization_id=$3";
+    let docs = format!(
+        "SELECT id FROM fvoci.documents WHERE workspace_id=$1 OR owner_user_id=$2 OR created_by IN ({actors})"
+    );
     for (table, predicate) in [
         (
             "documents",
-            "workspace_id=$1 OR owner_user_id=$2".to_owned(),
+            format!("workspace_id=$1 OR owner_user_id=$2 OR created_by IN ({actors})"),
         ),
         ("document_revisions", format!("document_id IN ({docs})")),
         ("document_shares", format!("document_id IN ({docs})")),
         ("document_links", format!("document_id IN ({docs})")),
         ("document_mentions", format!("document_id IN ({docs})")),
         ("public_links", format!("document_id IN ({docs})")),
-        ("audit_log", "workspace_id=$1 OR actor=$2".to_owned()),
-        ("activity", "workspace_id=$1 OR actor=$2".to_owned()),
+        (
+            "audit_log",
+            format!("workspace_id=$1 OR actor=$2 OR actor IN ({actors})"),
+        ),
+        (
+            "activity",
+            format!("workspace_id=$1 OR actor=$2 OR actor IN ({actors})"),
+        ),
     ] {
         let rows: Value = sqlx::query_scalar(&format!(
             "SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text), '[]'::jsonb)
@@ -65,6 +74,7 @@ pub(super) async fn snapshot(w: &World) -> Value {
         ))
         .bind(w.ws)
         .bind(w.owner.id.0)
+        .bind(w.org)
         .fetch_one(&mut conn)
         .await
         .unwrap();

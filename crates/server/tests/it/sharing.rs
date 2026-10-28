@@ -90,7 +90,7 @@ async fn settings(
 ) -> StatusCode {
     send(
         app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{}/settings", doc["id"].as_str().unwrap()),
         Some(user),
         Some(json!({ "visibility": visibility, "allow_copy": allow_copy })),
@@ -405,10 +405,10 @@ async fn move_doc(
     doc: &Value,
     target: Option<&str>,
 ) -> (StatusCode, Value) {
-    let uri = format!("/api/documents/{}/move", doc["id"].as_str().unwrap());
+    let uri = format!("/api/documents/{}/placement", doc["id"].as_str().unwrap());
     let preview = send(
         app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(user),
         Some(json!({ "target_workspace_id": target })),
@@ -422,7 +422,7 @@ async fn move_doc(
     let ack = json!({ "changes": preview.json["changes"] });
     let r = send(
         app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(user),
         Some(json!({ "target_workspace_id": target, "acknowledged": ack })),
@@ -443,10 +443,10 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
     let doc = create_doc(&app, &alice, &src, "옮길 문서").await;
     assert_eq!(get(&app, &src_reader, &doc).await.0, StatusCode::OK);
 
-    let uri = format!("/api/documents/{}/move", doc["id"].as_str().unwrap());
+    let uri = format!("/api/documents/{}/placement", doc["id"].as_str().unwrap());
     let preview = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice),
         Some(json!({ "target_workspace_id": dst })),
@@ -465,7 +465,7 @@ async fn move_requires_the_reviewed_preview_and_changes_who_can_see() {
     // 확인한 미리보기가 지금과 다르면(그사이 멤버가 바뀐 경우 등) 옮기지 않고 새 미리보기를 준다.
     let stale = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice),
         Some(json!({ "target_workspace_id": dst, "acknowledged": { "changes": [] } })),
@@ -621,10 +621,10 @@ async fn personal_note_moves_into_a_workspace_as_private() {
     let (peer, _) = add_member(&app, &state, &boss, &ws, "peer", "member").await;
 
     let note = create_note(&app, &alice2, "개인 → 팀").await;
-    let uri = format!("/api/documents/{}/move", note["id"].as_str().unwrap());
+    let uri = format!("/api/documents/{}/placement", note["id"].as_str().unwrap());
     let preview = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice2),
         Some(json!({ "target_workspace_id": ws })),
@@ -914,7 +914,7 @@ async fn document_settings_change_only_the_fields_sent() {
     );
     let copy = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &uri,
         Some(&second),
         Some(json!({ "allow_copy": true })),
@@ -926,7 +926,7 @@ async fn document_settings_change_only_the_fields_sent() {
     // 공개 범위만 보내면 복제 허용은 그대로다.
     let open = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &uri,
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": null })),
@@ -940,7 +940,7 @@ async fn document_settings_change_only_the_fields_sent() {
     let note_uri = format!("/api/documents/{}/settings", note["id"].as_str().unwrap());
     let r = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &note_uri,
         Some(&admin),
         Some(json!({ "allow_copy": true })),
@@ -950,7 +950,7 @@ async fn document_settings_change_only_the_fields_sent() {
     assert_eq!(r.json["visibility"], "private");
     let r = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &note_uri,
         Some(&admin),
         Some(json!({ "visibility": "workspace" })),

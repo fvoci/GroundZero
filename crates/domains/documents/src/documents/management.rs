@@ -1,18 +1,13 @@
 //! 트리·설정·공유·템플릿 명령.
 
-use crate::state::DocumentLimits as Limits;
-use crate::state::DocumentsState;
+use crate::state::{DocumentLimits as Limits, DocumentsState};
 use axum::Json;
-use axum::extract::Path;
-use axum::extract::Query;
-use axum::extract::State;
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use fvoci_core::error::AppError;
-use fvoci_core::error::ErrorBody;
+use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
-use fvoci_db::UserTx;
-use fvoci_db::new_ids;
-use fvoci_http::session::CurrentUser;
+use fvoci_db::{UserTx, new_ids};
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 use uuid::Uuid;
 
 use super::{
@@ -47,9 +42,11 @@ async fn set_parent_in(
 /// 트리에서 부모·순서 바꾸기(쓰기 권한). 권한은 바뀌지 않는다. 부모는 같은 자리에 있어야 하고
 /// 자기 하위로는 옮길 수 없으며 깊이 한도(`FVOCI_MAX_DOCUMENT_DEPTH`)를 넘을 수 없다.
 #[utoipa::path(put, path = "/api/documents/{document_id}/parent",
-    params(("document_id" = String, Path, format = Uuid)), request_body = SetParent,
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetParent,
     responses((status = 200, body = Document), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn set_parent(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -64,8 +61,9 @@ pub async fn set_parent(
 }
 
 /// 비공개·복제 허용 설정(소유 권한자). 감사 기록을 남긴다.
-#[utoipa::path(put, path = "/api/documents/{document_id}/settings",
-    params(("document_id" = String, Path, format = Uuid)), request_body = DocumentSettings,
+#[utoipa::path(patch, path = "/api/documents/{document_id}/settings",
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = DocumentSettings,
     responses((status = 200, body = Document), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "documents")]
@@ -114,9 +112,11 @@ pub async fn list_shares(
 
 /// 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/shares",
-    params(("document_id" = String, Path, format = Uuid)), request_body = CreateShare,
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateShare,
     responses((status = 201, body = Share), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn create_share(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -147,8 +147,11 @@ pub async fn create_share(
 
 /// 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.
 #[utoipa::path(delete, path = "/api/document-shares/{share_id}",
-    params(("share_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+    params(("share_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 400, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn delete_share(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
@@ -201,8 +204,11 @@ pub async fn templates(
 
 /// 템플릿 표시·해제(문서 소유 권한자).
 #[utoipa::path(put, path = "/api/documents/{document_id}/template", operation_id = "set_document_template",
-    params(("document_id" = String, Path, format = Uuid)), request_body = SetDocumentTemplate,
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
+    params(("document_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetDocumentTemplate,
+    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 400, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn set_template(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
