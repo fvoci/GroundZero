@@ -60,6 +60,7 @@ function isCurrentDraft(value: unknown): boolean {
   return (
     pending === null ||
     (retry(pending) &&
+      hasKeys(pending, ['requestId', 'signature']) &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pending.requestId) &&
       /^[0-9a-f]{64}$/.test(pending.signature))
   );
