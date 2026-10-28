@@ -223,7 +223,19 @@ async fn entries_are_edited_with_history_and_summed_in_the_viewers_days() {
     .await;
     assert_eq!(a.status, StatusCode::CREATED, "{:?}", a.json);
     assert_eq!(a.json["seconds"], 3600);
-    assert_eq!(a.json["target"]["label"], "TIM-2 분석");
+    assert_eq!(a.json["target"], json!({"kind":"task", "id":task["id"]}));
+    let targets = send(
+        &app,
+        Method::GET,
+        &format!(
+            "/api/time-entry-targets?entry_id={}",
+            a.json["id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(targets.json[0]["label"], "TIM-2 분석");
     send(
         &app,
         Method::POST,

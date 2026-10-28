@@ -23,8 +23,8 @@ use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
     accounts, courses, documents, export, files, home, item_profile, members, modules,
-    organizations, public_links, records, references, revisions, search_api, study, time_tracking,
-    trash, workspaces, zotero,
+    organizations, public_links, records, references, revisions, search_api, study, trash,
+    workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -105,6 +105,14 @@ impl FromRef<AppState> for fvoci_calendar::CalendarState {
 }
 
 impl FromRef<AppState> for fvoci_activity::ActivityState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_time::TimeState {
     fn from_ref(state: &AppState) -> Self {
         Self {
             db: state.db.clone(),
@@ -293,17 +301,6 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
-        time_tracking::current,
-        time_tracking::start,
-        time_tracking::action,
-        time_tracking::list,
-        time_tracking::add,
-        time_tracking::update,
-        time_tracking::delete,
-        time_tracking::revisions,
-        time_tracking::summary,
-        time_tracking::task_time,
-        time_tracking::item_time,
         // personal scope (2단계 B)
         home::home,
         home::my_tasks,
@@ -455,26 +452,6 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        time_tracking::TimeKind,
-        time_tracking::TargetKind,
-        time_tracking::TargetInput,
-        time_tracking::Target,
-        time_tracking::TimeEntry,
-        time_tracking::StartTimer,
-        time_tracking::TimerStartMode,
-        time_tracking::StartedTimer,
-        time_tracking::TimerAction,
-        time_tracking::TimerActionInput,
-        time_tracking::EntryInput,
-        time_tracking::AddEntry,
-        time_tracking::UpdateEntry,
-        time_tracking::TimeEntryConflict,
-        time_tracking::TimeEntryRevision,
-        time_tracking::SummaryGroup,
-        time_tracking::TimeSummaryRow,
-        time_tracking::TaskTime,
-        time_tracking::ItemTime,
-        time_tracking::ItemTimeKind,
         home::DueBucket,
         home::HomeTask,
         home::HomeDocument,
@@ -629,6 +606,7 @@ impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_calendar::CalendarApi::openapi());
+        openapi.merge(fvoci_time::TimeApi::openapi());
         openapi.merge(fvoci_activity::ActivityApi::openapi());
     }
 }
@@ -691,6 +669,7 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(fvoci_work::router(&state))
         .merge(fvoci_calendar::router())
+        .merge(fvoci_time::router(&state))
         .merge(fvoci_activity::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
@@ -858,29 +837,6 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/parent",
             put(documents::set_parent),
         )
-        .route(
-            "/me/timer",
-            get(time_tracking::current).post(time_tracking::start),
-        )
-        .route(
-            "/time-entries/{entry_id}/timer",
-            post(time_tracking::action),
-        )
-        .route(
-            "/me/time-entries",
-            get(time_tracking::list).post(time_tracking::add),
-        )
-        .route(
-            "/time-entries/{entry_id}",
-            put(time_tracking::update).delete(time_tracking::delete),
-        )
-        .route(
-            "/time-entries/{entry_id}/revisions",
-            get(time_tracking::revisions),
-        )
-        .route("/me/time-summary", get(time_tracking::summary))
-        .route("/tasks/{task_id}/time", get(time_tracking::task_time))
-        .route("/items/{item_id}/time", get(time_tracking::item_time))
         .route(
             "/workspaces/{workspace_id}/trash",
             get(trash::workspace_trash),

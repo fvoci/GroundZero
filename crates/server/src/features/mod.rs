@@ -19,7 +19,6 @@ pub mod revisions;
 pub mod search_api;
 pub mod search_text;
 pub mod study;
-pub mod time_tracking;
 pub mod trash;
 pub mod workspaces;
 pub mod zotero;

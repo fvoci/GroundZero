@@ -1,6 +1,7 @@
 <script lang="ts">
+  import type { TimeTargetKind } from '$lib/features/time/model';
   // 시간 기록의 연결 대상 고르기(업무·문서·항목). @ 링크와 같은 후보 검색을 쓴다(볼 수 있는 대상만 나온다).
-  import type { ReferenceCandidateView, TimeTargetKind } from '$lib/api/client';
+  import type { ReferenceCandidateView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { m } from '$lib/paraglide/messages.js';
   import { Input } from '$lib/ui/input';
@@ -20,16 +21,17 @@
   let seq = 0;
 
   $effect(() => () => {
+    seq++;
     clearTimeout(timer);
   });
 
   function search(q: string): void {
+    const mine = ++seq;
     clearTimeout(timer);
     if (q.trim() === '') {
       results = [];
       return;
     }
-    const mine = ++seq;
     timer = setTimeout(() => {
       api
         .referenceCandidates(q.trim(), null)
@@ -37,7 +39,7 @@
           if (mine === seq) results = found.filter((c) => c.kind !== 'user');
         })
         .catch(() => {
-          results = [];
+          if (mine === seq) results = [];
         });
     }, 200);
   }
@@ -71,6 +73,8 @@
               type="button"
               class="w-full px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               onclick={() => {
+                seq++;
+                clearTimeout(timer);
                 onpick({ kind, id: c.id, label: labelOf(c) });
                 query = '';
                 results = [];

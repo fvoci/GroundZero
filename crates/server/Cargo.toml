@@ -23,6 +23,7 @@ fvoci-calendar.workspace = true
 fvoci-core.workspace = true
 fvoci-db.workspace = true
 fvoci-http.workspace = true
+fvoci-time.workspace = true
 fvoci-work.workspace = true
 fvoci-activity.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

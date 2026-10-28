@@ -2351,6 +2351,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/time-entry-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 본인 기록의 대상 표시 모음. 타인 기록은 서버 관리자에게도 나오지 않는다.
+         *     공통 참조 해석은 강의 회차·스터디 단위를 지원하지 않아 시간의 다섯 대상 종류를 여기서 읽는다.
+         */
+        get: operations["time_entry_targets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trash/{batch_id}": {
         parameters: {
             query?: never;
@@ -5164,6 +5184,49 @@ export interface components {
             /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
             request_id?: string;
         };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_TimeEntry: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 시간 기록. */
+            current: {
+                /**
+                 * Format: date-time
+                 * @description 진행 중이면 없다.
+                 */
+                ended_at?: string | null;
+                /** Format: uuid */
+                id: string;
+                kind: components["schemas"]["TimeKind"];
+                memo: string;
+                /**
+                 * Format: date-time
+                 * @description 일시정지 중이면 그 시각.
+                 */
+                paused_at?: string | null;
+                /** Format: int32 */
+                paused_seconds: number;
+                /**
+                 * Format: int64
+                 * @description 지금까지의 길이(초). 진행 중이면 응답 시각 기준.
+                 */
+                seconds: number;
+                /** Format: date-time */
+                started_at: string;
+                target?: null | components["schemas"]["TargetInput"];
+                /** Format: int32 */
+                version: number;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
         /** @description 타이머 시작. */
         StartTimer: {
             kind: components["schemas"]["TimeKind"];
@@ -5409,14 +5472,9 @@ export interface components {
             seconds: number;
             /** Format: date-time */
             started_at: string;
-            target?: null | components["schemas"]["Target"];
+            target?: null | components["schemas"]["TargetInput"];
             /** Format: int32 */
             version: number;
-        };
-        /** @description 409 응답: 서버 최신본. */
-        TimeEntryConflict: {
-            current: components["schemas"]["TimeEntry"];
-            error: string;
         };
         /** @description 수정 이력 한 건(고치기 전 값). */
         TimeEntryRevision: {
@@ -5431,6 +5489,13 @@ export interface components {
             /** Format: date-time */
             started_at: string;
         };
+        /** @description 본인 기록의 대상 표시. 기록 자원과 따로 읽어 웹에서 조합한다. */
+        TimeEntryTarget: components["schemas"]["Target"] & {
+            /** Format: uuid */
+            entry_id: string;
+        };
+        /** @description 409 응답: 서버 최신본. */
+        TimeEntryWriteConflict: components["schemas"]["StaleWrite_TimeEntry"] | components["schemas"]["ErrorBody"];
         /**
          * @description 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `hobby`는 취미 활동, `rest`는 휴식.
          * @enum {string}
@@ -10399,7 +10464,10 @@ export interface operations {
     add_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10426,6 +10494,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10491,7 +10567,10 @@ export interface operations {
     start_timer: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12842,7 +12921,10 @@ export interface operations {
     update_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -12883,7 +12965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TimeEntryConflict"];
+                    "application/json": components["schemas"]["TimeEntryWriteConflict"];
                 };
             };
         };
@@ -12891,7 +12973,10 @@ export interface operations {
     delete_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -12905,7 +12990,23 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12947,7 +13048,10 @@ export interface operations {
     timer_action: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -12967,6 +13071,14 @@ export interface operations {
                     "application/json": components["schemas"]["TimeEntry"];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -12976,6 +13088,38 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    time_entry_targets: {
+        parameters: {
+            query?: {
+                entry_id?: string | null;
+                from?: string | null;
+                to?: string | null;
+                tz?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryTarget"][];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
