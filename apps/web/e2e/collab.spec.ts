@@ -39,7 +39,9 @@ test('two users edit a live document together and the result persists', async ({
   await expect
     .poll(() =>
       editor(writer.page).evaluate((element) => {
-        const { state, view } = (element as HTMLElement & { editor: Editor }).editor;
+        const tiptap = element.closest<HTMLElement & { editor: Editor }>('.tiptap');
+        if (tiptap === null) return false;
+        const { state, view } = tiptap.editor;
         const selection = window.getSelection();
         const end = state.doc.content.size - 1;
         return (
