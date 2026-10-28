@@ -6,9 +6,8 @@
 //! 권한·불변식·감사 기록을 처리하고 여기서는 입력 검증과 응답 변환만 한다.
 
 use axum::Json;
-use axum::extract::{FromRequestParts, Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -96,36 +95,7 @@ pub struct Organization {
     pub created_at: OffsetDateTime,
 }
 
-#[derive(Debug, Deserialize)]
-struct OrgQuery {
-    organization_id: Option<OrganizationId>,
-}
-
-/// 개인 화면 요청의 현재 조직 문맥(D-111). 질의 `organization_id`가 없거나 UUID가 아니면 400, 내가 속하지 않은 조직이면
-/// 존재를 숨기고 404. 사용자는 세션으로 정한다(`CurrentUser`와 같다).
-#[derive(Debug, Clone, Copy)]
-pub struct OrgScope {
-    pub user: UserId,
-    pub organization: OrganizationId,
-}
-
-impl FromRequestParts<AppState> for OrgScope {
-    type Rejection = AppError;
-
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
-        let CurrentUser(user) = CurrentUser::from_request_parts(parts, state).await?;
-        let Query(query) = Query::<OrgQuery>::from_request_parts(parts, state)
-            .await
-            .map_err(|_| AppError::BadRequest("organization_id must be a uuid".to_owned()))?;
-        let organization = query
-            .organization_id
-            .ok_or_else(|| AppError::BadRequest("organization_id is required".to_owned()))?;
-        let mut tx = state.db.begin_as(user).await?;
-        access::require_visible(&mut tx, Kind::Organization, organization).await?;
-        tx.commit().await?;
-        Ok(Self { user, organization })
-    }
-}
+pub use fvoci_http::organization::OrgScope;
 
 /// 내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다.
 #[utoipa::path(get, path = "/api/me/organizations", operation_id = "list_my_organizations",

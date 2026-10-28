@@ -9,6 +9,12 @@
 //! API는 제목만, 방을 다시 열어도 내용 유지, 복원하면 방 재시작, 권한·세션이 끝나면 연결 닫힘, 끄면 저장 후 닫힘.
 
 mod common;
+mod sql_support;
+
+#[path = "it/collab_file_refs.rs"]
+mod collab_file_refs;
+#[path = "it/collab_poison.rs"]
+mod collab_poison;
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -1636,10 +1642,11 @@ async fn live_ref_store_and_old_version_cleanup_do_not_race() {
         "text": format!("/api/files/{file_id}/content?version=1&inline=true") }] }] });
     let mut t1 = owner.begin().await.unwrap();
     let stored: bool = sqlx::query_scalar(
-        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, '{}'::uuid[])",
+        "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, ARRAY[$3::uuid], jsonb_build_array(jsonb_build_object('node','fixture','value',$2#>>'{content,0,content,0,text}','editor',$3::uuid)))",
     )
     .bind(&id)
     .bind(&body)
+    .bind(admin.id.0)
     .fetch_one(&mut *t1)
     .await
     .unwrap();
@@ -2015,12 +2022,14 @@ async fn file_refs_lock_versions_before_they_are_written() {
             let owner = owner.clone();
             let id = id.clone();
             let body = body.clone();
+            let editor = admin.id.0;
             tokio::spawn(async move {
                 let stored: bool = sqlx::query_scalar(
-                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, '{}'::uuid[])",
+                    "SELECT fvoci.app_system_collab_store($1::uuid, 1, '\\x00'::bytea, true, $2, ARRAY[$3::uuid], jsonb_build_array(jsonb_build_object('node','fixture','value',$2#>>'{content,0,content,0,text}','editor',$3::uuid)))",
                 )
                 .bind(&id)
                 .bind(&body)
+                .bind(editor)
                 .fetch_one(&owner)
                 .await
                 .unwrap();
