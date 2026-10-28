@@ -1,6 +1,8 @@
+import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 // 진행 중인 타이머(사용자당 하나, D-32). 화면 어디서나 같은 상태를 보도록 하나만 둔다.
-import type { TimeEntryView, TimeKind, TimeTargetKind } from '$lib/api/client';
-import { api, ApiError, newRequestId } from '$lib/api/client';
+
+import { ApiError, newRequestId } from '$lib/api/client';
 import { errorText } from '$lib/api/errors';
 import { m } from '$lib/paraglide/messages.js';
 import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -71,7 +73,7 @@ class TimerStore {
     const mine = ++this.#seq;
     const duringWrite = this.#writing > 0;
     try {
-      const entry = await api.currentTimer();
+      const entry = await timeData.currentTimer();
       if (duringWrite || mine !== this.#seq) return;
       this.#set(entry);
       this.error = undefined;
@@ -116,7 +118,7 @@ class TimerStore {
     try {
       let started;
       try {
-        started = await api.startTimer(requestId, kind, memo, target);
+        started = await timeData.startTimer(requestId, kind, memo, target);
       } catch (error: unknown) {
         if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'timer_running')
           throw error;
@@ -129,7 +131,7 @@ class TimerStore {
           await this.#finishWrite(true);
           return;
         }
-        started = await api.startTimer(requestId, kind, memo, target, mode);
+        started = await timeData.startTimer(requestId, kind, memo, target, mode);
       }
       entry = started;
       if (current()) {
@@ -151,7 +153,7 @@ class TimerStore {
     const mine = this.#beginWrite();
     let next: TimeEntryView;
     try {
-      next = await api.timerAction(this.entry.id, action);
+      next = await timeData.timerAction(this.entry.id, action);
     } catch (e: unknown) {
       // 다른 탭·기기에서 이미 바뀌었다(404·409). 서버 상태로 맞춘 뒤 알린다.
       await this.#finishWrite(!TimerStore.#stale(e));

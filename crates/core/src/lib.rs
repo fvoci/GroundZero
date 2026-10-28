@@ -7,6 +7,7 @@ pub mod ids;
 pub mod logging;
 pub mod module;
 pub mod random;
+pub mod recurrence;
 pub mod secret;
 pub mod trash;
 pub mod validate;

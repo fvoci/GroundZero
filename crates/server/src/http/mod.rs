@@ -22,9 +22,8 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, courses, documents, event_recurrence, events, export, files, home, item_profile,
-    members, modules, organizations, public_links, records, references, revisions, saved_views,
-    search_api, study, time_tracking, trash, workspaces, zotero,
+    accounts, courses, documents, export, home, item_profile, members, modules, organizations,
+    public_links, records, references, revisions, search_api, study, trash, workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -96,7 +95,44 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+impl fvoci_files::PersistWorkspace for crate::collab::Rooms {
+    fn persist_workspace(
+        &self,
+        workspace: uuid::Uuid,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(crate::collab::Rooms::persist_workspace(self, workspace))
+    }
+}
+
+impl FromRef<AppState> for fvoci_files::FilesState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            storage: state.storage.clone(),
+            limits: state.config.files,
+            upload_permits: Arc::clone(&state.upload_permits),
+            collab: Arc::new(state.collab.clone()),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_calendar::CalendarState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_activity::ActivityState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_time::TimeState {
     fn from_ref(state: &AppState) -> Self {
         Self {
             db: state.db.clone(),
@@ -285,25 +321,6 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
-        events::list,
-        events::get,
-        events::create,
-        events::update,
-        events::delete,
-        events::calendar,
-        event_recurrence::set_event,
-        event_recurrence::exclude_event,
-        time_tracking::current,
-        time_tracking::start,
-        time_tracking::action,
-        time_tracking::list,
-        time_tracking::add,
-        time_tracking::update,
-        time_tracking::delete,
-        time_tracking::revisions,
-        time_tracking::summary,
-        time_tracking::task_time,
-        time_tracking::item_time,
         // personal scope (2단계 B)
         home::home,
         home::my_tasks,
@@ -320,26 +337,10 @@ async fn api_not_found() -> AppError {
         trash::purge_my_expired,
         trash::set_retention,
         trash::set_version_retention,
-        files::create_upload,
-        files::get_upload,
-        files::put_part,
-        files::complete_upload,
-        files::abort_upload,
-        files::document_files,
-        files::item_files,
-        files::get_file,
-        files::rename_file,
-        files::trash_file,
-        files::content,
-        files::delete_version,
         export::workspace,
         export::mine,
         documents::templates,
         documents::set_template,
-        saved_views::list,
-        saved_views::create,
-        saved_views::update,
-        saved_views::delete,
         study::get,
         study::add_units,
         study::update_unit,
@@ -459,41 +460,6 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        events::EventKind,
-        events::Event,
-        events::EventInput,
-        events::CreateEvent,
-        events::UpdateEvent,
-        events::EventConflict,
-        events::CalendarTask,
-        events::CalendarItem,
-        events::CalendarDate,
-        events::CalendarDateKind,
-        events::Calendar,
-        events::EventOccurrence,
-        events::ProjectedTask,
-        event_recurrence::SetEventRecurrence,
-        event_recurrence::ExcludeOccurrence,
-        time_tracking::TimeKind,
-        time_tracking::TargetKind,
-        time_tracking::TargetInput,
-        time_tracking::Target,
-        time_tracking::TimeEntry,
-        time_tracking::StartTimer,
-        time_tracking::TimerStartMode,
-        time_tracking::StartedTimer,
-        time_tracking::TimerAction,
-        time_tracking::TimerActionInput,
-        time_tracking::EntryInput,
-        time_tracking::AddEntry,
-        time_tracking::UpdateEntry,
-        time_tracking::TimeEntryConflict,
-        time_tracking::TimeEntryRevision,
-        time_tracking::SummaryGroup,
-        time_tracking::TimeSummaryRow,
-        time_tracking::TaskTime,
-        time_tracking::ItemTime,
-        time_tracking::ItemTimeKind,
         home::DueBucket,
         home::HomeTask,
         home::HomeDocument,
@@ -525,20 +491,8 @@ async fn api_not_found() -> AppError {
         trash::SetRetention,
         trash::SetVersionRetention,
         search_api::SearchResult,
-        files::UploadTarget,
-        files::CreateUpload,
-        files::UploadView,
-        files::VersionView,
-        files::FileView,
-        files::FileDetail,
-        files::RenameFile,
-        files::FileTrashed,
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
-        saved_views::SavedView,
-        saved_views::CreateView,
-        saved_views::UpdateView,
-        saved_views::SavedViewConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -651,6 +605,9 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_files::FilesApi::openapi());
+        openapi.merge(fvoci_calendar::CalendarApi::openapi());
+        openapi.merge(fvoci_time::TimeApi::openapi());
         openapi.merge(fvoci_activity::ActivityApi::openapi());
     }
 }
@@ -688,15 +645,6 @@ impl utoipa::Modify for SessionSecurity {
     }
 }
 
-/// 라우터를 조립한다.
-/// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
-async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let Ok(_permit) = Arc::clone(&state.upload_permits).acquire_owned().await else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    };
-    next.run(req).await
-}
-
 pub fn router(state: AppState) -> Router {
     // JSON 직렬화 여유를 두고 문서 상한보다 조금 크게 받는다. 정확한 상한 검사는 핸들러가 한다.
     let body_limit = state
@@ -706,12 +654,11 @@ pub fn router(state: AppState) -> Router {
         .saturating_mul(2)
         .saturating_add(64 * 1024);
 
-    // 업로드 조각은 설정한 조각 크기만큼(머리글 여유 포함) 받는다.
-    let part_limit = usize::try_from(state.config.files.chunk_bytes)
-        .unwrap_or(usize::MAX)
-        .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_files::router(&state))
+        .merge(fvoci_calendar::router())
+        .merge(fvoci_time::router(&state))
         .merge(fvoci_activity::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
@@ -779,14 +726,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/documents/{document_id}/template",
             put(documents::set_template),
-        )
-        .route(
-            "/items/{item_id}/views",
-            get(saved_views::list).post(saved_views::create),
-        )
-        .route(
-            "/views/{view_id}",
-            put(saved_views::update).delete(saved_views::delete),
         )
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
@@ -888,46 +827,6 @@ pub fn router(state: AppState) -> Router {
             put(documents::set_parent),
         )
         .route(
-            "/items/{item_id}/events",
-            get(events::list).post(events::create),
-        )
-        .route(
-            "/events/{event_id}",
-            get(events::get).put(events::update).delete(events::delete),
-        )
-        .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
-        .route(
-            "/events/{event_id}/recurrence",
-            put(event_recurrence::set_event),
-        )
-        .route(
-            "/events/{event_id}/exclusions",
-            post(event_recurrence::exclude_event),
-        )
-        .route(
-            "/me/timer",
-            get(time_tracking::current).post(time_tracking::start),
-        )
-        .route(
-            "/time-entries/{entry_id}/timer",
-            post(time_tracking::action),
-        )
-        .route(
-            "/me/time-entries",
-            get(time_tracking::list).post(time_tracking::add),
-        )
-        .route(
-            "/time-entries/{entry_id}",
-            put(time_tracking::update).delete(time_tracking::delete),
-        )
-        .route(
-            "/time-entries/{entry_id}/revisions",
-            get(time_tracking::revisions),
-        )
-        .route("/me/time-summary", get(time_tracking::summary))
-        .route("/tasks/{task_id}/time", get(time_tracking::task_time))
-        .route("/items/{item_id}/time", get(time_tracking::item_time))
-        .route(
             "/workspaces/{workspace_id}/trash",
             get(trash::workspace_trash),
         )
@@ -944,34 +843,6 @@ pub fn router(state: AppState) -> Router {
             put(trash::set_version_retention),
         )
         .route("/me/trash", get(trash::my_trash))
-        .route("/uploads", post(files::create_upload))
-        .route(
-            "/uploads/{upload_id}",
-            get(files::get_upload).delete(files::abort_upload),
-        )
-        .route(
-            "/uploads/{upload_id}/parts/{number}",
-            put(files::put_part)
-                .layer(DefaultBodyLimit::max(part_limit))
-                .layer(middleware::from_fn_with_state(state.clone(), upload_slot)),
-        )
-        .route(
-            "/uploads/{upload_id}/complete",
-            post(files::complete_upload),
-        )
-        .route("/documents/{document_id}/files", get(files::document_files))
-        .route("/items/{item_id}/files", get(files::item_files))
-        .route(
-            "/files/{file_id}",
-            get(files::get_file)
-                .put(files::rename_file)
-                .delete(files::trash_file),
-        )
-        .route("/files/{file_id}/content", get(files::content))
-        .route(
-            "/files/{file_id}/versions/{version}",
-            delete(files::delete_version),
-        )
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))

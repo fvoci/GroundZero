@@ -9,13 +9,14 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::events::{Event, EventConflict};
-use crate::http::AppState;
-use fvoci_core::error::{AppError, ErrorBody};
+use crate::WorkState;
+use crate::events::{Event, EventWriteConflict};
+use crate::recurrence::RecurrenceRule;
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::validate::parse_date;
 use fvoci_db::new_ids;
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::CurrentUser;
-use fvoci_work::recurrence::RecurrenceRule;
 
 /// 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
 /// 규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.
@@ -28,11 +29,12 @@ pub struct SetEventRecurrence {
 /// 일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해
 /// 그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).
 #[utoipa::path(put, path = "/api/events/{event_id}/recurrence", operation_id = "set_event_recurrence",
-    params(("event_id" = String, Path, format = Uuid)), request_body = SetEventRecurrence,
+    params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = SetEventRecurrence,
     responses((status = 200, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = EventConflict)), tag = "events")]
+              (status = 404, body = ErrorBody), (status = 409, body = EventWriteConflict,
+                  description = "rule_conflict: current는 최신 일정, changed는 요청 본문의 rule 칸. 다른 상태 충돌은 ErrorBody.")), tag = "events")]
 pub async fn set_event(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetEventRecurrence>,
@@ -58,20 +60,27 @@ pub async fn set_event(
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let event = crate::features::events::load(&mut tx, id).await?;
+    let event = crate::events::load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(EventConflict {
-                error: "rule_conflict",
-                current: event,
-            }),
-        )
-            .into_response()
+        recurrence_conflict(event, rule).into_response()
     } else {
         Json(event).into_response()
     })
+}
+
+fn recurrence_conflict(current: Event, rule: Option<serde_json::Value>) -> StaleWrite<Event> {
+    let mut conflict = StaleWrite::new(
+        "rule_conflict",
+        "the recurrence rule changed",
+        current,
+        &serde_json::json!({ "recurrence": rule }),
+    );
+    // 현재 일정의 recurrence와 비교한 뒤 요청 칸(rule)으로 표시한다.
+    for field in &mut conflict.changed {
+        *field = "rule".to_owned();
+    }
+    conflict
 }
 
 /// 반복 일정의 회차 하나 빼기.
@@ -83,17 +92,18 @@ pub struct ExcludeOccurrence {
 
 /// 반복 일정의 회차 하나 빼기(쓰기 권한). 이미 뺐으면 그대로.
 #[utoipa::path(post, path = "/api/events/{event_id}/exclusions", operation_id = "exclude_event_occurrence",
-    params(("event_id" = String, Path, format = Uuid)), request_body = ExcludeOccurrence,
+    params(("event_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "있으면 세션 사용자와 비교한다(D-96).")), request_body = ExcludeOccurrence,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "events")]
 pub async fn exclude_event(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<ExcludeOccurrence>,
 ) -> Result<StatusCode, AppError> {
-    let date = parse_date(Some(&input.date), "date")?
-        .ok_or_else(|| AppError::BadRequest("date is required".into()))?;
+    let date = parse_date(Some(&input.date), "date")?.ok_or_else(|| {
+        AppError::invalid("date", InvalidReason::Required, None, "date is required")
+    })?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_exclude_event_occurrence($1, $2, $3)")
         .bind(id)
@@ -104,4 +114,46 @@ pub async fn exclude_event(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::EventKind;
+    use fvoci_core::access::Grade;
+    use fvoci_core::ids::{ItemId, WorkspaceId};
+
+    fn event() -> Event {
+        Event {
+            id: Uuid::nil(),
+            item_id: ItemId(Uuid::nil()),
+            workspace_id: WorkspaceId(Uuid::nil()),
+            kind: EventKind::Meeting,
+            title: "meeting".into(),
+            description: String::new(),
+            all_day: true,
+            start_date: Some("2026-11-02".into()),
+            end_date: Some("2026-11-02".into()),
+            starts_at: None,
+            ends_at: None,
+            timezone: "UTC".into(),
+            recurrence: None,
+            excluded_dates: Vec::new(),
+            version: 2,
+            access: Grade::Write,
+        }
+    }
+
+    #[test]
+    fn recurrence_conflicts_name_the_request_field_and_keep_equal_values_empty() {
+        let conflict = recurrence_conflict(
+            event(),
+            Some(serde_json::json!({
+                "freq": "weekly", "interval": 1, "weekdays": [], "until": null, "count": null,
+            })),
+        );
+        assert_eq!(conflict.changed, vec!["rule"]);
+        assert_eq!(conflict.current.title, "meeting");
+        assert!(recurrence_conflict(event(), None).changed.is_empty());
+    }
 }

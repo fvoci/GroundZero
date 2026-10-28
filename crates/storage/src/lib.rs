@@ -6,6 +6,9 @@
 //! 프록시(예: Cloudflare)의 요청 크기 제한 안에서 전송하고, 마칠 때 파일 전체를 다시 보내지 않는다. 자체 S3
 //! 서버는 만들지 않는다(S3 쪽은 서명만 직접 한다).
 
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
+pub mod config;
 mod local;
 mod s3;
 
@@ -40,7 +43,7 @@ pub enum Storage {
 }
 
 /// 서버가 만든 키인지 확인한다(경로 탈출·이상한 문자 방지).
-pub(crate) fn check_key(key: &str) -> Result<(), AppError> {
+pub fn check_key(key: &str) -> Result<(), AppError> {
     let ok = !key.is_empty()
         && key.len() <= 512
         && !key.starts_with('/')
@@ -226,7 +229,7 @@ async fn digest_stream(mut stream: ByteStream) -> Result<(String, u64), AppError
 }
 
 /// 조각 표시용 SHA-256(16진수).
-pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+pub fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 

@@ -1,6 +1,7 @@
+import { timeData } from '$lib/features/time/data';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, userEvent, within } from 'storybook/test';
-import { api } from '$lib/api/client';
+
 import TimerWidget from '$lib/features/time/TimerWidget.svelte';
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { setUpTime } from './setup';
@@ -29,7 +30,7 @@ export const Running: Story = {
 export const StopFailed: Story = {
   beforeEach: async () => {
     const restore = await setUpTime(true);
-    spyOn(api, 'timerAction').mockRejectedValue(new Error('offline'));
+    spyOn(timeData, 'timerAction').mockRejectedValue(new Error('offline'));
     return restore;
   },
   play: async ({ canvasElement }) => {

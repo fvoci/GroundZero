@@ -383,8 +383,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야
-         *     하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+         *     있어야 하며 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
          *     내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
          */
         post: operations["export_revision"];
@@ -565,16 +565,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 파일과 모든 버전. */
+        /** 파일 메타데이터. 버전은 별도 모음으로 읽는다. */
         get: operations["get_file"];
-        /** 이름 바꾸기(쓸 수 있는 사람). */
-        put: operations["rename_file"];
+        put?: never;
         post?: never;
         /** 휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다. */
         delete: operations["trash_file"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** 이름 바꾸기(쓸 수 있는 사람). */
+        patch: operations["rename_file"];
         trace?: never;
     };
     "/api/files/{file_id}/content": {
@@ -586,6 +586,23 @@ export interface paths {
         };
         /** 내려받기(볼 수 있는 사람). 최신 또는 `version`. `inline=true`는 이미지·PDF·텍스트만 브라우저 안에서 연다. */
         get: operations["file_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/files/{file_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 볼 수 있는 파일의 버전 목록(최신 먼저). */
+        get: operations["file_versions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2351,6 +2368,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/time-entry-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 본인 기록의 대상 표시 모음. 타인 기록은 서버 관리자에게도 나오지 않는다.
+         *     공통 참조 해석은 강의 회차·스터디 단위를 지원하지 않아 시간의 다섯 대상 종류를 여기서 읽는다.
+         */
+        get: operations["time_entry_targets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trash/{batch_id}": {
         parameters: {
             query?: never;
@@ -3038,7 +3075,7 @@ export interface components {
             /** @description 강의·스터디 계획일, 투고·산출물 날짜(D-80). */
             dates: components["schemas"]["CalendarDate"][];
             /** @description 기간 안에 회차가 있는 일정의 정의. */
-            events: components["schemas"]["Event"][];
+            events: components["schemas"]["CalendarEvent"][];
             items: components["schemas"]["CalendarItem"][];
             occurrences: components["schemas"]["EventOccurrence"][];
             projected_tasks: components["schemas"]["ProjectedTask"][];
@@ -3065,6 +3102,37 @@ export interface components {
          * @enum {string}
          */
         CalendarDateKind: "episode" | "study_unit" | "submission" | "revision_due" | "deliverable";
+        /** @description 일정. */
+        CalendarEvent: {
+            access: components["schemas"]["Access"];
+            /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+            all_day: boolean;
+            description: string;
+            end_date?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /** @description 뺀 회차(일정 시간대 기준 날짜). */
+            excluded_dates: string[];
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            kind: components["schemas"]["CalendarEventKind"];
+            recurrence?: null | components["schemas"]["RecurrenceRule"];
+            start_date?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+            timezone: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * @description 일정 종류.
+         * @enum {string}
+         */
+        CalendarEventKind: "meeting" | "presentation" | "event";
         /** @description 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해). */
         CalendarItem: {
             id: components["schemas"]["ItemId"];
@@ -3354,7 +3422,7 @@ export interface components {
         /** @description 문서 전체. */
         Document: {
             access: components["schemas"]["Access"];
-            /** @description 소유 권한자 외의 사람이 복제할 수 있는지 (D-20). */
+            /** @description 소유 권한자·문서 작성자 외의 사람이 복제·내보내기·내려받기를 할 수 있는지(D-115). */
             allow_copy: boolean;
             /** @description Tiptap JSON. `type`이 `doc`인 객체. */
             body: Record<string, never>;
@@ -3363,8 +3431,8 @@ export interface components {
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             /**
-             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
-             *     문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
+             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.
+             *     그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다.
              */
             can_export: boolean;
             /**
@@ -3533,11 +3601,6 @@ export interface components {
             version: number;
             workspace_id: components["schemas"]["WorkspaceId"];
         };
-        /** @description 409 응답: 서버 최신본. */
-        EventConflict: {
-            current: components["schemas"]["Event"];
-            error: string;
-        };
         /** @description 일정 내용(만들기·고치기 공통). */
         EventInput: {
             all_day: boolean;
@@ -3571,6 +3634,8 @@ export interface components {
             /** Format: date-time */
             starts_at?: string | null;
         };
+        /** @description 일정 판 충돌은 최신 자원과 다른 칸, 보관·계정 충돌은 공통 오류다. */
+        EventWriteConflict: components["schemas"]["StaleWrite_Event"] | components["schemas"]["ErrorBody"];
         /** @description 반복 일정의 회차 하나 빼기. */
         ExcludeOccurrence: {
             /** @description 일정 시간대 기준의 회차 날짜. */
@@ -3597,11 +3662,6 @@ export interface components {
          * @enum {string}
          */
         FieldType: "text" | "long_text" | "date" | "number" | "choice" | "url" | "tags" | "person" | "people" | "course" | "episode";
-        /** @description 파일과 모든 버전(최신 먼저). */
-        FileDetail: {
-            file: components["schemas"]["FileView"];
-            versions: components["schemas"]["VersionView"][];
-        };
         /**
          * Format: uuid
          * @description 첨부 파일 내부 ID (D-06). 새 버전을 올려도 유지된다(D-35).
@@ -3615,8 +3675,8 @@ export interface components {
         /** @description 첨부 파일. */
         FileView: {
             /**
-             * @description 내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의
-             *     `allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.
+             * @description 내려받을 수 있는지(D-115). 문서 첨부는 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+             *     있어야 참이다(수정 권한만으로는 참이 아니다). 항목 첨부는 볼 수 있으면 참이다.
              *     아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
              */
             can_download: boolean;
@@ -4720,11 +4780,6 @@ export interface components {
              */
             version: number;
         };
-        /** @description 409 응답: 이름이 이미 있거나(`exists`) 읽은 판이 지났다(`conflict`). 아무것도 바꾸지 않았고 `current`가 지금 보기다. */
-        SavedViewConflict: {
-            current: components["schemas"]["SavedView"];
-            error: string;
-        };
         /** @description 재배치 미리보기: 옮길 후속 업무와, 바뀐 관계가 닿지만 날짜가 없어 계산하지 않은 업무(날짜를 지어내지 않는다). */
         SchedulePlan: {
             blocked?: null | components["schemas"]["PlanBlocked"];
@@ -4963,6 +5018,46 @@ export interface components {
             title: string;
         };
         /** @description 판 충돌 409 본문. */
+        StaleWrite_Event: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 일정. */
+            current: {
+                access: components["schemas"]["Access"];
+                /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+                all_day: boolean;
+                description: string;
+                end_date?: string | null;
+                /** Format: date-time */
+                ends_at?: string | null;
+                /** @description 뺀 회차(일정 시간대 기준 날짜). */
+                excluded_dates: string[];
+                /** Format: uuid */
+                id: string;
+                item_id: components["schemas"]["ItemId"];
+                kind: components["schemas"]["EventKind"];
+                recurrence?: null | components["schemas"]["RecurrenceRule"];
+                start_date?: string | null;
+                /** Format: date-time */
+                starts_at?: string | null;
+                /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+                timezone: string;
+                title: string;
+                /** Format: int32 */
+                version: number;
+                workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
         StaleWrite_Option_TaskDependency: {
             /**
              * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
@@ -5002,6 +5097,32 @@ export interface components {
                 root_task_id: string;
                 rule?: null | components["schemas"]["RecurrenceRule"];
                 timezone: string;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_SavedView: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 저장한 보기. */
+            current: {
+                config: Record<string, never>;
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /**
+                 * Format: int32
+                 * @description 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
+                 */
+                version: number;
             };
             /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
             error: string;
@@ -5067,6 +5188,49 @@ export interface components {
                  */
                 version: number;
                 workspace_id: components["schemas"]["WorkspaceId"];
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_TimeEntry: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 시간 기록. */
+            current: {
+                /**
+                 * Format: date-time
+                 * @description 진행 중이면 없다.
+                 */
+                ended_at?: string | null;
+                /** Format: uuid */
+                id: string;
+                kind: components["schemas"]["TimeKind"];
+                memo: string;
+                /**
+                 * Format: date-time
+                 * @description 일시정지 중이면 그 시각.
+                 */
+                paused_at?: string | null;
+                /** Format: int32 */
+                paused_seconds: number;
+                /**
+                 * Format: int64
+                 * @description 지금까지의 길이(초). 진행 중이면 응답 시각 기준.
+                 */
+                seconds: number;
+                /** Format: date-time */
+                started_at: string;
+                target?: null | components["schemas"]["TargetInput"];
+                /** Format: int32 */
+                version: number;
             };
             /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
             error: string;
@@ -5320,14 +5484,9 @@ export interface components {
             seconds: number;
             /** Format: date-time */
             started_at: string;
-            target?: null | components["schemas"]["Target"];
+            target?: null | components["schemas"]["TargetInput"];
             /** Format: int32 */
             version: number;
-        };
-        /** @description 409 응답: 서버 최신본. */
-        TimeEntryConflict: {
-            current: components["schemas"]["TimeEntry"];
-            error: string;
         };
         /** @description 수정 이력 한 건(고치기 전 값). */
         TimeEntryRevision: {
@@ -5342,6 +5501,13 @@ export interface components {
             /** Format: date-time */
             started_at: string;
         };
+        /** @description 본인 기록의 대상 표시. 기록 자원과 따로 읽어 웹에서 조합한다. */
+        TimeEntryTarget: components["schemas"]["Target"] & {
+            /** Format: uuid */
+            entry_id: string;
+        };
+        /** @description 409 응답: 서버 최신본. */
+        TimeEntryWriteConflict: components["schemas"]["StaleWrite_TimeEntry"] | components["schemas"]["ErrorBody"];
         /**
          * @description 시간 기록 종류. `study`는 순공부(강의 시청 제외), `lecture`는 강의 시청, `hobby`는 취미 활동, `rest`는 휴식.
          * @enum {string}
@@ -5584,6 +5750,15 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        /** @description 보기 생성의 동명 거절 또는 계정 전환 오류. */
+        ViewCreateConflict: components["schemas"]["ViewNameConflict"] | components["schemas"]["ErrorBody"];
+        /** @description 같은 이름의 보기가 이미 있다. 판 충돌과 달리 만들기 요청은 보기를 바꾸지 않는다. */
+        ViewNameConflict: {
+            current: components["schemas"]["SavedView"];
+            error: string;
+        };
+        /** @description 보기 수정의 판 충돌 또는 계정 전환 오류. */
+        ViewWriteConflict: components["schemas"]["StaleWrite_SavedView"] | components["schemas"]["ErrorBody"];
         /** @description 워크스페이스 요약. */
         Workspace: {
             /**
@@ -7189,7 +7364,10 @@ export interface operations {
     update_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7238,7 +7416,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EventConflict"];
+                    "application/json": components["schemas"]["EventWriteConflict"];
                 };
             };
         };
@@ -7246,7 +7424,10 @@ export interface operations {
     delete_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7259,6 +7440,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -7289,7 +7478,10 @@ export interface operations {
     exclude_event_occurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7344,7 +7536,10 @@ export interface operations {
     set_event_recurrence: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 event_id: string;
             };
@@ -7388,12 +7583,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            /** @description rule_conflict: current는 최신 일정, changed는 요청 본문의 rule 칸. 다른 상태 충돌은 ErrorBody. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EventConflict"];
+                    "application/json": components["schemas"]["EventWriteConflict"];
                 };
             };
         };
@@ -7414,7 +7610,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileDetail"];
+                    "application/json": components["schemas"]["FileView"];
                 };
             };
             404: {
@@ -7427,10 +7623,69 @@ export interface operations {
             };
         };
     };
+    trash_file: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileTrashed"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     rename_file: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 file_id: string;
             };
@@ -7474,36 +7729,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-        };
-    };
-    trash_file: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                file_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileTrashed"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7547,10 +7773,42 @@ export interface operations {
             };
         };
     };
-    delete_file_version: {
+    file_versions: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionView"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_file_version: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 file_id: string;
                 version: number;
@@ -7564,6 +7822,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -8475,7 +8741,10 @@ export interface operations {
     create_event: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9426,7 +9695,10 @@ export interface operations {
     create_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9467,7 +9739,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedViewConflict"];
+                    "application/json": components["schemas"]["ViewCreateConflict"];
                 };
             };
         };
@@ -10274,7 +10546,10 @@ export interface operations {
     add_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10301,6 +10576,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10366,7 +10649,10 @@ export interface operations {
     start_timer: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12717,7 +13003,10 @@ export interface operations {
     update_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -12758,7 +13047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TimeEntryConflict"];
+                    "application/json": components["schemas"]["TimeEntryWriteConflict"];
                 };
             };
         };
@@ -12766,7 +13055,10 @@ export interface operations {
     delete_time_entry: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -12780,7 +13072,23 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12822,7 +13130,10 @@ export interface operations {
     timer_action: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description If sent, must match the signed-in user (D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 entry_id: string;
             };
@@ -12842,6 +13153,14 @@ export interface operations {
                     "application/json": components["schemas"]["TimeEntry"];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -12851,6 +13170,38 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    time_entry_targets: {
+        parameters: {
+            query?: {
+                entry_id?: string | null;
+                from?: string | null;
+                to?: string | null;
+                tz?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryTarget"][];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13021,7 +13372,10 @@ export interface operations {
     abort_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 upload_id: string;
             };
@@ -13034,6 +13388,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -13056,7 +13418,10 @@ export interface operations {
     complete_upload: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 upload_id: string;
             };
@@ -13070,6 +13435,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadView"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -13093,7 +13466,12 @@ export interface operations {
     put_upload_part: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description 보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다. */
+                "x-fvoci-expected-user"?: string | null;
+                /** @description 조각 본문의 SHA-256(16진수) */
+                "x-content-sha256": string;
+            };
             path: {
                 upload_id: string;
                 number: number;
@@ -13141,7 +13519,10 @@ export interface operations {
     update_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 view_id: string;
             };
@@ -13182,7 +13563,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedViewConflict"];
+                    "application/json": components["schemas"]["ViewWriteConflict"];
                 };
             };
         };
@@ -13190,7 +13571,10 @@ export interface operations {
     delete_view: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 있으면 세션 사용자와 비교한다(D-96). */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 view_id: string;
             };
@@ -13203,6 +13587,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {

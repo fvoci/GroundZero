@@ -124,15 +124,7 @@
   }
 
   async function run(): Promise<void> {
-    if (
-      busy ||
-      !mounted ||
-      !open ||
-      accountSwitching() ||
-      !doc.can_export ||
-      (doc.access !== 'owner' && !doc.allow_copy)
-    )
-      return;
+    if (busy || !mounted || !open || accountSwitching() || !doc.can_export) return;
     const started = {
       generation: accountSafety.generation,
       userId: currentUser.userId,

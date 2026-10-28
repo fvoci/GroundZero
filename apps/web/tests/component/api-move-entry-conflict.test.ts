@@ -1,6 +1,10 @@
+import type { EventInput } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
+import type { TimeEntryInput } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventInput, MovePreviewView, TimeEntryInput } from '$lib/api/client';
+import type { MovePreviewView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 
 // 문서 이동의 409는 두 모양이다: 그사이 접근 변화가 바뀌었으면 새 미리보기(`MovePreview`, 다시 확인을 받는다),
@@ -94,6 +98,15 @@ function reply(status: number, json: object): Seen[] {
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body;
     const url =
       typeof target === 'string' ? target : target instanceof URL ? target.href : target.url;
+    if (url.startsWith('/api/time-entry-targets?')) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { entry_id: 't1', kind: 'task', id: 'b', label: '구현', workspace_id: null },
+          ]),
+        ),
+      );
+    }
     seen.push({ method: init?.method ?? 'GET', url, body });
     return Promise.resolve(
       new Response(JSON.stringify(json), {
@@ -182,7 +195,7 @@ describe('document move', () => {
 describe('event and time entry conflicts', () => {
   it('turns a stale event version (409 EventConflict) into a conflict with the latest event', async () => {
     const seen = reply(409, { error: 'conflict', current: event });
-    const result = await api.updateEvent('e1', 3, eventInput);
+    const result = await eventsApi.updateEvent('e1', 3, eventInput);
     expect(result.kind).toBe('conflict');
     expect(result.kind === 'conflict' ? result.current.version : 0).toBe(4);
     expect(seen).toStrictEqual([
@@ -190,9 +203,14 @@ describe('event and time entry conflicts', () => {
     ]);
   });
 
-  it('turns a stale time entry version (409 TimeEntryConflict) into a conflict with the latest entry', async () => {
-    const seen = reply(409, { error: 'conflict', current: entry });
-    const result = await api.updateTimeEntry('t1', 1, entryInput);
+  it('turns a stale time entry version (409 StaleWrite<TimeEntry>) into a conflict with the latest entry', async () => {
+    const seen = reply(409, {
+      error: 'conflict',
+      message: 'the time entry changed',
+      changed: ['memo'],
+      current: entry,
+    });
+    const result = await timeData.updateTimeEntry('t1', 1, entryInput);
     expect(result.kind).toBe('conflict');
     expect(result.kind === 'conflict' ? result.current.version : 0).toBe(2);
     // 대상이 없으면 칸을 빼지 않고 `target: null`로 보낸다.
@@ -203,8 +221,8 @@ describe('event and time entry conflicts', () => {
   });
 
   it('sends the time entry target as given', async () => {
-    const seen = reply(200, { ...entry, target: { kind: 'task', id: 'b', label: '구현' } });
-    const result = await api.updateTimeEntry('t1', 2, {
+    const seen = reply(200, { ...entry, target: { kind: 'task', id: 'b' } });
+    const result = await timeData.updateTimeEntry('t1', 2, {
       ...entryInput,
       target: { kind: 'task', id: 'b' },
     });
@@ -215,8 +233,8 @@ describe('event and time entry conflicts', () => {
   it('reports a 409 without the latest copy (ErrorBody) as an ApiError', async () => {
     reply(409, { error: 'invalid_state', message: 'archived' });
     const failed = [
-      await failure(api.updateEvent('e1', 3, eventInput)),
-      await failure(api.updateTimeEntry('t1', 1, entryInput)),
+      await failure(eventsApi.updateEvent('e1', 3, eventInput)),
+      await failure(timeData.updateTimeEntry('t1', 1, entryInput)),
     ];
     expect(failed.map((e) => (e instanceof ApiError ? [e.status, e.code] : e))).toEqual([
       [409, 'invalid_state'],

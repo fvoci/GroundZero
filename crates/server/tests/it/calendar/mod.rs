@@ -7,12 +7,36 @@
 
 use crate::common;
 
+mod privacy;
+mod scope;
+mod time_exclusion;
+
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
 use serde_json::{Value, json};
 
-async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str, public: bool) -> Value {
+#[derive(Clone, Copy)]
+enum Visibility {
+    Workspace,
+    Private,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum DateStatus {
+    SharedPending,
+    SharedDone,
+    PersonalPending,
+    PersonalDone,
+}
+
+async fn module_item(
+    app: &Router,
+    admin: &TestUser,
+    ws: &str,
+    key: &str,
+    visibility: Visibility,
+) -> Value {
     let m = send(
         app,
         Method::POST,
@@ -31,7 +55,7 @@ async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str, public
     )
     .await;
     assert_eq!(i.status, StatusCode::CREATED, "{:?}", i.json);
-    if public {
+    if matches!(visibility, Visibility::Workspace) {
         let r = send(
             app,
             Method::PUT,
@@ -83,137 +107,6 @@ async fn calendar(
 }
 
 #[tokio::test]
-async fn events_follow_item_access_keep_their_zone_and_guard_versions() {
-    let state = common::state();
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "일정").await;
-    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
-    let outsider = login(&state, "outsider").await;
-    let item = module_item(&app, &admin, &ws, "EVT", true).await;
-
-    let body = timed(
-        "주간 회의",
-        "2026-11-02T10:00:00+09:00",
-        "2026-11-02T11:00:00+09:00",
-        "Asia/Seoul",
-    );
-    let (status, event) = create(&app, &admin, &item, body.clone()).await;
-    assert_eq!(status, StatusCode::CREATED, "{event:?}");
-    assert_eq!(event["starts_at"], "2026-11-02T01:00:00Z");
-    assert_eq!(event["timezone"], "Asia/Seoul");
-    // 같은 요청 id로 다시 보내면 같은 일정.
-    let (_, again) = create(&app, &admin, &item, body).await;
-    assert_eq!(again["id"], event["id"]);
-
-    let bad_zone = timed(
-        "x",
-        "2026-11-02T10:00:00+09:00",
-        "2026-11-02T11:00:00+09:00",
-        "Mars/Olympus",
-    );
-    assert_eq!(
-        create(&app, &admin, &item, bad_zone).await.0,
-        StatusCode::BAD_REQUEST
-    );
-    let backwards = timed(
-        "x",
-        "2026-11-02T10:00:00+09:00",
-        "2026-11-02T09:00:00+09:00",
-        "Asia/Seoul",
-    );
-    assert_eq!(
-        create(&app, &admin, &item, backwards).await.0,
-        StatusCode::BAD_REQUEST
-    );
-    let all_day = json!({ "request_id": new_request_id(), "kind": "event", "title": "학회", "description": "",
-        "all_day": true, "start_date": "2026-11-05", "end_date": "2026-11-07", "starts_at": null, "ends_at": null,
-        "timezone": "Asia/Seoul" });
-    let (status, conf) = create(&app, &admin, &item, all_day.clone()).await;
-    assert_eq!(status, StatusCode::CREATED, "{conf:?}");
-    assert_eq!(
-        (conf["start_date"].clone(), conf["end_date"].clone()),
-        (json!("2026-11-05"), json!("2026-11-07"))
-    );
-    assert_eq!(
-        create(&app, &reader, &item, all_day).await.0,
-        StatusCode::FORBIDDEN
-    );
-    let list = send(
-        &app,
-        Method::GET,
-        &format!("/api/items/{}/events", item["id"].as_str().unwrap()),
-        Some(&outsider),
-        None,
-    )
-    .await;
-    assert_eq!(list.status, StatusCode::NOT_FOUND);
-
-    // 버전 충돌과 날짜 변경 감사.
-    let uri = format!("/api/events/{}", event["id"].as_str().unwrap());
-    let edit = |version: &Value, starts: &str| {
-        json!({ "base_version": version, "kind": "meeting", "title": "주간 회의",
-        "description": "", "all_day": false, "start_date": null, "end_date": null, "starts_at": starts,
-        "ends_at": "2026-11-02T12:00:00+09:00", "timezone": "Asia/Seoul" })
-    };
-    let r = send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&admin),
-        Some(edit(&event["version"], "2026-11-02T10:30:00+09:00")),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    let r = send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&admin),
-        Some(edit(&event["version"], "2026-11-02T09:00:00+09:00")),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::CONFLICT);
-    assert_eq!(r.json["current"]["starts_at"], "2026-11-02T01:30:00Z");
-
-    // 지우기: 독자는 못 하고, 지운 일정은 없는 것과 같다.
-    assert_eq!(
-        send(&app, Method::DELETE, &uri, Some(&reader), None)
-            .await
-            .status,
-        StatusCode::FORBIDDEN
-    );
-    assert_eq!(
-        send(&app, Method::DELETE, &uri, Some(&admin), None)
-            .await
-            .status,
-        StatusCode::NO_CONTENT
-    );
-    assert_eq!(
-        send(&app, Method::GET, &uri, Some(&admin), None)
-            .await
-            .status,
-        StatusCode::NOT_FOUND
-    );
-    assert_eq!(
-        send(&app, Method::DELETE, &uri, Some(&admin), None)
-            .await
-            .status,
-        StatusCode::NOT_FOUND
-    );
-
-    let mut tx = state.db.begin_as(admin.id).await.unwrap();
-    let actions: Vec<String> = sqlx::query_scalar(
-        "SELECT action FROM audit_log WHERE target_id = $1::uuid ORDER BY created_at, id",
-    )
-    .bind(event["id"].as_str().unwrap())
-    .fetch_all(tx.conn())
-    .await
-    .unwrap();
-    assert_eq!(actions, ["create", "reschedule", "delete"]);
-}
-
-#[tokio::test]
 async fn the_calendar_shows_visible_tasks_and_events_by_the_viewers_days() {
     let state = common::state();
     let app = common::app(&state);
@@ -221,8 +114,8 @@ async fn the_calendar_shows_visible_tasks_and_events_by_the_viewers_days() {
     let ws = create_workspace(&app, &admin, "달력").await;
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
-    let public = module_item(&app, &admin, &ws, "PUB", true).await;
-    let private = module_item(&app, &admin, &ws, "PRV", false).await;
+    let public = module_item(&app, &admin, &ws, "PUB", Visibility::Workspace).await;
+    let private = module_item(&app, &admin, &ws, "PRV", Visibility::Private).await;
 
     let t = send(
         &app,
@@ -325,7 +218,7 @@ async fn calendar_days_start_at_the_first_midnight_in_the_viewers_zone() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "아바나 달력").await;
-    let item = module_item(&app, &admin, &ws, "HAV", true).await;
+    let item = module_item(&app, &admin, &ws, "HAV", Visibility::Workspace).await;
     for (title, starts, ends) in [
         (
             "가을 전날 밤",
@@ -383,7 +276,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
     let ws = create_workspace(&app, &admin, "달력 범위").await;
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
-    let made = |kind: &'static str, key: &'static str, public: bool| {
+    let made = |kind: &'static str, key: &'static str, visibility: Visibility| {
         let app = app.clone();
         let admin = admin.clone();
         let ws = ws.clone();
@@ -401,7 +294,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
             )
             .await;
             let item = i.json["id"].as_str().unwrap().to_owned();
-            if public {
+            if matches!(visibility, Visibility::Workspace) {
                 let r = send(
                     &app,
                     Method::PUT,
@@ -415,10 +308,10 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
             (module, item)
         }
     };
-    let (course_module, course) = made("course", "LEC", true).await;
-    let (_, study) = made("study", "STU", true).await;
-    let (_, research) = made("research", "RES", true).await;
-    let (_, project) = made("project", "PRJ", false).await;
+    let (course_module, course) = made("course", "LEC", Visibility::Workspace).await;
+    let (_, study) = made("study", "STU", Visibility::Workspace).await;
+    let (_, research) = made("research", "RES", Visibility::Workspace).await;
+    let (_, project) = made("project", "PRJ", Visibility::Private).await;
 
     let r = send(&app, Method::POST, &format!("/api/items/{course}/episodes"), Some(&admin),
         Some(json!({ "episodes": [
@@ -471,7 +364,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
             (r.status, r.json)
         }
     };
-    let summary = |v: &Value| -> Vec<(String, String, String, bool, bool)> {
+    let summary = |v: &Value| -> Vec<(String, String, String, DateStatus)> {
         v["dates"]
             .as_array()
             .unwrap()
@@ -481,26 +374,63 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
                     d["kind"].as_str().unwrap().to_owned(),
                     d["title"].as_str().unwrap().to_owned(),
                     d["date"].as_str().unwrap().to_owned(),
-                    d["personal"].as_bool().unwrap(),
-                    d["done"].as_bool().unwrap(),
+                    match (
+                        d["personal"].as_bool().unwrap(),
+                        d["done"].as_bool().unwrap(),
+                    ) {
+                        (false, false) => DateStatus::SharedPending,
+                        (false, true) => DateStatus::SharedDone,
+                        (true, false) => DateStatus::PersonalPending,
+                        (true, true) => DateStatus::PersonalDone,
+                    },
                 )
             })
             .collect()
     };
-    let s = |a: &str, b: &str, c: &str, p: bool, d: bool| {
-        (a.to_owned(), b.to_owned(), c.to_owned(), p, d)
+    let s = |a: &str, b: &str, c: &str, status: DateStatus| {
+        (a.to_owned(), b.to_owned(), c.to_owned(), status)
     };
     let (status, all) = dates(&admin, String::new()).await;
     assert_eq!(status, StatusCode::OK, "{all:?}");
     assert_eq!(
         summary(&all),
         vec![
-            s("episode", "1. 벡터", "2026-11-05", false, false),
-            s("episode", "2. 행렬", "2026-11-06", false, false),
-            s("study_unit", "1. 1장", "2026-11-07", false, false),
-            s("submission", "학회 투고", "2026-11-08", false, false),
-            s("deliverable", "설계서", "2026-11-09", false, true),
-            s("revision_due", "학회 투고", "2026-11-12", false, false),
+            s(
+                "episode",
+                "1. 벡터",
+                "2026-11-05",
+                DateStatus::SharedPending
+            ),
+            s(
+                "episode",
+                "2. 행렬",
+                "2026-11-06",
+                DateStatus::SharedPending
+            ),
+            s(
+                "study_unit",
+                "1. 1장",
+                "2026-11-07",
+                DateStatus::SharedPending
+            ),
+            s(
+                "submission",
+                "학회 투고",
+                "2026-11-08",
+                DateStatus::SharedPending
+            ),
+            s(
+                "deliverable",
+                "설계서",
+                "2026-11-09",
+                DateStatus::SharedDone
+            ),
+            s(
+                "revision_due",
+                "학회 투고",
+                "2026-11-12",
+                DateStatus::SharedPending
+            ),
         ]
     );
     // 작성자: 내 계획일로 옮긴 회차는 11-10(개인), 비공개 프로젝트의 산출물은 보이지 않는다.
@@ -508,11 +438,36 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
     assert_eq!(
         summary(&mine),
         vec![
-            s("episode", "1. 벡터", "2026-11-05", false, false),
-            s("study_unit", "1. 1장", "2026-11-07", false, false),
-            s("submission", "학회 투고", "2026-11-08", false, false),
-            s("episode", "2. 행렬", "2026-11-10", true, false),
-            s("revision_due", "학회 투고", "2026-11-12", false, false),
+            s(
+                "episode",
+                "1. 벡터",
+                "2026-11-05",
+                DateStatus::SharedPending
+            ),
+            s(
+                "study_unit",
+                "1. 1장",
+                "2026-11-07",
+                DateStatus::SharedPending
+            ),
+            s(
+                "submission",
+                "학회 투고",
+                "2026-11-08",
+                DateStatus::SharedPending
+            ),
+            s(
+                "episode",
+                "2. 행렬",
+                "2026-11-10",
+                DateStatus::PersonalPending
+            ),
+            s(
+                "revision_due",
+                "학회 투고",
+                "2026-11-12",
+                DateStatus::SharedPending
+            ),
         ]
     );
     // 모듈 범위: 강의 모듈의 회차만. 항목 범위: 그 항목만.
@@ -551,110 +506,4 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
         &format!("/api/workspaces/{other_ws}/calendar?from=2026-11-01&to=2026-11-30&tz=Asia/Seoul&module_id={course_module}"),
         Some(&admin), None).await;
     assert_eq!(r.status, StatusCode::NOT_FOUND);
-}
-
-/// D-113: 보관은 등급 위의 쓰기 금지다. 보관된 항목이나 보관된 모듈의 항목 아래 일정은 등급 판정에서 읽기로 내려오고
-/// (`app_grade_under_item`) 고치기는 거절된다. 웹은 쓰기 UI를 `access`로만 정하므로(따로 계산하지 않는다), 단건·목록·달력
-/// 응답이 모두 같은 `access`를 내야 한다.
-#[tokio::test]
-async fn events_under_an_archived_item_or_module_are_read_only() {
-    let state = common::state();
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "보관 일정").await;
-    let open = module_item(&app, &admin, &ws, "OPN", true).await;
-    let archived_item = module_item(&app, &admin, &ws, "AIT", true).await;
-    let archived_module = module_item(&app, &admin, &ws, "AMD", true).await;
-    let mut events = Vec::new();
-    for (item, title) in [
-        (&open, "열린 일정"),
-        (&archived_item, "보관된 항목의 일정"),
-        (&archived_module, "보관된 모듈의 일정"),
-    ] {
-        let body = timed(
-            title,
-            "2026-11-10T10:00:00+09:00",
-            "2026-11-10T11:00:00+09:00",
-            "Asia/Seoul",
-        );
-        let (status, event) = create(&app, &admin, item, body).await;
-        assert_eq!(status, StatusCode::CREATED, "{event:?}");
-        assert_eq!(event["access"], "owner", "{event:?}");
-        events.push(event);
-    }
-    let r = send(
-        &app,
-        Method::PUT,
-        &format!(
-            "/api/items/{}/archived",
-            archived_item["id"].as_str().unwrap()
-        ),
-        Some(&admin),
-        Some(json!({ "archived": true })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    let r = send(
-        &app,
-        Method::PUT,
-        &format!(
-            "/api/modules/{}/archived",
-            archived_module["module_id"].as_str().unwrap()
-        ),
-        Some(&admin),
-        Some(json!({ "archived": true })),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-
-    let (status, cal) = calendar(&app, &admin, &ws, "2026-11-01", "2026-11-30", "Asia/Seoul").await;
-    assert_eq!(status, StatusCode::OK, "{cal:?}");
-    for (item, event, access, edit_status) in [
-        (&open, &events[0], "owner", StatusCode::OK),
-        (&archived_item, &events[1], "read", StatusCode::CONFLICT),
-        (&archived_module, &events[2], "read", StatusCode::CONFLICT),
-    ] {
-        let id = event["id"].as_str().unwrap();
-        let single = send(
-            &app,
-            Method::GET,
-            &format!("/api/events/{id}"),
-            Some(&admin),
-            None,
-        )
-        .await;
-        assert_eq!(single.status, StatusCode::OK, "{:?}", single.json);
-        assert_eq!(single.json["access"], access, "single {:?}", single.json);
-        let list = send(
-            &app,
-            Method::GET,
-            &format!("/api/items/{}/events", item["id"].as_str().unwrap()),
-            Some(&admin),
-            None,
-        )
-        .await;
-        assert_eq!(list.status, StatusCode::OK, "{:?}", list.json);
-        let listed = list.json.as_array().unwrap();
-        assert_eq!(listed.len(), 1, "{listed:?}");
-        assert_eq!(listed[0]["access"], access, "list {listed:?}");
-        let on_calendar = cal["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|e| e["id"] == event["id"])
-            .unwrap_or_else(|| panic!("{id} missing from the calendar: {cal:?}"));
-        assert_eq!(on_calendar["access"], access, "calendar {on_calendar:?}");
-        let edit = send(
-            &app,
-            Method::PUT,
-            &format!("/api/events/{id}"),
-            Some(&admin),
-            Some(json!({ "base_version": single.json["version"], "kind": "meeting", "title": "고친 제목",
-                "description": "", "all_day": false, "start_date": null, "end_date": null,
-                "starts_at": "2026-11-10T10:00:00+09:00", "ends_at": "2026-11-10T11:30:00+09:00",
-                "timezone": "Asia/Seoul" })),
-        )
-        .await;
-        assert_eq!(edit.status, edit_status, "{id}: {:?}", edit.json);
-    }
 }

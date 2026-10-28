@@ -1,6 +1,7 @@
+import { eventsApi } from '$lib/features/events/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, userEvent, within } from 'storybook/test';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setUpScreen } from '../fixtures/screens';
@@ -22,8 +23,8 @@ const meta = {
       if (key.startsWith('fvoci:event-story-user:-:form-draft:')) localStorage.removeItem(key);
     }
     const restore = setUpScreen('/events');
-    spyOn(api, 'event').mockResolvedValue(recurring);
-    spyOn(api, 'updateEvent').mockRejectedValue(
+    spyOn(eventsApi, 'event').mockResolvedValue(recurring);
+    spyOn(eventsApi, 'updateEvent').mockRejectedValue(
       new ApiError(
         400,
         'bad_request',
@@ -58,7 +59,7 @@ export const UntilRejected: Story = {
 
 /** 반복 없는 회의 일정(반복 칸이 비어 있는 기본 모양 확인용). meta의 반복 일정 대신 이 일정을 돌려준다. */
 const plainMeeting = (): void => {
-  spyOn(api, 'event').mockResolvedValue({
+  spyOn(eventsApi, 'event').mockResolvedValue({
     id: 'event-example',
     item_id: 'item-example',
     workspace_id: 'ws-1',

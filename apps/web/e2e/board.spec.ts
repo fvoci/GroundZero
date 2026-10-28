@@ -42,6 +42,14 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
   await expect(card(lane(page, '할 일'), title)).toBeVisible();
   await expect.poll(() => serverStatus(api, task)).toBe('할 일');
 
+  // 서버 반영 뒤에도 화면의 앞선 이동 저장이 끝나야 다음 이동을 받는다.
+  await expect(
+    page
+      .locator('[data-board-card]')
+      .filter({ has: card(page, title) })
+      .getByRole('button', { name: '→', exact: true, includeHidden: true }),
+  ).toBeEnabled();
+
   // 키보드로 옮기기: 카드에 초점을 둔 채 Alt+오른쪽.
   await card(page, title).focus();
   await page.keyboard.press('Alt+ArrowRight');

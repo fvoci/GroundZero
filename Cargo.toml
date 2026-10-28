@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/db", "crates/domains/work", "crates/domains/activity", "crates/http", "crates/server", "xtask"]
+members = ["crates/aggregates/calendar", "crates/core", "crates/db", "crates/domains/activity", "crates/domains/files", "crates/domains/time", "crates/domains/work", "crates/http", "crates/server", "crates/storage", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,10 +15,14 @@ base64 = { version = "0.23", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
 # 작업 공간 crate. cargo-deny `wildcards = "deny"`(deny.toml)가 판 없는 경로 의존성을 거부하므로 판을 적는다.
 # `[workspace.package]`의 version을 올리면 함께 올린다.
+fvoci-activity = { path = "crates/domains/activity", version = "0.1.0" }
+fvoci-calendar = { path = "crates/aggregates/calendar", version = "0.1.0" }
 fvoci-core = { path = "crates/core", version = "0.1.0" }
 fvoci-db = { path = "crates/db", version = "0.1.0" }
+fvoci-files = { path = "crates/domains/files", version = "0.1.0" }
 fvoci-http = { path = "crates/http", version = "0.1.0" }
-fvoci-activity = { path = "crates/domains/activity", version = "0.1.0" }
+fvoci-storage = { path = "crates/storage", version = "0.1.0" }
+fvoci-time = { path = "crates/domains/time", version = "0.1.0" }
 fvoci-work = { path = "crates/domains/work", version = "0.1.0" }
 rand = "0.10"
 serde = { version = "1", features = ["derive"] }

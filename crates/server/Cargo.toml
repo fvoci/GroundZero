@@ -19,14 +19,17 @@ axum-extra = { version = "0.12", default-features = false, features = ["cookie"]
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 bytes = "1"
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+fvoci-activity.workspace = true
+fvoci-calendar.workspace = true
 fvoci-core.workspace = true
 fvoci-db.workspace = true
+fvoci-files.workspace = true
 fvoci-http.workspace = true
+fvoci-storage.workspace = true
+fvoci-time.workspace = true
 fvoci-work.workspace = true
-fvoci-activity.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
-hmac = "0.13"
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "native-tls"] }
 pdf-extract = "0.12.1"
 rand = "0.10"
@@ -38,7 +41,6 @@ sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio.workspace = true
-tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 tower-http = { version = "0.7", default-features = false, features = ["fs"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

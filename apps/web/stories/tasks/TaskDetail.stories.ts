@@ -1,3 +1,4 @@
+import { timeData } from '$lib/features/time/data';
 import { activityApi } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { api } from '$lib/api/client';
@@ -19,7 +20,7 @@ const meta = {
       spyOn(api, 'taskBacklinks').mockResolvedValue([]),
       spyOn(activityApi, 'comments').mockResolvedValue([]),
       spyOn(activityApi, 'mark').mockResolvedValue({ pin: false, favorite: false }),
-      spyOn(api, 'taskTime').mockResolvedValue({
+      spyOn(timeData, 'taskTime').mockResolvedValue({
         estimate_minutes: null,
         mine_seconds: 0,
       }),
