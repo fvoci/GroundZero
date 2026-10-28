@@ -1,6 +1,8 @@
 # 제품 검사. 로컬과 같은 xtask 진입점을 호출한다.
 # 컨테이너 검사는 base-image 워크플로의 digest를 쓴다. Compose를 직접 다루는 작업은 고정 도구의 호스트 러너에서 돈다.
 # digest는 저장소 변수 CI_BASE_IMAGE_DIGEST (sha256:...)에 둔다. 비어 있으면 image 참조가 잘못되어 job이 시작 단계에서 실패한다. 성공으로 처리하지 않는다.
+# rust-cache의 자동 키에는 Cargo 프로필이 들지 않는다. 루트 Cargo.toml의 [profile.*]를 바꾸면 아래 rust-cache의 prefix-key를
+# 모두 함께 올린다(#158). 그대로 두면 옛 프로필의 의존 빌드를 받아 매번 다시 빌드하고, 키가 같아 새 결과를 저장하지 않는다.
 name: ci
 
 on:
@@ -19,7 +21,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # 변경 경로로 이번 실행이 돌 job을 정한다(#146·#155, 판별과 경로 표는 xtask/src/ci_plan.rs). PR만 좁히고 push(main)는
+  # 전체를 돈다. 건너뛴 job은 결론이 skipped로만 보이므로 사유는 이 job의 실행 요약과 알림에 남는다.
+  # 아래 job은 출력이 'false'일 때만 건너뛴다. 이 job이 실패하면 출력이 비어 모두 돌고, 이 job은 실패로 남는다.
+  # PR 병합 커밋을 첫 부모(기준 브랜치)와 비교하므로 깊이 2로 받는다. git이 체크아웃 소유자와 같은 사용자로 돌도록
+  # 컨테이너가 아니라 호스트 러너에서 돈다(툴체인은 rust-toolchain.toml).
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      docs_only: ${{ steps.plan.outputs.docs_only }}
+      licenses: ${{ steps.plan.outputs.licenses }}
+      integration: ${{ steps.plan.outputs.integration }}
+      browser: ${{ steps.plan.outputs.browser }}
+      oidc: ${{ steps.plan.outputs.oidc }}
+      supabase: ${{ steps.plan.outputs.supabase }}
+      rhwp: ${{ steps.plan.outputs.rhwp }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
+      - id: plan
+        run: cargo xtask ci-plan --event "$GITHUB_EVENT_NAME"
+
+  # 문서 전용 PR이면 서식 검사만 돌고 나머지 단계는 SKIP으로 남는다(#146).
   check:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
@@ -27,14 +59,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       # pnpm은 Corepack이 packageManager의 판·sha512대로 실행한다(이미지의 다른 pnpm이 아니라). 쓰인 판을 로그에 남긴다.
       - run: corepack enable pnpm && rustc -V && node -v && corepack --version && pnpm -v
       - run: pnpm install --frozen-lockfile
       # 라이선스는 아래 licenses job이 따로 보인다(D-60 승인 대기 중 실패가 다른 검사 결과를 가리지 않게).
-      - run: cargo xtask check --skip-licenses
+      - if: needs.changes.outputs.docs_only != 'true'
+        run: cargo xtask check --skip-licenses
+      - if: needs.changes.outputs.docs_only == 'true'
+        run: cargo xtask check --skip-licenses --docs-only
 
   # 의존성 라이선스(D-60). 허용 목록 밖이면 실패로 그대로 보인다. 다른 job은 이 결과를 기다리지 않는다.
   licenses:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.licenses != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     container:
@@ -46,6 +85,8 @@ jobs:
       - run: cargo xtask licenses
 
   integration:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.integration != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
@@ -76,6 +117,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - run: cargo xtask test --external-services
 
   # S3 저장소 테스트(s3_*)는 SeaweedFS에 시작 인자(사용 통계 끄기 등)가 필요해 job 서비스로 띄울 수 없으므로
@@ -86,6 +129,8 @@ jobs:
   # 프로젝트명에 실행 번호·재시도 번호를 넣어 실행마다 컨테이너·네트워크·볼륨을 분리하고, 결과와 상관없이 지운다.
   # Docker 소켓은 테스트 컨테이너에 넘기지 않는다(체크아웃만 마운트).
   oidc:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.oidc != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -115,15 +160,21 @@ jobs:
   # 127.0.0.1 포트) 같은 통합 테스트를 직접 연결과 Supavisor session 모드로 두 번 돈다. 호스트의 Docker 포트를 쓰므로
   # base 이미지 컨테이너가 아니라 러너에서 돈다(툴체인은 rust-toolchain.toml).
   supabase:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.supabase != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - run: cargo xtask test --supabase --session-pooler --oidc
 
   # 실제 API·DB·OIDC를 쓰는 Chromium 회귀. 브라우저/서비스 생명주기는 로컬과 같은 xtask가 소유한다.
   browser:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.browser != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -132,6 +183,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.22.1'
@@ -161,7 +214,11 @@ jobs:
   # HWP·HWPX 미리보기 WASM(D-76). 제품 이미지와 같은 단계(rhwp-out)를 만든다. 빌드 안에서 브라우저에 들어가는
   # 그래프만 cargo-deny로 검사한다(취약점·회수·라이선스, 예외는 deploy/rhwp/deny.toml의 HWP 용도 승인분만).
   # 입력(deploy/rhwp의 네 파일)이 같으면 앞서 만든 결과를 다시 쓴다. 고지 파일이 그 결과와 같은지도 본다.
+  # 권고 검사는 모든 PR에서 돈다(#155 승인 조건). 감사 작업 공간이 빌드 결과 안에 있어 캐시 복원·cargo xtask rhwp도 늘 돌고
+  # (같은 입력이면 재사용, 캐시가 없을 때만 빌드), 경로 조건(rhwp 출력)은 고지 비교에만 건다.
   rhwp:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -173,7 +230,8 @@ jobs:
           path: target/rhwp
           key: rhwp-${{ hashFiles('deploy/rhwp/build.sh', 'deploy/rhwp/inputs.env', 'deploy/rhwp/Cargo.lock', 'deploy/rhwp/deny.toml') }}
       - run: cargo xtask rhwp
-      - run: git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt
+      - if: needs.changes.outputs.rhwp != 'false'
+        run: git diff --exit-code -- deploy/rhwp/THIRD_PARTY_NOTICES.txt
       # 다시 빌드하지 않은 실행에서도 새 보안 권고를 놓치지 않게 권고만 매번 새 DB로 다시 본다(cargo-deny는 베이스 이미지 안).
       - name: cargo xtask rhwp --audit (base image)
         run: >-

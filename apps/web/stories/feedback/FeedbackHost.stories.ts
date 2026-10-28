@@ -50,14 +50,6 @@ export const ConnectionLost: Story = {
   },
 };
 
-export const BrandLight: Story = {
-  ...ConnectionLost,
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
-};
-export const BrandDark: Story = {
-  ...ConnectionLost,
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-};
 export const BrandNarrowLargeText: Story = {
   ...ConnectionLost,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
@@ -67,7 +59,6 @@ export const AccountChanged: Story = {
   beforeEach: () => {
     accountSafety.switching = true;
   },
-  globals: { viewport: { value: 'narrow375' }, fontScale: '200' },
 };
 
 export const RepeatedError: Story = {

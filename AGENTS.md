@@ -5,7 +5,7 @@
 ## 기준 문서
 
 - [결정 기록 색인](docs/decisions.md): 접두어(D·P·O·H·X·C) 설명, 주제별 파일 표, 제안·열린 항목·제외·보류. 확정 결정 D는 `docs/decisions/<주제>.md`에 있고 각 파일 맨 위에 "현재 규칙 요약"이 있다. 변경하려는 영역의 파일 하나를 읽고 다른 조항은 번호(`#d-xx`)로 찾는다. 색인과 모든 주제 파일을 한 번에 읽지 않는다. 달리는 아비시니안 오버홀 결정은 D-111~D-129이다.
-- 달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조·SQL 계약·마이그레이션 안내·변경 종류별 스킬은 D-127에 따라 제거했다. 그 오버홀 동안 기준은 결정 기록과 현재 코드·시험이고, 새 계약 문서와 스킬은 그 오버홀의 4단계에서 코드를 보고 쓴다. 오버홀은 되풀이하며 진행 틀은 D-131, 변경 검토 방식은 D-130이다. [제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은 역사 기록이다.
+- 달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조·SQL 계약·마이그레이션 안내·변경 종류별 스킬은 D-127에 따라 제거했다. 새 스킬(아래 "변경 종류별 읽을 스킬")은 그 오버홀의 4단계에서 현재 코드를 보고 썼다. 규칙 본문은 결정 기록에 있고, 스킬은 읽을 곳과 돌릴 검사만 가리킨다. 오버홀은 되풀이하며 진행 틀은 D-131, 변경 검토 방식은 D-130이다. [제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은 역사 기록이다.
 
 ## 현재 기준과 실행 증거
 
@@ -18,6 +18,16 @@
 [명령표](README.md#명령)를 따른다. 공통 검사는 `cargo xtask check`, 격리 통합 시험은
 `cargo xtask test`다. API를 바꾸면 `cargo xtask openapi`와 `pnpm run generate:api`로 계약과 클라이언트를 함께 갱신한다.
 의존성을 추가·변경하면 `cargo xtask licenses`를 돌리고 허용 목록 밖의 결과는 예외를 넣지 말고 보고한다(D-60).
+
+## 변경 종류별 읽을 스킬
+
+- 기준 SQL(`crates/server/migrations/`): `.agents/skills/sql/SKILL.md`
+- 서버(`crates/server`): `.agents/skills/server/SKILL.md`
+- 웹(`apps/web`·`packages/api-client`): `.agents/skills/web/SKILL.md`
+- 시험 도구·Docker·CI(`xtask`·`deploy`·`.github/workflows`): `.agents/skills/test-docker-ci/SKILL.md`
+- Rust 코드를 쓸 때 `.agents/skills/rust-best-practices/`, 검토할 때 `.agents/skills/rust-review/`(D-130). 저장소 규칙이 우선한다.
+
+관련 없는 스킬은 읽지 않는다.
 
 ## 시크릿·권한·데이터 보호
 

@@ -31,9 +31,7 @@ export const Feed: Story = {
     await expect(await canvas.findByRole('list')).not.toBeEmptyDOMElement();
   },
 };
-export const Dark: Story = { ...Feed, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...Feed, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...Feed,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

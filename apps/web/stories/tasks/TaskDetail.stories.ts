@@ -36,18 +36,6 @@ type Story = StoryObj<typeof meta>;
 export const LightDesktop: Story = {
   globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop', isRotated: false } },
 };
-export const DarkDesktop: Story = {
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop', isRotated: false } },
-};
-export const Light375: Story = {
-  globals: { theme: 'light', fontScale: '100', viewport: { value: 'narrow375', isRotated: false } },
-};
-export const Dark375: Story = {
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'narrow375', isRotated: false } },
-};
-export const Font200: Story = {
-  globals: { theme: 'light', fontScale: '200', viewport: { value: 'desktop', isRotated: false } },
-};
 export const Dark375Font200: Story = {
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375', isRotated: false } },
 };

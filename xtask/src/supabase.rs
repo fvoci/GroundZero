@@ -59,6 +59,17 @@ pub fn upstream(root: &Path) -> Result<PathBuf> {
     Ok(docker)
 }
 
+/// POSIX 셸이 인자 하나로 읽도록 인용한다. 안전한 글자만 있으면 그대로 두고, 아니면 작은따옴표로 감싸며 안의
+/// 작은따옴표는 `'\''`로 바꾼다.
+fn shell_quote(arg: &str) -> String {
+    let safe = |c: char| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c);
+    if !arg.is_empty() && arg.chars().all(safe) {
+        arg.to_owned()
+    } else {
+        format!("'{}'", arg.replace('\'', r"'\''"))
+    }
+}
+
 /// 시험 구성 핸들.
 #[derive(Debug)]
 pub struct Supabase {
@@ -78,6 +89,16 @@ impl Supabase {
 
     pub fn project(&self) -> &str {
         &self.project
+    }
+
+    /// 강제로 끝난 실행의 이 Supabase 프로젝트 컨테이너만 멈추는 명령([`compose::Compose::recovery_command`]와 같은
+    /// 방식). 볼륨은 지우지 않으며 DB는 tmpfs라 컨테이너가 멈추면 내용이 사라진다.
+    ///
+    /// 경로는 체크아웃 위치의 절대 경로라 공백이나 따옴표가 있을 수 있으므로 인자마다 POSIX 셸 규칙으로 인용한다
+    /// (붙여 넣은 명령에서 경로가 여러 인자로 갈라지면 `down`이 실패한다).
+    pub fn recovery_command(&self) -> String {
+        let args: Vec<String> = self.args().iter().map(|a| shell_quote(a)).collect();
+        format!("docker {} down --remove-orphans", args.join(" "))
     }
 
     fn args(&self) -> Vec<String> {

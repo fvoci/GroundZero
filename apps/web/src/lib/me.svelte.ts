@@ -8,4 +8,6 @@ export const me = $state({
   weekStart: '',
   hourCycle: '',
   theme: 'system',
+  // 서버의 제목 글자 수 한도(FVOCI_MAX_TITLE_CHARS, #79). 서버 기본값으로 시작해 로그인 읽기에서 맞춘다.
+  maxTitleChars: 200,
 });

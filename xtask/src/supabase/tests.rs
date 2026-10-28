@@ -167,3 +167,89 @@ fn preparation_failure_stops_setup_and_preserves_original_error() -> Result<()> 
     }
     Ok(())
 }
+
+/// 강제 종료 뒤 안내(#93): 이 체크아웃의 Supabase 프로젝트만 멈추고 볼륨은 지우지 않는다. 같은 실행의 시험 Compose
+/// 프로젝트는 [`compose::Compose::recovery_command`]가 따로 알린다.
+#[test]
+fn recovery_command_names_only_this_project() {
+    let root = Path::new("/work/GroundZero");
+    let supabase = Supabase {
+        root: root.to_path_buf(),
+        upstream: root.join("target/supabase").join(REVISION).join("docker"),
+        project: compose::project_name(root, Env::Supabase),
+    };
+    let command = supabase.recovery_command();
+    let args: Vec<&str> = command.split(' ').collect();
+    assert_eq!(args[..2], ["docker", "compose"], "{command}");
+    let projects: Vec<&str> = args
+        .windows(2)
+        .filter(|pair| pair[0] == "--project-name")
+        .map(|pair| pair[1])
+        .collect();
+    assert_eq!(projects, [supabase.project()], "{command}");
+    assert!(command.ends_with(" down --remove-orphans"), "{command}");
+    assert!(!command.contains("--volumes"), "{command}");
+    assert!(
+        !command.contains(&compose::project_name(root, Env::Test)),
+        "{command}"
+    );
+}
+
+/// 체크아웃 경로에 공백이 있어도 안내 명령의 경로는 인자 하나로 인용되고 이 프로젝트만 가리킨다(CodeRabbit CR-10).
+#[test]
+fn recovery_command_quotes_paths_with_spaces() {
+    let root = Path::new("/work/Ground Zero");
+    let supabase = Supabase {
+        root: root.to_path_buf(),
+        upstream: root.join("target/supabase").join(REVISION).join("docker"),
+        project: compose::project_name(root, Env::Supabase),
+    };
+    let command = supabase.recovery_command();
+    let upstream = format!("/work/Ground Zero/target/supabase/{REVISION}/docker");
+    assert_eq!(
+        command,
+        format!(
+            "docker compose --project-name {project} --project-directory '{upstream}' \
+             --env-file '/work/Ground Zero/deploy/supabase/test.env' \
+             --file '{upstream}/docker-compose.yml' \
+             --file '/work/Ground Zero/deploy/supabase/compose.test.yaml' down --remove-orphans",
+            project = supabase.project()
+        )
+    );
+    assert!(!command.contains(&compose::project_name(root, Env::Test)));
+}
+
+#[test]
+fn shell_quote_keeps_one_argument_for_posix_shells() {
+    assert_eq!(shell_quote("--project-name"), "--project-name");
+    assert_eq!(
+        shell_quote("/work/GroundZero/a.yml"),
+        "/work/GroundZero/a.yml"
+    );
+    assert_eq!(shell_quote(""), "''");
+    assert_eq!(shell_quote("a b"), "'a b'");
+    assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    assert_eq!(shell_quote("$(x)`y`"), "'$(x)`y`'");
+}
+
+/// 인용한 명령을 실제 POSIX 셸이 원래 인자 그대로 나눠 읽는다.
+#[test]
+#[cfg(unix)]
+fn shell_quote_round_trips_through_sh() -> Result<()> {
+    let args = [
+        "/work/Ground Zero/x",
+        "it's",
+        "$HOME `id` \"q\"",
+        "",
+        "plain",
+    ];
+    let quoted: Vec<String> = args.iter().map(|a| shell_quote(a)).collect();
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("printf '%s\\n' {}", quoted.join(" ")))
+        .output()?;
+    assert!(output.status.success());
+    let lines: Vec<&str> = std::str::from_utf8(&output.stdout)?.lines().collect();
+    assert_eq!(lines, args);
+    Ok(())
+}

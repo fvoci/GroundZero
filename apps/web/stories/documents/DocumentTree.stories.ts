@@ -81,8 +81,6 @@ export const MoveFailed: Story = {
   },
 };
 
-export const BrandLight: Story = { globals: { theme: 'light', viewport: { value: 'desktop' } } };
-export const BrandDark: Story = { globals: { theme: 'dark', viewport: { value: 'desktop' } } };
 export const BrandNarrowLargeText: Story = {
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

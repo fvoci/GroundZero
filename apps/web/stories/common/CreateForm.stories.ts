@@ -53,14 +53,6 @@ export const RestoreOffer: Story = {
   },
 };
 
-export const Light: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'light', viewport: { value: 'desktop' } },
-};
-export const Dark: Story = {
-  ...RestoreOffer,
-  globals: { theme: 'dark', viewport: { value: 'desktop' } },
-};
 export const NarrowLargeText: Story = {
   ...RestoreOffer,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },

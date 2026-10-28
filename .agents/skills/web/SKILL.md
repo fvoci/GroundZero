@@ -22,6 +22,7 @@ description: fvoci 웹(apps/web)을 바꿀 때 무엇을 읽고 어떤 검사를
   - 완료·오류 알림과 계정 전환 안전 상태 `features/feedback/feedback.svelte.ts`
   - 공용 입력 `ui/`, 색 토큰 `apps/web/src/styles/app.css`, 문구 `apps/web/messages/<영역>/{ko,en}.json`
   - 상태 정의 편집 `features/tasks/StatusEditor.svelte`
+  - 칸반 이동 동기화·되돌리기 `features/tasks/move-sync.ts`. 지금 제한(#50): 재번호로 이웃의 판이 바뀐 뒤 다시 읽기 전에 되돌리면 `backTo`가 원래 자리를 찾지 못해 그 열 끝으로 돌아가고 `tasks_undone_end`로 알린다. 재번호 경로의 재현 시험은 다음 오버홀 '노르웨이숲 태비'로 넘겼다.
 - 시험 준비: `apps/web/tests/setup.ts`, `apps/web/tests/component/fixtures/`, 스토리 `apps/web/stories/fixtures/screens.ts`, e2e `apps/web/e2e/fixtures.ts`·증거 게시 `apps/web/e2e/publish.ts`.
 
 ## 돌릴 검사

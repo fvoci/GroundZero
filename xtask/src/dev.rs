@@ -5,11 +5,13 @@
 //!   작성자. 둘이 함께 쓰는 실시간 공동 편집 문서도 한 번만 만든다(`deploy/postgres/dev-seed.sql`). 이어서 둘이
 //!   함께 쓰는 별도 합성 워크스페이스에 다섯 모듈의 예제를 한 번만 만든다(`deploy/postgres/dev-module-seed.sql`).
 //!   마지막으로 Storybook과 같은 합성 데이터(`deploy/postgres/dev-ui-data.json`)로 "UI 상태 예제" 워크스페이스를
-//!   한 번만 만든다(`deploy/postgres/dev-ui-seed.sql`).
+//!   한 번만 만든다(`deploy/postgres/dev-ui-seed.sql`). `cargo xtask test`가 같은 경로를 새 DB에 두 번 돌려
+//!   본다([`check_seeds`]).
 //! - `--no-web`: 웹 개발 서버를 띄우지 않는다(API만). 기본은 `pnpm --filter @fvoci/web dev`를 함께 띄운다.
 //! - 공개 URL 기본값은 Vite 원점 `http://127.0.0.1:5173`이며 `FVOCI_PUBLIC_URL`로 바꾼다. 쿠키·리다이렉트가 이
 //!   원점에 맞춰진다.
 
+use std::fmt::Write as _;
 use std::path::Path;
 use std::process::{Child, Command};
 
@@ -58,9 +60,9 @@ pub fn run(root: &Path, oidc: bool, web: bool) -> Result<()> {
     let _files = sh.push_env("FVOCI_STORAGE_DIR", files);
     let _oidc = if oidc {
         let kc = compose.host_port(&sh, "keycloak", 8080)?;
-        let issuer = format!("http://127.0.0.1:{kc}/realms/{}", compose::OIDC_REALM);
+        let issuer = issuer(kc);
         check_realm_users(root, &compose, &sh)?;
-        seed(root, &compose, &sh, &issuer)?;
+        seed(root, &compose, &sh, &issuer, DEV_DATABASE)?;
         println!("keycloak     {issuer}");
         // 비밀번호는 로그·코드에 두지 않는다. 값은 deploy/keycloak/realm-test.json의 테스트 계정에 있다.
         println!(
@@ -136,13 +138,32 @@ fn check_realm_users(root: &Path, compose: &Compose, sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// 개발 Compose의 DB 이름(`compose.dev.yaml`의 `POSTGRES_DB`).
+const DEV_DATABASE: &str = "fvoci";
+
+/// 개발 Keycloak의 테스트 realm 발급자. 사용자 식별은 발급자 + subject라 포트도 그 일부다.
+fn issuer(keycloak_port: u16) -> String {
+    format!(
+        "http://127.0.0.1:{keycloak_port}/realms/{}",
+        compose::OIDC_REALM
+    )
+}
+
 /// 개발 전용 사용자·공동 작업 공간·공동 편집 문서를 한 번만 만든다(이미 있으면 아무것도 바꾸지 않음).
-fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> {
+fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str, database: &str) -> Result<()> {
     println!("==> dev seed (shared workspace and document, once)");
-    seed_file(root, compose, sh, issuer, "dev-seed.sql", None)?;
+    seed_file(root, compose, sh, issuer, database, "dev-seed.sql", None)?;
     // 모듈 예제는 자기 표시(dev_module_seed_v1)로 따로 한 번만 만든다. 이미 dev_seed가 있는 개발 DB에도 더해진다.
     println!("==> dev module examples (separate synthetic workspace, once)");
-    seed_file(root, compose, sh, issuer, "dev-module-seed.sql", None)?;
+    seed_file(
+        root,
+        compose,
+        sh,
+        issuer,
+        database,
+        "dev-module-seed.sql",
+        None,
+    )?;
     // Storybook story와 같은 내용(apps/web/stories/fixtures/synthetic.ts). 묶음마다 자기 표시(dev_ui_seed_v1·v2)로 한 번만.
     println!("==> dev UI examples (same synthetic data as Storybook, once)");
     let path = root.join("deploy/postgres/dev-ui-data.json");
@@ -157,9 +178,97 @@ fn seed(root: &Path, compose: &Compose, sh: &Shell, issuer: &str) -> Result<()> 
         compose,
         sh,
         issuer,
+        database,
         "dev-ui-seed.sql",
         Some(("fvoci.dev_ui_data", &data)),
     )
+}
+
+/// `compose.dev.yaml`의 `FVOCI_DEV_KEYCLOAK_PORT` 기본값. 시험은 Keycloak 없이 이 발급자로 준비 SQL을 돌린다(준비 SQL은
+/// 발급자를 문자열로 비교·저장만 하고 사용자 id는 `deploy/keycloak/realm-test.json`의 고정 subject를 쓴다).
+const DEV_KEYCLOAK_PORT: u16 = 8180;
+
+/// 개발 준비 SQL 셋이 기준 SQL을 막 설치한 새 DB에 끝까지 적용되고, 두 번째 적용은 실패하지 않고 아무것도 바꾸지
+/// 않는지 본다(`cargo xtask test`, #168). 개발 실행과 같은 [`seed`]를 거친다(파일 목록·순서, `dev-ids.sql` 앞붙임,
+/// 세션 설정, psql 옵션). `compose`는 PostgreSQL 서비스가 뜬 시험 프로젝트이고, DB는 그 서버에 따로 만들어 통합
+/// 시험의 DB를 건드리지 않는다(준비 SQL이 초기 관리자를 정한다). 시험 DB는 tmpfs라 프로젝트를 내릴 때 함께 사라진다.
+/// 하위 단계(새 DB, 기준 SQL, 지문 조회, 첫·둘째 적용) 사이마다 중단 신호를 확인해 남은 단계를 건너뛴다.
+pub fn check_seeds(root: &Path, compose: &Compose, sh: &Shell, pg_port: u16) -> Result<()> {
+    let database = format!("fvoci_dev_seed_{}", uuid::Uuid::now_v7().simple());
+    println!("==> dev seed check on a new database {database}");
+    compose.exec(
+        sh,
+        "postgres",
+        &psql(
+            DEV_DATABASE,
+            &["-c", &format!("CREATE DATABASE {database}")],
+        ),
+        "",
+    )?;
+    compose::check_interrupt()?;
+    compose::prepare_database(
+        sh,
+        &compose::DbUrls::at_database(&format!("127.0.0.1:{pg_port}"), &database),
+    )?;
+    compose::check_interrupt()?;
+    let issuer = issuer(DEV_KEYCLOAK_PORT);
+    let empty = table_digests(compose, sh, &database)?;
+    compose::check_interrupt()?;
+    seed(root, compose, sh, &issuer, &database)?;
+    compose::check_interrupt()?;
+    let first = table_digests(compose, sh, &database)?;
+    if first == empty {
+        bail!("dev seed check: the dev seeds changed nothing on a new database");
+    }
+    compose::check_interrupt()?;
+    println!("==> dev seeds again (must change nothing)");
+    seed(root, compose, sh, &issuer, &database)?;
+    compose::check_interrupt()?;
+    let second = table_digests(compose, sh, &database)?;
+    if second != first {
+        let changed: Vec<&str> = second
+            .lines()
+            .filter(|line| !first.lines().any(|l| l == *line))
+            .collect();
+        bail!(
+            "dev seed check: the second apply changed tables (table rows md5): {}",
+            changed.join("; ")
+        );
+    }
+    println!("==> dev seed check passed (second apply changed nothing)");
+    Ok(())
+}
+
+/// 사용자 스키마의 표마다 `이름 행수 md5`(행 글자열을 정렬해 이은 것). 행의 물리 순서와 상관없이 내용이 같으면 같다.
+/// 관리자(superuser)로 읽어 RLS와 상관없이 모든 행을 센다.
+fn table_digests(compose: &Compose, sh: &Shell, database: &str) -> Result<String> {
+    const QUERY: &str = "SELECT format('%I.%I', n.nspname, c.relname) || ' ' \
+        || (xpath('/row/d/text()', query_to_xml(format( \
+             'SELECT count(*) || '' '' || md5(coalesce(string_agg(t::text, chr(10) ORDER BY t::text), '''')) AS d FROM %I.%I t', \
+             n.nspname, c.relname), false, true, '')))[1]::text \
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \
+        WHERE c.relkind = 'r' AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema' \
+        ORDER BY 1";
+    compose.exec_read(sh, "postgres", &psql(database, &["-At", "-c", QUERY]))
+}
+
+/// PostgreSQL 컨테이너 안에서 관리자(`fvoci`)로 도는 psql 명령. 개발 실행과 그 시험이 같은 옵션을 쓴다.
+fn psql(database: &str, args: &[&str]) -> Vec<String> {
+    [
+        "psql",
+        "--quiet",
+        "--no-psqlrc",
+        "-U",
+        "fvoci",
+        "-d",
+        database,
+        "-v",
+        "ON_ERROR_STOP=1",
+    ]
+    .iter()
+    .chain(args)
+    .map(|s| (*s).to_owned())
+    .collect()
 }
 
 /// 준비 SQL에 넘기는 값의 달러 따옴표. 값에 이 글자열이 있으면 넘기지 않는다.
@@ -175,6 +284,7 @@ fn seed_file(
     compose: &Compose,
     sh: &Shell,
     issuer: &str,
+    database: &str,
     name: &str,
     setting: Option<(&str, &str)>,
 ) -> Result<()> {
@@ -194,27 +304,10 @@ fn seed_file(
             bail!("{name}: the value for {key} contains {SEED_QUOTE}");
         }
         // SET은 결과 행을 찍지 않는다(SELECT set_config는 값 전체를 출력한다).
-        sql.push_str(&format!("SET {key} = {SEED_QUOTE}{value}{SEED_QUOTE};\n"));
+        let _ignored = writeln!(sql, "SET {key} = {SEED_QUOTE}{value}{SEED_QUOTE};");
     }
-    sql.push_str(&format!("{}\n{}", read("dev-ids.sql")?, read(name)?));
-    let command: Vec<String> = [
-        "psql",
-        "--quiet",
-        "--no-psqlrc",
-        "-U",
-        "fvoci",
-        "-d",
-        "fvoci",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-v",
-        &format!("issuer={issuer}"),
-        "-f",
-        "-",
-    ]
-    .iter()
-    .map(|s| (*s).to_owned())
-    .collect();
+    let _ignored = write!(sql, "{}\n{}", read("dev-ids.sql")?, read(name)?);
+    let command = psql(database, &["-v", &format!("issuer={issuer}"), "-f", "-"]);
     compose.exec(sh, "postgres", &command, &sql)
 }
 

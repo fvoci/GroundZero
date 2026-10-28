@@ -189,13 +189,6 @@ export const CourseQuestions: Story = {
   },
 };
 
-export const CourseQuestionsDark: Story = {
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop' } },
-  play: async () => {
-    await screen.findByText('2. 행렬식과 고유값');
-  },
-};
-
 /** 새 질문 편집기: 회차 칸은 이 강좌의 회차 가운데 고른다. */
 export const NewQuestionEditor: Story = {
   globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },

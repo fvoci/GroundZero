@@ -1,6 +1,7 @@
 # fvoci 셀프호스트 설치 (docs/self-hosting.md). 비밀 값은 이 파일이 아니라 운영자의 .env에서 읽는다.
 #   docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d --build
 # 로그인 제공자는 표준 OIDC면 어느 것이든 된다(D-45, O-25). 같이 띄울 Keycloak이 필요하면 `--profile keycloak`.
+# 한 컴퓨터에서 혼자 쓰면 `--profile personal`(D-129): 같은 Keycloak을 `auth.localhost`로 띄우고 이 컴퓨터에서만 연다.
 name: fvoci
 
 # 운영 로그(D-83): 컨테이너는 stdout에만 쓰고, Docker가 json-file로 남기며 크기·개수로 돌린다(서비스마다 기본
@@ -124,15 +125,35 @@ services:
       - backups:/backups
 
   # 같이 띄우는 로그인 제공자(선택, O-25). 운영 모드이며 자체 DB를 쓴다. 사용자는 관리 콘솔에서 만든다.
+  # personal(D-129)은 이 서비스를 그대로 쓰는 개인용 이름이다. 새 서비스나 자체 로그인은 없다(X-09).
   keycloak:
     image: quay.io/keycloak/keycloak:26.5.4@sha256:ae8efb0d218d8921334b03a2dbee7069a0b868240691c50a3ffc9f42fabba8b4
-    profiles: ['keycloak']
+    profiles: ['keycloak', 'personal']
     restart: unless-stopped
     logging: *logging
     command: ['start', '--import-realm']
     depends_on:
       postgres:
         condition: service_healthy
+    # 앱 컨테이너 안에서도 브라우저와 같은 발급자 주소(http://auth.localhost:<KEYCLOAK_PORT>)로 닿게 하는 이름.
+    # 이 Compose 네트워크 안에서만 통한다. 실제 도메인을 쓰는 운영 설치에는 영향이 없다.
+    networks:
+      default:
+        aliases: ['auth.localhost']
+    healthcheck:
+      # 이미지에 curl·wget이 없어 bash로 관리 포트(9000)의 준비 상태를 묻는다. 응답 본문이 아니라 첫 줄의 HTTP 상태 코드가 200인지로 판정한다
+      # (준비 전에는 503이고, 본문에는 개별 검사의 "UP"이 섞일 수 있다). 첫 시작은 렐름 가져오기로 오래 걸린다. Compose가 $를 풀지 않도록 $$로 적는다.
+      test:
+        [
+          'CMD',
+          'bash',
+          '-c',
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && read -r line <&3 && [[ $$line == 'HTTP/'*' 200'* ]]",
+        ]
+      interval: 5s
+      timeout: 5s
+      start_period: 120s
+      retries: 30
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -141,6 +162,8 @@ services:
       # 브라우저와 앱 서버가 같은 주소로 닿는 Keycloak 주소(예: https://auth.example.com). 발급자는 <이 주소>/realms/fvoci.
       KC_HOSTNAME: ${KEYCLOAK_URL:-}
       KC_HTTP_ENABLED: 'true'
+      # 컨테이너 안 포트를 공개 포트와 같게 둔다. 그래야 위 이름으로 닿는 주소의 포트가 KEYCLOAK_URL과 같다.
+      KC_HTTP_PORT: ${KEYCLOAK_PORT:-8081}
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: 'true'
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -151,7 +174,7 @@ services:
     volumes:
       - ./keycloak/realm-selfhost.json:/opt/keycloak/data/import/realm-fvoci.json:ro
     ports:
-      - '${KEYCLOAK_LISTEN:-127.0.0.1:8081}:8080'
+      - '${KEYCLOAK_LISTEN:-127.0.0.1:8081}:${KEYCLOAK_PORT:-8081}'
 
 volumes:
   pgdata:

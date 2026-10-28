@@ -1,7 +1,8 @@
 # fvoci
 
 통합 작업·지식·학습 관리 앱. 제품 원칙과 제안의 상태, 공통 규칙은 [결정 기록](docs/decisions.md)과
-[AGENTS.md](AGENTS.md)를 읽는다. 달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
+[AGENTS.md](AGENTS.md)를 읽는다. 변경 종류별로 읽을 곳과 돌릴 검사는 AGENTS.md가 가리키는 `.agents/skills/`에 있다.
+달리는 아비시니안 오버홀 전의 개발 지침·저장소 구조 문서는 제거했고(D-127)
 [제거 전 판](https://github.com/fvoci/GroundZero/blob/8349771265af71e70d628bd48abe94f815d8f29c/docs/development.md)은
 역사 기록이다. 과거 실행·감사 기록은 필요한 SHA만 확인하며, 현재 정책이나 검증 완료로 해석하지 않는다.
 
@@ -28,6 +29,7 @@
 | DB 준비·마이그레이션을 직접 실행할 때 ([설치 안내](docs/self-hosting.md#db-setup)) | `fvoci-server db bootstrap && fvoci-server db migrate`                                    |
 | 웹 개발 서버만 따로(`cargo xtask dev --no-web`일 때)                               | `VITE_API_URL=http://127.0.0.1:8080 pnpm --filter @fvoci/web dev`                         |
 | 이 체크아웃의 Compose 자원 정리                                                    | `cargo xtask down`                                                                        |
+| 여러 워크트리에서 나란히 작업(데우기·동시 빌드·정리·시험 격리)                     | [병렬 워크트리 안내](docs/parallel-worktrees.md)                                          |
 | UI 컴포넌트 상태 보기(Storybook, D-108) / 정적 빌드                                | `pnpm --filter @fvoci/web run storybook` / `pnpm --filter @fvoci/web run build-storybook` |
 | OpenAPI 계약 재생성                                                                | `cargo xtask openapi` 후 `pnpm run generate:api`                                          |
 | 라이선스 검사만                                                                    | `cargo xtask licenses`                                                                    |
@@ -35,7 +37,7 @@
 
 `cargo xtask check`는 외부 서비스를 띄우지 않는다. 데이터베이스가 필요한 통합 테스트는 `cargo xtask test`에서만 돌고, `DATABASE_URL`이 없으면 건너뛰지 않고 실패한다.
 
-`cargo xtask down`은 이 체크아웃의 개발·시험 컨테이너와 DB·검색·Keycloak 볼륨을 지운다.
+`cargo xtask down`은 이 체크아웃의 개발·시험·브라우저·Supabase 시험 프로젝트의 컨테이너·Compose 프로젝트 네트워크와 DB·검색·Keycloak 볼륨을 지운다. `cargo xtask test --supabase --keep`으로 남긴 시험 DB도 사라진다.
 `target/dev-files` 첨부는 남는다. 기존 데이터를 지우기 전에 보존 범위와 사용자 승인을 확인한다.
 
 SQL을 변경할 때는 결정 기록의 D-88·D-107·D-126을 먼저 본다. 제품 SQL 정본은 `crates/server/migrations/` 하나다.

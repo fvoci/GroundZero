@@ -4,6 +4,8 @@
 //! 표시 이름(권한에 따라 달라짐)이 아니라 짧은 표기(`[reference kind="…" id="…"]`)로 남겨, 색인에 다른 사람이
 //! 볼 수 없는 이름이 들어가지 않게 한다. 너무 길면 자른다.
 
+use std::fmt::Write as _;
+
 use serde_json::Value;
 
 /// 색인에 넣는 본문 글자 상한(바이트에 가깝게 문자 수로).
@@ -51,7 +53,7 @@ fn walk(node: &Value, out: &mut String, counted_bytes: &mut usize, chars: &mut u
                 .and_then(|a| a.get("id"))
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            out.push_str(&format!("[reference kind=\"{ref_kind}\" id=\"{id}\"]"));
+            let _ignored = write!(out, "[reference kind=\"{ref_kind}\" id=\"{id}\"]");
             return;
         }
         "taskItem" => {

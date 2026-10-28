@@ -29,7 +29,7 @@ function story(overrides: Partial<ScreenApi> = {}): () => () => void {
 
 const screen = within(document.body);
 // 열 때 첫 칸으로 초점 옮기기는 실제 브라우저의 초점 처리에 기대므로 jsdom 재사용(tests/component/stories.test.ts)에서는
-// 확인하지 않는다(ui/Dialog.stories.ts와 같다).
+// 확인하지 않는다.
 const inBrowser = !navigator.userAgent.includes('jsdom');
 
 async function openAndType(query: string): Promise<HTMLElement> {
@@ -146,9 +146,7 @@ export const EscapeReturnsFocus: Story = {
   },
 };
 
-export const Dark: Story = { ...Opened, globals: { theme: 'dark' } };
-export const Narrow375: Story = { ...Opened, globals: { viewport: { value: 'narrow375' } } };
-export const LargeText: Story = {
+export const NarrowDarkLargeText: Story = {
   ...Opened,
-  globals: { fontScale: '200', viewport: { value: 'narrow375' } },
+  globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };

@@ -106,18 +106,66 @@ env:
   # 시작 로그(server.starting의 version·source), 버전 응답(/healthz의 build)에 모두 나와야 한다. 서버는 시작할 때 DB 기준을
   # 확인하므로(db::Db::check_baseline) 시험 Compose의 PostgreSQL을 실행마다 새로 띄우고(tmpfs), 이미지의 `db bootstrap`·
   # `db migrate`로 준비한 뒤 앱 역할로 띄운다. 자격 증명은 시험 값이다. 실패하면 정리 전에 로그를 남긴다.
-  # 인자: 이미지, 플랫폼, 소스 SHA, 버전, inject.
+  # 인자: 이미지, 플랫폼, 소스 SHA, 버전, inject. 환경: SMOKE_RUN(실행 식별자, 없으면 로컬용으로 새로 만든다), SMOKE_RECOVER.
+  #
+  # 실행 소유 자원(#125, D-126 (4)). 실행 식별자는 무엇을 만들기 전에 정해 출력하고, 이 실행이 만드는 컨테이너·네트워크마다
+  # 소유 라벨 fvoci.smoke=<식별자>를 단다(시험 Compose의 자원에는 덮어쓰는 구성으로). 만들기 전에 그 식별자의 라벨·이름·
+  # Compose 프로젝트를 쓰는 자원이 하나라도 있으면 건드리지 않고 멈춘다. 그래서 그 뒤 이 라벨을 단 자원은 이 실행이 만든 것이고,
+  # 만들기와 ID 받기 사이에 끊겨도 라벨로 정확히 찾는다. 지우는 일은 SMOKE_RECOVER 하나가 한다.
+  # - 실패와 SIGINT·SIGTERM·SIGHUP: 진행 중인 단계(자식)를 SIGTERM으로 끝내고 실패와 같은 정리 경로를 지난다. 진단 로그를 남기고
+  #   이 실행의 자원만 지운 뒤 실패로 끝난다. 신호면 "interrupted by SIG…"를 남기고 128+신호 번호로 끝난다. 단계 셸이 이 셸을
+  #   `exec`로 띄워 러너의 신호가 바로 이 셸에 온다.
+  # - 강제로 끝난 실행(SIGKILL, 취소·시간 초과 끝에 러너가 프로세스를 죽인 경우, PR은 cancel-in-progress로 생길 수 있다): 정리
+  #   경로를 못 지난다. job의 다음 `always()` 단계가 같은 SMOKE_RUN으로 SMOKE_RECOVER를 돌린다. 로컬에서는 시작할 때 출력한
+  #   복구 명령을 저장소 루트에서 돌린다. 덮어쓰는 구성의 임시 파일(TMPDIR)도 남는다. Docker 자원이 아니고 DB 내용도 없다.
+  # - 다른 실행의 자원과 볼륨·백업은 건드리지 않는다. 넓은 탐색 삭제·prune·`--volumes`를 쓰지 않는다.
+  # - 시험 PostgreSQL은 tmpfs라(볼륨 없음) 컨테이너를 멈추거나 지우면 DB 내용이 사라진다. 명시적 보존 요청은 자동 정리보다
+  #   우선하지만 이 smoke는 그 요청을 받는 옵션이 없어 정리와 복구가 늘 돈다. 실패의 증거로는 컨테이너 대신 진단 로그를 남긴다.
+  #   보존 요청이 있든 없든 이 실행이 만들지 않은 자원은 정리·복구 대상이 아니다.
   SMOKE: |
     set -euo pipefail
     ref="$1"; platform="$2"; revision="$3"; version="$4"; inject="$5"
+    run="${SMOKE_RUN:-fvoci-smoke-local-$(date +%s)-$$}"
     fail() { echo "::error::$platform: $*"; exit 1; }
+    [[ "$run" =~ ^fvoci-smoke-[a-z0-9][a-z0-9_-]*$ ]] || fail "'$run' is not a smoke run identifier"
+    echo "smoke run $run. If it is killed, remove only its resources from the repository root:" \
+      "bash -c \"\$SMOKE_RECOVER\" recover $run"
+    existing=$(docker ps -aq --filter "label=fvoci.smoke=$run"; docker ps -aq --filter "label=com.docker.compose.project=$run"
+      docker network ls -q --filter "label=fvoci.smoke=$run"; docker network ls -q --filter "label=com.docker.compose.project=$run"
+      docker ps -a --format '{{.ID}} {{.Names}}' | awk -v n="$run" '$2 == n { print $1 }'
+      docker network ls --format '{{.ID}} {{.Name}}' | awk -v n="${run}_default" '$2 == n { print $1 }')
+    [ -z "$existing" ] || fail "resources of $run already exist; not touching them: $(echo $existing)"
+    signal=""; child=""; labels=""
+    cleanup() {
+      local status="$1"
+      trap - EXIT INT TERM HUP
+      if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi
+      if [ -n "$labels" ]; then rm -f "$labels"; fi
+      if [ "$status" != 0 ]; then
+        for id in $(docker ps -aq --filter "label=fvoci.smoke=$run"); do docker logs "$id" 2>&1 | tail -n 50 || true; done
+      fi
+      bash -c "$SMOKE_RECOVER" recover "$run" || status=1
+      if [ -n "$signal" ]; then echo "::error::$platform: interrupted by SIG$signal"; fi
+      exit "$status"
+    }
+    trap 'cleanup $?' EXIT
+    trap 'signal=INT; exit 130' INT
+    trap 'signal=TERM; exit 143' TERM
+    trap 'signal=HUP; exit 129' HUP
+    # 셸은 앞에서 도는 자식이 끝나야 신호 처리기를 돌리므로 오래 걸리는 단계는 뒤에서 돌리고 기다린다. 자식이 명령 자체가 되도록
+    # 셸 함수가 아닌 명령만 넘긴다(함수면 하위 셸이 자식이 되어 SIGTERM이 그 안의 명령에 닿지 않는다).
+    step() { "$@" & child=$!; local status=0; wait "$child" || status=$?; child=""; return "$status"; }
     actual=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")
     [ "$actual" = "$platform" ] || fail "platform $actual, expected $platform"
+    # 이미지 크기 회귀를 실행 요약에서 본다(#138). 로컬 이미지 저장소의 크기이며 레지스트리의 압축 크기와 다르다.
+    size=$(docker image inspect --format '{{.Size}}' "$ref")
+    echo "image size: $platform $size bytes"
+    echo "- $platform: image size $size bytes (docker image inspect)" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
     label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$1\"}}" "$ref"; }
     [ "$(label revision)" = "$revision" ] || fail "revision label $(label revision), expected $revision"
     [ "$(label version)" = "$version" ] || fail "version label $(label version), expected $version"
-    [ "$(docker run --rm --entrypoint id "$ref" -u)" = 10001 ] || fail "not running as uid 10001"
-    docker run --rm --entrypoint sh "$ref" -c '
+    [ "$(docker run --rm --label "fvoci.smoke=$run" --entrypoint id "$ref" -u)" = 10001 ] || fail "not running as uid 10001"
+    docker run --rm --label "fvoci.smoke=$run" --entrypoint sh "$ref" -c '
       set -e
       test -x /usr/local/bin/fvoci-server
       test -s /usr/share/doc/fvoci/THIRD_PARTY_NOTICES.txt
@@ -127,57 +175,37 @@ env:
       test -d /data/files && test -d /backups' || fail "runtime files missing"
     want=$(jq -cn --arg v "$version" --arg s "$revision" '{version: $v, source: $s}')
     if [ "$inject" = true ]; then
-      compiled=$(docker run --rm "$ref" version | jq -c '{version, source}')
+      compiled=$(docker run --rm --label "fvoci.smoke=$run" "$ref" version | jq -c '{version, source}')
       [ "$compiled" = "$want" ] || fail "compiled build $compiled, expected $want"
-      # 실행·시도·호출마다 다른 이름을 쓴다. 같은 이름의 컨테이너·프로젝트·네트워크가 이미 있으면 건드리지 않고 멈춘다.
-      # 정리는 이 실행이 만들어 ID를 받은 것 가운데 라벨이 아직 이 이름인 것만 한다(PostgreSQL은 tmpfs라 볼륨이 없다).
-      name="fvoci-smoke-${platform//\//-}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
-      db=(docker compose --project-name "$name" --file deploy/compose.test.yaml)
-      existing=$(docker ps -aq --filter "name=^${name}\$"
-        docker ps -aq --filter "label=com.docker.compose.project=$name"
-        docker network ls -q --filter "label=com.docker.compose.project=$name")
-      [ -z "$existing" ] || fail "resources named $name already exist; not touching them"
-      app=""; pg_id=""; net_id=""
-      mine() { [ "$(docker "$1" inspect --format "{{index $2 \"$3\"}}" "$4" 2>/dev/null)" = "$name" ]; }
-      cleanup() {
-        if [ "$1" != 0 ]; then
-          if [ -n "$app" ]; then docker logs "$app" 2>&1 | tail -n 50 || true; fi
-          if [ -n "$pg_id" ]; then docker logs "$pg_id" 2>&1 | tail -n 50 || true; fi
-        fi
-        if [ -n "$app" ] && mine container .Config.Labels fvoci.smoke "$app"; then docker rm -f "$app" >/dev/null || true; fi
-        if [ -n "$pg_id" ] && mine container .Config.Labels com.docker.compose.project "$pg_id"; then
-          docker rm -f "$pg_id" >/dev/null || true
-        fi
-        if [ -n "$net_id" ] && mine network .Labels com.docker.compose.project "$net_id"; then
-          docker network rm "$net_id" >/dev/null || true
-        fi
-        left=$(docker ps -aq --filter "label=com.docker.compose.project=$name"; docker ps -aq --filter "name=^${name}\$"
-          docker network ls -q --filter "label=com.docker.compose.project=$name")
-        [ -z "$left" ] || echo "::warning::$platform: left resources of $name in place (not created or not owned): $left"
-      }
-      trap 'cleanup $?' EXIT
-      "${db[@]}" create postgres
+      # 시험 Compose의 PostgreSQL 컨테이너와 기본 네트워크에 소유 라벨을 단다. 프로젝트 이름도 실행 식별자다.
+      labels=$(mktemp)
+      printf 'services:\n  postgres:\n    labels:\n      fvoci.smoke: %s\nnetworks:\n  default:\n    labels:\n      fvoci.smoke: %s\n' \
+        "$run" "$run" >"$labels"
+      db=(docker compose --project-name "$run" --file deploy/compose.test.yaml --file "$labels")
+      step "${db[@]}" create postgres
       pg_id=$("${db[@]}" ps --all --quiet postgres)
-      net_id=$(docker network ls --quiet --filter "label=com.docker.compose.project=$name")
-      [ "$(wc -w <<<"$pg_id")" = 1 ] && [ "$(wc -w <<<"$net_id")" = 1 ] || fail "postgres container or network of $name not found"
-      echo "smoke resources: project $name, postgres $pg_id, network $net_id"
-      "${db[@]}" up --detach --wait --no-recreate postgres
-      net="$net_id"
+      net_id=$(docker network ls --quiet --filter "label=fvoci.smoke=$run")
+      [ "$(wc -w <<<"$pg_id")" = 1 ] && [ "$(wc -w <<<"$net_id")" = 1 ] || fail "postgres container or network of $run not found"
+      echo "smoke resources: postgres $pg_id, network $net_id"
+      step "${db[@]}" up --detach --wait --no-recreate postgres
       pg=postgres:5432/fvoci
       for cmd in bootstrap migrate; do
-        docker run --rm --network "$net" \
+        step docker run --rm --label "fvoci.smoke=$run" --network "$net_id" \
           -e DATABASE_ADMIN_URL="postgres://fvoci:fvoci-test-password@$pg" \
           -e DATABASE_MIGRATION_URL="postgres://fvoci_migrator:fvoci-test-migrator-password@$pg" \
           -e FVOCI_DB_MIGRATOR_PASSWORD=fvoci-test-migrator-password -e FVOCI_DB_APP_PASSWORD=fvoci-test-app-password \
           "$ref" db "$cmd" || fail "db $cmd failed"
       done
-      app=$(docker create --name "$name" --label "fvoci.smoke=$name" --network "$net" -p 127.0.0.1:18080:8080 \
+      # 호스트 포트는 Docker가 고른다. 같은 호스트의 다른 실행과 겹치지 않는다.
+      app=$(docker create --name "$run" --label "fvoci.smoke=$run" --network "$net_id" -p 127.0.0.1::8080 \
         -e DATABASE_URL="postgres://fvoci_app:fvoci-test-app-password@$pg" -e FVOCI_ROLE=api "$ref")
       echo "smoke resources: app $app"
       docker start "$app" >/dev/null
+      port=$(docker port "$app" 8080/tcp | head -n1)
+      port="${port##*:}"
       served=""
       for _ in $(seq 1 60); do
-        served=$(curl -s http://127.0.0.1:18080/healthz | jq -c '.build // empty' 2>/dev/null || true)
+        served=$(curl -s "http://127.0.0.1:$port/healthz" | jq -c '.build // empty' 2>/dev/null || true)
         [ -n "$served" ] && break
         sleep 1
       done
@@ -187,11 +215,186 @@ env:
       shown="$version (compiled, start log, /healthz and labels agree)"
     else
       # 주입 이전 소스(v0.0.1): 앱 안에는 버전이 없다. 라벨만 이 릴리스를 가리킨다.
-      if docker run --rm "$ref" version >/dev/null 2>&1; then fail "source without injection has a version command"; fi
+      if docker run --rm --label "fvoci.smoke=$run" "$ref" version >/dev/null 2>&1; then
+        fail "source without injection has a version command"
+      fi
       shown="not in the app (source predates version injection); labels only"
     fi
     echo "smoke ok: $platform, revision $revision, version $shown"
     echo "- $platform: smoke ok. revision \`$revision\`, version $shown" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+  # 실행 소유 자원 복구(#125). 실행 식별자 하나를 받아 소유 라벨 fvoci.smoke가 정확히 그 값인 컨테이너·네트워크만 지운다. 라벨
+  # 필터로 찾은 것을 inspect로 다시 확인하고, 볼륨은 지우지 않는다. 이름이나 Compose 프로젝트만 같고 소유 라벨이 없는 자원은 남기고
+  # 경고한다. 지운 뒤에도 소유 자원이 남으면 실패한다. SMOKE의 정리 경로와 강제로 끝난 실행 뒤의 `always()` 단계가 함께 쓴다.
+  # 인자: 실행 식별자.
+  SMOKE_RECOVER: |
+    set -euo pipefail
+    run="$1"
+    [[ "$run" =~ ^fvoci-smoke-[a-z0-9][a-z0-9_-]*$ ]] || { echo "::error::'$run' is not a smoke run identifier"; exit 1; }
+    owner() { docker "$1" inspect --format "{{index $2 \"fvoci.smoke\"}}" "$3" 2>/dev/null || true; }
+    removed=()
+    for id in $(docker ps -aq --filter "label=fvoci.smoke=$run"); do
+      if [ "$(owner container .Config.Labels "$id")" = "$run" ] && docker rm -f "$id" >/dev/null; then removed+=("container $id"); fi
+    done
+    for id in $(docker network ls -q --filter "label=fvoci.smoke=$run"); do
+      if [ "$(owner network .Labels "$id")" = "$run" ] && docker network rm "$id" >/dev/null; then removed+=("network $id"); fi
+    done
+    echo "smoke recover $run: removed ${#removed[@]} (${removed[*]:-nothing})"
+    left=$(docker ps -aq --filter "label=fvoci.smoke=$run"; docker network ls -q --filter "label=fvoci.smoke=$run")
+    [ -z "$left" ] || { echo "::error::resources owned by $run are still there: $(xargs <<<"$left")"; exit 1; }
+    others=$(docker ps -aq --filter "label=com.docker.compose.project=$run"
+      docker network ls -q --filter "label=com.docker.compose.project=$run"
+      docker ps -a --format '{{.ID}} {{.Names}}' | awk -v n="$run" '$2 == n { print $1 }'
+      docker network ls --format '{{.ID}} {{.Name}}' | awk -v n="${run}_default" '$2 == n { print $1 }')
+    if [ -n "$others" ]; then
+      echo "::warning::left in place, no owner label fvoci.smoke=$run: $(sort -u <<<"$others" | xargs)"
+    fi
+  # smoke 수명주기 시험(#125). 실제 이미지로 SMOKE를 돌리되, PATH 앞에 둔 docker 대역이 호출 하나만 바꿔 그 지점의 실패·중단을
+  # 만든다(나머지 호출은 진짜 docker로 넘긴다). 시나리오마다 실행 식별자를 따로 쓴다. 시험이 만든 미끼 자원에는
+  # fvoci.smoke.check=<기준 식별자>를 달고, 끝날 때(실패해도) 그 미끼와 각 시나리오의 소유 자원만 지운다(SMOKE_RECOVER).
+  # 인자: SMOKE와 같은 이미지·플랫폼·소스 SHA·버전(inject=true). 환경: SMOKE_RUN(기준 식별자), SMOKE, SMOKE_RECOVER.
+  SMOKE_CHECK: |
+    set -euo pipefail
+    ref="$1"; platform="$2"; revision="$3"; version="$4"
+    base="${SMOKE_RUN:-fvoci-smoke-local-$(date +%s)-$$}-check"
+    work=$(mktemp -d)
+    cases=()
+    finish() {
+      local status=$?
+      for c in "${cases[@]}"; do bash -c "$SMOKE_RECOVER" recover "$c" >/dev/null || status=1; done
+      for id in $(docker ps -aq --filter "label=fvoci.smoke.check=$base"); do docker rm -f "$id" >/dev/null || status=1; done
+      for id in $(docker network ls -q --filter "label=fvoci.smoke.check=$base"); do
+        docker network rm "$id" >/dev/null || status=1
+      done
+      rm -rf "$work"
+      exit "$status"
+    }
+    trap finish EXIT
+    # docker 대역. compose의 `create postgres`는 진짜로 만든 뒤(ID를 받기 전) SMOKE_SHIM대로 smoke 셸에 신호를 보낸다. term은
+    # 우두머리(smoke 셸)에만(러너가 단계 프로세스에 보내듯), int는 그룹 전체에(터미널 Ctrl-C처럼), kill은 그룹 전체를 강제로
+    # 끝낸다. term-stuck은 ID를 받은 뒤 compose `up`이 멈춘 것처럼 오래 걸리게 하고 우두머리에 SIGTERM을 보낸다. fail-bootstrap은
+    # `db bootstrap` 실행만 실패시킨다(DB가 뜬 뒤의 실패).
+    SMOKE_REAL_DOCKER=$(command -v docker)
+    export SMOKE_REAL_DOCKER
+    cat > "$work/docker" <<'EOF'
+    #!/usr/bin/env bash
+    set -uo pipefail
+    args=" $* "
+    if [ "${SMOKE_SHIM:-}" = term-stuck ] && [ "$1" = compose ] && [[ "$args" == *" up "* ]]; then
+      kill -s TERM "$(ps -o pgid= -p $$ | tr -d ' ')"
+      exec sleep 120
+    fi
+    if [ "$1" = compose ] && [[ "$args" == *" create postgres "* ]]; then
+      "$SMOKE_REAL_DOCKER" "$@" || exit
+      leader=$(ps -o pgid= -p $$ | tr -d ' ')
+      case "${SMOKE_SHIM:-}" in
+        term) kill -s TERM "$leader" ;;
+        int) kill -s INT -- "-$leader" ;;
+        kill) kill -s KILL -- "-$leader" ;;
+      esac
+      exit 0
+    fi
+    if [ "${SMOKE_SHIM:-}" = fail-bootstrap ] && [ "$1" = run ] && [[ "$args" == *" db bootstrap "* ]]; then
+      echo "docker stand-in: db bootstrap fails" >&2
+      exit 1
+    fi
+    exec "$SMOKE_REAL_DOCKER" "$@"
+    EOF
+    chmod +x "$work/docker"
+    expect() { [ "$2" = "$3" ] || { echo "::error::$1: got '$2', expected '$3'"; exit 1; }; }
+    has() { grep -qF -- "$2" "$work/$1.log" || { echo "::error::$1: no '$2' in output"; cat "$work/$1.log"; exit 1; }; }
+    lacks() { ! grep -qF -- "$2" "$work/$1.log" || { echo "::error::$1: '$2' in output"; cat "$work/$1.log"; exit 1; }; }
+    owned() { echo $(($(docker ps -aq --filter "label=fvoci.smoke=$1" | wc -l) + $(docker network ls -q --filter "label=fvoci.smoke=$1" | wc -l))); }
+    # 남은 자원은 소유 라벨이 빠진 것도 세도록 Compose 프로젝트 라벨로도 찾는다.
+    left() {
+      { docker ps -aq --filter "label=fvoci.smoke=$1"; docker ps -aq --filter "label=com.docker.compose.project=$1"
+        docker network ls -q --filter "label=fvoci.smoke=$1"; docker network ls -q --filter "label=com.docker.compose.project=$1"; } \
+        | sort -u | wc -l
+    }
+    decoy() { docker create --label "fvoci.smoke.check=$base" "$@" --entrypoint true "$ref" >/dev/null; }
+    # 시나리오 하나: 새 프로세스 그룹에서 SMOKE를 돌린다(대역이 그 그룹에 신호를 보낸다). 출력은 $work/<이름>.log, 종료 코드는 $code.
+    # 임시 파일도 $work에 만들게 해 강제 종료로 남은 것까지 시험이 지운다.
+    smoke() {
+      cases+=("$base-$1")
+      set -m
+      SMOKE_RUN="$base-$1" SMOKE_SHIM="$2" PATH="$work:$PATH" TMPDIR="$work" \
+        bash -c "$SMOKE" smoke "$ref" "$platform" "$revision" "$version" true >"$work/$1.log" 2>&1 &
+      set +m
+      code=0
+      wait "$!" || code=$?
+    }
+    # 다른 실행의 소유 자원. 어느 시나리오도 지우면 안 된다.
+    decoy --label "fvoci.smoke=$base-other"
+    docker network create --label "fvoci.smoke=$base-other" --label "fvoci.smoke.check=$base" "$base-other" >/dev/null
+
+    decoy --name "$base-exists"
+    smoke exists ""
+    expect "existing name: exit" "$code" 1
+    has exists "resources of $base-exists already exist"
+    expect "existing name: kept" "$(docker ps -aq --filter "name=^$base-exists\$" | wc -l)" 1
+    decoy --label "fvoci.smoke=$base-leftover"
+    smoke leftover ""
+    expect "existing owner label: exit" "$code" 1
+    has leftover "resources of $base-leftover already exist"
+    expect "existing owner label: kept" "$(owned "$base-leftover")" 1
+    echo "ok: refuses to start over existing resources (same name, same owner label) and leaves them"
+
+    smoke fail fail-bootstrap
+    expect "normal failure: exit" "$code" 1
+    has fail "db bootstrap failed"
+    has fail "ready to accept connections"
+    lacks fail "interrupted"
+    expect "normal failure: resources left" "$(left "$base-fail")" 0
+    echo "ok: normal failure after the DB is up keeps diagnostics and removes only its resources"
+
+    smoke term term
+    expect "SIGTERM: exit" "$code" 143
+    has term "interrupted by SIGTERM"
+    lacks term "smoke resources:"
+    expect "SIGTERM: resources left" "$(left "$base-term")" 0
+    echo "ok: SIGTERM to the smoke shell between create and ID record cleans up as a failure"
+
+    smoke int int
+    expect "SIGINT: exit" "$code" 130
+    has int "interrupted by SIGINT"
+    lacks int "smoke resources:"
+    expect "SIGINT: resources left" "$(left "$base-int")" 0
+    echo "ok: SIGINT to the process group between create and ID record cleans up as a failure"
+
+    SECONDS=0
+    smoke stuck term-stuck
+    took=$SECONDS
+    expect "SIGTERM in a hung step: exit" "$code" 143
+    has stuck "smoke resources: postgres"
+    has stuck "interrupted by SIGTERM"
+    [ "$took" -lt 30 ] || { echo "::error::SIGTERM in a hung step: took ${took}s, the step was not stopped"; exit 1; }
+    expect "SIGTERM in a hung step: resources left" "$(left "$base-stuck")" 0
+    echo "ok: SIGTERM while a step hangs stops that step at once and cleans up as a failure"
+
+    smoke kill kill
+    expect "forced kill: exit" "$code" 137
+    lacks kill "smoke resources:"
+    expect "forced kill: resources left for recovery" "$(owned "$base-kill")" 2
+    bash -c "$SMOKE_RECOVER" recover "$base-kill" >"$work/recover.log" 2>&1
+    has recover "removed 2"
+    expect "forced kill: resources after recovery" "$(left "$base-kill")" 0
+    echo "ok: forced kill between create and ID record leaves the resources to SMOKE_RECOVER, which removes exactly them"
+
+    m="$base-mismatch"
+    decoy --name "$m"
+    decoy --label "com.docker.compose.project=$m"
+    decoy --label "fvoci.smoke=$m-x"
+    docker network create --label "com.docker.compose.project=$m" --label "fvoci.smoke.check=$base" "${m}_default" >/dev/null
+    before=$(docker ps -aq --filter "label=fvoci.smoke.check=$base" | wc -l)
+    bash -c "$SMOKE_RECOVER" recover "$m" >"$work/mismatch.log" 2>&1
+    has mismatch "removed 0"
+    has mismatch "left in place, no owner label fvoci.smoke=$m"
+    expect "owner label mismatch: containers kept" "$(docker ps -aq --filter "label=fvoci.smoke.check=$base" | wc -l)" "$before"
+    expect "owner label mismatch: network kept" "$(docker network ls -q --filter "name=${m}_default" | wc -l)" 1
+    echo "ok: recovery leaves resources whose name or Compose project matches but whose owner label does not"
+
+    expect "other run: resources kept" "$(owned "$base-other")" 2
+    echo "ok: another run's owned container and network were never touched"
+    echo "- $platform: smoke lifecycle checks ok (#125)" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 jobs:
   # 태그 확인과 이미 게시된 이미지 확인. 읽기 권한만.
@@ -280,6 +483,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # smoke 실행 식별자(SMOKE). job이 시작할 때 정해지므로 smoke가 강제로 끝나도 복구 단계가 같은 값을 쓴다.
+      SMOKE_RUN: fvoci-smoke-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -324,7 +530,10 @@ jobs:
           INJECT: ${{ needs.resolve.outputs.inject }}
         run: |
           docker pull --platform "$PLATFORM" "$REF"
-          bash -c "$SMOKE" smoke "$REF" "$PLATFORM" "$SHA" "$VERSION" "$INJECT"
+          exec bash -c "$SMOKE" smoke "$REF" "$PLATFORM" "$SHA" "$VERSION" "$INJECT"
+      - name: Remove smoke resources left by a forced stop
+        if: always()
+        run: bash -c "$SMOKE_RECOVER" recover "$SMOKE_RUN"
       - name: Keep the digest for the manifest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -403,6 +612,8 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+    env:
+      SMOKE_RUN: fvoci-smoke-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -430,7 +641,17 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           SHA: ${{ github.sha }}
-        run: bash -c "$SMOKE" smoke groundzero:pr "$PLATFORM" "$SHA" 0.0.0 true
+        run: exec bash -c "$SMOKE" smoke groundzero:pr "$PLATFORM" "$SHA" 0.0.0 true
+      # 수명주기는 플랫폼과 상관없으므로 한 플랫폼에서만 시험한다.
+      - name: Smoke lifecycle checks (#125)
+        if: matrix.platform == 'linux/amd64'
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          SHA: ${{ github.sha }}
+        run: exec bash -c "$SMOKE_CHECK" check groundzero:pr "$PLATFORM" "$SHA" 0.0.0
+      - name: Remove smoke resources left by a forced stop
+        if: always()
+        run: bash -c "$SMOKE_RECOVER" recover "$SMOKE_RUN"
 
   # PR: 기존 이미지 확인의 분기를 실제 GitHub·GHCR 응답으로 검증한다(게시 권한 없음). 이미 있는 공개 패키지
   # groundzero-ci-base(사용자 fvoci 소유), 한 번도 게시하지 않은 패키지, 없는 소유자, 토큰 없는 호출을 쓴다.

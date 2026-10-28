@@ -1,4 +1,4 @@
-// Storybook: 실제 제품 컴포넌트의 상태를 합성 데이터로 보는 로컬 작업 환경(docs/development.md#storybook).
+// Storybook: 실제 제품 컴포넌트의 상태를 합성 데이터로 보는 로컬 작업 환경(D-108 docs/decisions/ui.md#d-108).
 // 앱의 vite.config.ts(Svelte·Tailwind·$lib 별칭)를 그대로 쓰고, 실제 서버로 넘기는 개발 프록시만 뺀다.
 import type { StorybookConfig } from '@storybook/svelte-vite';
 

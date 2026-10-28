@@ -2,6 +2,8 @@
 //! 경로 방식 주소(`{endpoint}/{bucket}/{key}`)를 쓴다. 조각은 본문의 SHA-256으로 서명해 전송 중 변조·손상을
 //! 저장소가 거부하게 한다.
 
+use std::fmt::Write as _;
+
 use bytes::Bytes;
 use futures_util::StreamExt;
 use hmac::{Hmac, KeyInit, Mac};
@@ -38,7 +40,9 @@ fn encode(value: &str, keep_slash: bool) -> String {
                 out.push(b as char)
             }
             b'/' if keep_slash => out.push('/'),
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                let _ignored = write!(out, "%{b:02X}");
+            }
         }
     }
     out
@@ -46,7 +50,8 @@ fn encode(value: &str, keep_slash: bool) -> String {
 
 fn hmac(key: &[u8], data: &str) -> Vec<u8> {
     // HMAC는 어떤 길이의 키도 받으므로 실패하지 않는다.
-    let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap_or_else(|_| unreachable!());
+    let mut mac = Hmac::<Sha256>::new_from_slice(key)
+        .unwrap_or_else(|_| unreachable!("HMAC accepts keys of any length"));
     mac.update(data.as_bytes());
     mac.finalize().into_bytes().to_vec()
 }
@@ -299,11 +304,12 @@ impl S3Store {
     ) -> Result<(), AppError> {
         let mut xml = String::from("<CompleteMultipartUpload>");
         for part in parts {
-            xml.push_str(&format!(
+            let _ignored = write!(
+                xml,
                 "<Part><PartNumber>{}</PartNumber><ETag>{}</ETag></Part>",
                 part.number,
                 part.etag.replace('&', "&amp;").replace('<', "&lt;")
-            ));
+            );
         }
         xml.push_str("</CompleteMultipartUpload>");
         let hash = hex::encode(Sha256::digest(xml.as_bytes()));

@@ -1,4 +1,4 @@
--- GroundZero 새 설치 기준(2026-10-25 오버홀 1단계, D-126). 역할·스키마는 먼저 db bootstrap으로 준비한다.
+-- GroundZero 새 설치 기준(오버홀 '달리는 아비시니안' 1단계, D-126·D-131). 역할·스키마는 먼저 db bootstrap으로 준비한다.
 -- PostgreSQL 17 이상에서 환경 공통 SQL을 쓴다(D-100: docs/decisions/database.md#d-100).
 -- 기존 개발·시험 DB는 대상·백업·삭제 승인을 거쳐 재생성한다(D-107: docs/decisions/database.md#d-107).
 -- 비교용 과거 기준 SQL: 355fe26407b91b5b560a4f13dd34981f74c0ee6f의
@@ -1552,7 +1552,7 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
         RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
       END IF;
     END IF;
-    -- 조직 탈퇴(조직 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다.
+    -- 조직 제거·탈퇴(멤버 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다(D-114).
     PERFORM 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee FOR SHARE;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
@@ -1629,7 +1629,8 @@ CREATE FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item
 
 ALTER FUNCTION fvoci.app_document_audience(p_doc uuid, p_workspace uuid, p_item uuid, p_owner uuid) OWNER TO fvoci_migrator;
 
--- 이동 전 확인(D-24·D-114): 사용자 id·등급 단위의 변화. 같은 조직 안의 이동이라 공개 링크·개별 공유는 그대로 유효하다.
+-- 이동 전 확인(D-24·D-114): 사용자 id·등급 단위의 변화. 공간 사이 이동은 같은 조직 안에서만 한다(app_check_move).
+-- 개인 노트는 소유자가 속한 어느 공간으로든 옮길 수 있고, 그 공간의 조직 밖 개별 공유는 app_move_document가 철회한다.
 CREATE FUNCTION fvoci.app_move_preview(p_doc uuid, p_target uuid, p_item uuid) RETURNS TABLE(change text, user_id uuid, display_name text, from_grade text, to_grade text)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -1770,6 +1771,46 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
 
 
 ALTER FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_workspace uuid, p_title text, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- 공간(위키 p_workspace 또는 항목 p_item)에 템플릿으로 새 문서를 만들 때의 본문(D-27·D-114·D-115). 읽을 수 있는 템플릿이어야
+-- 하고, 템플릿 예외는 allow_copy만 넘는다: 공간 문서 템플릿은 복제처럼 같은 조직 공간에서만 쓰고 원본에 복제 감사를 남긴다.
+-- 개인 노트 대상은 이 함수를 거치지 않는다. 새 id 1: 원본 감사.
+CREATE FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_kind   text := CASE WHEN p_item IS NULL THEN 'workspace' ELSE 'item' END;
+    v_target uuid := coalesce(p_item, p_workspace);
+    v_ws     uuid := coalesce(p_workspace, (SELECT i.workspace_id FROM items i WHERE i.id = p_item));
+    v_src    documents%ROWTYPE;
+  BEGIN
+    SELECT * INTO v_src FROM documents WHERE id = p_template AND is_template AND deleted_at IS NULL;
+    IF v_src.id IS NULL OR app_access('document', p_template) = 'none' THEN
+      RAISE EXCEPTION 'template not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF (p_workspace IS NULL) = (p_item IS NULL) THEN
+      RAISE EXCEPTION 'choose a workspace or an item' USING ERRCODE = '22023';
+    END IF;
+    IF app_access(v_kind, v_target) = 'none' THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_src.workspace_id IS NOT NULL
+       AND app_target_organization('document', p_template) IS DISTINCT FROM app_target_organization(v_kind, v_target) THEN
+      RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
+    END IF;
+    -- 같은 request_id로 다시 보낸 생성은 이미 만든 문서를 돌려받으므로 감사를 다시 남기지 않는다(app_copy_document와 같다).
+    IF NOT EXISTS (SELECT 1 FROM documents
+                   WHERE workspace_id = v_ws AND created_by = app_user_id() AND request_id = p_request_id) THEN
+      PERFORM app_audit_document(app_id(p_ids, 1), p_template, 'copy',
+                                 jsonb_build_object('target', 'workspace', 'template', true));
+    END IF;
+    RETURN v_src.body;
+  END
+  $$;
+
+
+ALTER FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 -- D-115: allow_copy가 꺼진 문서는 소유 권한 외 누구도(수정 권한 포함) 내보내거나 첨부를 내려받지 못한다.
 CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
@@ -3379,7 +3420,10 @@ CREATE FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user
       PERFORM app_require_organization_admin(p_organization);
     END IF;
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
-    IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user) THEN
+    -- 공유 생성(멤버 행 공유 잠금 뒤 공유 기록)과 줄 세운다(D-114). 먼저 온 공유는 커밋을 기다렸다가 아래에서 함께 거두고,
+    -- 나중 공유는 이 제거가 커밋된 뒤 멤버 행이 없어 거절된다.
+    PERFORM 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
+    IF NOT FOUND THEN
       RAISE EXCEPTION 'organization member not found' USING ERRCODE = 'P0002';
     END IF;
     IF NOT v_self THEN
@@ -3802,8 +3846,8 @@ CREATE FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uui
 
 ALTER FUNCTION fvoci.app_create_workspace(p_request_id uuid, p_organization uuid, p_name text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
--- 워크스페이스 초대(워크스페이스 관리자, D-20·D-118). 받는 사람은 수락할 때 조직 멤버여야 한다(D-114). 발송 단계에서 조직 밖
--- 이메일을 막을지는 사용자 결정 대기다. 새 id 3: 초대, 공간 로그, 알림.
+-- 워크스페이스 초대(워크스페이스 관리자, D-20·D-118). 받는 사람이 조직 밖이어도 보낸다. 수락하면 그 조직의 멤버로 먼저
+-- 가입한다(D-112 개정 2026-10-26, app_respond_invitation). 새 id 3: 초대, 공간 로그, 알림.
 CREATE FUNCTION fvoci.app_invite(p_workspace uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -3870,7 +3914,8 @@ CREATE FUNCTION fvoci.app_my_invitations() RETURNS TABLE(id uuid, organization_i
 
 ALTER FUNCTION fvoci.app_my_invitations() OWNER TO fvoci_migrator;
 
--- 초대 수락·거절(D-51·D-118). 조직 초대는 조직 멤버가 되고, 워크스페이스 초대는 그 조직의 멤버여야 수락할 수 있다(D-114).
+-- 초대 수락·거절(D-51·D-118). 조직 초대는 조직 멤버가 되고, 워크스페이스 초대는 조직 밖 사람이면 그 조직의 멤버로 먼저
+-- 가입한 뒤(감사로그 join) 워크스페이스 역할을 받는다(D-112 개정 2026-10-26).
 -- 돌려주는 값은 워크스페이스 초대면 워크스페이스 id, 조직 초대면 조직 id다. 알림함의 invite 알림에 결과를 남긴다.
 CREATE FUNCTION fvoci.app_respond_invitation(p_invitation uuid, p_accept boolean, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
@@ -6890,6 +6935,12 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
       PERFORM app_activity(app_id(p_ids, v_at), p_target, p_item, 'document', p_doc, 'unshare',
                            jsonb_build_object('user', v_child.grantee_user_id, 'reason', 'moved'));
     END LOOP;
+    -- D-114: 이 문서의 참조 가운데 옮긴 자리의 조직 밖 대상은 지운다(개인 노트는 쓴 사람이 속한 다른 조직의 대상도 참조한다).
+    -- 조직이 없는 개인 대상은 참조 기록 규칙대로 남긴다.
+    DELETE FROM document_links l
+    WHERE l.document_id = p_doc
+      AND app_target_organization(l.target_kind, l.target_id)
+          <> (SELECT w.organization_id FROM workspaces w WHERE w.id = p_target);
     v_at := v_at + 1;
     PERFORM app_audit_document(app_id(p_ids, v_at), p_doc, 'move_in',
       jsonb_build_object('from', CASE WHEN v_doc.owner_user_id IS NULL THEN 'workspace' ELSE 'personal' END));
@@ -13250,6 +13301,9 @@ REVOKE ALL ON FUNCTION fvoci.app_task_series_bound(p_series uuid) FROM PUBLIC;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_tasks_move_version() FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_template_body(p_template uuid, p_workspace uuid, p_item uuid, p_request_id uuid, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_time_target_label(p_kind text, p_id uuid) TO fvoci_app;

@@ -4,6 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import TaskCsvImport from '$lib/features/tasks/TaskCsvImport.svelte';
 import { matchRows, saveImport } from '$lib/features/tasks/csv-import';
 import { parseTasksCsv } from '$lib/features/tasks/csv';
+import { me } from '$lib/me.svelte';
 import { org } from '$lib/org.svelte';
 import MainFrame from '../fixtures/MainFrame.svelte';
 import { setUpScreen } from '../fixtures/screens';
@@ -21,7 +22,7 @@ const meta = {
     const restore = setUpScreen('/csv');
     const key = org.key('csv-import:csv-item');
     const text = '저장한 업무\n응답을 기다리던 업무';
-    const steps = matchRows(parseTasksCsv(text, [], statuses).rows, []);
+    const steps = matchRows(parseTasksCsv(text, [], statuses, me.maxTitleChars).rows, []);
     if (steps[0] !== undefined) steps[0].progress.applied = steps[0].key;
     saveImport(
       key,
@@ -48,16 +49,4 @@ export const Reentered: Story = {
 export const NarrowDark200: Story = {
   ...Reentered,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
-};
-export const Dark: Story = {
-  ...Reentered,
-  globals: { theme: 'dark', fontScale: '100', viewport: { value: 'desktop' } },
-};
-export const Narrow: Story = {
-  ...Reentered,
-  globals: { theme: 'light', fontScale: '100', viewport: { value: 'narrow375' } },
-};
-export const LargeText: Story = {
-  ...Reentered,
-  globals: { theme: 'light', fontScale: '200', viewport: { value: 'desktop' } },
 };
