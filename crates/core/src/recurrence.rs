@@ -50,13 +50,19 @@ impl RecurrenceRule {
             ));
         }
         if self.freq != Frequency::Weekly && !weekdays.is_empty() {
-            return Err(AppError::BadRequest(
-                "weekdays are only for weekly rules".into(),
+            return Err(AppError::invalid(
+                "weekdays",
+                InvalidReason::InvalidFormat,
+                None,
+                "weekdays are only for weekly rules",
             ));
         }
         if self.until.is_some() && self.count.is_some() {
-            return Err(AppError::BadRequest(
-                "use either until or count, not both".into(),
+            return Err(AppError::invalid(
+                "count",
+                InvalidReason::InvalidFormat,
+                None,
+                "use either until or count, not both",
             ));
         }
         if self.count.is_some_and(|c| !(1..=1000).contains(&c)) {
