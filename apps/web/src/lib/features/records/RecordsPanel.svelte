@@ -66,6 +66,10 @@
   let pending = $state<{ requestId: string; signature: string } | null>(null);
   let baseline = $state(JSON.stringify(emptyForm()));
   let busy = $state(false);
+  let draftReadiness = $state<'ready' | 'retry' | 'reading'>(clearLegacyRecordDrafts());
+  let draftCleanupNotice = $state('');
+  let mounted = false;
+  let detachDraft: (() => void) | undefined;
   function baseForm(): RecordForm {
     try {
       return parseRecordForm(JSON.parse(baseline)) ?? emptyForm();
@@ -95,7 +99,9 @@
   }
   const draft = createFormDraft({
     name: () =>
-      selected === undefined ? undefined : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
+      draftReadiness === 'retry' || selected === undefined
+        ? undefined
+        : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
     snapshot: () => ({ form, baseline, version: editingVersion, pending }),
     storedSnapshot: () => ({
       form: writing(form),
@@ -133,9 +139,35 @@
       JSON.stringify(settings(form)) !== JSON.stringify(settings(baseForm())),
     busy: () => busy,
   });
+  async function retryDraftCleanup(): Promise<void> {
+    if (draftReadiness !== 'retry') return;
+    if (clearLegacyRecordDrafts() === 'retry') return;
+    draftReadiness = 'reading';
+    // Let the offers read repaired keys before enabling entry.
+    await tick();
+    if (!mounted) return;
+    detachDraft = draft.attach();
+    draftCleanupNotice = '';
+    draftReadiness = 'ready';
+  }
   onMount(() => {
-    clearLegacyRecordDrafts();
-    return draft.attach();
+    mounted = true;
+    if (draftReadiness === 'ready') detachDraft = draft.attach();
+    else draftCleanupNotice = m.records_draft_cleanup_failed();
+    const onReturn = (): void => {
+      void retryDraftCleanup();
+    };
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') onReturn();
+    };
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      mounted = false;
+      detachDraft?.();
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   });
   let reloadKey = $state(0);
 
@@ -230,6 +262,7 @@
   });
 
   async function startNew(): Promise<void> {
+    if (draftReadiness !== 'ready') return;
     editingId = undefined;
     await tick();
     form = emptyForm();
@@ -240,6 +273,7 @@
   }
 
   async function startEdit(def: RecordKindView, r: RecordView): Promise<void> {
+    if (draftReadiness !== 'ready') return;
     creating = false;
     editingId = r.id;
     await tick();
@@ -361,6 +395,14 @@
 
 <!-- 저장하는 동안 되살리기도 잠근다. 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 만들기는 다시 내면 새 요청 id로
      두 번째 기록을, 고치기는 옮기지 못한 기준 판으로 자기 저장과 409를 낸다. -->
+<p role="status" aria-live="polite" class="text-sm text-destructive empty:hidden">
+  {draftCleanupNotice}
+</p>
+{#if draftReadiness === 'retry'}
+  <Button size="sm" variant="outline" onclick={() => void retryDraftCleanup()}
+    >{m.common_retry()}</Button
+  >
+{/if}
 {#each draft.offers as entry (entry.key)}
   <fieldset class="contents" disabled={busy}>
     <FormDraftOffer
@@ -460,6 +502,7 @@
           <Button
             size="sm"
             variant="outline"
+            disabled={draftReadiness !== 'ready'}
             onclick={() => {
               draft.leave.request(() => void startNew());
             }}>{m.records_new_kind({ label: kindLabel })}</Button
@@ -641,7 +684,8 @@
                     variant="ghost"
                     onclick={() => {
                       draft.leave.request(() => void startEdit(def, r));
-                    }}>{m.records_edit()}</Button
+                    }}
+                    disabled={draftReadiness !== 'ready'}>{m.records_edit()}</Button
                   >
                 {/if}
                 {#if r.can_delete && confirming !== r.id}

@@ -25,7 +25,9 @@ interface DraftCheck {
   value: RecordDraft;
 }
 
-function recordDraftKeys(): string[] {
+export type RecordDraftCleanup = 'ready' | 'retry';
+
+function recordDraftKeys(): string[] | undefined {
   const keys: string[] = [];
   try {
     const storage = window.localStorage;
@@ -34,7 +36,7 @@ function recordDraftKeys(): string[] {
       if (key !== null && RECORD_DRAFT_KEY.test(key)) keys.push(key);
     }
   } catch {
-    return [];
+    return undefined;
   }
   return keys;
 }
@@ -132,17 +134,17 @@ function checkWriting(value: unknown, kind: string | undefined): DraftCheck | un
   };
 }
 
-function stillStoredAt(key: string, raw: string): boolean {
+function storedStateAt(key: string, raw: string): 'same' | 'changed' | 'unavailable' {
   try {
-    return window.localStorage.getItem(key) === raw;
+    return window.localStorage.getItem(key) === raw ? 'same' : 'changed';
   } catch {
-    return false;
+    return 'unavailable';
   }
 }
 
 /** Normalize only the supplied snapshot; a later writer's value belongs to its own event. */
-function clearLegacyRecordDraftAt(key: string, raw: string | null): void {
-  if (!RECORD_DRAFT_KEY.test(key) || raw === null) return;
+function clearLegacyRecordDraftAt(key: string, raw: string | null): RecordDraftCleanup {
+  if (!RECORD_DRAFT_KEY.test(key) || raw === null) return 'ready';
   const kind = RECORD_KIND_KEY.exec(key)?.[1];
   let checked: DraftCheck | undefined;
   try {
@@ -150,12 +152,16 @@ function clearLegacyRecordDraftAt(key: string, raw: string | null): void {
   } catch {
     // Malformed JSON is discarded only if this exact raw value is still stored.
   }
-  if (checked?.state === 'current' || !stillStoredAt(key, raw)) return;
+  if (checked?.state === 'current') return 'ready';
+  const stored = storedStateAt(key, raw);
+  if (stored !== 'same') return stored === 'changed' ? 'ready' : 'retry';
   // localStorage has no atomic compare-and-set across tabs. Compare just before each mutation.
-  if (!writeDraftAt(key, checked?.value) && checked !== undefined && stillStoredAt(key, raw)) {
-    // A failed rewrite may discard only the old snapshot, never newer writing.
-    writeDraftAt(key, undefined);
-  }
+  if (writeDraftAt(key, checked?.value)) return 'ready';
+  if (checked === undefined) return 'retry';
+  const fallback = storedStateAt(key, raw);
+  if (fallback !== 'same') return fallback === 'changed' ? 'ready' : 'retry';
+  // A failed rewrite may discard only the old snapshot, never newer writing.
+  return writeDraftAt(key, undefined) ? 'ready' : 'retry';
 }
 
 /**
@@ -163,14 +169,20 @@ function clearLegacyRecordDraftAt(key: string, raw: string | null): void {
  * tabs and held offers. Snapshot keys so deleting an entry cannot skip the next one. Both startup
  * and event cleanup use the same writing normalization and compare before changing a stored value.
  */
-export function clearLegacyRecordDrafts(): void {
-  for (const key of recordDraftKeys()) {
+export function clearLegacyRecordDrafts(): RecordDraftCleanup {
+  const keys = recordDraftKeys();
+  if (keys === undefined) return 'retry';
+  let state: RecordDraftCleanup = 'ready';
+  for (const key of keys) {
     try {
-      clearLegacyRecordDraftAt(key, window.localStorage.getItem(key));
+      if (clearLegacyRecordDraftAt(key, window.localStorage.getItem(key)) === 'retry')
+        state = 'retry';
     } catch {
       // A failed read must not discard writing that could not be inspected.
+      state = 'retry';
     }
   }
+  return state;
 }
 
 /** Other tabs can still run an older release; attach for the App lifetime. */
