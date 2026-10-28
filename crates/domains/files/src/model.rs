@@ -38,6 +38,7 @@ pub struct CreateUpload {
     #[serde(default)]
     pub content_type: String,
     /// 전체 크기(바이트).
+    #[schema(minimum = 1)]
     pub size: i64,
 }
 
@@ -99,16 +100,10 @@ pub struct FileView {
     pub can_download: bool,
 }
 
-/// 파일과 모든 버전(최신 먼저).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FileDetail {
-    pub file: FileView,
-    pub versions: Vec<VersionView>,
-}
-
 /// 이름 바꾸기.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RenameFile {
+    #[schema(min_length = 1, max_length = 255)]
     pub name: String,
 }
 

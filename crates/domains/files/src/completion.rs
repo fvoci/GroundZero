@@ -15,8 +15,8 @@ use time::OffsetDateTime;
 /// 마치기(같은 요청을 다시 보내도 한 번만). 모든 조각이 있어야 한다. 서버가 내용 전체를 다시 읽어 크기를
 /// 확인하고 SHA-256을 기록한다. 맞지 않으면 업로드를 닫고 409.
 #[utoipa::path(post, path = "/api/uploads/{upload_id}/complete", operation_id = "complete_upload",
-    params(("upload_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = UploadView), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
+    params(("upload_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.")),
+    responses((status = 200, body = UploadView), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "files")]
 pub async fn complete_upload(
     State(state): State<FilesState>,

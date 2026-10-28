@@ -343,10 +343,18 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         None,
     )
     .await;
-    assert_eq!(detail.json["file"]["current_version"], 2);
-    assert_eq!(detail.json["file"]["name"], "data.csv");
-    assert_eq!(detail.json["versions"][0]["note"], "고친 값");
-    assert_eq!(detail.json["versions"][1]["sha256"], sha(&data));
+    assert_eq!(detail.json["current_version"], 2);
+    assert_eq!(detail.json["name"], "data.csv");
+    let versions = send(
+        &app,
+        Method::GET,
+        &format!("/api/files/{file_id}/versions"),
+        Some(&reader),
+        None,
+    )
+    .await;
+    assert_eq!(versions.json[0]["note"], "고친 값");
+    assert_eq!(versions.json[1]["sha256"], sha(&data));
     let (_, headers, latest) = download(
         &app,
         &reader,
@@ -376,7 +384,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         async move {
             send(
                 &app,
-                Method::PUT,
+                Method::PATCH,
                 &uri,
                 Some(&user),
                 Some(json!({ "name": name })),

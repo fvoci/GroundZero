@@ -95,11 +95,24 @@ pub async fn create_upload(
         (Some(_), None) => (None, None),
         (None, Some(t)) => (Some(t.kind.clone()), Some(t.id)),
         _ => {
-            return Err(AppError::BadRequest(
-                "give either file_id (new version) or target (new file)".into(),
+            return Err(AppError::invalid(
+                "target",
+                fvoci_core::error::InvalidReason::InvalidFormat,
+                None,
+                "give either file_id (new version) or target (new file)",
             ));
         }
     };
+    if let Some(target) = &input.target
+        && !matches!(target.kind.as_str(), "document" | "item")
+    {
+        return Err(AppError::invalid(
+            "target.kind",
+            fvoci_core::error::InvalidReason::InvalidFormat,
+            None,
+            "target kind must be document or item",
+        ));
+    }
     let mut tx = state.db.begin_as(user).await?;
     let id: Uuid = sqlx::query_scalar(
         "SELECT app_create_upload($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
@@ -119,7 +132,7 @@ pub async fn create_upload(
     .bind(new_ids(1))
     .fetch_one(tx.conn())
     .await
-    .map_err(AppError::from_db_function)?;
+    .map_err(crate::validation::from_file_function)?;
     let row = my_upload(&mut tx, UploadId(id)).await?;
     tx.commit().await?;
 
@@ -131,7 +144,7 @@ pub async fn create_upload(
             .bind(&started)
             .execute(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
+            .map_err(crate::validation::from_file_function)?;
         let row = my_upload(&mut tx, UploadId(id)).await?;
         tx.commit().await?;
         // 같은 요청이 동시에 와서 다른 쪽이 먼저 기록했으면 이쪽 저장소 업로드는 버린다.
@@ -165,7 +178,7 @@ pub async fn get_upload(
 /// 조각 하나 보내기(1부터). 본문은 날것 그대로, `x-content-sha256`에 본문의 SHA-256. 크기는 조각 크기(마지막만
 /// 나머지)와 같아야 한다. 같은 번호를 다시 보내면 바꾼다.
 #[utoipa::path(put, path = "/api/uploads/{upload_id}/parts/{number}", operation_id = "put_upload_part",
-    params(("upload_id" = String, Path, format = Uuid), ("number" = i32, Path)),
+    params(("upload_id" = String, Path, format = Uuid), ("number" = i32, Path), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다."), ("x-content-sha256" = String, Header, description = "조각 본문의 SHA-256(16진수)")),
     request_body(content = Vec<u8>, content_type = "application/octet-stream"),
     responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "files")]
@@ -187,9 +200,12 @@ pub async fn put_part(
     };
     let total = parts_total(row.size, row.chunk_bytes);
     if number < 1 || i64::from(number) > total {
-        return Err(AppError::BadRequest(format!(
-            "part number must be 1..={total}"
-        )));
+        return Err(AppError::invalid(
+            "number",
+            fvoci_core::error::InvalidReason::OutOfRange,
+            u64::try_from(total).ok(),
+            format!("part number must be 1..={total}"),
+        ));
     }
     let expected = if i64::from(number) == total {
         row.size - row.chunk_bytes * (total - 1)
@@ -197,19 +213,32 @@ pub async fn put_part(
         row.chunk_bytes
     };
     if i64::try_from(body.len()).unwrap_or(i64::MAX) != expected {
-        return Err(AppError::BadRequest(format!(
-            "part {number} must be {expected} bytes"
-        )));
+        return Err(AppError::invalid(
+            "size",
+            fvoci_core::error::InvalidReason::InvalidFormat,
+            u64::try_from(expected).ok(),
+            format!("part {number} must be {expected} bytes"),
+        ));
     }
     let claimed = headers
         .get(PART_SHA256_HEADER)
         .and_then(|v| v.to_str().ok())
         .map(str::to_ascii_lowercase)
-        .ok_or_else(|| AppError::BadRequest(format!("missing {PART_SHA256_HEADER}")))?;
+        .ok_or_else(|| {
+            AppError::invalid(
+                PART_SHA256_HEADER,
+                fvoci_core::error::InvalidReason::Required,
+                None,
+                format!("missing {PART_SHA256_HEADER}"),
+            )
+        })?;
     let actual = sha256_hex(&body);
     if claimed != actual {
-        return Err(AppError::BadRequest(
-            "the part does not match its SHA-256; send it again".into(),
+        return Err(AppError::invalid(
+            PART_SHA256_HEADER,
+            fvoci_core::error::InvalidReason::InvalidFormat,
+            Some(64),
+            "the part does not match its SHA-256; send it again",
         ));
     }
     let number_u32 = u32::try_from(number).unwrap_or_default();
@@ -226,15 +255,15 @@ pub async fn put_part(
         .bind(&etag)
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(crate::validation::from_file_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// 업로드 그만두기(올린 사람). 받은 조각은 백그라운드 작업이 지운다.
 #[utoipa::path(delete, path = "/api/uploads/{upload_id}", operation_id = "abort_upload",
-    params(("upload_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "files")]
+    params(("upload_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.")),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "files")]
 pub async fn abort_upload(
     State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
@@ -245,7 +274,7 @@ pub async fn abort_upload(
         .bind(id)
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(crate::validation::from_file_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

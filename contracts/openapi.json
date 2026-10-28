@@ -2539,7 +2539,7 @@
         "tags": [
           "files"
         ],
-        "summary": "파일과 모든 버전.",
+        "summary": "파일 메타데이터. 버전은 별도 모음으로 읽는다.",
         "operationId": "get_file",
         "parameters": [
           {
@@ -2558,7 +2558,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FileDetail"
+                  "$ref": "#/components/schemas/FileView"
                 }
               }
             }
@@ -2575,7 +2575,90 @@
           }
         }
       },
-      "put": {
+      "delete": {
+        "tags": [
+          "files"
+        ],
+        "summary": "휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다.",
+        "operationId": "trash_file",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileTrashed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
         "tags": [
           "files"
         ],
@@ -2588,6 +2671,19 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "uuid"
             }
           }
@@ -2642,48 +2738,8 @@
                 }
               }
             }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "files"
-        ],
-        "summary": "휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다.",
-        "operationId": "trash_file",
-        "parameters": [
-          {
-            "name": "file_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileTrashed"
-                }
-              }
-            }
           },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "404": {
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -2765,6 +2821,51 @@
         }
       }
     },
+    "/api/files/{file_id}/versions": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "볼 수 있는 파일의 버전 목록(최신 먼저).",
+        "operationId": "file_versions",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VersionView"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/files/{file_id}/versions/{version}": {
       "delete": {
         "tags": [
@@ -2783,6 +2884,19 @@
             }
           },
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "version",
             "in": "path",
             "required": true,
@@ -2795,6 +2909,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -10899,11 +11023,34 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -10944,6 +11091,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -10953,6 +11113,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -11004,6 +11174,28 @@
             "schema": {
               "type": "integer",
               "format": "int32"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-content-sha256",
+            "in": "header",
+            "description": "조각 본문의 SHA-256(16진수)",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -14177,7 +14369,8 @@
           "size": {
             "type": "integer",
             "format": "int64",
-            "description": "전체 크기(바이트)."
+            "description": "전체 크기(바이트).",
+            "minimum": 1
           },
           "target": {
             "oneOf": [
@@ -15064,25 +15257,6 @@
           "course",
           "episode"
         ]
-      },
-      "FileDetail": {
-        "type": "object",
-        "description": "파일과 모든 버전(최신 먼저).",
-        "required": [
-          "file",
-          "versions"
-        ],
-        "properties": {
-          "file": {
-            "$ref": "#/components/schemas/FileView"
-          },
-          "versions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VersionView"
-            }
-          }
-        }
       },
       "FileId": {
         "type": "string",
@@ -18093,7 +18267,9 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1
           }
         }
       },

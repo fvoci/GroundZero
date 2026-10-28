@@ -12,6 +12,7 @@ pub mod resource;
 pub mod router;
 pub mod state;
 pub mod uploads;
+pub mod validation;
 
 pub use router::router;
 pub use state::{FileLimits, FilesState, PersistWorkspace};
@@ -29,6 +30,7 @@ use utoipa::OpenApi;
         read::document_files,
         read::item_files,
         read::get_file,
+        read::versions,
         commands::rename_file,
         commands::trash_file,
         content::content,
@@ -40,7 +42,6 @@ use utoipa::OpenApi;
         model::UploadView,
         model::VersionView,
         model::FileView,
-        model::FileDetail,
         model::RenameFile,
         model::FileTrashed
     ))

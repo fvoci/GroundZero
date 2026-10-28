@@ -13,10 +13,10 @@ use fvoci_db::new_ids;
 use fvoci_http::session::CurrentUser;
 use uuid::Uuid;
 /// 이름 바꾸기(쓸 수 있는 사람).
-#[utoipa::path(put, path = "/api/files/{file_id}", operation_id = "rename_file",
-    params(("file_id" = String, Path, format = Uuid)), request_body = RenameFile,
+#[utoipa::path(patch, path = "/api/files/{file_id}", operation_id = "rename_file",
+    params(("file_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.")), request_body = RenameFile,
     responses((status = 200, body = FileView), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "files")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "files")]
 pub async fn rename_file(
     State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
@@ -30,7 +30,7 @@ pub async fn rename_file(
         .bind(new_ids(1))
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(crate::validation::from_file_function)?;
     let file = one_file(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(file))
@@ -38,8 +38,8 @@ pub async fn rename_file(
 
 /// 휴지통으로(쓸 수 있는 사람). 모든 버전이 함께 가고 함께 돌아온다.
 #[utoipa::path(delete, path = "/api/files/{file_id}", operation_id = "trash_file",
-    params(("file_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = FileTrashed), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
+    params(("file_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다.")),
+    responses((status = 200, body = FileTrashed), (status = 400, body = ErrorBody), (status = 409, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "files")]
 pub async fn trash_file(
     State(state): State<FilesState>,
@@ -52,15 +52,15 @@ pub async fn trash_file(
         .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(crate::validation::from_file_function)?;
     tx.commit().await?;
     Ok(Json(FileTrashed { batch_id }))
 }
 
 /// 현재가 아닌 버전 하나를 영구 삭제(쓸 수 있는 사람, D-56). 저장소의 내용은 백그라운드 작업이 지운다.
 #[utoipa::path(delete, path = "/api/files/{file_id}/versions/{version}", operation_id = "delete_file_version",
-    params(("file_id" = String, Path, format = Uuid), ("version" = i32, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("file_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = "보내면 세션 사용자와 비교한다(D-96). 생략할 수 있다."), ("version" = i32, Path)),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "files")]
 pub async fn delete_version(
     State(state): State<FilesState>,
@@ -88,7 +88,7 @@ pub async fn delete_version(
         .bind(new_ids(1))
         .execute(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(crate::validation::from_file_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

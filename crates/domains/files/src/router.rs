@@ -4,10 +4,11 @@ use crate::{FilesState, commands, completion, content, read, uploads};
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRef, Request, State};
 use axum::http::StatusCode;
+use axum::middleware::from_extractor_with_state;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use std::sync::Arc;
 
 async fn upload_slot(State(state): State<FilesState>, req: Request, next: Next) -> Response {
@@ -49,12 +50,16 @@ where
         .route(
             "/files/{file_id}",
             get(read::get_file)
-                .put(commands::rename_file)
+                .patch(commands::rename_file)
                 .delete(commands::trash_file),
         )
+        .route("/files/{file_id}/versions", get(read::versions))
         .route("/files/{file_id}/content", get(content::content))
         .route(
             "/files/{file_id}/versions/{version}",
             delete(commands::delete_version),
         )
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

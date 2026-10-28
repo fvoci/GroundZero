@@ -1153,6 +1153,7 @@ dependencies = [
  "fvoci-http",
  "fvoci-storage",
  "serde",
+ "serde_json",
  "sqlx",
  "time",
  "tokio",

@@ -1,7 +1,7 @@
 //! 첨부 목록과 파일·버전 읽기.
 use crate::{
     FilesState,
-    model::{FileDetail, FileView, VersionView},
+    model::{FileView, VersionView},
     resource::{FILE_SELECT, FileRow, file_view, one_file},
 };
 use axum::Json;
@@ -52,17 +52,32 @@ pub async fn item_files(
     Ok(Json(rows.into_iter().map(file_view).collect()))
 }
 
-/// 파일과 모든 버전.
+/// 파일 메타데이터. 버전은 별도 모음으로 읽는다.
 #[utoipa::path(get, path = "/api/files/{file_id}", operation_id = "get_file",
     params(("file_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = FileDetail), (status = 404, body = ErrorBody)), tag = "files")]
+    responses((status = 200, body = FileView), (status = 404, body = ErrorBody)), tag = "files")]
 pub async fn get_file(
     State(state): State<FilesState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<FileId>,
-) -> Result<Json<FileDetail>, AppError> {
+) -> Result<Json<FileView>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let file = one_file(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(Json(file))
+}
+
+/// 볼 수 있는 파일의 버전 목록(최신 먼저).
+#[utoipa::path(get, path = "/api/files/{file_id}/versions", operation_id = "file_versions",
+    params(("file_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [VersionView]), (status = 404, body = ErrorBody)), tag = "files")]
+pub async fn versions(
+    State(state): State<FilesState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<FileId>,
+) -> Result<Json<Vec<VersionView>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    one_file(&mut tx, id).await?;
     type Row = (
         i32,
         i64,
@@ -108,5 +123,5 @@ pub async fn get_file(
             },
         )
         .collect();
-    Ok(Json(FileDetail { file, versions }))
+    Ok(Json(versions))
 }

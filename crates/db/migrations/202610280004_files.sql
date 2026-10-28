@@ -197,7 +197,8 @@ CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text
       RETURN v_id;
     END IF;
     IF p_size < 1 THEN
-      RAISE EXCEPTION 'empty files cannot be uploaded' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'empty files cannot be uploaded' USING ERRCODE = '22023',
+        DETAIL = jsonb_build_object('field','size','reason','out_of_range','limit',NULL)::text;
     END IF;
     IF p_file IS NOT NULL THEN
       SELECT * INTO v_file FROM files WHERE id = p_file;
@@ -213,10 +214,17 @@ CREATE FUNCTION fvoci.app_create_upload(p_request uuid, p_file uuid, p_kind text
     SELECT * INTO v_place FROM app_file_place(v_kind, v_tgt);
     v_limit := app_effective_limit(v_place.workspace_id, 'max_file_bytes', p_max_file);
     IF p_size > v_limit THEN
-      RAISE EXCEPTION 'the file is larger than the limit (% bytes)', v_limit USING ERRCODE = '22023';
+      RAISE EXCEPTION 'the file is larger than the limit (% bytes)', v_limit USING ERRCODE = '22023',
+        DETAIL = jsonb_build_object('field','size','reason','out_of_range','limit',v_limit)::text;
     END IF;
     IF length(v_name) NOT BETWEEN 1 AND 255 OR v_name ~ '[\x00-\x1f/\\]' THEN
-      RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023',
+        DETAIL = jsonb_build_object('field','name','reason',
+          CASE WHEN length(v_name) = 0 THEN 'required'
+               WHEN length(v_name) > 255 THEN 'too_long'
+               WHEN v_name ~ '[\x00-\x1f]' THEN 'control_characters'
+               ELSE 'invalid_format' END,
+          'limit', CASE WHEN length(v_name) > 255 THEN 255 ELSE NULL END)::text;
     END IF;
     -- 같은 영역의 업로드 시작을 줄 세워 저장량·동시성 확인이 겹치지 않게 한다.
     PERFORM pg_advisory_xact_lock(hashtextextended('fvoci-storage:' || coalesce(v_place.workspace_id, v_place.owner_user_id)::text, 0));
@@ -608,7 +616,13 @@ CREATE FUNCTION fvoci.app_rename_file(p_file uuid, p_name text, p_ids uuid[]) RE
   BEGIN
     PERFORM app_require_file_write(p_file);
     IF length(v_name) NOT BETWEEN 1 AND 255 OR v_name ~ '[\x00-\x1f/\\]' THEN
-      RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'invalid file name' USING ERRCODE = '22023',
+        DETAIL = jsonb_build_object('field','name','reason',
+          CASE WHEN length(v_name) = 0 THEN 'required'
+               WHEN length(v_name) > 255 THEN 'too_long'
+               WHEN v_name ~ '[\x00-\x1f]' THEN 'control_characters'
+               ELSE 'invalid_format' END,
+          'limit', CASE WHEN length(v_name) > 255 THEN 255 ELSE NULL END)::text;
     END IF;
     SELECT * INTO v_file FROM files WHERE id = p_file FOR NO KEY UPDATE;
     IF app_file_archived(p_file) THEN

@@ -16,6 +16,7 @@ description: fvoci 웹(apps/web)을 바꿀 때 무엇을 읽고 어떤 검사를
   - 업무·상태 정의·충돌 재저장·세부 통일(이탈 취소·시간대 대체 등): `tasks.md`(#d-94 · #d-116 · #d-125)
   - 시간 기록: `time.md`(#d-117). 수락 경로: `product.md`(#d-128)
 - 계약: `contracts/openapi.json`(어느 쓰기가 `x-fvoci-expected-user`를 받는지 포함), 공통 요청·오류·기대 사용자 머리 `apps/web/src/lib/shared/api/`, 도메인별 파서 `apps/web/src/lib/api/client.ts`·`features/tasks/api.ts`, 오류 문구 `apps/web/src/lib/api/errors.ts`.
+- 파일 자원 계약·호출·파서: `apps/web/src/lib/features/files/api.ts`·`model.ts`. `AttachmentsPanel.svelte`는 별도 버전 모음을 읽으며 짧은 이름은 `createFormDraft({ preserve: false })`로 화면에만 둔다. 재개 정보는 `upload.ts`가 맡는다.
 - 코드 위치(`apps/web/src/lib/`):
   - 조직 문맥 `org.svelte.ts`, 경로 `router.svelte.ts`, 브라우저 저장소 `storage.ts`
   - 폼·업무 CSV 초안의 공통 저장 `features/common/draft-storage.ts`, 폼 정책 `form-draft.ts`·`form-draft.svelte.ts`, 업무 조직 키 래퍼 `features/tasks/drafts.ts`. 이탈 확인 `features/common/leave-guard.svelte.ts`·`DiscardChangesConfirm.svelte`, 같은 줄 확인 `features/common/inline-confirm.ts`

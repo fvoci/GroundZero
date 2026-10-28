@@ -189,8 +189,8 @@
 
   async function showVersions(id: string): Promise<void> {
     try {
-      const detail = await api.file(id);
-      versions = { id, list: detail.versions };
+      const list = await api.fileVersions(id);
+      versions = { id, list };
     } catch (e: unknown) {
       error = errorText(e, m.files_versions_load_failed());
     }
