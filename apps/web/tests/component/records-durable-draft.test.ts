@@ -98,7 +98,7 @@ it("ignores another account's late record success without changing the new input
   expect(done).not.toHaveBeenCalled();
 });
 
-it('restores raw numeric and long text input without sending, and warns on cancel and browser exit', async () => {
+it('keeps raw numbers on screen, restores only long text and reuses the same retry identity', async () => {
   const create = vi
     .spyOn(api, 'createRecord')
     .mockRejectedValue(new ApiError(403, 'forbidden', 'denied'));
@@ -110,15 +110,17 @@ it('restores raw numeric and long text input without sending, and warns on cance
   const unload = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(unload);
   expect(unload.defaultPrevented).toBe(true);
+  expect(input('amount')).toHaveValue('1e');
   await fireEvent.click(screen.getByRole('button', { name: m.common_cancel() }));
   expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   view.unmount();
   const restored = render(RecordsPanel, { item, kind: 'project', canWrite: true });
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
-  expect(input('title')).toHaveValue('보존할 제목');
-  expect(input('amount')).toHaveValue('1e');
+  expect(input('title')).toHaveValue('');
+  expect(input('amount')).toHaveValue('');
   expect(input('notes')).toHaveValue('긴 입력\n두 번째 줄');
   expect(create).not.toHaveBeenCalled();
+  await fireEvent.input(input('title'), { target: { value: '보존할 제목' } });
   await fireEvent.input(input('amount'), { target: { value: '12' } });
   await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));
   await waitFor(() => {
@@ -130,6 +132,10 @@ it('restores raw numeric and long text input without sending, and warns on cance
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
   expect(create).toHaveBeenCalledTimes(1);
+  expect(input('title')).toHaveValue('');
+  expect(input('amount')).toHaveValue('');
+  await fireEvent.input(input('title'), { target: { value: '보존할 제목' } });
+  await fireEvent.input(input('amount'), { target: { value: '12' } });
   await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));
   await waitFor(() => {
     expect(create).toHaveBeenCalledTimes(2);
@@ -143,13 +149,13 @@ it('restores the edit-start version after a remount and keeps another account is
     .mockRejectedValue(new ApiError(403, 'forbidden', 'denied'));
   const view = render(RecordsPanel, { item, kind: 'project', canWrite: true });
   await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
-  await fireEvent.input(input('title'), { target: { value: '개인 입력' } });
+  await fireEvent.input(input('body'), { target: { value: '개인 긴 입력' } });
   me.userId = 'user-b';
-  await waitFor(() => expect(input('title')).toHaveValue(''));
+  await waitFor(() => expect(input('body')).toHaveValue(''));
   expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
   me.userId = 'user-a';
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
-  expect(input('title')).toHaveValue('개인 입력');
+  expect(input('body')).toHaveValue('개인 긴 입력');
   view.unmount();
   vi.mocked(api.itemRecords).mockResolvedValue([{ ...record, version: 8 }]);
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
@@ -161,7 +167,7 @@ it('restores the edit-start version after a remount and keeps another account is
     expect(update).toHaveBeenCalledWith(
       record.id,
       3,
-      expect.objectContaining({ title: '개인 입력' }),
+      expect.objectContaining({ title: record.title, body: '개인 긴 입력' }),
     );
   });
 });

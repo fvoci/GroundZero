@@ -130,7 +130,7 @@ describe('confirm only the local input being discarded', () => {
     expect(screen.getByLabelText(/붙여넣을 체크리스트/)).toHaveValue('- [ ] 원문 유지');
     expect(router.guard).toBe(guard);
     await waitFor(() => {
-      expect(Object.values(localStorage).join('')).toContain('신규 유지');
+      expect(Object.values(localStorage).join('')).not.toContain('신규 유지');
       expect(Object.values(localStorage).join('')).not.toContain('수정 A');
     });
   });
@@ -205,11 +205,9 @@ describe('confirm only the local input being discarded', () => {
     });
     expect(screen.queryByLabelText('항목 A의 새 문구')).toBeNull();
     me.userId = 'user-a';
-    expect(await screen.findByTestId('checklist-new-item-draft-offer')).toHaveTextContent(
-      'A의 수정',
-    );
-    await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
-    expect(screen.getByLabelText('항목 A의 새 문구')).toHaveValue('A의 수정');
+    await waitFor(() => expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull());
+    expect(screen.queryByLabelText('항목 A의 새 문구')).toBeNull();
+    expect(Object.values(localStorage).join('')).not.toContain('A의 수정');
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
@@ -252,7 +250,7 @@ describe('confirm only the local input being discarded', () => {
   );
 
   it.each([true, false])(
-    'reports checklist preservation during account switching (storage available: %s)',
+    'reports checklist input as screen-only during account switching (storage available: %s)',
     async (available) => {
       if (!available)
         vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
@@ -273,14 +271,14 @@ describe('confirm only the local input being discarded', () => {
       });
       await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '보존할 항목' } });
       await waitFor(() => {
-        expect(ondraftkept).toHaveBeenLastCalledWith(available);
+        expect(ondraftkept).toHaveBeenLastCalledWith(false);
       });
       accountSafety.switching = true;
       await waitFor(() => {
         expect(screen.queryByLabelText('새 항목')).toBeNull();
       });
       expect(onunsaved).toHaveBeenLastCalledWith(true);
-      expect(ondraftkept).toHaveBeenLastCalledWith(available);
+      expect(ondraftkept).toHaveBeenLastCalledWith(false);
     },
   );
 });
