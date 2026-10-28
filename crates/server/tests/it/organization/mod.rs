@@ -7,3 +7,4 @@
 
 mod admin_recovery;
 mod share_ceiling;
+mod share_races;
