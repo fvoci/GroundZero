@@ -1266,6 +1266,8 @@ GRANT ALL ON FUNCTION fvoci.app_remove_organization_member_ids(p_organization uu
 REVOKE ALL ON FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user uuid, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user uuid, p_ids uuid[]) TO fvoci_app;
 
+REVOKE ALL ON FUNCTION fvoci.app_invitation_recipient(p_email text) FROM PUBLIC;
+
 REVOKE ALL ON FUNCTION fvoci.app_invite_organization(p_organization uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_invite_organization(p_organization uuid, p_email text, p_role text, p_ttl_secs integer, p_ids uuid[]) TO fvoci_app;
 

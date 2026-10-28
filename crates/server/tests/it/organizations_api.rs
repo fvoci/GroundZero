@@ -504,6 +504,67 @@ async fn organization_and_workspace_invitations_have_typed_context_and_responses
     }
 }
 
+/// SR1-12(D-45·D-51): 같은 검증 이메일 계정이 여럿이면 초대 알림은 가장 먼저 만든 계정에 간다. 수락·거절도 그
+/// 계정만 한다. 다른 계정에는 대상이 아닌 사람과 같은 404다.
+#[tokio::test]
+async fn only_the_notified_account_of_a_shared_email_responds_to_the_invitation() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let email = common::unique_email("shared");
+    let older = common::login_with_email(&w.state, "older", &email, true).await;
+    let newer = common::login_with_email(&w.state, "newer", &email, true).await;
+    let inv = expect(
+        &app,
+        Method::POST,
+        &format!("/api/organizations/{}/invitations", w.org),
+        &w.owner,
+        Some(json!({"email":email,"role":"member"})),
+        201,
+    )
+    .await;
+    let id = inv["id"].as_str().unwrap();
+    for (user, n) in [(&older, 1), (&newer, 0)] {
+        let notified = one(
+            &w.state,
+            user,
+            "SELECT count(*)::integer AS n FROM fvoci.notifications WHERE invitation_id=$1",
+            &[Uuid::parse_str(id).unwrap()],
+        )
+        .await;
+        assert_eq!(notified["n"], n);
+    }
+    for action in ["accept", "decline"] {
+        expect(
+            &app,
+            Method::POST,
+            &format!("/api/invitations/{id}/{action}"),
+            &newer,
+            None,
+            404,
+        )
+        .await;
+    }
+    expect(
+        &app,
+        Method::POST,
+        &format!("/api/invitations/{id}/accept"),
+        &older,
+        None,
+        200,
+    )
+    .await;
+    assert_eq!(
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT user_id FROM fvoci.organization_members WHERE organization_id=$1 AND user_id IN (SELECT id FROM fvoci.users WHERE lower(email)=lower((SELECT email FROM fvoci.users WHERE id=$2)))",
+            &[w.org, older.id.0]
+        )
+        .await,
+        vec![json!({"user_id": older.id.0})]
+    );
+}
+
 #[tokio::test]
 async fn organization_names_on_create_use_configured_unicode_validation() {
     let state =

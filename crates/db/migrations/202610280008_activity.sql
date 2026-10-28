@@ -450,8 +450,7 @@ CREATE FUNCTION fvoci.app_notify_invitation(p_id uuid, p_invitation uuid) RETURN
     IF v_inv.id IS NULL OR v_inv.closed_at IS NOT NULL THEN
       RETURN false;
     END IF;
-    SELECT u.id INTO v_user FROM users u WHERE u.email_verified AND lower(u.email) = v_inv.email
-    ORDER BY u.created_at LIMIT 1;
+    v_user := app_invitation_recipient(v_inv.email);
     IF v_user IS NULL THEN
       RETURN false;
     END IF;

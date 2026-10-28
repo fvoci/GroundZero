@@ -1359,6 +1359,19 @@ CREATE FUNCTION fvoci.app_my_invitations() RETURNS TABLE(id uuid, organization_i
 
 ALTER FUNCTION fvoci.app_my_invitations() OWNER TO fvoci_migrator;
 
+-- 초대 이메일의 받는 계정(D-51·D-118, #177 SR1-12). 같은 검증 이메일 계정이 여럿이면 가장 먼저 만든 계정 하나다.
+-- 알림(app_notify_invitation)과 수락·거절(app_respond_invitation)이 같은 계정을 가리키도록 이 함수 하나로 고른다.
+CREATE FUNCTION fvoci.app_invitation_recipient(p_email text) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT u.id FROM users u WHERE u.email_verified AND lower(u.email) = p_email
+    ORDER BY u.created_at, u.id LIMIT 1
+  $$;
+
+
+ALTER FUNCTION fvoci.app_invitation_recipient(p_email text) OWNER TO fvoci_migrator;
+
 -- 초대 수락·거절(D-51·D-118). 조직 초대는 조직 멤버가 되고, 워크스페이스 초대는 조직 밖 사람이면 그 조직의 멤버로 먼저
 -- 가입한 뒤(감사로그 join) 워크스페이스 역할을 받는다(D-112 개정 2026-10-26).
 -- 돌려주는 값은 워크스페이스 초대면 워크스페이스 id, 조직 초대면 조직 id다. 알림함의 invite 알림에 결과를 남긴다.
@@ -1369,12 +1382,10 @@ CREATE FUNCTION fvoci.app_respond_invitation(p_invitation uuid, p_accept boolean
   DECLARE
     v_user uuid := app_user_id();
     v_inv  invitations%ROWTYPE;
-    v_ok   boolean;
   BEGIN
     SELECT * INTO v_inv FROM invitations WHERE id = p_invitation;
-    SELECT u.email_verified AND lower(u.email) = v_inv.email INTO v_ok FROM users u WHERE u.id = v_user;
-    -- 대상이 아니면 초대의 존재를 알리지 않는다.
-    IF v_user IS NULL OR v_inv.id IS NULL OR NOT coalesce(v_ok, false) THEN
+    -- 대상(알림을 받는 계정)이 아니면 초대의 존재를 알리지 않는다.
+    IF v_user IS NULL OR v_inv.id IS NULL OR app_invitation_recipient(v_inv.email) IS DISTINCT FROM v_user THEN
       RAISE EXCEPTION 'invitation not found' USING ERRCODE = 'P0002';
     END IF;
     -- 조직 행 → (워크스페이스 행) → 초대 행 순서로 잠근다(조직 탈퇴·워크스페이스 지우기와 같은 순서).
