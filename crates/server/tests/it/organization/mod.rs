@@ -7,7 +7,11 @@
 
 mod admin_recovery;
 mod admin_security;
+mod members;
+mod organization_removal_lock_order;
+mod organizations_api;
 mod role_sources;
 mod share_ceiling;
 mod share_races;
 mod share_resources;
+mod source_organization;
