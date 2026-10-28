@@ -44,6 +44,14 @@ struct Span {
 
 type Previous = HashMap<(String, String, Option<u64>), BTreeMap<u32, Entry>>;
 
+/// Yjs의 문자 ID 시계는 UTF-16이다. StickyIndex의 상대 위치도 같은 단위로 읽어야 한글·이모지의 귀속이 흔들리지 않는다.
+pub(super) fn new_document() -> Doc {
+    Doc::with_options(yrs::Options {
+        offset_kind: OffsetKind::Utf16,
+        ..Default::default()
+    })
+}
+
 impl Attribution {
     pub(super) fn load(doc: &Doc, stored: Option<Value>) -> Result<Self, AppError> {
         let mut refs: Self = match stored {
@@ -329,36 +337,27 @@ mod tests {
 
     #[test]
     fn removing_a_readers_link_text_cannot_lend_their_identity_to_another_editors_text() {
-        for kind in [OffsetKind::Bytes, OffsetKind::Utf16] {
-            let doc = Doc::with_options(yrs::Options {
-                offset_kind: kind,
-                ..Default::default()
-            });
-            let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
-            let text = fragment.push_back(&mut doc.transact_mut(), XmlTextPrelim::new(""));
-            let a = UserId(Uuid::now_v7());
-            let b = UserId(Uuid::now_v7());
-            let attrs = Attrs::from([(
-                Arc::from("link"),
-                yrs::Any::from(HashMap::from([(
-                    "href".to_owned(),
-                    yrs::Any::from(format!("/api/files/{}/content?version=1", Uuid::now_v7())),
-                )])),
-            )]);
-            let mut attribution = Attribution::default();
-            text.insert_with_attributes(&mut doc.transact_mut(), 0, "가😀", attrs.clone());
-            attribution.observe(&doc, Some(a));
-            text.insert_with_attributes(
-                &mut doc.transact_mut(),
-                width("가😀", kind),
-                "나😀",
-                attrs,
-            );
-            attribution.observe(&doc, Some(b));
-            text.remove_range(&mut doc.transact_mut(), 0, width("가😀", kind));
-            attribution.observe(&doc, Some(a));
-            assert!(!attribution.0.is_empty());
-            assert!(attribution.0.iter().all(|entry| entry.editor == Some(b)));
-        }
+        let doc = new_document();
+        let kind = OffsetKind::Utf16;
+        let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+        let text = fragment.push_back(&mut doc.transact_mut(), XmlTextPrelim::new(""));
+        let a = UserId(Uuid::now_v7());
+        let b = UserId(Uuid::now_v7());
+        let attrs = Attrs::from([(
+            Arc::from("link"),
+            yrs::Any::from(HashMap::from([(
+                "href".to_owned(),
+                yrs::Any::from(format!("/api/files/{}/content?version=1", Uuid::now_v7())),
+            )])),
+        )]);
+        let mut attribution = Attribution::default();
+        text.insert_with_attributes(&mut doc.transact_mut(), 0, "가😀", attrs.clone());
+        attribution.observe(&doc, Some(a));
+        text.insert_with_attributes(&mut doc.transact_mut(), width("가😀", kind), "나😀", attrs);
+        attribution.observe(&doc, Some(b));
+        text.remove_range(&mut doc.transact_mut(), 0, width("가😀", kind));
+        attribution.observe(&doc, Some(a));
+        assert!(!attribution.0.is_empty());
+        assert!(attribution.0.iter().all(|entry| entry.editor == Some(b)));
     }
 }

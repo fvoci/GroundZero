@@ -22,7 +22,7 @@ use yrs::updates::encoder::Encode;
 use yrs::{ClientID, Doc, Map, ReadTxn, StateVector, Transact, Update};
 
 use super::convert::{self, FRAGMENT};
-use super::file_refs::{Attribution, LoadRow};
+use super::file_refs::{Attribution, LoadRow, new_document};
 use super::lease::{Lease, MovePermit, WritePermit};
 use super::visibility::{CommittedMove, Snapshot};
 use crate::config::Limits;
@@ -1253,12 +1253,12 @@ impl Room {
                 .await
                 .map_err(AppError::from_db_function)?;
         tx.commit().await?;
-        let doc = Doc::new();
+        let doc = new_document();
         let restored = state
             .and_then(|bytes| Update::decode_v1(&bytes).ok())
             .is_some_and(|update| doc.transact_mut().apply_update(update).is_ok());
         if !restored || lineage_of(&doc).is_none() {
-            let doc = Doc::new();
+            let doc = new_document();
             let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
             let map = meta(&doc);
             let mut txn = doc.transact_mut();
