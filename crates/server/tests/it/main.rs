@@ -58,7 +58,6 @@ mod restore_measure;
 mod revisions;
 mod room_memory_measure;
 mod saved_views;
-mod settings_contract;
 mod sharing;
 mod shutdown;
 mod storage;
