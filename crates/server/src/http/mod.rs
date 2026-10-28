@@ -22,8 +22,8 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, courses, documents, export, home, item_profile, members, modules, organizations,
-    public_links, records, references, revisions, search_api, study, trash, workspaces, zotero,
+    accounts, courses, documents, home, item_profile, members, modules, organizations,
+    public_links, records, references, revisions, search_api, study, workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -326,19 +326,6 @@ async fn api_not_found() -> AppError {
         home::my_tasks,
         documents::shared_with_me,
         search_api::search,
-        trash::trash_document,
-        trash::trash_item,
-        trash::trash_module,
-        trash::workspace_trash,
-        trash::my_trash,
-        trash::restore,
-        trash::purge,
-        trash::purge_expired,
-        trash::purge_my_expired,
-        trash::set_retention,
-        trash::set_version_retention,
-        export::workspace,
-        export::mine,
         documents::templates,
         documents::set_template,
         study::get,
@@ -483,13 +470,6 @@ async fn api_not_found() -> AppError {
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
         home::UpNextCounts,
-        trash::Trashed,
-        trash::TrashKind,
-        trash::TrashEntry,
-        trash::Trash,
-        trash::Purged,
-        trash::SetRetention,
-        trash::SetVersionRetention,
         search_api::SearchResult,
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
@@ -605,6 +585,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_system::SystemApi::openapi());
         openapi.merge(fvoci_files::FilesApi::openapi());
         openapi.merge(fvoci_calendar::CalendarApi::openapi());
         openapi.merge(fvoci_time::TimeApi::openapi());
@@ -656,6 +637,7 @@ pub fn router(state: AppState) -> Router {
 
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_system::router(&state))
         .merge(fvoci_files::router(&state))
         .merge(fvoci_calendar::router())
         .merge(fvoci_time::router(&state))
@@ -717,8 +699,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/workspaces/{workspace_id}", delete(workspaces::delete))
         .route("/me/deleted-workspaces", get(workspaces::deleted))
-        .route("/workspaces/{workspace_id}/export", get(export::workspace))
-        .route("/me/export", get(export::mine))
         .route("/record-kinds", get(records::kinds))
         .route("/zotero/collections", post(zotero::list_collections))
         .route("/items/{item_id}/zotero/import", post(zotero::import))
@@ -827,26 +807,6 @@ pub fn router(state: AppState) -> Router {
             put(documents::set_parent),
         )
         .route(
-            "/workspaces/{workspace_id}/trash",
-            get(trash::workspace_trash),
-        )
-        .route(
-            "/workspaces/{workspace_id}/trash/purge-expired",
-            post(trash::purge_expired),
-        )
-        .route(
-            "/workspaces/{workspace_id}/trash-retention",
-            put(trash::set_retention),
-        )
-        .route(
-            "/workspaces/{workspace_id}/version-retention",
-            put(trash::set_version_retention),
-        )
-        .route("/me/trash", get(trash::my_trash))
-        .route("/me/trash/purge-expired", post(trash::purge_my_expired))
-        .route("/trash/{batch_id}", delete(trash::purge))
-        .route("/trash/{batch_id}/restore", post(trash::restore))
-        .route(
             "/tasks/{task_id}/backlinks",
             get(references::task_backlinks),
         )
@@ -883,9 +843,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/modules/{module_id}",
-            get(modules::get_module)
-                .put(modules::update_module)
-                .delete(trash::trash_module),
+            get(modules::get_module).put(modules::update_module),
         )
         .route(
             "/modules/{module_id}/archived",
@@ -897,9 +855,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/items/{item_id}",
-            get(modules::get_item)
-                .put(modules::update_item)
-                .delete(trash::trash_item),
+            get(modules::get_item).put(modules::update_item),
         )
         .route("/items/{item_id}/archived", put(modules::archive_item))
         .route(
@@ -909,9 +865,7 @@ pub fn router(state: AppState) -> Router {
         .route("/public/{token}", get(public_links::view))
         .route(
             "/documents/{document_id}",
-            get(documents::get)
-                .put(documents::save)
-                .delete(trash::trash_document),
+            get(documents::get).put(documents::save),
         )
         .route(
             "/documents/{document_id}/collab",
