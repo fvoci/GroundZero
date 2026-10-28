@@ -160,7 +160,7 @@ async fn a_document_moved_while_the_share_waits_is_refused() {
     .execute(&mut *held)
     .await
     .unwrap();
-    let holder_pid = pid(&mut *held).await;
+    let holder_pid = pid(&mut held).await;
     let mut share = w.state.db.begin_as(w.owner.id).await.unwrap();
     let share_pid = pid(share.conn()).await;
     let sharing = spawn_call(share, SHARE, vec![doc, member.id.0, w.org]);
@@ -231,7 +231,7 @@ async fn removing_the_note_owner_while_they_share_leaves_no_share_in_that_organi
     .execute(&mut *held)
     .await
     .unwrap();
-    let holder_pid = pid(&mut *held).await;
+    let holder_pid = pid(&mut held).await;
     let mut share = w.state.db.begin_as(owner.id).await.unwrap();
     let share_pid = pid(share.conn()).await;
     let sharing = spawn_call(share, SHARE, vec![note, member.id.0, w.org]);
