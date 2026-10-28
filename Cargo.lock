@@ -1134,6 +1134,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-calendar"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-core"
 version = "0.1.0"
 dependencies = [
@@ -1187,6 +1203,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "fvoci-activity",
+ "fvoci-calendar",
  "fvoci-core",
  "fvoci-db",
  "fvoci-http",

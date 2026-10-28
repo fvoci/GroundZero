@@ -1,3 +1,5 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import type { TimeEntryView } from '$lib/features/time/model';
 import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
@@ -5,7 +7,7 @@ import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemProfileView, ItemView } from '$lib/api/client';
+import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
@@ -165,9 +167,9 @@ describe('creating while a request is in flight', () => {
   });
 
   it('locks a new event form and closes it once the event is created', async () => {
-    vi.spyOn(api, 'itemEvents').mockResolvedValue([]);
+    vi.spyOn(eventsApi, 'itemEvents').mockResolvedValue([]);
     const request = held<EventView>();
-    const create = vi.spyOn(api, 'createEvent').mockReturnValue(request.promise);
+    const create = vi.spyOn(eventsApi, 'createEvent').mockReturnValue(request.promise);
     render(ItemEvents, { item: { ...item, is_template: false } });
     await fireEvent.click(screen.getByRole('button', { name: m.events_add() }));
     const title = await screen.findByLabelText(m.events_title());

@@ -1,8 +1,9 @@
+import { type EventInput, type EventView } from '$lib/features/events/model';
+import { RuleConflict, eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventInput, EventView } from '$lib/api/client';
-import { api, NetworkError, RuleConflict } from '$lib/api/client';
+import { NetworkError } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { describeWhen } from '$lib/features/events/labels';
 import { localTimeZone } from '$lib/features/events/time';
@@ -84,8 +85,8 @@ function eventForm(): HTMLFormElement {
 }
 
 function stub(...results: (UpdateResult | Error)[]) {
-  vi.spyOn(api, 'event').mockResolvedValue(ev());
-  const update = vi.spyOn(api, 'updateEvent');
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(ev());
+  const update = vi.spyOn(eventsApi, 'updateEvent');
   for (const r of results) {
     if (r instanceof Error) update.mockRejectedValueOnce(r);
     else update.mockResolvedValueOnce(r);
@@ -349,7 +350,7 @@ describe('saving my input after an event conflict (D-94)', () => {
    */
   async function saveRuleDuringNotice(fields: Partial<EventInput> = {}): Promise<EventView> {
     const afterRule = { ...theirs, title: '규칙 뒤 제목', ...fields, version: 7 };
-    const setRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(afterRule);
+    const setRule = vi.spyOn(eventsApi, 'setEventRecurrence').mockResolvedValue(afterRule);
     await fireEvent.submit(ruleForm());
     await waitFor(() => {
       expect(setRule).toHaveBeenCalledTimes(1);
@@ -533,7 +534,7 @@ describe('saving my input after an event conflict (D-94)', () => {
       recurrence: { freq: 'weekly', interval: 1, weekdays: [2], until: null, count: null },
       version: 7,
     };
-    vi.spyOn(api, 'setEventRecurrence').mockRejectedValue(new RuleConflict(ruled));
+    vi.spyOn(eventsApi, 'setEventRecurrence').mockRejectedValue(new RuleConflict(ruled));
     await fireEvent.submit(ruleForm());
 
     const zone = localTimeZone();
@@ -563,7 +564,7 @@ describe('saving my input after an event conflict (D-94)', () => {
   // 반박 검증 nit: 공백만 남긴 내 설명은 서버가 빈 설명으로 저장한다. 물을 때도 비어 있다고 보인다.
   it('shows a description of only spaces as empty in the question', async () => {
     stub({ kind: 'conflict', current: ev({ description: '남의 설명' }, 6) });
-    vi.spyOn(api, 'event').mockResolvedValue(ev({ description: '원래 설명' }));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev({ description: '원래 설명' }));
     await open();
     await describeAndConflict('  \n ');
 

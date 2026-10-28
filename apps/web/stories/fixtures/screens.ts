@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { timeData } from '$lib/features/time/data';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
@@ -44,7 +45,7 @@ export interface ScreenApi {
   // 업무 보기는 서버 상태 정의를 함께 읽는다.
   taskStatuses: typeof work.taskStatuses;
   tasks: typeof work.tasks;
-  savedViews: typeof api.savedViews;
+  savedViews: typeof savedViewsApi.savedViews;
   syncRecurrences: typeof work.syncRecurrences;
   task: typeof work.task;
   moveTask: typeof work.moveTask;
@@ -156,7 +157,7 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(work, 'tasks').mockImplementation(stubs.tasks);
   // 실제 상태 정의 조회도 합성 응답으로 격리한다.
   spyOn(work, 'taskStatuses').mockImplementation(stubs.taskStatuses);
-  spyOn(api, 'savedViews').mockImplementation(stubs.savedViews);
+  spyOn(savedViewsApi, 'savedViews').mockImplementation(stubs.savedViews);
   spyOn(work, 'syncRecurrences').mockImplementation(stubs.syncRecurrences);
   spyOn(work, 'task').mockImplementation(stubs.task);
   spyOn(work, 'moveTask').mockImplementation(stubs.moveTask);

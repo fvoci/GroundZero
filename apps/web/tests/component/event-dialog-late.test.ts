@@ -1,8 +1,10 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, RecurrenceRule } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import type { RecurrenceRule } from '$lib/api/client';
+
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -65,7 +67,7 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 // 저장이 A를 고침). A의 늦은 지우기·회차 빼기는 B의 창을 닫았다.
 describe('event dialog late results', () => {
   function stubEvents(): void {
-    vi.spyOn(api, 'event').mockImplementation((id: string) =>
+    vi.spyOn(eventsApi, 'event').mockImplementation((id: string) =>
       Promise.resolve(id === 'A' ? ev('A', 1, 'A 일정') : ev('B', 1, 'B 일정')),
     );
   }
@@ -75,7 +77,7 @@ describe('event dialog late results', () => {
     stubEvents();
     const late = deferred<UpdateResult>();
     const update = vi
-      .spyOn(api, 'updateEvent')
+      .spyOn(eventsApi, 'updateEvent')
       .mockImplementation((id: string, _base: number, input) =>
         id === 'A'
           ? late.promise
@@ -108,7 +110,7 @@ describe('event dialog late results', () => {
     await waitFor(() => {
       expect(dialogTitle()).toBe('A 새 제목');
     });
-    expect(api.event).not.toHaveBeenCalledWith('B');
+    expect(eventsApi.event).not.toHaveBeenCalledWith('B');
 
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
     await waitFor(() => {
@@ -122,7 +124,7 @@ describe('event dialog late results', () => {
     await setLocale('ko', { reload: false });
     stubEvents();
     const late = deferred<undefined>();
-    vi.spyOn(api, 'deleteEvent').mockReturnValue(late.promise);
+    vi.spyOn(eventsApi, 'deleteEvent').mockReturnValue(late.promise);
     const onclose = vi.fn();
     const onchanged = vi.fn();
     const props = (eventId: string | undefined) => ({ eventId, onclose, onchanged });
@@ -147,7 +149,7 @@ describe('event dialog late results', () => {
     await setLocale('ko', { reload: false });
     stubEvents();
     const late = deferred<UpdateResult>();
-    const update = vi.spyOn(api, 'updateEvent').mockReturnValue(late.promise);
+    const update = vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(late.promise);
     const onclose = vi.fn();
     render(EventDialog, { props: { eventId: 'A', onclose, onchanged: () => undefined } });
     await screen.findByDisplayValue('A 일정');
@@ -180,13 +182,13 @@ describe('event dialog load server', () => {
       count: null,
     };
     const theirs: RecurrenceRule = { ...mine, weekdays: [1, 3] };
-    vi.spyOn(api, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
-    vi.spyOn(api, 'updateEvent').mockResolvedValue({
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(eventsApi, 'updateEvent').mockResolvedValue({
       kind: 'conflict',
       current: ev('A', 6, '회의', theirs),
     });
     const setRule = vi
-      .spyOn(api, 'setEventRecurrence')
+      .spyOn(eventsApi, 'setEventRecurrence')
       .mockImplementation((_id: string, rule: RecurrenceRule | null) =>
         Promise.resolve(ev('A', 7, '회의', rule)),
       );
@@ -223,13 +225,13 @@ describe('event dialog load server', () => {
       count: null,
     };
     const theirs: RecurrenceRule = { ...mine, weekdays: [1, 3] };
-    vi.spyOn(api, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
     const update = vi
-      .spyOn(api, 'updateEvent')
+      .spyOn(eventsApi, 'updateEvent')
       .mockResolvedValueOnce({ kind: 'conflict', current: ev('A', 6, '회의', theirs) })
       .mockResolvedValueOnce({ kind: 'updated', event: ev('A', 7, '내 제목', theirs) });
     const setRule = vi
-      .spyOn(api, 'setEventRecurrence')
+      .spyOn(eventsApi, 'setEventRecurrence')
       .mockImplementation((_id: string, rule: RecurrenceRule | null) =>
         Promise.resolve(ev('A', 8, '내 제목', rule)),
       );
@@ -266,8 +268,8 @@ describe('event dialog load server', () => {
       until: null,
       count: null,
     };
-    vi.spyOn(api, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
-    vi.spyOn(api, 'updateEvent').mockImplementation((_id: string, _base: number, input) =>
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(eventsApi, 'updateEvent').mockImplementation((_id: string, _base: number, input) =>
       Promise.resolve({ kind: 'updated', event: ev('A', 6, input.title, mine) }),
     );
     render(EventDialog, {

@@ -1,3 +1,5 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import type { TimeEntryView } from '$lib/features/time/model';
 import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
@@ -5,7 +7,7 @@ import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemProfileView, ItemView } from '$lib/api/client';
+import type { ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
@@ -205,9 +207,9 @@ describe('draft offers while a create request is in flight', () => {
       endChoice: null,
       request: null,
     });
-    vi.spyOn(api, 'itemEvents').mockResolvedValue([]);
+    vi.spyOn(eventsApi, 'itemEvents').mockResolvedValue([]);
     const create = vi
-      .spyOn(api, 'createEvent')
+      .spyOn(eventsApi, 'createEvent')
       .mockReturnValue(new Promise<EventView>(() => undefined));
     render(ItemEvents, { item: { ...item, is_template: false } });
     await fireEvent.click(screen.getByRole('button', { name: m.events_add() }));
