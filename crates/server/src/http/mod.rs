@@ -24,8 +24,8 @@ use fvoci_http::origin::{PublicOrigin, require_same_origin};
 use crate::features::documents::shares as document_shares;
 use crate::features::{
     accounts, courses, documents, event_recurrence, events, export, files, home, item_profile,
-    members, modules, organizations, public_links, records, references, revisions, saved_views,
-    search_api, study, trash, workspaces, zotero,
+    modules, public_links, records, references, revisions, saved_views, search_api, study, trash,
+    workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -93,6 +93,30 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
                     build: build_info::CURRENT,
                 }),
             )
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_organizations::OrganizationsState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_organizations::AccountState {
+    fn from_ref(state: &AppState) -> Self {
+        let limits = state.config.limits;
+        Self {
+            db: state.db.clone(),
+            limits: fvoci_organizations::accounts::InputLimits {
+                max_title_chars: limits.max_title_chars,
+                max_document_bytes: limits.max_document_bytes,
+                max_references_per_document: limits.max_references_per_document,
+                max_document_depth: limits.max_document_depth,
+            },
         }
     }
 }
@@ -251,35 +275,8 @@ async fn api_not_found() -> AppError {
         accounts::login,
         accounts::callback,
         accounts::logout,
-        accounts::me,
-        accounts::set_settings,
         accounts::auth_info,
-        workspaces::list,
-        workspaces::create,
-        workspaces::delete,
         workspaces::set_realtime,
-        workspaces::deleted,
-        workspaces::restore,
-        workspaces::purge,
-        organizations::list_mine,
-        organizations::get,
-        // organizations (2단계 A)
-        organizations::members,
-        organizations::set_member,
-        organizations::removal_preview,
-        organizations::remove_member,
-        organizations::invite,
-        organizations::invitations,
-        organizations::set_settings,
-        organizations::workspace_limits,
-        organizations::set_workspace_limits,
-        organizations::workspaces,
-        organizations::join_as_admin,
-        organizations::restore_workspace,
-        organizations::offer_workspace_ownership,
-        organizations::server_organizations,
-        organizations::create,
-        organizations::server_admins,
         documents::list_wiki,
         documents::create_wiki,
         documents::get,
@@ -392,52 +389,14 @@ async fn api_not_found() -> AppError {
         public_links::create,
         public_links::revoke,
         public_links::view,
-        members::list_members,
-        members::set_role,
-        members::remove_member,
-        members::leave,
-        members::invite,
-        members::list_invitations,
-        members::revoke_invitation,
-        members::my_invitations,
-        members::accept_invitation,
-        members::decline_invitation,
-        members::offer_ownership,
-        members::cancel_ownership_offer,
-        members::accept_ownership,
-        members::list_groups,
-        members::create_group,
-        members::delete_group,
-        members::add_group_member,
-        members::remove_group_member,
     ),
     components(schemas(
-        members::Member,
-        members::MembersView,
-        members::SetRole,
-        members::CreateInvitation,
-        members::Invitation,
-        members::ReceivedInvitation,
-        members::Accepted,
-        members::InvitationTarget,
-        members::OfferOwnership,
-        members::Group,
-        members::CreateGroup,
         Health,
         BuildInfo,
         ErrorBody,
-        accounts::Me,
-        // 작업자 D · #79 입력 한도 계약.
-        accounts::InputLimits,
-        accounts::MySettings,
         accounts::AuthInfo,
         accounts::LogoutResponse,
-        workspaces::Workspace,
-        workspaces::CreateWorkspace,
-        workspaces::DeleteWorkspace,
         workspaces::SetRealtime,
-        workspaces::WorkspaceDeleted,
-        workspaces::DeletedWorkspace,
         documents::DocumentSummary,
         documents::Document,
         documents::CreateDocument,
@@ -482,22 +441,7 @@ async fn api_not_found() -> AppError {
         home::HomeItem,
         home::MarkedTarget,
         home::Home,
-        organizations::OrgRole,
-        organizations::OrganizationSummary,
-        organizations::OrganizationLimits,
-        organizations::Organization,
         // organizations (2단계 A)
-        organizations::OrganizationMember,
-        organizations::SetOrganizationRole,
-        organizations::OrganizationRemovalPreview,
-        organizations::InviteOrganization,
-        organizations::OrganizationInvitation,
-        organizations::OrganizationSettingsPatch,
-        organizations::OrganizationWorkspace,
-        organizations::ServerOrganization,
-        organizations::CreateOrganization,
-        organizations::CreatedOrganization,
-        organizations::ServerAdmin,
         home::UpNextCounts,
         trash::Trashed,
         trash::TrashKind,
@@ -632,6 +576,7 @@ struct DomainApis;
 
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.merge(fvoci_organizations::OrganizationsApi::openapi());
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_time::TimeApi::openapi());
         openapi.merge(fvoci_activity::ActivityApi::openapi());
@@ -694,67 +639,13 @@ pub fn router(state: AppState) -> Router {
         .unwrap_or(usize::MAX)
         .saturating_add(64 * 1024);
     let api = Router::new()
+        .merge(fvoci_organizations::router())
         .merge(fvoci_work::router(&state))
         .merge(fvoci_time::router(&state))
         .merge(fvoci_activity::router(&state))
         .merge(document_shares::router(&state))
-        .route("/me", get(accounts::me))
-        .route("/me/settings", put(accounts::set_settings))
-        .route("/me/organizations", get(organizations::list_mine))
-        .route("/organizations/{organization_id}", get(organizations::get))
         // organizations (2단계 A)
-        .route(
-            "/organizations/{organization_id}/members",
-            get(organizations::members),
-        )
-        .route(
-            "/organizations/{organization_id}/members/{user_id}",
-            put(organizations::set_member).delete(organizations::remove_member),
-        )
-        .route(
-            "/organizations/{organization_id}/members/{user_id}/removal-preview",
-            get(organizations::removal_preview),
-        )
-        .route(
-            "/organizations/{organization_id}/invitations",
-            get(organizations::invitations).post(organizations::invite),
-        )
-        .route(
-            "/organizations/{organization_id}/settings",
-            put(organizations::set_settings),
-        )
-        .route(
-            "/workspaces/{workspace_id}/limits",
-            get(organizations::workspace_limits).put(organizations::set_workspace_limits),
-        )
-        .route(
-            "/organizations/{organization_id}/workspaces",
-            get(organizations::workspaces),
-        )
-        .route(
-            "/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin",
-            post(organizations::join_as_admin),
-        )
-        .route(
-            "/organizations/{organization_id}/workspaces/{workspace_id}/restore",
-            post(organizations::restore_workspace),
-        )
-        .route(
-            "/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer",
-            post(organizations::offer_workspace_ownership),
-        )
-        .route(
-            "/server/organizations",
-            get(organizations::server_organizations).post(organizations::create),
-        )
-        .route("/server/admins", get(organizations::server_admins))
         .route("/auth-info", get(accounts::auth_info))
-        .route(
-            "/workspaces",
-            get(workspaces::list).post(workspaces::create),
-        )
-        .route("/workspaces/{workspace_id}", delete(workspaces::delete))
-        .route("/me/deleted-workspaces", get(workspaces::deleted))
         .route("/workspaces/{workspace_id}/export", get(export::workspace))
         .route("/me/export", get(export::mine))
         .route("/record-kinds", get(records::kinds))
@@ -824,14 +715,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/episodes/{episode_id}/progress",
             put(courses::set_progress),
-        )
-        .route(
-            "/me/deleted-workspaces/{workspace_id}",
-            delete(workspaces::purge),
-        )
-        .route(
-            "/me/deleted-workspaces/{workspace_id}/restore",
-            post(workspaces::restore),
         )
         .route(
             "/workspaces/{workspace_id}/wiki/documents",
@@ -1003,49 +886,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workspaces/{workspace_id}/realtime",
             put(workspaces::set_realtime),
-        )
-        .route(
-            "/workspaces/{workspace_id}/members",
-            get(members::list_members),
-        )
-        .route(
-            "/workspaces/{workspace_id}/members/{user_id}",
-            put(members::set_role).delete(members::remove_member),
-        )
-        .route("/workspaces/{workspace_id}/leave", post(members::leave))
-        .route(
-            "/workspaces/{workspace_id}/invitations",
-            get(members::list_invitations).post(members::invite),
-        )
-        .route("/invitations", get(members::my_invitations))
-        .route(
-            "/invitations/{invitation_id}",
-            delete(members::revoke_invitation),
-        )
-        .route(
-            "/invitations/{invitation_id}/accept",
-            post(members::accept_invitation),
-        )
-        .route(
-            "/invitations/{invitation_id}/decline",
-            post(members::decline_invitation),
-        )
-        .route(
-            "/workspaces/{workspace_id}/ownership",
-            post(members::offer_ownership).delete(members::cancel_ownership_offer),
-        )
-        .route(
-            "/workspaces/{workspace_id}/ownership/accept",
-            post(members::accept_ownership),
-        )
-        .route(
-            "/workspaces/{workspace_id}/groups",
-            get(members::list_groups).post(members::create_group),
-        )
-        .route("/groups/{group_id}", delete(members::delete_group))
-        .route(
-            "/groups/{group_id}/members/{user_id}",
-            put(members::add_group_member).delete(members::remove_group_member),
         )
         .fallback(api_not_found)
         .layer(middleware::from_fn(json_rejections));

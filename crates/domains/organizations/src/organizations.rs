@@ -14,12 +14,12 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::access::{self, Kind};
-use crate::features::members::OfferOwnership;
-use crate::http::AppState;
+use crate::OrganizationsState;
+use crate::members::OfferOwnership;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
+use fvoci_db::access::{self, Kind};
 use fvoci_db::{UserTx, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 
@@ -103,7 +103,7 @@ pub use fvoci_http::organization::OrgScope;
 #[utoipa::path(get, path = "/api/me/organizations", operation_id = "list_my_organizations",
     responses((status = 200, body = [OrganizationSummary]), (status = 401, body = ErrorBody)), tag = "organizations")]
 pub async fn list_mine(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<OrganizationSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -146,7 +146,7 @@ type OrganizationRow = (
     responses((status = 200, body = Organization), (status = 401, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(organization): Path<OrganizationId>,
 ) -> Result<Json<Organization>, AppError> {
@@ -220,7 +220,7 @@ pub struct OrganizationMember {
     params(("organization_id" = OrganizationId, Path)),
     responses((status = 200, body = [OrganizationMember]), (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn members(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
 ) -> Result<Json<Vec<OrganizationMember>>, AppError> {
@@ -258,7 +258,7 @@ pub struct SetOrganizationRole {
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn set_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
     Json(input): Json<SetOrganizationRole>,
@@ -289,7 +289,7 @@ pub struct OrganizationRemovalPreview {
     responses((status = 200, body = OrganizationRemovalPreview), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn removal_preview(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
 ) -> Result<Json<OrganizationRemovalPreview>, AppError> {
@@ -305,7 +305,7 @@ pub async fn removal_preview(
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn remove_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
 ) -> Result<StatusCode, AppError> {
@@ -349,7 +349,7 @@ pub struct OrganizationInvitation {
     responses((status = 201, body = OrganizationInvitation), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn invite(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
     Json(input): Json<InviteOrganization>,
@@ -387,7 +387,7 @@ pub async fn invite(
     responses((status = 200, body = [OrganizationInvitation]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn invitations(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
 ) -> Result<Json<Vec<OrganizationInvitation>>, AppError> {
@@ -448,7 +448,7 @@ fn validate_limits(limits: &OrganizationLimits) -> Result<(), AppError> {
     responses((status = 200, body = Organization), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn set_settings(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     ExpectedUser(user): ExpectedUser,
     Path(org): Path<OrganizationId>,
     Json(mut patch): Json<Value>,
@@ -460,7 +460,7 @@ pub async fn set_settings(
             .name
             .as_deref()
             .ok_or_else(|| AppError::BadRequest("the organization needs a name".into()))?;
-        let name = validate_title(name, state.config.limits.max_title_chars, "name")?;
+        let name = validate_title(name, state.max_title_chars, "name")?;
         patch["name"] = Value::String(name);
     }
     validate_limits(&input.limits)?;
@@ -493,7 +493,7 @@ async fn read_workspace_limits(
     responses((status = 200, body = OrganizationLimits), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn workspace_limits(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<OrganizationLimits>, AppError> {
@@ -509,7 +509,7 @@ pub async fn workspace_limits(
     responses((status = 200, body = OrganizationLimits), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn set_workspace_limits(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     ExpectedUser(user): ExpectedUser,
     Path(ws): Path<WorkspaceId>,
     Json(patch): Json<Value>,
@@ -551,7 +551,7 @@ pub struct OrganizationWorkspace {
     responses((status = 200, body = [OrganizationWorkspace]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn workspaces(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
 ) -> Result<Json<Vec<OrganizationWorkspace>>, AppError> {
@@ -600,7 +600,7 @@ pub async fn workspaces(
     params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn join_as_admin(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
 ) -> Result<StatusCode, AppError> {
@@ -642,7 +642,7 @@ async fn require_organization_workspace(
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn restore_workspace(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
 ) -> Result<StatusCode, AppError> {
@@ -665,7 +665,7 @@ pub async fn restore_workspace(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn offer_workspace_ownership(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
     Json(input): Json<OfferOwnership>,
@@ -697,7 +697,7 @@ pub struct ServerOrganization {
 #[utoipa::path(get, path = "/api/server/organizations", operation_id = "server_organizations",
     responses((status = 200, body = [ServerOrganization]), (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn server_organizations(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<ServerOrganization>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -724,11 +724,11 @@ pub struct CreatedOrganization {
     responses((status = 201, body = CreatedOrganization), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Json(input): Json<CreateOrganization>,
 ) -> Result<(StatusCode, Json<CreatedOrganization>), AppError> {
-    let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
+    let name = validate_title(&input.name, state.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
     let id = sqlx::query_scalar("SELECT app_create_organization($1, $2, $3, $4)")
         .bind(input.request_id)
@@ -754,7 +754,7 @@ pub struct ServerAdmin {
 #[utoipa::path(get, path = "/api/server/admins", operation_id = "server_admins",
     responses((status = 200, body = [ServerAdmin]), (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn server_admins(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<ServerAdmin>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;

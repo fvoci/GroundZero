@@ -12,8 +12,8 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::workspaces::member_role;
-use crate::http::AppState;
+use crate::OrganizationsState;
+use crate::workspaces::member_role;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
 pub use fvoci_core::validate::validate_email;
@@ -83,7 +83,7 @@ pub struct MembersView {
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 200, body = MembersView), (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn list_members(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<MembersView>, AppError> {
@@ -91,7 +91,7 @@ pub async fn list_members(
     let my_role = member_role(&mut tx, ws).await?;
     // 관리 여부는 접근 등급 하나에서 온다(D-113). 역할로 다시 계산하지 않는다.
     let can_manage_members =
-        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws)
+        fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Workspace, ws)
             .await?
             .is_owner();
     let rows: Vec<(UserId, String, Option<String>, String, bool)> = sqlx::query_as(
@@ -149,7 +149,7 @@ pub struct SetRole {
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn set_role(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((ws, member)): Path<(WorkspaceId, UserId)>,
     Json(input): Json<SetRole>,
@@ -176,7 +176,7 @@ pub async fn set_role(
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn remove_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((ws, member)): Path<(WorkspaceId, UserId)>,
 ) -> Result<StatusCode, AppError> {
@@ -201,7 +201,7 @@ pub async fn remove_member(
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn leave(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
@@ -249,7 +249,7 @@ pub struct Invitation {
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn invite(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<CreateInvitation>,
@@ -288,12 +288,12 @@ pub async fn invite(
     responses((status = 200, body = [Invitation]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn list_invitations(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Invitation>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_owner(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    fvoci_db::access::require_owner(&mut tx, fvoci_db::access::Kind::Workspace, ws).await?;
     let rows: Vec<(Uuid, String, String, OffsetDateTime)> = sqlx::query_as(
         "SELECT id, email, role, expires_at FROM invitations
          WHERE workspace_id = $1 AND closed_at IS NULL AND expires_at > now() ORDER BY created_at",
@@ -321,7 +321,7 @@ pub async fn list_invitations(
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn revoke_invitation(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -355,7 +355,7 @@ pub struct ReceivedInvitation {
 #[utoipa::path(get, path = "/api/invitations", operation_id = "my_invitations",
     responses((status = 200, body = [ReceivedInvitation]), (status = 401, body = ErrorBody)), tag = "members")]
 pub async fn my_invitations(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<ReceivedInvitation>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -410,7 +410,7 @@ pub async fn my_invitations(
 }
 
 async fn respond(
-    state: &AppState,
+    state: &OrganizationsState,
     user: UserId,
     id: Uuid,
     accept: bool,
@@ -469,7 +469,7 @@ pub struct Accepted {
     responses((status = 200, body = Accepted), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn accept_invitation(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Accepted>, AppError> {
@@ -481,7 +481,7 @@ pub async fn accept_invitation(
     params(("invitation_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn decline_invitation(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -505,7 +505,7 @@ pub struct OfferOwnership {
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn offer_ownership(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<OfferOwnership>,
@@ -524,7 +524,7 @@ pub async fn offer_ownership(
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn cancel_ownership_offer(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
@@ -542,7 +542,7 @@ pub async fn cancel_ownership_offer(
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn accept_ownership(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
@@ -579,12 +579,12 @@ pub struct CreateGroup {
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Group]), (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn list_groups(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<Group>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Workspace, ws).await?;
     let rows: Vec<(Uuid, String, Vec<Uuid>)> = sqlx::query_as(
         "SELECT g.id, g.name, coalesce(array_agg(gm.user_id ORDER BY gm.user_id)
                                        FILTER (WHERE gm.user_id IS NOT NULL), '{}')
@@ -612,12 +612,12 @@ pub async fn list_groups(
     responses((status = 201, body = Group), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn create_group(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<CreateGroup>,
 ) -> Result<(StatusCode, Json<Group>), AppError> {
-    let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
+    let name = validate_title(&input.name, state.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
     let id: Uuid = sqlx::query_scalar("SELECT app_create_group($1, $2, $3)")
         .bind(ws)
@@ -642,7 +642,7 @@ pub async fn create_group(
     params(("group_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn delete_group(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -666,7 +666,7 @@ pub async fn delete_group(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn add_group_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((group, member)): Path<(Uuid, UserId)>,
 ) -> Result<StatusCode, AppError> {
@@ -693,7 +693,7 @@ pub async fn add_group_member(
     params(("group_id" = String, Path, format = Uuid), ("user_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "members")]
 pub async fn remove_group_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((group, member)): Path<(Uuid, UserId)>,
 ) -> Result<StatusCode, AppError> {
