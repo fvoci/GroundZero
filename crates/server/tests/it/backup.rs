@@ -425,6 +425,129 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
+/// 잠금 조건을 관찰해 순서를 정한다. 제한 시간은 교착 검출용이며 진행을 위한 sleep은 없다.
+async fn wait_for_advisory_waiter(conn: &mut PgConnection, application: &str) -> i32 {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            let pid: Option<i32> = sqlx::query_scalar(
+                "SELECT a.pid FROM pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid
+                  WHERE a.application_name = $1 AND l.locktype = 'advisory' AND NOT l.granted
+                    AND cardinality(pg_blocking_pids(a.pid)) > 0 LIMIT 1",
+            )
+            .bind(application)
+            .fetch_optional(&mut *conn)
+            .await
+            .unwrap();
+            if let Some(pid) = pid {
+                return pid;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("restore did not reach an advisory lock wait")
+}
+
+/// #185: A가 빌린 멤버십을 B가 기존 권한으로 오인한 뒤 A가 반납하면 B의 SET LOCAL ROLE이 42501이다.
+/// 대상 DB를 달리하고 각 STORAGE_LOCK으로 두 복구를 멈춰, A 반납 → B 재개 순서를 강제한다.
+#[tokio::test]
+async fn overlapping_restores_across_databases_keep_their_migrator_membership() {
+    tokio::task::LocalSet::new()
+        .run_until(overlapping_restores())
+        .await;
+}
+
+async fn overlapping_restores() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let source = fresh_database(&mut admin, "overlap_source").await;
+    let mut first = fresh_database(&mut admin, "overlap_a").await;
+    let mut second = fresh_database(&mut admin, "overlap_b").await;
+    let files = temp_dir("overlap-source-files");
+    let config = config_with(&[("FVOCI_STORAGE_DIR", &files.to_string_lossy())]);
+    let out = temp_dir("overlap-backup");
+    backup::create(&config, &source.db, &out).await.unwrap();
+
+    // Supabase 관리자의 멤버십을 쓰는 다른 준비·복구 시험과 섞지 않는다. 이 시험의 두 복구는 병렬로 돈다.
+    let _serial = common::PREPARE_DATABASE.lock().await;
+    let superuser: bool =
+        sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(&mut admin)
+            .await
+            .unwrap();
+    let role = format!("fvoci_overlap_{}", uuid::Uuid::now_v7().simple());
+    let mut url = url::Url::parse(&admin_url).unwrap();
+    if superuser {
+        // 이 실행의 격리 Compose에만 만드는 시험 관리자와 명백한 시험 비밀번호.
+        sqlx::raw_sql(&format!(
+            "CREATE ROLE {role} LOGIN PASSWORD 'fvoci-overlap-test-password';
+             GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+             GRANT SET ON PARAMETER session_replication_role TO {role}"
+        ))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+        url.set_username(&role).unwrap();
+        url.set_password(Some("fvoci-overlap-test-password"))
+            .unwrap();
+    }
+    let member = url.username().to_owned();
+    let before = migrator_memberships(&mut admin, &member).await;
+    let app_a = format!("overlap-a-{}", uuid::Uuid::now_v7().simple());
+    let app_b = format!("overlap-b-{}", uuid::Uuid::now_v7().simple());
+    url.set_path(&format!("/{}", first.name));
+    url.query_pairs_mut()
+        .append_pair("application_name", &app_a);
+    first.db.admin_url = Some(fvoci_core::secret::Secret::new(url.to_string()));
+    url.set_path(&format!("/{}", second.name));
+    url.set_query(None);
+    url.query_pairs_mut()
+        .append_pair("application_name", &app_b);
+    second.db.admin_url = Some(fvoci_core::secret::Secret::new(url.to_string()));
+    let mut block_a = PgConnection::connect(&common::with_database(&admin_url, &first.name))
+        .await
+        .unwrap();
+    let mut block_b = PgConnection::connect(&common::with_database(&admin_url, &second.name))
+        .await
+        .unwrap();
+    for conn in [&mut block_a, &mut block_b] {
+        sqlx::query("SELECT pg_advisory_lock($1)")
+            .bind(backup::STORAGE_LOCK)
+            .execute(conn)
+            .await
+            .unwrap();
+    }
+    let config_a = config_with(&[(
+        "FVOCI_STORAGE_DIR",
+        &temp_dir("overlap-a-files").to_string_lossy(),
+    )]);
+    let config_b = config_with(&[(
+        "FVOCI_STORAGE_DIR",
+        &temp_dir("overlap-b-files").to_string_lossy(),
+    )]);
+    let first_db = first.db.clone();
+    let second_db = second.db.clone();
+    let first_out = out.clone();
+    let second_out = out.clone();
+    let a =
+        tokio::task::spawn_local(
+            async move { backup::restore(&config_a, &first_db, &first_out).await },
+        );
+    wait_for_advisory_waiter(&mut admin, &app_a).await;
+    let b = tokio::task::spawn_local(async move {
+        backup::restore(&config_b, &second_db, &second_out).await
+    });
+    wait_for_advisory_waiter(&mut admin, &app_b).await;
+    block_a.close().await.unwrap();
+    let result_a = a.await.unwrap();
+    block_b.close().await.unwrap();
+    let result_b = b.await.unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &member).await, before);
+    assert!(result_a.is_ok(), "first restore: {result_a:?}");
+    assert!(result_b.is_ok(), "second restore: {result_b:?}");
+    // DB·시험 역할은 이 실행의 격리 Compose와 함께 xtask가 정리한다.
+}
+
 /// 관리자의 `fvoci_migrator` 직접 멤버십 레코드(grantor, ADMIN, INHERIT, SET).
 async fn migrator_memberships(
     conn: &mut PgConnection,
