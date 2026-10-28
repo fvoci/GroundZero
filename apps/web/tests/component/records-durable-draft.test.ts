@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
+import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
+import { emptyForm } from '$lib/features/records/records';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
 import RecordsPanel from '$lib/features/records/RecordsPanel.svelte';
@@ -74,6 +76,49 @@ beforeEach(async () => {
   });
 });
 afterEach(() => vi.restoreAllMocks());
+
+it.each([
+  [
+    'raw request signature',
+    { requestId: '11111111-1111-4111-8111-111111111111', signature: 'LEGACY_REQUEST_BODY' },
+  ],
+  ['non-UUID request ID', { requestId: 'LEGACY_REQUEST_BODY', signature: 'a'.repeat(64) }],
+  [
+    'additional request property',
+    {
+      requestId: '11111111-1111-4111-8111-111111111111',
+      signature: 'a'.repeat(64),
+      request: 'LEGACY_REQUEST_BODY',
+    },
+  ],
+])(
+  'does not restore or re-save a draft read after startup with invalid pending: %s',
+  async (_name, pending) => {
+    clearLegacyRecordDrafts();
+    const key = 'fvoci:user-a:-:form-draft:record:draft-item:risk:new:held:old-tab';
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: '2026-10-28T12:00:00Z',
+        input: {
+          form: { ...emptyForm(), body: 'LEGACY_UNSAFE_DRAFT' },
+          baseline: JSON.stringify(emptyForm()),
+          version: 0,
+          pending,
+        },
+      }),
+    );
+    const writes = vi.spyOn(Storage.prototype, 'setItem');
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+    const restore = screen.queryByRole('button', { name: m.common_draft_restore() });
+    if (restore !== null) await fireEvent.click(restore);
+
+    expect(input('body')).toHaveValue('');
+    expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+    expect(writes.mock.calls.map((call) => call[1]).join('')).not.toContain('LEGACY_');
+  },
+);
 
 it("ignores another account's late record success without changing the new input or status", async () => {
   const done = vi.spyOn(feedback, 'notifyDone');

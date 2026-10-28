@@ -287,6 +287,84 @@ it('clears a legacy full form if its sanitized replacement cannot be stored', as
   expect(localStorage.getItem(recordKey)).toBeNull();
 });
 
+it('normalizes an old full-form record draft written by another tab after app startup', async () => {
+  await startWithoutOpeningRecords();
+  const old = draft(null);
+  old.input.form.title = 'SHORT_LATE_TITLE';
+  const values = { mitigation: 'Unsent late mitigation', amount: '123' };
+  old.input.form.values = values;
+  old.input.baseline = JSON.stringify({
+    ...old.input.form,
+    title: 'SHORT_LATE_BASE_TITLE',
+    body: 'Before late editing',
+  });
+  const value = JSON.stringify(old);
+  const untouchedKey = recordKey.replace('never-opened-item', 'another-unopened-item');
+  localStorage.setItem(untouchedKey, value);
+  localStorage.setItem(recordKey, value);
+
+  window.dispatchEvent(
+    new StorageEvent('storage', { key: recordKey, storageArea: localStorage, newValue: value }),
+  );
+
+  await waitFor(() => {
+    expect(JSON.parse(localStorage.getItem(recordKey) ?? 'null')).toEqual({
+      ...old,
+      input: {
+        ...old.input,
+        form: {
+          ...emptyForm(),
+          body: old.input.form.body,
+          values: { mitigation: 'Unsent late mitigation' },
+        },
+        baseline: JSON.stringify({
+          ...emptyForm(),
+          body: 'Before late editing',
+          values: { mitigation: 'Unsent late mitigation' },
+        }),
+      },
+    });
+  });
+  expect(localStorage.getItem(untouchedKey)).toBe(value);
+});
+
+it('removes a legacy raw retry written by another tab after app startup', async () => {
+  await startWithoutOpeningRecords();
+  const value = saved({ requestId, signature: legacySignature });
+  localStorage.setItem(recordKey, value);
+
+  window.dispatchEvent(
+    new StorageEvent('storage', { key: recordKey, storageArea: localStorage, newValue: value }),
+  );
+
+  await waitFor(() => {
+    expect(localStorage.getItem(recordKey)).toBeNull();
+  });
+});
+
+it('ignores unrelated storage events and stops record cleanup when App unmounts', async () => {
+  await startWithoutOpeningRecords();
+  const value = saved({ requestId, signature: legacySignature });
+  const unrelatedKey = 'fvoci:user-a:-:form-draft:comment:d1:new:tab:old-tab';
+  localStorage.setItem(recordKey, value);
+  localStorage.setItem(unrelatedKey, value);
+
+  for (const event of [
+    new StorageEvent('storage', { key: unrelatedKey, storageArea: localStorage, newValue: value }),
+    new StorageEvent('storage', { key: recordKey, storageArea: sessionStorage, newValue: value }),
+    new StorageEvent('storage', { key: null, storageArea: localStorage }),
+  ])
+    window.dispatchEvent(event);
+
+  expect(localStorage.getItem(recordKey)).toBe(value);
+  expect(localStorage.getItem(unrelatedKey)).toBe(value);
+  cleanup();
+  window.dispatchEvent(
+    new StorageEvent('storage', { key: recordKey, storageArea: localStorage, newValue: value }),
+  );
+  expect(localStorage.getItem(recordKey)).toBe(value);
+});
+
 it('keeps app startup working when browser storage cannot be enumerated', async () => {
   vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
     throw new DOMException('storage unavailable', 'SecurityError');
