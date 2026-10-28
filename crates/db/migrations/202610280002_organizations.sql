@@ -915,6 +915,9 @@ CREATE FUNCTION fvoci.app_remove_organization_member(p_organization uuid, p_user
     IF EXISTS (SELECT 1 FROM workspaces WHERE organization_id = p_organization AND owner_id = p_user) THEN
       RAISE EXCEPTION 'transfer workspace ownership first' USING ERRCODE = '55000';
     END IF;
+    -- 공간 → 문서(#186). 멤버십이 없는 공간의 공유도 거두므로 조직의 공간을 id 순서로 먼저 잠근다.
+    -- 조직 행 잠금이 새 공간 만들기·이동을 막고, 받는 사람의 조직 멤버 행 잠금이 새 공유를 막는다(D-114).
+    PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
     -- 조직 안 공간 문서에서 받은 개별 공유는 공간 멤버십과 무관하게 모두 거둔다(D-114). 문서 행을 잠근 뒤 지운다.
     FOR v_share IN
       SELECT s.id, s.document_id, d.workspace_id, d.item_id FROM document_shares s JOIN documents d ON d.id = s.document_id

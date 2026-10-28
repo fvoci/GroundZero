@@ -816,25 +816,7 @@ pub async fn save(
     validate_body(&input.body, &state.config.limits)?;
 
     let mut tx = state.db.begin_as(user).await?;
-    // 항목 아래 문서면 항목·모듈을 먼저 공유 잠금한다(판정 뒤 보관·비공개 전환이 끼어들지 않게).
-    sqlx::query("SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1))")
-        .bind(id)
-        .execute(tx.conn())
-        .await?;
-    // 잠그기 전에 권한을 판정한다(읽기 권한만 있으면 잠글 수 없고, 403과 404를 구분해야 한다).
-    let access = access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-    if !access.can_write() {
-        // 쓸 수 없는 이유(권한 부족 403, 보관된 항목 409)는 SQL이 정한다(D-113·D-106).
-        sqlx::query("SELECT app_require_document($1, 'write')")
-            .bind(id)
-            .execute(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
-        return Err(AppError::Forbidden);
-    }
-    let current = load_for_update(&mut tx, id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let (access, current, realtime) = super::document_locks::for_save(&mut tx, id).await?;
 
     // 같은 사용자의 같은 요청 재시도. 그 요청이 만든 리비전이 아직 최신이면 성공으로 돌려주고,
     // 그 뒤에 다른 저장이 있었으면 충돌로 알린다(재시도한 클라이언트가 남의 최신본을 덮지 않게).
@@ -885,11 +867,6 @@ pub async fn save(
         return document_reply(user, &to_document(current, access));
     }
     // 실시간 편집 중이면 본문은 실시간 연결만 고친다(두 길로 본문이 갈라지지 않게). 제목은 여기서 바꾼다.
-    // 워크스페이스 행을 공유 잠금하고 다시 읽어, 켜기·끄기와 엇갈려 꺼진 줄 알고 쓴 본문이 켜진 뒤 들어오지 않게 한다.
-    let realtime: bool = sqlx::query_scalar("SELECT app_document_realtime_locked($1)")
-        .bind(id)
-        .fetch_one(tx.conn())
-        .await?;
     if realtime && current.body != input.body {
         return Err(AppError::Conflict(
             "realtime editing is on for this document; edit the body in the live editor".into(),
@@ -897,7 +874,16 @@ pub async fn save(
     }
 
     // 저장 API는 늘 저장하는 사람이 쓴 내용이다(대신 저장 기록 없음, D-95).
-    let row = write_revision(&mut tx, id, &title, &input.body, input.request_id, None).await?;
+    let row = write_revision(
+        &mut tx,
+        id,
+        &title,
+        &input.body,
+        input.request_id,
+        None,
+        None,
+    )
+    .await?;
     tx.commit().await?;
     document_reply(user, &to_document(row, access))
 }
@@ -912,6 +898,7 @@ pub(crate) async fn write_revision(
     body: &Value,
     request_id: Uuid,
     edited_by: Option<&[UserId]>,
+    file_ref_editors: Option<&Value>,
 ) -> Result<DocRow, AppError> {
     let row: DocRow = sqlx::query_as(&format!(
         "UPDATE documents
@@ -931,8 +918,8 @@ pub(crate) async fn write_revision(
     let edited_by: Option<Vec<Uuid>> = edited_by.map(|users| users.iter().map(|u| u.0).collect());
     sqlx::query(
         "INSERT INTO document_revisions (document_id, revision, title, schema_version, body, author, request_id,
-                                         edited_by)
-         VALUES ($1, $2, $3, $4, $5, app_user_id(), $6, $7)",
+                                         edited_by, file_ref_editors)
+         VALUES ($1, $2, $3, $4, $5, app_user_id(), $6, $7, $8)",
     )
     .bind(id)
     .bind(row.revision)
@@ -941,6 +928,7 @@ pub(crate) async fn write_revision(
     .bind(body)
     .bind(request_id)
     .bind(edited_by)
+    .bind(file_ref_editors)
     .execute(tx.conn())
     .await?;
     // 제목이 바뀌었으면 감사 기록을 남긴다(이전·새 제목은 함수가 두 리비전에서 읽는다, 본문은 남기지 않는다).
