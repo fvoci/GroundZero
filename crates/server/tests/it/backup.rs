@@ -206,7 +206,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let damaged = temp_dir("damaged");
     copy_dir(&out, &damaged);
     std::fs::write(damaged.join("db").join("documents.copy"), b"broken\n").unwrap();
-    let err = serial_restore(&restored.config, restored_db, &damaged)
+    let err = backup::restore(&restored.config, restored_db, &damaged)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("damaged"), "{err}");
@@ -224,7 +224,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = serial_restore(&restored.config, restored_db, &partial)
+    let err = backup::restore(&restored.config, restored_db, &partial)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("comments"), "{err}");
@@ -239,16 +239,16 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = serial_restore(&restored.config, restored_db, &oversized)
+    let err = backup::restore(&restored.config, restored_db, &oversized)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("size differs"), "{err}");
-    serial_restore(&restored.config, restored_db, &out)
+    backup::restore(&restored.config, restored_db, &out)
         .await
         .unwrap();
     // 빈 DB에만 복구한다.
     assert!(
-        serial_restore(&restored.config, restored_db, &out)
+        backup::restore(&restored.config, restored_db, &out)
             .await
             .is_err()
     );
@@ -344,7 +344,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
     let manifest = backup::create(&config, &source.db, &full).await.unwrap();
     assert_eq!(manifest.migration_version, last);
     let target = fresh_database(&mut admin, "generation_target").await;
-    serial_restore(&config, &target.db, &full).await.unwrap();
+    backup::restore(&config, &target.db, &full).await.unwrap();
 
     let rejecting = fresh_database(&mut admin, "generation_rejecting").await;
     let single_file = temp_dir("generation-single-file");
@@ -357,7 +357,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = serial_restore(&config, &rejecting.db, &single_file)
+    let err = backup::restore(&config, &rejecting.db, &single_file)
         .await
         .unwrap_err();
     assert!(
@@ -373,7 +373,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         .await
         .unwrap();
     assert_eq!(manifest.migration_version, partial_at);
-    let err = serial_restore(&config, &rejecting.db, &from_partial)
+    let err = backup::restore(&config, &rejecting.db, &from_partial)
         .await
         .unwrap_err();
     assert!(
@@ -382,7 +382,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         )),
         "{err}"
     );
-    let err = serial_restore(&config, &partial.db, &full)
+    let err = backup::restore(&config, &partial.db, &full)
         .await
         .unwrap_err();
     assert!(
@@ -414,15 +414,17 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
 }
 
 /// 잠금 조건을 관찰해 순서를 정한다. 제한 시간은 교착 검출용이며 진행을 위한 sleep은 없다.
-async fn wait_for_advisory_waiter(conn: &mut PgConnection, application: &str) -> i32 {
+async fn wait_for_advisory_waiter(conn: &mut PgConnection, application: &str, key: i64) -> i32 {
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
             let pid: Option<i32> = sqlx::query_scalar(
                 "SELECT a.pid FROM pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid
                   WHERE a.application_name = $1 AND l.locktype = 'advisory' AND NOT l.granted
+                    AND ((l.classid::bigint << 32) | l.objid::bigint) = $2
                     AND cardinality(pg_blocking_pids(a.pid)) > 0 LIMIT 1",
             )
             .bind(application)
+            .bind(key)
             .fetch_optional(&mut *conn)
             .await
             .unwrap();
@@ -561,7 +563,8 @@ async fn overlapping_restores(end: RestoreEnd) {
         tokio::task::spawn_local(
             async move { backup::restore(&config_a, &first_db, &first_out).await },
         );
-    let first_pid = wait_for_advisory_waiter(&mut admin, &app_a).await;
+    // A는 공통 잠금과 빌림을 마친 뒤 대상 DB의 저장소 잠금에서 멈춰야 한다.
+    let first_pid = wait_for_advisory_waiter(&mut admin, &app_a, backup::STORAGE_LOCK).await;
     assert_eq!(
         migrator_memberships(&mut admin, &member).await,
         before,
@@ -570,7 +573,8 @@ async fn overlapping_restores(end: RestoreEnd) {
     let b = tokio::task::spawn_local(async move {
         backup::restore(&config_b, &second_db, &second_out).await
     });
-    let second_pid = wait_for_advisory_waiter(&mut admin, &app_b).await;
+    let second_pid =
+        wait_for_advisory_waiter(&mut admin, &app_b, fvoci_db::admin::MIGRATOR_LOCK).await;
     let database: String = sqlx::query_scalar(
         "SELECT d.datname::text FROM pg_locks l JOIN pg_database d ON d.oid = l.database
           WHERE l.pid = $1 AND l.locktype = 'advisory' AND NOT l.granted
@@ -736,15 +740,4 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
         .execute(&mut admin)
         .await
         .unwrap();
-}
-/// 복구는 superuser가 아닌 관리자(셀프호스트 Supabase)에게 `fvoci_migrator` 멤버십을 잠시 빌렸다 돌려준다. 클러스터
-/// 공용 행이라 새 DB 준비와 같은 잠금으로 한 번에 하나씩 한다. 겹치면 앞 복구가 돌려준 멤버십에 기대던 뒤 복구가
-/// `SET ROLE`에서 42501로 실패한다(CI supabase 잡, #183).
-async fn serial_restore(
-    config: &fvoci_server::config::Config,
-    db: &fvoci_db::config::DbCommandConfig,
-    from: &std::path::Path,
-) -> Result<backup::Manifest, fvoci_core::error::AppError> {
-    let _serial = common::PREPARE_DATABASE.lock().await;
-    backup::restore(config, db, from).await
 }
