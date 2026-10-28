@@ -18,10 +18,19 @@ const requestId = '11111111-1111-4111-8111-111111111111';
 const recordKey = 'fvoci:user-a:-:form-draft:record:never-opened-item:risk:new:tab:old-tab';
 
 function draft(pending: unknown) {
-  const form = { ...emptyForm(), body: 'Keep current long writing' };
+  const form = {
+    ...emptyForm(),
+    body: 'Keep current long writing',
+    values: { mitigation: '' },
+  };
   return {
     savedAt: '2026-10-28T12:00:00Z',
-    input: { form, baseline: JSON.stringify(emptyForm()), version: 0, pending },
+    input: {
+      form,
+      baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+      version: 0,
+      pending,
+    },
   };
 }
 
@@ -149,6 +158,91 @@ it('leaves other domains and non-app storage untouched while cleaning a legacy r
 
   expect(localStorage.getItem(recordKey)).toBeNull();
   for (const key of unrelated) expect(localStorage.getItem(key)).toBe(value);
+});
+
+it('clears retry metadata with additional own properties even when UUID and digest are valid', async () => {
+  localStorage.setItem(
+    recordKey,
+    saved({ requestId, signature: 'a'.repeat(64), request: legacySignature }),
+  );
+
+  await startWithoutOpeningRecords();
+
+  expect(localStorage.getItem(recordKey)).toBeNull();
+});
+
+it.each([false, true])(
+  'normalizes both old full forms to writing only without login or network (offline: %s)',
+  async (offline) => {
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    if (offline) fetch.mockRejectedValue(new TypeError('offline'));
+    const oldForm = {
+      ...emptyForm(),
+      title: 'SHORT_OLD_TITLE',
+      occurred_on: '2026-10-28',
+      body: 'Unsent body',
+      values: {
+        mitigation: 'Unsent mitigation',
+        amount: '123456',
+        reference: 'SHORT_REFERENCE',
+        owner: 'SHORT_PERSON',
+        unknown_long_looking: 'x'.repeat(1000),
+      },
+      people: { attendees: ['SHORT_ATTENDEE'] },
+      files: [{ file_id: requestId, version: '2', role: 'SHORT_FILE_ROLE' }],
+      unreadable: { amount: true },
+    };
+    const oldBase = {
+      ...oldForm,
+      title: 'SHORT_BASE_TITLE',
+      body: 'Body before editing',
+      values: { ...oldForm.values, mitigation: 'Mitigation before editing' },
+    };
+    const old = {
+      ...draft(null),
+      input: { form: oldForm, baseline: JSON.stringify(oldBase), version: 7, pending: null },
+    };
+    const keys = [
+      recordKey,
+      'fvoci:user-b:org-b:form-draft:record:unopened-item:risk:old-record:held:old-offer',
+    ];
+    for (const key of keys) localStorage.setItem(key, JSON.stringify(old));
+
+    await startWithoutOpeningRecords();
+
+    for (const key of keys) {
+      const value = localStorage.getItem(key);
+      if (value === null) throw new Error('unsent writing was discarded');
+      const normalized: unknown = JSON.parse(value);
+      expect(normalized).toEqual({
+        ...old,
+        input: {
+          form: {
+            ...emptyForm(),
+            body: 'Unsent body',
+            values: { mitigation: 'Unsent mitigation' },
+          },
+          baseline: JSON.stringify({
+            ...emptyForm(),
+            body: 'Body before editing',
+            values: { mitigation: 'Mitigation before editing' },
+          }),
+          version: 7,
+          pending: null,
+        },
+      });
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+
+it('clears a draft whose record kind is absent from the offline field definitions', async () => {
+  const unknown = recordKey.replace(':risk:', ':unknown_kind:');
+  localStorage.setItem(unknown, saved(null));
+
+  await startWithoutOpeningRecords();
+
+  expect(localStorage.getItem(unknown)).toBeNull();
 });
 
 it('keeps app startup working when browser storage cannot be enumerated', async () => {
