@@ -1,12 +1,12 @@
 //! 협업 활동(D-119). 감사로그와 별개이며 SQL이 대상 접근을 확인한다.
-use crate::access::{self, Kind};
-use crate::features::notifications::CursorQuery;
-use crate::features::organizations::OrgScope;
-use crate::http::AppState;
+use crate::ActivityState;
+use crate::notifications::CursorQuery;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, UserId};
+use fvoci_db::access::{self, Kind};
+use fvoci_http::org_scope::OrgScope;
 use fvoci_http::session::CurrentUser;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -49,7 +49,7 @@ pub struct RecentActivityQuery {
     params(RecentActivityQuery, ("organization_id" = OrganizationId, Query)),
     responses((status = 200, body = [Activity]), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "activity")]
 pub async fn recent(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     OrgScope { user, organization }: OrgScope,
     Query(query): Query<RecentActivityQuery>,
 ) -> Result<Json<Vec<Activity>>, AppError> {
@@ -64,7 +64,7 @@ pub async fn recent(
 }
 
 async fn target(
-    state: &AppState,
+    state: &ActivityState,
     user: UserId,
     kind: Kind,
     id: Uuid,
@@ -101,7 +101,7 @@ async fn target(
     params(("item_id" = Uuid, Path), CursorQuery),
     responses((status = 200, body = ActivityPage), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "activity")]
 pub async fn item(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Query(query): Query<CursorQuery>,
@@ -113,7 +113,7 @@ pub async fn item(
     params(("document_id" = Uuid, Path), CursorQuery),
     responses((status = 200, body = ActivityPage), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "activity")]
 pub async fn document(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Query(query): Query<CursorQuery>,
@@ -125,7 +125,7 @@ pub async fn document(
     params(("task_id" = Uuid, Path), CursorQuery),
     responses((status = 200, body = ActivityPage), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "activity")]
 pub async fn task(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Query(query): Query<CursorQuery>,

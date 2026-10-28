@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::http::AppState;
+use crate::ActivityState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, UserId};
 use fvoci_db::{UserTx, needed_ids, new_ids};
@@ -113,7 +113,7 @@ async fn list(
     .bind(task)
     .fetch_all(tx.conn())
     .await?;
-    let grade = crate::access::Grade::parse_present(&access)?;
+    let grade = fvoci_db::access::Grade::parse_present(&access)?;
     let owner = grade.is_owner();
     let writer = grade.can_write();
     Ok(rows
@@ -155,7 +155,7 @@ async fn list(
     params(("document_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Comment]), (status = 404, body = ErrorBody)), tag = "comments")]
 pub async fn document_comments(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(doc): Path<DocumentId>,
 ) -> Result<Json<Vec<Comment>>, AppError> {
@@ -170,7 +170,7 @@ pub async fn document_comments(
     params(("task_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Comment]), (status = 404, body = ErrorBody)), tag = "comments")]
 pub async fn task_comments(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(task): Path<Uuid>,
 ) -> Result<Json<Vec<Comment>>, AppError> {
@@ -185,7 +185,7 @@ pub async fn task_comments(
     responses((status = 201, body = CommentCreated), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn add(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Json(input): Json<NewComment>,
 ) -> Result<(StatusCode, Json<CommentCreated>), AppError> {
@@ -218,7 +218,7 @@ pub async fn add(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn edit(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<EditComment>,
@@ -239,7 +239,7 @@ pub async fn edit(
     params(("comment_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "comments")]
 pub async fn delete(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -260,7 +260,7 @@ pub async fn delete(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "comments")]
 pub async fn resolve(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<ResolveComment>,

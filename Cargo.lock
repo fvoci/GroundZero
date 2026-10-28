@@ -1118,6 +1118,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-activity"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-core"
 version = "0.1.0"
 dependencies = [
@@ -1168,6 +1184,7 @@ dependencies = [
  "bytes",
  "flate2",
  "futures-util",
+ "fvoci-activity",
  "fvoci-core",
  "fvoci-db",
  "fvoci-http",
