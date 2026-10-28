@@ -1,7 +1,7 @@
+import { type EventView } from '$lib/features/events/model';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView } from '$lib/api/client';
 import EventForm from '$lib/features/events/EventForm.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';

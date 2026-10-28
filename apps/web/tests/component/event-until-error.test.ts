@@ -1,6 +1,7 @@
+import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -11,8 +12,8 @@ it.each(['ko', 'en'] as const)(
   'places the real until rejection next to the end field (%s)',
   async (locale) => {
     await setLocale(locale, { reload: false });
-    vi.spyOn(api, 'event').mockResolvedValue(recurring);
-    vi.spyOn(api, 'updateEvent').mockRejectedValue(
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(recurring);
+    vi.spyOn(eventsApi, 'updateEvent').mockRejectedValue(
       new ApiError(
         400,
         'bad_request',

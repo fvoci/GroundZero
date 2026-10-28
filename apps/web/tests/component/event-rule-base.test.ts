@@ -1,8 +1,8 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView } from '$lib/api/client';
-import { api } from '$lib/api/client';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -36,10 +36,10 @@ function event(version: number, title: string): EventView {
 describe('event dialog base version after a rule save', () => {
   async function saveRuleThenForm(ruleResult: EventView): Promise<number | undefined> {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'event').mockResolvedValue(event(1, '처음 제목'));
-    const setRule = vi.spyOn(api, 'setEventRecurrence').mockResolvedValue(ruleResult);
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(event(1, '처음 제목'));
+    const setRule = vi.spyOn(eventsApi, 'setEventRecurrence').mockResolvedValue(ruleResult);
     const update = vi
-      .spyOn(api, 'updateEvent')
+      .spyOn(eventsApi, 'updateEvent')
       .mockImplementation((_id: string, _base: number, input) =>
         Promise.resolve({ kind: 'updated', event: { ...event(9, input.title) } }),
       );

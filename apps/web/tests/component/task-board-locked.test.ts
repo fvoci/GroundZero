@@ -1,10 +1,11 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { router } from '$lib/router.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -36,7 +37,7 @@ const item: ItemView = {
 async function mount(locked: boolean): Promise<void> {
   await setLocale('ko', { reload: false });
   vi.spyOn(work, 'tasks').mockResolvedValue([]);
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined, locked } });
   await screen.findByTestId('task-board');
@@ -64,7 +65,7 @@ describe('task board losing write access with CSV input', () => {
   it('does not keep the removed CSV guard in the navigation chain', async () => {
     await setLocale('ko', { reload: false });
     vi.spyOn(work, 'tasks').mockResolvedValue([]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const view = render(TaskBoard, {

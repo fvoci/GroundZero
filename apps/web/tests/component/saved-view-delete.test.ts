@@ -1,10 +1,11 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -49,10 +50,10 @@ describe('saved view delete', () => {
 
   it('sends one delete while the first is in flight and shows no failure after it succeeds', async () => {
     let views = [view];
-    vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve(views));
+    vi.spyOn(savedViewsApi, 'savedViews').mockImplementation(() => Promise.resolve(views));
     let finish: () => void = () => undefined;
     const deleteView = vi
-      .spyOn(api, 'deleteView')
+      .spyOn(savedViewsApi, 'deleteView')
       .mockImplementationOnce(
         () =>
           new Promise<undefined>((resolve) => {

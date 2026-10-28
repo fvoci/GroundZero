@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
@@ -691,7 +692,7 @@ describe('the overwrite question inside the task dialog', () => {
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
     vi.spyOn(work, 'tasks').mockResolvedValue([v2]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     vi.spyOn(work, 'task').mockResolvedValue(v2);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
@@ -728,7 +729,7 @@ describe('the overwrite question inside the task dialog', () => {
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
     vi.spyOn(work, 'tasks').mockResolvedValue([v2]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     vi.spyOn(work, 'task').mockResolvedValue(v2);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);

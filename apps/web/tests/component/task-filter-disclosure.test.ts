@@ -1,10 +1,11 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import { EMPTY_FILTER, hiddenConditionCount } from '$lib/features/tasks/filters';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -78,7 +79,7 @@ describe('task board filter disclosure', () => {
       task('1', '자료 정리', 'high'),
       task('2', '문서 검토', 'low'),
     ]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
