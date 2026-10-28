@@ -1012,7 +1012,12 @@ mod tests {
     fn organization_selection_and_timer_modes_are_typed_contracts() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
         let schemas = &doc["components"]["schemas"];
-        let selection = &schemas["MySettings"]["properties"]["last_organization_id"];
+        assert!(
+            schemas["MySettings"]["properties"]
+                .get("last_organization_id")
+                .is_none()
+        );
+        let selection = &schemas["SetLastOrganization"]["properties"]["organization_id"];
         assert_eq!(selection["format"], "uuid");
         assert!(
             selection["type"]
@@ -1020,9 +1025,9 @@ mod tests {
                 .is_some_and(|types| types.contains(&serde_json::json!("null")))
         );
         assert!(
-            !schemas["MySettings"]["required"]
+            schemas["SetLastOrganization"]["required"]
                 .as_array()
-                .is_some_and(|fields| fields.contains(&serde_json::json!("last_organization_id")))
+                .is_some_and(|fields| fields.contains(&serde_json::json!("organization_id")))
         );
         assert_eq!(
             schemas["TimerStartMode"]["enum"],
