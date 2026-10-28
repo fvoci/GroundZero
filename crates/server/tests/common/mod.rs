@@ -406,7 +406,8 @@ pub struct FreshDb {
 
 /// 새 DB 준비(`admin::prepare_database`)를 한 번에 하나씩 하게 하는 잠금. 같은 시험 바이너리에서 준비가 겹치면 클러스터
 /// 공용 행(역할 권한 등)을 함께 고쳐 "tuple concurrently updated"(XX000)로 실패한다. 새 DB를 만드는 모든 경로
-/// ([`fresh_database`]와 따로 준비하는 시험)가 이 잠금 하나를 쓴다.
+/// ([`fresh_database`]와 따로 준비하는 시험)가 이 잠금 하나를 쓴다. 관리자의 `fvoci_migrator` 멤버십을 빌리는 복구
+/// (`backup::restore`)도 같은 잠금을 쓴다(빌림이 겹치면 한쪽이 돌려준 멤버십 때문에 다른 쪽의 `SET ROLE`이 실패한다).
 pub static PREPARE_DATABASE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 pub async fn fresh_database(admin: &mut sqlx::PgConnection, label: &str) -> FreshDb {

@@ -67,6 +67,18 @@ fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
 }
 
+/// 복구는 superuser가 아닌 관리자(셀프호스트 Supabase)에게 `fvoci_migrator` 멤버십을 잠시 빌렸다 돌려준다. 클러스터
+/// 공용 행이라 새 DB 준비와 같은 잠금으로 한 번에 하나씩 한다. 겹치면 앞 복구가 돌려준 멤버십에 기대던 뒤 복구가
+/// `SET ROLE`에서 42501로 실패한다(CI supabase 잡, #183).
+async fn serial_restore(
+    config: &fvoci_server::config::Config,
+    db: &fvoci_db::config::DbCommandConfig,
+    from: &std::path::Path,
+) -> Result<backup::Manifest, fvoci_core::error::AppError> {
+    let _serial = common::PREPARE_DATABASE.lock().await;
+    backup::restore(config, db, from).await
+}
+
 #[tokio::test]
 async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
@@ -206,7 +218,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let damaged = temp_dir("damaged");
     copy_dir(&out, &damaged);
     std::fs::write(damaged.join("db").join("documents.copy"), b"broken\n").unwrap();
-    let err = backup::restore(&restored.config, restored_db, &damaged)
+    let err = serial_restore(&restored.config, restored_db, &damaged)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("damaged"), "{err}");
@@ -224,7 +236,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = backup::restore(&restored.config, restored_db, &partial)
+    let err = serial_restore(&restored.config, restored_db, &partial)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("comments"), "{err}");
@@ -239,16 +251,16 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = backup::restore(&restored.config, restored_db, &oversized)
+    let err = serial_restore(&restored.config, restored_db, &oversized)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("size differs"), "{err}");
-    backup::restore(&restored.config, restored_db, &out)
+    serial_restore(&restored.config, restored_db, &out)
         .await
         .unwrap();
     // 빈 DB에만 복구한다.
     assert!(
-        backup::restore(&restored.config, restored_db, &out)
+        serial_restore(&restored.config, restored_db, &out)
             .await
             .is_err()
     );
@@ -344,7 +356,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
     let manifest = backup::create(&config, &source.db, &full).await.unwrap();
     assert_eq!(manifest.migration_version, last);
     let target = fresh_database(&mut admin, "generation_target").await;
-    backup::restore(&config, &target.db, &full).await.unwrap();
+    serial_restore(&config, &target.db, &full).await.unwrap();
 
     let rejecting = fresh_database(&mut admin, "generation_rejecting").await;
     let single_file = temp_dir("generation-single-file");
@@ -357,7 +369,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = backup::restore(&config, &rejecting.db, &single_file)
+    let err = serial_restore(&config, &rejecting.db, &single_file)
         .await
         .unwrap_err();
     assert!(
@@ -373,7 +385,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         .await
         .unwrap();
     assert_eq!(manifest.migration_version, partial_at);
-    let err = backup::restore(&config, &rejecting.db, &from_partial)
+    let err = serial_restore(&config, &rejecting.db, &from_partial)
         .await
         .unwrap_err();
     assert!(
@@ -382,7 +394,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         )),
         "{err}"
     );
-    let err = backup::restore(&config, &partial.db, &full)
+    let err = serial_restore(&config, &partial.db, &full)
         .await
         .unwrap_err();
     assert!(
