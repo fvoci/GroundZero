@@ -48,6 +48,7 @@
   "documents_upload_failed": "업로드를 마치지 못했습니다",
   "documents_title_required": "제목을 입력하세요.",
   "documents_title_conflict": "다른 곳에서 동시에 저장했습니다. 다시 시도하세요.",
+  "documents_live_title_pending": "저장하지 않은 제목은 이 화면에만 남아 있습니다. 다시 열면 제목이 사라지므로, 먼저 내용을 옮겨 두거나 변경을 버려 주세요.",
   "documents_title_save_failed": "제목을 저장하지 못했습니다.",
   "documents_live_connected": "실시간 연결됨",
   "documents_live_connecting": "연결 중…",

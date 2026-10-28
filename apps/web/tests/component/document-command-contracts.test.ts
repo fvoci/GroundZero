@@ -42,6 +42,63 @@ function reply(status: number, body: object) {
 }
 
 describe('document command contracts (#178, PR3 #189, D-96)', () => {
+  it('keeps stale title metadata and sends no body or If-Match', async () => {
+    const current = { ...document, title: '최신 제목', revision: 4 };
+    const fetch = reply(409, {
+      error: 'conflict',
+      message: 'stale',
+      current,
+      changed: ['title'],
+      request_id: 'title-request',
+    });
+    await expect(
+      api.patchTitle('d1', {
+        expectedUser: 'editing-user',
+        requestId: 'title',
+        baseRevision: 3,
+        title: '내 제목',
+      }),
+    ).resolves.toEqual({
+      kind: 'conflict',
+      current,
+      changed: ['title'],
+      requestId: 'title-request',
+    });
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'title',
+      base_revision: 3,
+      title: '내 제목',
+    });
+    expect(new Headers(init.headers).get('x-fvoci-expected-user')).toBe('editing-user');
+    expect(new Headers(init.headers).has('If-Match')).toBe(false);
+  });
+
+  it('preserves structured title field validation errors', async () => {
+    reply(400, {
+      error: 'invalid',
+      message: 'too long',
+      reason: 'too_long',
+      field: 'title',
+      limit: 200,
+      request_id: 'validation',
+    });
+    await expect(
+      api.patchTitle('d1', {
+        expectedUser: 'user-a',
+        requestId: 'title',
+        baseRevision: 3,
+        title: 'x'.repeat(201),
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      reason: 'too_long',
+      field: 'title',
+      limit: 200,
+      requestId: 'validation',
+    });
+  });
+
   it('patches only the supplied settings with the expected user', async () => {
     const fetch = reply(200, { ...document, allow_copy: true });
     await api.setSettings('d/1', { allow_copy: true });

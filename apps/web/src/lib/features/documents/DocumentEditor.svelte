@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DocumentConflictNotice from './DocumentConflictNotice.svelte';
   // 위키 문서 편집 화면 (첫 사용자 흐름).
   // - 저장은 자동(입력 후 잠시 멈추면)과 수동 버튼 둘 다. 저장 상태를 항상 보여준다.
   // - 같은 내용의 재시도는 같은 request_id를 다시 보낸다. 내용이 바뀌면 새 request_id.
@@ -37,7 +38,6 @@
     clearDraft,
     loadDraft,
     loadOffers,
-    plainText,
     removeOffer,
     sameContent,
     storeDraft,
@@ -579,42 +579,17 @@
   {/if}
 
   {#if conflict !== undefined}
-    <section
-      class="flex flex-col gap-3 rounded border border-amber-500/60 px-3 py-3"
-      aria-labelledby="conflict-heading"
-    >
-      <h2 id="conflict-heading" class="font-semibold">{m.documents_conflict_heading()}</h2>
-      <p class="text-sm">
-        {m.documents_conflict_body({ revision: conflict.revision })}
-      </p>
-      <div class="grid gap-3 @2xl:grid-cols-2">
-        <div>
-          <h3 class="text-sm font-semibold">
-            {m.documents_conflict_server({ title: conflict.title })}
-          </h3>
-          <pre
-            class="max-h-60 overflow-auto rounded bg-muted p-2 text-sm whitespace-pre-wrap"
-            data-testid="conflict-server">{plainText(conflict.body)}</pre>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold">{m.documents_conflict_mine({ title })}</h3>
-          <pre
-            class="max-h-60 overflow-auto rounded bg-muted p-2 text-sm whitespace-pre-wrap"
-            data-testid="conflict-mine">{plainText(body)}</pre>
-        </div>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <Button size="sm" onclick={() => void keepMineAsCopy()}
-          >{m.documents_conflict_keep_copy()}</Button
-        >
-        <Button size="sm" variant="outline" onclick={() => (confirmOverwrite = true)}
-          >{m.documents_conflict_overwrite()}</Button
-        >
-        <Button size="sm" variant="ghost" onclick={useServerVersion}
-          >{m.documents_conflict_use_server()}</Button
-        >
-      </div>
-    </section>
+    <DocumentConflictNotice current={conflict} {title} serverBody={conflict.body} mineBody={body}>
+      <Button size="sm" onclick={() => void keepMineAsCopy()}
+        >{m.documents_conflict_keep_copy()}</Button
+      >
+      <Button size="sm" variant="outline" onclick={() => (confirmOverwrite = true)}
+        >{m.documents_conflict_overwrite()}</Button
+      >
+      <Button size="sm" variant="ghost" onclick={useServerVersion}
+        >{m.documents_conflict_use_server()}</Button
+      >
+    </DocumentConflictNotice>
   {/if}
 
   <div class="flex flex-col gap-1">

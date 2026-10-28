@@ -61,6 +61,38 @@ afterEach(() => {
 });
 
 describe('title command and screen-only protection (D-27, #178)', () => {
+  it('reuses the title request id after a lost response and sends only one request while saving', async () => {
+    let finish: ((response: Response) => void) | undefined;
+    const fetch = vi
+      .fn<(_url: string, init?: RequestInit) => Promise<Response>>()
+      .mockRejectedValueOnce(new TypeError('connection lost'))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const saved = vi.fn();
+    render(LiveDocumentEditor, { props: { initial: doc, onsaved: saved } });
+    const title = screen.getByLabelText(m.documents_title_label());
+    const button = screen.getByRole('button', { name: m.documents_title_save() });
+    const form = button.closest('form');
+    if (form === null) throw new Error('missing title form');
+    await fireEvent.input(title, { target: { value: '내 제목' } });
+    await fireEvent.click(button);
+    await screen.findByRole('alert');
+    await fireEvent.click(button);
+    await fireEvent.blur(title);
+    await fireEvent.submit(form);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
+    finish?.(
+      new Response(JSON.stringify({ ...doc, title: '내 제목', revision: 4 }), { status: 200 }),
+    );
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  });
+
   it('sends one title PATCH, shows the stale title and revision, and retries only on explicit save', async () => {
     const current = { ...doc, title: '다른 사람 제목', revision: 4 };
     let writes = 0;
