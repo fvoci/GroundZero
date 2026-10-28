@@ -368,35 +368,32 @@ describe('draft offers after write access is withdrawn', () => {
     expect(unload.defaultPrevented).toBe(false);
   });
 
-  // RB-2: 이름 바꾸기는 파일마다 서버가 준 `can_write`로 정한다(D-113). 패널의 `canWrite`(새 파일 붙이기)와는 따로 온다.
-  it('ignores old attachment name drafts when the file is not writable', async () => {
-    otherTabDraft('attachment-rename:item:i1', {
-      id: ACCESS_FILE.id,
-      name: '권한 철회 전 이름.pdf',
-      baseline: ACCESS_FILE.name,
-    });
-    vi.spyOn(api, 'itemFiles').mockResolvedValue([{ ...ACCESS_FILE, can_write: false }]);
-    const rename = vi.spyOn(api, 'renameFile');
-    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
-    await screen.findByText(ACCESS_FILE.name);
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
-    expect(screen.queryByDisplayValue('권한 철회 전 이름.pdf')).toBeNull();
-    expect(rename).not.toHaveBeenCalled();
-  });
-
-  it('opens the server name without restoring old input on a read-only target', async () => {
-    otherTabDraft('attachment-rename:item:i1', {
-      id: ACCESS_FILE.id,
-      name: '쓸 수 있는 파일 이름.pdf',
-      baseline: ACCESS_FILE.name,
-    });
-    vi.spyOn(api, 'itemFiles').mockResolvedValue([ACCESS_FILE]);
-    render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: false } });
-    await screen.findByText(ACCESS_FILE.name);
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
-    await fireEvent.click(
-      screen.getByRole('button', { name: m.files_rename_aria({ name: ACCESS_FILE.name }) }),
-    );
-    expect(screen.getByLabelText(m.files_new_name())).toHaveValue(ACCESS_FILE.name);
-  });
+  // D-27·D-113: 옛 이름 초안은 무시하고 직접 편집은 파일의 can_write를 따른다.
+  it.each([false, true])(
+    'ignores legacy attachment-name offers while file can_write=%s',
+    async (writable) => {
+      const oldName = '옛 이름 초안.pdf';
+      otherTabDraft('attachment-rename:item:i1', {
+        id: ACCESS_FILE.id,
+        name: oldName,
+        baseline: ACCESS_FILE.name,
+      });
+      vi.spyOn(api, 'itemFiles').mockResolvedValue([{ ...ACCESS_FILE, can_write: writable }]);
+      const rename = vi.spyOn(api, 'renameFile');
+      render(AttachmentsPanel, {
+        props: { target: { kind: 'item', id: 'i1' }, canWrite: !writable },
+      });
+      await screen.findByText(ACCESS_FILE.name);
+      expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+      const buttonName = m.files_rename_aria({ name: ACCESS_FILE.name });
+      if (writable) {
+        await fireEvent.click(screen.getByRole('button', { name: buttonName }));
+        expect(screen.getByLabelText(m.files_new_name())).toHaveValue(ACCESS_FILE.name);
+      } else {
+        expect(screen.queryByRole('button', { name: buttonName })).toBeNull();
+      }
+      expect(screen.queryByDisplayValue(oldName)).toBeNull();
+      expect(rename).not.toHaveBeenCalled();
+    },
+  );
 });
