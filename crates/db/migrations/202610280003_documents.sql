@@ -208,7 +208,14 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
     IF v_grantee = app_user_id() THEN
       RAISE EXCEPTION 'you already own this document' USING ERRCODE = '22023';
     END IF;
-    IF v_doc.owner_user_id IS NOT NULL THEN
+    IF v_doc.source_organization_id IS NOT NULL THEN
+      -- 출처 조직을 기억한 개인 노트는 그 조직 안에서만 공유한다(#175=1 A). 소유자·받는 사람이 그 조직 멤버인지는 아래
+      -- 멤버 행 잠금이 본다(소유자가 떠났으면 22023).
+      v_org := v_doc.source_organization_id;
+      IF p_organization IS NOT NULL AND p_organization <> v_org THEN
+        RAISE EXCEPTION 'the document belongs to another organization' USING ERRCODE = '22023';
+      END IF;
+    ELSIF v_doc.owner_user_id IS NOT NULL THEN
       v_common := ARRAY(SELECT o1.organization_id FROM organization_members o1
                         JOIN organization_members o2 ON o2.organization_id = o1.organization_id AND o2.user_id = v_grantee
                         WHERE o1.user_id = v_doc.owner_user_id

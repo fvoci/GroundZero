@@ -312,3 +312,54 @@ async fn leaving_the_source_organization_blocks_public_links() {
     assert_eq!(opens(&app, &public).await, StatusCode::NOT_FOUND);
     public_link(&app, &member, note, StatusCode::CONFLICT).await;
 }
+
+/// A: 출처 조직을 기억한 노트의 개별 공유는 그 조직 안에서만 한다. 공유 행의 조직은 출처 조직이다.
+#[tokio::test]
+async fn a_remembered_note_is_shared_only_inside_its_organization() {
+    let t = Two::new().await;
+    let note = note_copy(&t.w, &t.w.owner, t.w.doc().await).await;
+    let share = "SELECT fvoci.app_share_document($1,(SELECT email FROM fvoci.users WHERE id=$2),'read',$3,@ids) AS id";
+    // 다른 조직에만 있는 사람에게는 공유할 수 없다.
+    let outsider = common::login_with_email(
+        &t.w.state,
+        "other member",
+        &common::unique_email("outsider"),
+        true,
+    )
+    .await;
+    common::join_organization(t.other_org, &outsider, "member").await;
+    let refused = attempt(
+        &t.w.state,
+        &t.w.owner,
+        share,
+        &[note, outsider.id.0, t.other_org],
+    )
+    .await;
+    code(
+        &refused.expect_err("shared into another organization"),
+        "22023",
+    );
+    // 두 조직에 모두 있는 사람에게도 다른 조직 이름으로는 공유할 수 없고, 출처 조직으로는 된다.
+    let member = t.w.member("member").await;
+    common::join_organization(t.other_org, &member, "member").await;
+    let refused = attempt(
+        &t.w.state,
+        &t.w.owner,
+        share,
+        &[note, member.id.0, t.other_org],
+    )
+    .await;
+    code(
+        &refused.expect_err("shared under another organization"),
+        "22023",
+    );
+    let id = made(&t.w.state, &t.w.owner, share, &[note, member.id.0, t.w.org]).await;
+    let mut conn = common::fixture_conn().await;
+    let org: Uuid =
+        sqlx::query_scalar("SELECT organization_id FROM fvoci.document_shares WHERE id = $1")
+            .bind(id)
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+    assert_eq!(org, t.w.org);
+}
