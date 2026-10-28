@@ -105,9 +105,13 @@ BEGIN
     FOR v_row IN SELECT * FROM jsonb_array_elements(v_data->'tasks') LOOP
       SELECT coalesce(array_agg((v_people->>a)::uuid), ARRAY[]::uuid[]) INTO v_assignees
         FROM jsonb_array_elements_text(v_row->'assignees') AS a;
-      -- id: 업무·감사·활동 + 담당자마다 감사·활동 2개.
+      -- id: 업무·감사·활동 + 담당자마다 감사·활동 2개. 자료의 상태 값은 Storybook과 같게
+      -- (apps/web/stories/fixtures/synthetic.ts의 SEED_STATUSES) 기본 상태 정의의 이름으로 옮긴다(D-116).
+      -- 모르는 값은 그대로 넘겨 app_create_task가 거절하게 한다.
       PERFORM app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, v_row->>'description',
-        v_row->>'status', v_row->>'priority', v_today + (v_row->>'start')::integer,
+        CASE v_row->>'status' WHEN 'todo' THEN '할 일' WHEN 'in_progress' THEN '진행 중'
+          WHEN 'done' THEN '완료' ELSE v_row->>'status' END,
+        v_row->>'priority', v_today + (v_row->>'start')::integer,
         v_today + (v_row->>'due')::integer, (v_row->>'estimate')::integer,
         ARRAY(SELECT jsonb_array_elements_text(v_row->'tags')), v_assignees,
         (v_row->>'milestone')::boolean, pg_temp.take(3 + 2 * cardinality(v_assignees)));

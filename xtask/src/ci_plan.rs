@@ -350,6 +350,9 @@ mod tests {
             "crates/db/migrations/202610250001_baseline.sql",
             "deploy/compose.test.yaml",
             "deploy/supabase/test.env",
+            // 개발 준비 SQL 시험은 supabase job에서 돈다(#168).
+            "deploy/postgres/dev-module-seed.sql",
+            "deploy/postgres/dev-ui-data.json",
             "contracts/openapi.json",
             "Cargo.lock",
             "rust-toolchain.toml",
@@ -377,6 +380,7 @@ mod tests {
             ".github/workflows/ci.yml",
             ".github/workflows/release-image.yml",
             "xtask/src/check.rs",
+            "xtask/src/dev.rs",
             "AGENTS.md",
             "CLAUDE.md",
             "docs/AGENTS.md",
