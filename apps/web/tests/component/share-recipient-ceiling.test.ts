@@ -37,16 +37,14 @@ beforeEach(() => {
   vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
   vi.stubGlobal(
     'fetch',
-    vi
-      .fn()
-      .mockImplementation(() =>
-        Promise.resolve(
-          new Response(JSON.stringify(recipient), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        ),
+    vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(recipient), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       ),
+    ),
   );
 });
 afterEach(() => {
@@ -73,7 +71,9 @@ for (const [locale, role, cap] of [
     await fireEvent.input(await screen.findByLabelText(m.documents_email()), {
       target: { value: recipient.email },
     });
-    await fireEvent.click(screen.getByRole('button', { name: m.documents_share_permission() }));
+    await fireEvent.keyDown(screen.getByRole('button', { name: m.documents_share_permission() }), {
+      key: 'ArrowDown',
+    });
     await screen.findByRole('option', { name: m.documents_permission_read() });
     expect(screen.queryByRole('option', { name: m.documents_permission_write() })).toBeNull();
     expect(await screen.findByText(role)).toBeInTheDocument();
