@@ -853,8 +853,9 @@ REVOKE ALL ON FUNCTION fvoci.app_sync_task_series_ids(p_series uuid) FROM PUBLIC
 GRANT ALL ON FUNCTION fvoci.app_sync_task_series_ids(p_series uuid) TO fvoci_app;
 
 
-REVOKE ALL ON FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_authorized_file_refs(p_doc uuid, p_body jsonb, p_editors jsonb, p_author uuid, p_revision integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[], p_file_ref_editors jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[], p_file_ref_editors jsonb) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_system_due_notifications(p_today date, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_system_due_notifications(p_today date, p_ids uuid[]) TO fvoci_app;
