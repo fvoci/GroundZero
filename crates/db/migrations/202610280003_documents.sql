@@ -693,17 +693,23 @@ CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
   BEGIN
     SELECT * INTO v_doc FROM documents WHERE id = NEW.document_id;
     -- 가리키는 버전 행을 참조를 넣기 전에 공유 잠금한다. 범위 밖 참조(다른 조직의 파일)는 기록하지 않는다(D-114).
+    -- 작성자가 파일의 자리(붙은 문서·항목)를 읽지 못하는 참조도 기록하지 않는다(#177 SR1-16). 파일 자체의 휴지통
+    -- 상태는 보지 않아 휴지통 첨부를 가리키는 리비전의 보존(D-56)은 그대로다.
     PERFORM 1 FROM file_versions v
     JOIN (SELECT DISTINCT r.file_id, r.version FROM app_file_refs(NEW.body) r) r
       ON r.file_id = v.file_id AND r.version = v.version
     JOIN files f ON f.id = v.file_id
     WHERE app_file_ref_in_scope(v_doc.workspace_id, v_doc.owner_user_id, f.workspace_id, f.owner_user_id)
+      AND CASE WHEN f.document_id IS NOT NULL THEN app_grade_document(f.document_id, NEW.author)
+               ELSE app_grade_under_item(f.item_id, NEW.author) END <> 'none'
     ORDER BY v.id
     FOR KEY SHARE OF v;
     INSERT INTO document_file_refs (document_id, revision, file_id, version)
     SELECT NEW.document_id, NEW.revision, r.file_id, r.version
     FROM app_file_refs(NEW.body) r JOIN files f ON f.id = r.file_id
     WHERE app_file_ref_in_scope(v_doc.workspace_id, v_doc.owner_user_id, f.workspace_id, f.owner_user_id)
+      AND CASE WHEN f.document_id IS NOT NULL THEN app_grade_document(f.document_id, NEW.author)
+               ELSE app_grade_under_item(f.item_id, NEW.author) END <> 'none'
     ON CONFLICT DO NOTHING;
     RETURN NULL;
   END
