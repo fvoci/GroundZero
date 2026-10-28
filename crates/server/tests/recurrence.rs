@@ -75,7 +75,7 @@ async fn dated_task(app: &Router, user: &TestUser, item: &Value, title: &str, du
     )
     .await
     .json;
-    let r = send(app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
+    let r = send(app, Method::PATCH, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
                  Some(json!({ "base_version": t["version"], "title": title, "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": due, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -246,7 +246,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
     let (status, detail) = repeat(&app, &admin, &root, daily.clone()).await;
     assert_eq!(status, StatusCode::OK, "{detail:?}");
-    assert_eq!(detail["series"]["rule"]["freq"], "daily");
+    assert_eq!(detail["rule"]["freq"], "daily");
     // 기준일~오늘(4개)과 다음 회차 하나.
     let all = tasks(&app, &admin, &item).await;
     let mut dates: Vec<String> = all
@@ -319,7 +319,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     )
     .await
     .json;
-    let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
+    let r = send(&app, Method::PATCH, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
                  Some(json!({ "base_version": fresh["version"], "title": "월간 보고", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": fresh["due_date"], "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -382,7 +382,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     // 멈추면 이미 만든 회차는 남고 예정도 사라진다.
     let (status, stopped) = repeat_from(&app, &admin, &root, Value::Null, daily.clone()).await;
     assert_eq!(status, StatusCode::OK, "{stopped:?}");
-    assert_eq!(stopped["series"]["rule"], Value::Null);
+    assert_eq!(stopped["rule"], Value::Null);
     let cal = send(
         &app,
         Method::GET,
@@ -606,7 +606,7 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
     )
     .await
     .json;
-    let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
+    let r = send(&app, Method::PATCH, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
                  Some(json!({ "base_version": fresh["version"], "title": "정리", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -984,16 +984,13 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
     )
     .await
     .json;
-    let finished = send(&app, Method::PUT, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
+    let finished = send(&app, Method::PATCH, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
         Some(json!({ "base_version": current["version"], "title": "완료 뿌리", "description": "", "status": "완료",
                      "priority": "none", "start_date": null, "due_date": day(today), "estimate_minutes": null,
                      "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(finished.status, StatusCode::OK, "{:?}", finished.json);
-    let done_series = done_rule["series"]["id"].as_str().unwrap().to_owned();
-    for series in [
-        todo_rule["series"]["id"].as_str().unwrap(),
-        done_series.as_str(),
-    ] {
+    let done_series = done_rule["id"].as_str().unwrap().to_owned();
+    for series in [todo_rule["id"].as_str().unwrap(), done_series.as_str()] {
         common::fixture_sql(
             "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
             series,
@@ -1067,7 +1064,7 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
         }
     };
     let done_made = made(done_series.clone()).await;
-    let todo_made = made(todo_rule["series"]["id"].as_str().unwrap().to_owned()).await;
+    let todo_made = made(todo_rule["id"].as_str().unwrap().to_owned()).await;
     owner.close().await;
     assert!(done_made >= 1, "the done-rooted series lost its occurrence");
     assert!(todo_made >= 1, "the todo-rooted series lost its occurrence");
@@ -1093,7 +1090,7 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         let root = dated_task(&app, &admin, &item, "매일", &day(today)).await;
         let (status, rule) = repeat(&app, &admin, &root, daily.clone()).await;
         assert_eq!(status, StatusCode::OK, "{rule:?}");
-        series.push(rule["series"]["id"].as_str().unwrap().to_owned());
+        series.push(rule["id"].as_str().unwrap().to_owned());
         items.push(item["id"].as_str().unwrap().to_owned());
     }
 

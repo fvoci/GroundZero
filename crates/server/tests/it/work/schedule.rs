@@ -57,30 +57,17 @@ async fn task(app: &Router, user: &TestUser, item: &Value, title: &str) -> Value
 }
 
 async fn fetch(app: &Router, user: &TestUser, t: &Value) -> Value {
-    send(
-        app,
-        Method::GET,
-        &format!("/api/tasks/{}", t["id"].as_str().unwrap()),
-        Some(user),
-        None,
-    )
-    .await
-    .json
+    common::task_snapshot(app, user, t["id"].as_str().unwrap()).await
 }
 
 async fn update(app: &Router, user: &TestUser, t: &Value, changes: Value) -> (StatusCode, Value) {
-    let mut body = json!({
-        "base_version": t["version"], "title": t["title"], "description": t["description"],
-        "status": t["status"], "priority": t["priority"], "start_date": t["start_date"],
-        "due_date": t["due_date"], "estimate_minutes": t["estimate_minutes"], "tags": t["tags"],
-        "assignee_ids": [], "milestone": t["milestone"],
-    });
+    let mut body = json!({ "base_version": t["version"] });
     for (k, v) in changes.as_object().unwrap() {
         body[k] = v.clone();
     }
     let r = send(
         app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/tasks/{}", t["id"].as_str().unwrap()),
         Some(user),
         Some(body),
@@ -211,8 +198,8 @@ async fn dependencies_stay_in_one_item_reject_cycles_and_follow_access() {
         None,
     )
     .await;
-    assert_eq!(r.status, StatusCode::OK);
-    assert_eq!(r.json["predecessors"], json!([]));
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    assert_eq!(fetch(&app, &admin, &b).await["predecessors"], json!([]));
 
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
     let actions: Vec<String> = sqlx::query_scalar(
@@ -411,10 +398,25 @@ async fn set_link(
     mut body: Value,
 ) -> common::Reply {
     if body.get("base").is_none() {
-        let current = fetch(app, user, succ).await;
-        body["base"] = current["predecessors"]
+        let current = send(
+            app,
+            Method::GET,
+            &format!(
+                "/api/task-dependencies?task={}",
+                succ["id"].as_str().unwrap()
+            ),
+            Some(user),
+            None,
+        )
+        .await;
+        body["base"] = current
+            .json
             .as_array()
-            .and_then(|links| links.iter().find(|l| l["task_id"] == pred["id"]))
+            .and_then(|links| {
+                links
+                    .iter()
+                    .find(|l| l["predecessor_id"] == pred["id"] && l["successor_id"] == succ["id"])
+            })
             .map_or(
                 Value::Null,
                 |l| json!({ "kind": l["kind"], "lag_days": l["lag_days"] }),
@@ -485,7 +487,7 @@ async fn existing_links_are_finish_to_start_and_stale_link_edits_conflict() {
     let r = set_link(&app, &admin, &a, &b, json!({ "kind": "SS", "lag_days": 2 })).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
     assert_eq!(
-        r.json["predecessors"],
+        fetch(&app, &admin, &b).await["predecessors"],
         json!([{ "task_id": a["id"], "kind": "SS", "lag_days": 2 }])
     );
     // 이미 있는 관계를 "새 관계"로 다시 보내면(편집을 시작한 뒤 다른 곳에서 만든 경우) 덮지 않고 409다.
@@ -652,11 +654,11 @@ async fn changing_a_link_previews_causes_and_moves_approved_tasks_in_one_transac
     .await;
     assert_eq!(done.status, StatusCode::OK, "{:?}", done.json);
     assert_eq!(
-        done.json["predecessors"],
+        fetch(&app, &writer, &b).await["predecessors"],
         json!([{ "task_id": a["id"], "kind": "FS", "lag_days": 3 }])
     );
     assert_eq!(
-        dates(&done.json),
+        dates(&fetch(&app, &writer, &b).await),
         (json!("2026-10-09"), json!("2026-10-10"))
     );
     assert_eq!(fetch(&app, &admin, &c).await["start_date"], "2026-10-11");
@@ -749,7 +751,8 @@ async fn approved_date_moves_are_recomputed_against_the_links_at_save_time() {
     let r = set_link(&app, &admin, &a, &b, json!({ "kind": "SS", "lag_days": 0 })).await;
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(
-        r.json["version"], b["version"],
+        fetch(&app, &admin, &b).await["version"],
+        b["version"],
         "a link change does not bump the task"
     );
     let (status, body) = update(
@@ -813,7 +816,7 @@ async fn copying_an_item_keeps_link_kinds_and_lags() {
     let copy_b = list.iter().find(|t| t["title"] == "B").unwrap();
     assert_ne!(copy_a["id"], a["id"]);
     assert_eq!(
-        copy_b["predecessors"],
+        fetch(&app, &admin, copy_b).await["predecessors"],
         json!([{ "task_id": copy_a["id"], "kind": "FF", "lag_days": 4 }])
     );
 }
@@ -890,8 +893,9 @@ async fn link_conflicts_come_back_as_task_conflict_or_error_body() {
     .await;
     assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.json);
     assert_eq!(r.json["error"], "shift_conflict");
-    assert_eq!(r.json["current"]["id"], b["id"]);
-    assert!(r.json.get("message").is_none());
+    assert_eq!(r.json["current"]["successor_id"], b["id"]);
+    assert_eq!(r.json["changed"], json!(["lag_days"]));
+    assert!(r.json["message"].is_string());
 
     // 보관된 항목: 일반 409(ErrorBody).
     let archived = send(
@@ -936,7 +940,7 @@ async fn date_plan(app: &Router, user: &TestUser, t: &Value, start: Value, due: 
 
 async fn unlink(app: &Router, user: &TestUser, pred: &Value, succ: &Value) {
     let r = send(app, Method::DELETE, &path_of(pred, succ), Some(user), None).await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{:?}", r.json);
 }
 
 /// 미리 본 뒤 관계가 지워져 승인 목록의 업무가 더는 후속이 아니면, 처음부터 잘못된 요청(400)이 아니라 오래된
@@ -1270,7 +1274,7 @@ async fn a_plan_made_stale_by_a_reversed_link_conflicts() {
     let approved = approve(&plan);
     assert_eq!(approved.len(), 1, "{plan:?}");
     let removed = send(&app, Method::DELETE, &path_of(&a, &b), Some(&admin), None).await;
-    assert_eq!(removed.status, StatusCode::OK, "{:?}", removed.json);
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
     assert_eq!(link(&app, &admin, &b, &a).await, StatusCode::OK);
     let (status, body) = update(
         &app,
@@ -1331,8 +1335,8 @@ async fn link_edits_from_a_stale_view_conflict_instead_of_overwriting() {
     assert_eq!(stale.status, StatusCode::CONFLICT, "{:?}", stale.json);
     assert_eq!(stale.json["error"], "link_conflict");
     assert_eq!(
-        stale.json["current"]["predecessors"],
-        json!([{ "task_id": a["id"], "kind": "SS", "lag_days": 3 }])
+        stale.json["current"],
+        json!({ "predecessor_id": a["id"], "successor_id": b["id"], "kind": "SS", "lag_days": 3 })
     );
     assert_eq!(
         fetch(&app, &admin, &b).await["predecessors"],
@@ -1351,7 +1355,7 @@ async fn link_edits_from_a_stale_view_conflict_instead_of_overwriting() {
 
     // 고치는 사이 관계가 지워졌으면 다시 만들지 않는다.
     let removed = send(&app, Method::DELETE, &path_of(&a, &b), Some(&writer), None).await;
-    assert_eq!(removed.status, StatusCode::OK, "{:?}", removed.json);
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
     let revived = set_link(
         &app,
         &admin,

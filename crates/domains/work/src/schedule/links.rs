@@ -15,12 +15,13 @@ use super::planner::{Change, Link, LinkKind, Span, same_shifts};
 use super::preview::{check_lag, item_of, load_graph, plan_graph};
 use crate::state::WorkState;
 use crate::tasks::{
-    EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, load_detail,
+    EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskDependency, load_dependency,
 };
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::UserId;
 use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::UserTx;
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::ExpectedUser;
 
 /// 관계 미리보기·설정 입력.
@@ -50,16 +51,6 @@ pub struct SetPredecessor {
 /// 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건).
 #[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
 pub struct LinkBase {
-    pub kind: LinkKind,
-    #[schema(minimum = 0, maximum = 3650)]
-    pub lag_days: i32,
-}
-
-/// 업무의 선행 관계 하나.
-#[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct TaskLink {
-    #[schema(value_type = String, format = Uuid)]
-    pub task_id: Uuid,
     pub kind: LinkKind,
     #[schema(minimum = 0, maximum = 3650)]
     pub lag_days: i32,
@@ -137,53 +128,32 @@ pub(crate) async fn approved_still_planned(
     Ok(same_shifts(&plan_graph(&rows, &links, change), approved))
 }
 
-/// 승인 목록이 그사이 맞지 않게 됐을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
-pub(super) async fn shift_conflict(
+/// 관계·승인 목록 충돌은 쓰기를 버린 뒤 현재 관계를 읽어 공통 409로 돌려준다.
+async fn dependency_conflict(
     state: &WorkState,
     user: UserId,
     task: Uuid,
+    predecessor: Uuid,
+    error: &'static str,
+    input: &SetPredecessor,
 ) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let current = load_detail(&mut tx, task).await?;
+    let current = load_dependency(&mut tx, predecessor, task).await?;
     tx.commit().await?;
-    Ok((
-        StatusCode::CONFLICT,
-        Json(TaskConflict {
-            error: "shift_conflict",
-            current,
-        }),
+    Ok(StaleWrite::new(
+        error,
+        "the dependency or approved schedule changed",
+        current,
+        &serde_json::json!({ "kind": input.kind, "lag_days": input.lag_days }),
     )
-        .into_response())
+    .into_response())
 }
 
-/// 편집을 시작한 관계(`base`)가 그사이 바뀌었을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
-pub(super) async fn link_conflict(
-    state: &WorkState,
-    user: UserId,
-    task: Uuid,
-) -> Result<Response, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let current = load_detail(&mut tx, task).await?;
-    tx.commit().await?;
-    Ok((
-        StatusCode::CONFLICT,
-        Json(TaskConflict {
-            error: "link_conflict",
-            current,
-        }),
-    )
-        .into_response())
-}
-
-/// 관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-/// - `TaskConflict`(`error: "shift_conflict"` 또는 `"link_conflict"`, `current`): 승인한 재배치가 그사이 맞지 않게
-///   됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.
-/// - `ErrorBody`(`current` 없음): 기대 사용자 불일치(`account_changed`), 보관된 항목,
-///   동시 변경 재시도(40001·40P01), 새 id 부족(FV001, `invalid_state`).
+/// 관계 설정의 409: 지금 관계(지워졌으면 null)와 다른 칸, 또는 계정·보관 등의 일반 오류.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(untagged)]
-pub enum PredecessorConflict {
-    Shift(Box<TaskConflict>),
+pub enum DependencyWriteConflict {
+    Stale(Box<StaleWrite<Option<TaskDependency>>>),
     State(ErrorBody),
 }
 
@@ -196,10 +166,10 @@ pub enum PredecessorConflict {
     params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
     request_body = SetPredecessor,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+    responses((status = 200, body = TaskDependency), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
-              (status = 409, body = PredecessorConflict,
-               description = "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
+              (status = 409, body = DependencyWriteConflict,
+               description = "`shift_conflict`·`link_conflict`면 StaleWrite(현재 관계 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
     tag = "tasks")]
 pub async fn add_predecessor(
     State(state): State<WorkState>,
@@ -227,11 +197,11 @@ pub async fn add_predecessor(
             .map_err(AppError::from_db_function)?;
     if outcome == "shift_conflict" {
         drop(tx);
-        return shift_conflict(&state, user, id).await;
+        return dependency_conflict(&state, user, id, predecessor, "shift_conflict", &input).await;
     }
     if outcome == "link_conflict" {
         drop(tx);
-        return link_conflict(&state, user, id).await;
+        return dependency_conflict(&state, user, id, predecessor, "link_conflict", &input).await;
     }
     if !approved.is_empty() {
         let old = match (old_kind.as_deref().and_then(LinkKind::parse), old_lag) {
@@ -261,25 +231,28 @@ pub async fn add_predecessor(
         .await?
         {
             drop(tx);
-            return shift_conflict(&state, user, id).await;
+            return dependency_conflict(&state, user, id, predecessor, "shift_conflict", &input)
+                .await;
         }
     }
-    let detail = load_detail(&mut tx, id).await?;
+    let dependency = load_dependency(&mut tx, predecessor, id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     tx.commit().await?;
-    Ok(Json(detail).into_response())
+    Ok(Json(dependency).into_response())
 }
 
 /// 선행 업무 지우기(후속 업무 쓰기 권한). 관계를 지우면 제약이 줄 뿐이라 옮길 것이 없다.
 #[utoipa::path(delete, path = "/api/tasks/{task_id}/predecessors/{predecessor_id}", operation_id = "remove_predecessor",
     params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn remove_predecessor(
     State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
-) -> Result<Json<TaskDetail>, AppError> {
+) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_remove_task_dependency($1, $2, $3)")
         .bind(predecessor)
@@ -288,7 +261,6 @@ pub async fn remove_predecessor(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let detail = load_detail(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(detail))
+    Ok(StatusCode::NO_CONTENT)
 }

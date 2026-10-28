@@ -15,8 +15,8 @@ mod planner;
 mod preview;
 
 pub use links::{
-    __path_add_predecessor, __path_remove_predecessor, LinkBase, LinkInput, PredecessorConflict,
-    SetPredecessor, TaskLink, add_predecessor, remove_predecessor,
+    __path_add_predecessor, __path_remove_predecessor, DependencyWriteConflict, LinkBase,
+    LinkInput, SetPredecessor, add_predecessor, remove_predecessor,
 };
 pub(crate) use links::{approved_shifts, approved_still_planned, spans_before};
 pub use planner::{

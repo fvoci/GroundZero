@@ -6,12 +6,11 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use uuid::Uuid;
 
-use super::edit::{Edit, Saved, save_edit};
 use super::model::{
-    CheckedFields, CreateTask, EXPECTED_TASK_USER_DOC, MoveTask, SetTaskParent, TaskConflict,
-    TaskDetail, TaskWriteConflict, UpdateTask, check_fields, validate_status,
+    CreateTask, EXPECTED_TASK_USER_DOC, MoveTask, SetTaskParent, check_fields, validate_status,
 };
-use super::read::load_detail;
+use super::patch::TaskPatchConflict;
+use super::resource::{Task, load_task};
 
 use crate::state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
@@ -25,14 +24,14 @@ use fvoci_http::session::ExpectedUser;
 #[utoipa::path(post, path = "/api/items/{item_id}/tasks", operation_id = "create_task",
     params(("item_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = CreateTask,
-    responses((status = 201, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+    responses((status = 201, body = Task), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; task_deleted: 같은 요청으로 만든 업무가 휴지통에 있음; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn create(
     State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
     Json(input): Json<CreateTask>,
-) -> Result<(StatusCode, Json<TaskDetail>), AppError> {
+) -> Result<(StatusCode, Json<Task>), AppError> {
     let fields = check_fields(
         &state,
         &input.title,
@@ -65,7 +64,7 @@ pub async fn create(
         .fetch_one(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-        let detail = load_detail(&mut tx, id).await?;
+        let detail = load_task(&mut tx, id).await?;
         tx.commit().await?;
         Ok(detail)
     };
@@ -78,80 +77,14 @@ pub async fn create(
     }
 }
 
-/// 업무 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본(입력은 클라이언트가 보존).
-#[utoipa::path(put, path = "/api/tasks/{task_id}", operation_id = "update_task",
-    params(("task_id" = String, Path, format = Uuid),
-           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = UpdateTask,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "conflict·shift_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
-pub async fn update(
-    State(state): State<WorkState>,
-    ExpectedUser(user): ExpectedUser,
-    Path(id): Path<Uuid>,
-    Json(input): Json<UpdateTask>,
-) -> Result<Response, AppError> {
-    let CheckedFields {
-        title,
-        description,
-        start,
-        due,
-        tags,
-    } = check_fields(
-        &state,
-        &input.title,
-        &input.description,
-        input.start_date.as_deref(),
-        input.due_date.as_deref(),
-        input.estimate_minutes,
-        &input.tags,
-    )?;
-    let edit = Edit {
-        title,
-        description,
-        status: validate_status(&input.status)?,
-        priority: input.priority,
-        start,
-        due,
-        estimate_minutes: input.estimate_minutes,
-        tags,
-        assignee_ids: input.assignee_ids,
-        milestone: input.milestone,
-    };
-    let saved = save_edit(
-        &state,
-        user,
-        id,
-        input.base_version,
-        &edit,
-        &input.successor_shifts,
-    )
-    .await?;
-    let mut tx = state.db.begin_as(user).await?;
-    let detail = load_detail(&mut tx, id).await?;
-    tx.commit().await?;
-    let error = match saved {
-        Saved::Updated => return Ok(Json(detail).into_response()),
-        Saved::Conflict => "conflict",
-        Saved::ShiftConflict => "shift_conflict",
-    };
-    Ok((
-        StatusCode::CONFLICT,
-        Json(TaskConflict {
-            error,
-            current: detail,
-        }),
-    )
-        .into_response())
-}
-
 /// 칸반 이동(쓰기 권한). `base_move_version`이 없으면 판과 상관없이 바로 반영한다(D-79). 있으면 행을 잠근 같은
 /// 트랜잭션에서 이동 판을 비교하고, 그사이 열·위치가 바뀌었으면 아무것도 바꾸지 않고 409 `move_conflict`와 지금
 /// 업무를 돌려준다(D-89).
 #[utoipa::path(put, path = "/api/tasks/{task_id}/position",
     params(("task_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = MoveTask,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "move_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
+    responses((status = 200, body = Task), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = TaskPatchConflict, description = "move_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn move_task(
     State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
@@ -176,20 +109,19 @@ pub async fn move_task(
             // 아무것도 바뀌지 않았다(트랜잭션을 버린다). 지금 업무를 새 트랜잭션으로 읽어 함께 돌려준다.
             drop(tx);
             let mut fresh = state.db.begin_as(user).await?;
-            let current = load_detail(&mut fresh, id).await?;
+            let current = load_task(&mut fresh, id).await?;
             fresh.commit().await?;
-            return Ok((
-                StatusCode::CONFLICT,
-                Json(TaskConflict {
-                    error: "move_conflict",
-                    current,
-                }),
+            return Ok(fvoci_http::conflict::StaleWrite::new(
+                "move_conflict",
+                "the task moved since it was read",
+                current,
+                &serde_json::json!({ "status": validate_status(&input.status)? }),
             )
-                .into_response());
+            .into_response());
         }
         return Err(AppError::from_db_function(err));
     }
-    let detail = load_detail(&mut tx, id).await?;
+    let detail = load_task(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(detail).into_response())
 }
@@ -198,14 +130,14 @@ pub async fn move_task(
 #[utoipa::path(put, path = "/api/tasks/{task_id}/parent", operation_id = "set_task_parent",
     params(("task_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = SetTaskParent,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+    responses((status = 200, body = Task), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn set_parent(
     State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetTaskParent>,
-) -> Result<Json<TaskDetail>, AppError> {
+) -> Result<Json<Task>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_set_task_parent($1, $2, $3)")
         .bind(id)
@@ -214,7 +146,7 @@ pub async fn set_parent(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let detail = load_detail(&mut tx, id).await?;
+    let detail = load_task(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(detail))
 }

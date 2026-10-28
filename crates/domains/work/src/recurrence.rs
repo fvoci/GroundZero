@@ -9,18 +9,18 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::state::WorkState;
-use crate::tasks::{EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, load_detail};
+use crate::tasks::{EXPECTED_TASK_USER_DOC, TaskSeries, load_series};
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::ItemId;
 use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::{needed_ids, new_ids};
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::ExpectedUser;
 
 /// 반복 주기.
@@ -111,13 +111,21 @@ pub struct SetTaskRecurrence {
     pub timezone: String,
 }
 
+/// 반복 설정의 409. 반복이 없으면 현재 자원은 null이다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum RuleWriteConflict {
+    Stale(Box<StaleWrite<Option<TaskSeries>>>),
+    State(ErrorBody),
+}
+
 /// 반복 업무 정하기·바꾸기·멈추기(쓰기 권한, 첫 회차에서). 처음 정하면 그 업무가 첫 회차가 되고, 오늘까지의
 /// 회차와 다음 회차를 만든다. 이미 만든 회차는 바꾸지 않는다.
 #[utoipa::path(put, path = "/api/tasks/{task_id}/recurrence", operation_id = "set_task_recurrence",
     params(("task_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = SetTaskRecurrence,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "rule_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
+    responses((status = 200, body = Option<TaskSeries>), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = RuleWriteConflict, description = "rule_conflict면 현재 반복 계열 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn set_task(
     State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
@@ -156,19 +164,18 @@ pub async fn set_task(
         tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = fvoci_core::logging::safe_error(&e), %series, "recurrence sync after rule change failed");
     }
     let mut tx = state.db.begin_as(user).await?;
-    let detail = load_detail(&mut tx, id).await?;
+    let current = load_series(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(crate::tasks::TaskConflict {
-                error: "rule_conflict",
-                current: detail,
-            }),
+        StaleWrite::new(
+            "rule_conflict",
+            "the recurrence rule changed",
+            current,
+            &serde_json::json!({ "rule": rule, "timezone": input.timezone.trim() }),
         )
-            .into_response()
+        .into_response()
     } else {
-        Json(detail).into_response()
+        Json(current).into_response()
     })
 }
 

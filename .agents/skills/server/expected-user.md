@@ -2,7 +2,7 @@
 
 D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위험을 명시"하라고 한다. 이 표가 그 명시다. 적용을 넓힐지는 사용자 결정이며, 이 표는 지금 코드의 모습만 적는다.
 
-- 웹은 GET·HEAD가 아닌 모든 요청에 `x-fvoci-expected-user`를 붙인다(`apps/web/src/lib/api/client.ts`의 `EXPECTED_USER`).
+- 웹은 GET·HEAD가 아닌 모든 요청에 `x-fvoci-expected-user`를 붙인다(`apps/web/src/lib/shared/api/index.ts`의 `EXPECTED_USER`).
 - 서버는 처리기 인자에 `ExpectedUser`(`crates/http/src/session.rs`)가 있으면 머리를 꼭 받아 비교한다(없으면 400).
 - 업무 라우터(`crates/domains/work/src/lib.rs`의 `router`)는 공통 처리 `ExpectedUserIfSent`(같은 파일 `session.rs`)를 건다. GET·HEAD가 아닌 모든 업무 요청에서 머리가 있으면 늘 비교하고(D-96 2026-10-28 개정 (가)), 없으면 아무것도 하지 않는다. 노르웨이숲 태비의 뒤 조각은 자기 도메인 라우터에 같은 처리를 건다.
 - 그 밖의 처리기(`CurrentUser`만 쓰고 공통 처리를 걸지 않은 라우터)는 머리를 보지 않는다.
@@ -15,7 +15,7 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 빠진 경로의 위험은 모두 같은 전제에서만 생긴다.
 
 - 같은 브라우저의 다른 탭에서 계정을 바꾼 직후다.
-- 앞 계정 화면이 보낸 요청이 웹의 감지보다 먼저 나갔다. 감지는 `apps/web/src/lib/features/feedback/FeedbackHost.svelte`의 `api.me()` 확인과 `client.ts`의 전환 중 차단이다.
+- 앞 계정 화면이 보낸 요청이 웹의 감지보다 먼저 나갔다. 감지는 `apps/web/src/lib/features/feedback/FeedbackHost.svelte`의 `api.me()` 확인과 `shared/api/index.ts`의 전환 중 차단이다.
 - 권한은 언제나 세션의 사용자(새 계정)로 판단한다. 새 계정에 그 권한이 없으면 거절된다.
 - 외부 공격자가 일으킬 수 없다.
 
@@ -35,12 +35,12 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | `features/documents.rs`                       | `create_note`(617), `save`(806)                                                              |
 | `features/files.rs`                           | `create_upload`(217)                                                                         |
 | `features/organizations.rs`                   | `set_settings`(477), `set_workspace_limits`(538)                                             |
-| `crates/domains/work/src/tasks/write.rs`      | `create`(30), `update`(87), `move_task`(155), `set_parent`(203), `trash_task`(228)           |
+| `crates/domains/work/src/tasks/write.rs`      | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)           |
 | `crates/domains/work/src/tasks/patch.rs`      | `patch`(194)                                                                                 |
 | `crates/domains/work/src/tasks/checklist.rs`  | `add_checklist`(25), `update_checklist_item`(68), `delete_checklist_item`(100)               |
 | `crates/domains/work/src/task_statuses.rs`    | `create`(165), `update`(199), `delete`(245)                                                  |
-| `crates/domains/work/src/recurrence.rs`       | `set_task`(121), `sync_item`(210)                                                            |
-| `crates/domains/work/src/schedule/links.rs`   | `add_predecessor`(204), `remove_predecessor`(278)                                            |
+| `crates/domains/work/src/recurrence.rs`       | `set_task`(129), `sync_item`(217)                                                            |
+| `crates/domains/work/src/schedule/links.rs`   | `add_predecessor`(174), `remove_predecessor`(251)                                            |
 | `crates/domains/work/src/schedule/preview.rs` | 머리가 필수는 아니다. 보내면 업무 라우터 공통 처리가 비교한다: `plan`(286), `plan_link`(304) |
 | `collab/ws.rs`                                | 실시간 연결의 질의 `expected_user`(50). 누락·형식 오류는 400, 다르면 닫기 코드 4412          |
 

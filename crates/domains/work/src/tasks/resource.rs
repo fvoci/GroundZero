@@ -124,10 +124,21 @@ impl TryFrom<TaskRecord> for Task {
 }
 
 /// 업무 하나. 볼 수 없으면 404.
-pub(super) async fn load_task(tx: &mut UserTx, id: Uuid) -> Result<Task, AppError> {
+pub(crate) async fn load_task(tx: &mut UserTx, id: Uuid) -> Result<Task, AppError> {
     let row: Option<TaskRecord> = sqlx::query_as(&format!("{TASK_SELECT} WHERE t.id = $1"))
         .bind(id)
         .fetch_optional(tx.conn())
         .await?;
     row.ok_or(AppError::NotFound)?.try_into()
+}
+
+/// 항목의 업무를 칸반 열·위치·번호 순서로 읽는다.
+pub(super) async fn load_tasks(tx: &mut UserTx, item: ItemId) -> Result<Vec<Task>, AppError> {
+    let rows: Vec<TaskRecord> = sqlx::query_as(&format!(
+        "{TASK_SELECT} WHERE t.item_id = $1 ORDER BY s.position, t.position, t.number"
+    ))
+    .bind(item)
+    .fetch_all(tx.conn())
+    .await?;
+    rows.into_iter().map(Task::try_from).collect()
 }

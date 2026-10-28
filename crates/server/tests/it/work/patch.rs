@@ -124,7 +124,7 @@ async fn a_patch_changes_only_the_sent_fields_and_null_clears() {
         assert_eq!(kept[field], task[field], "{field} is kept");
     }
     assert_eq!(
-        kept["assignees"][0]["user_id"],
+        common::task_snapshot(&app, &admin, id).await["assignees"][0]["user_id"],
         json!(admin_id),
         "assignees are kept"
     );

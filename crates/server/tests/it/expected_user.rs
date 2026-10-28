@@ -60,7 +60,6 @@ async fn every_task_write_requires_the_user_who_started_it() {
 
     for action in [
         "create",
-        "update",
         "patch",
         "move",
         "parent",
@@ -121,7 +120,7 @@ async fn every_task_write_requires_the_user_who_started_it() {
         )
         .await;
         assert_eq!(checklist.status, StatusCode::OK, "{:?}", checklist.json);
-        let checklist_id = checklist.json["checklist"][0]["id"].as_str().unwrap();
+        let checklist_id = checklist.json[0]["id"].as_str().unwrap();
         let link_uri = format!("{uri}/predecessors/{related}");
         if action == "remove_predecessor" {
             let linked = send(
@@ -164,14 +163,6 @@ async fn every_task_write_requires_the_user_who_started_it() {
                 json!({"base_version": task["version"], "title": "patched"}),
                 StatusCode::OK,
             ),
-            "update" => (
-                Method::PUT,
-                uri.clone(),
-                json!({"base_version": task["version"], "title": "changed", "description": "changed",
-                "status": "할 일", "priority": "high", "start_date": null, "due_date": "2026-01-01", "estimate_minutes": null,
-                "tags": [], "assignee_ids": [], "milestone": false}),
-                StatusCode::OK,
-            ),
             "move" => (
                 Method::PUT,
                 format!("{uri}/position"),
@@ -208,7 +199,12 @@ async fn every_task_write_requires_the_user_who_started_it() {
                 json!({"kind": "FS", "lag_days": 0, "base": null}),
                 StatusCode::OK,
             ),
-            "remove_predecessor" => (Method::DELETE, link_uri, Value::Null, StatusCode::OK),
+            "remove_predecessor" => (
+                Method::DELETE,
+                link_uri,
+                Value::Null,
+                StatusCode::NO_CONTENT,
+            ),
             "recurrence" => (
                 Method::PUT,
                 format!("{uri}/recurrence"),

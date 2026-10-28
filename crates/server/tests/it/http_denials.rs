@@ -163,7 +163,7 @@ async fn readonly_writes_are_forbidden_and_archived_writes_conflict() {
             json!({"request_id":Uuid::now_v7(),"document_id":doc,"body":"denied comment"}),
         ),
         (
-            Method::PUT,
+            Method::PATCH,
             format!("/api/tasks/{task}"),
             json!({"base_version":1,"title":"denied task","description":"","status":"todo","priority":"none","tags":[],"assignee_ids":[],"milestone":false}),
         ),

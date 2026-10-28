@@ -68,13 +68,7 @@ async fn task(app: &Router, user: &TestUser, item: &Value, title: &str) -> Value
 }
 
 fn edit(task: &Value, changes: Value) -> Value {
-    let mut body = json!({
-        "base_version": task["version"], "title": task["title"], "description": task["description"],
-        "status": task["status"], "priority": task["priority"], "start_date": task["start_date"],
-        "due_date": task["due_date"], "estimate_minutes": task["estimate_minutes"], "tags": task["tags"],
-        "milestone": task["milestone"],
-        "assignee_ids": task["assignees"].as_array().unwrap().iter().map(|a| a["user_id"].clone()).collect::<Vec<_>>(),
-    });
+    let mut body = json!({ "base_version": task["version"] });
     for (k, v) in changes.as_object().unwrap() {
         body[k] = v.clone();
     }
@@ -89,18 +83,31 @@ async fn update(
 ) -> (StatusCode, Value) {
     let r = send(
         app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/tasks/{}", task["id"].as_str().unwrap()),
         Some(user),
         Some(edit(task, changes)),
     )
     .await;
-    (r.status, r.json)
+    let body = if r.status.is_success() {
+        common::task_snapshot(app, user, task["id"].as_str().unwrap()).await
+    } else {
+        r.json
+    };
+    (r.status, body)
 }
 
 async fn get(app: &Router, user: &TestUser, uri: &str) -> (StatusCode, Value) {
     let r = send(app, Method::GET, uri, Some(user), None).await;
-    (r.status, r.json)
+    let body = if r.status.is_success()
+        && uri.starts_with("/api/tasks/")
+        && uri["/api/tasks/".len()..].find('/').is_none()
+    {
+        common::task_snapshot(app, user, uri.trim_start_matches("/api/tasks/")).await
+    } else {
+        r.json
+    };
+    (r.status, body)
 }
 
 #[tokio::test]
@@ -165,7 +172,10 @@ async fn tasks_share_the_module_sequence_and_follow_item_access() {
         .collect();
     assert_eq!(refs, vec!["DEV-2", "DEV-4"], "subtask follows its parent");
     let (_, current) = get(&app, &reader, &task_uri).await;
-    assert_eq!(current["access"], "read");
+    assert!(
+        current.get("access").is_none(),
+        "grade belongs to the item resource"
+    );
     assert_eq!(
         update(&app, &reader, &current, json!({ "title": "독자 수정" }))
             .await
@@ -205,7 +215,7 @@ async fn tasks_share_the_module_sequence_and_follow_item_access() {
     )
     .await;
     let (_, archived) = get(&app, &admin, &task_uri).await;
-    assert_eq!(archived["access"], "read");
+    assert!(archived.get("access").is_none());
     assert_eq!(
         update(&app, &admin, &archived, json!({ "title": "보관 중" }))
             .await
@@ -402,17 +412,23 @@ async fn checklists_are_idempotent_and_reader_cannot_toggle() {
     assert_eq!(first.status, StatusCode::OK, "{:?}", first.json);
     let replay = send(&app, Method::POST, &uri, Some(&admin), Some(batch)).await;
     assert_eq!(
-        replay.json["checklist"].as_array().unwrap().len(),
+        replay.json.as_array().unwrap().len(),
         2,
         "replayed batch adds nothing"
     );
-    assert_eq!(replay.json["checklist_done"], 1);
-    assert_eq!(replay.json["checklist_total"], 2);
+    assert_eq!(
+        replay
+            .json
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["checked"] == true)
+            .count(),
+        1
+    );
+    assert_eq!(replay.json.as_array().unwrap().len(), 2);
 
-    let item_id = replay.json["checklist"][1]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let item_id = replay.json[1]["id"].as_str().unwrap().to_owned();
     let toggle = |user: &TestUser| {
         let app = app.clone();
         let user = user.clone();
@@ -608,7 +624,7 @@ async fn checklist_rename_and_toggle_by_two_people_both_stay() {
     assert_eq!(added.status, StatusCode::OK, "{:?}", added.json);
     let entry = format!(
         "/api/checklist-items/{}",
-        added.json["checklist"][0]["id"].as_str().unwrap()
+        added.json[0]["id"].as_str().unwrap()
     );
 
     // 둘 다 "초안 작성 · 미완료"를 본 화면에서: 관리자는 문구만, 작성자는 완료만.
@@ -1082,7 +1098,8 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     );
     let first = send(&app, Method::POST, &uri, Some(&admin), Some(body.clone())).await;
     assert_eq!(first.status, StatusCode::CREATED, "{:?}", first.json);
-    let t = &first.json;
+    let snapshot = common::task_snapshot(&app, &admin, first.json["id"].as_str().unwrap()).await;
+    let t = &snapshot;
     assert_eq!(t["title"], "주간 회의");
     assert_eq!(t["description"], "회의록 정리");
     assert_eq!(t["status"], "진행 중");
@@ -1120,7 +1137,10 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     assert_eq!(replay.json["id"], t["id"]);
     assert_eq!(replay.json["title"], "주간 회의");
     assert_eq!(replay.json["status"], "할 일");
-    assert_eq!(replay.json["assignees"], json!([]));
+    assert_eq!(
+        common::task_snapshot(&app, &admin, replay.json["id"].as_str().unwrap()).await["assignees"],
+        json!([])
+    );
     assert_eq!(replay.json["version"], 2);
     assert_eq!(task_rows(&state, &admin, &item).await.0, 1);
 
@@ -1140,7 +1160,13 @@ async fn a_create_carries_every_field_and_a_replay_returns_the_first_task() {
     for r in &replies {
         assert_eq!(r.status, StatusCode::CREATED, "{:?}", r.json);
         assert_eq!(r.json["id"], replies[0].json["id"]);
-        assert_eq!(r.json["assignees"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            common::task_snapshot(&app, &admin, r.json["id"].as_str().unwrap()).await["assignees"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
     }
     assert!(replies[0].json["completed_at"].is_string());
     // 감사 기록: 첫 업무(만들기 1·담당 1·담당 해제 1) + 이 업무(만들기 1·담당 2).

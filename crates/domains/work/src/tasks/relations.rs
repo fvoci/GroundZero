@@ -246,3 +246,52 @@ pub async fn checklist_items(
             .collect(),
     ))
 }
+
+/// 업무의 체크리스트(명령 응답과 읽기가 같은 자원을 쓴다).
+pub(crate) async fn load_checklist(
+    tx: &mut UserTx,
+    task: Uuid,
+) -> Result<Vec<ChecklistItem>, AppError> {
+    Ok(sqlx::query_as("SELECT id, task_id, text, checked FROM checklist_items WHERE task_id = $1 ORDER BY position, created_at")
+        .bind(task).fetch_all(tx.conn()).await?)
+}
+
+/// 업무에 걸린 반복 계열. 반복이 없으면 없다.
+pub(crate) async fn load_series(
+    tx: &mut UserTx,
+    task: Uuid,
+) -> Result<Option<TaskSeries>, AppError> {
+    let row: Option<(Uuid, Uuid, Option<serde_json::Value>, String)> = sqlx::query_as(
+        "SELECT s.id, s.root_task_id, s.rule, s.timezone FROM task_series s JOIN tasks t ON t.series_id = s.id WHERE t.id = $1")
+        .bind(task).fetch_optional(tx.conn()).await?;
+    row.map(|(id, root_task_id, rule, timezone)| {
+        Ok(TaskSeries {
+            id,
+            root_task_id,
+            rule: rule.map(RecurrenceRule::from_db).transpose()?,
+            timezone,
+        })
+    })
+    .transpose()
+}
+
+/// 한 선행 관계. 충돌 때 이미 지워진 관계면 없다.
+pub(crate) async fn load_dependency(
+    tx: &mut UserTx,
+    predecessor: Uuid,
+    successor: Uuid,
+) -> Result<Option<TaskDependency>, AppError> {
+    let row: Option<(String, i32)> = sqlx::query_as(
+        "SELECT kind, lag_days FROM task_dependencies WHERE predecessor_id = $1 AND successor_id = $2")
+        .bind(predecessor).bind(successor).fetch_optional(tx.conn()).await?;
+    row.map(|(kind, lag_days)| {
+        Ok(TaskDependency {
+            predecessor_id: predecessor,
+            successor_id: successor,
+            kind: LinkKind::parse(&kind)
+                .ok_or_else(|| AppError::Config(format!("unknown dependency kind {kind}")))?,
+            lag_days,
+        })
+    })
+    .transpose()
+}

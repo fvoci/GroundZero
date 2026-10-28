@@ -405,7 +405,7 @@ async fn restore_measure_generate() {
                 ok(
                     &app,
                     &owner,
-                    Method::PUT,
+                    Method::PATCH,
                     &format!("/api/tasks/{id}"),
                     json!({ "base_version": task["version"], "title": task["title"], "description": task["description"],
                              "status": task["status"], "priority": task["priority"], "start_date": task["start_date"],

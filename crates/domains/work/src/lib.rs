@@ -31,7 +31,6 @@ pub use state::WorkState;
         tasks::assignable,
         tasks::get,
         tasks::create,
-        tasks::update,
         tasks::move_task,
         tasks::set_parent,
         tasks::add_checklist,
@@ -54,21 +53,17 @@ pub use state::WorkState;
         tasks::TaskPriority,
         tasks::Assignee,
         tasks::ChecklistItem,
-        tasks::TaskWithRelations,
         tasks::Task,
         tasks::TaskAssignee,
         tasks::TaskDependency,
         tasks::PatchTask,
         tasks::TaskPatchConflict,
-        tasks::TaskDetail,
         tasks::CreateTask,
-        tasks::UpdateTask,
         tasks::MoveTask,
         tasks::SetTaskParent,
         tasks::NewChecklistItem,
         tasks::AddChecklist,
         tasks::UpdateChecklistItem,
-        tasks::TaskConflict,
         tasks::SuccessorShift,
         schedule::SchedulePreviewInput,
         schedule::ShiftProposal,
@@ -81,8 +76,8 @@ pub use state::WorkState;
         schedule::LinkInput,
         schedule::SetPredecessor,
         schedule::LinkBase,
-        schedule::PredecessorConflict,
-        schedule::TaskLink,
+        schedule::DependencyWriteConflict,
+        recurrence::RuleWriteConflict,
         recurrence::Frequency,
         recurrence::RecurrenceRule,
         recurrence::SetTaskRecurrence,
@@ -122,7 +117,6 @@ where
         .route(
             "/tasks/{task_id}",
             get(tasks::get)
-                .put(tasks::update)
                 .patch(tasks::patch)
                 .delete(tasks::trash_task),
         )

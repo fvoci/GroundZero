@@ -109,12 +109,12 @@ async fn relation_reads_cover_one_item_or_one_task_and_hide_what_the_reader_cann
     let checklist_a = send(
         &app,
         Method::GET,
-        &format!("/api/tasks/{first}"),
+        &format!("/api/checklist-items?task={first}"),
         Some(&admin),
         None,
     )
     .await
-    .json["checklist"][0]["id"]
+    .json[0]["id"]
         .as_str()
         .unwrap()
         .to_owned();

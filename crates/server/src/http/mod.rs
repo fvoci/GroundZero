@@ -1311,44 +1311,6 @@ mod tests {
         );
     }
 
-    /// 관계 설정의 409는 두 모양이다(D-91): 승인 목록이 맞지 않으면 `TaskConflict`, 보관·동시 변경·id 부족이면
-    /// `ErrorBody`. 계약이 둘 다 적고, 두 스키마가 실제 응답의 필수 칸을 갖는지 본다.
-    #[test]
-    fn the_link_conflict_is_task_conflict_or_error_body() {
-        let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
-        let conflict = &doc["paths"]["/api/tasks/{task_id}/predecessors/{predecessor_id}"]["put"]["responses"]
-            ["409"]["content"]["application/json"]["schema"];
-        assert_eq!(
-            conflict,
-            &serde_json::json!({ "$ref": "#/components/schemas/PredecessorConflict" })
-        );
-        let schemas = &doc["components"]["schemas"];
-        let one_of: Vec<&str> = schemas["PredecessorConflict"]["oneOf"]
-            .as_array()
-            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
-            .unwrap_or_default();
-        assert_eq!(
-            one_of,
-            [
-                "#/components/schemas/TaskConflict",
-                "#/components/schemas/ErrorBody"
-            ]
-        );
-        let required = |name: &str| -> Vec<String> {
-            schemas[name]["required"]
-                .as_array()
-                .map(|v| {
-                    v.iter()
-                        .filter_map(|s| s.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-        assert!(required("TaskConflict").iter().any(|k| k == "current"));
-        assert!(!required("ErrorBody").iter().any(|k| k == "current"));
-        assert!(required("ErrorBody").iter().any(|k| k == "message"));
-    }
-
     /// 문서 저장의 409는 두 모양이다(#60): 리비전 충돌이면 `ConflictBody`, `account_changed`·`invalid_state`면
     /// `ErrorBody`. 기대 사용자 머리는 적용 경로(문서 저장·내 노트 만들기)에서 필수다.
     #[test]

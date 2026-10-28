@@ -6,7 +6,7 @@
 //! 앱 공급 UUIDv7(D-88)과 모든 칸을 한 번에 받는 만들기(D-105)의 SQL 정본은 `crates/db/migrations/`에 있다.
 //!
 //! 나눔: `resource` 업무 자원, `relations` 관계 모음 읽기, `patch` 고친 칸만 보내는 고치기 명령, `edit` 고치기의 저장
-//! 한 번, `model` 명령 모양과 칸 검증, `read` 옛 읽기, `write` 업무 명령, `checklist` 체크리스트 명령.
+//! 한 번, `model` 명령 모양과 칸 검증, `read` 자원 읽기, `write` 업무 명령, `checklist` 체크리스트 명령.
 
 mod checklist;
 mod edit;
@@ -24,3 +24,5 @@ pub use read::*;
 pub use relations::*;
 pub use resource::Task;
 pub use write::*;
+
+pub(crate) use relations::{load_dependency, load_series};

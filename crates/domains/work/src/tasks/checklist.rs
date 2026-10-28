@@ -6,10 +6,10 @@ use axum::http::StatusCode;
 use uuid::Uuid;
 
 use super::model::{
-    AddChecklist, EXPECTED_TASK_USER_DOC, MAX_CHECKLIST_BATCH, NewChecklistItem, TaskDetail,
+    AddChecklist, ChecklistItem, EXPECTED_TASK_USER_DOC, MAX_CHECKLIST_BATCH, NewChecklistItem,
     UpdateChecklistItem,
 };
-use super::read::load_detail;
+use super::relations::load_checklist;
 use crate::state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::validate::validate_title;
@@ -20,14 +20,14 @@ use fvoci_http::session::ExpectedUser;
 #[utoipa::path(post, path = "/api/tasks/{task_id}/checklist",
     params(("task_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = AddChecklist,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+    responses((status = 200, body = [ChecklistItem]), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn add_checklist(
     State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<AddChecklist>,
-) -> Result<Json<TaskDetail>, AppError> {
+) -> Result<Json<Vec<ChecklistItem>>, AppError> {
     if input.items.len() > MAX_CHECKLIST_BATCH {
         return Err(AppError::invalid(
             "items",
@@ -53,7 +53,7 @@ pub async fn add_checklist(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    let detail = load_detail(&mut tx, id).await?;
+    let detail = load_checklist(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(detail))
 }

@@ -65,7 +65,7 @@ async fn task(
     )
     .await
     .json;
-    let r = send(app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
+    let r = send(app, Method::PATCH, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
                  Some(json!({ "base_version": t["version"], "title": title, "description": "", "status": status,
                               "priority": "none", "start_date": null, "due_date": due, "estimate_minutes": null,
                               "tags": [], "assignee_ids": assignees, "milestone": false }))).await;
