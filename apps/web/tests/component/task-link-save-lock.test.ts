@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 
@@ -64,7 +65,7 @@ function setUp(): { release: (ok: boolean) => void } {
   vi.spyOn(work, 'task').mockResolvedValue({ ...build, checklist: [] });
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   vi.spyOn(work, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
   let release: (ok: boolean) => void = () => undefined;
   setPredecessor = vi.spyOn(work, 'setPredecessor').mockImplementation(

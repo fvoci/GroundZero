@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -105,7 +106,7 @@ describe('create forms while the request is in flight', () => {
     localStorage.setItem(org.key('quick-add-item'), item.id);
     otherTabDraft('home-quick-task:org-1', { title: '다른 탭 업무', item: item.id, pending: null });
     vi.spyOn(api, 'home').mockResolvedValue(home);
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     const request = held<never>();
     const add = vi.spyOn(work, 'createQuickTask').mockReturnValue(request.promise);
     render(HomeDashboard, { workspaces: [] });

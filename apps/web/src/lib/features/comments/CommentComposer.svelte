@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { type CommentTarget } from '$lib/features/activity/api';
   import { onDestroy } from 'svelte';
 
-  import type { CommentTarget } from '$lib/api/client';
   import { newRequestId } from '$lib/api/client';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';

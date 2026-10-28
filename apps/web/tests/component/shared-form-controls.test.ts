@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
@@ -77,7 +78,7 @@ describe('task board fields use the shared controls', () => {
 
 describe('comment boxes use the shared Textarea', () => {
   it('draws the new comment and reply boxes with it, and still focuses the reply box when opened', async () => {
-    vi.spyOn(api, 'comments').mockResolvedValue([
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([
       {
         id: 'c1',
         parent_id: null,

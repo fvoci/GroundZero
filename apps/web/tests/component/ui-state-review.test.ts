@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { MembersView, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -52,7 +53,7 @@ const view: MembersView = {
 describe('audit', () => {
   it('drops the previous workspace entries when the workspace changes', async () => {
     const other: Workspace = { ...workspace, id: 'ws-2', name: '다른 곳' };
-    vi.spyOn(api, 'audit')
+    vi.spyOn(activityApi, 'audit')
       .mockResolvedValueOnce([
         {
           id: 'a-1',
