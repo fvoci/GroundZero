@@ -175,6 +175,9 @@ export function clearLegacyRecordDrafts(): void {
 
 /** Other tabs can still run an older release; attach for the App lifetime. */
 export function attachRecordDraftCleanup(): () => void {
+  function onVisible(): void {
+    if (document.visibilityState === 'visible') clearLegacyRecordDrafts();
+  }
   function onStorage(event: StorageEvent): void {
     if (event.key === null) return;
     try {
@@ -186,7 +189,11 @@ export function attachRecordDraftCleanup(): () => void {
     clearLegacyRecordDraftAt(event.key, event.newValue);
   }
   window.addEventListener('storage', onStorage);
+  window.addEventListener('focus', clearLegacyRecordDrafts);
+  document.addEventListener('visibilitychange', onVisible);
   return () => {
     window.removeEventListener('storage', onStorage);
+    window.removeEventListener('focus', clearLegacyRecordDrafts);
+    document.removeEventListener('visibilitychange', onVisible);
   };
 }

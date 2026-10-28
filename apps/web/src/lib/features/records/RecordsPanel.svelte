@@ -17,7 +17,7 @@
   import { Button } from '$lib/ui/button';
 
   import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
-  import { normalizeRecordDraft } from './legacy-drafts';
+  import { clearLegacyRecordDrafts, normalizeRecordDraft } from './legacy-drafts';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, parseRecordForm, recordWriting, summary, toInput } from './records';
@@ -133,7 +133,10 @@
       JSON.stringify(settings(form)) !== JSON.stringify(settings(baseForm())),
     busy: () => busy,
   });
-  onMount(draft.attach);
+  onMount(() => {
+    clearLegacyRecordDrafts();
+    return draft.attach();
+  });
   let reloadKey = $state(0);
 
   const current = $derived(defs.find((d) => d.kind === selected));
