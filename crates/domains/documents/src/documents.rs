@@ -10,7 +10,7 @@
 //! 충돌 (D-53): 저장 요청의 `base_revision`이 현재 리비전과 다르면 409와 함께 서버 최신본을 돌려준다.
 //! 클라이언트는 초안을 버리지 않는다. 같은 `request_id`의 재시도는 이미 만든 리비전을 돌려준다.
 
-pub use fvoci_documents::model::{
+pub use crate::model::{
     AcknowledgedPreview, ConflictBody, CopyDocument, CreateDocument, CreateShare, Document,
     DocumentSettings, DocumentSummary, DocumentTemplate, MoveAccessChange, MoveConflict,
     MoveDocument, MoveOutcome, MovePreview, MoveReply, MoveTarget, SaveConflict, SaveDocument,
@@ -25,26 +25,26 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::collab::room::MoveRequest;
-use crate::config::Limits;
-use crate::http::AppState;
-use crate::http::cache;
+use crate::state::CommittedMove;
+use crate::state::DocumentLimits as Limits;
+use crate::state::DocumentsState;
+use crate::state::MoveRequest;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
 use fvoci_db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
-use fvoci_documents::state::CommittedMove;
+use fvoci_http::cache;
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;
 
-/// 문서에 대한 현재 사용자의 등급. 모든 대상의 등급 타입은 하나다(`crate::access::Grade`, D-113).
-pub use crate::access::Grade as Access;
+/// 문서에 대한 현재 사용자의 등급. 모든 대상의 등급 타입은 하나다(`fvoci_db::access::Grade`, D-113).
+pub use fvoci_db::access::Grade as Access;
 
 /// 현재 사용자의 권한. 볼 수 없으면 `None`.
 pub async fn access(tx: &mut UserTx, id: DocumentId) -> Result<Option<Access>, AppError> {
-    crate::access::grade(tx, crate::access::Kind::Document, id).await
+    fvoci_db::access::grade(tx, fvoci_db::access::Kind::Document, id).await
 }
 
 /// 관리 목록은 SQL의 관리 판단(현재 등급 + 보관 중 관리자 예외)을 따른다.
@@ -64,7 +64,7 @@ pub async fn require_manager(tx: &mut UserTx, id: DocumentId) -> Result<(), AppE
 }
 
 /// 기대 사용자 머리의 계약 설명(OpenAPI).
-pub(crate) const EXPECTED_USER_DOC: &str = "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 \
+pub const EXPECTED_USER_DOC: &str = "이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 \
     아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 \
     아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), \
     업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. \
@@ -279,24 +279,24 @@ fn check_reference_node(node: &serde_json::Map<String, Value>) -> Result<(), App
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub(crate) struct DocRow {
+pub struct DocRow {
     id: DocumentId,
     workspace_id: Option<WorkspaceId>,
     item_id: Option<ItemId>,
     parent_id: Option<DocumentId>,
     placement: String,
     reference: Option<String>,
-    pub(crate) title: String,
-    pub(crate) body: Value,
+    pub title: String,
+    pub body: Value,
     schema_version: i32,
-    pub(crate) revision: i32,
+    pub revision: i32,
     updated_at: OffsetDateTime,
     visibility: String,
     allow_copy: bool,
     can_manage: bool,
     can_delete: bool,
     is_template: bool,
-    pub(crate) realtime: bool,
+    pub realtime: bool,
     can_export: bool,
 }
 
@@ -347,10 +347,7 @@ async fn load(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRow>, AppErro
 }
 
 /// 행을 잠그고 읽는다. 같은 문서의 저장은 직렬화되어 재시도 판단과 리비전 비교가 최신 행 기준이 된다.
-pub(crate) async fn load_for_update(
-    tx: &mut UserTx,
-    id: DocumentId,
-) -> Result<Option<DocRow>, AppError> {
+pub async fn load_for_update(tx: &mut UserTx, id: DocumentId) -> Result<Option<DocRow>, AppError> {
     let row = sqlx::query_as(&format!(
         "SELECT {DOC_COLUMNS} FROM documents WHERE id = $1 FOR UPDATE"
     ))
@@ -411,12 +408,12 @@ pub(crate) fn to_summaries(rows: Vec<SummaryRow>) -> Vec<DocumentSummary> {
     params(("workspace_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [DocumentSummary]), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn list_wiki(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
+    fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Workspace, ws).await?;
     let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
         "SELECT {SUMMARY_COLUMNS} FROM documents
          WHERE workspace_id = $1 AND placement = 'wiki' ORDER BY {TREE_ORDER}"
@@ -436,12 +433,12 @@ pub async fn list_wiki(
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "다른 조직 공간의 템플릿")), tag = "documents")]
 pub async fn create_wiki(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<CreateDocument>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let title = validate_title(&input.title, state.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let grade: String = sqlx::query_scalar("SELECT app_access('workspace', $1)")
@@ -463,7 +460,7 @@ pub async fn create_wiki(
                 .bind(SCHEMA_VERSION)
                 .bind(body)
                 .bind(input.parent_id)
-                .bind(max_depth(&state.config.limits))
+                .bind(max_depth(&state.limits))
                 .bind(new_ids(4))
                 .fetch_one(tx.conn())
                 .await
@@ -490,7 +487,7 @@ pub async fn create_wiki(
 #[utoipa::path(get, path = "/api/me/notes",
     responses((status = 200, body = [DocumentSummary]), (status = 401, body = ErrorBody)), tag = "documents")]
 pub async fn my_notes(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -514,11 +511,11 @@ pub async fn my_notes(
               (status = 409, body = ErrorBody, description = "`account_changed`: 기대 사용자가 세션의 사용자와 다름(아무것도 만들지 않음)")),
     tag = "documents")]
 pub async fn create_note(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     ExpectedUser(user): ExpectedUser,
     Json(input): Json<CreateDocument>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let title = validate_title(&input.title, state.limits.max_title_chars, "title")?;
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
         let body = initial_body(&mut tx, &input, NewDocumentPlace::PersonalNote).await?;
@@ -530,7 +527,7 @@ pub async fn create_note(
                 .bind(SCHEMA_VERSION)
                 .bind(body)
                 .bind(input.parent_id)
-                .bind(max_depth(&state.config.limits))
+                .bind(max_depth(&state.limits))
                 .bind(new_ids(3))
                 .bind(input.template_id)
                 .fetch_one(tx.conn())
@@ -555,8 +552,8 @@ pub async fn create_note(
     responses((status = 200, body = [SharedDocument]), (status = 400, body = ErrorBody),
               (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn shared_with_me(
-    State(state): State<AppState>,
-    scope: crate::features::organizations::OrgScope,
+    State(state): State<DocumentsState>,
+    scope: fvoci_http::organization::OrgScope,
 ) -> Result<Json<Vec<SharedDocument>>, AppError> {
     let mut tx = state.db.begin_as(scope.user).await?;
     let rows: Vec<(DocumentId, String, String, String, OffsetDateTime)> = sqlx::query_as(
@@ -627,7 +624,7 @@ pub(crate) fn document_reply(user: UserId, doc: &Document) -> Result<Response, A
               (status = 304, description = "바뀌지 않음", headers(("ETag" = String))),
               (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     headers: HeaderMap,
@@ -644,7 +641,7 @@ pub async fn get(
     let mut response = with_etag(response, &etag);
     response.headers_mut().insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static(cache::PRIVATE_REVALIDATE),
+        HeaderValue::from_static("private, no-cache, no-transform"),
     );
     Ok(response)
 }
@@ -691,14 +688,14 @@ pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppE
                description = "`conflict`면 ConflictBody(서버 최신본 포함). `account_changed`(기대 사용자가 세션의 사용자와 다름)·`invalid_state`(실시간 편집 중 본문 변경 등)면 ErrorBody. 어느 쪽도 아무것도 바꾸지 않았다"),
               (status = 412, body = ConflictBody)), tag = "documents")]
 pub async fn save(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<DocumentId>,
     headers: HeaderMap,
     Json(input): Json<SaveDocument>,
 ) -> Result<Response, AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
-    validate_body(&input.body, &state.config.limits)?;
+    let title = validate_title(&input.title, state.limits.max_title_chars, "title")?;
+    validate_body(&input.body, &state.limits)?;
 
     let mut tx = state.db.begin_as(user).await?;
     let (access, current, realtime) = super::document_locks::for_save(&mut tx, id).await?;
@@ -776,7 +773,7 @@ pub async fn save(
 /// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 저장 API와 실시간 편집의
 /// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다. `edited_by`: 실시간 방이 고친
 /// 사람 대신 남기는 리비전의 실제 편집자(D-95). 작성자는 늘 이 트랜잭션의 사용자다(`document_revisions_insert`).
-pub(crate) async fn write_revision(
+pub async fn write_revision(
     tx: &mut UserTx,
     id: DocumentId,
     title: &str,
@@ -874,20 +871,13 @@ async fn set_parent_in(
     responses((status = 200, body = Document), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn set_parent(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<SetParent>,
 ) -> Result<Json<Document>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    set_parent_in(
-        &mut tx,
-        &state.config.limits,
-        id,
-        input.parent_id,
-        input.before_id,
-    )
-    .await?;
+    set_parent_in(&mut tx, &state.limits, id, input.parent_id, input.before_id).await?;
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(to_document(row, access)))
@@ -904,7 +894,7 @@ pub async fn set_parent(
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn set_settings(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<DocumentSettings>,
@@ -929,7 +919,7 @@ pub async fn set_settings(
     responses((status = 200, body = [Share]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn list_shares(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<Share>>, AppError> {
@@ -952,12 +942,12 @@ pub async fn list_shares(
     responses((status = 201, body = Share), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn create_share(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<CreateShare>,
 ) -> Result<(StatusCode, Json<Share>), AppError> {
-    let email = crate::features::members::validate_email(&input.email)?;
+    let email = fvoci_core::validate::validate_email(&input.email)?;
     let mut tx = state.db.begin_as(user).await?;
     let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4, $5)")
         .bind(id)
@@ -984,7 +974,7 @@ pub async fn create_share(
     params(("share_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn delete_share(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(share): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -1010,12 +1000,12 @@ pub async fn delete_share(
     responses((status = 201, body = Document), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn copy(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<CopyDocument>,
 ) -> Result<(StatusCode, Json<Document>), AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
+    let title = validate_title(&input.title, state.limits.max_title_chars, "title")?;
     let mut tx = state.db.begin_as(user).await?;
     let new_id: DocumentId = sqlx::query_scalar("SELECT app_copy_document($1, $2, $3, $4, $5)")
         .bind(id)
@@ -1087,7 +1077,7 @@ async fn preview(
     responses((status = 200, body = MovePreview), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn move_preview(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<MoveTarget>,
@@ -1108,7 +1098,7 @@ pub async fn move_preview(
     responses((status = 200, body = MoveOutcome), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = MoveConflict)), tag = "documents")]
 pub async fn move_document(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<MoveDocument>,
@@ -1134,8 +1124,8 @@ pub async fn move_document(
         input,
     };
     match state
-        .collab
-        .move_document(&state.db, &state.config.limits, request)
+        .runtime
+        .move_document(&state.db, &state.limits, request)
         .await?
     {
         MoveReply::Moved { outcome, .. } => Ok(Json(outcome).into_response()),
@@ -1177,7 +1167,7 @@ fn move_lock_error(err: sqlx::Error) -> AppError {
 
 /// 이동 트랜잭션(잠금 → 미리보기 다시 계산·확인 → 옮김). 열린 방이 있으면 방이 자기 명령 안에서 부르고, 없으면 요청
 /// 처리기가 방이 새로 열리지 않게 막은 채 부른다(`Rooms::move_document`). 잠금은 `LOCK_LIMIT`까지만 기다린다.
-pub(crate) async fn move_in_db(
+pub async fn move_in_db(
     db: &Db,
     user: UserId,
     id: DocumentId,
@@ -1263,7 +1253,7 @@ async fn visible_document(tx: &mut UserTx, id: DocumentId) -> Result<Option<Docu
 }
 
 /// 옮긴 뒤 방이 리비전을 더 남겼을 때 이동의 답에 넣을 지금 문서(옮긴 사람이 볼 수 있으면).
-pub(crate) async fn document_for(
+pub async fn document_for(
     db: &Db,
     user: UserId,
     id: DocumentId,
@@ -1282,13 +1272,13 @@ pub(crate) async fn document_for(
 #[utoipa::path(get, path = "/api/document-templates", operation_id = "document_templates", params(TemplateQuery),
     responses((status = 200, body = [DocumentTemplate]), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn templates(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Query(query): Query<TemplateQuery>,
 ) -> Result<Json<Vec<DocumentTemplate>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     if let Some(ws) = query.workspace_id {
-        crate::access::require_visible(&mut tx, crate::access::Kind::Workspace, ws).await?;
+        fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Workspace, ws).await?;
     }
     let rows: Vec<(DocumentId, String, Option<String>, bool)> = sqlx::query_as(
         "SELECT id, title, app_document_reference(id), owner_user_id IS NOT NULL FROM documents
@@ -1317,7 +1307,7 @@ pub async fn templates(
     params(("document_id" = String, Path, format = Uuid)), request_body = SetDocumentTemplate,
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn set_template(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<SetDocumentTemplate>,

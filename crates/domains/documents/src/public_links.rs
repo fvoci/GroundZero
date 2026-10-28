@@ -10,11 +10,11 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::accounts::random_token;
-use crate::features::documents::require_manager;
-use crate::http::AppState;
+use crate::documents::require_manager;
+use crate::state::DocumentsState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
+use fvoci_core::random::random_token;
 use fvoci_db::new_ids;
 use fvoci_http::session::{CurrentUser, token_hash};
 
@@ -71,7 +71,7 @@ pub struct PublicDocument {
     responses((status = 200, body = [PublicLink]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn list(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<PublicLink>>, AppError> {
@@ -104,7 +104,7 @@ pub async fn list(
     responses((status = 201, body = CreatedPublicLink), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<CreatePublicLink>,
@@ -121,7 +121,6 @@ pub async fn create(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     let url = state
-        .config
         .public_url
         .join(&format!("/p/{token}"))
         .map_err(|e| AppError::Config(format!("public link url: {e}")))?
@@ -141,7 +140,7 @@ pub async fn create(
     params(("link_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn revoke(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(link): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -161,7 +160,7 @@ pub async fn revoke(
     params(("token" = String, Path)),
     responses((status = 200, body = PublicDocument), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn view(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     Path(token): Path<String>,
 ) -> Result<Response, AppError> {
     if token.len() > 128 {
@@ -177,7 +176,7 @@ pub async fn view(
     tx.commit().await?;
     let (title, mut body, schema_version, updated_at) = row.ok_or(AppError::NotFound)?;
     // 공개 보기는 로그인하지 않은 사람에게 내부 id를 내보내지 않는다. 참조 노드는 자리표시 글자로 바꾼다.
-    crate::features::references::strip_references(&mut body);
+    crate::references::strip_references(&mut body);
     let doc = PublicDocument {
         title,
         body,

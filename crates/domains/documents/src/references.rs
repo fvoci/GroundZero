@@ -11,8 +11,8 @@ use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::documents::access;
-use crate::http::AppState;
+use crate::documents::access;
+use crate::state::DocumentsState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, WorkspaceId};
 use fvoci_db::UserTx;
@@ -70,7 +70,7 @@ async fn backlinks_to(
     params(("document_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
 pub async fn document_backlinks(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<Backlink>>, AppError> {
@@ -86,7 +86,7 @@ pub async fn document_backlinks(
     params(("task_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
 pub async fn task_backlinks(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<Backlink>>, AppError> {
@@ -108,7 +108,7 @@ pub async fn task_backlinks(
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
 pub async fn item_backlinks(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<ItemId>,
 ) -> Result<Json<Vec<Backlink>>, AppError> {

@@ -14,13 +14,13 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::collab::room::RestoreRequest;
-use crate::config::Limits;
-use crate::features::documents::{
+use crate::documents::{
     ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
     load_with_access, lock_limit_error, to_document, validate_body,
 };
-use crate::http::AppState;
+use crate::state::DocumentLimits as Limits;
+use crate::state::DocumentsState;
+use crate::state::RestoreRequest;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
 use fvoci_core::validate::validate_title;
@@ -98,7 +98,7 @@ type SummaryRow = (
     params(("document_id" = String, Path, format = Uuid), RevisionPage),
     responses((status = 200, body = [RevisionSummary]), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn list(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Query(page): Query<RevisionPage>,
@@ -151,7 +151,7 @@ type RevisionRow = (
     params(("document_id" = String, Path, format = Uuid), ("revision" = i32, Path)),
     responses((status = 200, body = Revision), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path((id, revision)): Path<(DocumentId, i32)>,
 ) -> Result<Json<Revision>, AppError> {
@@ -224,7 +224,7 @@ pub struct ExportRequest {
     responses((status = 200, body = Revision), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn export(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path((id, revision)): Path<(DocumentId, i32)>,
     Json(input): Json<ExportRequest>,
@@ -274,7 +274,7 @@ pub enum RestoreConflict {
                description = "기준이 지났으면 ConflictBody(최신본 포함), 실시간 편집을 먼저 남기지 못했거나 잠금 한도를 넘었으면 ErrorBody(`invalid_state`)")),
     tag = "documents")]
 pub async fn restore(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path((id, revision)): Path<(DocumentId, i32)>,
     Json(input): Json<RestoreRevision>,
@@ -306,8 +306,8 @@ pub async fn restore(
     }
     tx.commit().await?;
     let outcome = state
-        .collab
-        .restore(&state.db, &state.config.limits, request)
+        .runtime
+        .restore(&state.db, &state.limits, request)
         .await?;
     let mut tx = state.db.begin_as(user).await?;
     let (row, access) = load_with_access(&mut tx, id).await?;
@@ -320,7 +320,7 @@ pub async fn restore(
 }
 
 /// 복원 SQL: 한도 확인 뒤 `app_restore_document_revision`(권한·기준 확인 포함). `restored`·`unchanged`·`conflict`.
-pub(crate) async fn restore_in_db(
+pub async fn restore_in_db(
     db: &Db,
     limits: &Limits,
     request: &RestoreRequest,
