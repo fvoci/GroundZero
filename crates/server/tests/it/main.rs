@@ -27,6 +27,7 @@ mod archived_management;
 mod audit;
 mod backup;
 mod cache;
+mod calendar;
 mod comment_archive_race;
 mod comment_flags;
 mod conflict_contracts;

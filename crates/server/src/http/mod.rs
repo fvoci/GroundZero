@@ -22,9 +22,9 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
-    members, modules, organizations, public_links, records, references, revisions, search_api,
-    study, time_tracking, trash, workspaces, zotero,
+    accounts, audit, comments, courses, documents, export, files, home, item_profile, members,
+    modules, organizations, public_links, records, references, revisions, search_api, study,
+    time_tracking, trash, workspaces, zotero,
 };
 use crate::features::{activity, notifications};
 
@@ -93,6 +93,14 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
                     build: build_info::CURRENT,
                 }),
             )
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_calendar::CalendarState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
         }
     }
 }
@@ -278,7 +286,6 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
-        events::calendar,
         time_tracking::current,
         time_tracking::start,
         time_tracking::action,
@@ -458,13 +465,6 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        events::CalendarTask,
-        events::CalendarItem,
-        events::CalendarDate,
-        events::CalendarDateKind,
-        events::Calendar,
-        events::EventOccurrence,
-        events::ProjectedTask,
         time_tracking::TimeKind,
         time_tracking::TargetKind,
         time_tracking::TargetInput,
@@ -655,6 +655,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_calendar::CalendarApi::openapi());
     }
 }
 
@@ -715,6 +716,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_calendar::router())
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -894,7 +896,6 @@ pub fn router(state: AppState) -> Router {
             "/documents/{document_id}/parent",
             put(documents::set_parent),
         )
-        .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
         .route(
             "/me/timer",
             get(time_tracking::current).post(time_tracking::start),
