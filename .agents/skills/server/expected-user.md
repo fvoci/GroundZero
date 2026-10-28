@@ -30,22 +30,22 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 
 ## 적용된 경로
 
-| 파일                                          | 처리기(줄)                                                                                   |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `features/documents.rs`                       | `create_note`(617), `save`(806)                                                              |
-| `features/files.rs`                           | `create_upload`(217)                                                                         |
-| `features/organizations.rs`                   | `set_settings`(477), `set_workspace_limits`(538)                                             |
-| `crates/domains/work/src/tasks/write.rs`      | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)                          |
-| `crates/domains/work/src/tasks/patch.rs`      | `patch`(194)                                                                                 |
-| `crates/domains/work/src/tasks/checklist.rs`  | `add_checklist`(25), `update_checklist_item`(68), `delete_checklist_item`(100)               |
-| `crates/domains/work/src/task_statuses.rs`    | `create`(165), `update`(199), `delete`(245)                                                  |
-| `crates/domains/work/src/recurrence.rs`       | `set_task`(129), `sync_item`(217)                                                            |
-| `crates/domains/work/src/schedule/links.rs`   | `add_predecessor`(174), `remove_predecessor`(251)                                            |
-| `crates/domains/work/src/schedule/preview.rs` | 머리가 필수는 아니다. 보내면 업무 라우터 공통 처리가 비교한다: `plan`(286), `plan_link`(304) |
-| `crates/domains/activity/src/comments.rs` | 머리는 선택. 보내면 공통 처리가 비교한다: `add`(192), `edit`(225), `delete`(246), `resolve`(267) |
-| `crates/domains/activity/src/notifications.rs` | 머리는 선택. 보내면 공통 처리가 비교한다: `mark_read`(192) |
-| `crates/domains/activity/src/marks.rs` | 머리는 선택. 보내면 공통 처리가 비교한다: `set_mark`(55) |
-| `collab/ws.rs`                                | 실시간 연결의 질의 `expected_user`(50). 누락·형식 오류는 400, 다르면 닫기 코드 4412          |
+| 파일                                           | 처리기(줄)                                                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `features/documents.rs`                        | `create_note`(617), `save`(806)                                                                  |
+| `features/files.rs`                            | `create_upload`(217)                                                                             |
+| `features/organizations.rs`                    | `set_settings`(477), `set_workspace_limits`(538)                                                 |
+| `crates/domains/work/src/tasks/write.rs`       | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)                              |
+| `crates/domains/work/src/tasks/patch.rs`       | `patch`(194)                                                                                     |
+| `crates/domains/work/src/tasks/checklist.rs`   | `add_checklist`(25), `update_checklist_item`(68), `delete_checklist_item`(100)                   |
+| `crates/domains/work/src/task_statuses.rs`     | `create`(165), `update`(199), `delete`(245)                                                      |
+| `crates/domains/work/src/recurrence.rs`        | `set_task`(129), `sync_item`(217)                                                                |
+| `crates/domains/work/src/schedule/links.rs`    | `add_predecessor`(174), `remove_predecessor`(251)                                                |
+| `crates/domains/work/src/schedule/preview.rs`  | 머리가 필수는 아니다. 보내면 업무 라우터 공통 처리가 비교한다: `plan`(286), `plan_link`(304)     |
+| `crates/domains/activity/src/comments.rs`      | 머리는 선택. 보내면 공통 처리가 비교한다: `add`(192), `edit`(225), `delete`(246), `resolve`(267) |
+| `crates/domains/activity/src/notifications.rs` | 머리는 선택. 보내면 공통 처리가 비교한다: `mark_read`(192)                                       |
+| `crates/domains/activity/src/marks.rs`         | 머리는 선택. 보내면 공통 처리가 비교한다: `set_mark`(55)                                         |
+| `collab/ws.rs`                                 | 실시간 연결의 질의 `expected_user`(50). 누락·형식 오류는 400, 다르면 닫기 코드 4412              |
 
 ## 빠진 쓰기 경로
 
