@@ -89,7 +89,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
   const other = await page.context().newPage();
   await test.step('B로 바뀐 뒤 창 복귀: 다시 읽기가 끝나지 않는 동안 이전 화면은 안전 상태로 가려지고 API를 부르지 않는다', async () => {
     await first.endTrace();
-    expect(await switchTo(other, 'test-user-2')).toBe(b);
+    // SR-221-1: storage 전환은 switchTo 도중 일어나므로 관찰·보류를 먼저 설치한다(단언·대기 동일).
     // 다시 읽기의 문서 응답을 2.5초 붙잡아 둔다(느린 다시 읽기). 그동안 이전 문서가 살아 있다. 이동이 걸려 있는 동안은 Playwright
     // 조작이 막히므로, 이전 문서 안의 기록기가 안전 상태를 0.1초마다 표본으로 남기고(세션 저장소, 같은 탭의 다시 읽기 뒤에도
     // 남는다) 복귀 이벤트를 계속 내서 이전 화면이 요청을 보내는지 네트워크에서 본다.
@@ -108,19 +108,42 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       await route.continue();
     });
     await page.evaluate(() => {
-      // 이전 문서가 보내는 API 호출을 호출 시점의 전환 상태와 함께 적는다(네트워크 이벤트의 시각 순서는 수 ms 어긋날 수 있다).
-      const fetches: { path: string; switching: boolean }[] = [];
+      // 같은 관찰기에서 메서드·쿼리·사용자 표식을 함께 적어 제어 확인과 이전 화면 요청을 구분한다.
+      const fetches: {
+        t: number;
+        path: string;
+        method: string;
+        markerUser: string | null;
+        switching: boolean;
+      }[] = [];
+      const markerUser = (): string | null => {
+        try {
+          const value: unknown = JSON.parse(
+            window.localStorage.getItem('fvoci:auth-session') ?? 'null',
+          );
+          return typeof value === 'object' &&
+            value !== null &&
+            'userId' in value &&
+            typeof value.userId === 'string'
+            ? value.userId
+            : null;
+        } catch {
+          return null;
+        }
+      };
       const original = window.fetch.bind(window);
       window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        if (url.includes('/api/')) {
-          fetches.push({
-            path: new URL(url, window.location.origin).pathname,
-            switching: document.documentElement.hasAttribute('data-account-switching'),
-          });
-          window.sessionStorage.setItem('fvoci-e2e-fetches', JSON.stringify(fetches));
-        }
+        const target = new URL(url, window.location.origin);
+        fetches.push({
+          t: Date.now(),
+          path: target.pathname + target.search,
+          method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
+          markerUser: markerUser(),
+          switching: document.documentElement.hasAttribute('data-account-switching'),
+        });
+        window.sessionStorage.setItem('fvoci-e2e-fetches', JSON.stringify(fetches));
         return original(input, init);
       };
       const start = Date.now();
@@ -144,14 +167,14 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
           descriptionVisible: visible(box),
         });
         window.sessionStorage.setItem('fvoci-e2e-probe', JSON.stringify(samples.slice(-60)));
-        // 전환이 켜진 뒤에만 복귀 이벤트를 더 낸다(감지 자체는 탭 전환 또는 시험이 낸 focus가 하고, 그 뒤에는 확인 요청조차
-        // 나가지 않아야 한다).
+        // 가림 중 복귀 이벤트를 계속 낸다. #88/D-96의 익명 재로그인 대기에는 정확한 GET /api/me만 허용한다.
         if (document.documentElement.hasAttribute('data-account-switching')) {
           window.dispatchEvent(new Event('focus'));
           document.dispatchEvent(new Event('visibilitychange'));
         }
       }, 100);
     });
+    expect(await switchTo(other, 'test-user-2')).toBe(b);
     await returnToWindow(page, testInfo, (timeout) =>
       page.waitForEvent('load', { timeout }).then(
         () => true,
@@ -178,24 +201,46 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         s.descriptionVisible === false,
     );
     expect(covered.length, 'samples with the previous screen covered').toBeGreaterThanOrEqual(10);
-    // 이전 화면은 다시 읽기가 걸려 있는 동안 API를 부르지 않았다(확인 요청 /api/me 한 번 뒤 문서 요청, 그 뒤로는 없음). 확인 요청이
-    // 돌아오기 전의 복귀 갱신(타이머·안 읽은 수 읽기)은 아직 전환을 모르는 상태라 나갈 수 있다(⑫의 남는 위험과 같은 창, 읽기뿐).
     const reloadDocument = traffic.find((r) => r.kind === 'document');
     if (reloadDocument === undefined) throw new Error('no reload document request recorded');
-    const detection = traffic.filter((r) => r.path === '/api/me' && r.t <= reloadDocument.t);
-    expect(detection.length, 'one /api/me check before the reload').toBe(1);
-    // 이전 문서가 전환이 켜진 뒤에 보낸 API 호출은 없어야 한다(호출 시점의 전환 상태로 판정; 네트워크 이벤트의 시각 순서는
-    // 수 ms 어긋날 수 있어 쓰지 않는다). 확인 요청이 돌아오기 전의 복귀 갱신(타이머·안 읽은 수 읽기)은 전환을 모르는 상태라
-    // 나갈 수 있다(⑫의 남는 위험과 같은 창, 읽기뿐).
     const fetches: unknown = JSON.parse(
       (await page.evaluate(() => window.sessionStorage.getItem('fvoci-e2e-fetches'))) ?? '[]',
     );
     await page.evaluate(() => {
       window.sessionStorage.removeItem('fvoci-e2e-fetches');
     });
-    const leaked = list(fetches).filter(
+    const identityCheck = (f: unknown): boolean =>
+      typeof f === 'object' &&
+      f !== null &&
+      'method' in f &&
+      f.method === 'GET' &&
+      'path' in f &&
+      f.path === '/api/me';
+    // 코디네이터 승인: 전체 확인 1회 → 다른 사용자 표식 뒤~다시 읽기 문서 요청 전 정확히 1회.
+    // 익명 재로그인 대기의 확인은 제어 요청이고, 다른 사용자 감지의 중복 없음은 그대로 단언한다(#88/D-96).
+    const detection = list(fetches).filter(
+      (f) =>
+        identityCheck(f) &&
+        typeof f === 'object' &&
+        f !== null &&
+        'markerUser' in f &&
+        f.markerUser === b &&
+        't' in f &&
+        typeof f.t === 'number' &&
+        f.t <= reloadDocument.t,
+    );
+    expect(
+      detection.length,
+      'one /api/me check after the other-user marker before the reload',
+    ).toBe(1);
+    const hidden = list(fetches).filter(
       (f) => typeof f === 'object' && f !== null && 'switching' in f && f.switching === true,
     );
+    expect(hidden.length, 'requests observed while hidden').toBeGreaterThan(0);
+    expect(hidden.every(identityCheck), 'only exact GET /api/me without a query while hidden').toBe(
+      true,
+    );
+    const leaked = hidden.filter((f) => !identityCheck(f));
     expect(leaked, 'API calls from the previous screen after the switch').toEqual([]);
     expect(list(fetches).length, 'API calls recorded by the previous screen').toBeGreaterThan(0);
     page.removeAllListeners('request');
