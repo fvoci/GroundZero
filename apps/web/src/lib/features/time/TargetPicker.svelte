@@ -20,16 +20,17 @@
   let seq = 0;
 
   $effect(() => () => {
+    seq++;
     clearTimeout(timer);
   });
 
   function search(q: string): void {
+    const mine = ++seq;
     clearTimeout(timer);
     if (q.trim() === '') {
       results = [];
       return;
     }
-    const mine = ++seq;
     timer = setTimeout(() => {
       api
         .referenceCandidates(q.trim(), null)
@@ -37,7 +38,7 @@
           if (mine === seq) results = found.filter((c) => c.kind !== 'user');
         })
         .catch(() => {
-          results = [];
+          if (mine === seq) results = [];
         });
     }, 200);
   }
@@ -71,6 +72,8 @@
               type="button"
               class="w-full px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               onclick={() => {
+                seq++;
+                clearTimeout(timer);
                 onpick({ kind, id: c.id, label: labelOf(c) });
                 query = '';
                 results = [];
