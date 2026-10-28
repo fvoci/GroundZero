@@ -89,6 +89,132 @@ pub async fn policy(request: Request, next: Next) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Router, body::Body, middleware};
+    use tower::ServiceExt;
+
+    // SR-221-3 / D-77: 처리기가 성공 응답에 잘못 단 머리글도 바깥 층이 강제한다.
+    async fn downstream(method: Method, path: &str, status: StatusCode) -> Response {
+        Router::new()
+            .fallback(move || async move {
+                (
+                    status,
+                    [
+                        (header::CACHE_CONTROL, PRIVATE_REVALIDATE),
+                        (header::ETAG, "\"downstream\""),
+                    ],
+                )
+            })
+            .layer(middleware::from_fn(policy))
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    fn assert_no_store(response: &Response) {
+        assert_eq!(response.headers()[header::CACHE_CONTROL], NO_STORE);
+        assert!(!response.headers().contains_key(header::ETAG));
+    }
+
+    #[tokio::test]
+    async fn policy_overrides_sensitive_success_headers_outside_the_allowlist() {
+        for path in [
+            "/api/workspaces",
+            "/api",
+            "/auth/login",
+            "/healthz",
+            "/api/documents",
+            "/api/documents/",
+            "/api/documents/x/",
+            "/api/documents/x/revisions",
+            "/api/documents/x/collab",
+            "/api/documents-other/x",
+            "/api/documents//revisions/1/restore",
+            "/api/files/x/content?inline=true",
+        ] {
+            for method in [Method::GET, Method::HEAD] {
+                for status in [StatusCode::OK, StatusCode::NOT_MODIFIED] {
+                    let response = downstream(method.clone(), path, status).await;
+                    assert_no_store(&response);
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn policy_preserves_only_single_document_reads_and_two_legacy_write_etags() {
+        for method in [Method::GET, Method::HEAD] {
+            for status in [StatusCode::OK, StatusCode::NOT_MODIFIED] {
+                let response =
+                    downstream(method.clone(), "/api/documents/x?view=body", status).await;
+                assert_eq!(
+                    response.headers()[header::CACHE_CONTROL],
+                    PRIVATE_REVALIDATE
+                );
+                assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
+            }
+        }
+        // #212 5행, PR4c가 본문 PUT을 지울 때 이 예외도 지운다
+        for (method, path) in [
+            (Method::PUT, "/api/documents/x"),
+            (Method::POST, "/api/documents/x/revisions/1/restore"),
+        ] {
+            let response = downstream(method, path, StatusCode::OK).await;
+            assert_eq!(response.headers()[header::CACHE_CONTROL], NO_STORE);
+            assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
+        }
+    }
+
+    #[tokio::test]
+    async fn policy_removes_etags_for_disallowed_methods_and_statuses() {
+        for (method, path) in [
+            (Method::POST, "/api/documents/x"),
+            (Method::DELETE, "/api/documents/x"),
+            (Method::PUT, "/api/documents/x/"),
+            (Method::GET, "/api/documents/x/revisions/1/restore"),
+            (Method::PUT, "/api/documents/x/revisions/1/restore"),
+            (Method::POST, "/api/documents/x/revisions/1/restore/"),
+            (Method::POST, "/api/documents/x/revisions//restore"),
+            (Method::POST, "/api/documents/x/revisions/1/extra/restore"),
+        ] {
+            assert_no_store(&downstream(method, path, StatusCode::OK).await);
+        }
+        for status in [
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+            StatusCode::NOT_FOUND,
+            StatusCode::CONFLICT,
+            StatusCode::PRECONDITION_FAILED,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
+        ] {
+            for method in [Method::GET, Method::HEAD, Method::PUT] {
+                assert_no_store(&downstream(method, "/api/documents/x", status).await);
+            }
+            assert_no_store(
+                &downstream(Method::POST, "/api/documents/x/revisions/1/restore", status).await,
+            );
+        }
+        for status in [StatusCode::CREATED, StatusCode::NOT_MODIFIED] {
+            assert_no_store(&downstream(Method::PUT, "/api/documents/x", status).await);
+            assert_no_store(
+                &downstream(Method::POST, "/api/documents/x/revisions/1/restore", status).await,
+            );
+        }
+        assert_no_store(
+            &downstream(
+                Method::GET,
+                "/api/documents/x/collab",
+                StatusCode::SWITCHING_PROTOCOLS,
+            )
+            .await,
+        );
+    }
 
     #[test]
     fn scopes_follow_the_path() {
