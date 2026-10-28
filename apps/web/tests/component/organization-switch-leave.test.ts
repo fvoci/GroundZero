@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -37,7 +38,7 @@ beforeEach(async () => {
   if (item === undefined) throw new Error('missing writable item');
   localStorage.setItem(org.key('quick-add-item'), item.id);
   vi.spyOn(api, 'home').mockResolvedValue(home);
-  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+  vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
 });
 afterEach(() => {
   cleanup();

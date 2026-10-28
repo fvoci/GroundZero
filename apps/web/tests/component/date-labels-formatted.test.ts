@@ -1,8 +1,9 @@
+import { type NotificationView } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CalendarView, EventView, ItemView, NotificationView } from '$lib/api/client';
+import type { CalendarView, EventView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';

@@ -1,9 +1,8 @@
 <script lang="ts">
+  import { activityApi, type AuditEntryView } from '$lib/features/activity/api';
   // 감사 기록(D-57). 워크스페이스(관리자) 또는 내 개인 영역. 최신 먼저, 더 보기로 이어서.
   import type { Workspace } from '@fvoci/api-client';
 
-  import type { AuditEntryView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
   import { m } from '$lib/paraglide/messages.js';
@@ -29,7 +28,7 @@
   async function load(before: string | undefined, mine: number): Promise<void> {
     loading = true;
     try {
-      const page = await api.audit(workspace?.id ?? null, before);
+      const page = await activityApi.audit(workspace?.id ?? null, before);
       if (mine !== seq) return;
       entries = before === undefined ? page : [...entries, ...page];
       more = page.length === 100;

@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -72,7 +73,7 @@ describe('home this week', () => {
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const list = document.querySelector('[aria-labelledby="week-heading"] ol');
