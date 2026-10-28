@@ -5,7 +5,7 @@ import { timeData } from '$lib/features/time/data';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MovePreviewView } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 
 // 문서 이동의 409는 두 모양이다: 그사이 접근 변화가 바뀌었으면 새 미리보기(`MovePreview`, 다시 확인을 받는다),
 // 그 밖의 충돌은 `ErrorBody`(일반 오류). 일정·시간 기록 고치기의 409는 기준 버전이 지난 것이며 서버 최신본이 온다.
