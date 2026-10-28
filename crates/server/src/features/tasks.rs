@@ -10,7 +10,6 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
-use time::format_description::well_known::Iso8601;
 use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -18,10 +17,10 @@ use uuid::Uuid;
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
-use crate::features::workspaces::validate_title;
-use crate::http::AppState;
+use crate::features::work_state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
+use fvoci_core::validate::{format_date, parse_date, validate_text, validate_title};
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 
@@ -231,9 +230,6 @@ pub struct SuccessorShift {
 /// 한 번에 옮길 수 있는 후속 업무 수.
 pub(crate) const MAX_SHIFTS: usize = 500;
 
-/// 저장할 수 있는 날짜의 연도(터무니없이 먼 날짜는 받지 않는다. 반복 펼치기·달력 계산이 그 거리만큼 커지지 않게).
-pub(crate) const DATE_YEARS: std::ops::RangeInclusive<i32> = 1900..=2200;
-
 /// 칸반 이동: 열(상태)과 그 안에서 바로 뒤에 올 업무(없으면 맨 끝).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MoveTask {
@@ -295,49 +291,6 @@ pub enum TaskWriteConflict {
     State(ErrorBody),
 }
 
-pub(crate) fn parse_date(raw: Option<&str>, field: &str) -> Result<Option<Date>, AppError> {
-    match raw.map(str::trim).filter(|s| !s.is_empty()) {
-        None => Ok(None),
-        // 시각이 붙은 값은 받지 않는다(날짜만 있는 일정은 날짜 그대로, D-50).
-        Some(s) if s.len() != 10 => Err(AppError::BadRequest(format!(
-            "{field} must be a date like 2026-10-17"
-        ))),
-        Some(s) => {
-            let date = Date::parse(s, &Iso8601::DATE).map_err(|_| {
-                AppError::BadRequest(format!("{field} must be a date like 2026-10-17"))
-            })?;
-            if !DATE_YEARS.contains(&date.year()) {
-                return Err(AppError::BadRequest(format!(
-                    "{field} must be between 1900 and 2200"
-                )));
-            }
-            Ok(Some(date))
-        }
-    }
-}
-
-pub(crate) fn format_date(date: Option<Date>) -> Option<String> {
-    date.map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day()))
-}
-
-pub(crate) fn validate_text(raw: &str, max: usize, field: &str) -> Result<String, AppError> {
-    let trimmed = raw.trim();
-    if trimmed.chars().count() > max {
-        return Err(AppError::BadRequest(format!(
-            "{field} must be at most {max} characters"
-        )));
-    }
-    if trimmed
-        .chars()
-        .any(|c| c.is_control() && c != '\n' && c != '\t')
-    {
-        return Err(AppError::BadRequest(format!(
-            "{field} must not contain control characters"
-        )));
-    }
-    Ok(trimmed.to_owned())
-}
-
 /// 만들기·고치기가 함께 쓰는 칸 확인(같은 규칙). 상태·우선순위 값, 시작일 ≤ 마감일, 이정표, 담당자는 DB 함수가 본다.
 struct CheckedFields {
     title: String,
@@ -348,7 +301,7 @@ struct CheckedFields {
 }
 
 fn check_fields(
-    state: &AppState,
+    state: &WorkState,
     title: &str,
     description: &str,
     start_date: Option<&str>,
@@ -356,7 +309,7 @@ fn check_fields(
     estimate_minutes: Option<i32>,
     tags: &[String],
 ) -> Result<CheckedFields, AppError> {
-    let title = validate_title(title, state.config.limits.max_title_chars, "title")?;
+    let title = validate_title(title, state.max_title_chars, "title")?;
     let description = validate_text(description, MAX_DESCRIPTION_CHARS, "description")?;
     let start = parse_date(start_date, "start_date")?;
     let due = parse_date(due_date, "due_date")?;
@@ -601,7 +554,7 @@ pub(crate) async fn load_detail(tx: &mut UserTx, id: Uuid) -> Result<TaskDetail,
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Task]), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn list(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Task>>, AppError> {
@@ -629,7 +582,7 @@ pub async fn list(
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Assignee]), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn assignable(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Assignee>>, AppError> {
@@ -656,7 +609,7 @@ pub async fn assignable(
     params(("task_id" = String, Path, format = Uuid)),
     responses((status = 200, body = TaskDetail), (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<TaskDetail>, AppError> {
@@ -678,7 +631,7 @@ pub async fn get(
     responses((status = 201, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; task_deleted: 같은 요청으로 만든 업무가 휴지통에 있음; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
     Json(input): Json<CreateTask>,
@@ -735,7 +688,7 @@ pub async fn create(
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "conflict·shift_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn update(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTask>,
@@ -848,7 +801,7 @@ pub async fn update(
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "move_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn move_task(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<MoveTask>,
@@ -896,7 +849,7 @@ pub async fn move_task(
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn set_parent(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetTaskParent>,
@@ -921,7 +874,7 @@ pub async fn set_parent(
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn add_checklist(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<AddChecklist>,
@@ -933,7 +886,7 @@ pub async fn add_checklist(
     }
     let mut items = Vec::with_capacity(input.items.len());
     for item in input.items {
-        let text = validate_title(&item.text, state.config.limits.max_title_chars, "text")?;
+        let text = validate_title(&item.text, state.max_title_chars, "text")?;
         items.push(NewChecklistItem { text, ..item });
     }
     let payload = serde_json::to_value(&items)
@@ -961,7 +914,7 @@ pub async fn add_checklist(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn update_checklist_item(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateChecklistItem>,
@@ -972,7 +925,7 @@ pub async fn update_checklist_item(
     let text = input
         .text
         .as_deref()
-        .map(|t| validate_title(t, state.config.limits.max_title_chars, "text"))
+        .map(|t| validate_title(t, state.max_title_chars, "text"))
         .transpose()?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_update_checklist_item($1, $2, $3)")
@@ -993,7 +946,7 @@ pub async fn update_checklist_item(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn delete_checklist_item(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -1010,15 +963,6 @@ pub async fn delete_checklist_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn dates_are_plain_calendar_dates() {
-        let d = parse_date(Some("2026-10-17"), "due_date").unwrap();
-        assert_eq!(format_date(d).as_deref(), Some("2026-10-17"));
-        assert_eq!(parse_date(Some(" "), "due_date").unwrap(), None);
-        assert!(parse_date(Some("2026-13-01"), "due_date").is_err());
-        assert!(parse_date(Some("2026-10-17T09:00:00Z"), "due_date").is_err());
-    }
 
     #[test]
     fn tags_are_trimmed_deduplicated_and_limited() {

@@ -18,11 +18,11 @@ use uuid::Uuid;
 
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
-use crate::features::tasks::{format_date, parse_date, validate_text};
-use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, WorkspaceId};
+use fvoci_core::validate::validate_title;
+use fvoci_core::validate::{format_date, parse_date, validate_text};
 use fvoci_db::{UserTx, is_unique_violation, new_ids};
 use fvoci_http::session::CurrentUser;
 

@@ -20,12 +20,12 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::features::tasks::{
-    DATE_YEARS, EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail,
-    format_date, load_detail, parse_date,
+    EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, load_detail,
 };
-use crate::http::AppState;
+use crate::features::work_state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::UserId;
+use fvoci_core::validate::{DATE_YEARS, format_date, parse_date};
 use fvoci_db::UserTx;
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 
@@ -623,7 +623,7 @@ fn check_lag(lag_days: i32) -> Result<(), AppError> {
 }
 
 async fn date_plan(
-    state: &AppState,
+    state: &WorkState,
     user: UserId,
     id: Uuid,
     input: &SchedulePreviewInput,
@@ -643,7 +643,7 @@ async fn date_plan(
     responses((status = 200, body = SchedulePlan), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "tasks")]
 pub async fn plan(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SchedulePreviewInput>,
@@ -659,7 +659,7 @@ pub async fn plan(
     responses((status = 200, body = SchedulePlan), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "tasks")]
 pub async fn plan_link(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
     Json(input): Json<LinkInput>,
@@ -786,7 +786,7 @@ pub(crate) async fn approved_still_planned(
 
 /// 승인 목록이 그사이 맞지 않게 됐을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
 pub(crate) async fn shift_conflict(
-    state: &AppState,
+    state: &WorkState,
     user: UserId,
     task: Uuid,
 ) -> Result<Response, AppError> {
@@ -805,7 +805,7 @@ pub(crate) async fn shift_conflict(
 
 /// 편집을 시작한 관계(`base`)가 그사이 바뀌었을 때의 409 응답(아무것도 바꾸지 않았다). 최신본은 새 트랜잭션에서 읽는다.
 pub(crate) async fn link_conflict(
-    state: &AppState,
+    state: &WorkState,
     user: UserId,
     task: Uuid,
 ) -> Result<Response, AppError> {
@@ -849,7 +849,7 @@ pub enum PredecessorConflict {
                description = "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)")),
     tag = "tasks")]
 pub async fn add_predecessor(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
     Json(input): Json<SetPredecessor>,
@@ -923,7 +923,7 @@ pub async fn add_predecessor(
     responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn remove_predecessor(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path((id, predecessor)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<TaskDetail>, AppError> {

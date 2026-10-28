@@ -22,10 +22,10 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
-    members, modules, organizations, public_links, records, recurrence, references, revisions,
-    saved_views, schedule, search_api, study, task_statuses, tasks, time_tracking, trash,
-    workspaces, zotero,
+    accounts, audit, comments, courses, documents, event_recurrence, events, export, files, home,
+    item_profile, members, modules, organizations, public_links, records, recurrence, references,
+    revisions, saved_views, schedule, search_api, study, task_statuses, tasks, time_tracking,
+    trash, workspaces, zotero,
 };
 use crate::features::{activity, notifications};
 
@@ -94,6 +94,15 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
                     build: build_info::CURRENT,
                 }),
             )
+        }
+    }
+}
+
+impl FromRef<AppState> for crate::features::work_state::WorkState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            max_title_chars: state.config.limits.max_title_chars,
         }
     }
 }
@@ -297,8 +306,8 @@ async fn api_not_found() -> AppError {
         events::calendar,
         recurrence::set_task,
         recurrence::sync_item,
-        recurrence::set_event,
-        recurrence::exclude_event,
+        event_recurrence::set_event,
+        event_recurrence::exclude_event,
         time_tracking::current,
         time_tracking::start,
         time_tracking::action,
@@ -527,8 +536,8 @@ async fn api_not_found() -> AppError {
         recurrence::RecurrenceRule,
         recurrence::SetTaskRecurrence,
         recurrence::SyncResult,
-        recurrence::SetEventRecurrence,
-        recurrence::ExcludeOccurrence,
+        event_recurrence::SetEventRecurrence,
+        event_recurrence::ExcludeOccurrence,
         tasks::TaskSeries,
         time_tracking::TimeKind,
         time_tracking::TargetKind,
@@ -1004,10 +1013,13 @@ pub fn router(state: AppState) -> Router {
             "/items/{item_id}/recurrences/sync",
             post(recurrence::sync_item),
         )
-        .route("/events/{event_id}/recurrence", put(recurrence::set_event))
+        .route(
+            "/events/{event_id}/recurrence",
+            put(event_recurrence::set_event),
+        )
         .route(
             "/events/{event_id}/exclusions",
-            post(recurrence::exclude_event),
+            post(event_recurrence::exclude_event),
         )
         .route(
             "/me/timer",
