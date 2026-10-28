@@ -78,6 +78,37 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it('repairs an original held key when panel cleanup enumeration fails once but offers enumeration succeeds', async () => {
+  const key = 'fvoci:user-a:-:form-draft:record:draft-item:risk:new:held:old-offer';
+  const form = {
+    ...emptyForm(),
+    title: 'SHORT_TRANSIENT_TITLE',
+    body: 'Unsent transient body',
+    values: { mitigation: 'Unsent mitigation' },
+  };
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      savedAt: '2026-10-28T12:00:00Z',
+      input: { form, baseline: JSON.stringify(emptyForm()), version: 3, pending: null },
+    }),
+  );
+  const startupEnumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+    throw new DOMException('startup enumeration unavailable', 'SecurityError');
+  });
+  clearLegacyRecordDrafts();
+  startupEnumeration.mockRestore();
+  const panelEnumeration = vi.spyOn(Storage.prototype, 'key').mockImplementationOnce(() => {
+    throw new DOMException('transient panel enumeration failure', 'SecurityError');
+  });
+
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  await screen.findByRole('button', { name: m.common_draft_restore() });
+
+  expect(panelEnumeration).toHaveBeenCalled();
+  expect(localStorage.getItem(key)).not.toContain('SHORT_TRANSIENT_TITLE');
+});
+
 it.each(['held:old-offer', 'tab:other-tab'])(
   'repairs a missed legacy full form at its original %s key when the record panel opens',
   async (suffix) => {
