@@ -176,7 +176,7 @@ describe('saved view save on a stale version', () => {
     await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
     expect(screen.queryByTestId('form-draft-offer')).toBeNull();
   });
-  // R5 F-4(D-121): 보기 초안을 되살리면 보기 전환처럼 주소도 바꾼다. 주소는 칸반인데 화면만 목록이 되던 것을 막는다.
+  // D-27 개정·#154: 짧은 보기 이름은 영구 초안 없이 화면에서만 유지한다.
   it('warns for a screen-only view name and offers nothing after remount (#154)', async () => {
     const sent = viewServer([]);
     const props = { item, workspaces: [], openTaskId: undefined };

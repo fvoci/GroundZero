@@ -3,9 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '$lib/api/client';
 
-// 관계 설정의 409는 두 모양이다(D-91, 계약 `PredecessorConflict`): 승인 목록이 맞지 않으면 TaskConflict(최신본 포함),
-// 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`, 최신본 없음). 클라이언트는 앞의 것만 다시 묻기로 돌리고 뒤의
-// 것은 일반 오류로 알린다(최신본이 있다고 가정하지 않는다).
+// 관계 설정의 409는 최신 관계(없어졌으면 null)를 담은 StaleWrite 또는 ErrorBody다(D-91).
+// 승인 충돌·관계 충돌은 다시 묻기로 돌리고 보관·동시 변경 등의 ErrorBody는 일반 오류로 알린다.
 const task = { predecessor_id: 'a', successor_id: 'b', kind: 'FS', lag_days: 0 };
 
 function reply(status: number, json: object): void {

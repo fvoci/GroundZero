@@ -35,7 +35,7 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | `features/documents.rs`                       | `create_note`(617), `save`(806)                                                              |
 | `features/files.rs`                           | `create_upload`(217)                                                                         |
 | `features/organizations.rs`                   | `set_settings`(477), `set_workspace_limits`(538)                                             |
-| `crates/domains/work/src/tasks/write.rs`      | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)           |
+| `crates/domains/work/src/tasks/write.rs`      | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)                          |
 | `crates/domains/work/src/tasks/patch.rs`      | `patch`(194)                                                                                 |
 | `crates/domains/work/src/tasks/checklist.rs`  | `add_checklist`(25), `update_checklist_item`(68), `delete_checklist_item`(100)               |
 | `crates/domains/work/src/task_statuses.rs`    | `create`(165), `update`(199), `delete`(245)                                                  |
