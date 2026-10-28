@@ -6,6 +6,7 @@
 //! #86: 댓글 수정·해결·재개와 보관을 같은 모듈 → 항목 → 댓글 순서로 직렬화한다.
 
 use crate::sql_support::*;
+use sqlx::Connection;
 use uuid::Uuid;
 
 const WRITES: [&str; 3] = [
@@ -85,28 +86,34 @@ async fn reply_and_edit_use_the_same_module_before_comment_lock_order() {
     let w = World::new().await;
     let task = w.task().await;
     let comment = made(&w.state, &w.owner, COMMENT, &[Uuid::now_v7(), task]).await;
-    let mut archive = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let mut fixture = crate::common::fixture_conn().await;
+    let mut archive = fixture.begin().await.unwrap();
+    sqlx::query("SELECT set_config('app.user_id',$1,true)")
+        .bind(w.owner.id.0.to_string())
+        .execute(&mut *archive)
+        .await
+        .unwrap();
     on(
-        archive.conn(),
+        &mut archive,
         "SELECT id FROM fvoci.modules WHERE id=$1 FOR UPDATE",
         &[w.module],
     )
     .await
     .unwrap();
-    let holder = pid(archive.conn()).await;
+    let holder = pid(&mut archive).await;
     let mut edit = w.state.db.begin_as(w.owner.id).await.unwrap();
     let waiter = pid(edit.conn()).await;
     let editing = tokio::spawn(async move { on(edit.conn(), WRITES[0], &[comment]).await });
     blocked(holder, waiter).await;
     let reply = on(
-        archive.conn(),
+        &mut archive,
         "SELECT fvoci.app_add_comment($1,NULL,$2,$3,'reply',@ids)",
         &[Uuid::now_v7(), task, comment],
     )
     .await;
     if reply.is_ok() {
         on(
-            archive.conn(),
+            &mut archive,
             "SELECT fvoci.app_archive_module($1,true,@ids)",
             &[w.module],
         )
@@ -122,4 +129,86 @@ async fn reply_and_edit_use_the_same_module_before_comment_lock_order() {
         .unwrap();
     assert!(reply.is_ok(), "reply/archive failed: {reply:?}");
     code(&edited.unwrap_err(), "55000");
+}
+
+async fn due_overlap(archive_first: bool) {
+    let w = World::new().await;
+    let task = w.task().await;
+    let date = if archive_first {
+        "2091-04-05"
+    } else {
+        "2091-05-06"
+    };
+    fixture(
+        &format!("UPDATE fvoci.tasks SET due_date='{date}' WHERE id=$1"),
+        &[task],
+    )
+    .await;
+    let sql: &'static str = if archive_first {
+        "SELECT fvoci.app_system_due_notifications('2091-04-05',@ids)"
+    } else {
+        "SELECT fvoci.app_system_due_notifications('2091-05-06',@ids)"
+    };
+    let mut archive = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let mut notify = w.state.db.begin_anonymous().await.unwrap();
+    let archive_pid = pid(archive.conn()).await;
+    let notify_pid = pid(notify.conn()).await;
+    if archive_first {
+        on(
+            archive.conn(),
+            "SELECT fvoci.app_archive_module($1,true,@ids)",
+            &[w.module],
+        )
+        .await
+        .unwrap();
+        // ID 수 계산은 예약 상한이며, 보관 장벽은 실제 생성 시 app_notify가 다시 확인한다.
+        on(
+            notify.conn(),
+            "SELECT fvoci.app_system_due_notifications_ids('2091-04-05')",
+            &[],
+        )
+        .await
+        .unwrap();
+        let pending = tokio::spawn(async move {
+            on(notify.conn(), sql, &[]).await.unwrap();
+            notify.commit().await.unwrap();
+        });
+        blocked(archive_pid, notify_pid).await;
+        archive.commit().await.unwrap();
+        pending.await.unwrap();
+    } else {
+        on(notify.conn(), sql, &[]).await.unwrap();
+        let module = w.module;
+        let pending = tokio::spawn(async move {
+            on(
+                archive.conn(),
+                "SELECT fvoci.app_archive_module($1,true,@ids)",
+                &[module],
+            )
+            .await
+            .unwrap();
+            archive.commit().await.unwrap();
+        });
+        blocked(notify_pid, archive_pid).await;
+        notify.commit().await.unwrap();
+        pending.await.unwrap();
+    }
+    let notifications = rows(
+        &w.state,
+        &w.owner,
+        "SELECT id FROM fvoci.notifications WHERE task_id=$1 AND kind='due'",
+        &[task],
+    )
+    .await;
+    assert_eq!(notifications.len(), usize::from(!archive_first));
+}
+
+#[tokio::test]
+async fn module_archive_prevents_waiting_due_notifications() {
+    due_overlap(true).await;
+}
+
+#[tokio::test]
+async fn due_notification_holds_module_until_archive_can_commit() {
+    due_overlap(false).await;
 }

@@ -16,7 +16,7 @@ async fn reopen_after_poison(registry: Registry) {
     let id = target.to_string();
     let mut client = connect(addr, Some(&w.owner), &id, true).await.unwrap();
     client.paragraph("서버에 저장한 편집").await;
-    assert!(client.until(|c| !c.persisted.is_empty()).await);
+    assert!(client.until(acked).await);
     // 서버에 보내지 않은 로컬 편집도 재연결 때 원래 CRDT와 합쳐야 한다.
     let fragment = client.doc.get_or_insert_xml_fragment(FRAGMENT);
     {
@@ -32,9 +32,13 @@ async fn reopen_after_poison(registry: Registry) {
         Some(4503),
         "poisoned {registry:?} must disconnect the old room"
     );
-    assert!(probe.text().contains("서버에 저장한 편집"));
+    assert!(
+        probe
+            .until(|c| c.text().contains("서버에 저장한 편집"))
+            .await
+    );
     let local = client.doc;
-    let mut rejoined = connect_with(addr, Some(&w.owner), &id, true, local)
+    let rejoined = connect_with(addr, Some(&w.owner), &id, true, local)
         .await
         .unwrap();
     assert!(
