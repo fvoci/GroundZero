@@ -1,6 +1,7 @@
 //! 휴지통·ZIP 반출·자동 정리 도메인. 일정 실행은 조립 crate가 맡는다.
 
-mod access;
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
 pub mod cleanup;
 pub mod export;
 pub mod state;
