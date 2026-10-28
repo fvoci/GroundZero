@@ -627,6 +627,210 @@ async fn overlapping_restores(end: RestoreEnd) {
     // DB·시험 역할은 이 실행의 격리 Compose와 함께 xtask가 정리한다.
 }
 
+/// SR-219-1: 첫 반납 SQL에만 실제 PostgreSQL 잠금 대기를 붙이는 시험 전용 wire proxy.
+/// 제품 경로·DB 객체를 바꾸지 않고 lock_timeout으로 같은 연결의 반납을 중단시킨다.
+async fn release_failure_proxy(
+    upstream: &url::Url,
+    gate: i64,
+) -> (url::Url, tokio::task::JoinHandle<()>) {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let host = upstream.host_str().unwrap().to_owned();
+    let port = upstream.port().unwrap_or(5432);
+    let injected = Arc::new(AtomicBool::new(false));
+    let task = tokio::spawn(async move {
+        let mut connections = tokio::task::JoinSet::new();
+        loop {
+            tokio::select! {
+                accepted = listener.accept() => {
+                    let (client, _) = accepted.unwrap();
+                    let server = tokio::net::TcpStream::connect((host.as_str(), port)).await.unwrap();
+                    let injected = Arc::clone(&injected);
+                    connections.spawn(async move { proxy_release(client, server, gate, injected).await });
+                }
+                Some(done) = connections.join_next(), if !connections.is_empty() => {
+                    done.unwrap().unwrap();
+                }
+            }
+        }
+    });
+    let mut endpoint = upstream.clone();
+    endpoint.set_host(Some("127.0.0.1")).unwrap();
+    endpoint.set_port(Some(address.port())).unwrap();
+    // 격리 시험의 로컬 TCP만 사용한다. SSL 협상 없는 PostgreSQL 프레임을 중계한다.
+    endpoint.query_pairs_mut().append_pair("sslmode", "disable");
+    (endpoint, task)
+}
+
+async fn proxy_release(
+    client: tokio::net::TcpStream,
+    server: tokio::net::TcpStream,
+    gate: i64,
+    injected: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> std::io::Result<()> {
+    use std::sync::atomic::Ordering;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let (mut client_read, mut client_write) = client.into_split();
+    let (mut server_read, mut server_write) = server.into_split();
+    let forward = async {
+        // StartupMessage는 타입 바이트가 없고, 이후 프레임은 타입 + 길이 + 본문이다.
+        let length = client_read.read_u32().await?;
+        let mut startup = vec![0; usize::try_from(length - 4).unwrap()];
+        client_read.read_exact(&mut startup).await?;
+        server_write.write_u32(length).await?;
+        server_write.write_all(&startup).await?;
+        loop {
+            let tag = match client_read.read_u8().await {
+                Ok(tag) => tag,
+                Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+                Err(err) => return Err(err),
+            };
+            let length = client_read.read_u32().await?;
+            let mut body = vec![0; usize::try_from(length - 4).unwrap()];
+            client_read.read_exact(&mut body).await?;
+            if tag == b'Q' && body.starts_with(b"REVOKE ") && !injected.swap(true, Ordering::SeqCst)
+            {
+                let mut gated = format!("SELECT pg_advisory_lock({gate}); ").into_bytes();
+                gated.extend(body);
+                body = gated;
+            }
+            server_write.write_u8(tag).await?;
+            server_write
+                .write_u32(u32::try_from(body.len() + 4).unwrap())
+                .await?;
+            server_write.write_all(&body).await?;
+            if tag == b'X' {
+                return Ok(());
+            }
+        }
+    };
+    let backward = tokio::io::copy(&mut server_read, &mut client_write);
+    tokio::try_join!(forward, backward)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn restore_reports_a_failed_membership_return_and_rolls_back_the_loaded_data() {
+    tokio::task::LocalSet::new()
+        .run_until(failed_membership_return())
+        .await;
+}
+
+async fn failed_membership_return() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let source = fresh_database(&mut admin, "return_failure_source").await;
+    let mut target = fresh_database(&mut admin, "return_failure_target").await;
+    let files = temp_dir("return-failure-source-files");
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("DATABASE_URL", &source.app_url),
+        ("FVOCI_STORAGE_DIR", &files.to_string_lossy()),
+    ]))
+    .unwrap();
+    let user = session(&state, &format!("return-failure-{}", uuid::Uuid::now_v7())).await;
+    let out = temp_dir("return-failure-backup");
+    let manifest = backup::create(&state.config, &source.db, &out)
+        .await
+        .unwrap();
+    assert!(
+        manifest
+            .tables
+            .iter()
+            .any(|t| t.name == "users" && t.rows > 0)
+    );
+
+    let mut endpoint = url::Url::parse(&admin_url).unwrap();
+    let superuser: bool =
+        sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(&mut admin)
+            .await
+            .unwrap();
+    if superuser {
+        let role = format!("fvoci_return_{}", uuid::Uuid::now_v7().simple());
+        let password = endpoint.password().unwrap();
+        sqlx::raw_sql(&format!(
+            "CREATE ROLE {role} LOGIN PASSWORD '{password}';
+             GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+             GRANT SET ON PARAMETER session_replication_role TO {role}"
+        ))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+        endpoint.set_username(&role).unwrap();
+    }
+    let member = endpoint.username().to_owned();
+    let before = migrator_memberships(&mut admin, &member).await;
+    endpoint.set_path(&format!("/{}", target.name));
+    let application = format!("return-failure-{}", uuid::Uuid::now_v7().simple());
+    endpoint
+        .query_pairs_mut()
+        .append_pair("application_name", &application)
+        .append_pair("options", "-c lock_timeout=5s");
+    // 이 대상 DB에만 있는 시험 잠금이며 제품의 두 잠금과 구별한다("fvociret").
+    let gate = 0x6676_6f63_6972_6574_i64;
+    let mut blocker = PgConnection::connect(&common::with_database(&admin_url, &target.name))
+        .await
+        .unwrap();
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(gate)
+        .execute(&mut blocker)
+        .await
+        .unwrap();
+    let (proxy_url, proxy) = release_failure_proxy(&endpoint, gate).await;
+    target.db.admin_url = Some(fvoci_core::secret::Secret::new(proxy_url.to_string()));
+    let config = config_with(&[(
+        "FVOCI_STORAGE_DIR",
+        &temp_dir("return-failure-target-files").to_string_lossy(),
+    )]);
+    let restore =
+        tokio::task::spawn_local(async move { backup::restore(&config, &target.db, &out).await });
+    let returning = wait_for_advisory_waiter(&mut admin, &application, gate).await;
+    let query: String = sqlx::query_scalar("SELECT query FROM pg_stat_activity WHERE pid = $1")
+        .bind(returning)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+    assert!(
+        query.contains("REVOKE fvoci_migrator"),
+        "the actual membership return must be blocked"
+    );
+    let result = tokio::time::timeout(std::time::Duration::from_secs(30), restore)
+        .await
+        .unwrap()
+        .unwrap();
+    blocker.close().await.unwrap();
+    proxy.abort();
+    let mut loaded = PgConnection::connect(&common::with_database(&admin_url, &target.name))
+        .await
+        .unwrap();
+    let present: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM fvoci.users WHERE id = $1)")
+            .bind(user.id.0)
+            .fetch_one(&mut loaded)
+            .await
+            .unwrap();
+    assert!(
+        !present,
+        "a failed membership return must roll back the restored user"
+    );
+    assert_eq!(migrator_memberships(&mut admin, &member).await, before);
+    assert!(
+        result.is_err(),
+        "SR-219-1: restore returned success after its membership return aborted the transaction"
+    );
+    let fvoci_core::error::AppError::Database(err) = result.unwrap_err() else {
+        panic!("expected the original database return error")
+    };
+    assert_eq!(
+        err.as_database_error().and_then(|e| e.code()).as_deref(),
+        Some("55P03")
+    );
+}
+
 /// 관리자의 `fvoci_migrator` 직접 멤버십 레코드(grantor, ADMIN, INHERIT, SET).
 async fn migrator_memberships(
     conn: &mut PgConnection,
