@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::{HomeState, progress::HomeProgress};
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{ItemId, OrganizationId, WorkspaceId};
+use fvoci_core::marks::MarkTarget;
 use fvoci_core::module::ModuleKind;
 use fvoci_http::organization::OrgScope;
 
@@ -66,15 +67,6 @@ pub struct HomeItem {
     pub progress: HomeProgress,
     /// 이 항목에 업무·일정을 더할 수 있는지(빠른 추가).
     pub can_write: bool,
-}
-
-/// 고정·즐겨찾기 대상.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MarkTarget {
-    Item,
-    Document,
-    Task,
 }
 
 /// 표시한 대상(지금 볼 수 있는 것만).

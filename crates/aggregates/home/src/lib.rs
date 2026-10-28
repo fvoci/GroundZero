@@ -29,7 +29,7 @@ pub struct HomeState {
         dashboard::HomeTask,
         dashboard::HomeDocument,
         dashboard::HomeItem,
-        dashboard::MarkTarget,
+        fvoci_core::marks::MarkTarget,
         dashboard::MarkedTarget,
         dashboard::Home,
         dashboard::UpNextCounts,
