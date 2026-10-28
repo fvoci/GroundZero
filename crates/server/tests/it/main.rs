@@ -67,6 +67,7 @@ mod schedule;
 mod settings_contract;
 mod sharing;
 mod shutdown;
+mod source_organization;
 mod storage;
 mod study;
 mod supabase;

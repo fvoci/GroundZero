@@ -114,6 +114,9 @@ CREATE TABLE fvoci.documents (
     deleted_at timestamp with time zone,
     trash_batch_id uuid,
     is_template boolean DEFAULT false NOT NULL,
+    -- 공간 문서에서 만든 개인 노트가 기억하는 출처 조직(#175=1, D-114). 그 조직의 복제·이동 경계와 공개 링크 설정을
+    -- 계속 따른다. 개인 노트에만 있고, 같은 조직 공간으로 옮겨 공간 문서가 되면 비운다.
+    source_organization_id uuid,
     CONSTRAINT documents_id_uuidv7 CHECK ((uuid_extract_version(id) = 7)),
     CONSTRAINT documents_module_shape CHECK (((placement = 'module'::text) = (item_id IS NOT NULL))),
     CONSTRAINT documents_one_owner CHECK (((workspace_id IS NULL) <> (owner_user_id IS NULL))),
@@ -121,6 +124,7 @@ CREATE TABLE fvoci.documents (
     CONSTRAINT documents_placement_check CHECK ((placement = ANY (ARRAY['wiki'::text, 'module'::text, 'personal'::text]))),
     CONSTRAINT documents_revision_check CHECK ((revision > 0)),
     CONSTRAINT documents_schema_version_check CHECK ((schema_version > 0)),
+    CONSTRAINT documents_source_organization_personal CHECK (((source_organization_id IS NULL) OR (placement = 'personal'::text))),
     CONSTRAINT documents_title_check CHECK ((length(btrim(title)) > 0)),
     CONSTRAINT documents_visibility_check CHECK ((visibility = ANY (ARRAY['workspace'::text, 'private'::text])))
 );
@@ -356,6 +360,7 @@ CREATE FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) RET
   DECLARE
     v_doc documents%ROWTYPE;
     v_item items%ROWTYPE;
+    v_from uuid;
   BEGIN
     PERFORM app_require_document(p_doc, 'owner');
     SELECT * INTO v_doc FROM documents WHERE id = p_doc;
@@ -371,9 +376,12 @@ CREATE FUNCTION fvoci.app_check_move(p_doc uuid, p_target uuid, p_item uuid) RET
     IF app_access('workspace', p_target) NOT IN ('owner', 'write') THEN
       RAISE EXCEPTION 'write access to the target workspace is required' USING ERRCODE = '42501';
     END IF;
-    -- 공간 간 이동은 같은 조직 안에서만 한다(D-24·D-114). 개인 노트는 소유자가 속한 어느 공간으로든 옮길 수 있다.
-    IF v_doc.workspace_id IS NOT NULL
-       AND app_target_organization('workspace', v_doc.workspace_id) IS DISTINCT FROM app_target_organization('workspace', p_target) THEN
+    -- 공간 간 이동은 같은 조직 안에서만 한다(D-24·D-114). 출처 조직을 기억한 개인 노트도 그 조직 공간으로만 옮긴다
+    -- (#175=1, 조직을 떠났거나 조직이 없어도 기억은 남는다). 기억이 없는 개인 노트는 소유자가 속한 어느 공간으로든 옮긴다.
+    v_from := CASE WHEN v_doc.workspace_id IS NOT NULL THEN app_target_organization('workspace', v_doc.workspace_id)
+                   ELSE v_doc.source_organization_id END;
+    IF (v_doc.workspace_id IS NOT NULL OR v_doc.source_organization_id IS NOT NULL)
+       AND v_from IS DISTINCT FROM app_target_organization('workspace', p_target) THEN
       RAISE EXCEPTION 'documents move within the organization' USING ERRCODE = '55000';
     END IF;
     IF p_item IS NOT NULL THEN
@@ -408,11 +416,15 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
     v_private boolean;
     v_id      uuid;
     v_number  bigint;
+    v_source  uuid;
   BEGIN
     SELECT * INTO v_src FROM documents WHERE id = p_doc;
     IF v_access <> 'owner' AND NOT v_src.allow_copy AND NOT v_src.is_template THEN
       RAISE EXCEPTION 'copying is not allowed for this document' USING ERRCODE = '42501';
     END IF;
+    -- 원본의 조직: 공간 문서는 그 공간의 조직, 개인 노트는 기억한 출처 조직(#175=1, 없으면 NULL).
+    v_source := CASE WHEN v_src.workspace_id IS NOT NULL THEN app_target_organization('workspace', v_src.workspace_id)
+                     ELSE v_src.source_organization_id END;
     -- 사본으로 볼 수 있는 사람이 조용히 늘지 않게: 비공개 문서, 개인 노트, 비공개 항목 아래 문서의 사본은 비공개.
     v_private := v_src.visibility = 'private'
       OR EXISTS (SELECT 1 FROM items i WHERE i.id = v_src.item_id AND i.visibility = 'private');
@@ -420,10 +432,11 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
     IF p_target_workspace IS NULL THEN
       SELECT id INTO v_id FROM documents WHERE owner_user_id = v_user AND request_id = p_request_id;
       IF v_id IS NOT NULL THEN RETURN v_id; END IF;
+      -- 개인 노트 사본은 원본의 조직을 기억한다. 공간 문서의 사본이면 그 조직, 기억한 노트의 사본이면 이어받는다(B·C).
       INSERT INTO documents (id, owner_user_id, placement, scope, number, title, schema_version, body,
-                             revision, created_by, updated_by, request_id, visibility)
+                             revision, created_by, updated_by, request_id, visibility, source_organization_id)
       VALUES (app_id(p_ids, 1), v_user, 'personal', 'NOTE', NULL, btrim(p_title), v_src.schema_version, v_src.body,
-              1, v_user, v_user, p_request_id, 'private')
+              1, v_user, v_user, p_request_id, 'private', v_source)
       RETURNING id INTO v_id;
     ELSE
       IF app_access('workspace', p_target_workspace) = 'none' THEN
@@ -432,8 +445,8 @@ CREATE FUNCTION fvoci.app_copy_document(p_doc uuid, p_request_id uuid, p_target_
       IF app_access('workspace', p_target_workspace) NOT IN ('owner', 'write') THEN
         RAISE EXCEPTION 'write access to the target workspace is required' USING ERRCODE = '42501';
       END IF;
-      IF v_src.workspace_id IS NOT NULL
-         AND app_target_organization('workspace', v_src.workspace_id) IS DISTINCT FROM app_target_organization('workspace', p_target_workspace) THEN
+      IF v_source IS NOT NULL
+         AND v_source IS DISTINCT FROM app_target_organization('workspace', p_target_workspace) THEN
         RAISE EXCEPTION 'copies stay within the organization' USING ERRCODE = '55000';
       END IF;
       SELECT id INTO v_id FROM documents
@@ -1179,7 +1192,7 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
     END LOOP;
 
     UPDATE documents d
-    SET workspace_id = p_target, owner_user_id = NULL, item_id = p_item,
+    SET workspace_id = p_target, owner_user_id = NULL, source_organization_id = NULL, item_id = p_item,
         placement = CASE WHEN p_item IS NULL THEN 'wiki' ELSE 'module' END,
         scope = CASE WHEN p_item IS NULL THEN 'WIKI' ELSE v_scope::text END,
         number = v_number, parent_id = NULL,
@@ -1776,6 +1789,10 @@ ALTER TABLE ONLY fvoci.documents
 
 ALTER TABLE ONLY fvoci.documents
     ADD CONSTRAINT documents_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES fvoci.documents(id);
+
+-- 출처 조직은 지워지면 경계가 풀리므로 SET NULL 없이 둔다(#175=1 E). 조직을 지우는 경로는 아직 없다.
+ALTER TABLE ONLY fvoci.documents
+    ADD CONSTRAINT documents_source_organization_id_fkey FOREIGN KEY (source_organization_id) REFERENCES fvoci.organizations(id);
 
 ALTER TABLE ONLY fvoci.documents
     ADD CONSTRAINT documents_trash_batch_id_fkey FOREIGN KEY (trash_batch_id) REFERENCES fvoci.trash_batches(id);
