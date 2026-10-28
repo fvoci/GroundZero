@@ -13,7 +13,7 @@ description: fvoci 서버(crates/server와 공통 crate core·db·http)를 바�
 - 오류 계약: 칸 검증 거절은 `AppError::invalid`(`crates/core/src/error.rs`)로 400 `bad_request`에 `reason`·`field`·`limit`을 싣는다(#76·#79). 판 충돌 409는 `fvoci_http::conflict::StaleWrite`(지금 자원과 바뀐 칸, #180 서버 부분)를 쓴다. 공통 검증은 `crates/core/src/validate.rs`.
 - 개인 시간은 `crates/domains/time`(`fvoci-time`)에 있고 시험은 `it/time/`이다. 기록 자원과 대상 표시 모음(`/time-entry-targets`)은 따로 읽어 웹의 `features/time/data.ts`에서 조합한다. 업무·항목 예상/실제 비교는 시간 함수와 업무 표를 SQL 한 문장으로 읽으며 도메인 crate끼리 의존하지 않는다.
 - 부르는 SQL 함수의 시그니처·id 개수는 `crates/db/migrations/`의 영역 기준 파일에서 직접 확인한다(`grep -n '^CREATE FUNCTION fvoci.<이름>(' crates/db/migrations/*.sql`). 새 행 id는 서버가 만든다(`new_ids(n)`, 가변은 `needed_ids`).
-- 기대 사용자(D-96): `ExpectedUser`를 받는 처리기는 머리가 필수다. 업무·소통활동 도메인 라우터의 `ExpectedUserIfSent`는 머리가 있으면 모든 명령에서 비교하고 400/409(`account_changed`)를 낸다. 머리는 비교에만 쓰며, 소통활동 명령의 머리는 계속 선택이다(D-96 개정). 붙은 경로·빠진 경로와 빠진 경로의 위험은 [expected-user.md](expected-user.md).
+- 기대 사용자(D-96): `ExpectedUser`를 받는 처리기는 머리가 필수다. 업무·소통활동·조직 도메인 라우터의 `ExpectedUserIfSent`는 머리가 있으면 모든 명령에서 비교하고 400/409(`account_changed`)를 낸다. 머리는 비교에만 쓰며, 소통활동·조직 명령의 머리는 계속 선택이다(조직 설정·공간 한도 PUT의 기존 필수 머리는 유지)(D-96 개정). 붙은 경로·빠진 경로와 빠진 경로의 위험은 [expected-user.md](expected-user.md).
 - 템플릿으로 새 문서(`features/documents.rs` `initial_body`): 위키·항목 문서는 SQL `app_template_body`가 본문을 준다. 공간 문서 템플릿은 같은 조직 공간에서만 쓰고(다른 조직이면 409) 원본에 복제 감사를 남긴다(D-114·D-115). 개인 노트는 문서 RLS로 읽을 수 있는 템플릿만 쓴다.
 - 마감 알림(#86): 보관이 커밋된 뒤에는 마감 알림이 없다. 기준 SQL `app_notify`의 `due` 분기가 `app_lock_item`으로 잠근 뒤 `app_item_archived`를 다시 본다. 시험 `tests/it/activity/comment_archive_race.rs`의 `due_notifications_wait_for_archive_and_do_not_notify_after_commit`.
 

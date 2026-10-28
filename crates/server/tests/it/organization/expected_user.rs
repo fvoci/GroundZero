@@ -63,7 +63,7 @@ async fn invitation(w: &World) -> (Uuid, TestUser) {
     (id, recipient)
 }
 
-async fn scenario(name: &str) -> (World, Command) {
+async fn scenario(name: &str) -> Result<(World, Command), String> {
     let w = World::new().await;
     let member = w.member("member").await;
     let mut c = Command {
@@ -264,9 +264,9 @@ async fn scenario(name: &str) -> (World, Command) {
                 }
             }
         }
-        _ => panic!("unknown command fixture {name}"),
+        _ => return Err(format!("unknown command fixture {name}")),
     }
-    (w, c)
+    Ok((w, c))
 }
 
 async fn snapshot(w: &World, actor: &TestUser) -> Value {
@@ -328,7 +328,7 @@ async fn every_organization_command_compares_a_sent_user_without_changing_any_re
     let mut failures = Vec::new();
     for name in COMMANDS {
         for sent in [false, true] {
-            let (w, c) = scenario(name).await;
+            let (w, c) = scenario(name).await.unwrap();
             let app = common::app(&w.state);
             let matching = c.actor.id.0.to_string();
             if !sent {

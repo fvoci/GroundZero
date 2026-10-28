@@ -237,8 +237,8 @@ pub struct SetOrganizationRole {
 }
 
 #[utoipa::path(put, path = "/api/organizations/{organization_id}/members/{user_id}", operation_id = "set_organization_member",
-    params(("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)), request_body = SetOrganizationRole,
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)), request_body = SetOrganizationRole,
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn set_member(
     State(state): State<OrganizationsState>,
@@ -284,8 +284,8 @@ pub async fn removal_preview(
 }
 
 #[utoipa::path(delete, path = "/api/organizations/{organization_id}/members/{user_id}", operation_id = "remove_organization_member",
-    params(("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)),
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn remove_member(
     State(state): State<OrganizationsState>,
@@ -328,7 +328,7 @@ pub struct OrganizationInvitation {
 }
 
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/invitations", operation_id = "invite_organization",
-    params(("organization_id" = OrganizationId, Path)), request_body = InviteOrganization,
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path)), request_body = InviteOrganization,
     responses((status = 201, body = OrganizationInvitation), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn invite(
@@ -462,8 +462,8 @@ pub async fn workspaces(
 }
 
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin", operation_id = "join_workspace_as_admin",
-    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "organizations")]
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    responses((status = 409, body = ErrorBody), (status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn join_as_admin(
     State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
@@ -503,8 +503,8 @@ async fn require_organization_workspace(
 
 /// 조직 관리자가 보존 기간 안의 삭제된 워크스페이스를 복원한다.
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore", operation_id = "restore_organization_workspace",
-    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn restore_workspace(
     State(state): State<OrganizationsState>,
@@ -525,9 +525,9 @@ pub async fn restore_workspace(
 
 /// 조직 관리자가 워크스페이스 멤버에게 소유권 인계를 제안한다.
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer", operation_id = "offer_organization_workspace_ownership",
-    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
     request_body = OfferOwnership,
-    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+    responses((status = 409, body = ErrorBody), (status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn offer_workspace_ownership(
     State(state): State<OrganizationsState>,
@@ -584,9 +584,9 @@ pub struct CreatedOrganization {
     pub id: OrganizationId,
 }
 
-#[utoipa::path(post, path = "/api/server/organizations", operation_id = "create_organization",
+#[utoipa::path(post, params(("x-fvoci-expected-user" = Option<UserId>, Header)), path = "/api/server/organizations", operation_id = "create_organization",
     request_body = CreateOrganization,
-    responses((status = 201, body = CreatedOrganization), (status = 400, body = ErrorBody),
+    responses((status = 409, body = ErrorBody), (status = 201, body = CreatedOrganization), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn create(
     State(state): State<OrganizationsState>,

@@ -10,8 +10,9 @@ pub mod workspaces;
 
 use axum::Router;
 use axum::extract::FromRef;
+use axum::middleware::from_extractor_with_state;
 use axum::routing::{delete, get, post, put};
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use utoipa::OpenApi;
 
 pub use state::{AccountState, OrganizationsState};
@@ -22,6 +23,7 @@ pub use state::{AccountState, OrganizationsState};
     paths(
         accounts::me,
         accounts::set_settings,
+        accounts::set_last_organization,
         workspaces::list,
         workspaces::create,
         workspaces::delete,
@@ -80,6 +82,7 @@ pub use state::{AccountState, OrganizationsState};
         accounts::Me,
         accounts::InputLimits,
         accounts::MySettings,
+        accounts::SetLastOrganization,
         workspaces::Workspace,
         workspaces::CreateWorkspace,
         workspaces::DeleteWorkspace,
@@ -104,8 +107,9 @@ pub use state::{AccountState, OrganizationsState};
 )]
 pub struct OrganizationsApi;
 
-/// 조립 상태에서 부분 상태를 꺼내는 경로(/api 아래).
-pub fn router<S>() -> Router<S>
+/// 조립 상태에서 부분 상태를 꺼내는 경로(/api 아래). 보낸 기대 사용자는 모든 명령에서 비교한다(D-96).
+/// 이미 필수인 조직 설정·공간 한도는 처리기의 ExpectedUser도 그대로 유지한다.
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     OrganizationsState: FromRef<S>,
@@ -115,6 +119,10 @@ where
     Router::new()
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
+        .route(
+            "/me/last-organization",
+            put(accounts::set_last_organization),
+        )
         .route("/me/organizations", get(organizations::list_mine))
         .route("/organizations/{organization_id}", get(organizations::get))
         .route(
@@ -178,6 +186,9 @@ where
             post(workspaces::restore),
         )
         .merge(member_routes())
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }
 
 fn member_routes<S>() -> Router<S>

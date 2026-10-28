@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::OrganizationsState;
 use fvoci_core::access::Grade;
 use fvoci_core::error::{AppError, ErrorBody};
-use fvoci_core::ids::{OrganizationId, Role, WorkspaceId};
+use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, new_ids};
 use fvoci_http::session::CurrentUser;
@@ -106,8 +106,8 @@ pub async fn list(
 }
 
 /// 워크스페이스 생성. 생성자는 관리자가 된다.
-#[utoipa::path(post, path = "/api/workspaces", request_body = CreateWorkspace,
-    responses((status = 201, body = Workspace), (status = 400, body = ErrorBody),
+#[utoipa::path(post, params(("x-fvoci-expected-user" = Option<UserId>, Header)), path = "/api/workspaces", request_body = CreateWorkspace,
+    responses((status = 409, body = ErrorBody), (status = 201, body = Workspace), (status = 400, body = ErrorBody),
               (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "workspaces")]
 pub async fn create(
     State(state): State<OrganizationsState>,
@@ -171,7 +171,7 @@ pub struct DeletedWorkspace {
 /// 워크스페이스 지우기(소유자, 이름 확인, D-51). 곧바로 모든 멤버에게 보이지 않고, 보존 기간 안에 소유자가
 /// 되살릴 수 있다. 소유권 인계가 진행 중이면 409.
 #[utoipa::path(delete, path = "/api/workspaces/{workspace_id}", operation_id = "delete_workspace",
-    params(("workspace_id" = String, Path, format = Uuid)), request_body = DeleteWorkspace,
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("workspace_id" = String, Path, format = Uuid)), request_body = DeleteWorkspace,
     responses((status = 200, body = WorkspaceDeleted), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "workspaces")]
@@ -222,8 +222,8 @@ pub async fn deleted(
 
 /// 지운 워크스페이스 되살리기(소유자, 보존 기간 안). 지났으면 409.
 #[utoipa::path(post, path = "/api/me/deleted-workspaces/{workspace_id}/restore", operation_id = "restore_workspace",
-    params(("workspace_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("workspace_id" = String, Path, format = Uuid)),
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "workspaces")]
 pub async fn restore(
     State(state): State<OrganizationsState>,
@@ -243,8 +243,8 @@ pub async fn restore(
 
 /// 지운 워크스페이스 영구 삭제(소유자). 모든 내용이 지워지고 되돌릴 수 없다. 개인 시간 기록은 남는다.
 #[utoipa::path(delete, path = "/api/me/deleted-workspaces/{workspace_id}", operation_id = "purge_workspace",
-    params(("workspace_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 404, body = ErrorBody)), tag = "workspaces")]
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("workspace_id" = String, Path, format = Uuid)),
+    responses((status = 409, body = ErrorBody), (status = 400, body = ErrorBody), (status = 204), (status = 404, body = ErrorBody)), tag = "workspaces")]
 pub async fn purge(
     State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,

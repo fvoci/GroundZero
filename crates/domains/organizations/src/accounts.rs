@@ -4,10 +4,11 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use utoipa::ToSchema;
 
 use crate::AccountState;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{OrganizationId, UserId};
 use fvoci_http::session::CurrentUser;
 
@@ -89,7 +90,7 @@ pub async fn me(
     }))
 }
 
-/// 내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다.
+/// 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct MySettings {
     /// IANA 시간대 이름(예: `Asia/Seoul`). 빈 문자열이면 지운다.
@@ -107,30 +108,33 @@ pub struct MySettings {
     /// `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`).
     #[serde(default)]
     pub theme: Option<String>,
-    /// 마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다.
-    #[serde(default, deserialize_with = "deserialize_last_organization")]
-    #[schema(value_type = Option<String>, format = Uuid, nullable = true)]
-    pub last_organization_id: Option<Option<OrganizationId>>,
 }
 
-fn deserialize_last_organization<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<OrganizationId>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Option::<OrganizationId>::deserialize(deserializer).map(Some)
-}
-
-/// 내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.
-/// 모르는 설정 값이나 소속하지 않은 조직이면 400.
-#[utoipa::path(put, path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
-    responses((status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
+/// 내 표시 설정 바꾸기(D-50·D-81·D-109). 저장된 일정 시각·날짜는 그대로다.
+/// 마지막 조직은 별도 명령이다(#178·D-105).
+#[utoipa::path(put, params(("x-fvoci-expected-user" = Option<UserId>, Header)), path = "/api/me/settings", operation_id = "set_my_settings", request_body = MySettings,
+    responses((status = 409, body = ErrorBody), (status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
 pub async fn set_settings(
     State(state): State<AccountState>,
     CurrentUser(user): CurrentUser,
-    Json(input): Json<MySettings>,
+    Json(patch): Json<Value>,
 ) -> Result<StatusCode, AppError> {
+    if patch.get("last_organization_id").is_some() {
+        return Err(AppError::invalid(
+            "last_organization_id",
+            InvalidReason::InvalidFormat,
+            None,
+            "last_organization_id is no longer a display setting",
+        ));
+    }
+    let input = MySettings::deserialize(&patch).map_err(|_| {
+        AppError::invalid(
+            "settings",
+            InvalidReason::InvalidFormat,
+            None,
+            "invalid display settings",
+        )
+    })?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_set_display_settings($1, $2, $3, $4, $5)")
         .bind(input.time_zone.as_deref())
@@ -141,13 +145,48 @@ pub async fn set_settings(
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;
-    if let Some(organization) = input.last_organization_id {
-        sqlx::query("SELECT app_set_last_organization($1)")
-            .bind(organization)
-            .execute(tx.conn())
-            .await
-            .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// 마지막 조직 선택. null은 선택을 지운다. 표시 설정과 별도 명령이다(#178·D-105).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetLastOrganization {
+    #[schema(value_type = Option<String>, format = Uuid, nullable = true, required = true)]
+    pub organization_id: Option<OrganizationId>,
+}
+
+/// 소속 조직 가운데 마지막으로 고른 조직만 저장한다(D-121).
+#[utoipa::path(put, params(("x-fvoci-expected-user" = Option<UserId>, Header)), path = "/api/me/last-organization", operation_id = "set_last_organization",
+    request_body = SetLastOrganization,
+    responses((status = 409, body = ErrorBody), (status = 204), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody)), tag = "auth")]
+pub async fn set_last_organization(
+    State(state): State<AccountState>,
+    CurrentUser(user): CurrentUser,
+    Json(patch): Json<Value>,
+) -> Result<StatusCode, AppError> {
+    if patch.get("organization_id").is_none() {
+        return Err(AppError::invalid(
+            "organization_id",
+            InvalidReason::Required,
+            None,
+            "organization_id is required",
+        ));
     }
+    let input = SetLastOrganization::deserialize(&patch).map_err(|_| {
+        AppError::invalid(
+            "organization_id",
+            InvalidReason::InvalidFormat,
+            None,
+            "organization_id must be a UUID or null",
+        )
+    })?;
+    let mut tx = state.db.begin_as(user).await?;
+    sqlx::query("SELECT app_set_last_organization($1)")
+        .bind(input.organization_id)
+        .execute(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

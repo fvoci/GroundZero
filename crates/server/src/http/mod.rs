@@ -639,7 +639,7 @@ pub fn router(state: AppState) -> Router {
         .unwrap_or(usize::MAX)
         .saturating_add(64 * 1024);
     let api = Router::new()
-        .merge(fvoci_organizations::router())
+        .merge(fvoci_organizations::router(&state))
         .merge(fvoci_work::router(&state))
         .merge(fvoci_time::router(&state))
         .merge(fvoci_activity::router(&state))

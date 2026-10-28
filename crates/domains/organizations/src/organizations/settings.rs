@@ -8,8 +8,8 @@ use utoipa::ToSchema;
 
 use super::{Organization, read_organization};
 use crate::OrganizationsState;
-use fvoci_core::error::{AppError, ErrorBody};
-use fvoci_core::ids::{OrganizationId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
+use fvoci_core::ids::{OrganizationId, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
 use fvoci_db::access::{self, Kind};
 use fvoci_db::{UserTx, new_ids};
@@ -44,22 +44,127 @@ pub struct OrganizationSettingsPatch {
     pub limits: OrganizationLimits,
 }
 
-/// SQL의 열 CHECK와 같은 입력 범위. SQL의 23514/22P02는 내부 오류이므로 HTTP 입력에서 검증한다.
+/// SQL 열 CHECK와 같은 범위. 한도는 최댓값일 때만 limit에 싣는다.
 fn validate_limits(limits: &OrganizationLimits) -> Result<(), AppError> {
-    if limits.max_file_bytes.is_some_and(|v| v < 1)
-        || limits.max_storage_bytes.is_some_and(|v| v < 0)
-        || limits.max_concurrent_uploads.is_some_and(|v| v < 1)
-        || limits.notification_rate_per_hour.is_some_and(|v| v < 1)
-        || limits
-            .activity_retention_days
-            .is_some_and(|v| !(1..=3650).contains(&v))
-        || limits
-            .audit_retention_days
-            .is_some_and(|v| !(1..=3650).contains(&v))
-    {
-        return Err(AppError::BadRequest(
-            "limit is outside its allowed range".into(),
-        ));
+    for (field, value, minimum, maximum) in [
+        ("max_file_bytes", limits.max_file_bytes, 1, None),
+        ("max_storage_bytes", limits.max_storage_bytes, 0, None),
+        (
+            "max_concurrent_uploads",
+            limits.max_concurrent_uploads.map(i64::from),
+            1,
+            None,
+        ),
+        (
+            "notification_rate_per_hour",
+            limits.notification_rate_per_hour.map(i64::from),
+            1,
+            None,
+        ),
+        (
+            "activity_retention_days",
+            limits.activity_retention_days.map(i64::from),
+            1,
+            Some(3650),
+        ),
+        (
+            "audit_retention_days",
+            limits.audit_retention_days.map(i64::from),
+            1,
+            Some(3650),
+        ),
+    ] {
+        if let Some(value) = value {
+            if value < minimum {
+                return Err(out_of_range(field, None));
+            }
+            if maximum.is_some_and(|max| value > max) {
+                return Err(out_of_range(field, maximum));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum SettingsScope {
+    Organization,
+    Workspace,
+}
+
+fn invalid_format(field: &str) -> AppError {
+    AppError::invalid(
+        field,
+        InvalidReason::InvalidFormat,
+        None,
+        format!("{field} has an invalid format"),
+    )
+}
+
+fn out_of_range(field: &str, maximum: Option<i64>) -> AppError {
+    AppError::invalid(
+        field,
+        InvalidReason::OutOfRange,
+        maximum.and_then(|value| u64::try_from(value).ok()),
+        format!("{field} is outside its allowed range"),
+    )
+}
+
+fn integer(field: &str, value: &Value, minimum: i64, maximum: i64) -> Result<(), AppError> {
+    if value.is_null() {
+        return Ok(());
+    }
+    let number = value.as_i64().ok_or_else(|| {
+        if value.as_u64().is_some() {
+            out_of_range(field, Some(maximum))
+        } else {
+            invalid_format(field)
+        }
+    })?;
+    if number < minimum {
+        return Err(out_of_range(field, None));
+    }
+    if number > maximum {
+        return Err(out_of_range(field, Some(maximum)));
+    }
+    Ok(())
+}
+
+fn validate_patch(patch: &Value, scope: SettingsScope) -> Result<(), AppError> {
+    let root = match scope {
+        SettingsScope::Organization => "settings",
+        SettingsScope::Workspace => "limits",
+    };
+    let object = patch.as_object().ok_or_else(|| invalid_format(root))?;
+    for (field, value) in object {
+        match field.as_str() {
+            "name" if matches!(scope, SettingsScope::Organization) => {
+                if value.is_null() {
+                    return Err(AppError::invalid(
+                        "name",
+                        InvalidReason::Required,
+                        None,
+                        "the organization needs a name",
+                    ));
+                }
+                if !value.is_string() {
+                    return Err(invalid_format(field));
+                }
+            }
+            "public_links_enabled" if matches!(scope, SettingsScope::Organization) => {
+                if !value.is_null() && !value.is_boolean() {
+                    return Err(invalid_format(field));
+                }
+            }
+            "max_file_bytes" | "max_storage_bytes" => integer(field, value, i64::MIN, i64::MAX)?,
+            "max_concurrent_uploads"
+            | "notification_rate_per_hour"
+            | "activity_retention_days"
+            | "audit_retention_days" => {
+                integer(field, value, i64::from(i32::MIN), i64::from(i32::MAX))?;
+            }
+            _ => return Err(invalid_format(field)),
+        }
     }
     Ok(())
 }
@@ -75,13 +180,18 @@ pub async fn set_settings(
     Path(org): Path<OrganizationId>,
     Json(mut patch): Json<Value>,
 ) -> Result<Json<Organization>, AppError> {
-    let input = OrganizationSettingsPatch::deserialize(&patch)
-        .map_err(|_| AppError::BadRequest("invalid organization settings".into()))?;
+    validate_patch(&patch, SettingsScope::Organization)?;
+    let input =
+        OrganizationSettingsPatch::deserialize(&patch).map_err(|_| invalid_format("settings"))?;
     if patch.get("name").is_some() {
-        let name = input
-            .name
-            .as_deref()
-            .ok_or_else(|| AppError::BadRequest("the organization needs a name".into()))?;
+        let name = input.name.as_deref().ok_or_else(|| {
+            AppError::invalid(
+                "name",
+                InvalidReason::Required,
+                None,
+                "the organization needs a name",
+            )
+        })?;
         let name = validate_title(name, state.max_title_chars, "name")?;
         patch["name"] = Value::String(name);
     }
@@ -136,8 +246,8 @@ pub async fn set_workspace_limits(
     Path(ws): Path<WorkspaceId>,
     Json(patch): Json<Value>,
 ) -> Result<Json<OrganizationLimits>, AppError> {
-    let input = OrganizationLimits::deserialize(&patch)
-        .map_err(|_| AppError::BadRequest("invalid workspace limits".into()))?;
+    validate_patch(&patch, SettingsScope::Workspace)?;
+    let input = OrganizationLimits::deserialize(&patch).map_err(|_| invalid_format("limits"))?;
     validate_limits(&input)?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_set_workspace_limits($1, $2, $3)")

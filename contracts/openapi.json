@@ -3045,6 +3045,21 @@
         "operationId": "delete_group",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "group_id",
             "in": "path",
             "required": true,
@@ -3057,6 +3072,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -3077,6 +3102,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -3089,6 +3124,21 @@
         "summary": "그룹에 멤버 추가(관리자).",
         "operationId": "add_group_member",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
           {
             "name": "group_id",
             "in": "path",
@@ -3141,6 +3191,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       },
@@ -3151,6 +3211,21 @@
         "summary": "그룹에서 멤버 제외(관리자).",
         "operationId": "remove_group_member",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
           {
             "name": "group_id",
             "in": "path",
@@ -3174,6 +3249,16 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -3185,6 +3270,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -3240,6 +3335,21 @@
         "operationId": "revoke_invitation",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "invitation_id",
             "in": "path",
             "required": true,
@@ -3252,6 +3362,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -3295,6 +3415,21 @@
         "operationId": "accept_invitation",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "invitation_id",
             "in": "path",
             "required": true,
@@ -3311,6 +3446,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -3347,6 +3492,21 @@
         "operationId": "decline_invitation",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "invitation_id",
             "in": "path",
             "required": true,
@@ -3359,6 +3519,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -6064,6 +6234,21 @@
         "operationId": "purge_workspace",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -6077,7 +6262,27 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -6099,6 +6304,21 @@
         "operationId": "restore_workspace",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -6111,6 +6331,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -6221,6 +6451,77 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/last-organization": {
+      "put": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "소속 조직 가운데 마지막으로 고른 조직만 저장한다(D-121).",
+        "operationId": "set_last_organization",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLastOrganization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -6760,8 +7061,25 @@
         "tags": [
           "auth"
         ],
-        "summary": "내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.\n모르는 설정 값이나 소속하지 않은 조직이면 400.",
+        "summary": "내 표시 설정 바꾸기(D-50·D-81·D-109). 저장된 일정 시각·날짜는 그대로다.\n마지막 조직은 별도 명령이다(#178·D-105).",
         "operationId": "set_my_settings",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6787,6 +7105,16 @@
             }
           },
           "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -7899,6 +8227,21 @@
         "operationId": "invite_organization",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "organization_id",
             "in": "path",
             "required": true,
@@ -8022,6 +8365,21 @@
         "operationId": "set_organization_member",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "organization_id",
             "in": "path",
             "required": true,
@@ -8051,6 +8409,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -8091,6 +8459,21 @@
         "operationId": "remove_organization_member",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "organization_id",
             "in": "path",
             "required": true,
@@ -8110,6 +8493,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -8351,6 +8744,21 @@
         "operationId": "join_workspace_as_admin",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "organization_id",
             "in": "path",
             "required": true,
@@ -8371,6 +8779,16 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -8382,6 +8800,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -8402,6 +8830,21 @@
         "summary": "조직 관리자가 워크스페이스 멤버에게 소유권 인계를 제안한다.",
         "operationId": "offer_organization_workspace_ownership",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
           {
             "name": "organization_id",
             "in": "path",
@@ -8462,6 +8905,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -8474,6 +8927,21 @@
         "summary": "조직 관리자가 보존 기간 안의 삭제된 워크스페이스를 복원한다.",
         "operationId": "restore_organization_workspace",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
           {
             "name": "organization_id",
             "in": "path",
@@ -8494,6 +8962,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -9133,6 +9611,23 @@
           "organizations"
         ],
         "operationId": "create_organization",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9165,6 +9660,16 @@
             }
           },
           "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -11641,6 +12146,23 @@
         ],
         "summary": "워크스페이스 생성. 생성자는 관리자가 된다.",
         "operationId": "create",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -11691,6 +12213,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -11703,6 +12235,21 @@
         "summary": "워크스페이스 지우기(소유자, 이름 확인, D-51). 곧바로 모든 멤버에게 보이지 않고, 보존 기간 안에 소유자가\n되살릴 수 있다. 소유권 인계가 진행 중이면 409.",
         "operationId": "delete_workspace",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
           {
             "name": "workspace_id",
             "in": "path",
@@ -12066,6 +12613,21 @@
         "operationId": "create_group",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12092,6 +12654,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -12191,6 +12763,21 @@
         "operationId": "invite",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12273,6 +12860,21 @@
         "operationId": "leave",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12285,6 +12887,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "404": {
             "description": "",
@@ -12497,6 +13109,21 @@
         "operationId": "set_role",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12528,6 +13155,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -12569,6 +13206,21 @@
         "operationId": "remove_member",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12590,6 +13242,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -12758,6 +13420,21 @@
         "operationId": "offer_ownership",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12810,6 +13487,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       },
@@ -12820,6 +13507,21 @@
         "summary": "인계 제안 취소(소유자).",
         "operationId": "cancel_ownership_offer",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
           {
             "name": "workspace_id",
             "in": "path",
@@ -12834,6 +13536,16 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "403": {
             "description": "",
             "content": {
@@ -12845,6 +13557,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -12866,6 +13588,21 @@
         "operationId": "accept_ownership",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/UserId"
+                }
+              ]
+            }
+          },
+          {
             "name": "workspace_id",
             "in": "path",
             "required": true,
@@ -12879,7 +13616,27 @@
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -16932,7 +17689,7 @@
       },
       "MySettings": {
         "type": "object",
-        "description": "내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다.",
+        "description": "내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다.",
         "properties": {
           "hour_cycle": {
             "type": [
@@ -16940,14 +17697,6 @@
               "null"
             ],
             "description": "`h12`·`h23`, 빈 문자열이면 지운다."
-          },
-          "last_organization_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid",
-            "description": "마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다."
           },
           "locale": {
             "type": [
@@ -19132,6 +19881,22 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "SetLastOrganization": {
+        "type": "object",
+        "description": "마지막 조직 선택. null은 선택을 지운다. 표시 설정과 별도 명령이다(#178·D-105).",
+        "required": [
+          "organization_id"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           }
         }
       },
