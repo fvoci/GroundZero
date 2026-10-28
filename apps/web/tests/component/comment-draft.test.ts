@@ -1,7 +1,8 @@
+import { activityApi, type CommentView } from '$lib/features/activity/api';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api, NetworkError, type CommentView } from '$lib/api/client';
+import { NetworkError } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -28,7 +29,7 @@ describe('comment drafts', () => {
     await setLocale('ko', { reload: false });
     localStorage.clear();
     me.userId = 'user-a';
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   });
   afterEach(() => {
     cleanup();
@@ -38,7 +39,7 @@ describe('comment drafts', () => {
   });
 
   it('offers a failed new comment after remount and preserves its retry id', async () => {
-    const add = vi.spyOn(api, 'addComment').mockRejectedValue(new NetworkError('offline'));
+    const add = vi.spyOn(activityApi, 'addComment').mockRejectedValue(new NetworkError('offline'));
     const view = render(CommentsPanel, { props });
     await fireEvent.input(screen.getByLabelText(/새 댓글/), { target: { value: '남길 댓글' } });
     await fireEvent.click(screen.getByRole('button', { name: '댓글 달기' }));
@@ -70,7 +71,7 @@ describe('comment drafts', () => {
 
   it('hides the original account input on a live switch and offers it only to that account', async () => {
     const unsaved = vi.fn();
-    const add = vi.spyOn(api, 'addComment');
+    const add = vi.spyOn(activityApi, 'addComment');
     render(CommentsPanel, { props: { ...props, onunsaved: unsaved } });
     await fireEvent.input(screen.getByLabelText(/새 댓글/), {
       target: { value: 'A의 비공개 입력' },
@@ -92,9 +93,11 @@ describe('comment drafts', () => {
   });
 
   it('keeps independent replies and a failed existing-comment edit across remount', async () => {
-    vi.mocked(api.comments).mockResolvedValue([comment('c1'), comment('c2')]);
-    const edit = vi.spyOn(api, 'editComment').mockRejectedValue(new NetworkError('offline'));
-    const add = vi.spyOn(api, 'addComment');
+    vi.mocked(activityApi.comments).mockResolvedValue([comment('c1'), comment('c2')]);
+    const edit = vi
+      .spyOn(activityApi, 'editComment')
+      .mockRejectedValue(new NetworkError('offline'));
+    const add = vi.spyOn(activityApi, 'addComment');
     const unsaved = vi.fn();
     const view = render(CommentsPanel, { props: { ...props, onunsaved: unsaved } });
     for (const id of ['c1', 'c2']) {
@@ -140,7 +143,7 @@ describe('comment drafts', () => {
 
   it('retains input when access is revoked and when a late success follows more typing', async () => {
     let resolve: (id: string) => void = () => undefined;
-    vi.spyOn(api, 'addComment').mockReturnValue(
+    vi.spyOn(activityApi, 'addComment').mockReturnValue(
       new Promise((done) => {
         resolve = done;
       }),
@@ -163,8 +166,10 @@ describe('comment drafts', () => {
 
   // R5 F-11: 쓸 수 없는 동안은 되살리기 대신 읽기 전용 안내와 버리기만 보인다. 입력은 버리기 전까지 남는다.
   it('offers only discard with a read-only notice while comments cannot be written', async () => {
-    vi.mocked(api.comments).mockResolvedValue([comment('c1')]);
-    const edit = vi.spyOn(api, 'editComment').mockRejectedValue(new NetworkError('offline'));
+    vi.mocked(activityApi.comments).mockResolvedValue([comment('c1')]);
+    const edit = vi
+      .spyOn(activityApi, 'editComment')
+      .mockRejectedValue(new NetworkError('offline'));
     const first = render(CommentsPanel, { props });
     await fireEvent.input(screen.getByLabelText(/새 댓글/), {
       target: { value: '읽기 전용 입력' },
@@ -207,7 +212,7 @@ describe('comment drafts', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('unavailable');
     });
-    const add = vi.spyOn(api, 'addComment').mockResolvedValue('c1');
+    const add = vi.spyOn(activityApi, 'addComment').mockResolvedValue('c1');
     const unsaved = vi.fn();
     render(CommentsPanel, { props: { ...props, onunsaved: unsaved } });
     await fireEvent.input(screen.getByLabelText(/새 댓글/), { target: { value: '메모' } });
@@ -223,7 +228,7 @@ describe('comment drafts', () => {
   });
 
   it('does not overwrite or clear another tab when this tab saves', async () => {
-    vi.spyOn(api, 'addComment').mockResolvedValue('c1');
+    vi.spyOn(activityApi, 'addComment').mockResolvedValue('c1');
     sessionStorage.setItem('fvoci:tab', 'first-tab');
     const first = render(CommentsPanel, { props });
     const a = within(first.container);

@@ -15,7 +15,19 @@ const WRITES: [&str; 3] = [
     "SELECT fvoci.app_resolve_comment($1,false)",
 ];
 
-async fn overlap(module: bool, archive_first: bool) {
+#[derive(Debug, Clone, Copy)]
+enum ArchiveTarget {
+    Item,
+    Module,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LockOrder {
+    ArchiveFirst,
+    WriteFirst,
+}
+
+async fn overlap(target: ArchiveTarget, order: LockOrder) {
     for write in WRITES {
         let w = World::new().await;
         let task = w.task().await;
@@ -28,7 +40,7 @@ async fn overlap(module: bool, archive_first: bool) {
             &[comment],
         )
         .await;
-        let (archive, target) = if module {
+        let (archive, target) = if matches!(target, ArchiveTarget::Module) {
             ("SELECT fvoci.app_archive_module($1,true,@ids)", w.module)
         } else {
             ("SELECT fvoci.app_archive_item($1,true,@ids)", w.item)
@@ -37,7 +49,7 @@ async fn overlap(module: bool, archive_first: bool) {
         let mut second = w.state.db.begin_as(w.owner.id).await.unwrap();
         let holder = pid(first.conn()).await;
         let waiter = pid(second.conn()).await;
-        let (first_sql, first_id, next_sql, next_id) = if archive_first {
+        let (first_sql, first_id, next_sql, next_id) = if matches!(order, LockOrder::ArchiveFirst) {
             (archive, target, write, comment)
         } else {
             (write, comment, archive, target)
@@ -56,7 +68,7 @@ async fn overlap(module: bool, archive_first: bool) {
             .await
             .unwrap()
             .unwrap();
-        if archive_first {
+        if matches!(order, LockOrder::ArchiveFirst) {
             code(&result.unwrap_err(), "55000");
         } else {
             result.unwrap();
@@ -66,19 +78,19 @@ async fn overlap(module: bool, archive_first: bool) {
 
 #[tokio::test]
 async fn comment_updates_hold_item_until_archive_commits() {
-    overlap(false, false).await;
+    overlap(ArchiveTarget::Item, LockOrder::WriteFirst).await;
 }
 #[tokio::test]
 async fn comment_updates_hold_module_until_archive_commits() {
-    overlap(true, false).await;
+    overlap(ArchiveTarget::Module, LockOrder::WriteFirst).await;
 }
 #[tokio::test]
 async fn item_archive_rejects_waiting_comment_updates() {
-    overlap(false, true).await;
+    overlap(ArchiveTarget::Item, LockOrder::ArchiveFirst).await;
 }
 #[tokio::test]
 async fn module_archive_rejects_waiting_comment_updates() {
-    overlap(true, true).await;
+    overlap(ArchiveTarget::Module, LockOrder::ArchiveFirst).await;
 }
 
 #[tokio::test]
@@ -131,10 +143,10 @@ async fn reply_and_edit_use_the_same_module_before_comment_lock_order() {
     code(&edited.unwrap_err(), "55000");
 }
 
-async fn due_overlap(archive_first: bool) {
+async fn due_overlap(order: LockOrder) {
     let w = World::new().await;
     let task = w.task().await;
-    let date = if archive_first {
+    let date = if matches!(order, LockOrder::ArchiveFirst) {
         "2091-04-05"
     } else {
         "2091-05-06"
@@ -144,7 +156,7 @@ async fn due_overlap(archive_first: bool) {
         &[task],
     )
     .await;
-    let sql: &'static str = if archive_first {
+    let sql: &'static str = if matches!(order, LockOrder::ArchiveFirst) {
         "SELECT fvoci.app_system_due_notifications('2091-04-05',@ids)"
     } else {
         "SELECT fvoci.app_system_due_notifications('2091-05-06',@ids)"
@@ -153,7 +165,7 @@ async fn due_overlap(archive_first: bool) {
     let mut notify = w.state.db.begin_anonymous().await.unwrap();
     let archive_pid = pid(archive.conn()).await;
     let notify_pid = pid(notify.conn()).await;
-    if archive_first {
+    if matches!(order, LockOrder::ArchiveFirst) {
         on(
             archive.conn(),
             "SELECT fvoci.app_archive_module($1,true,@ids)",
@@ -200,15 +212,21 @@ async fn due_overlap(archive_first: bool) {
         &[task],
     )
     .await;
-    assert_eq!(notifications.len(), usize::from(!archive_first));
+    assert_eq!(
+        notifications.len(),
+        match order {
+            LockOrder::ArchiveFirst => 0,
+            LockOrder::WriteFirst => 1,
+        }
+    );
 }
 
 #[tokio::test]
 async fn module_archive_prevents_waiting_due_notifications() {
-    due_overlap(true).await;
+    due_overlap(LockOrder::ArchiveFirst).await;
 }
 
 #[tokio::test]
 async fn due_notification_holds_module_until_archive_can_commit() {
-    due_overlap(false).await;
+    due_overlap(LockOrder::WriteFirst).await;
 }

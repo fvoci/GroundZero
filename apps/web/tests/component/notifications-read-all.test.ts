@@ -1,8 +1,8 @@
+import { activityApi, type NotificationView } from '$lib/features/activity/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { NotificationView } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -10,7 +10,7 @@ import { router } from '$lib/router.svelte';
 
 beforeEach(() => {
   router.path = '/notifications';
-  vi.spyOn(api, 'unreadCount').mockResolvedValueOnce(15).mockResolvedValue(0);
+  vi.spyOn(activityApi, 'unreadCount').mockResolvedValueOnce(15).mockResolvedValue(0);
 });
 
 afterEach(() => {
@@ -42,8 +42,11 @@ const unread: NotificationView = {
 describe('notifications mark all read', () => {
   it('says so beside the button when marking fails and keeps the list', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [unread], next: null });
-    vi.spyOn(api, 'markNotificationsRead').mockRejectedValue(
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({
+      notifications: [unread],
+      next: null,
+    });
+    vi.spyOn(activityApi, 'markNotificationsRead').mockRejectedValue(
       new ApiError(401, 'unauthorized', 'Unauthorized'),
     );
     const onchanged = vi.fn();
@@ -64,11 +67,11 @@ describe('notifications mark all read', () => {
   it('sends one request while marking is in flight and disables the button', async () => {
     await setLocale('ko', { reload: false });
     const read: NotificationView = { ...unread, read: true };
-    vi.spyOn(api, 'notifications')
+    vi.spyOn(activityApi, 'notifications')
       .mockResolvedValueOnce({ notifications: [unread], next: null })
       .mockResolvedValue({ notifications: [read], next: null });
     let finish: () => void = () => undefined;
-    const mark = vi.spyOn(api, 'markNotificationsRead').mockImplementation(
+    const mark = vi.spyOn(activityApi, 'markNotificationsRead').mockImplementation(
       () =>
         new Promise<number>((resolve) => {
           finish = () => {
@@ -96,9 +99,12 @@ describe('notifications mark all read', () => {
 
   it('enables the button again after a failed attempt so it can be retried', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [unread], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({
+      notifications: [unread],
+      next: null,
+    });
     const mark = vi
-      .spyOn(api, 'markNotificationsRead')
+      .spyOn(activityApi, 'markNotificationsRead')
       .mockRejectedValue(new ApiError(500, 'internal', '서버 오류'));
     render(NotificationsScreen, { props: { workspaces: [], onchanged: vi.fn() } });
 

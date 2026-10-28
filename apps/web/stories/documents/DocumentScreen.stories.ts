@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { spyOn } from 'storybook/test';
 import { api } from '$lib/api/client';
@@ -17,7 +18,7 @@ const meta = {
     spyOn(api, 'document').mockResolvedValue(ACCESS_DOCUMENT);
     spyOn(api, 'documentFiles').mockResolvedValue([ACCESS_FILE]);
     spyOn(api, 'documentBacklinks').mockResolvedValue([]);
-    spyOn(api, 'comments').mockResolvedValue(THREAD);
+    spyOn(activityApi, 'comments').mockResolvedValue(THREAD);
     return cleanup;
   },
 } satisfies Meta<typeof DocumentScreen>;

@@ -1,5 +1,6 @@
 import { api } from '$lib/api/client';
 import { eventsApi } from '$lib/features/events/api';
+import { activityApi } from '$lib/features/activity/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,7 +38,7 @@ const item: ItemView = {
 
 describe('audit list', () => {
   it('says loading, not empty, before the first page arrives', () => {
-    vi.spyOn(api, 'audit').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(activityApi, 'audit').mockReturnValue(new Promise(() => undefined));
     render(AuditScreen, { props: { workspace: undefined } });
     expect(screen.queryByText('기록이 없습니다.')).toBeNull();
     expect(screen.getAllByText('불러오는 중…').length).toBeGreaterThan(0);
@@ -45,7 +46,7 @@ describe('audit list', () => {
 
   it('retries a failed first load instead of claiming there are no entries', async () => {
     const load = vi
-      .spyOn(api, 'audit')
+      .spyOn(activityApi, 'audit')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue([]);
     render(AuditScreen, { props: { workspace: undefined } });

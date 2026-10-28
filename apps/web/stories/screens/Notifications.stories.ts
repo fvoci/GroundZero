@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, within } from 'storybook/test';
 import { api, NetworkError } from '$lib/api/client';
@@ -21,7 +22,7 @@ function setup(fail = false): () => void {
           cursor === undefined ? { before: '2026-10-26T00:00:00Z', before_id: 'cursor-1' } : null,
       }),
   });
-  spyOn(api, 'markNotificationsRead').mockImplementation(() =>
+  spyOn(activityApi, 'markNotificationsRead').mockImplementation(() =>
     fail ? Promise.reject(new NetworkError('offline')) : Promise.resolve(1),
   );
   return cleanup;
@@ -53,7 +54,7 @@ export const Invitation: Story = {
       notifications: () => Promise.resolve({ notifications: [INVITE_NOTIFICATION], next: null }),
       myInvitations: () => Promise.resolve([INVITATION]),
     });
-    spyOn(api, 'markNotificationsRead').mockResolvedValue(1);
+    spyOn(activityApi, 'markNotificationsRead').mockResolvedValue(1);
     spyOn(api, 'acceptInvitation').mockResolvedValue({
       kind: 'organization',
       organization_id: INVITATION.organization_id,

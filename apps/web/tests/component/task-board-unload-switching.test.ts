@@ -1,4 +1,5 @@
 import { savedViewsApi } from '$lib/features/events/saved-views-api';
+import { activityApi } from '$lib/features/activity/api';
 import { org } from '$lib/org.svelte';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
@@ -84,7 +85,7 @@ async function mountWithOpenTask(): Promise<HTMLElement> {
   vi.spyOn(work, 'task').mockResolvedValue(detail);
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });
   return screen.findByLabelText('설명', { exact: true });
 }
@@ -240,7 +241,7 @@ describe('task board unload warning while the account is switching', () => {
     const task = vi.spyOn(work, 'task').mockResolvedValue(detail);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     const { rerender } = render(TaskBoard, { props: { item, workspaces: [], openTaskId: 't-1' } });
     const description = await screen.findByLabelText('설명', { exact: true });
     await fireEvent.input(description, { target: { value: '남기지 못한 설명' } });

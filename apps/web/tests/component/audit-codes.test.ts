@@ -1,9 +1,8 @@
+import { activityApi, type AuditEntryView } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuditEntryView } from '$lib/api/client';
-import { api } from '$lib/api/client';
 import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
 import { auditAction, auditSubject } from '$lib/features/audit/labels';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -69,7 +68,7 @@ describe('audit codes', () => {
       detail,
       created_at: '2026-10-21T00:00:00Z',
     });
-    vi.spyOn(api, 'audit').mockResolvedValue([
+    vi.spyOn(activityApi, 'audit').mockResolvedValue([
       entry('a1', 'archive', 'module', {}),
       entry('a2', 'mark_template', 'document', {}),
       entry('a3', 'set_realtime', 'workspace', { enabled: true }),

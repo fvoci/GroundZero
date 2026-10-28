@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { activityApi, type MarkKind } from '$lib/features/activity/api';
   // 홈에 고정·즐겨찾기(D-19). 본인만 보는 표시이며 볼 수 있는 대상에만 켤 수 있다.
-  import type { MarkKind, MarkTarget } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+  import type { MarkTarget } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -22,7 +22,7 @@
   $effect(() => {
     const target = { kind, id };
     let cancelled = false;
-    api
+    activityApi
       .mark(target.kind, target.id)
       .then((s) => {
         if (!cancelled) marks = s;
@@ -37,7 +37,7 @@
     if (marks === undefined) return;
     error = undefined;
     try {
-      marks = await api.setMark(kind, id, mark, !marks[mark]);
+      marks = await activityApi.setMark(kind, id, mark, !marks[mark]);
     } catch (e: unknown) {
       error = errorText(e, m.home_mark_failed());
     }
