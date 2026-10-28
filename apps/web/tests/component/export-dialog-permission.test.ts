@@ -58,7 +58,7 @@ async function clickExport(doc: DocumentView): Promise<void> {
     },
   });
   const dialog = await screen.findByRole('dialog');
-  await fireEvent.click(within(dialog).getByRole('button', { name: '내보내기', exact: true }));
+  await fireEvent.click(within(dialog).getByRole('button', { name: /^내보내기$/ }));
 }
 
 describe('export dialog server permission (D-115, SR-200-1)', () => {
@@ -77,8 +77,12 @@ describe('export dialog server permission (D-115, SR-200-1)', () => {
 
     await clickExport(doc);
 
-    await waitFor(() => expect(exportRevision).toHaveBeenCalledWith(doc.id, 3, 'markdown'));
-    await waitFor(() => expect(exporter.saveBlob).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(exportRevision).toHaveBeenCalledWith(doc.id, 3, 'markdown');
+    });
+    await waitFor(() => {
+      expect(exporter.saveBlob).toHaveBeenCalledOnce();
+    });
   });
 
   it('sends no export request when the server denies it even if the dialog is open', async () => {
