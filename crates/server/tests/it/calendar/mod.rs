@@ -7,12 +7,36 @@
 
 use crate::common;
 
+mod privacy;
+mod scope;
+mod time_exclusion;
+
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{TestUser, add_member, create_workspace, login, new_request_id, send};
 use serde_json::{Value, json};
 
-async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str, public: bool) -> Value {
+#[derive(Clone, Copy)]
+enum Visibility {
+    Workspace,
+    Private,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum DateStatus {
+    SharedPending,
+    SharedDone,
+    PersonalPending,
+    PersonalDone,
+}
+
+async fn module_item(
+    app: &Router,
+    admin: &TestUser,
+    ws: &str,
+    key: &str,
+    visibility: Visibility,
+) -> Value {
     let m = send(
         app,
         Method::POST,
@@ -31,7 +55,7 @@ async fn module_item(app: &Router, admin: &TestUser, ws: &str, key: &str, public
     )
     .await;
     assert_eq!(i.status, StatusCode::CREATED, "{:?}", i.json);
-    if public {
+    if matches!(visibility, Visibility::Workspace) {
         let r = send(
             app,
             Method::PUT,
@@ -90,8 +114,8 @@ async fn the_calendar_shows_visible_tasks_and_events_by_the_viewers_days() {
     let ws = create_workspace(&app, &admin, "달력").await;
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
-    let public = module_item(&app, &admin, &ws, "PUB", true).await;
-    let private = module_item(&app, &admin, &ws, "PRV", false).await;
+    let public = module_item(&app, &admin, &ws, "PUB", Visibility::Workspace).await;
+    let private = module_item(&app, &admin, &ws, "PRV", Visibility::Private).await;
 
     let t = send(
         &app,
@@ -194,7 +218,7 @@ async fn calendar_days_start_at_the_first_midnight_in_the_viewers_zone() {
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "아바나 달력").await;
-    let item = module_item(&app, &admin, &ws, "HAV", true).await;
+    let item = module_item(&app, &admin, &ws, "HAV", Visibility::Workspace).await;
     for (title, starts, ends) in [
         (
             "가을 전날 밤",
@@ -252,7 +276,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
     let ws = create_workspace(&app, &admin, "달력 범위").await;
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let other_ws = create_workspace(&app, &admin, "다른 곳").await;
-    let made = |kind: &'static str, key: &'static str, public: bool| {
+    let made = |kind: &'static str, key: &'static str, visibility: Visibility| {
         let app = app.clone();
         let admin = admin.clone();
         let ws = ws.clone();
@@ -270,7 +294,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
             )
             .await;
             let item = i.json["id"].as_str().unwrap().to_owned();
-            if public {
+            if matches!(visibility, Visibility::Workspace) {
                 let r = send(
                     &app,
                     Method::PUT,
@@ -284,10 +308,10 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
             (module, item)
         }
     };
-    let (course_module, course) = made("course", "LEC", true).await;
-    let (_, study) = made("study", "STU", true).await;
-    let (_, research) = made("research", "RES", true).await;
-    let (_, project) = made("project", "PRJ", false).await;
+    let (course_module, course) = made("course", "LEC", Visibility::Workspace).await;
+    let (_, study) = made("study", "STU", Visibility::Workspace).await;
+    let (_, research) = made("research", "RES", Visibility::Workspace).await;
+    let (_, project) = made("project", "PRJ", Visibility::Private).await;
 
     let r = send(&app, Method::POST, &format!("/api/items/{course}/episodes"), Some(&admin),
         Some(json!({ "episodes": [
@@ -340,7 +364,7 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
             (r.status, r.json)
         }
     };
-    let summary = |v: &Value| -> Vec<(String, String, String, bool, bool)> {
+    let summary = |v: &Value| -> Vec<(String, String, String, DateStatus)> {
         v["dates"]
             .as_array()
             .unwrap()
@@ -350,26 +374,63 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
                     d["kind"].as_str().unwrap().to_owned(),
                     d["title"].as_str().unwrap().to_owned(),
                     d["date"].as_str().unwrap().to_owned(),
-                    d["personal"].as_bool().unwrap(),
-                    d["done"].as_bool().unwrap(),
+                    match (
+                        d["personal"].as_bool().unwrap(),
+                        d["done"].as_bool().unwrap(),
+                    ) {
+                        (false, false) => DateStatus::SharedPending,
+                        (false, true) => DateStatus::SharedDone,
+                        (true, false) => DateStatus::PersonalPending,
+                        (true, true) => DateStatus::PersonalDone,
+                    },
                 )
             })
             .collect()
     };
-    let s = |a: &str, b: &str, c: &str, p: bool, d: bool| {
-        (a.to_owned(), b.to_owned(), c.to_owned(), p, d)
+    let s = |a: &str, b: &str, c: &str, status: DateStatus| {
+        (a.to_owned(), b.to_owned(), c.to_owned(), status)
     };
     let (status, all) = dates(&admin, String::new()).await;
     assert_eq!(status, StatusCode::OK, "{all:?}");
     assert_eq!(
         summary(&all),
         vec![
-            s("episode", "1. 벡터", "2026-11-05", false, false),
-            s("episode", "2. 행렬", "2026-11-06", false, false),
-            s("study_unit", "1. 1장", "2026-11-07", false, false),
-            s("submission", "학회 투고", "2026-11-08", false, false),
-            s("deliverable", "설계서", "2026-11-09", false, true),
-            s("revision_due", "학회 투고", "2026-11-12", false, false),
+            s(
+                "episode",
+                "1. 벡터",
+                "2026-11-05",
+                DateStatus::SharedPending
+            ),
+            s(
+                "episode",
+                "2. 행렬",
+                "2026-11-06",
+                DateStatus::SharedPending
+            ),
+            s(
+                "study_unit",
+                "1. 1장",
+                "2026-11-07",
+                DateStatus::SharedPending
+            ),
+            s(
+                "submission",
+                "학회 투고",
+                "2026-11-08",
+                DateStatus::SharedPending
+            ),
+            s(
+                "deliverable",
+                "설계서",
+                "2026-11-09",
+                DateStatus::SharedDone
+            ),
+            s(
+                "revision_due",
+                "학회 투고",
+                "2026-11-12",
+                DateStatus::SharedPending
+            ),
         ]
     );
     // 작성자: 내 계획일로 옮긴 회차는 11-10(개인), 비공개 프로젝트의 산출물은 보이지 않는다.
@@ -377,11 +438,36 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
     assert_eq!(
         summary(&mine),
         vec![
-            s("episode", "1. 벡터", "2026-11-05", false, false),
-            s("study_unit", "1. 1장", "2026-11-07", false, false),
-            s("submission", "학회 투고", "2026-11-08", false, false),
-            s("episode", "2. 행렬", "2026-11-10", true, false),
-            s("revision_due", "학회 투고", "2026-11-12", false, false),
+            s(
+                "episode",
+                "1. 벡터",
+                "2026-11-05",
+                DateStatus::SharedPending
+            ),
+            s(
+                "study_unit",
+                "1. 1장",
+                "2026-11-07",
+                DateStatus::SharedPending
+            ),
+            s(
+                "submission",
+                "학회 투고",
+                "2026-11-08",
+                DateStatus::SharedPending
+            ),
+            s(
+                "episode",
+                "2. 행렬",
+                "2026-11-10",
+                DateStatus::PersonalPending
+            ),
+            s(
+                "revision_due",
+                "학회 투고",
+                "2026-11-12",
+                DateStatus::SharedPending
+            ),
         ]
     );
     // 모듈 범위: 강의 모듈의 회차만. 항목 범위: 그 항목만.
