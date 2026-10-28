@@ -523,14 +523,27 @@ async fn overlapping_restores(end: RestoreEnd) {
     );
     fixture.close().await.unwrap();
     let before = migrator_memberships(&mut admin, &member).await;
+    let exit_gate = std::sync::Arc::new(ProxyFault::DelaySecondMaintenanceExit {
+        exits: std::sync::atomic::AtomicUsize::new(0),
+        entered: tokio::sync::Notify::new(),
+        resume: tokio::sync::Notify::new(),
+    });
+    let proxy = if matches!(end, RestoreEnd::Completed) {
+        let (endpoint, proxy) = postgres_proxy(&url, std::sync::Arc::clone(&exit_gate)).await;
+        url = endpoint;
+        Some(proxy)
+    } else {
+        None
+    };
     let app_a = format!("overlap-a-{}", uuid::Uuid::now_v7().simple());
     let app_b = format!("overlap-b-{}", uuid::Uuid::now_v7().simple());
-    url.set_path(&format!("/{}", first.name));
-    url.query_pairs_mut()
+    let mut first_url = url.clone();
+    first_url.set_path(&format!("/{}", first.name));
+    first_url
+        .query_pairs_mut()
         .append_pair("application_name", &app_a);
-    first.db.admin_url = Some(fvoci_core::secret::Secret::new(url.to_string()));
+    first.db.admin_url = Some(fvoci_core::secret::Secret::new(first_url.to_string()));
     url.set_path(&format!("/{}", second.name));
-    url.set_query(None);
     url.query_pairs_mut()
         .append_pair("application_name", &app_b);
     second.db.admin_url = Some(fvoci_core::secret::Secret::new(url.to_string()));
@@ -615,6 +628,28 @@ async fn overlapping_restores(end: RestoreEnd) {
         RestoreEnd::Cancelled => assert!(result_a.unwrap_err().is_cancelled()),
     }
     assert!(result_b.is_ok(), "second restore: {result_b:?}");
+    let mut backend = Vec::new();
+    if proxy.is_some() {
+        let ProxyFault::DelaySecondMaintenanceExit { entered, .. } = &*exit_gate else {
+            unreachable!()
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(30), entered.notified())
+            .await
+            .expect("the second maintenance Terminate was not observed");
+        backend = sqlx::query_as::<_, (i32, String, String)>(
+            "SELECT pid, datname::text, state FROM pg_stat_activity
+              WHERE application_name = $1 AND datname = 'postgres'",
+        )
+        .bind(&app_b)
+        .fetch_all(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!(
+            backend.len(),
+            1,
+            "the maintenance backend must still be alive before checking its locks"
+        );
+    }
     let held: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
           WHERE l.locktype = 'advisory' AND a.application_name = ANY($1)",
@@ -623,24 +658,45 @@ async fn overlapping_restores(end: RestoreEnd) {
     .fetch_one(&mut admin)
     .await
     .unwrap();
-    assert_eq!(held, 0, "restore sessions left advisory locks behind");
+    // 0개 단언은 그대로 둔다. Terminate를 보류한 채 관찰한 뒤 시험 연결을 정리한다.
+    if let Some(proxy) = proxy {
+        let ProxyFault::DelaySecondMaintenanceExit { resume, .. } = &*exit_gate else {
+            unreachable!()
+        };
+        resume.notify_one();
+        proxy.abort();
+    }
+    assert_eq!(
+        held, 0,
+        "restore sessions left advisory locks behind; live maintenance backend: {backend:?}"
+    );
     // DB·시험 역할은 이 실행의 격리 Compose와 함께 xtask가 정리한다.
 }
 
-/// SR-219-1: 첫 반납 SQL에만 실제 PostgreSQL 잠금 대기를 붙이는 시험 전용 wire proxy.
-/// 제품 경로·DB 객체를 바꾸지 않고 lock_timeout으로 같은 연결의 반납을 중단시킨다.
-async fn release_failure_proxy(
+enum ProxyFault {
+    ReturnLock {
+        key: i64,
+        injected: std::sync::atomic::AtomicBool,
+    },
+    DelaySecondMaintenanceExit {
+        exits: std::sync::atomic::AtomicUsize,
+        entered: tokio::sync::Notify,
+        resume: tokio::sync::Notify,
+    },
+}
+
+/// PostgreSQL 프레임에서 첫 반납의 잠금 대기 또는 두 번째 유지보수 Terminate를 조건으로 제어한다.
+/// 제품 경로·DB 객체를 바꾸거나 고정 sleep을 사용하지 않는다.
+async fn postgres_proxy(
     upstream: &url::Url,
-    gate: i64,
+    fault: std::sync::Arc<ProxyFault>,
 ) -> (url::Url, tokio::task::JoinHandle<()>) {
     use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let host = upstream.host_str().unwrap().to_owned();
     let port = upstream.port().unwrap_or(5432);
-    let injected = Arc::new(AtomicBool::new(false));
     let task = tokio::spawn(async move {
         let mut connections = tokio::task::JoinSet::new();
         loop {
@@ -648,8 +704,8 @@ async fn release_failure_proxy(
                 accepted = listener.accept() => {
                     let (client, _) = accepted.unwrap();
                     let server = tokio::net::TcpStream::connect((host.as_str(), port)).await.unwrap();
-                    let injected = Arc::clone(&injected);
-                    connections.spawn(async move { proxy_release(client, server, gate, injected).await });
+                    let fault = Arc::clone(&fault);
+                    connections.spawn(async move { proxy_connection(client, server, fault).await });
                 }
                 Some(done) = connections.join_next(), if !connections.is_empty() => {
                     done.unwrap().unwrap();
@@ -665,11 +721,10 @@ async fn release_failure_proxy(
     (endpoint, task)
 }
 
-async fn proxy_release(
+async fn proxy_connection(
     client: tokio::net::TcpStream,
     server: tokio::net::TcpStream,
-    gate: i64,
-    injected: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    fault: std::sync::Arc<ProxyFault>,
 ) -> std::io::Result<()> {
     use std::sync::atomic::Ordering;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -681,6 +736,9 @@ async fn proxy_release(
         let length = client_read.read_u32().await?;
         let mut startup = vec![0; usize::try_from(length - 4).unwrap()];
         client_read.read_exact(&mut startup).await?;
+        let maintenance = startup
+            .windows(b"database\0postgres\0".len())
+            .any(|part| part == b"database\0postgres\0");
         server_write.write_u32(length).await?;
         server_write.write_all(&startup).await?;
         loop {
@@ -692,11 +750,25 @@ async fn proxy_release(
             let length = client_read.read_u32().await?;
             let mut body = vec![0; usize::try_from(length - 4).unwrap()];
             client_read.read_exact(&mut body).await?;
-            if tag == b'Q' && body.starts_with(b"REVOKE ") && !injected.swap(true, Ordering::SeqCst)
-            {
-                let mut gated = format!("SELECT pg_advisory_lock({gate}); ").into_bytes();
-                gated.extend(body);
-                body = gated;
+            match &*fault {
+                ProxyFault::ReturnLock { key, injected }
+                    if tag == b'Q'
+                        && body.starts_with(b"REVOKE ")
+                        && !injected.swap(true, Ordering::SeqCst) =>
+                {
+                    let mut gated = format!("SELECT pg_advisory_lock({key}); ").into_bytes();
+                    gated.extend(body);
+                    body = gated;
+                }
+                ProxyFault::DelaySecondMaintenanceExit {
+                    exits,
+                    entered,
+                    resume,
+                } if tag == b'X' && maintenance && exits.fetch_add(1, Ordering::SeqCst) == 1 => {
+                    entered.notify_one();
+                    resume.notified().await;
+                }
+                _ => {}
             }
             server_write.write_u8(tag).await?;
             server_write
@@ -780,7 +852,14 @@ async fn failed_membership_return() {
         .execute(&mut blocker)
         .await
         .unwrap();
-    let (proxy_url, proxy) = release_failure_proxy(&endpoint, gate).await;
+    let (proxy_url, proxy) = postgres_proxy(
+        &endpoint,
+        std::sync::Arc::new(ProxyFault::ReturnLock {
+            key: gate,
+            injected: std::sync::atomic::AtomicBool::new(false),
+        }),
+    )
+    .await;
     target.db.admin_url = Some(fvoci_core::secret::Secret::new(proxy_url.to_string()));
     let config = config_with(&[(
         "FVOCI_STORAGE_DIR",
