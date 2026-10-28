@@ -40,7 +40,9 @@ export const OutsideMemberShare: Story = {
     await expect(await screen.findByText('공간 밖 조직원')).toBeInTheDocument();
     await expect(screen.getByText('공유 상한: 읽기')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('이메일'), 'outside@example.test');
-    await fireEvent.keyDown(screen.getByRole('button', { name: '공유 권한' }), { key: 'ArrowDown' });
+    await fireEvent.keyDown(screen.getByRole('button', { name: '공유 권한' }), {
+      key: 'ArrowDown',
+    });
     await expect(await screen.findByRole('option', { name: '읽기' })).toBeInTheDocument();
     await expect(screen.queryByRole('option', { name: '수정' })).toBeNull();
   },
