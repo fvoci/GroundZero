@@ -369,7 +369,7 @@ describe('draft offers after write access is withdrawn', () => {
   });
 
   // RB-2: 이름 바꾸기는 파일마다 서버가 준 `can_write`로 정한다(D-113). 패널의 `canWrite`(새 파일 붙이기)와는 따로 온다.
-  it('shows the attachment rename offer read-only when the file is not writable', async () => {
+  it('ignores old attachment name drafts when the file is not writable', async () => {
     otherTabDraft('attachment-rename:item:i1', {
       id: ACCESS_FILE.id,
       name: '권한 철회 전 이름.pdf',
@@ -379,12 +379,12 @@ describe('draft offers after write access is withdrawn', () => {
     const rename = vi.spyOn(api, 'renameFile');
     render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: true } });
     await screen.findByText(ACCESS_FILE.name);
-    await expectReadOnlyOffer();
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
     expect(screen.queryByDisplayValue('권한 철회 전 이름.pdf')).toBeNull();
     expect(rename).not.toHaveBeenCalled();
   });
 
-  it('restores the attachment rename offer when the file is writable on a read-only target', async () => {
+  it('opens the server name without restoring old input on a read-only target', async () => {
     otherTabDraft('attachment-rename:item:i1', {
       id: ACCESS_FILE.id,
       name: '쓸 수 있는 파일 이름.pdf',
@@ -393,8 +393,10 @@ describe('draft offers after write access is withdrawn', () => {
     vi.spyOn(api, 'itemFiles').mockResolvedValue([ACCESS_FILE]);
     render(AttachmentsPanel, { props: { target: { kind: 'item', id: 'i1' }, canWrite: false } });
     await screen.findByText(ACCESS_FILE.name);
-    const offer = await screen.findByTestId('form-draft-offer');
-    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_restore() }));
-    expect(screen.getByLabelText(m.files_new_name())).toHaveValue('쓸 수 있는 파일 이름.pdf');
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    await fireEvent.click(
+      screen.getByRole('button', { name: m.files_rename_aria({ name: ACCESS_FILE.name }) }),
+    );
+    expect(screen.getByLabelText(m.files_new_name())).toHaveValue(ACCESS_FILE.name);
   });
 });
