@@ -3,7 +3,7 @@
 use crate::HomeState;
 use axum::Json;
 use axum::extract::{Query, State};
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{ItemId, OrganizationId, WorkspaceId};
 use fvoci_http::organization::OrgScope;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ pub struct MyTasksQuery {
 }
 
 /// SQL bucket: overdue, today, upcoming, none(날짜 없음), done.
-#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct MyTask {
     pub id: Uuid,
     pub item_id: ItemId,
@@ -35,7 +35,7 @@ pub struct MyTask {
     pub updated_at: OffsetDateTime,
 }
 
-#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct MyTaskCounts {
     pub overdue: i32,
     pub today: i32,
@@ -44,14 +44,14 @@ pub struct MyTaskCounts {
     pub done: i32,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct WorkspaceTasks {
     pub workspace_id: WorkspaceId,
     pub workspace_name: String,
     pub tasks: Vec<MyTask>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct MyTasks {
     pub counts: MyTaskCounts,
     pub workspaces: Vec<WorkspaceTasks>,
@@ -76,7 +76,7 @@ pub async fn my_tasks(
     let mut tx = state.db.begin_as(user).await?;
     let today = match query.today {
         Some(raw) => Date::parse(&raw, time::macros::format_description!("[year]-[month]-[day]"))
-            .map_err(|_| AppError::BadRequest("today must be YYYY-MM-DD".to_owned()))?,
+            .map_err(|_| AppError::invalid("today", InvalidReason::InvalidFormat, None, "today must be YYYY-MM-DD"))?,
         None => sqlx::query_scalar(
             "SELECT (now() AT TIME ZONE coalesce(nullif((SELECT time_zone FROM user_settings WHERE user_id = app_user_id()), ''), 'UTC'))::date",
         ).fetch_one(tx.conn()).await?,

@@ -38,8 +38,6 @@ import type {
   Accepted,
   Activity,
   ActivityPage,
-  MyTask,
-  MyTaskCounts,
   Organization,
   OrganizationLimits,
   OrganizationSummary,
@@ -239,69 +237,6 @@ export function parseAccepted(value: Json): Accepted {
 // --- 항목별 업무 상태 정의 (D-116) ----------------------------------------
 
 // --- 내 업무 (D-120) ---------------------------------------------------
-
-export type MyTaskBucket = 'overdue' | 'today' | 'upcoming' | 'none' | 'done';
-
-export interface MyTaskView extends Omit<MyTask, 'bucket' | 'status_category'> {
-  bucket: MyTaskBucket;
-  status_category: StatusCategory;
-}
-
-export interface MyTasksView {
-  counts: MyTaskCounts;
-  workspaces: { workspace_id: string; workspace_name: string; tasks: MyTaskView[] }[];
-}
-
-function myTaskBucket(value: string): MyTaskBucket {
-  if (
-    value === 'overdue' ||
-    value === 'today' ||
-    value === 'upcoming' ||
-    value === 'none' ||
-    value === 'done'
-  )
-    return value;
-  throw new TypeError(`unknown bucket ${value}`);
-}
-
-function parseMyTask(value: Json): MyTaskView {
-  const o = rec(value, 'my task');
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    status: str(o, 'status'),
-    status_category: statusCategory(str(o, 'status_category')),
-    priority: str(o, 'priority'),
-    start_date: optStr(o, 'start_date'),
-    due_date: optStr(o, 'due_date'),
-    bucket: myTaskBucket(str(o, 'bucket')),
-    updated_at: str(o, 'updated_at'),
-  };
-}
-
-export function parseMyTasks(value: Json): MyTasksView {
-  const o = rec(value, 'my tasks');
-  const c = rec(o.counts, 'my task counts');
-  return {
-    counts: {
-      overdue: int(c, 'overdue'),
-      today: int(c, 'today'),
-      upcoming: int(c, 'upcoming'),
-      undated: int(c, 'undated'),
-      done: int(c, 'done'),
-    },
-    workspaces: parseList(o.workspaces, (v) => {
-      const w = rec(v, 'workspace tasks');
-      return {
-        workspace_id: str(w, 'workspace_id'),
-        workspace_name: str(w, 'workspace_name'),
-        tasks: parseList(w.tasks, parseMyTask),
-      };
-    }),
-  };
-}
 
 // --- 활동 (D-119, 감사와 분리) ---------------------------------------------
 
@@ -1487,130 +1422,6 @@ export function parseTimeEntry(value: Json): TimeEntryView {
 export type MarkTarget = 'item' | 'document' | 'task';
 export type MarkKind = 'pin' | 'favorite';
 
-export interface HomeTaskView {
-  id: string;
-  item_id: string;
-  workspace_id: string;
-  reference: string | null;
-  title: string;
-  // 홈 계약의 상태는 항목별 사용자 정의 문자열이고 집계는 status_category(D-116).
-  status: string;
-  status_category: StatusCategory;
-  due_date: string | null;
-  bucket: 'overdue' | 'today' | 'upcoming' | null;
-}
-
-export interface HomeView {
-  today: string;
-  up_next: HomeTaskView[];
-  /** 묶음마다의 전체 수. `up_next`는 묶음마다 50개까지라 이보다 적을 수 있다. */
-  up_next_counts: { overdue: number; today: number; upcoming: number };
-  recent_tasks: HomeTaskView[];
-  recent_documents: {
-    id: string;
-    title: string;
-    reference: string | null;
-    workspace_id: string | null;
-    item_id: string | null;
-    updated_at: string;
-  }[];
-  active_items: {
-    id: string;
-    workspace_id: string;
-    module_kind: ModuleKind;
-    reference: string | null;
-    title: string;
-    tasks_done: number;
-    tasks_total: number;
-    can_write: boolean;
-  }[];
-  pins: MarkedTargetView[];
-  favorites: MarkedTargetView[];
-}
-
-export interface MarkedTargetView {
-  kind: MarkTarget;
-  id: string;
-  label: string;
-  workspace_id: string | null;
-  item_id: string | null;
-}
-
-function markTarget(value: string): MarkTarget {
-  if (value === 'item' || value === 'document' || value === 'task') return value;
-  throw new TypeError(`unknown mark target ${value}`);
-}
-
-function parseHomeTask(value: Json): HomeTaskView {
-  const o = rec(value, 'home task');
-  const bucket = optStr(o, 'bucket');
-  if (bucket !== null && bucket !== 'overdue' && bucket !== 'today' && bucket !== 'upcoming')
-    throw new TypeError(`unknown bucket ${bucket}`);
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    workspace_id: str(o, 'workspace_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    status: str(o, 'status'),
-    due_date: optStr(o, 'due_date'),
-    status_category: statusCategory(str(o, 'status_category')),
-    bucket,
-  };
-}
-
-function parseMarked(value: Json): MarkedTargetView {
-  const o = rec(value, 'marked target');
-  return {
-    kind: markTarget(str(o, 'kind')),
-    id: str(o, 'id'),
-    label: str(o, 'label'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-  };
-}
-
-function parseUpNextCounts(value: unknown): HomeView['up_next_counts'] {
-  const c = rec(value, 'up next counts');
-  return { overdue: int(c, 'overdue'), today: int(c, 'today'), upcoming: int(c, 'upcoming') };
-}
-
-function parseHome(value: Json): HomeView {
-  const o = rec(value, 'home');
-  return {
-    today: str(o, 'today'),
-    up_next: parseList(o.up_next, parseHomeTask),
-    up_next_counts: parseUpNextCounts(o.up_next_counts),
-    recent_tasks: parseList(o.recent_tasks, parseHomeTask),
-    recent_documents: parseList(o.recent_documents, (v) => {
-      const d = rec(v, 'home document');
-      return {
-        id: str(d, 'id'),
-        title: str(d, 'title'),
-        reference: optStr(d, 'reference'),
-        workspace_id: optStr(d, 'workspace_id'),
-        item_id: optStr(d, 'item_id'),
-        updated_at: str(d, 'updated_at'),
-      };
-    }),
-    active_items: parseList(o.active_items, (v) => {
-      const i = rec(v, 'home item');
-      return {
-        id: str(i, 'id'),
-        workspace_id: str(i, 'workspace_id'),
-        module_kind: moduleKind(str(i, 'module_kind')),
-        reference: optStr(i, 'reference'),
-        title: str(i, 'title'),
-        tasks_done: int(i, 'tasks_done'),
-        tasks_total: int(i, 'tasks_total'),
-        can_write: bool(i, 'can_write'),
-      };
-    }),
-    pins: parseList(o.pins, parseMarked),
-    favorites: parseList(o.favorites, parseMarked),
-  };
-}
-
 function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
   const o = rec(value, 'mark state');
   return { pin: bool(o, 'pin'), favorite: bool(o, 'favorite') };
@@ -2719,20 +2530,6 @@ export const api = {
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
       days,
     }),
-  /** 홈은 현재 조직의 요약이다(D-19·D-120). */
-  home: (organizationId: string, tz: string) =>
-    expectOk(
-      'GET',
-      `/api/me/home?organization_id=${encodeURIComponent(organizationId)}&tz=${encodeURIComponent(tz)}`,
-      parseHome,
-    ),
-  /** 내 업무: 담당=나, 날짜 없음 포함, 워크스페이스별 묶음(D-120). `today`는 사용자 시간대의 오늘(YYYY-MM-DD). */
-  myTasks: (organizationId: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/me/tasks?organization_id=${encodeURIComponent(organizationId)}&today=${encodeURIComponent(today)}`,
-      parseMyTasks,
-    ),
   /** 현재 조직의 최근 활동(D-119). */
   recentActivity: (organizationId: string, limit?: number) => {
     const params = new URLSearchParams({ organization_id: organizationId });

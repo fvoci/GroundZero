@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -20,7 +21,7 @@ beforeEach(async () => {
   const item = home.active_items.find((value) => value.can_write);
   if (item === undefined) throw new Error('missing writable item');
   localStorage.setItem(org.key('quick-add-item'), item.id);
-  vi.spyOn(api, 'home').mockResolvedValue(home);
+  vi.spyOn(homeApi, 'home').mockResolvedValue(home);
   vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
 });
 afterEach(() => {
@@ -103,7 +104,7 @@ it('keeps the next account input when an earlier account request finishes', asyn
   await waitFor(() => {
     expect(nextTitle).toHaveValue('B의 제목');
   });
-  expect(api.home).toHaveBeenCalledTimes(1);
+  expect(homeApi.home).toHaveBeenCalledTimes(1);
   expect(add.mock.calls[0]?.[0]).toBe('user-a');
   expect(add.mock.calls[0]?.[4]).toBe('user-a');
 

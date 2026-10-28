@@ -1,5 +1,6 @@
+import type { HomeView, MyTasksView } from '$lib/features/home/api';
 import type { Activity, ReceivedInvitation } from '@fvoci/api-client';
-import type { HomeView, MyTasksView, NotificationView } from '$lib/api/client';
+import type { NotificationView } from '$lib/api/client';
 import { homeView, ORGANIZATION, WORKSPACE } from './synthetic';
 
 /** 홈과 내 업무가 공유하는 합성 업무. 수는 서버 응답 자리에서만 정한다. */

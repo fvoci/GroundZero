@@ -205,8 +205,8 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
         .map(|i| {
             (
                 i["title"].as_str().unwrap().to_owned(),
-                i["tasks_done"].as_i64().unwrap(),
-                i["tasks_total"].as_i64().unwrap(),
+                i["progress"]["done"].as_i64().unwrap(),
+                i["progress"]["total"].as_i64().unwrap(),
             )
         })
         .collect();

@@ -1,8 +1,10 @@
+import type { HomeView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CalendarView, HomeView } from '$lib/api/client';
+import type { CalendarView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
@@ -27,6 +29,7 @@ const workspace: Workspace = {
 
 const home: HomeView = {
   // 수요일. 주 시작(기본 일요일) 기준 이번 주는 2026-10-18 ~ 2026-10-24.
+  my_tasks: { counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 }, workspaces: [] },
   today: '2026-10-21',
   up_next: [],
   up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
@@ -70,7 +73,7 @@ const calendar: CalendarView = {
 describe('home this week', () => {
   it('shows the D-80 calendar dates the calendar shows', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
     vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });

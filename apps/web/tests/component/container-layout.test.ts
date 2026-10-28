@@ -1,3 +1,5 @@
+import type { HomeView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
@@ -8,7 +10,7 @@ import type { Workspace } from '@fvoci/api-client';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { HomeView, ItemView } from '$lib/api/client';
+import type { ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
@@ -40,6 +42,10 @@ describe('multi-column layouts follow the content width', () => {
       realtime_enabled: false,
     };
     const home: HomeView = {
+      my_tasks: {
+        counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 },
+        workspaces: [],
+      },
       today: '2026-10-21',
       up_next: [],
       up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
@@ -49,7 +55,7 @@ describe('multi-column layouts follow the content width', () => {
       pins: [],
       favorites: [],
     };
-    vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue({
       tasks: [],
       projected_tasks: [],

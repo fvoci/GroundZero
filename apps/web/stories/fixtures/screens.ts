@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 // 화면 단위 story(Screens/)의 준비: 경로(router.path), 사이드바가 같이 쓰는 목록(workspaceNav), 서버 응답(`api` 함수)과
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
@@ -28,13 +29,13 @@ import {
 
 /** 화면이 부르는 서버 함수. 기본값은 합성 데이터로 답하고, story가 일부만 바꾼다. */
 export interface ScreenApi {
-  myTasks: typeof api.myTasks;
+  myTasks: typeof homeApi.myTasks;
   recentActivity: typeof api.recentActivity;
   modules: typeof api.modules;
   wikiDocuments: typeof api.wikiDocuments;
   module: typeof api.module;
   items: typeof api.items;
-  home: typeof api.home;
+  home: typeof homeApi.home;
   calendar: typeof api.calendar;
   notifications: typeof api.notifications;
   myInvitations: typeof api.myInvitations;
@@ -140,13 +141,13 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   // 바로 바꾸면 이 story의 클릭이 막히므로 먼저 푼다(tests/component/stories.test.ts의 afterEach와 같은 정리).
   document.body.style.removeProperty('pointer-events');
   const stubs: ScreenApi = { ...DEFAULTS, ...taskServer(), ...overrides };
-  spyOn(api, 'myTasks').mockImplementation(stubs.myTasks);
+  spyOn(homeApi, 'myTasks').mockImplementation(stubs.myTasks);
   spyOn(api, 'recentActivity').mockImplementation(stubs.recentActivity);
   spyOn(api, 'modules').mockImplementation(stubs.modules);
   spyOn(api, 'wikiDocuments').mockImplementation(stubs.wikiDocuments);
   spyOn(api, 'module').mockImplementation(stubs.module);
   spyOn(api, 'items').mockImplementation(stubs.items);
-  spyOn(api, 'home').mockImplementation(stubs.home);
+  spyOn(homeApi, 'home').mockImplementation(stubs.home);
   spyOn(api, 'calendar').mockImplementation(stubs.calendar);
   spyOn(api, 'notifications').mockImplementation(stubs.notifications);
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);

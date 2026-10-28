@@ -1173,6 +1173,10 @@ GRANT ALL ON FUNCTION fvoci.app_item_time(p_item uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_task_time(p_task uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_task_time(p_task uuid) TO fvoci_app;
 
+-- 홈 집계는 호출자 권한과 기존 RLS로 읽는다.
+REVOKE ALL ON FUNCTION fvoci.app_home(p_organization uuid, p_tz text) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_home(p_organization uuid, p_tz text) TO fvoci_app;
+
 REVOKE ALL ON FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) TO fvoci_app;
 

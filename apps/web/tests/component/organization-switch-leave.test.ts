@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -36,7 +37,7 @@ beforeEach(async () => {
   const item = home.active_items.find((value) => value.can_write);
   if (item === undefined) throw new Error('missing writable item');
   localStorage.setItem(org.key('quick-add-item'), item.id);
-  vi.spyOn(api, 'home').mockResolvedValue(home);
+  vi.spyOn(homeApi, 'home').mockResolvedValue(home);
   vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
 });
 afterEach(() => {

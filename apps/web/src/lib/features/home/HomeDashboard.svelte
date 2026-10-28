@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { HomeView, MarkedTargetView } from '$lib/features/home/api';
+  import { homeApi } from '$lib/features/home/api';
   import { taskData as work } from '$lib/features/tasks/detail-data';
   // 홈(D-19·D-120): 현재 조직 요약. 시간 기록 표시는 앱 상단에서 맡는다.
   import FileText from '@lucide/svelte/icons/file-text';
@@ -6,7 +8,7 @@
   import type { Workspace } from '@fvoci/api-client';
   import { onMount } from 'svelte';
 
-  import type { CalendarView, HomeView, MarkedTargetView, NotificationView } from '$lib/api/client';
+  import type { CalendarView, NotificationView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { me } from '$lib/me.svelte';
@@ -31,6 +33,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import MyTasksScreen from './MyTasksScreen.svelte';
+  import HomeProgress from './HomeProgress.svelte';
   import { invitationChanges } from './invitations.svelte';
 
   interface Props {
@@ -80,7 +83,7 @@
     }
     void (async () => {
       try {
-        const h = await api.home(organizationId, zone);
+        const h = await homeApi.home(organizationId, zone);
         if (mine !== loadSeq) return;
         const from = startOfWeek(h.today, settings.weekStart);
         const to = fromDayNumber(dayNumber(from) + 6);
@@ -346,7 +349,7 @@
     <!-- 열 정의가 없으면 암묵 auto 열이 띄어쓰기 없는 긴 글(URL)만큼 늘어나 좁은 화면에서 가로로 넘친다. -->
     <div class="grid grid-cols-1 gap-6 @2xl:grid-cols-2">
       {#if home !== undefined}<div class="rounded-md border bg-card p-2 @md:p-3">
-          <MyTasksScreen summary version={reloadKey} />
+          <MyTasksScreen source={{ kind: 'summary', data: home.my_tasks }} />
         </div>{/if}
       <section
         class="flex flex-col gap-2 rounded-md border bg-card p-2 @md:p-3"
@@ -409,17 +412,7 @@
               {i.title}
               <span class="text-muted-foreground">· {workspaceName(i.workspace_id)}</span></span
             >
-            {#if i.tasks_total > 0}
-              <span class="flex items-center gap-2 text-xs text-muted-foreground">
-                <span class="h-1.5 w-32 overflow-hidden rounded bg-muted" aria-hidden="true">
-                  <span
-                    class="block h-full bg-primary"
-                    style:width={`${String(Math.round((i.tasks_done / i.tasks_total) * 100))}%`}
-                  ></span>
-                </span>
-                {m.home_tasks_done({ done: i.tasks_done, total: i.tasks_total })}
-              </span>
-            {/if}
+            <HomeProgress progress={i.progress} />
           </button>
         {:else}
           {#if home !== undefined}

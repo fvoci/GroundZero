@@ -1323,7 +1323,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 홈(로그인한 사람). 현재 조직에서 볼 수 있는 것만 모은다. */
+        /** 현재 조직의 홈 집계를 호출자 권한으로 읽는다. */
         get: operations["home"];
         put?: never;
         post?: never;
@@ -3665,12 +3665,14 @@ export interface components {
         Home: {
             active_items: components["schemas"]["HomeItem"][];
             favorites: components["schemas"]["MarkedTarget"][];
+            /** @description 홈의 내 업무 요약. 독립 내 업무 화면과 같은 집계 계약이다. */
+            my_tasks: components["schemas"]["MyTasks"];
             pins: components["schemas"]["MarkedTarget"][];
             recent_documents: components["schemas"]["HomeDocument"][];
             recent_tasks: components["schemas"]["HomeTask"][];
             /** @description 보는 사람 시간대의 오늘. */
             today: string;
-            /** @description 묶음(기한 지남·오늘·다가오는 일)마다 마감이 이른 것부터 50개까지(`UP_NEXT_PER_BUCKET`). */
+            /** @description 묶음(기한 지남·오늘·다가오는 일)마다 마감이 이른 것부터 50개까지. */
             up_next: components["schemas"]["HomeTask"][];
             /** @description 묶음마다의 전체 수. `up_next`보다 많으면 잘린 것이다. */
             up_next_counts: components["schemas"]["UpNextCounts"];
@@ -3686,22 +3688,36 @@ export interface components {
             updated_at: string;
             workspace_id?: null | components["schemas"]["WorkspaceId"];
         };
-        /**
-         * @description 진행 중인 항목과 진행률. 진행률은 활동의 의미대로 계산하며 서로 다른 종류를 합산하지 않는다(D-19). 지금은
-         *     업무 완료 비율(완료한 업무 수 / 업무 수)이며 강의 이수율·공부 목표 달성률은 각 모듈 조각에서 더한다.
-         */
+        /** @description 진행 중인 항목. 업무·강의·스터디의 진행률은 각각의 의미와 단위를 유지한다(D-19). */
         HomeItem: {
             /** @description 이 항목에 업무·일정을 더할 수 있는지(빠른 추가). */
             can_write: boolean;
             id: components["schemas"]["ItemId"];
             module_kind: components["schemas"]["ModuleKind"];
+            progress: components["schemas"]["HomeProgress"];
             reference?: string | null;
-            /** Format: int64 */
-            tasks_done: number;
-            /** Format: int64 */
-            tasks_total: number;
             title: string;
             workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @description 항목 종류에 맞는 진행률. 업무는 공유 집계, 강의·스터디는 요청한 사용자의 진행이다. */
+        HomeProgress: {
+            /** Format: int64 */
+            done: number;
+            /** @enum {string} */
+            kind: "tasks";
+            /** Format: int64 */
+            total: number;
+        } | {
+            /** Format: int64 */
+            done: number;
+            /** @enum {string} */
+            kind: "course";
+            /** Format: int64 */
+            total: number;
+        } | {
+            amounts: components["schemas"]["StudyAmount"][];
+            /** @enum {string} */
+            kind: "study";
         };
         /** @description 홈의 업무 한 줄. */
         HomeTask: {
@@ -5093,6 +5109,14 @@ export interface components {
          * @enum {string}
          */
         StatusCategory: "todo" | "doing" | "done";
+        /** @description 같은 단위 안에서만 합한 목표와 실적. */
+        StudyAmount: {
+            /** Format: int64 */
+            done: number;
+            /** Format: int64 */
+            target: number;
+            unit: components["schemas"]["StudyUnitKind"];
+        };
         /** @description 함께 하는 사람의 진행 집계(메모·개인 날짜는 없음). */
         StudyParticipant: {
             display_name: string;
@@ -5137,6 +5161,11 @@ export interface components {
              */
             version: number;
         };
+        /**
+         * @description 스터디 목표의 단위. 서로 다른 단위의 분량을 더하지 않는다.
+         * @enum {string}
+         */
+        StudyUnitKind: "pages" | "problems" | "minutes" | "items";
         /** @description 승인한 후속 업무 재배치 한 건. 날짜가 있던 칸만 옮긴다. */
         SuccessorShift: {
             /** Format: int32 */
@@ -9732,6 +9761,14 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

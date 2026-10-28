@@ -23,6 +23,7 @@ description: fvoci 웹(apps/web)을 바꿀 때 무엇을 읽고 어떤 검사를
   - 공용 입력 `ui/`, 색 토큰 `apps/web/src/styles/app.css`, 문구 `apps/web/messages/<영역>/{ko,en}.json`
   - 상태 정의 편집 `features/tasks/StatusEditor.svelte`
   - 업무 읽기·명령 `features/tasks/api.ts`(생성 자원 타입), 화면 조합 `board-data.ts`·`detail-data.ts`. 보드 조각 `BoardCard`·`BoardLane`·`BoardQuickAdd`·`BoardFilters`·`board-keyboard.ts`, 상세 조각 `TaskFields`·`TaskDependencies`·`TaskRecurrence`·`TaskSidePanels`와 공통 `ChecklistForm`.
+  - 홈·내 업무 집계 읽기와 생성 타입 연결은 `features/home/api.ts`다. 홈의 내 업무 요약은 홈 응답의 `my_tasks`를 주입하며, 독립 내 업무 화면만 `/me/tasks`를 읽는다. 달력·알림·활동은 각 기능 API를 계속 쓴다.
   - 칸반 이동 동기화·되돌리기 `features/tasks/move-sync.ts`. 재번호 뒤에도 원래 이웃이 붙어 있으면 정확히 그 사이로 돌아간다(#50). 판 변경·다시 읽기 실패 시험은 `tests/component/task-move-sync.test.ts`·`task-move-undo.test.ts`.
 - 시험 준비: `apps/web/tests/setup.ts`, `apps/web/tests/component/fixtures/`, 스토리 `apps/web/stories/fixtures/screens.ts`, e2e `apps/web/e2e/fixtures.ts`·증거 게시 `apps/web/e2e/publish.ts`.
 
