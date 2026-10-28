@@ -1,6 +1,6 @@
 //! 파일 경로와 업로드 본문·동시 처리 한도.
 
-use crate::{FilesState, files};
+use crate::{FilesState, commands, completion, content, read, uploads};
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRef, Request, State};
 use axum::http::StatusCode;
@@ -29,32 +29,32 @@ where
         .unwrap_or(usize::MAX)
         .saturating_add(64 * 1024);
     Router::new()
-        .route("/uploads", post(files::create_upload))
+        .route("/uploads", post(uploads::create_upload))
         .route(
             "/uploads/{upload_id}",
-            get(files::get_upload).delete(files::abort_upload),
+            get(uploads::get_upload).delete(uploads::abort_upload),
         )
         .route(
             "/uploads/{upload_id}/parts/{number}",
-            put(files::put_part)
+            put(uploads::put_part)
                 .layer(DefaultBodyLimit::max(part_limit))
                 .layer(middleware::from_fn_with_state(files, upload_slot)),
         )
         .route(
             "/uploads/{upload_id}/complete",
-            post(files::complete_upload),
+            post(completion::complete_upload),
         )
-        .route("/documents/{document_id}/files", get(files::document_files))
-        .route("/items/{item_id}/files", get(files::item_files))
+        .route("/documents/{document_id}/files", get(read::document_files))
+        .route("/items/{item_id}/files", get(read::item_files))
         .route(
             "/files/{file_id}",
-            get(files::get_file)
-                .put(files::rename_file)
-                .delete(files::trash_file),
+            get(read::get_file)
+                .put(commands::rename_file)
+                .delete(commands::trash_file),
         )
-        .route("/files/{file_id}/content", get(files::content))
+        .route("/files/{file_id}/content", get(content::content))
         .route(
             "/files/{file_id}/versions/{version}",
-            delete(files::delete_version),
+            delete(commands::delete_version),
         )
 }

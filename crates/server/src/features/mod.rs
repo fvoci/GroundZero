@@ -11,7 +11,6 @@ pub mod event_recurrence;
 pub mod events;
 pub mod export;
 pub mod file_text;
-pub use fvoci_files::files;
 pub mod home;
 pub mod item_profile;
 pub mod members;

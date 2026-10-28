@@ -22,7 +22,7 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, audit, comments, courses, documents, event_recurrence, events, export, files, home,
+    accounts, audit, comments, courses, documents, event_recurrence, events, export, home,
     item_profile, members, modules, organizations, public_links, records, references, revisions,
     saved_views, search_api, study, time_tracking, trash, workspaces, zotero,
 };
@@ -252,18 +252,6 @@ async fn api_not_found() -> AppError {
     modifiers(&SessionSecurity, &DomainApis),
     security(("session_https" = []), ("session_http" = [])),
     paths(
-        files::create_upload,
-        files::get_upload,
-        files::put_part,
-        files::complete_upload,
-        files::abort_upload,
-        files::document_files,
-        files::item_files,
-        files::get_file,
-        files::rename_file,
-        files::trash_file,
-        files::content,
-        files::delete_version,
         healthz,
         accounts::login,
         accounts::callback,
@@ -444,14 +432,6 @@ async fn api_not_found() -> AppError {
         members::remove_group_member,
     ),
     components(schemas(
-        files::UploadTarget,
-        files::CreateUpload,
-        files::UploadView,
-        files::VersionView,
-        files::FileView,
-        files::FileDetail,
-        files::RenameFile,
-        files::FileTrashed,
         members::Member,
         members::MembersView,
         members::SetRole,
@@ -699,6 +679,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_files::FilesApi::openapi());
     }
 }
 
