@@ -125,7 +125,7 @@ describe('document move', () => {
     expect(seen).toStrictEqual([
       {
         method: 'POST',
-        url: '/api/documents/d1/move/preview',
+        url: '/api/documents/d1/move-plan',
         body: { target_workspace_id: 'ws-2', target_item_id: null },
       },
     ]);
@@ -154,8 +154,8 @@ describe('document move', () => {
     // 확인한 것은 접근이 생기고 사라지는 사람뿐이다.
     expect(seen).toStrictEqual([
       {
-        method: 'POST',
-        url: '/api/documents/d1/move',
+        method: 'PUT',
+        url: '/api/documents/d1/placement',
         body: {
           target_workspace_id: 'ws-2',
           target_item_id: 'i2',
