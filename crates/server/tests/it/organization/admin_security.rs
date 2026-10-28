@@ -135,3 +135,80 @@ async fn self_offered_ownership_cannot_bypass_admin_join_recovery() {
         .is_empty()
     );
 }
+
+/// CR201-B: 공유가 조직 멤버 잠금을 먼저 잡으면 ID 산정도 그 커밋 뒤 공유를 세어야 한다.
+#[tokio::test]
+async fn demotion_counts_a_share_committed_while_waiting_for_the_organization_member() {
+    let w = World::new().await;
+    let email = common::unique_email("sharing-admin");
+    let user = common::login_with_email(&w.state, "sharing organization admin", &email, true).await;
+    common::join_organization(w.org, &user, "admin").await;
+    rows(
+        &w.state,
+        &user,
+        "SELECT fvoci.app_join_workspace_as_admin($1,@ids)",
+        &[w.ws],
+    )
+    .await;
+    let first = w.doc().await;
+    let second = w.doc().await;
+    w.share(first, &user, "read").await;
+    let mut sharing = w.state.db.begin_as(w.owner.id).await.unwrap();
+    // 기존 공유를 갱신해 건수는 유지하고 실제 공유 함수의 조직 멤버 SHARE를 잡아 둔다.
+    let share = "SELECT fvoci.app_share_document($1,(SELECT email FROM fvoci.users WHERE id=$2),'read',$3,@ids)";
+    on(sharing.conn(), share, &[first, user.id.0, w.org])
+        .await
+        .unwrap();
+    let holder = pid(sharing.conn()).await;
+    let mut demotion = w.state.db.begin_as(w.owner.id).await.unwrap();
+    let waiter = pid(demotion.conn()).await;
+    let (organization, member) = (w.org, user.id.0);
+    let pending = tokio::spawn(async move {
+        let count: i32 =
+            sqlx::query_scalar("SELECT fvoci.app_set_organization_member_ids($1,$2,'member')")
+                .bind(organization)
+                .bind(member)
+                .fetch_one(demotion.conn())
+                .await?;
+        sqlx::query("SELECT fvoci.app_set_organization_member($1,$2,'member',$3)")
+            .bind(organization)
+            .bind(member)
+            .bind(fvoci_db::new_ids(usize::try_from(count).unwrap()))
+            .execute(demotion.conn())
+            .await?;
+        demotion.commit().await
+    });
+    blocked(holder, waiter).await;
+    on(sharing.conn(), share, &[second, member, organization])
+        .await
+        .unwrap();
+    sharing.commit().await.unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), pending)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(result.is_ok(), "CR201-B demotion failed: {result:?}");
+    assert!(rows(&w.state, &w.owner,
+        "SELECT id FROM fvoci.document_shares WHERE document_id IN ($1,$2) AND grantee_user_id=$3",
+        &[first, second, member]).await.is_empty());
+    assert!(
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT role FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
+            &[w.ws, member]
+        )
+        .await
+        .is_empty()
+    );
+    assert_eq!(
+        one(
+            &w.state,
+            &w.owner,
+            "SELECT role FROM fvoci.organization_members WHERE organization_id=$1 AND user_id=$2",
+            &[organization, member]
+        )
+        .await["role"],
+        "member"
+    );
+}
