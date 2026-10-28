@@ -13,10 +13,10 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::modules::ModuleKind;
-use crate::http::AppState;
+use crate::RecordsState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, UserId};
+use fvoci_core::module::ModuleKind;
 use fvoci_db::{UserTx, is_unique_violation, new_ids};
 use fvoci_http::session::CurrentUser;
 
@@ -935,12 +935,12 @@ type FileRow = (Uuid, String, Option<Uuid>, String, i32, String, i64, bool);
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Record]), (status = 404, body = ErrorBody)), tag = "records")]
 pub async fn list(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<Record>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    crate::access::require_visible(&mut tx, crate::access::Kind::Item, item).await?;
+    fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Item, item).await?;
     let rows: Vec<RecordRow> = sqlx::query_as(
         "SELECT r.id, r.kind, r.title, r.occurred_on, r.body, r.fields, r.created_by,
                 (SELECT u.display_name FROM users u WHERE u.id = r.created_by), r.updated_at, r.version,
@@ -989,7 +989,7 @@ pub async fn list(
                 access,
                 mine,
             )| {
-                let grade = crate::access::Grade::parse_present(&access)?;
+                let grade = fvoci_db::access::Grade::parse_present(&access)?;
                 Ok(Record {
                     id,
                     kind,
@@ -1017,7 +1017,7 @@ pub async fn list(
     responses((status = 201, body = Object), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "records")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<NewRecord>,
@@ -1067,7 +1067,7 @@ pub async fn create(
     responses((status = 200, body = RecordVersion), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "records")]
 pub async fn update(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(record): Path<Uuid>,
     Json(input): Json<EditRecord>,
@@ -1116,7 +1116,7 @@ pub async fn update(
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "records")]
 pub async fn delete(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(record): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {

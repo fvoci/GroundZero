@@ -13,8 +13,8 @@ use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::records::{RecordFileInput, validate};
-use crate::http::AppState;
+use crate::RecordsState;
+use crate::records::{RecordFileInput, validate};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::UserTx;
@@ -109,7 +109,7 @@ fn valid_key(key: &str) -> bool {
 
 /// Zotero 목록 한 종류를 끝까지(최대 `limit`개) 읽는다.
 async fn fetch_all(
-    state: &AppState,
+    state: &RecordsState,
     lib: &Library,
     path: &str,
     limit: usize,
@@ -122,7 +122,6 @@ async fn fetch_all(
     let mut out = Vec::new();
     loop {
         let mut url = state
-            .config
             .zotero_api_url
             .join(&format!("{}/{path}", lib.prefix))
             .map_err(|e| AppError::Config(format!("zotero url: {e}")))?;
@@ -166,7 +165,10 @@ async fn fetch_all(
     }
 }
 
-async fn collections(state: &AppState, lib: &Library) -> Result<Vec<ZoteroCollection>, AppError> {
+async fn collections(
+    state: &RecordsState,
+    lib: &Library,
+) -> Result<Vec<ZoteroCollection>, AppError> {
     let rows = fetch_all(state, lib, "collections", 1000).await?;
     Ok(rows
         .iter()
@@ -184,7 +186,7 @@ async fn collections(state: &AppState, lib: &Library) -> Result<Vec<ZoteroCollec
     responses((status = 200, body = [ZoteroCollection]), (status = 400, body = ErrorBody),
               (status = 502, body = ErrorBody)), tag = "records")]
 pub async fn list_collections(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(_user): CurrentUser,
     Json(input): Json<ZoteroLibrary>,
 ) -> Result<Json<Vec<ZoteroCollection>>, AppError> {
@@ -383,7 +385,7 @@ async fn existing_files(tx: &mut UserTx, record: Uuid) -> Result<Vec<RecordFileI
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody), (status = 502, body = ErrorBody)),
     tag = "records")]
 pub async fn import(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<ZoteroImport>,

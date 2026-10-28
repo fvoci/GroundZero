@@ -9,7 +9,7 @@ use time::Date;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::http::AppState;
+use crate::RecordsState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, UserId};
 use fvoci_db::new_ids;
@@ -204,7 +204,7 @@ type EpisodeRow = (
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = Course), (status = 404, body = ErrorBody)), tag = "courses")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Course>, AppError> {
@@ -296,7 +296,7 @@ pub async fn get(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "courses")]
 pub async fn set_details(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<CourseDetails>,
@@ -326,7 +326,7 @@ pub async fn set_details(
     responses((status = 200, body = EpisodesAdded), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "courses")]
 pub async fn add_episodes(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<AddEpisodes>,
@@ -353,7 +353,7 @@ pub async fn add_episodes(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "courses")]
 pub async fn update_episode(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(episode): Path<Uuid>,
     Json(input): Json<UpdateEpisode>,
@@ -381,7 +381,7 @@ pub async fn update_episode(
     params(("episode_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "courses")]
 pub async fn delete_episode(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(episode): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -401,7 +401,7 @@ pub async fn delete_episode(
     params(("episode_id" = String, Path, format = Uuid)), request_body = SetProgress,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "courses")]
 pub async fn set_progress(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(episode): Path<Uuid>,
     Json(input): Json<SetProgress>,
@@ -426,7 +426,7 @@ pub async fn set_progress(
     params(("item_id" = String, Path, format = Uuid), TodayQuery),
     responses((status = 200, body = [Participant]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "courses")]
 pub async fn participants(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Query(query): Query<TodayQuery>,

@@ -1159,6 +1159,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-records"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "url",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-server"
 version = "0.1.0"
 dependencies = [
@@ -1171,6 +1189,7 @@ dependencies = [
  "fvoci-core",
  "fvoci-db",
  "fvoci-http",
+ "fvoci-records",
  "fvoci-work",
  "hex",
  "hmac 0.13.0",

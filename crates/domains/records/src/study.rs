@@ -9,8 +9,8 @@ use time::Date;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::courses::TodayQuery;
-use crate::http::AppState;
+use crate::RecordsState;
+use crate::courses::TodayQuery;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, UserId};
 use fvoci_db::new_ids;
@@ -186,7 +186,7 @@ type UnitRow = (
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = StudyPlan), (status = 404, body = ErrorBody)), tag = "study")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<StudyPlan>, AppError> {
@@ -246,7 +246,7 @@ pub async fn get(
     responses((status = 200, body = UnitsAdded), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "study")]
 pub async fn add_units(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<AddStudyUnits>,
@@ -273,7 +273,7 @@ pub async fn add_units(
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "study")]
 pub async fn update_unit(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(unit): Path<Uuid>,
     Json(input): Json<UpdateStudyUnit>,
@@ -300,7 +300,7 @@ pub async fn update_unit(
     params(("unit_id" = String, Path, format = Uuid)),
     responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "study")]
 pub async fn delete_unit(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(unit): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -320,7 +320,7 @@ pub async fn delete_unit(
     params(("unit_id" = String, Path, format = Uuid)), request_body = SetUnitProgress,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "study")]
 pub async fn set_progress(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(unit): Path<Uuid>,
     Json(input): Json<SetUnitProgress>,
@@ -346,7 +346,7 @@ pub async fn set_progress(
     responses((status = 200, body = UnitsPlanned), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
     tag = "study")]
 pub async fn plan(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<PlanUnits>,
@@ -369,7 +369,7 @@ pub async fn plan(
     params(("item_id" = String, Path, format = Uuid), TodayQuery),
     responses((status = 200, body = [StudyParticipant]), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "study")]
 pub async fn participants(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Query(query): Query<TodayQuery>,
