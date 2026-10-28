@@ -13,19 +13,13 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::tasks::EXPECTED_TASK_USER_DOC;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_db::{UserTx, needed_ids, new_ids};
-use fvoci_http::session::{CurrentUser, ExpectedUser};
+use fvoci_http::session::CurrentUser;
 
-/// 지운 결과(되살릴 때 쓰는 휴지통 묶음).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Trashed {
-    #[schema(value_type = String, format = Uuid)]
-    pub batch_id: Uuid,
-}
+pub use fvoci_core::trash::Trashed;
 
 /// 휴지통 묶음의 맨 위 대상 종류.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -180,21 +174,6 @@ pub async fn trash_document(
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Trashed>, AppError> {
     let batch_id = trash_call(&state, user, "SELECT app_trash_document($1, $2)", id.0).await?;
-    Ok(Json(Trashed { batch_id }))
-}
-
-/// 업무 지우기(하위 업무까지, 쓰기 권한).
-#[utoipa::path(delete, path = "/api/tasks/{task_id}", operation_id = "trash_task",
-    params(("task_id" = String, Path, format = Uuid),
-           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
-    responses((status = 200, body = Trashed), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "trash")]
-pub async fn trash_task(
-    State(state): State<AppState>,
-    ExpectedUser(user): ExpectedUser,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Trashed>, AppError> {
-    let batch_id = trash_call(&state, user, "SELECT app_trash_task($1, $2)", id).await?;
     Ok(Json(Trashed { batch_id }))
 }
 

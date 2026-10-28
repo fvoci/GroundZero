@@ -20,6 +20,7 @@ use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
 use crate::features::work_state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
+use fvoci_core::trash::Trashed;
 use fvoci_core::validate::{format_date, parse_date, validate_text, validate_title};
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
@@ -958,6 +959,29 @@ pub async fn delete_checklist_item(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// 업무 지우기(하위 업무까지, 쓰기 권한).
+#[utoipa::path(delete, path = "/api/tasks/{task_id}", operation_id = "trash_task",
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)),
+    responses((status = 200, body = Trashed), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "trash")]
+pub async fn trash_task(
+    State(state): State<WorkState>,
+    ExpectedUser(user): ExpectedUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Trashed>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    // 휴지통 묶음과 감사 기록의 id 2개.
+    let batch_id: Uuid = sqlx::query_scalar("SELECT app_trash_task($1, $2)")
+        .bind(id)
+        .bind(new_ids(2))
+        .fetch_one(tx.conn())
+        .await
+        .map_err(AppError::from_db_function)?;
+    tx.commit().await?;
+    Ok(Json(Trashed { batch_id }))
 }
 
 #[cfg(test)]

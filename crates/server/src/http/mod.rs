@@ -334,7 +334,7 @@ async fn api_not_found() -> AppError {
         home::set_mark,
         home::get_mark,
         trash::trash_document,
-        trash::trash_task,
+        tasks::trash_task,
         trash::trash_item,
         trash::trash_module,
         trash::workspace_trash,
@@ -990,7 +990,7 @@ pub fn router(state: AppState) -> Router {
         .route("/items/{item_id}/assignable", get(tasks::assignable))
         .route(
             "/tasks/{task_id}",
-            get(tasks::get).put(tasks::update).delete(trash::trash_task),
+            get(tasks::get).put(tasks::update).delete(tasks::trash_task),
         )
         .route("/tasks/{task_id}/position", put(tasks::move_task))
         .route("/tasks/{task_id}/parent", put(tasks::set_parent))

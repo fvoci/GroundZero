@@ -6,4 +6,5 @@ pub mod error;
 pub mod ids;
 pub mod logging;
 pub mod secret;
+pub mod trash;
 pub mod validate;
