@@ -4,6 +4,7 @@ pub mod time_tracking;
 
 use axum::routing::{get, post, put};
 use axum::{Router, extract::FromRef};
+use fvoci_http::session::SessionState;
 use utoipa::OpenApi;
 
 /// 시간 처리기에 필요한 DB 상태.
@@ -57,6 +58,7 @@ pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     TimeState: FromRef<S>,
+    SessionState: FromRef<S>,
 {
     Router::new()
         .route(
