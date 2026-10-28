@@ -929,18 +929,37 @@ ALTER FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid,
 
 -- 조직 탈퇴·제거에 필요한 새 id 수: 공간마다 app_remove_member_ids + 조직 로그 1.
 CREATE FUNCTION fvoci.app_remove_organization_member_ids(p_organization uuid, p_user uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    -- 본인 또는 조직 관리자만. 조직 전체의 받은 공유(공간 멤버십과 무관)마다 활동 1 + 공간마다 (감사 1 + 담당·리더 해제 2배) + 조직 로그 1.
-    SELECT CASE WHEN app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
-                     OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN 0 ELSE
-      1 + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-           WHERE s.organization_id = p_organization AND s.grantee_user_id = p_user AND d.workspace_id IS NOT NULL)::integer
-        + coalesce((SELECT sum(1 + app_unseen_assignees_bound(NULL, m.workspace_id, p_user) * 2)
-                    FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
-                    WHERE w.organization_id = p_organization AND m.user_id = p_user), 0)::integer
-    END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
+       OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN
+      RETURN 0;
+    END IF;
+    -- 명령과 같은 순서로 먼저 잠근 뒤 센다. 권한 없는 집계는 잠그지 않고 0(D-88).
+    PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
+    IF app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
+       OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN
+      RETURN 0;
+    END IF;
+    PERFORM 1 FROM organization_members
+    WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN 0;
+    END IF;
+    PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
+    -- 공유는 조직 멤버·공간 잠금, 새 담당·리더는 공간 멤버 잠금에서 기다린다.
+    PERFORM 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+    WHERE w.organization_id = p_organization AND m.user_id = p_user
+    ORDER BY m.workspace_id FOR UPDATE OF m;
+    RETURN 1 + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+                WHERE s.organization_id = p_organization AND s.grantee_user_id = p_user
+                  AND d.workspace_id IS NOT NULL)::integer
+      + coalesce((SELECT sum(1 + app_unseen_assignees_bound(NULL, m.workspace_id, p_user) * 2)
+                  FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                  WHERE w.organization_id = p_organization AND m.user_id = p_user), 0)::integer;
+  END
   $$;
 
 
