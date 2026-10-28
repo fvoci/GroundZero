@@ -3,7 +3,7 @@
 //! 기록은 문서를 볼 수 있는 사람이 본다(RLS: `document_revisions_select`). 복원은 쓰기 권한자가 하며
 //! 옛 리비전의 내용으로 새 리비전을 만든다. 이력을 지우지 않고, 저장과 같은 충돌 규칙(기준 리비전,
 //! 같은 `request_id` 재시도)을 따른다. 처리는 DB 함수 `app_restore_document_revision`이 한 트랜잭션에서 한다
-//! (`crates/db/migrations/202610250001_initial_state.sql`). 새 UUIDv7은 앱이 공급한다(D-88).
+//! (`crates/db/migrations/202610280003_documents.sql`). 새 UUIDv7은 앱이 공급한다(D-88).
 
 use axum::Json;
 use axum::extract::{Path, Query, State};

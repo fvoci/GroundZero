@@ -4,7 +4,7 @@
 //! 사용자당 하나이고 서버 시각으로 재므로 앱을 닫아도 이어진다. 기록은 측정 뒤에 종류·대상을 정할 수 있고,
 //! 고치면 본인만 보는 수정 이력에 이전 값이 남는다. 집계는 보는 사람의 시간대 날짜로 하며 기록은 시작한 날에
 //! 센다. 시간 합계도 본인 기록만 돌려준다.
-//! DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`의 `app_start_timer`·`app_update_time_entry` 등에 있다.
+//! DB 정의는 `crates/db/migrations/202610280007_time.sql`의 `app_start_timer`·`app_update_time_entry` 등에 있다.
 //! 새 UUIDv7은 앱이 공급한다(D-88).
 
 use axum::Json;

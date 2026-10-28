@@ -6,7 +6,7 @@
 //! 최소 이동이며 기간(시작~마감)을 유지한다. 앞당긴 경우에는 제안하지 않는다. 승인할 때는 잠근 뒤 같은 계산을 다시
 //! 해서 승인 목록과 다르면(그사이 관계·날짜·완료가 바뀜) 아무것도 바꾸지 않는다.
 //! 관계의 종류·지연일과 앱 공급 UUIDv7(D-88)은
-//! `crates/db/migrations/202610250001_initial_state.sql`의 `app_set_task_dependency` 등이 처리한다.
+//! `crates/db/migrations/202610280005_work.sql`의 `app_set_task_dependency` 등이 처리한다.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

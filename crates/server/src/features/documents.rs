@@ -2,7 +2,7 @@
 //!
 //! 한 문서 엔진을 쓴다. 문서는 워크스페이스 소유(위키) 또는 사용자 소유(개인 노트) 중 하나다 (D-59).
 //! 접근 판정은 DB 함수 `app_access`(owner·write·read·없음) 하나로 하고, RLS와 이 모듈이 같은 함수를
-//! 쓴다(`crates/db/migrations/202610250001_initial_state.sql`의 `app_access`).
+//! 쓴다(`crates/db/migrations/202610280002_organizations.sql`의 `app_access`).
 //!
 //! 저장 경계 (D-62): 본문은 Tiptap JSON(`schema_version` 1)이며 저장할 때마다 리비전이 하나 늘어난다.
 //! 이것은 JSON 리비전 저장이고 공동 편집이 아니다. CRDT 도입 시 상태 열을 `body` 옆에 추가하며
@@ -624,7 +624,8 @@ pub async fn create_note(
         let mut tx = state.db.begin_as(user).await?;
         let body = initial_body(&mut tx, &input, NewDocumentPlace::PersonalNote).await?;
         let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7)")
+            // 템플릿을 주면 SQL이 그 조직을 노트에 기억한다(#175=1).
+            sqlx::query_scalar("SELECT app_create_personal_note($1, $2, $3, $4, $5, $6, $7, $8)")
                 .bind(input.request_id)
                 .bind(&title)
                 .bind(SCHEMA_VERSION)
@@ -632,6 +633,7 @@ pub async fn create_note(
                 .bind(input.parent_id)
                 .bind(max_depth(&state.config.limits))
                 .bind(new_ids(3))
+                .bind(input.template_id)
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
@@ -1250,7 +1252,7 @@ pub struct MovePreview {
     pub changes: Vec<MoveAccessChange>,
     /// 참조 번호가 새로 매겨지는지. 같은 모듈의 다른 항목으로 옮기면 번호를 유지한다. 링크는 id 기준이라 유지된다 (D-18).
     pub reference_changes: bool,
-    /// 이전 리비전 기록도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
+    /// 이전 리비전 기록과 댓글, 첨부 파일(이전 버전 포함)도 함께 옮겨져 새로 볼 수 있게 되는 사람에게 보인다.
     pub history_moves_with_document: bool,
     /// 이동해도 유지되는 활성 공개 링크 수. 로그인 없이 계속 볼 수 있다.
     pub active_public_links: i64,

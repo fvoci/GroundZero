@@ -168,9 +168,17 @@ async fn shares_from_another_organization_stop_when_a_note_moves() {
         shares,
         vec![json!({"grantee_user_id":y.id.0,"organization_id":orgs[1]})]
     );
-    assert_eq!(rows(&state, &owner,
-        "SELECT id FROM fvoci.activity WHERE target_kind='document' AND target_id=$1 AND kind='unshare' AND detail->>'reason'='moved' AND detail->>'user'=$2::text",
-        &[doc, x.id.0]).await.len(), 1);
+    // SR1-7(D-49·D-114): 철회는 활동에 한 건으로 남지만, 공간 멤버가 읽는 그 행에 다른 조직 사람의 id는 남기지 않는다.
+    assert_eq!(
+        rows(
+            &state,
+            &owner,
+            "SELECT detail FROM fvoci.activity WHERE target_kind='document' AND target_id=$1 AND kind='unshare'",
+            &[doc]
+        )
+        .await,
+        vec![json!({"detail": {"reason": "moved"}})]
+    );
 }
 
 #[tokio::test]
@@ -265,7 +273,17 @@ async fn reference_document(
     ws: Option<Uuid>,
     file: Uuid,
 ) -> Uuid {
-    let body = json!({"type":"doc","content":[{"type":"image","attrs":{"src":format!("/api/files/{file}/content?version=1")}}]});
+    reference_version(state, user, ws, file, 1).await
+}
+
+async fn reference_version(
+    state: &AppState,
+    user: &TestUser,
+    ws: Option<Uuid>,
+    file: Uuid,
+    version: u32,
+) -> Uuid {
+    let body = json!({"type":"doc","content":[{"type":"image","attrs":{"src":format!("/api/files/{file}/content?version={version}")}}]});
     let mut tx = state.db.begin_as(user.id).await.unwrap();
     let doc: Uuid = if let Some(ws) = ws {
         sqlx::query_scalar(
@@ -298,48 +316,77 @@ async fn reference_state(doc: Uuid, file: Uuid) -> (i64, bool) {
         .bind(doc).bind(file).fetch_one(&mut observer).await.unwrap()
 }
 
+/// SR1-16(D-56·D-114, 부조종사 결정 #177): 본문의 첨부 참조는 작성자가 그 파일의 자리(붙은 문서·항목)를 읽을 수 있고
+/// 같은 조직 범위일 때만 기록해 그 버전을 보존한다. 파일 자체의 휴지통 상태는 보지 않는다(휴지통 첨부의 보존 유지).
 #[tokio::test]
-async fn file_versions_referenced_across_the_organization_are_kept() {
+async fn file_versions_are_kept_only_for_references_their_author_can_read() {
     let w = World::new().await; // 파일이 있는 B.
     let a = workspace(&w.state, &w.owner, w.org).await;
     let member = verified_user(&w.state, "review org member").await;
     common::join_organization(w.org, &member, "member").await;
     let outsider = verified_user(&w.state, "review outsider").await;
-    // 두 범위를 독립적으로 검증한다. 앞 문서의 참조가 개인 노트 보존의 실패를 가리지 않는다.
-    for ws in [Some(a), None] {
+    let new_file = || async {
         let upload = made(&w.state, &w.owner,
             "SELECT fvoci.app_create_upload($1,NULL,'item',$2,'version.txt','','text/plain',10,10,3600,1000,100000,@ids) AS id",
             &[Uuid::now_v7(), w.item]).await;
-        let file = finish_upload(&w.state, &w.owner, upload).await;
-        let user = if ws.is_some() { &w.owner } else { &member };
-        let doc = reference_document(&w.state, user, ws, file).await;
+        finish_upload(&w.state, &w.owner, upload).await
+    };
+    // 범위마다 새 파일로 독립적으로 본다. 앞 문서의 참조가 뒤 경우의 결과를 가리지 않는다.
+    // 파일 자리를 읽는 작성자: 같은 조직의 다른 공간 문서와 개인 노트 모두 기록·보존한다.
+    for ws in [Some(a), None] {
+        let file = new_file().await;
+        let doc = reference_document(&w.state, &w.owner, ws, file).await;
         assert_eq!(reference_state(doc, file).await, (1, true));
-        // 파일 열람 거부는 앱 역할 SELECT로, 범위 밖 노드의 미기록은 내부 색인으로 따로 확인한다.
+    }
+    // 파일 자리를 읽지 못하는 같은 조직 멤버의 개인 노트는 기록하지 않는다. 조직 밖 사람의 참조도 기록하지 않는다.
+    let file = new_file().await;
+    for user in [&member, &outsider] {
         assert!(
             rows(
                 &w.state,
-                &outsider,
+                user,
                 "SELECT id FROM fvoci.files WHERE id=$1",
                 &[file]
             )
             .await
             .is_empty()
         );
-        if ws.is_none() {
-            assert!(
-                rows(
-                    &w.state,
-                    &member,
-                    "SELECT id FROM fvoci.files WHERE id=$1",
-                    &[file]
-                )
-                .await
-                .is_empty()
-            );
-        }
-        let outside_doc = reference_document(&w.state, &outsider, None, file).await;
-        assert_eq!(reference_state(outside_doc, file).await.0, 0);
+        let doc = reference_document(&w.state, user, None, file).await;
+        assert_eq!(reference_state(doc, file).await, (0, false));
     }
+    // 휴지통에 든 첨부도 자리를 읽는 작성자의 새 리비전이 가리키면 기록·보존한다(D-56).
+    let file = new_file().await;
+    made(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_trash_file($1,@ids) AS id",
+        &[file],
+    )
+    .await;
+    let doc = reference_document(&w.state, &w.owner, Some(a), file).await;
+    assert_eq!(reference_state(doc, file).await, (1, true));
+}
+
+/// CR183-3: 참조는 있는 버전만 기록한다. `document_file_refs`에는 버전 외래 키가 없어, 없는 버전(정리됐거나 처음부터
+/// 없는)을 가리키는 본문이 참조 행을 남기면 안 된다. 기록 질의가 `file_versions`와 맞춰 본다.
+#[tokio::test]
+async fn references_to_a_missing_file_version_are_not_recorded() {
+    let w = World::new().await;
+    let upload = made(&w.state, &w.owner,
+        "SELECT fvoci.app_create_upload($1,NULL,'item',$2,'version.txt','','text/plain',10,10,3600,1000,100000,@ids) AS id",
+        &[Uuid::now_v7(), w.item]).await;
+    let file = finish_upload(&w.state, &w.owner, upload).await;
+    let doc = reference_version(&w.state, &w.owner, Some(w.ws), file, 99).await;
+    let mut observer = common::fixture_conn().await;
+    let recorded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.document_file_refs WHERE document_id=$1 AND file_id=$2",
+    )
+    .bind(doc)
+    .bind(file)
+    .fetch_one(&mut observer)
+    .await
+    .unwrap();
+    assert_eq!(recorded, 0);
 }
 
 #[tokio::test]
@@ -424,13 +471,14 @@ async fn purge_does_not_swallow_short_ids() {
     .await
     .unwrap();
     assert_eq!(gone, 2);
-    let checksum: String = sqlx::query_scalar(
-        "SELECT encode(checksum,'hex') FROM fvoci._sqlx_migrations WHERE version=202610250001",
+    let checksums: String = sqlx::query_scalar(
+        "SELECT string_agg(version || ':' || encode(checksum,'hex'), ' ' ORDER BY version)
+         FROM fvoci._sqlx_migrations",
     )
     .fetch_one(&mut migration)
     .await
     .unwrap();
-    eprintln!("review migration checksum: {checksum}");
+    eprintln!("review migration checksums: {checksums}");
     migration.close().await.unwrap();
     state.db.close().await;
     sqlx::raw_sql(&format!("DROP DATABASE {} WITH (FORCE)", fresh.name))

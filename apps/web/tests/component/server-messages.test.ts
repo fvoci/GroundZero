@@ -199,14 +199,14 @@ describe('server messages the web matches', () => {
         name: '202701010001_change.sql',
         text: define('renamed').replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION'),
       },
-      { name: '202610250001_initial_state.sql', text: define('the item is archived') },
+      { name: '202610280001_foundation.sql', text: define('the item is archived') },
     ]);
     expect(raisedBy(replaced, 'the item is archived', '55000')).toEqual([]);
     expect(raisedBy(replaced, 'renamed', '55000')).toEqual(['app_x(uuid)']);
   });
 
   const initial = (message: string): MigrationFile => ({
-    name: '202610250001_initial_state.sql',
+    name: '202610280001_foundation.sql',
     text: `CREATE FUNCTION fvoci.app_y(p_id uuid, p_at timestamp with time zone DEFAULT now(), OUT ok boolean) RETURNS boolean\n    LANGUAGE plpgsql\n    AS $_$\n  BEGIN\n    ${raise(message, '55000')};\n  END\n  $_$;\n`,
   });
 

@@ -123,6 +123,27 @@ const workspaces: Workspace[] = [
   },
 ];
 
+describe('move preview history notice', () => {
+  beforeEach(async () => {
+    await setLocale('ko', { reload: false });
+  });
+
+  // SR1-15(D-22·D-24): 옮기면 리비전뿐 아니라 댓글·첨부(이전 버전 포함)도 새로 볼 수 있게 되는 사람에게 보인다.
+  it('tells that revisions, comments and attachments move with the document', async () => {
+    vi.spyOn(api, 'modules').mockResolvedValue([]);
+    vi.spyOn(api, 'movePreview').mockResolvedValue(preview);
+    render(DocumentActions, { props: { doc, workspaces, onchanged: () => undefined } });
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    await fireEvent.click(await screen.findByRole('menuitem', { name: '이동' }));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('move-preview');
+    const notice = within(dialog).getByText(/리비전/);
+    for (const part of ['댓글', '첨부', '이전 버전']) {
+      expect(notice.textContent).toContain(part);
+    }
+  });
+});
+
 describe('move panel when the live room is busy', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });

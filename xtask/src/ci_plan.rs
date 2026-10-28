@@ -347,7 +347,7 @@ mod tests {
     fn server_sql_deploy_pr_adds_oidc_and_supabase() {
         for path in [
             "crates/server/src/main.rs",
-            "crates/db/migrations/202610250001_baseline.sql",
+            "crates/db/migrations/202610280001_foundation.sql",
             "deploy/compose.test.yaml",
             "deploy/supabase/test.env",
             // 개발 준비 SQL 시험은 supabase job에서 돈다(#168).

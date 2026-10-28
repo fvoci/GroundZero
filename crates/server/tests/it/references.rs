@@ -653,3 +653,70 @@ async fn moving_a_note_into_another_organization_drops_outside_links() {
     .await;
     assert_eq!(links(note).await, [personal]);
 }
+
+/// #177 SR1-5 후속(D-114): 옮긴 노트를 가리키던 들어오는 참조도 새 자리의 조직 밖이면 지운다. 같은 조직 공간 문서와
+/// 조직이 없는 개인 노트의 참조는 남는다.
+#[tokio::test]
+async fn moving_a_note_into_another_organization_drops_incoming_outside_links() {
+    use crate::sql_support::{World, fixture, made, rows, workspace};
+
+    async fn refer(w: &World, from: uuid::Uuid, to: uuid::Uuid) {
+        fixture(
+            "UPDATE fvoci.documents SET body = jsonb_build_object('type', 'doc', 'content', jsonb_build_array(
+               jsonb_build_object('type', 'paragraph', 'content', jsonb_build_array(
+                 jsonb_build_object('type', 'reference', 'attrs', jsonb_build_object('kind', 'document', 'id', $2::text)))))),
+               revision = revision + 1
+             WHERE id = $1",
+            &[from, to],
+        )
+        .await;
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT fvoci.app_record_document_references($1,false,@ids)",
+            &[from],
+        )
+        .await;
+    }
+
+    async fn incoming(note: uuid::Uuid) -> Vec<uuid::Uuid> {
+        let mut conn = common::fixture_conn().await;
+        sqlx::query_scalar(
+            "SELECT document_id FROM fvoci.document_links
+             WHERE target_kind = 'document' AND target_id = $1 ORDER BY document_id",
+        )
+        .bind(note)
+        .fetch_all(&mut conn)
+        .await
+        .unwrap()
+    }
+
+    let w = World::new().await;
+    let boss = login(&w.state, "boss").await;
+    let other = common::organization_for(&boss).await;
+    common::join_organization(other, &w.owner, "admin").await;
+    let other_ws = workspace(&w.state, &w.owner, other).await;
+    let note = w.note().await;
+    let old_org_doc = w.doc().await;
+    let new_org_doc = made(&w.state, &w.owner,
+        "SELECT fvoci.app_create_wiki_document($1,$2,'reference',1,'{\"type\":\"doc\",\"content\":[]}',NULL,20,@ids) AS id",
+        &[other_ws, uuid::Uuid::now_v7()]).await;
+    let personal = w.note().await;
+    for from in [old_org_doc, new_org_doc, personal] {
+        refer(&w, from, note).await;
+    }
+    let mut all = vec![old_org_doc, new_org_doc, personal];
+    all.sort();
+    assert_eq!(incoming(note).await, all);
+
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT * FROM fvoci.app_move_document($1,$2,NULL,@ids)",
+        &[note, other_ws],
+    )
+    .await;
+    let mut kept = vec![new_org_doc, personal];
+    kept.sort();
+    assert_eq!(incoming(note).await, kept);
+}

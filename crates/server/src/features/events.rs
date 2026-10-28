@@ -3,7 +3,8 @@
 //! 일정은 항목에 속하고 권한은 항목을 따른다(DB 함수 `app_access`). 시각이 있는 일정은 UTC 시각과 일정의
 //! 시간대를 함께 저장하고, 종일 일정은 날짜 그대로 둔다(D-50). 달력은 워크스페이스 단위의 기간 조회로, 볼 수 있는
 //! 업무(시작·마감)와 일정을 함께 돌려준다(홈의 주간 달력도 같은 API를 쓴다).
-//! DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`의 `app_access`·`app_event_occurrences` 등에 있다.
+//! DB 정의는 `crates/db/migrations/202610280002_organizations.sql`의 `app_access`,
+//! `crates/db/migrations/202610280005_work.sql`의 `app_event_occurrences` 등에 있다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};

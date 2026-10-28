@@ -495,7 +495,7 @@ export interface MoveAccessChangeView {
 
 export interface MovePreviewView {
   changes: MoveAccessChangeView[];
-  /** 이전 리비전 기록도 함께 옮겨진다. */
+  /** 이전 리비전 기록과 댓글, 첨부 파일(이전 버전 포함)도 함께 옮겨진다. */
   history_moves_with_document: boolean;
   /** 대상에서 번호가 새로 매겨지는지(같은 모듈 안 이동이면 유지). */
   reference_changes: boolean;

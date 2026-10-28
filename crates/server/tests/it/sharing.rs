@@ -516,8 +516,6 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
     common::join_organization(common::organization_for(&alice).await, &boss, "member").await;
     let dst = create_workspace(&app, &boss, "남의 팀").await;
     let alice_email = unique_email("alice-dst");
-    let alice_dst = login_with_email(&state, "alice-dst", &alice_email, true).await;
-    let _ = alice_dst;
     // 앨리스를 대상 워크스페이스의 작성자로 들인다(같은 사람이 다른 이메일로 두 번 로그인하는 대신 초대를 쓴다).
     let inv = send(
         &app,
@@ -959,4 +957,46 @@ async fn document_settings_change_only_the_fields_sent() {
     )
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);
+}
+
+/// #177 SR1-12 따름(결정 6458970283, 수정 묶음 3): 같은 검증 이메일 계정이 여럿이면 공유 받는 계정도 초대 알림·수락과
+/// 같은 규칙(created_at, id 순 첫 계정)으로 고른다. 만든 시각이 같아도 두 경로가 같은 계정을 가리킨다.
+#[tokio::test]
+async fn sharing_picks_the_same_account_as_invitations_even_when_created_at_ties() {
+    use crate::sql_support::{World, fixture, made};
+
+    let w = World::new().await;
+    let email = unique_email("tie");
+    let first = login_with_email(&w.state, "tie first", &email, true).await;
+    let second = login_with_email(&w.state, "tie second", &email, true).await;
+    for user in [&first, &second] {
+        common::join_organization(w.org, user, "member").await;
+    }
+    // 먼저 만든 계정의 시각을 나중 계정에 맞춘다(그 행만 고쳐 저장 위치도 뒤로 간다).
+    fixture(
+        "UPDATE fvoci.users SET created_at = (SELECT created_at FROM fvoci.users WHERE id = $2) WHERE id = $1",
+        &[first.id.0, second.id.0],
+    )
+    .await;
+    let expected = first.id.0.min(second.id.0);
+    let doc = w.doc().await;
+    made(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_share_document($1,(SELECT email FROM fvoci.users WHERE id=$2),'read',$3,@ids) AS id",
+        &[doc, first.id.0, w.org],
+    )
+    .await;
+    let mut conn = common::fixture_conn().await;
+    let (grantee, recipient): (uuid::Uuid, uuid::Uuid) = sqlx::query_as(
+        "SELECT (SELECT grantee_user_id FROM fvoci.document_shares WHERE document_id = $1),
+                fvoci.app_invitation_recipient(lower((SELECT email FROM fvoci.users WHERE id = $2)))",
+    )
+    .bind(doc)
+    .bind(first.id.0)
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(recipient, expected);
+    assert_eq!(grantee, expected);
 }
