@@ -1,5 +1,5 @@
+import { type CommentView } from '$lib/features/activity/api';
 // 댓글 목록을 스레드(첫 댓글 + 답글)로 묶는다. 서버는 스레드 순으로 주지만 순서에 기대지 않는다.
-import type { CommentView } from '$lib/api/client';
 
 export interface Thread {
   root: CommentView;

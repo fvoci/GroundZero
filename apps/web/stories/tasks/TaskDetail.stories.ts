@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { api } from '$lib/api/client';
 import { fn, spyOn } from 'storybook/test';
@@ -16,8 +17,8 @@ const meta = {
     const restore = setUpScreen(itemPath(WORKSPACE.id, TASK_ITEM.id));
     const mocks = [
       spyOn(api, 'taskBacklinks').mockResolvedValue([]),
-      spyOn(api, 'comments').mockResolvedValue([]),
-      spyOn(api, 'mark').mockResolvedValue({ pin: false, favorite: false }),
+      spyOn(activityApi, 'comments').mockResolvedValue([]),
+      spyOn(activityApi, 'mark').mockResolvedValue({ pin: false, favorite: false }),
       spyOn(api, 'taskTime').mockResolvedValue({
         estimate_minutes: null,
         mine_seconds: 0,

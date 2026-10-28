@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
@@ -58,7 +59,7 @@ describe('multi-column layouts follow the content width', () => {
       dates: [],
       items: [],
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const grid = document.querySelector('[aria-labelledby="week-heading"]')?.parentElement;

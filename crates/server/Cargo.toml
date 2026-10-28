@@ -25,6 +25,7 @@ fvoci-http.workspace = true
 fvoci-work.workspace = true
 fvoci-documents.workspace = true
 fvoci-references.workspace = true
+fvoci-activity.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 hmac = "0.13"

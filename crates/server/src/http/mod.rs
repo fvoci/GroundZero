@@ -22,11 +22,10 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, audit, comments, courses, event_recurrence, events, export, files, home,
-    item_profile, members, modules, organizations, records, saved_views, search_api, study,
-    time_tracking, trash, workspaces, zotero,
+    accounts, courses, event_recurrence, events, export, files, home, item_profile, members,
+    modules, organizations, records, saved_views, search_api, study, time_tracking, trash,
+    workspaces, zotero,
 };
-use crate::features::{activity, notifications};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -93,6 +92,14 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
                     build: build_info::CURRENT,
                 }),
             )
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_activity::ActivityState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
         }
     }
 }
@@ -307,15 +314,6 @@ async fn api_not_found() -> AppError {
         home::home,
         home::my_tasks,
         search_api::search,
-        notifications::notifications,
-        notifications::unread_count,
-        notifications::mark_read,
-        activity::recent,
-        activity::item,
-        activity::document,
-        activity::task,
-        home::set_mark,
-        home::get_mark,
         trash::trash_document,
         trash::trash_item,
         trash::trash_module,
@@ -341,8 +339,6 @@ async fn api_not_found() -> AppError {
         files::delete_version,
         export::workspace,
         export::mine,
-        audit::workspace,
-        audit::mine,
         saved_views::list,
         saved_views::create,
         saved_views::update,
@@ -374,12 +370,6 @@ async fn api_not_found() -> AppError {
         courses::delete_episode,
         courses::set_progress,
         courses::participants,
-        comments::document_comments,
-        comments::task_comments,
-        comments::add,
-        comments::edit,
-        comments::delete,
-        comments::resolve,
         modules::list_modules,
         modules::get_module,
         modules::create_module,
@@ -476,8 +466,6 @@ async fn api_not_found() -> AppError {
         home::HomeTask,
         home::HomeDocument,
         home::HomeItem,
-        home::MarkTarget,
-        home::MarkKind,
         home::MarkedTarget,
         home::Home,
         organizations::OrgRole,
@@ -497,8 +485,6 @@ async fn api_not_found() -> AppError {
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
         home::UpNextCounts,
-        home::SetMark,
-        home::MarkState,
         trash::Trashed,
         trash::TrashKind,
         trash::TrashEntry,
@@ -515,7 +501,6 @@ async fn api_not_found() -> AppError {
         files::FileDetail,
         files::RenameFile,
         files::FileTrashed,
-        audit::AuditEntry,
         saved_views::SavedView,
         saved_views::CreateView,
         saved_views::UpdateView,
@@ -568,11 +553,6 @@ async fn api_not_found() -> AppError {
         courses::UpdateEpisode,
         courses::SetProgress,
         courses::Participant,
-        comments::Comment,
-        comments::NewComment,
-        comments::EditComment,
-        comments::ResolveComment,
-        comments::CommentCreated,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -585,17 +565,10 @@ async fn api_not_found() -> AppError {
         modules::ItemConflict,
         modules::ItemSaveConflict,
         // personal scope (2단계 B)
-        notifications::Notification,
-        notifications::NotificationPage,
-        notifications::MarkRead,
-        notifications::MarkedNotifications,
-        notifications::UnreadCount,
         home::MyTask,
         home::MyTaskCounts,
         home::WorkspaceTasks,
         home::MyTasks,
-        activity::Activity,
-        activity::ActivityPage,
         fvoci_core::ids::Role,
     )),
     tags(
@@ -630,6 +603,7 @@ impl utoipa::Modify for DomainApis {
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_references::ReferencesApi::openapi());
         openapi.merge(fvoci_documents::DocumentsApi::openapi());
+        openapi.merge(fvoci_activity::ActivityApi::openapi());
     }
 }
 
@@ -692,6 +666,7 @@ pub fn router(state: AppState) -> Router {
         .merge(fvoci_work::router(&state))
         .merge(fvoci_references::router())
         .merge(fvoci_documents::router())
+        .merge(fvoci_activity::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -751,8 +726,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/deleted-workspaces", get(workspaces::deleted))
         .route("/workspaces/{workspace_id}/export", get(export::workspace))
         .route("/me/export", get(export::mine))
-        .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
-        .route("/me/audit", get(audit::mine))
         .route("/record-kinds", get(records::kinds))
         .route("/zotero/collections", post(zotero::list_collections))
         .route("/items/{item_id}/zotero/import", post(zotero::import))
@@ -816,17 +789,6 @@ pub fn router(state: AppState) -> Router {
             "/episodes/{episode_id}/progress",
             put(courses::set_progress),
         )
-        .route(
-            "/documents/{document_id}/comments",
-            get(comments::document_comments),
-        )
-        .route("/tasks/{task_id}/comments", get(comments::task_comments))
-        .route("/comments", post(comments::add))
-        .route(
-            "/comments/{comment_id}",
-            put(comments::edit).delete(comments::delete),
-        )
-        .route("/comments/{comment_id}/resolve", post(comments::resolve))
         .route(
             "/me/deleted-workspaces/{workspace_id}",
             delete(workspaces::purge),
@@ -923,24 +885,10 @@ pub fn router(state: AppState) -> Router {
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))
-        .route(
-            "/me/marks/{target_kind}/{target_id}",
-            get(home::get_mark).put(home::set_mark),
-        )
         // personal scope (2단계 B)
         .route("/me/home", get(home::home))
         .route("/me/tasks", get(home::my_tasks))
         .route("/search", get(search_api::search))
-        .route("/me/notifications", get(notifications::notifications))
-        .route(
-            "/me/notifications/unread-count",
-            get(notifications::unread_count),
-        )
-        .route("/me/notifications/read", post(notifications::mark_read))
-        .route("/me/activity", get(activity::recent))
-        .route("/items/{item_id}/activity", get(activity::item))
-        .route("/documents/{document_id}/activity", get(activity::document))
-        .route("/tasks/{task_id}/activity", get(activity::task))
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),

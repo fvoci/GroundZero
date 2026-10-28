@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -89,7 +90,7 @@ function mount(current: TaskView = build, others: TaskView[] = [design, review])
   vi.spyOn(work, 'task').mockResolvedValue({ ...current, checklist: [] });
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
     props: {
       taskId: current.id,

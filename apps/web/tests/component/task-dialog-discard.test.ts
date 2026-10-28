@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -156,7 +157,7 @@ async function openBoard(tasks: TaskDetailView[] = [task('t1')], beforeOpen?: ()
   );
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
   const props = (openTaskId: string | undefined) => ({ item, workspaces: [], openTaskId });
   const view = render(TaskBoard, { props: props(undefined) });
@@ -366,7 +367,7 @@ describe('closing the task dialog with unsaved input', () => {
         const { back } = await openBoard();
         const save =
           label === '새 댓글'
-            ? vi.spyOn(api, 'addComment').mockImplementation(async () => {
+            ? vi.spyOn(activityApi, 'addComment').mockImplementation(async () => {
                 await pending.promise;
                 return 'new-comment';
               })

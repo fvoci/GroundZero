@@ -1,6 +1,6 @@
+import { type NotificationView } from '$lib/features/activity/api';
 import { describe, expect, it } from 'vitest';
 
-import type { NotificationView } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { notificationText } from '$lib/features/references/notification-text';
 import { m } from '$lib/paraglide/messages.js';
