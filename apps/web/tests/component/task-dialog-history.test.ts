@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
@@ -75,7 +76,7 @@ describe('task dialog and browser history', () => {
     await setLocale('ko', { reload: false });
     window.history.replaceState(null, '', '/w/ws-1/i/i1');
     vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     vi.spyOn(work, 'task').mockReturnValue(new Promise(() => undefined));
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
@@ -105,7 +106,7 @@ describe('task dialog and browser history', () => {
     window.history.replaceState(null, '', '/w/ws-1/i/i1/tasks/board/t/2');
     router.path = '/w/ws-1/i/i1/tasks/board/t/2';
     vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     vi.spyOn(work, 'task').mockReturnValue(new Promise(() => undefined));
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
@@ -130,7 +131,7 @@ describe('board context across navigation', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const first = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await screen.findByTestId('task-board');
@@ -154,7 +155,7 @@ describe('board context across navigation', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await fireEvent.change(await screen.findByLabelText('상태'), {
@@ -180,7 +181,7 @@ describe('move menu', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue([task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const move = vi
       .spyOn(work, 'moveTask')
@@ -200,7 +201,7 @@ describe('quick add in a column', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue([]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const create = vi
       .spyOn(work, 'createTask')
@@ -234,7 +235,7 @@ describe('quick add in a column', () => {
 function boardMocks(list: TaskView[] | Promise<TaskView[]>): void {
   window.sessionStorage.clear();
   vi.spyOn(work, 'tasks').mockReturnValue(Promise.resolve(list));
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
 }
 

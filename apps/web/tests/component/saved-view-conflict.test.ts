@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import './fixtures/task-statuses';
@@ -5,7 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -117,12 +118,12 @@ function viewServer(
 describe('saved view save on a stale version', () => {
   it('reuses the saved view request id after a lost response while the form stays on screen', async () => {
     const saved: Stored[] = [];
-    vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve(saved));
-    const create = vi.spyOn(api, 'createView').mockImplementation(() => {
+    vi.spyOn(savedViewsApi, 'savedViews').mockImplementation(() => Promise.resolve(saved));
+    const create = vi.spyOn(savedViewsApi, 'createView').mockImplementation(() => {
       saved.push({ id: 'created', name: '응답 유실', config: {}, version: 1 });
       return Promise.reject(new Error('response lost'));
     });
-    const update = vi.spyOn(api, 'updateView');
+    const update = vi.spyOn(savedViewsApi, 'updateView');
     const props = { item, workspaces: [], openTaskId: undefined };
     render(TaskBoard, props);
     await fireEvent.click(screen.getByRole('button', { name: /필터·정렬/ }));
@@ -153,8 +154,8 @@ describe('saved view save on a stale version', () => {
   // R5 F-3(⑱·D-97): 응답을 잃은 저장 뒤 이탈 확인에서 버리면 요청까지 버린다. 남으면 버린 보기 초안을 다시 제안했다.
   it('drops the pending view request when leaving with discard after a lost response', async () => {
     const saved: Stored[] = [];
-    vi.spyOn(api, 'savedViews').mockImplementation(() => Promise.resolve(saved));
-    const create = vi.spyOn(api, 'createView').mockImplementation(() => {
+    vi.spyOn(savedViewsApi, 'savedViews').mockImplementation(() => Promise.resolve(saved));
+    const create = vi.spyOn(savedViewsApi, 'createView').mockImplementation(() => {
       saved.push({ id: 'created', name: '버릴 보기', config: {}, version: 1 });
       return Promise.reject(new Error('response lost'));
     });

@@ -1,10 +1,10 @@
+import { type EventView } from '$lib/features/events/model';
 // 달력 배치 (D-31, D-50, D-81). 달 보기는 사용자의 한 주 시작(월·일)부터 6주(42일). 날짜 칸마다 업무(마감·시작)와 일정을 놓는다.
 import type {
   CalendarDateKind,
   CalendarDateView,
   CalendarTaskView,
   EventOccurrenceView,
-  EventView,
   ProjectedTaskView,
 } from '$lib/api/client';
 import type { WeekStart } from '$lib/display';

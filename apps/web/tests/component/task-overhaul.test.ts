@@ -1,8 +1,9 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, parseTask } from '$lib/api/client';
+import { parseTask } from '$lib/api/client';
 import { displaySettings } from '$lib/display';
 import { dayIn } from '$lib/features/events/time';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
@@ -23,7 +24,7 @@ beforeEach(async () => {
   window.history.replaceState(null, '', router.path);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   vi.spyOn(work, 'tasks').mockResolvedValue(taskViews());
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -71,7 +72,7 @@ it('URL view and query override the scoped session and switching pushes a view r
   );
   router.path = itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'list');
   window.history.replaceState(null, '', `${router.path}?status=in_progress&sort=title`);
-  vi.mocked(api.savedViews).mockResolvedValue([
+  vi.mocked(savedViewsApi.savedViews).mockResolvedValue([
     {
       id: 'saved',
       name: '기본',
@@ -98,7 +99,7 @@ it('uses the saved default before the session without rewriting the URL', async 
     org.key(`board:${TASK_ITEM.id}`),
     JSON.stringify({ view: 'gantt', sort: 'due' }),
   );
-  vi.mocked(api.savedViews).mockResolvedValue([
+  vi.mocked(savedViewsApi.savedViews).mockResolvedValue([
     {
       id: 'saved',
       name: '기본',
@@ -123,7 +124,7 @@ it('does not choose arbitrarily when multiple saved views claim to be default', 
   // R5 최종 A FA-8(3): 세션 보기는 첫 그리기에서 동기로 적용되므로, 늦게 온 기본 보기 둘을 어떻게 다루는지 보려면 그
   // 응답이 처리된 뒤에 본다.
   let release: () => void = () => undefined;
-  const listed = vi.mocked(api.savedViews).mockImplementation(
+  const listed = vi.mocked(savedViewsApi.savedViews).mockImplementation(
     () =>
       new Promise((resolve) => {
         release = () => {
@@ -185,7 +186,7 @@ it.each([
 describe('a late default saved view', () => {
   function holdDefaultView(): () => void {
     let release: () => void = () => undefined;
-    vi.mocked(api.savedViews).mockImplementation(
+    vi.mocked(savedViewsApi.savedViews).mockImplementation(
       () =>
         new Promise((resolve) => {
           release = () => {

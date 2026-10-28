@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { savedViewsApi } from '$lib/features/events/saved-views-api';
   // 항목 하나: 제목·설명·공개 범위, 보관, 항목 아래 문서 (D-14, D-20, D-59).
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
@@ -184,7 +185,7 @@
    * 처음 열 때 고르는 규칙과 같다), 아니면 이 탭에서 마지막으로 본 보기, 없으면 보드다. 못 읽으면 세션 순으로 넘어간다.
    */
   async function taskEntryView(id: string, session: TaskViewName): Promise<TaskViewName> {
-    const views = await api.savedViews(id).catch(() => []);
+    const views = await savedViewsApi.savedViews(id).catch(() => []);
     const defaults = views.filter((v) => v.config.default === true);
     const saved = defaults.length === 1 ? defaults[0] : undefined;
     return saved === undefined ? session : readConfig(saved.config).view;

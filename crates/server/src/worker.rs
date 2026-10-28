@@ -262,76 +262,21 @@ async fn drain_all(
     Ok(total)
 }
 
-/// 기한이 지난 업로드를 닫고, 저장소에서 지울 것(영구 삭제한 버전·그만둔 업로드)을 지운다. 실패한 것은
-/// 다시 넣어 다음 주기에 한다(10번까지).
 async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
-    system_call(
+    fvoci_files::cleanup::clean_storage(
         db,
-        &[Job {
-            ids: None,
-            call: "SELECT app_system_expire_uploads()",
-        }],
-        Retention::default(),
+        storage,
+        crate::backup::STORAGE_LOCK,
+        system_call(
+            db,
+            &[Job {
+                ids: None,
+                call: "SELECT app_system_expire_uploads()",
+            }],
+            Retention::default(),
+        ),
     )
-    .await?;
-    let mut done = 0;
-    // 하나씩 꺼내 지우고 바로 끝낸다(저장소 호출 동안 트랜잭션을 길게 열지 않는다). 한 주기에 200개까지.
-    for _ in 0..200 {
-        let mut tx = db.begin_anonymous().await?;
-        // 백업·복구 중이면 쉰다(복사 중인 내용을 지우지 않게).
-        let free: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock_shared($1)")
-            .bind(crate::backup::STORAGE_LOCK)
-            .fetch_one(tx.conn())
-            .await?;
-        if !free {
-            break;
-        }
-        let Some((key, upload, attempts)): Option<(String, String, i32)> = sqlx::query_as(
-            "SELECT storage_key, storage_upload_id, attempts FROM app_system_storage_claim(1)",
-        )
-        .fetch_optional(tx.conn())
-        .await?
-        else {
-            break;
-        };
-        let result = if upload.is_empty() {
-            storage.delete(&key).await
-        } else {
-            storage.abort(&key, &upload).await
-        };
-        match result {
-            Ok(()) => done += 1,
-            Err(err) => {
-                if attempts >= 9 {
-                    tracing::error!(
-                        event = "storage.cleanup_gave_up",
-                        error_code = err.code(),
-                        detail = fvoci_core::logging::safe_error(&err),
-                        key = key.as_str(),
-                        attempts = attempts + 1,
-                        "storage cleanup gave up after 10 attempts"
-                    );
-                } else {
-                    tracing::warn!(
-                        event = "storage.cleanup_retry",
-                        error_code = err.code(),
-                        detail = fvoci_core::logging::safe_error(&err),
-                        key = key.as_str(),
-                        attempts = attempts + 1,
-                        "storage cleanup failed; will retry"
-                    );
-                }
-                sqlx::query("SELECT app_system_storage_retry($1, $2, $3)")
-                    .bind(&key)
-                    .bind(&upload)
-                    .bind(attempts)
-                    .execute(tx.conn())
-                    .await?;
-            }
-        }
-        tx.commit().await?;
-    }
-    Ok(done)
+    .await
 }
 
 /// 일 하나를 작업 id 안에서 하고(그 안의 로그 줄에 `job`·`job_id`, D-83), 실패를 기록하고 0으로 본다. 한 일이

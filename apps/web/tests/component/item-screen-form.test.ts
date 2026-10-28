@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
@@ -354,7 +355,7 @@ describe('item info form when the task board finds the item changed', () => {
     quietServer();
     mockItem(item(), item({ title: '다른 사람이 고친 제목' }));
     vi.spyOn(work, 'tasks').mockResolvedValue([task('1', '문서 검토')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const move = vi
       .spyOn(work, 'moveTask')
@@ -389,7 +390,7 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
   };
   mockItem(current);
   vi.spyOn(work, 'tasks').mockResolvedValue([entry]);
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   vi.spyOn(work, 'task').mockResolvedValue({ ...entry, checklist: [] });
   vi.spyOn(work, 'assignable').mockResolvedValue([]);

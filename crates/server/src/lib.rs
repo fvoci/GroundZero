@@ -10,5 +10,5 @@ pub mod features;
 pub mod http;
 pub mod logging;
 pub mod search;
-pub mod storage;
+pub use fvoci_storage as storage;
 pub mod worker;

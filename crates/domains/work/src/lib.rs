@@ -1,10 +1,13 @@
-//! 업무 도메인: 업무·하위 업무·담당자·체크리스트, 항목별 상태 정의, 선행 관계와 재배치 미리보기, 반복 업무
-//! (노르웨이숲 태비 초안 2). 라우터와 OpenAPI 조각을 내고, 조립 crate(`fvoci-server`)가 합친다(초안 3).
+//! 업무 도메인: 업무·하위 업무·담당자·체크리스트, 항목별 상태 정의, 선행 관계와 재배치 미리보기, 반복 업무·일정·저장한 보기
+//! (노르웨이숲 태비 초안 2·5). 라우터와 OpenAPI 조각을 내고, 조립 crate(`fvoci-server`)가 합친다(초안 3).
 //! 처리기는 부분 상태 [`WorkState`]를 조립 crate의 상태에서 `FromRef`로 꺼낸다.
 
 #![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
 
+pub mod event_recurrence;
+pub mod events;
 pub mod recurrence;
+pub mod saved_views;
 pub mod schedule;
 pub mod state;
 pub mod task_statuses;
@@ -23,6 +26,17 @@ pub use state::WorkState;
 #[derive(Debug, OpenApi)]
 #[openapi(
     paths(
+        events::list,
+        events::get,
+        events::create,
+        events::update,
+        events::delete,
+        event_recurrence::set_event,
+        event_recurrence::exclude_event,
+        saved_views::list,
+        saved_views::create,
+        saved_views::update,
+        saved_views::delete,
         task_statuses::list,
         task_statuses::create,
         task_statuses::update,
@@ -50,6 +64,20 @@ pub use state::WorkState;
         tasks::checklist_items,
     ),
     components(schemas(
+        event_recurrence::SetEventRecurrence,
+        event_recurrence::ExcludeOccurrence,
+        events::EventKind,
+        events::Event,
+        events::EventInput,
+        events::CreateEvent,
+        events::UpdateEvent,
+        events::EventWriteConflict,
+        saved_views::SavedView,
+        saved_views::CreateView,
+        saved_views::UpdateView,
+        saved_views::ViewNameConflict,
+        saved_views::ViewCreateConflict,
+        saved_views::ViewWriteConflict,
         tasks::TaskPriority,
         tasks::Assignee,
         tasks::ChecklistItem,
@@ -144,6 +172,30 @@ where
         .route(
             "/checklist-items/{item_id}",
             put(tasks::update_checklist_item).delete(tasks::delete_checklist_item),
+        )
+        .route(
+            "/items/{item_id}/views",
+            get(saved_views::list).post(saved_views::create),
+        )
+        .route(
+            "/views/{view_id}",
+            put(saved_views::update).delete(saved_views::delete),
+        )
+        .route(
+            "/items/{item_id}/events",
+            get(events::list).post(events::create),
+        )
+        .route(
+            "/events/{event_id}",
+            get(events::get).put(events::update).delete(events::delete),
+        )
+        .route(
+            "/events/{event_id}/recurrence",
+            put(event_recurrence::set_event),
+        )
+        .route(
+            "/events/{event_id}/exclusions",
+            post(event_recurrence::exclude_event),
         )
         .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
             state.clone(),

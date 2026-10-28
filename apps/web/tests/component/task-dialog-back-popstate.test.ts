@@ -1,3 +1,5 @@
+import { api } from '$lib/api/client';
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
@@ -5,7 +7,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -100,7 +102,7 @@ const title = (): HTMLElement => {
 /** 보드를 그리고 `beforeOpen` 뒤 카드를 눌러 상세를 연다. */
 async function openFromBoard(beforeOpen?: () => Promise<void>, list: TaskDetailView[] = [detail]) {
   vi.spyOn(work, 'tasks').mockResolvedValue(list);
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   vi.spyOn(work, 'task').mockImplementation((id) =>
     Promise.resolve(list.find((t) => t.id === id) ?? detail),

@@ -1,10 +1,11 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -65,7 +66,7 @@ describe('move menu within a column', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
@@ -97,7 +98,7 @@ describe('reordering under a non-default sort', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue([task('1', '문서 검토'), task('2', 'API 연결')]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {

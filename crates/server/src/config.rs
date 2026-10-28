@@ -26,40 +26,8 @@ pub struct SearchConfig {
     pub key: Secret,
 }
 
-/// S3 호환 저장소 연결 (D-61). 경로 방식 주소를 쓴다. R2의 지역은 `auto`.
-#[derive(Debug, Clone)]
-pub struct S3Config {
-    pub endpoint: Url,
-    pub region: String,
-    pub bucket: String,
-    pub access_key: String,
-    pub secret_key: Secret,
-}
-
-/// 파일 저장소 (D-06). `FVOCI_STORAGE=local|s3`, 기본 local(`FVOCI_STORAGE_DIR`, 기본 `data/files`).
-#[derive(Debug, Clone)]
-pub enum StorageConfig {
-    Local { dir: PathBuf },
-    S3(S3Config),
-}
-
-/// 파일 한도 (D-52). 기본값은 O-26 제안값이며 운영 설정으로 바꾼다.
-#[derive(Debug, Clone, Copy)]
-pub struct FileLimits {
-    /// 파일 하나의 최대 크기(바이트). `FVOCI_MAX_FILE_BYTES`, 기본 1 GiB.
-    pub max_file_bytes: u64,
-    /// 업로드 조각 크기(바이트). `FVOCI_UPLOAD_CHUNK_BYTES`, 기본 8 MiB, 5 MiB~64 MiB(S3 최소 조각 5 MiB,
-    /// Cloudflare 요청 한도 100 MB보다 충분히 작게).
-    pub chunk_bytes: u64,
-    /// 워크스페이스(개인 영역은 사람마다) 총 저장량(바이트). `FVOCI_MAX_WORKSPACE_STORAGE_BYTES`, 기본 50 GiB.
-    pub max_storage_bytes: u64,
-    /// 마치지 않은 업로드를 버리기까지의 시간. `FVOCI_UPLOAD_TTL_SECS`, 기본 24시간.
-    pub upload_ttl: Duration,
-    /// 서버 전체에서 동시에 받는 업로드 조각 수(조각마다 메모리에 담는다). `FVOCI_UPLOAD_CONCURRENCY`, 기본 8.
-    pub upload_concurrency: usize,
-    /// 동시에 만드는 반출 ZIP 수. `FVOCI_EXPORT_CONCURRENCY`, 기본 2.
-    pub export_concurrency: usize,
-}
+pub use fvoci_files::FileLimits;
+pub use fvoci_storage::config::{S3Config, StorageConfig};
 
 /// 운영 한도 (D-52). 기본값은 `O-26`에서 사용량·테스트 결과로 조정한다.
 #[derive(Debug, Clone, Copy)]

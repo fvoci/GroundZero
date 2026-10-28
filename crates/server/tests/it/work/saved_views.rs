@@ -12,12 +12,12 @@ use common::{TestUser, add_member, create_workspace, login, new_request_id, send
 use serde_json::{Value, json};
 
 #[tokio::test]
-async fn saved_views_are_personal_and_follow_item_access() {
+async fn readonly_saved_views_are_personal_and_follow_item_access() {
     let state = common::state();
     let app = common::app(&state);
     let admin = login(&state, "admin").await;
     let ws = create_workspace(&app, &admin, "보기").await;
-    let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
+    let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
     let m = send(&app, Method::POST, &format!("/api/workspaces/{ws}/modules"), Some(&admin),
         Some(json!({ "request_id": new_request_id(), "kind": "project", "name": "P", "key": "VIEW" }))).await;
@@ -46,7 +46,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
         &app,
         Method::POST,
         &uri,
-        Some(&writer),
+        Some(&reader),
         Some(json!({ "request_id": new_request_id(), "name": "내 할 일", "config": config })),
     )
     .await;
@@ -57,13 +57,17 @@ async fn saved_views_are_personal_and_follow_item_access() {
         &app,
         Method::POST,
         &uri,
-        Some(&writer),
+        Some(&reader),
         Some(json!({ "request_id": new_request_id(),
         "name": "내 할 일", "config": { "view": "board" } })),
     )
     .await;
     assert_eq!(again.status, StatusCode::CONFLICT, "{:?}", again.json);
     assert_eq!(again.json["error"], "exists");
+    assert!(
+        again.json.get("changed").is_none(),
+        "same-name create is not a stale write"
+    );
     assert_eq!(saved.json["version"], 1);
     assert_eq!(again.json["current"]["id"], saved.json["id"]);
     assert_eq!(again.json["current"]["config"]["sort"], "due");
@@ -72,7 +76,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
         &app,
         Method::PUT,
         &view_uri,
-        Some(&writer),
+        Some(&reader),
         Some(json!({ "request_id": new_request_id(), "base_version": 1,
         "config": { "view": "board" } })),
     )
@@ -80,7 +84,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
     assert_eq!(changed.status, StatusCode::OK, "{:?}", changed.json);
     assert_eq!(changed.json["id"], saved.json["id"]);
     assert_eq!(changed.json["version"], 2);
-    let mine = send(&app, Method::GET, &uri, Some(&writer), None).await;
+    let mine = send(&app, Method::GET, &uri, Some(&reader), None).await;
     assert_eq!(mine.json.as_array().unwrap().len(), 1);
     assert_eq!(mine.json[0]["config"], json!({ "view": "board" }));
     // 다른 사람에게는 보이지 않고 고치거나 지울 수도 없다.
@@ -117,7 +121,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
             &app,
             Method::POST,
             &uri,
-            Some(&writer),
+            Some(&reader),
             Some(json!({ "request_id": new_request_id(), "name": " ", "config": {} }))
         )
         .await
@@ -134,7 +138,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
     )
     .await;
     assert_eq!(
-        send(&app, Method::GET, &uri, Some(&writer), None)
+        send(&app, Method::GET, &uri, Some(&reader), None)
             .await
             .status,
         StatusCode::NOT_FOUND
@@ -148,7 +152,7 @@ async fn saved_views_are_personal_and_follow_item_access() {
     )
     .await;
     assert_eq!(
-        send(&app, Method::DELETE, &view_uri, Some(&writer), None)
+        send(&app, Method::DELETE, &view_uri, Some(&reader), None)
             .await
             .status,
         StatusCode::NO_CONTENT
@@ -232,6 +236,9 @@ async fn a_view_saved_from_a_stale_tab_is_refused_with_the_latest() {
     .await;
     assert_eq!(tab_a.status, StatusCode::CONFLICT, "{:?}", tab_a.json);
     assert_eq!(tab_a.json["error"], "conflict");
+    assert_eq!(tab_a.json["changed"], json!(["config"]));
+    assert!(tab_a.json["message"].is_string());
+    assert!(tab_a.json["request_id"].is_string());
     assert_eq!(tab_a.json["current"]["id"], created["id"]);
     assert_eq!(tab_a.json["current"]["version"], 2);
     assert_eq!(

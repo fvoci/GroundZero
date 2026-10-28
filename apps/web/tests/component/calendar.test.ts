@@ -1,6 +1,7 @@
+import { type EventView } from '$lib/features/events/model';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { CalendarTaskView, EventOccurrenceView, EventView } from '$lib/api/client';
+import type { CalendarTaskView, EventOccurrenceView } from '$lib/api/client';
 import { entriesByDay, monthRange, shiftMonth } from '$lib/features/events/calendar';
 import { dayIn, instantOf, instantsOf, offsetLabel, wallTime } from '$lib/features/events/time';
 import { me } from '$lib/me.svelte';

@@ -67,18 +67,6 @@ fn temp_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("fvoci-{label}-{}", uuid::Uuid::now_v7().simple()))
 }
 
-/// 복구는 superuser가 아닌 관리자(셀프호스트 Supabase)에게 `fvoci_migrator` 멤버십을 잠시 빌렸다 돌려준다. 클러스터
-/// 공용 행이라 새 DB 준비와 같은 잠금으로 한 번에 하나씩 한다. 겹치면 앞 복구가 돌려준 멤버십에 기대던 뒤 복구가
-/// `SET ROLE`에서 42501로 실패한다(CI supabase 잡, #183).
-async fn serial_restore(
-    config: &fvoci_server::config::Config,
-    db: &fvoci_db::config::DbCommandConfig,
-    from: &std::path::Path,
-) -> Result<backup::Manifest, fvoci_core::error::AppError> {
-    let _serial = common::PREPARE_DATABASE.lock().await;
-    backup::restore(config, db, from).await
-}
-
 #[tokio::test]
 async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via `cargo xtask test`");
@@ -218,7 +206,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let damaged = temp_dir("damaged");
     copy_dir(&out, &damaged);
     std::fs::write(damaged.join("db").join("documents.copy"), b"broken\n").unwrap();
-    let err = serial_restore(&restored.config, restored_db, &damaged)
+    let err = backup::restore(&restored.config, restored_db, &damaged)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("damaged"), "{err}");
@@ -236,7 +224,7 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = serial_restore(&restored.config, restored_db, &partial)
+    let err = backup::restore(&restored.config, restored_db, &partial)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("comments"), "{err}");
@@ -251,16 +239,16 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = serial_restore(&restored.config, restored_db, &oversized)
+    let err = backup::restore(&restored.config, restored_db, &oversized)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("size differs"), "{err}");
-    serial_restore(&restored.config, restored_db, &out)
+    backup::restore(&restored.config, restored_db, &out)
         .await
         .unwrap();
     // 빈 DB에만 복구한다.
     assert!(
-        serial_restore(&restored.config, restored_db, &out)
+        backup::restore(&restored.config, restored_db, &out)
             .await
             .is_err()
     );
@@ -356,7 +344,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
     let manifest = backup::create(&config, &source.db, &full).await.unwrap();
     assert_eq!(manifest.migration_version, last);
     let target = fresh_database(&mut admin, "generation_target").await;
-    serial_restore(&config, &target.db, &full).await.unwrap();
+    backup::restore(&config, &target.db, &full).await.unwrap();
 
     let rejecting = fresh_database(&mut admin, "generation_rejecting").await;
     let single_file = temp_dir("generation-single-file");
@@ -369,7 +357,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         serde_json::to_vec(&listed).unwrap(),
     )
     .unwrap();
-    let err = serial_restore(&config, &rejecting.db, &single_file)
+    let err = backup::restore(&config, &rejecting.db, &single_file)
         .await
         .unwrap_err();
     assert!(
@@ -385,7 +373,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         .await
         .unwrap();
     assert_eq!(manifest.migration_version, partial_at);
-    let err = serial_restore(&config, &rejecting.db, &from_partial)
+    let err = backup::restore(&config, &rejecting.db, &from_partial)
         .await
         .unwrap_err();
     assert!(
@@ -394,7 +382,7 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         )),
         "{err}"
     );
-    let err = serial_restore(&config, &partial.db, &full)
+    let err = backup::restore(&config, &partial.db, &full)
         .await
         .unwrap_err();
     assert!(
@@ -423,6 +411,582 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
             std::fs::copy(entry.path(), target).unwrap();
         }
     }
+}
+
+/// 잠금 조건을 관찰해 순서를 정한다. 제한 시간은 교착 검출용이며 진행을 위한 sleep은 없다.
+async fn wait_for_advisory_waiter(conn: &mut PgConnection, application: &str, key: i64) -> i32 {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            let pid: Option<i32> = sqlx::query_scalar(
+                "SELECT a.pid FROM pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid
+                  WHERE a.application_name = $1 AND l.locktype = 'advisory' AND NOT l.granted
+                    AND ((l.classid::bigint << 32) | l.objid::bigint) = $2
+                    AND cardinality(pg_blocking_pids(a.pid)) > 0 LIMIT 1",
+            )
+            .bind(application)
+            .bind(key)
+            .fetch_optional(&mut *conn)
+            .await
+            .unwrap();
+            if let Some(pid) = pid {
+                return pid;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("restore did not reach an advisory lock wait")
+}
+
+/// #185: A가 빌린 멤버십을 B가 기존 권한으로 오인한 뒤 A가 반납하면 B의 SET LOCAL ROLE이 42501이다.
+/// 대상 DB를 달리하고 각 STORAGE_LOCK으로 두 복구를 멈춰, A 반납 → B 재개 순서를 강제한다.
+#[tokio::test]
+async fn overlapping_restores_across_databases_keep_their_migrator_membership() {
+    tokio::task::LocalSet::new()
+        .run_until(overlapping_restores(RestoreEnd::Completed))
+        .await;
+}
+
+#[tokio::test]
+async fn disconnected_restore_rolls_back_membership_and_unblocks_another_database() {
+    tokio::task::LocalSet::new()
+        .run_until(overlapping_restores(RestoreEnd::Disconnected))
+        .await;
+}
+
+#[tokio::test]
+async fn cancelled_restore_rolls_back_membership_and_unblocks_another_database() {
+    tokio::task::LocalSet::new()
+        .run_until(overlapping_restores(RestoreEnd::Cancelled))
+        .await;
+}
+
+enum RestoreEnd {
+    Completed,
+    Disconnected,
+    Cancelled,
+}
+
+async fn overlapping_restores(end: RestoreEnd) {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let source = fresh_database(&mut admin, "overlap_source").await;
+    let mut first = fresh_database(&mut admin, "overlap_a").await;
+    let mut second = fresh_database(&mut admin, "overlap_b").await;
+    let files = temp_dir("overlap-source-files");
+    let config = config_with(&[("FVOCI_STORAGE_DIR", &files.to_string_lossy())]);
+    let out = temp_dir("overlap-backup");
+    backup::create(&config, &source.db, &out).await.unwrap();
+
+    let superuser: bool =
+        sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(&mut admin)
+            .await
+            .unwrap();
+    let role = format!("fvoci_overlap_{}", uuid::Uuid::now_v7().simple());
+    let mut url = url::Url::parse(&admin_url).unwrap();
+    if superuser {
+        // 격리 Compose에만 시험 관리자를 만들고 deploy의 기존 시험 비밀번호를 쓴다.
+        let password = url
+            .password()
+            .expect("isolated test admin password")
+            .to_owned();
+        sqlx::raw_sql(&format!(
+            "CREATE ROLE {role} LOGIN PASSWORD '{password}';
+             GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+             GRANT SET ON PARAMETER session_replication_role TO {role}"
+        ))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+        url.set_username(&role).unwrap();
+    }
+    let member = url.username().to_owned();
+    let mut fixture = PgConnection::connect(url.as_str()).await.unwrap();
+    if superuser && matches!(end, RestoreEnd::Cancelled) {
+        // 기존 레코드를 바꾼 빌림도 취소 시 INHERIT를 포함해 그대로 돌아와야 한다.
+        sqlx::raw_sql(&format!(
+            "GRANT fvoci_migrator TO {role} WITH INHERIT TRUE, SET FALSE"
+        ))
+        .execute(&mut fixture)
+        .await
+        .unwrap();
+    }
+    let can_set: bool =
+        sqlx::query_scalar("SELECT pg_has_role(current_user, 'fvoci_migrator', 'SET')")
+            .fetch_one(&mut fixture)
+            .await
+            .unwrap();
+    assert!(
+        !can_set,
+        "the restore must exercise temporary membership borrowing"
+    );
+    fixture.close().await.unwrap();
+    let before = migrator_memberships(&mut admin, &member).await;
+    let app_a = format!("overlap-a-{}", uuid::Uuid::now_v7().simple());
+    let app_b = format!("overlap-b-{}", uuid::Uuid::now_v7().simple());
+    let exit_gate = std::sync::Arc::new(ProxyFault::DelayMaintenanceExit {
+        application: app_b.clone(),
+        entered: tokio::sync::Notify::new(),
+        resume: tokio::sync::Notify::new(),
+    });
+    let proxy = if matches!(end, RestoreEnd::Completed) {
+        let (endpoint, proxy) = postgres_proxy(&url, std::sync::Arc::clone(&exit_gate)).await;
+        url = endpoint;
+        Some(proxy)
+    } else {
+        None
+    };
+    let mut first_url = url.clone();
+    first_url.set_path(&format!("/{}", first.name));
+    first_url
+        .query_pairs_mut()
+        .append_pair("application_name", &app_a);
+    first.db.admin_url = Some(fvoci_core::secret::Secret::new(first_url.to_string()));
+    url.set_path(&format!("/{}", second.name));
+    url.query_pairs_mut()
+        .append_pair("application_name", &app_b);
+    second.db.admin_url = Some(fvoci_core::secret::Secret::new(url.to_string()));
+    let mut block_a = PgConnection::connect(&common::with_database(&admin_url, &first.name))
+        .await
+        .unwrap();
+    let mut block_b = PgConnection::connect(&common::with_database(&admin_url, &second.name))
+        .await
+        .unwrap();
+    for conn in [&mut block_a, &mut block_b] {
+        sqlx::query("SELECT pg_advisory_lock($1)")
+            .bind(backup::STORAGE_LOCK)
+            .execute(conn)
+            .await
+            .unwrap();
+    }
+    let config_a = config_with(&[(
+        "FVOCI_STORAGE_DIR",
+        &temp_dir("overlap-a-files").to_string_lossy(),
+    )]);
+    let config_b = config_with(&[(
+        "FVOCI_STORAGE_DIR",
+        &temp_dir("overlap-b-files").to_string_lossy(),
+    )]);
+    let first_db = first.db.clone();
+    let second_db = second.db.clone();
+    let first_out = out.clone();
+    let second_out = out.clone();
+    let a =
+        tokio::task::spawn_local(
+            async move { backup::restore(&config_a, &first_db, &first_out).await },
+        );
+    // A는 공통 잠금과 빌림을 마친 뒤 대상 DB의 저장소 잠금에서 멈춰야 한다.
+    let first_pid = wait_for_advisory_waiter(&mut admin, &app_a, backup::STORAGE_LOCK).await;
+    assert_eq!(
+        migrator_memberships(&mut admin, &member).await,
+        before,
+        "the uncommitted borrow must not be visible in another session"
+    );
+    let b = tokio::task::spawn_local(async move {
+        backup::restore(&config_b, &second_db, &second_out).await
+    });
+    let second_pid =
+        wait_for_advisory_waiter(&mut admin, &app_b, fvoci_db::admin::MIGRATOR_LOCK).await;
+    let database: String = sqlx::query_scalar(
+        "SELECT d.datname::text FROM pg_locks l JOIN pg_database d ON d.oid = l.database
+          WHERE l.pid = $1 AND l.locktype = 'advisory' AND NOT l.granted
+            AND ((l.classid::bigint << 32) | l.objid::bigint) = $2",
+    )
+    .bind(second_pid)
+    .bind(fvoci_db::admin::MIGRATOR_LOCK)
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    assert_eq!(
+        database, "postgres",
+        "both target DBs must use the fixed maintenance DB"
+    );
+    match end {
+        RestoreEnd::Completed => {}
+        RestoreEnd::Disconnected => {
+            let ended: bool = sqlx::query_scalar("SELECT pg_terminate_backend($1)")
+                .bind(first_pid)
+                .fetch_one(&mut admin)
+                .await
+                .unwrap();
+            assert!(ended);
+        }
+        RestoreEnd::Cancelled => a.abort(),
+    }
+    block_a.close().await.unwrap();
+    let result_a = a.await;
+    block_b.close().await.unwrap();
+    let result_b = tokio::time::timeout(std::time::Duration::from_secs(30), b)
+        .await
+        .expect("second restore did not acquire the released lock")
+        .unwrap();
+    assert_eq!(migrator_memberships(&mut admin, &member).await, before);
+    match end {
+        RestoreEnd::Completed => assert!(result_a.unwrap().is_ok()),
+        RestoreEnd::Disconnected => assert!(result_a.unwrap().is_err()),
+        RestoreEnd::Cancelled => assert!(result_a.unwrap_err().is_cancelled()),
+    }
+    assert!(result_b.is_ok(), "second restore: {result_b:?}");
+    let mut backend = Vec::new();
+    if proxy.is_some() {
+        let ProxyFault::DelayMaintenanceExit { entered, .. } = &*exit_gate else {
+            unreachable!()
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(30), entered.notified())
+            .await
+            .expect("the second maintenance Terminate was not observed");
+        backend = sqlx::query_as::<_, (i32, String, String)>(
+            "SELECT pid, datname::text, state FROM pg_stat_activity
+              WHERE application_name = $1 AND datname = 'postgres'",
+        )
+        .bind(&app_b)
+        .fetch_all(&mut admin)
+        .await
+        .unwrap();
+        assert_eq!(
+            backend.len(),
+            1,
+            "the maintenance backend must still be alive before checking its locks"
+        );
+    }
+    let held: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+          WHERE l.locktype = 'advisory' AND a.application_name = ANY($1)",
+    )
+    .bind(vec![app_a, app_b])
+    .fetch_one(&mut admin)
+    .await
+    .unwrap();
+    // 0개 단언은 그대로 둔다. Terminate를 보류한 채 관찰한 뒤 시험 연결을 정리한다.
+    if let Some(proxy) = proxy {
+        let ProxyFault::DelayMaintenanceExit { resume, .. } = &*exit_gate else {
+            unreachable!()
+        };
+        resume.notify_one();
+        proxy.abort();
+    }
+    assert_eq!(
+        held, 0,
+        "restore sessions left advisory locks behind; live maintenance backend: {backend:?}"
+    );
+    // DB·시험 역할은 이 실행의 격리 Compose와 함께 xtask가 정리한다.
+}
+
+enum ProxyFault {
+    ReturnLock {
+        key: i64,
+        injected: std::sync::atomic::AtomicBool,
+    },
+    DelayMaintenanceExit {
+        application: String,
+        entered: tokio::sync::Notify,
+        resume: tokio::sync::Notify,
+    },
+}
+
+/// PostgreSQL 프레임에서 첫 반납의 잠금 대기 또는 지정한 유지보수 Terminate를 조건으로 제어한다.
+/// 제품 경로·DB 객체를 바꾸거나 고정 sleep을 사용하지 않는다.
+async fn postgres_proxy(
+    upstream: &url::Url,
+    fault: std::sync::Arc<ProxyFault>,
+) -> (url::Url, tokio::task::JoinHandle<()>) {
+    use std::sync::Arc;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let host = upstream.host_str().unwrap().to_owned();
+    let port = upstream.port().unwrap_or(5432);
+    let task = tokio::spawn(async move {
+        let mut connections = tokio::task::JoinSet::new();
+        loop {
+            tokio::select! {
+                accepted = listener.accept() => {
+                    let (client, _) = accepted.unwrap();
+                    let server = tokio::net::TcpStream::connect((host.as_str(), port)).await.unwrap();
+                    let fault = Arc::clone(&fault);
+                    connections.spawn(async move { proxy_connection(client, server, fault).await });
+                }
+                Some(done) = connections.join_next(), if !connections.is_empty() => {
+                    done.unwrap().unwrap();
+                }
+            }
+        }
+    });
+    let mut endpoint = upstream.clone();
+    endpoint.set_host(Some("127.0.0.1")).unwrap();
+    endpoint.set_port(Some(address.port())).unwrap();
+    // 격리 시험의 로컬 TCP만 사용한다. SSL 협상 없는 PostgreSQL 프레임을 중계한다.
+    endpoint.query_pairs_mut().append_pair("sslmode", "disable");
+    (endpoint, task)
+}
+
+async fn proxy_connection(
+    client: tokio::net::TcpStream,
+    server: tokio::net::TcpStream,
+    fault: std::sync::Arc<ProxyFault>,
+) -> std::io::Result<()> {
+    use std::sync::atomic::Ordering;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    // SQLx의 실제 TCP 연결처럼 작은 프로토콜 프레임을 즉시 전달한다.
+    client.set_nodelay(true)?;
+    server.set_nodelay(true)?;
+    let (mut client_read, mut client_write) = client.into_split();
+    let (mut server_read, mut server_write) = server.into_split();
+    let forward = async {
+        // StartupMessage는 타입 바이트가 없고, 이후 프레임은 타입 + 길이 + 본문이다.
+        let length = client_read.read_u32().await?;
+        let mut startup = vec![0; usize::try_from(length - 4).unwrap()];
+        client_read.read_exact(&mut startup).await?;
+        let maintenance = startup
+            .windows(b"database\0postgres\0".len())
+            .any(|part| part == b"database\0postgres\0");
+        let pause_exit = match &*fault {
+            ProxyFault::DelayMaintenanceExit { application, .. } => {
+                let parameter = format!("application_name\0{application}\0");
+                maintenance
+                    && startup
+                        .windows(parameter.len())
+                        .any(|part| part == parameter.as_bytes())
+            }
+            ProxyFault::ReturnLock { .. } => false,
+        };
+        server_write.write_u32(length).await?;
+        server_write.write_all(&startup).await?;
+        loop {
+            let tag = match client_read.read_u8().await {
+                Ok(tag) => tag,
+                Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+                Err(err) => return Err(err),
+            };
+            let length = client_read.read_u32().await?;
+            let mut body = vec![0; usize::try_from(length - 4).unwrap()];
+            client_read.read_exact(&mut body).await?;
+            match &*fault {
+                ProxyFault::ReturnLock { key, injected }
+                    if tag == b'Q'
+                        && body.starts_with(b"REVOKE ")
+                        && !injected.swap(true, Ordering::SeqCst) =>
+                {
+                    let mut gated = format!("SELECT pg_advisory_lock({key}); ").into_bytes();
+                    gated.extend(body);
+                    body = gated;
+                }
+                ProxyFault::DelayMaintenanceExit {
+                    entered, resume, ..
+                } if tag == b'X' && pause_exit => {
+                    entered.notify_one();
+                    resume.notified().await;
+                }
+                _ => {}
+            }
+            server_write.write_u8(tag).await?;
+            server_write
+                .write_u32(u32::try_from(body.len() + 4).unwrap())
+                .await?;
+            server_write.write_all(&body).await?;
+            if tag == b'X' {
+                return Ok(());
+            }
+        }
+    };
+    let backward = tokio::io::copy(&mut server_read, &mut client_write);
+    tokio::try_join!(forward, backward)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn migrator_lock_release_closes_the_connection_even_when_unlocking_fails() {
+    use fvoci_core::error::AppError;
+    use fvoci_core::secret::Secret;
+    use fvoci_db::admin::{MIGRATOR_LOCK, lock_migrator, unlock_migrator};
+
+    let admin_url = url::Url::parse(&std::env::var("FVOCI_TEST_ADMIN_URL").unwrap()).unwrap();
+    for aborted in [false, true] {
+        let application = format!("unlock-failure-{}", uuid::Uuid::now_v7().simple());
+        let exit_gate = std::sync::Arc::new(ProxyFault::DelayMaintenanceExit {
+            application: application.clone(),
+            entered: tokio::sync::Notify::new(),
+            resume: tokio::sync::Notify::new(),
+        });
+        let mut upstream = admin_url.clone();
+        upstream
+            .query_pairs_mut()
+            .append_pair("application_name", &application);
+        let (endpoint, proxy) = postgres_proxy(&upstream, std::sync::Arc::clone(&exit_gate)).await;
+        let url = Secret::new(endpoint.to_string());
+        let mut lock = lock_migrator(&url).await.unwrap();
+        if aborted {
+            assert!(
+                sqlx::raw_sql("BEGIN; SELECT 1 / 0")
+                    .execute(&mut lock)
+                    .await
+                    .is_err()
+            );
+        } else {
+            let held: bool = sqlx::query_scalar("SELECT pg_advisory_unlock($1)")
+                .bind(MIGRATOR_LOCK)
+                .fetch_one(&mut lock)
+                .await
+                .unwrap();
+            assert!(held);
+        }
+        let result = unlock_migrator(lock).await;
+        let ProxyFault::DelayMaintenanceExit {
+            entered, resume, ..
+        } = &*exit_gate
+        else {
+            unreachable!()
+        };
+        // 소유하지 않은 잠금(false)과 SQL 오류 모두에서 실제 close가 Terminate를 보냈는지 확인한다.
+        tokio::time::timeout(std::time::Duration::from_secs(30), entered.notified())
+            .await
+            .expect("unlock failure skipped closing the maintenance connection");
+        resume.notify_one();
+        proxy.abort();
+        if aborted {
+            let AppError::Database(err) = result.unwrap_err() else {
+                panic!("expected an aborted transaction error")
+            };
+            assert_eq!(
+                err.as_database_error().and_then(|e| e.code()).as_deref(),
+                Some("25P02")
+            );
+        } else {
+            assert!(matches!(result, Err(AppError::Config(_))));
+        }
+    }
+}
+
+#[tokio::test]
+async fn restore_reports_a_failed_membership_return_and_rolls_back_the_loaded_data() {
+    tokio::task::LocalSet::new()
+        .run_until(failed_membership_return())
+        .await;
+}
+
+async fn failed_membership_return() {
+    let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").expect("run via cargo xtask test");
+    let mut admin = PgConnection::connect(&admin_url).await.unwrap();
+    let source = fresh_database(&mut admin, "return_failure_source").await;
+    let mut target = fresh_database(&mut admin, "return_failure_target").await;
+    let files = temp_dir("return-failure-source-files");
+    let state = fvoci_server::app::build_state(config_with(&[
+        ("DATABASE_URL", &source.app_url),
+        ("FVOCI_STORAGE_DIR", &files.to_string_lossy()),
+    ]))
+    .unwrap();
+    let user = session(&state, &format!("return-failure-{}", uuid::Uuid::now_v7())).await;
+    let out = temp_dir("return-failure-backup");
+    let manifest = backup::create(&state.config, &source.db, &out)
+        .await
+        .unwrap();
+    assert!(
+        manifest
+            .tables
+            .iter()
+            .any(|t| t.name == "users" && t.rows > 0)
+    );
+
+    let mut endpoint = url::Url::parse(&admin_url).unwrap();
+    let superuser: bool =
+        sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(&mut admin)
+            .await
+            .unwrap();
+    if superuser {
+        let role = format!("fvoci_return_{}", uuid::Uuid::now_v7().simple());
+        let password = endpoint.password().unwrap();
+        sqlx::raw_sql(&format!(
+            "CREATE ROLE {role} LOGIN PASSWORD '{password}';
+             GRANT fvoci_migrator TO {role} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+             GRANT SET ON PARAMETER session_replication_role TO {role}"
+        ))
+        .execute(&mut admin)
+        .await
+        .unwrap();
+        endpoint.set_username(&role).unwrap();
+    }
+    let member = endpoint.username().to_owned();
+    let before = migrator_memberships(&mut admin, &member).await;
+    endpoint.set_path(&format!("/{}", target.name));
+    let application = format!("return-failure-{}", uuid::Uuid::now_v7().simple());
+    endpoint
+        .query_pairs_mut()
+        .append_pair("application_name", &application)
+        .append_pair("options", "-c lock_timeout=5s");
+    // 이 대상 DB에만 있는 시험 잠금이며 제품의 두 잠금과 구별한다("fvociret").
+    let gate = 0x6676_6f63_6972_6574_i64;
+    let mut blocker = PgConnection::connect(&common::with_database(&admin_url, &target.name))
+        .await
+        .unwrap();
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(gate)
+        .execute(&mut blocker)
+        .await
+        .unwrap();
+    let (proxy_url, proxy) = postgres_proxy(
+        &endpoint,
+        std::sync::Arc::new(ProxyFault::ReturnLock {
+            key: gate,
+            injected: std::sync::atomic::AtomicBool::new(false),
+        }),
+    )
+    .await;
+    target.db.admin_url = Some(fvoci_core::secret::Secret::new(proxy_url.to_string()));
+    let config = config_with(&[(
+        "FVOCI_STORAGE_DIR",
+        &temp_dir("return-failure-target-files").to_string_lossy(),
+    )]);
+    let restore =
+        tokio::task::spawn_local(async move { backup::restore(&config, &target.db, &out).await });
+    let returning = wait_for_advisory_waiter(&mut admin, &application, gate).await;
+    let query: String = sqlx::query_scalar("SELECT query FROM pg_stat_activity WHERE pid = $1")
+        .bind(returning)
+        .fetch_one(&mut admin)
+        .await
+        .unwrap();
+    assert!(
+        query.contains("REVOKE fvoci_migrator"),
+        "the actual membership return must be blocked"
+    );
+    let result = tokio::time::timeout(std::time::Duration::from_secs(30), restore)
+        .await
+        .unwrap()
+        .unwrap();
+    blocker.close().await.unwrap();
+    proxy.abort();
+    let mut loaded = PgConnection::connect(&common::with_database(&admin_url, &target.name))
+        .await
+        .unwrap();
+    let present: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM fvoci.users WHERE id = $1)")
+            .bind(user.id.0)
+            .fetch_one(&mut loaded)
+            .await
+            .unwrap();
+    assert!(
+        !present,
+        "a failed membership return must roll back the restored user"
+    );
+    assert_eq!(migrator_memberships(&mut admin, &member).await, before);
+    assert!(
+        result.is_err(),
+        "SR-219-1: restore returned success after its membership return aborted the transaction"
+    );
+    let error = result.unwrap_err();
+    let code = match &error {
+        fvoci_core::error::AppError::Database(err) => {
+            err.as_database_error().and_then(|e| e.code())
+        }
+        _ => None,
+    };
+    assert_eq!(
+        code.as_deref(),
+        Some("55P03"),
+        "expected the original database return error: {error}"
+    );
 }
 
 /// 관리자의 `fvoci_migrator` 직접 멤버십 레코드(grantor, ADMIN, INHERIT, SET).
@@ -508,10 +1072,11 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
         .unwrap();
     assert_eq!(migrator_memberships(&mut admin, &role).await, before);
 
-    // 빌린 뒤 연결이 끊겼다(복구 중 장애): 같은 관리자 주소의 새 연결로 되돌린다.
-    let borrow = fvoci_db::admin::borrow_migrator(&mut conn).await.unwrap();
+    // 트랜잭션 안에서 빌린 뒤 연결이 끊겼다: PostgreSQL의 롤백 결과를 새 연결에서 확인만 한다.
+    let mut tx = conn.begin().await.unwrap();
+    let borrow = fvoci_db::admin::borrow_migrator(&mut tx).await.unwrap();
     let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *tx)
         .await
         .unwrap();
     let mut other = PgConnection::connect_with(&options).await.unwrap();
@@ -522,13 +1087,14 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
         .unwrap();
     assert!(ended);
     other.close().await.unwrap();
+    drop(tx);
     let role_url = fvoci_core::secret::Secret::new(format!(
         "postgres://{role}:{password}@{}:{}/{}",
         options.get_host(),
         options.get_port(),
         options.get_database().unwrap_or("postgres"),
     ));
-    fvoci_db::admin::release_migrator_or_reconnect(&mut conn, &role_url, borrow)
+    fvoci_db::admin::verify_migrator_returned(&role_url, &borrow)
         .await
         .unwrap();
     assert_eq!(migrator_memberships(&mut admin, &role).await, before);

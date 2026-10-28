@@ -297,13 +297,22 @@ async fn course_episodes_and_personal_progress() {
     )
     .await;
     assert_eq!(entry.status, StatusCode::CREATED, "{:?}", entry.json);
+    let targets = send(
+        &app,
+        Method::GET,
+        &format!(
+            "/api/time-entry-targets?entry_id={}",
+            entry.json["id"].as_str().unwrap()
+        ),
+        Some(&reader),
+        None,
+    )
+    .await;
+    assert_eq!(targets.status, StatusCode::OK, "{:?}", targets.json);
     assert!(
-        entry.json["target"]["label"]
-            .as_str()
-            .unwrap()
-            .contains("행렬"),
+        targets.json[0]["label"].as_str().unwrap().contains("행렬"),
         "{:?}",
-        entry.json
+        targets.json
     );
 
     // 회차 고치기·지우기(쓸 수 있는 사람). 지우면 그 회차의 진도도 사라진다.

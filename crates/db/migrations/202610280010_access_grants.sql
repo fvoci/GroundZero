@@ -1356,6 +1356,10 @@ GRANT SELECT ON TABLE fvoci.task_statuses TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid) TO fvoci_app;
 
+-- 달력 집계(D-80): 기존 권한 덩어리와 분리해 추가한다.
+REVOKE ALL ON FUNCTION fvoci.app_calendar(uuid, date, date, text, uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_calendar(uuid, date, date, text, uuid, uuid) TO fvoci_app;
+
 -- SQLx는 본문 실행 뒤 같은 트랜잭션에서 스키마 없는 _sqlx_migrations 이름에 기록한다.
 -- bootstrap의 스키마를 다시 보이게 해 새 버전·체크섬도 이 원장에 남긴다.
 SET LOCAL search_path = fvoci;
