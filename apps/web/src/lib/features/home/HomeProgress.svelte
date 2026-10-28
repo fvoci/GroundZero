@@ -7,6 +7,7 @@
   const rows = $derived.by(() => {
     if (progress.kind === 'study') {
       return progress.amounts.map((amount) => ({
+        key: amount.unit,
         done: amount.done,
         total: amount.target,
         label: m.home_study_done({
@@ -17,6 +18,7 @@
     }
     return [
       {
+        key: progress.kind,
         done: progress.done,
         total: progress.total,
         label:
@@ -28,7 +30,7 @@
   });
 </script>
 
-{#each rows as row}
+{#each rows as row (row.key)}
   {#if row.total > 0}
     <span class="flex items-center gap-2 text-xs text-muted-foreground">
       <span class="h-1.5 w-32 overflow-hidden rounded bg-muted" aria-hidden="true">
