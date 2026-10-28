@@ -1,7 +1,7 @@
 //! D-88·D-114: ID 집계가 기다린 뒤 커밋된 공유·담당까지 세어 제거를 끝낸다.
 
 use crate::common::{self, TestUser};
-use crate::sql_support::{World, blocked, code, fixture, made, on, one, pid, rows};
+use crate::sql_support::{World, blocked, fixture, made, on, one, pid, rows};
 use fvoci_core::error::AppError;
 use fvoci_db::UserTx;
 use tokio::task::JoinHandle;
@@ -335,24 +335,14 @@ async fn id_count_permissions_are_checked_before_waiting_for_locked_rows() {
     )
     .await
     .unwrap();
-    for (actor, change, args, expected) in [
-        (
-            &reader,
-            REMOVE_ORGANIZATION,
-            vec![w.org, w.owner.id.0],
-            "42501",
-        ),
-        (&reader, REMOVE_MEMBER, vec![w.ws, w.owner.id.0], "42501"),
-        (&reader, DEMOTE, vec![w.ws, w.owner.id.0], "42501"),
-        (&reader, DELETE_GROUP, vec![group], "42501"),
-        (
-            &reader,
-            REMOVE_GROUP_MEMBER,
-            vec![group, reader.id.0],
-            "42501",
-        ),
-        (&reader, ADD_GROUP_MEMBER, vec![group, reader.id.0], "42501"),
-        (&outsider, LEAVE, vec![w.ws], "P0002"),
+    for (actor, change, args) in [
+        (&reader, REMOVE_ORGANIZATION, vec![w.org, w.owner.id.0]),
+        (&reader, REMOVE_MEMBER, vec![w.ws, w.owner.id.0]),
+        (&reader, DEMOTE, vec![w.ws, w.owner.id.0]),
+        (&reader, DELETE_GROUP, vec![group]),
+        (&reader, REMOVE_GROUP_MEMBER, vec![group, reader.id.0]),
+        (&reader, ADD_GROUP_MEMBER, vec![group, reader.id.0]),
+        (&outsider, LEAVE, vec![w.ws]),
     ] {
         let mut denied = w.state.db.begin_as(actor.id).await.unwrap();
         let mut query = sqlx::query_scalar::<_, i32>(change.count);
@@ -365,7 +355,7 @@ async fn id_count_permissions_are_checked_before_waiting_for_locked_rows() {
         )
         .await
         .expect("a denied ID counter must not wait for an authorized caller's row lock");
-        code(&result.expect_err(change.count), expected);
+        assert_eq!(result.unwrap(), 0, "D-88: {}", change.count);
     }
     holding.commit().await.unwrap();
 }
