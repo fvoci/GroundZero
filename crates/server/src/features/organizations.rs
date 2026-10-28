@@ -6,7 +6,7 @@
 //! 권한·불변식·감사 기록을 처리하고 여기서는 입력 검증과 응답 변환만 한다.
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -95,7 +95,7 @@ pub struct Organization {
     pub created_at: OffsetDateTime,
 }
 
-pub use fvoci_http::org_scope::OrgScope;
+pub use fvoci_http::organization::OrgScope;
 
 /// 내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다.
 #[utoipa::path(get, path = "/api/me/organizations", operation_id = "list_my_organizations",

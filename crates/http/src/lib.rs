@@ -3,5 +3,6 @@
 
 pub mod conflict;
 pub mod org_scope;
+pub mod organization;
 pub mod origin;
 pub mod session;
