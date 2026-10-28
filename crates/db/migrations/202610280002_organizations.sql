@@ -896,6 +896,10 @@ CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_use
     ) THEN
       RETURN 1;
     END IF;
+    -- 명령이 거절할 마지막 관리자 강등은 공간·문서 작업을 기다리지 않는다.
+    IF (SELECT count(*) FROM organization_members WHERE organization_id = p_organization AND role = 'admin') = 1 THEN
+      RETURN 1;
+    END IF;
     PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
     PERFORM 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
       WHERE w.organization_id = p_organization AND m.user_id = p_user AND m.role_source = 'admin_join'
