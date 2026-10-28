@@ -1,6 +1,13 @@
 //! 달력 집계. 업무·일정·학습·기록의 날짜를 읽으며 도메인 crate에 의존하지 않는다.
 
-pub mod calendar;
+#![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
+
+mod calendar;
+mod events;
+pub mod model;
+mod response;
+mod scope;
+mod sources;
 
 use axum::Router;
 use axum::extract::FromRef;
@@ -20,15 +27,15 @@ pub struct CalendarState {
 #[openapi(
     paths(calendar::calendar),
     components(schemas(
-        calendar::CalendarTask,
-        calendar::CalendarItem,
-        calendar::CalendarDate,
-        calendar::CalendarDateKind,
-        calendar::Calendar,
-        calendar::EventOccurrence,
-        calendar::ProjectedTask,
-        calendar::Event,
-        calendar::EventKind,
+        model::CalendarTask,
+        model::CalendarItem,
+        model::CalendarDate,
+        model::CalendarDateKind,
+        model::Calendar,
+        model::EventOccurrence,
+        model::ProjectedTask,
+        model::Event,
+        model::EventKind,
     ))
 )]
 pub struct CalendarApi;
