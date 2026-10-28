@@ -22,22 +22,18 @@
     onAccountSwitch,
     watchConnection,
     hideSession,
-    accountSwitching,
+    reportSessionExpired,
   } from './feedback.svelte';
 
   interface Props {
     /** 이 창을 처음부터 다시 읽는다(시험에서 바꿔 끼운다). */
     reload?: () => void;
-    replace?: (url: string) => void;
     retryLogout?: () => void;
     retryRestore?: () => void;
     syncSessionSignal?: () => boolean;
   }
 
   const {
-    replace = (url) => {
-      window.location.replace(url);
-    },
     retryLogout,
     retryRestore,
     syncSessionSignal,
@@ -94,17 +90,25 @@
     const recheck = (): void => {
       if (syncSessionSignal?.()) return;
       const signedIn = currentUser.userId;
-      if (signedIn === '' || sessionHidden || checking) return;
+      if (signedIn === '' || (sessionHidden && accountSafety.reason !== 'reauth') || checking)
+        return;
+      const generation = accountSafety.generation;
       checking = true;
       void api
         .me()
         .then((now) => {
-          if (!active || accountSwitching() || currentUser.userId !== signedIn) return;
+          if (!active || generation !== accountSafety.generation || currentUser.userId !== signedIn)
+            return;
           publishSessionUser(now?.id ?? null);
           if (now === undefined) {
-            hideSession('signed-out');
-            replace(router.path + router.hash);
+            reportSessionExpired();
+            hideSession('reauth');
           } else if (now.id !== signedIn) switchAccount();
+          else if (accountSafety.reason === 'reauth') {
+            accountSafety.switching = false;
+            accountSafety.restoring = false;
+            auth.expired = false;
+          }
         })
         .catch(() => undefined)
         .finally(() => {
@@ -144,13 +148,15 @@
     <Dialog.Header>
       <Dialog.Title>
         {#if accountSafety.reason === 'logout'}{m.app_menu_logout()}
-        {:else if accountSafety.reason === 'restore'}{m.feedback_restore_title()}
+        {:else if accountSafety.reason === 'reauth' && auth.expired}{m.common_session_sign_in()}
+        {:else if accountSafety.reason === 'restore' || accountSafety.reason === 'reauth'}{m.feedback_restore_title()}
         {:else if accountSafety.reason === 'signed-out'}{m.feedback_signed_out_title()}
         {:else}{m.feedback_account_changed_title()}{/if}
       </Dialog.Title>
       <Dialog.Description>
         {#if accountSafety.reason === 'logout'}{m.feedback_logout_pending()}
-        {:else if accountSafety.reason === 'restore'}{m.feedback_restore_pending()}
+        {:else if accountSafety.reason === 'reauth' && auth.expired}{m.common_session_expired()}
+        {:else if accountSafety.reason === 'restore' || accountSafety.reason === 'reauth'}{m.feedback_restore_pending()}
         {:else if accountSafety.reason === 'signed-out'}{m.feedback_signed_out_pending()}
         {:else}{m.feedback_account_switching()}{/if}
       </Dialog.Description>
@@ -160,7 +166,12 @@
       {#if accountSafety.error !== '' && retryLogout !== undefined}
         <Button onclick={retryLogout}>{m.feedback_logout_retry()}</Button>
       {/if}
-    {:else if accountSafety.reason === 'restore'}
+    {:else if accountSafety.reason === 'restore' || accountSafety.reason === 'reauth'}
+      {#if accountSafety.reason === 'reauth' && auth.expired}
+        <a class="font-medium underline" href={signInHref} target="_blank" rel="noopener noreferrer"
+          >{m.common_session_sign_in()}</a
+        >
+      {/if}
       {#if accountSafety.error !== '' && retryRestore !== undefined}
         <Button onclick={retryRestore}>{m.common_retry()}</Button>
       {/if}

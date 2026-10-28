@@ -43,7 +43,9 @@ function blockedBySafety(method: string, path: string): boolean {
       // #212 1·2행, 코디네이터 추가 지시: 확인 전에는 이 두 정확한 제어 요청만 허용한다.
       return !(
         (accountSafety.reason === 'logout' && method === 'POST' && path === '/auth/logout') ||
-        (accountSafety.reason === 'restore' && method === 'GET' && path === '/api/me')
+        ((accountSafety.reason === 'restore' || accountSafety.reason === 'reauth') &&
+          method === 'GET' &&
+          path === '/api/me')
       );
     }
     // 같은 사용자임을 확인한 뒤 화면을 새로 읽는 동안에도 쓰기는 열지 않는다.

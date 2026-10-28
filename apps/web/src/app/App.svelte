@@ -29,7 +29,14 @@
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
   // 계정 전환은 입력을 보존하고(D-96), 로그아웃은 비운다. 둘 다 다시 읽기 전까지 기존 화면을 가린다.
-  import { accountSafety, connection, hideSession } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    auth,
+    connection,
+    hideSession,
+    reportSessionExpired,
+    switchAccount,
+  } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   // 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
   import { invitationChanges } from '$lib/features/home/invitations.svelte';
@@ -80,6 +87,7 @@
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
   let signaledUser: string | null | undefined;
+  let checkingSignal = false;
   onDestroy(() => {
     sessionSequence += 1;
     restoreSequence += 1;
@@ -314,8 +322,10 @@
   }
 
   async function restoreSession(): Promise<void> {
-    if (sessionHidden && accountSafety.reason !== 'restore') return;
+    if (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
+      return;
     const mine = ++restoreSequence;
+    checkingSignal = false;
     restoringUserId ??= currentUser.userId;
     hideSession('restore');
     try {
@@ -359,25 +369,64 @@
   }
 
   function restorePage(event: PageTransitionEvent): void {
-    if (syncSessionSignal()) return;
     if (event.persisted && route.name !== 'public') void restoreSession();
+    else syncSessionSignal();
+  }
+
+  /** 살아 있던 화면의 짧은 값·저장 실패 입력은 재마운트하지 않는다(D-27/D-96/#88, 코디네이터 SR 정정). */
+  async function verifySessionSignal(): Promise<void> {
+    if (sessionHidden && accountSafety.reason !== 'reauth') return;
+    const expected = currentUser.userId;
+    const mine = ++restoreSequence;
+    checkingSignal = true;
+    hideSession('reauth');
+    try {
+      const now = await api.me();
+      if (mine !== restoreSequence || accountSafety.reason !== 'reauth') return;
+      signaledUser = now?.id ?? null;
+      publishSessionUser(signaledUser);
+      if (now === undefined) {
+        reportSessionExpired();
+      } else if (now.id !== expected) {
+        switchAccount();
+      } else {
+        auth.expired = false;
+        accountSafety.switching = false;
+        accountSafety.restoring = false;
+      }
+    } catch (error: unknown) {
+      if (mine === restoreSequence && accountSafety.reason === 'reauth') {
+        accountSafety.error = errorText(error, m.feedback_restore_failed());
+      }
+    } finally {
+      if (mine === restoreSequence) checkingSignal = false;
+    }
   }
 
   /** 돌아올 때도 storage 배달 전에 읽는다. 사용자 불일치만 가리고 같은 사용자의 입력은 남긴다(D-96/#88). */
   function syncSessionSignal(): boolean {
     if (router.route.name === 'public') return false;
     const expected = restoringUserId ?? currentUser.userId;
-    if (expected === '' || (sessionHidden && accountSafety.reason !== 'restore')) return false;
+    if (
+      expected === '' ||
+      (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
+    )
+      return false;
     const userId = readSessionUser();
-    if (userId === undefined || userId === expected) return false;
-    if (restoring() && signaledUser === userId) return true;
+    const reauthenticating = sessionHidden && accountSafety.reason === 'reauth';
+    if (userId === undefined || (userId === expected && !reauthenticating)) return false;
+    if ((restoring() || checkingSignal) && signaledUser === userId) return true;
     signaledUser = userId;
-    void restoreSession();
+    if (restoring()) void restoreSession();
+    else void verifySessionSignal();
     return true;
   }
 
   function sessionSignal(event: StorageEvent): void {
-    if (isSessionSignal(event)) syncSessionSignal();
+    if (!isSessionSignal(event)) return;
+    // 익명 확인을 여러 탭이 다시 알리더라도 같은 사용자 표식끼리 확인 요청을 되풀이하지 않는다.
+    if (accountSafety.reason === 'reauth' && signaledUser === readSessionUser()) return;
+    syncSessionSignal();
   }
 
   const route = $derived(router.route);
@@ -443,11 +492,13 @@
 {#if route.name !== 'public' && (session.state !== 'loading' || sessionHidden)}
   <!-- 표시 언어(D-81)를 정한 뒤에 그린다(토스트 영역 라벨도 그 언어로). -->
   <FeedbackHost
-    {replace}
     {reload}
     {syncSessionSignal}
     retryLogout={() => void logout()}
-    retryRestore={() => void restoreSession()}
+    retryRestore={() => {
+      if (accountSafety.reason === 'reauth') void verifySessionSignal();
+      else void restoreSession();
+    }}
   />
 {/if}
 

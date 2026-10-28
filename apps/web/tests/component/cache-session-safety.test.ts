@@ -356,7 +356,7 @@ it.each(['focus', 'visibilitychange'])(
   async (event) => {
     currentUser.userId = me.id;
     vi.spyOn(api, 'me').mockResolvedValue(undefined);
-    render(FeedbackHost, { replace, reload });
+    render(FeedbackHost, { reload });
     if (event === 'focus') window.dispatchEvent(new Event(event));
     else {
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
@@ -370,10 +370,11 @@ it.each(['focus', 'visibilitychange'])(
 
 // 코디네이터 SR 추가 지시: D-27의 짧은 값·저장 실패 입력은 살아 있는 화면의 메모리에 남긴다.
 async function liveInput(): Promise<HTMLElement> {
-  const original = Storage.prototype.setItem;
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+  const original: unknown = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem')?.value;
+  if (typeof original !== 'function') throw new Error('setItem missing');
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
     if (key.includes(':form-draft:')) throw new DOMException('quota', 'QuotaExceededError');
-    original.call(this, key, value);
+    Reflect.apply(original, this, [key, value]);
   });
   vi.spyOn(api, 'myNotes').mockResolvedValue([]);
   router.navigate('/notes');
@@ -397,6 +398,11 @@ it('unhides the same live user without remounting screen-only input when draft s
   expect(screen.getByLabelText('새 노트 제목')).toBe(input);
   expect(input).toHaveValue('메모리에만 남긴 입력');
   expect(api.myNotes).toHaveBeenCalledTimes(1);
+  const checkAgain = deferred<Me | undefined>();
+  vi.spyOn(api, 'me').mockReturnValue(checkAgain.promise);
+  window.dispatchEvent(new Event('focus'));
+  expect(input).toBeVisible();
+  checkAgain.resolve(me);
 });
 
 it('keeps input mounted through anonymous reauthentication and switches only after a different user', async () => {
