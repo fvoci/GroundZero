@@ -1,11 +1,13 @@
+import { type SavedViewView } from '$lib/features/events/saved-views-model';
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ItemView, SavedViewView, TaskDetailView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import type { ItemView, TaskDetailView } from '$lib/api/client';
+
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
@@ -116,7 +118,7 @@ function server(kind: ModuleKind, views: SavedViewView[] = []): void {
   vi.spyOn(api, 'item').mockImplementation((id: string) => Promise.resolve(itemOf(id)));
   vi.spyOn(api, 'module').mockResolvedValue(moduleOf(kind));
   vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
-  vi.spyOn(api, 'savedViews').mockResolvedValue(views);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue(views);
 }
 
 /** 기본으로 표시한 저장 보기(업무 묶음 안의 보기·필터·정렬). */
@@ -595,7 +597,7 @@ describe('item group memory scope', () => {
 describe('late answers and item switches', () => {
   function heldViews(): (views: SavedViewView[]) => void {
     let resolve: (views: SavedViewView[]) => void = () => undefined;
-    vi.spyOn(api, 'savedViews').mockReturnValue(
+    vi.spyOn(savedViewsApi, 'savedViews').mockReturnValue(
       new Promise<SavedViewView[]>((r) => {
         resolve = r;
       }),
@@ -663,7 +665,7 @@ describe('late answers and item switches', () => {
         ),
       );
       vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
-      const views = vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+      const views = vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
       goTo(`${itemPath(ws, itemId)}${fromPath}`);
       const view = render(ItemScreen, { props: { workspace, itemId, workspaces: [workspace] } });
       await screen.findByRole('navigation', { name: '항목 묶음' });

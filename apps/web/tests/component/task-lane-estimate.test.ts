@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
@@ -5,7 +6,7 @@ import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskStatus, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import { laneEstimate } from '$lib/features/tasks/board';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -84,7 +85,7 @@ describe('lane estimate in the board', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(work, 'tasks').mockResolvedValue(list);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {

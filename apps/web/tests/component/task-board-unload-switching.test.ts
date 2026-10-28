@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { org } from '$lib/org.svelte';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
@@ -5,7 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { me } from '$lib/me.svelte';
@@ -78,7 +79,7 @@ function unloadPrevented(): boolean {
 
 async function mountWithOpenTask(): Promise<HTMLElement> {
   vi.spyOn(work, 'tasks').mockResolvedValue([detail]);
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   vi.spyOn(work, 'task').mockResolvedValue(detail);
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
@@ -234,7 +235,7 @@ describe('task board unload warning while the account is switching', () => {
       detail,
       { ...detail, id: 't-2', title: '다음 업무' },
     ]);
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const task = vi.spyOn(work, 'task').mockResolvedValue(detail);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);

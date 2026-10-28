@@ -1,7 +1,7 @@
+import { type EventInput, type EventView } from '$lib/features/events/model';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventInput, EventView } from '$lib/api/client';
 import { ApiError } from '$lib/api/client';
 import EventForm from '$lib/features/events/EventForm.svelte';
 import { me } from '$lib/me.svelte';

@@ -1,12 +1,14 @@
 <script lang="ts">
+  import { type EventInput, type EventView } from '$lib/features/events/model';
+  import { RuleConflict, eventsApi } from '$lib/features/events/api';
   // 일정 상세 대화상자: 보기·고치기·지우기. 고치기는 기준 버전으로 충돌을 막고, 충돌하면 입력을 두고 서버 내용을
   // 보여 준다(D-53과 같은 원칙). 충돌 뒤 다시 저장하면 내가 고친 칸만 서버 최신 일정에 얹고, 같은 칸을 다른 사람도
   // 고쳤으면 양쪽 값을 보여 덮어쓸지 묻는다(D-94). 지우기는 한 번 더 묻는다(행은 남고 휴지통 조각에서 되살린다).
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
 
-  import type { EventInput, EventView, RecurrenceRule } from '$lib/api/client';
-  import { api, ApiError, RuleConflict } from '$lib/api/client';
+  import type { RecurrenceRule } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
   import { errorText, untilBeforeStart } from '$lib/api/errors';
   import { formatDay } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -187,7 +189,7 @@
     if (event === undefined) return false;
     const mine = shown;
     const user = me.userId;
-    const result = await sending(api.updateEvent(event.id, baseVersion, input));
+    const result = await sending(eventsApi.updateEvent(event.id, baseVersion, input));
     if (mine !== shown || user !== me.userId) {
       // 그사이 다른 일정을 열었다. 고친 일정은 목록에서 다시 읽게만 한다.
       if (result.kind === 'updated') onchanged();
@@ -341,7 +343,11 @@
     let saved: EventView;
     try {
       saved = await sending(
-        api.setEventRecurrence(id, rule, baseRule === undefined ? event.recurrence : baseRule),
+        eventsApi.setEventRecurrence(
+          id,
+          rule,
+          baseRule === undefined ? event.recurrence : baseRule,
+        ),
       );
     } catch (e: unknown) {
       // 서버가 거절하며 함께 준 지금 규칙을 요약에 보이고 다음 저장의 기준으로 삼는다(따로 다시 읽지 않으니 다시 읽기가
@@ -365,7 +371,7 @@
     if (event === undefined) return;
     const mine = shown;
     try {
-      await sending(api.excludeOccurrence(event.id, date));
+      await sending(eventsApi.excludeOccurrence(event.id, date));
       onchanged();
       if (mine === shown) onclose();
     } catch (e: unknown) {
@@ -377,7 +383,7 @@
     if (event === undefined) return;
     const mine = shown;
     try {
-      await sending(api.deleteEvent(event.id));
+      await sending(eventsApi.deleteEvent(event.id));
       onchanged();
       if (mine === shown) onclose();
     } catch (e: unknown) {

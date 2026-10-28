@@ -1,10 +1,12 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import type { ItemView } from '$lib/api/client';
+
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -90,8 +92,8 @@ async function mountItem(archived: boolean): Promise<void> {
   vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
   // 서버가 주는 등급: 보관이면 일정은 read다.
   const shown: EventView = archived ? { ...event, access: 'read' } : event;
-  vi.spyOn(api, 'itemEvents').mockResolvedValue([shown]);
-  vi.spyOn(api, 'event').mockResolvedValue(shown);
+  vi.spyOn(eventsApi, 'itemEvents').mockResolvedValue([shown]);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(shown);
   render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
   await screen.findByRole('heading', { name: '항목' });
   // 일정 목록과 항목 달력은 일정 묶음에 있다.

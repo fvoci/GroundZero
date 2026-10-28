@@ -1,8 +1,9 @@
+import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -61,7 +62,7 @@ describe('audit list', () => {
 describe('item events list', () => {
   it('says loading before the list, and retries a failed first load', async () => {
     const load = vi
-      .spyOn(api, 'itemEvents')
+      .spyOn(eventsApi, 'itemEvents')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue([]);
     render(ItemEvents, { props: { item, onchanged: () => undefined } });

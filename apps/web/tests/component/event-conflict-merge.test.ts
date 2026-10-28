@@ -1,6 +1,6 @@
+import { type EventInput, type EventView } from '$lib/features/events/model';
 import { describe, expect, it } from 'vitest';
 
-import type { EventInput, EventView } from '$lib/api/client';
 import { mergeEventInput, sameUnit } from '$lib/features/events/conflict';
 
 // D-94: 충돌 뒤 "내 입력으로 다시 저장"은 내가 고친 칸만 서버 최신 값에 얹는다. 같은 칸을 양쪽이 서로 다른 값으로

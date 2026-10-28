@@ -1,6 +1,8 @@
+import { type EventInput } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventInput, MovePreviewView, TimeEntryInput } from '$lib/api/client';
+import type { MovePreviewView, TimeEntryInput } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 
 // 문서 이동의 409는 두 모양이다: 그사이 접근 변화가 바뀌었으면 새 미리보기(`MovePreview`, 다시 확인을 받는다),
@@ -182,7 +184,7 @@ describe('document move', () => {
 describe('event and time entry conflicts', () => {
   it('turns a stale event version (409 EventConflict) into a conflict with the latest event', async () => {
     const seen = reply(409, { error: 'conflict', current: event });
-    const result = await api.updateEvent('e1', 3, eventInput);
+    const result = await eventsApi.updateEvent('e1', 3, eventInput);
     expect(result.kind).toBe('conflict');
     expect(result.kind === 'conflict' ? result.current.version : 0).toBe(4);
     expect(seen).toStrictEqual([
@@ -215,7 +217,7 @@ describe('event and time entry conflicts', () => {
   it('reports a 409 without the latest copy (ErrorBody) as an ApiError', async () => {
     reply(409, { error: 'invalid_state', message: 'archived' });
     const failed = [
-      await failure(api.updateEvent('e1', 3, eventInput)),
+      await failure(eventsApi.updateEvent('e1', 3, eventInput)),
       await failure(api.updateTimeEntry('t1', 1, entryInput)),
     ];
     expect(failed.map((e) => (e instanceof ApiError ? [e.status, e.code] : e))).toEqual([

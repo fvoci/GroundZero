@@ -1,9 +1,11 @@
+import { type EventView } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CalendarView, EventView, ItemView, NotificationView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import type { CalendarView, ItemView, NotificationView } from '$lib/api/client';
+
 import { formatDay } from '$lib/display';
 import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
@@ -131,7 +133,7 @@ describe('dates inside localized text', () => {
   });
 
   it('formats the single-occurrence label in the event dialog', async () => {
-    vi.spyOn(api, 'event').mockResolvedValue(
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(
       event({
         recurrence: { freq: 'weekly', interval: 1, weekdays: [1], until: null, count: null },
       }),
