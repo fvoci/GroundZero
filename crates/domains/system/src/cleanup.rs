@@ -152,7 +152,7 @@ fn log_cleanup_failure(key: &str, attempts: i32, err: &AppError) {
         tracing::error!(
             event = "storage.cleanup_gave_up",
             error_code = err.code(),
-            detail = fvoci_core::logging::safe_error(&err),
+            detail = fvoci_core::logging::safe_error(err),
             key,
             attempts = attempts + 1,
             "storage cleanup gave up after 10 attempts"
@@ -161,7 +161,7 @@ fn log_cleanup_failure(key: &str, attempts: i32, err: &AppError) {
         tracing::warn!(
             event = "storage.cleanup_retry",
             error_code = err.code(),
-            detail = fvoci_core::logging::safe_error(&err),
+            detail = fvoci_core::logging::safe_error(err),
             key,
             attempts = attempts + 1,
             "storage cleanup failed; will retry"
