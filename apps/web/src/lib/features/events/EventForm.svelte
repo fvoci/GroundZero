@@ -1,8 +1,14 @@
 <script lang="ts">
+  import {
+    type EventInput,
+    type EventKind,
+    type EventView,
+    EVENT_KINDS,
+  } from '$lib/features/events/model';
   // 일정 입력 (D-31, D-50). 시각은 일정에 지정한 시간대의 벽시계 시각으로 넣고 UTC로 바꿔 보낸다.
   // 종일 일정은 날짜 그대로 보낸다.
-  import type { EventInput, EventKind, EventView } from '$lib/api/client';
-  import { EVENT_KINDS, newRequestId } from '$lib/api/client';
+
+  import { newRequestId } from '$lib/api/client';
   import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';

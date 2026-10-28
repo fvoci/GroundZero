@@ -138,15 +138,10 @@ async fn system_call_once(db: &Db, jobs: &[Job], retention: Retention) -> Result
             }
             None => match job.call {
                 "SELECT app_system_purge_audit($1)" => {
-                    sqlx::query_scalar(job.call)
-                        .bind(retention.audit_days)
-                        .fetch_one(tx.conn())
-                        .await?
+                    fvoci_activity::retention::purge_audit(&mut tx, retention.audit_days).await?
                 }
                 "SELECT app_system_purge_activity($1)" => {
-                    sqlx::query_scalar(job.call)
-                        .bind(retention.activity_days)
-                        .fetch_one(tx.conn())
+                    fvoci_activity::retention::purge_activity(&mut tx, retention.activity_days)
                         .await?
                 }
                 _ => sqlx::query_scalar(job.call).fetch_one(tx.conn()).await?,

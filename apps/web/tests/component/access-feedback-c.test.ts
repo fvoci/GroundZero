@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,7 +39,7 @@ describe('server access and archived comments (D-20·D-106·D-113)', () => {
   it.each(['document', 'task'] as const)(
     'shows the archived-parent notice for %s comments',
     async (kind) => {
-      vi.spyOn(api, 'comments').mockResolvedValue([]);
+      vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
       vi.spyOn(api, 'item').mockResolvedValue({ ...TASK_ITEM, access: 'read' });
       vi.spyOn(api, 'module').mockResolvedValue({ ...PROJECT_MODULE, archived: true });
       render(CommentsPanel, {
@@ -51,7 +52,9 @@ describe('server access and archived comments (D-20·D-106·D-113)', () => {
   it.each([false, true])(
     'hides write controls and preserves own-comment deletion when archived=%s',
     async (archived) => {
-      vi.spyOn(api, 'comments').mockResolvedValue([comment({ can_edit: true, can_delete: true })]);
+      vi.spyOn(activityApi, 'comments').mockResolvedValue([
+        comment({ can_edit: true, can_delete: true }),
+      ]);
       render(CommentsPanel, {
         props: { target: { kind: 'document', id: 'd1' }, canWrite: false, archived },
       });
@@ -73,8 +76,8 @@ describe('server access and archived comments (D-20·D-106·D-113)', () => {
   );
 
   it('keeps the input on an archived 409 and explains the archived state', async () => {
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
-    vi.spyOn(api, 'addComment').mockRejectedValue(
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'addComment').mockRejectedValue(
       new ApiError(409, 'invalid_state', 'the item is archived'),
     );
     render(CommentsPanel, { props: { target: { kind: 'document', id: 'd1' }, canWrite: true } });
@@ -107,8 +110,8 @@ describe('organization public links and allow_copy', () => {
       });
       vi.spyOn(api, 'documentFiles').mockResolvedValue([]);
       vi.spyOn(api, 'documentBacklinks').mockResolvedValue([]);
-      vi.spyOn(api, 'comments').mockResolvedValue([]);
-      vi.spyOn(api, 'mark').mockResolvedValue({ pin: false, favorite: false });
+      vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
+      vi.spyOn(activityApi, 'mark').mockResolvedValue({ pin: false, favorite: false });
       render(DocumentScreen, { documentId: ACCESS_DOCUMENT.id, workspaces: [] });
       await fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
       await screen.findByRole('menu');

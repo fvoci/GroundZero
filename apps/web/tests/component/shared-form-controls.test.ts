@@ -1,10 +1,12 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
@@ -35,7 +37,7 @@ beforeEach(async () => {
   await setLocale('ko', { reload: false });
   window.sessionStorage.clear();
   vi.spyOn(work, 'tasks').mockResolvedValue([]);
-  vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+  vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
 });
 afterEach(() => {
@@ -77,7 +79,7 @@ describe('task board fields use the shared controls', () => {
 
 describe('comment boxes use the shared Textarea', () => {
   it('draws the new comment and reply boxes with it, and still focuses the reply box when opened', async () => {
-    vi.spyOn(api, 'comments').mockResolvedValue([
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([
       {
         id: 'c1',
         parent_id: null,

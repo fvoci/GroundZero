@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { type CommentView } from '$lib/features/activity/api';
   // 댓글 하나: 쓴 사람·시각, 본문, 고치기(쓴 사람)·지우기(쓴 사람·소유자).
   import { formatInstant } from '$lib/display';
   import { onDestroy } from 'svelte';
-  import type { CommentView } from '$lib/api/client';
+
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';

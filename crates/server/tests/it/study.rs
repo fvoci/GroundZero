@@ -287,7 +287,19 @@ async fn study_units_are_shared_and_progress_is_personal() {
     )
     .await;
     assert_eq!(timer.status, StatusCode::CREATED, "{:?}", timer.json);
-    assert_eq!(timer.json["target"]["label"], "STU-1 2. 연습문제");
+    let targets = send(
+        &app,
+        Method::GET,
+        &format!(
+            "/api/time-entry-targets?entry_id={}",
+            timer.json["id"].as_str().unwrap()
+        ),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(targets.status, StatusCode::OK, "{:?}", targets.json);
+    assert_eq!(targets.json[0]["label"], "STU-1 2. 연습문제");
     let refused = send(
         &app,
         Method::POST,

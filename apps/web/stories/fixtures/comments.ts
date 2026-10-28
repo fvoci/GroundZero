@@ -1,5 +1,5 @@
+import { type CommentView } from '$lib/features/activity/api';
 // 댓글 합성 데이터. 스레드는 개발 seed와 같은 내용(synthetic.ts), 한 댓글의 변형은 `comment()`로 만든다.
-import type { CommentView } from '$lib/api/client';
 
 import { commentThreads, personName } from './synthetic';
 

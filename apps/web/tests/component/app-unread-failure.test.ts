@@ -1,3 +1,5 @@
+import { timeData } from '$lib/features/time/data';
+import { activityApi } from '$lib/features/activity/api';
 import type { Me } from '@fvoci/api-client';
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -50,8 +52,8 @@ beforeEach(async () => {
   vi.spyOn(api, 'me').mockResolvedValue(me);
   vi.spyOn(api, 'workspaces').mockResolvedValue([]);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
-  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
-  vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+  vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'deletedWorkspaces').mockResolvedValue([]);
 });
 
@@ -65,7 +67,10 @@ afterEach(() => {
 describe('unread notification count', () => {
   it('refreshes the server count immediately after an invitation changes', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    const count = vi.spyOn(api, 'unreadCount').mockResolvedValueOnce(2).mockResolvedValue(1);
+    const count = vi
+      .spyOn(activityApi, 'unreadCount')
+      .mockResolvedValueOnce(2)
+      .mockResolvedValue(1);
     render(App);
     await screen.findByRole('link', { name: /읽지 않은 알림 2개/ });
     invitationChanges.changed();
@@ -77,7 +82,7 @@ describe('unread notification count', () => {
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     // 안 읽은 수는 서버가 현재 조직 범위로 센다(D-118).
     const unreadCount = vi
-      .spyOn(api, 'unreadCount')
+      .spyOn(activityApi, 'unreadCount')
       .mockResolvedValueOnce(2)
       .mockRejectedValueOnce(new NetworkError('offline'))
       .mockResolvedValue(1);
@@ -104,7 +109,7 @@ describe('unread count after the organization selection is cleared', () => {
   it('drops a late count from the previous organization', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     let release: ((count: number) => void) | undefined;
-    vi.spyOn(api, 'unreadCount').mockImplementation(
+    vi.spyOn(activityApi, 'unreadCount').mockImplementation(
       () =>
         new Promise<number>((resolve) => {
           release = resolve;

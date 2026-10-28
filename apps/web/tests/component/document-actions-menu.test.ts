@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,8 +55,8 @@ beforeEach(async () => {
   const none: DOMRectList = Object.assign([], { item: (): DOMRect | null => null });
   Range.prototype.getClientRects = (): DOMRectList => none;
   Element.prototype.scrollIntoView = (): void => undefined;
-  vi.spyOn(api, 'mark').mockResolvedValue({ pin: true, favorite: false });
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'mark').mockResolvedValue({ pin: true, favorite: false });
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   vi.spyOn(api, 'documentFiles').mockResolvedValue([]);
   vi.spyOn(api, 'documentBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);

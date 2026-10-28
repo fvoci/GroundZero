@@ -1,7 +1,10 @@
+import { type TimeEntryView, type TimeSummaryRowView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
+import { activityApi } from '$lib/features/activity/api';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api, type TimeEntryView, type TimeSummaryRowView } from '$lib/api/client';
+import { api } from '$lib/api/client';
 import { displaySettings } from '$lib/display';
 import { dayIn, instantOf } from '$lib/features/events/time';
 import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
@@ -99,14 +102,16 @@ describe('time organization context', () => {
     const summary: TimeSummaryRowView[] = [{ period: today, kind: 'work', seconds: 3600 }];
     const next = deferred<TimeEntryView[]>();
     const nextSummary = deferred<TimeSummaryRowView[]>();
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
-    const save = vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({ kind: 'updated', entry });
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
+    const save = vi
+      .spyOn(timeData, 'updateTimeEntry')
+      .mockResolvedValue({ kind: 'updated', entry });
     const entries = vi
-      .spyOn(api, 'timeEntries')
+      .spyOn(timeData, 'timeEntries')
       .mockResolvedValueOnce([entry])
       .mockReturnValue(next.promise);
-    vi.spyOn(api, 'timeSummary')
+    vi.spyOn(timeData, 'timeSummary')
       .mockResolvedValueOnce(summary)
       .mockResolvedValueOnce(summary)
       .mockReturnValue(nextSummary.promise);
@@ -152,12 +157,12 @@ describe('time organization context', () => {
 
   it('clears old load errors across an organization deselection and ignores late failures', async () => {
     const old = deferred<TimeEntryView[]>();
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeEntries')
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntries')
       .mockRejectedValueOnce(new Error('offline'))
       .mockReturnValueOnce(old.promise)
       .mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
     render(TimeScreen);
     await screen.findByRole('alert');
     await act(() => {
@@ -182,7 +187,7 @@ describe('time organization context', () => {
 it('isolates workspace request IDs by organization and restores the original retry identity', async () => {
   vi.spyOn(api, 'home').mockReturnValue(new Promise(() => undefined));
   vi.spyOn(api, 'myTasks').mockReturnValue(new Promise(() => undefined));
-  vi.spyOn(api, 'recentActivity').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'recentActivity').mockResolvedValue([]);
   vi.spyOn(api, 'myInvitations').mockResolvedValue([]);
   const create = vi.spyOn(api, 'createWorkspace').mockRejectedValue(new Error('response lost'));
   render(HomeScreen, { workspaces: [], oncreated: vi.fn(), onjoined: () => Promise.resolve() });

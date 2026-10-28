@@ -1,9 +1,12 @@
+import type { TaskTimeView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
+import { activityApi } from '$lib/features/activity/api';
 import type { MembersView, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TaskTimeView, TaskView } from '$lib/api/client';
+import type { TaskView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
@@ -52,7 +55,7 @@ const view: MembersView = {
 describe('audit', () => {
   it('drops the previous workspace entries when the workspace changes', async () => {
     const other: Workspace = { ...workspace, id: 'ws-2', name: '다른 곳' };
-    vi.spyOn(api, 'audit')
+    vi.spyOn(activityApi, 'audit')
       .mockResolvedValueOnce([
         {
           id: 'a-1',
@@ -140,7 +143,7 @@ describe('task time panel', () => {
 
   it('keeps the newest total when an older read of the same task answers late', async () => {
     const reads: ((v: TaskTimeView) => void)[] = [];
-    vi.spyOn(api, 'taskTime').mockImplementation(
+    vi.spyOn(timeData, 'taskTime').mockImplementation(
       () =>
         new Promise<TaskTimeView>((r) => {
           reads.push(r);
@@ -178,9 +181,9 @@ describe('task time panel', () => {
 
 describe('time screen', () => {
   it('drops "loading" after a failed first load and clears the error while retrying', async () => {
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'timeEntries')
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeEntries')
       .mockRejectedValueOnce(new Error('offline'))
       .mockReturnValue(new Promise(() => undefined));
     render(TimeScreen);
@@ -193,9 +196,9 @@ describe('time screen', () => {
   });
 
   it('says there are no entries in an empty week', async () => {
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
     render(TimeScreen);
 
     expect(await screen.findByText('기록이 없습니다.')).toBeInTheDocument();

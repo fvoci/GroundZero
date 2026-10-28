@@ -1,10 +1,11 @@
 //! 조직 범위 알림함(D-118). 초대는 SQL 계약에 따라 모든 조직 문맥에 보인다.
-use crate::features::organizations::OrgScope;
-use crate::http::AppState;
+use crate::ActivityState;
 use axum::Json;
 use axum::extract::{Query, State};
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, WorkspaceId};
+use fvoci_http::organization::OrgScope;
+use fvoci_http::session::EXPECTED_USER_IF_SENT_DOC;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
@@ -93,7 +94,7 @@ pub struct CursorQuery {
     params(CursorQuery, ("organization_id" = OrganizationId, Query)),
     responses((status = 200, body = NotificationPage), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "notifications")]
 pub async fn notifications(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     OrgScope { user, organization }: OrgScope,
     Query(query): Query<CursorQuery>,
 ) -> Result<Json<NotificationPage>, AppError> {
@@ -186,10 +187,10 @@ pub async fn notifications(
 
 /// 알림 읽음 표시. 내 알림만 바뀐다.
 #[utoipa::path(post, path = "/api/me/notifications/read", operation_id = "mark_my_notifications_read",
-    params(("organization_id" = OrganizationId, Query)), request_body = MarkRead,
-    responses((status = 200, body = MarkedNotifications), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "notifications")]
+    params(("organization_id" = OrganizationId, Query), ("x-fvoci-expected-user" = Option<Uuid>, Header, description = EXPECTED_USER_IF_SENT_DOC)), request_body = MarkRead,
+    responses((status = 409, body = ErrorBody), (status = 200, body = MarkedNotifications), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "notifications")]
 pub async fn mark_read(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     OrgScope { user, organization }: OrgScope,
     Json(input): Json<MarkRead>,
 ) -> Result<Json<MarkedNotifications>, AppError> {
@@ -207,8 +208,15 @@ pub async fn mark_read(
 impl CursorQuery {
     pub(crate) fn validate(&self) -> Result<(), AppError> {
         if self.before.is_some() != self.before_id.is_some() {
-            return Err(AppError::BadRequest(
-                "before and before_id must be provided together".to_owned(),
+            return Err(AppError::invalid(
+                if self.before.is_none() {
+                    "before"
+                } else {
+                    "before_id"
+                },
+                InvalidReason::Required,
+                None,
+                "before and before_id must be provided together",
             ));
         }
         Ok(())
@@ -239,7 +247,7 @@ pub struct UnreadCount {
     params(("organization_id" = OrganizationId, Query)),
     responses((status = 200, body = UnreadCount), (status = 400, body = ErrorBody), (status = 401, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "notifications")]
 pub async fn unread_count(
-    State(state): State<AppState>,
+    State(state): State<ActivityState>,
     OrgScope { user, organization }: OrgScope,
 ) -> Result<Json<UnreadCount>, AppError> {
     let mut tx = state.db.begin_as(user).await?;

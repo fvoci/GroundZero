@@ -22,11 +22,9 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, audit, comments, courses, documents, event_recurrence, events, export, home,
-    item_profile, members, modules, organizations, public_links, records, references, revisions,
-    saved_views, search_api, study, time_tracking, trash, workspaces, zotero,
+    accounts, courses, documents, export, home, item_profile, members, modules, organizations,
+    public_links, records, references, revisions, search_api, study, trash, workspaces, zotero,
 };
-use crate::features::{activity, notifications};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -114,6 +112,30 @@ impl FromRef<AppState> for fvoci_files::FilesState {
             limits: state.config.files,
             upload_permits: Arc::clone(&state.upload_permits),
             collab: Arc::new(state.collab.clone()),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_calendar::CalendarState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_activity::ActivityState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_time::TimeState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
         }
     }
 }
@@ -299,39 +321,11 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
-        events::list,
-        events::get,
-        events::create,
-        events::update,
-        events::delete,
-        events::calendar,
-        event_recurrence::set_event,
-        event_recurrence::exclude_event,
-        time_tracking::current,
-        time_tracking::start,
-        time_tracking::action,
-        time_tracking::list,
-        time_tracking::add,
-        time_tracking::update,
-        time_tracking::delete,
-        time_tracking::revisions,
-        time_tracking::summary,
-        time_tracking::task_time,
-        time_tracking::item_time,
         // personal scope (2단계 B)
         home::home,
         home::my_tasks,
         documents::shared_with_me,
         search_api::search,
-        notifications::notifications,
-        notifications::unread_count,
-        notifications::mark_read,
-        activity::recent,
-        activity::item,
-        activity::document,
-        activity::task,
-        home::set_mark,
-        home::get_mark,
         trash::trash_document,
         trash::trash_item,
         trash::trash_module,
@@ -345,14 +339,8 @@ async fn api_not_found() -> AppError {
         trash::set_version_retention,
         export::workspace,
         export::mine,
-        audit::workspace,
-        audit::mine,
         documents::templates,
         documents::set_template,
-        saved_views::list,
-        saved_views::create,
-        saved_views::update,
-        saved_views::delete,
         study::get,
         study::add_units,
         study::update_unit,
@@ -380,12 +368,6 @@ async fn api_not_found() -> AppError {
         courses::delete_episode,
         courses::set_progress,
         courses::participants,
-        comments::document_comments,
-        comments::task_comments,
-        comments::add,
-        comments::edit,
-        comments::delete,
-        comments::resolve,
         references::task_backlinks,
         revisions::list,
         revisions::get,
@@ -478,47 +460,10 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        events::EventKind,
-        events::Event,
-        events::EventInput,
-        events::CreateEvent,
-        events::UpdateEvent,
-        events::EventConflict,
-        events::CalendarTask,
-        events::CalendarItem,
-        events::CalendarDate,
-        events::CalendarDateKind,
-        events::Calendar,
-        events::EventOccurrence,
-        events::ProjectedTask,
-        event_recurrence::SetEventRecurrence,
-        event_recurrence::ExcludeOccurrence,
-        time_tracking::TimeKind,
-        time_tracking::TargetKind,
-        time_tracking::TargetInput,
-        time_tracking::Target,
-        time_tracking::TimeEntry,
-        time_tracking::StartTimer,
-        time_tracking::TimerStartMode,
-        time_tracking::StartedTimer,
-        time_tracking::TimerAction,
-        time_tracking::TimerActionInput,
-        time_tracking::EntryInput,
-        time_tracking::AddEntry,
-        time_tracking::UpdateEntry,
-        time_tracking::TimeEntryConflict,
-        time_tracking::TimeEntryRevision,
-        time_tracking::SummaryGroup,
-        time_tracking::TimeSummaryRow,
-        time_tracking::TaskTime,
-        time_tracking::ItemTime,
-        time_tracking::ItemTimeKind,
         home::DueBucket,
         home::HomeTask,
         home::HomeDocument,
         home::HomeItem,
-        home::MarkTarget,
-        home::MarkKind,
         home::MarkedTarget,
         home::Home,
         organizations::OrgRole,
@@ -538,8 +483,6 @@ async fn api_not_found() -> AppError {
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
         home::UpNextCounts,
-        home::SetMark,
-        home::MarkState,
         trash::Trashed,
         trash::TrashKind,
         trash::TrashEntry,
@@ -548,13 +491,8 @@ async fn api_not_found() -> AppError {
         trash::SetRetention,
         trash::SetVersionRetention,
         search_api::SearchResult,
-        audit::AuditEntry,
         documents::DocumentTemplate,
         documents::SetDocumentTemplate,
-        saved_views::SavedView,
-        saved_views::CreateView,
-        saved_views::UpdateView,
-        saved_views::SavedViewConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -603,11 +541,6 @@ async fn api_not_found() -> AppError {
         courses::UpdateEpisode,
         courses::SetProgress,
         courses::Participant,
-        comments::Comment,
-        comments::NewComment,
-        comments::EditComment,
-        comments::ResolveComment,
-        comments::CommentCreated,
         revisions::RevisionSummary,
         revisions::Revision,
         revisions::ExportFormat,
@@ -632,17 +565,10 @@ async fn api_not_found() -> AppError {
         references::ResolvedReference,
         references::Backlink,
         // personal scope (2단계 B)
-        notifications::Notification,
-        notifications::NotificationPage,
-        notifications::MarkRead,
-        notifications::MarkedNotifications,
-        notifications::UnreadCount,
         home::MyTask,
         home::MyTaskCounts,
         home::WorkspaceTasks,
         home::MyTasks,
-        activity::Activity,
-        activity::ActivityPage,
         public_links::PublicLink,
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
@@ -680,6 +606,9 @@ impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_files::FilesApi::openapi());
+        openapi.merge(fvoci_calendar::CalendarApi::openapi());
+        openapi.merge(fvoci_time::TimeApi::openapi());
+        openapi.merge(fvoci_activity::ActivityApi::openapi());
     }
 }
 
@@ -728,6 +657,9 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(fvoci_work::router(&state))
         .merge(fvoci_files::router(&state))
+        .merge(fvoci_calendar::router())
+        .merge(fvoci_time::router(&state))
+        .merge(fvoci_activity::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -787,8 +719,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/deleted-workspaces", get(workspaces::deleted))
         .route("/workspaces/{workspace_id}/export", get(export::workspace))
         .route("/me/export", get(export::mine))
-        .route("/workspaces/{workspace_id}/audit", get(audit::workspace))
-        .route("/me/audit", get(audit::mine))
         .route("/record-kinds", get(records::kinds))
         .route("/zotero/collections", post(zotero::list_collections))
         .route("/items/{item_id}/zotero/import", post(zotero::import))
@@ -796,14 +726,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/documents/{document_id}/template",
             put(documents::set_template),
-        )
-        .route(
-            "/items/{item_id}/views",
-            get(saved_views::list).post(saved_views::create),
-        )
-        .route(
-            "/views/{view_id}",
-            put(saved_views::update).delete(saved_views::delete),
         )
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
@@ -858,17 +780,6 @@ pub fn router(state: AppState) -> Router {
             put(courses::set_progress),
         )
         .route(
-            "/documents/{document_id}/comments",
-            get(comments::document_comments),
-        )
-        .route("/tasks/{task_id}/comments", get(comments::task_comments))
-        .route("/comments", post(comments::add))
-        .route(
-            "/comments/{comment_id}",
-            put(comments::edit).delete(comments::delete),
-        )
-        .route("/comments/{comment_id}/resolve", post(comments::resolve))
-        .route(
             "/me/deleted-workspaces/{workspace_id}",
             delete(workspaces::purge),
         )
@@ -916,46 +827,6 @@ pub fn router(state: AppState) -> Router {
             put(documents::set_parent),
         )
         .route(
-            "/items/{item_id}/events",
-            get(events::list).post(events::create),
-        )
-        .route(
-            "/events/{event_id}",
-            get(events::get).put(events::update).delete(events::delete),
-        )
-        .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
-        .route(
-            "/events/{event_id}/recurrence",
-            put(event_recurrence::set_event),
-        )
-        .route(
-            "/events/{event_id}/exclusions",
-            post(event_recurrence::exclude_event),
-        )
-        .route(
-            "/me/timer",
-            get(time_tracking::current).post(time_tracking::start),
-        )
-        .route(
-            "/time-entries/{entry_id}/timer",
-            post(time_tracking::action),
-        )
-        .route(
-            "/me/time-entries",
-            get(time_tracking::list).post(time_tracking::add),
-        )
-        .route(
-            "/time-entries/{entry_id}",
-            put(time_tracking::update).delete(time_tracking::delete),
-        )
-        .route(
-            "/time-entries/{entry_id}/revisions",
-            get(time_tracking::revisions),
-        )
-        .route("/me/time-summary", get(time_tracking::summary))
-        .route("/tasks/{task_id}/time", get(time_tracking::task_time))
-        .route("/items/{item_id}/time", get(time_tracking::item_time))
-        .route(
             "/workspaces/{workspace_id}/trash",
             get(trash::workspace_trash),
         )
@@ -975,10 +846,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/trash/purge-expired", post(trash::purge_my_expired))
         .route("/trash/{batch_id}", delete(trash::purge))
         .route("/trash/{batch_id}/restore", post(trash::restore))
-        .route(
-            "/me/marks/{target_kind}/{target_id}",
-            get(home::get_mark).put(home::set_mark),
-        )
         .route(
             "/tasks/{task_id}/backlinks",
             get(references::task_backlinks),
@@ -1001,16 +868,6 @@ pub fn router(state: AppState) -> Router {
         .route("/me/tasks", get(home::my_tasks))
         .route("/me/shared", get(documents::shared_with_me))
         .route("/search", get(search_api::search))
-        .route("/me/notifications", get(notifications::notifications))
-        .route(
-            "/me/notifications/unread-count",
-            get(notifications::unread_count),
-        )
-        .route("/me/notifications/read", post(notifications::mark_read))
-        .route("/me/activity", get(activity::recent))
-        .route("/items/{item_id}/activity", get(activity::item))
-        .route("/documents/{document_id}/activity", get(activity::document))
-        .route("/tasks/{task_id}/activity", get(activity::task))
         .route("/references/resolve", post(references::resolve))
         .route(
             "/documents/{document_id}/backlinks",
