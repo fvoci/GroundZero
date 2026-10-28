@@ -36,9 +36,9 @@ pub use state::{AccountState, OrganizationsState};
         organizations::remove_member,
         organizations::invite,
         organizations::invitations,
-        organizations::set_settings,
-        organizations::workspace_limits,
-        organizations::set_workspace_limits,
+        organizations::settings::set_settings,
+        organizations::settings::workspace_limits,
+        organizations::settings::set_workspace_limits,
         organizations::workspaces,
         organizations::join_as_admin,
         organizations::restore_workspace,
@@ -135,11 +135,12 @@ where
         )
         .route(
             "/organizations/{organization_id}/settings",
-            put(organizations::set_settings),
+            put(organizations::settings::set_settings),
         )
         .route(
             "/workspaces/{workspace_id}/limits",
-            get(organizations::workspace_limits).put(organizations::set_workspace_limits),
+            get(organizations::settings::workspace_limits)
+                .put(organizations::settings::set_workspace_limits),
         )
         .route(
             "/organizations/{organization_id}/workspaces",
