@@ -24,6 +24,8 @@ use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 
+mod role_ids;
+
 /// 조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 "관리자로 참여" 뒤에만 본다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -292,11 +294,12 @@ pub async fn set_member(
     Json(input): Json<SetOrganizationRole>,
 ) -> Result<StatusCode, AppError> {
     let mut tx = state.db.begin_as(user).await?;
+    let ids = role_ids::for_change(tx.conn(), org, member, input.role).await?;
     sqlx::query("SELECT app_set_organization_member($1, $2, $3, $4)")
         .bind(org)
         .bind(member)
         .bind(input.role.as_str())
-        .bind(new_ids(1))
+        .bind(ids)
         .execute(tx.conn())
         .await
         .map_err(AppError::from_db_function)?;

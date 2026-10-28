@@ -1258,6 +1258,9 @@ GRANT ALL ON FUNCTION fvoci.app_organization_workspaces(p_organization uuid) TO 
 REVOKE ALL ON FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) TO fvoci_app;
 
+REVOKE ALL ON FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) TO fvoci_app;
+
 REVOKE ALL ON FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid, p_user uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid, p_user uuid) TO fvoci_app;
 

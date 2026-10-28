@@ -810,6 +810,9 @@ CREATE FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uu
   DECLARE
     v_admin uuid := app_require_organization_admin(p_organization);
     v_old   text;
+    v_row   record;
+    v_at    integer := 0;
+    v_need  integer;
   BEGIN
     -- 조직 멤버십 변경은 조직 행으로 줄 세운다(탈퇴·초대 수락과 같은 순서).
     PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
@@ -820,16 +823,51 @@ CREATE FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uu
     IF NOT EXISTS (SELECT 1 FROM users WHERE id = p_user) THEN
       RAISE EXCEPTION 'user not found' USING ERRCODE = 'P0002';
     END IF;
-    SELECT role INTO v_old FROM organization_members WHERE organization_id = p_organization AND user_id = p_user;
+    SELECT role INTO v_old FROM organization_members WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
     IF v_old = 'admin' AND p_role <> 'admin'
        AND (SELECT count(*) FROM organization_members WHERE organization_id = p_organization AND role = 'admin') = 1 THEN
       RAISE EXCEPTION 'the organization needs at least one admin' USING ERRCODE = '55000';
     END IF;
     INSERT INTO organization_members (organization_id, user_id, role) VALUES (p_organization, p_user, p_role)
     ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+    IF v_old = 'admin' AND p_role = 'member' THEN
+      -- PR4a: 조직 → 조직 멤버 → 공간 id 순 → 문서 id 순. 휴지통 공간의 자기 참여도 함께 회수한다.
+      PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
+      PERFORM 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+        WHERE w.organization_id = p_organization AND m.user_id = p_user AND m.role_source = 'admin_join'
+        ORDER BY m.workspace_id FOR UPDATE OF m;
+      PERFORM 1 FROM documents d
+        WHERE EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                      WHERE m.workspace_id = d.workspace_id AND w.organization_id = p_organization
+                        AND m.user_id = p_user AND m.role_source = 'admin_join' AND m.previous_role IS NULL)
+        ORDER BY d.id FOR UPDATE;
+      FOR v_row IN
+        SELECT m.workspace_id, m.previous_role, m.previous_role_source
+        FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+        WHERE w.organization_id = p_organization AND m.user_id = p_user AND m.role_source = 'admin_join'
+        ORDER BY m.workspace_id
+      LOOP
+        v_need := 1 + 2 * app_unseen_assignees_bound(NULL, v_row.workspace_id, p_user)
+          + (SELECT count(*)::integer FROM document_shares s JOIN documents d ON d.id = s.document_id
+             WHERE d.workspace_id = v_row.workspace_id AND s.grantee_user_id = p_user);
+        IF v_row.previous_role IS NULL THEN
+          PERFORM app_remove_member_internal(v_row.workspace_id, p_user, 'organization_admin_demoted',
+                                            coalesce(p_ids[v_at + 1:v_at + v_need], '{}'::uuid[]));
+        ELSE
+          UPDATE workspace_members
+            SET role = previous_role, role_source = previous_role_source, previous_role = NULL, previous_role_source = NULL
+            WHERE workspace_id = v_row.workspace_id AND user_id = p_user;
+          PERFORM app_audit(app_id(p_ids, v_at + 1), v_row.workspace_id, 'change_role', 'member', p_user,
+                            jsonb_build_object('from', 'admin', 'to', v_row.previous_role, 'reason', 'organization_admin_demoted'));
+          PERFORM app_drop_unseen_assignees(NULL, v_row.workspace_id, p_user, 'organization_admin_demoted',
+                                           coalesce(p_ids[v_at + 2:v_at + v_need], '{}'::uuid[]));
+        END IF;
+        v_at := v_at + v_need;
+      END LOOP;
+    END IF;
     IF v_old IS DISTINCT FROM p_role THEN
       INSERT INTO audit_log (id, workspace_id, organization_id, actor, action, target_type, target_id, detail)
-      VALUES (app_id(p_ids, 1), NULL, p_organization, v_admin,
+      VALUES (app_id(p_ids, v_at + 1), NULL, p_organization, v_admin,
               CASE WHEN v_old IS NULL THEN 'add_member' ELSE 'change_role' END, 'organization_member', p_user,
               jsonb_build_object('from', v_old, 'to', p_role));
     END IF;
@@ -838,6 +876,28 @@ CREATE FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uu
 
 
 ALTER FUNCTION fvoci.app_set_organization_member(p_organization uuid, p_user uuid, p_role text, p_ids uuid[]) OWNER TO fvoci_migrator;
+
+-- D-88: 회수할 공간별 공유·담당 정리 로그를 포함한 새 id 상한. 실제 명령이 잠금 뒤 다시 센다.
+CREATE FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) RETURNS integer
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    PERFORM app_require_organization_admin(p_organization);
+    IF p_role <> 'member' OR NOT EXISTS (
+      SELECT 1 FROM organization_members WHERE organization_id = p_organization AND user_id = p_user AND role = 'admin'
+    ) THEN
+      RETURN 1;
+    END IF;
+    RETURN 1 + coalesce((SELECT sum(1 + 2 * app_unseen_assignees_bound(NULL, m.workspace_id, p_user)
+      + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+         WHERE d.workspace_id = m.workspace_id AND s.grantee_user_id = p_user))
+      FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE w.organization_id = p_organization AND m.user_id = p_user AND m.role_source = 'admin_join'), 0)::integer;
+  END
+  $$;
+
+ALTER FUNCTION fvoci.app_set_organization_member_ids(p_organization uuid, p_user uuid, p_role text) OWNER TO fvoci_migrator;
 
 -- 조직에서 빠질 때 풀리는 것의 건수(확인 대화용, D-114).
 CREATE FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid, p_user uuid) RETURNS TABLE(workspaces integer, shares integer, assignments integer)
@@ -1517,7 +1577,7 @@ CREATE FUNCTION fvoci.app_remove_member_internal(p_workspace uuid, p_member uuid
     -- 소유권 수락·제안과 같은 순서로 워크스페이스 행 → 멤버 행을 먼저 잠근다. 그 뒤에 소유자를 보고(수락이 끝난
     -- 뒤의 값), 항목·그룹 멤버를 지운다(동시에 넣는 쪽은 멤버 행 공유 잠금을 기다린다).
     -- 조직 탈퇴는 휴지통에 든 워크스페이스의 멤버십도 정리하므로 살아 있는지 묻지 않고 행만 잠근다.
-    IF p_action = 'organization_left' THEN
+    IF p_action IN ('organization_left', 'organization_admin_demoted') THEN
       PERFORM 1 FROM workspaces WHERE id = p_workspace FOR NO KEY UPDATE;
     ELSE
       PERFORM app_lock_live_workspace(p_workspace);
