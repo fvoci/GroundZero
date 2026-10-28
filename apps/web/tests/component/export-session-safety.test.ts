@@ -94,15 +94,24 @@ afterEach(() => {
 async function start(format: 'zip' | 'pdf') {
   const view = render(ExportDialog, props);
   await screen.findByRole('dialog');
-  await fireEvent.click(screen.getByRole('radio', { name: format === 'zip' ? /ZIP/ : /PDF/ }));
+  await fireEvent.click(screen.getByRole('radio', { name: format === 'zip' ? /\.zip/ : /PDF/ }));
   await fireEvent.click(screen.getByRole('button', { name: '내보내기', exact: true }));
   return view;
 }
 
 // SR-221-2 / D-96: 공통 request 밖 첨부도 로그아웃·다른 탭 신호·닫기에서 중단한다.
-it.each(['logout', 'other-tab', 'close', 'unmount'] as const)(
-  'aborts a held attachment and never saves or prints after %s',
-  async (change) => {
+it.each([
+  ['logout', 'zip'],
+  ['other-tab', 'zip'],
+  ['close', 'zip'],
+  ['unmount', 'zip'],
+  ['logout', 'pdf'],
+  ['other-tab', 'pdf'],
+  ['close', 'pdf'],
+  ['unmount', 'pdf'],
+] as const)(
+  'aborts a held attachment and never saves or prints after %s during %s',
+  async (change, format) => {
     let finish!: (response: Response) => void;
     let signal: AbortSignal | null | undefined;
     vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
@@ -113,11 +122,11 @@ it.each(['logout', 'other-tab', 'close', 'unmount'] as const)(
       });
     });
     const prepare = vi.spyOn(exporting, 'prepareExport');
-    const view = await start('zip');
+    const view = await start(format);
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     if (change === 'unmount') view.unmount();
     else if (change === 'close')
-      await fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+      await fireEvent.click(screen.getAllByRole('button', { name: '닫기' })[0]!);
     else hideSession(change === 'logout' ? 'logout' : 'restore');
     flushSync();
     expect.soft(signal?.aborted).toBe(true);
