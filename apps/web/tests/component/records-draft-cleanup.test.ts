@@ -399,3 +399,44 @@ it('keeps app startup working when browser storage cannot be enumerated', async 
 
   await startWithoutOpeningRecords();
 });
+
+it.each(['focus', 'visibilitychange'])(
+  'retries failed startup record cleanup when the window returns through %s',
+  async (event) => {
+    const old = draft(null);
+    old.input.form.title = 'SHORT_UNOPENED_TITLE';
+    const value = JSON.stringify(old);
+    localStorage.setItem(recordKey, value);
+    const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new DOMException('enumeration unavailable', 'SecurityError');
+    });
+    await startWithoutOpeningRecords();
+    expect(localStorage.getItem(recordKey)).toBe(value);
+    enumeration.mockRestore();
+
+    if (event === 'focus') window.dispatchEvent(new Event(event));
+    else {
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+      document.dispatchEvent(new Event(event));
+    }
+
+    await waitFor(() => {
+      expect(localStorage.getItem(recordKey)).not.toContain('SHORT_UNOPENED_TITLE');
+    });
+    expect(localStorage.getItem(recordKey)).toContain('Keep current long writing');
+  },
+);
+
+it('does not retry record cleanup while hidden or after the app unmounts', async () => {
+  await startWithoutOpeningRecords();
+  const value = saved({ requestId, signature: legacySignature });
+  localStorage.setItem(recordKey, value);
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(localStorage.getItem(recordKey)).toBe(value);
+  cleanup();
+  window.dispatchEvent(new Event('focus'));
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(localStorage.getItem(recordKey)).toBe(value);
+});

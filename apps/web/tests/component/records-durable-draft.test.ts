@@ -78,6 +78,64 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it.each(['held:old-offer', 'tab:other-tab'])(
+  'repairs a missed legacy full form at its original %s key when the record panel opens',
+  async (suffix) => {
+    const key = `fvoci:user-a:-:form-draft:record:draft-item:risk:new:${suffix}`;
+    const form = {
+      ...emptyForm(),
+      title: 'SHORT_ORIGINAL_TITLE',
+      body: 'Unsent original body',
+      values: { mitigation: 'Unsent mitigation', amount: 'SHORT_AMOUNT' },
+    };
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: '2026-10-28T12:00:00Z',
+        input: {
+          form,
+          baseline: JSON.stringify({ ...form, title: 'SHORT_BASE', body: 'Before editing' }),
+          version: 3,
+          pending: null,
+        },
+      }),
+    );
+    const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new DOMException('enumeration unavailable', 'SecurityError');
+    });
+    clearLegacyRecordDrafts();
+    enumeration.mockRestore();
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+    await screen.findByRole('button', { name: m.common_draft_restore() });
+
+    const value = localStorage.getItem(key);
+    expect(value).not.toBeNull();
+    expect(value).not.toContain('SHORT_');
+    expect(value).toContain('Unsent original body');
+    expect(value).toContain('Unsent mitigation');
+    expect(value).toContain('Before editing');
+  },
+);
+
+it.each(['held:old-offer', 'tab:other-tab'])(
+  'removes malformed drafts at their original %s key after startup cleanup failed',
+  async (suffix) => {
+    const key = `fvoci:user-a:-:form-draft:record:draft-item:risk:new:${suffix}`;
+    localStorage.setItem(key, '{"input":{"form":{"title":"SHORT_BROKEN"');
+    const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new DOMException('enumeration unavailable', 'SecurityError');
+    });
+    clearLegacyRecordDrafts();
+    enumeration.mockRestore();
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  },
+);
+
 it('normalizes record form and baseline before holding a draft missed by startup cleanup', async () => {
   const key = formDraftTabKey('record:draft-item:risk:new');
   if (key === undefined) throw new Error('missing record draft key');
