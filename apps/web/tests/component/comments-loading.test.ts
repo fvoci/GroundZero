@@ -1,7 +1,7 @@
+import { activityApi } from '$lib/features/activity/api';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
 import CommentsPanel from '$lib/features/comments/CommentsPanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
@@ -14,7 +14,7 @@ describe('comments loading state', () => {
   it('says loading until the first list arrives, then shows the empty text', async () => {
     await setLocale('ko', { reload: false });
     let resolve: (list: []) => void = () => undefined;
-    vi.spyOn(api, 'comments').mockReturnValue(
+    vi.spyOn(activityApi, 'comments').mockReturnValue(
       new Promise((r) => {
         resolve = r;
       }),
@@ -33,7 +33,7 @@ describe('comments loading state', () => {
   it('changes the loading and empty text inside a live region', async () => {
     await setLocale('ko', { reload: false });
     let resolve: (list: []) => void = () => undefined;
-    vi.spyOn(api, 'comments').mockReturnValue(
+    vi.spyOn(activityApi, 'comments').mockReturnValue(
       new Promise((r) => {
         resolve = r;
       }),
@@ -50,7 +50,7 @@ describe('comments loading state', () => {
   // 앞 대상의 불러오기 실패 문구가 다른 대상으로 넘어가면 남지 않고, 새 대상은 불러오는 중으로 시작한다(리뷰).
   it('drops the previous target error when the target changes', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'comments')
+    vi.spyOn(activityApi, 'comments')
       .mockRejectedValueOnce(new Error('load failed'))
       .mockReturnValue(new Promise(() => undefined));
     const view = render(CommentsPanel, { props: { target: { kind: 'document', id: 'doc-1' } } });

@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { activityApi, type NotificationView, type PageCursor } from '$lib/features/activity/api';
   import { untrack } from 'svelte';
   import type { Workspace } from '@fvoci/api-client';
-  import { api, type NotificationView, type PageCursor } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
   import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
@@ -51,8 +51,8 @@
     failedCursor = cursor;
     try {
       const [page, count] = await Promise.all([
-        api.notifications(organizationId, cursor),
-        api.unreadCount(organizationId),
+        activityApi.notifications(organizationId, cursor),
+        activityApi.unreadCount(organizationId),
       ]);
       if (ticket !== generation) return;
       items =
@@ -95,12 +95,12 @@
     readError = undefined;
     failedRead = id;
     try {
-      await api.markNotificationsRead(organizationId, id);
+      await activityApi.markNotificationsRead(organizationId, id);
       if (ticket !== generation) return;
       items = items.map((n) => (id === null || n.id === id ? { ...n, read: true } : n));
       onchanged();
       // 읽은 수를 빼서 추정하지 않는다. 목록 밖 알림까지 서버가 센다(D-118).
-      const count = await api.unreadCount(organizationId);
+      const count = await activityApi.unreadCount(organizationId);
       if (ticket === generation) unread = count;
     } catch (e: unknown) {
       if (ticket === generation) readError = errorText(e, m.references_notifications_read_failed());

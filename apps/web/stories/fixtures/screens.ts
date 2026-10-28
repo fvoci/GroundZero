@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 // 화면 단위 story(Screens/)의 준비: 경로(router.path), 사이드바가 같이 쓰는 목록(workspaceNav), 서버 응답(`api` 함수)과
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
@@ -29,14 +30,14 @@ import {
 /** 화면이 부르는 서버 함수. 기본값은 합성 데이터로 답하고, story가 일부만 바꾼다. */
 export interface ScreenApi {
   myTasks: typeof api.myTasks;
-  recentActivity: typeof api.recentActivity;
+  recentActivity: typeof activityApi.recentActivity;
   modules: typeof api.modules;
   wikiDocuments: typeof api.wikiDocuments;
   module: typeof api.module;
   items: typeof api.items;
   home: typeof api.home;
   calendar: typeof api.calendar;
-  notifications: typeof api.notifications;
+  notifications: typeof activityApi.notifications;
   myInvitations: typeof api.myInvitations;
   currentTimer: typeof api.currentTimer;
   // 업무 보기는 서버 상태 정의를 함께 읽는다.
@@ -50,7 +51,7 @@ export interface ScreenApi {
   assignable: typeof work.assignable;
   search: typeof api.search;
   myOrganizations: typeof api.myOrganizations;
-  unreadCount: typeof api.unreadCount;
+  unreadCount: typeof activityApi.unreadCount;
 }
 
 /** 응답이 오지 않는 요청(불러오는 중). */
@@ -141,14 +142,14 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   document.body.style.removeProperty('pointer-events');
   const stubs: ScreenApi = { ...DEFAULTS, ...taskServer(), ...overrides };
   spyOn(api, 'myTasks').mockImplementation(stubs.myTasks);
-  spyOn(api, 'recentActivity').mockImplementation(stubs.recentActivity);
+  spyOn(activityApi, 'recentActivity').mockImplementation(stubs.recentActivity);
   spyOn(api, 'modules').mockImplementation(stubs.modules);
   spyOn(api, 'wikiDocuments').mockImplementation(stubs.wikiDocuments);
   spyOn(api, 'module').mockImplementation(stubs.module);
   spyOn(api, 'items').mockImplementation(stubs.items);
   spyOn(api, 'home').mockImplementation(stubs.home);
   spyOn(api, 'calendar').mockImplementation(stubs.calendar);
-  spyOn(api, 'notifications').mockImplementation(stubs.notifications);
+  spyOn(activityApi, 'notifications').mockImplementation(stubs.notifications);
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
   spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
   spyOn(work, 'tasks').mockImplementation(stubs.tasks);
@@ -162,7 +163,7 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(work, 'assignable').mockImplementation(stubs.assignable);
   spyOn(api, 'search').mockImplementation(stubs.search);
   spyOn(api, 'myOrganizations').mockImplementation(stubs.myOrganizations);
-  spyOn(api, 'unreadCount').mockImplementation(stubs.unreadCount);
+  spyOn(activityApi, 'unreadCount').mockImplementation(stubs.unreadCount);
 
   // 개인 화면은 현재 조직 범위다(D-111). story는 합성 조직 하나를 고른 상태로 시작한다.
   org.load('story-user', [ORGANIZATION], ORGANIZATION.id);

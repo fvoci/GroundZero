@@ -1,5 +1,5 @@
 //! 접근 등급(D-113). SQL `app_access(kind, id)` 하나가 none/read/write/owner를 계산하고 서버는 그 결과만 쓴다.
-//! 역할·보관·개별 공유·조직 경계로 등급을 다시 계산하지 않는다. 등급을 읽는 질의 도우미는 서버의 `access`에 있다.
+//! 역할·보관·개별 공유·조직 경계로 등급을 다시 계산하지 않는다. 등급을 읽는 질의 도우미는 `fvoci_db::access`에 있다.
 //! DB 정의는 `crates/db/migrations/202610280002_organizations.sql`.
 
 use serde::{Deserialize, Serialize};
