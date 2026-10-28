@@ -96,13 +96,13 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
     let entries = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await
     .json;
-    let titles: Vec<&str> = entries["entries"]
+    let titles: Vec<&str> = entries
         .as_array()
         .unwrap()
         .iter()

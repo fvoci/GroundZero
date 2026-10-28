@@ -495,17 +495,17 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await;
-    assert_eq!(trash.json["entries"][0]["kind"], "file");
+    assert_eq!(trash.json[0]["kind"], "file");
     assert_eq!(
         send(
             &app,
             Method::POST,
-            &format!("/api/trash/{batch}/restore"),
+            &format!("/api/trash-batches/{batch}/restore"),
             Some(&writer),
             None
         )
@@ -537,7 +537,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&admin),
             None
         )
@@ -830,7 +830,7 @@ async fn s3_files_round_trip_and_purge_with_the_document() {
         send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&admin),
             None
         )
@@ -928,16 +928,16 @@ async fn moving_a_document_takes_its_attachments_along() {
             send(
                 &app,
                 Method::GET,
-                &format!("/api/workspaces/{ws}/trash"),
+                &format!("/api/trash-batches?workspace_id={ws}"),
                 Some(&user),
                 None,
             )
             .await
-            .json["entries"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["id"] == batch.as_str())
+            .json
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["id"] == batch.as_str())
         }
     };
     for batch in [batch, early_batch] {
@@ -946,7 +946,7 @@ async fn moving_a_document_takes_its_attachments_along() {
         let restore = send(
             &app,
             Method::POST,
-            &format!("/api/trash/{batch}/restore"),
+            &format!("/api/trash-batches/{batch}/restore"),
             Some(&src_admin),
             None,
         )
@@ -955,7 +955,7 @@ async fn moving_a_document_takes_its_attachments_along() {
         let purge = send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&src_admin),
             None,
         )

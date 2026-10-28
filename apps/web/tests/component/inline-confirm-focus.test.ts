@@ -30,8 +30,7 @@ const entry: TrashEntryView = {
   deleted_by_name: '관리자',
   deleted_at: '2026-10-20T01:00:00Z',
   expires_at: '2026-11-19T01:00:00Z',
-  expired: false,
-  kept_for_references: false,
+  expiry: 'active',
   can_purge: true,
 };
 

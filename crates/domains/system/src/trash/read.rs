@@ -1,8 +1,8 @@
-use super::model::{Trash, TrashEntry, TrashKind};
+use super::model::{RetentionSettings, TrashEntry, TrashExpiry, TrashKind, TrashScope};
 use crate::SystemState;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
 use fvoci_core::{
     error::{AppError, ErrorBody},
@@ -69,8 +69,13 @@ async fn entries(
                     deleted_by_name: name,
                     deleted_at,
                     expires_at,
-                    expired: expires_at <= now,
-                    kept_for_references: kept.contains(&id),
+                    expiry: if expires_at > now {
+                        TrashExpiry::Active
+                    } else if kept.contains(&id) {
+                        TrashExpiry::KeptForReferences
+                    } else {
+                        TrashExpiry::Expired
+                    },
                     can_purge,
                 })
             },
@@ -78,45 +83,44 @@ async fn entries(
         .collect()
 }
 
-/// 워크스페이스 휴지통(관리자는 전부, 작성자는 자기가 지운 것만).
-#[utoipa::path(get, path = "/api/workspaces/{workspace_id}/trash", operation_id = "workspace_trash",
+/// 휴지통 묶음 모음. 공간은 관리자·지운 사람의 범위, 개인은 본인 범위로 읽는다.
+#[utoipa::path(get, path = "/api/trash-batches", operation_id = "list_trash_batches",
+    params(TrashScope),
+    responses((status = 200, body = Vec<TrashEntry>), (status = 404, body = ErrorBody)), tag = "trash")]
+pub async fn list(
+    State(state): State<SystemState>,
+    CurrentUser(user): CurrentUser,
+    Query(scope): Query<TrashScope>,
+) -> Result<Json<Vec<TrashEntry>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    if let Some(ws) = scope.workspace_id {
+        fvoci_db::access::require_visible(&mut tx, fvoci_core::access::Kind::Workspace, ws).await?;
+    }
+    let entries = entries(&mut tx, scope.workspace_id).await?;
+    tx.commit().await?;
+    Ok(Json(entries))
+}
+
+/// 공간 보존 설정. 공간을 볼 수 있는 사람에게 기존과 같은 설정만 공개한다.
+#[utoipa::path(get, path = "/api/workspaces/{workspace_id}/retention", operation_id = "workspace_retention",
     params(("workspace_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = Trash), (status = 404, body = ErrorBody)), tag = "trash")]
-pub async fn workspace_trash(
+    responses((status = 200, body = RetentionSettings), (status = 404, body = ErrorBody)), tag = "trash")]
+pub async fn retention(
     State(state): State<SystemState>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
-) -> Result<Json<Trash>, AppError> {
+) -> Result<Json<RetentionSettings>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     fvoci_db::access::require_visible(&mut tx, fvoci_core::access::Kind::Workspace, ws).await?;
-    let (retention_days, version_retention_days): (i32, Option<i32>) = sqlx::query_as(
+    let (retention_days, version_retention_days) = sqlx::query_as(
         "SELECT trash_retention_days, version_retention_days FROM workspaces WHERE id = $1",
     )
     .bind(ws)
     .fetch_one(tx.conn())
     .await?;
-    let entries = entries(&mut tx, Some(ws)).await?;
     tx.commit().await?;
-    Ok(Json(Trash {
+    Ok(Json(RetentionSettings {
         retention_days,
         version_retention_days,
-        entries,
-    }))
-}
-
-/// 내 개인 노트 휴지통(보존 30일).
-#[utoipa::path(get, path = "/api/me/trash", operation_id = "my_trash",
-    responses((status = 200, body = Trash)), tag = "trash")]
-pub async fn my_trash(
-    State(state): State<SystemState>,
-    CurrentUser(user): CurrentUser,
-) -> Result<Json<Trash>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let entries = entries(&mut tx, None).await?;
-    tx.commit().await?;
-    Ok(Json(Trash {
-        retention_days: 30,
-        version_retention_days: None,
-        entries,
     }))
 }

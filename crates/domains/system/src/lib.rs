@@ -7,12 +7,13 @@ pub mod export;
 pub mod state;
 pub mod trash;
 
+use axum::middleware::from_extractor_with_state;
 use axum::{
     Router,
     extract::FromRef,
     routing::{delete, get, post, put},
 };
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 pub use state::SystemState;
 use utoipa::OpenApi;
 
@@ -22,12 +23,11 @@ use utoipa::OpenApi;
         trash::trash_document,
         trash::trash_item,
         trash::trash_module,
-        trash::workspace_trash,
-        trash::my_trash,
+        trash::list,
+        trash::retention,
         trash::restore,
         trash::purge,
         trash::purge_expired,
-        trash::purge_my_expired,
         trash::set_retention,
         trash::set_version_retention,
         export::workspace,
@@ -37,7 +37,8 @@ use utoipa::OpenApi;
         trash::Trashed,
         trash::TrashKind,
         trash::TrashEntry,
-        trash::Trash,
+        trash::RetentionSettings,
+        trash::TrashExpiry,
         trash::Purged,
         trash::SetRetention,
         trash::SetVersionRetention,
@@ -45,8 +46,8 @@ use utoipa::OpenApi;
 )]
 pub struct SystemApi;
 
-/// 시스템 경로. 이 단계는 기존 HTTP 계약을 그대로 옮긴다.
-pub fn router<S>() -> Router<S>
+/// 시스템 경로. 모든 명령에서 보낸 기대 사용자를 비교한다(D-96).
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     SystemState: FromRef<S>,
@@ -57,25 +58,24 @@ where
         .route("/items/{item_id}", delete(trash::trash_item))
         .route("/modules/{module_id}", delete(trash::trash_module))
         .route(
-            "/workspaces/{workspace_id}/trash",
-            get(trash::workspace_trash),
+            "/workspaces/{workspace_id}/retention",
+            get(trash::retention),
         )
-        .route("/me/trash", get(trash::my_trash))
-        .route("/trash/{batch_id}/restore", post(trash::restore))
-        .route("/trash/{batch_id}", delete(trash::purge))
+        .route("/trash-batches", get(trash::list))
+        .route("/trash-batches/{batch_id}/restore", post(trash::restore))
+        .route("/trash-batches/{batch_id}", delete(trash::purge))
+        .route("/trash-batches/purge-expired", post(trash::purge_expired))
         .route(
-            "/workspaces/{workspace_id}/trash/purge-expired",
-            post(trash::purge_expired),
-        )
-        .route("/me/trash/purge-expired", post(trash::purge_my_expired))
-        .route(
-            "/workspaces/{workspace_id}/trash-retention",
+            "/workspaces/{workspace_id}/retention/trash",
             put(trash::set_retention),
         )
         .route(
-            "/workspaces/{workspace_id}/version-retention",
+            "/workspaces/{workspace_id}/retention/file-versions",
             put(trash::set_version_retention),
         )
         .route("/workspaces/{workspace_id}/export", get(export::workspace))
         .route("/me/export", get(export::mine))
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }
