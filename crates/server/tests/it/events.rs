@@ -429,15 +429,12 @@ async fn calendar_scopes_and_date_sources_follow_item_access() {
     let course_view = send(
         &app,
         Method::GET,
-        &format!("/api/items/{course}/course"),
+        &format!("/api/items/{course}/episodes"),
         Some(&writer),
         None,
     )
     .await;
-    let second = course_view.json["episodes"][1]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let second = course_view.json[1]["id"].as_str().unwrap().to_owned();
     // 작성자만 둘째 회차를 11-10으로 옮긴다(개인 계획일).
     let r = send(
         &app,

@@ -1,4 +1,4 @@
-//! 모듈 기능 유형. 서버와 도메인이 같은 타입을 사용한다.
+//! 여러 영역의 응답이 공유하는 모듈 기능 유형.
 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

@@ -383,15 +383,12 @@ async fn restoring_a_document_leaves_tasks_and_progress_alone() {
     let course = send(
         &app,
         Method::GET,
-        &format!("/api/items/{item_id}/course"),
+        &format!("/api/items/{item_id}/episodes"),
         Some(&admin),
         None,
     )
     .await;
-    let episode = course.json["episodes"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let episode = course.json[0]["id"].as_str().unwrap().to_owned();
     send(
         &app,
         Method::PUT,
@@ -426,10 +423,10 @@ async fn restoring_a_document_leaves_tasks_and_progress_alone() {
     let course_now = send(
         &app,
         Method::GET,
-        &format!("/api/items/{item_id}/course"),
+        &format!("/api/items/{item_id}/episode-progress"),
         Some(&admin),
         None,
     )
     .await;
-    assert_eq!(course_now.json["episodes"][0]["mine"]["status"], "done");
+    assert_eq!(course_now.json[0]["status"], "done");
 }

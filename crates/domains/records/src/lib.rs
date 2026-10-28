@@ -3,24 +3,29 @@
 #![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
 
 pub mod courses;
+pub mod learning;
 pub mod records;
 mod state;
 pub mod study;
+mod validation;
 pub mod zotero;
 pub use state::RecordsState;
 
+use axum::middleware::from_extractor_with_state;
 use axum::{
     Router,
     extract::FromRef,
     routing::{get, post, put},
 };
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use utoipa::OpenApi;
 
 #[derive(Debug, OpenApi)]
 #[openapi(
     paths(
         study::get,
+        study::units,
+        study::progress,
         study::add_units,
         study::update_unit,
         study::delete_unit,
@@ -35,6 +40,8 @@ use utoipa::OpenApi;
         records::update,
         records::delete,
         courses::get,
+        courses::episodes,
+        courses::progress,
         courses::set_details,
         courses::add_episodes,
         courses::update_episode,
@@ -43,6 +50,10 @@ use utoipa::OpenApi;
         courses::participants,
     ),
     components(schemas(
+        learning::LearningAccess,
+        courses::EpisodeWriteConflict,
+        study::UnitWriteConflict,
+        records::RecordWriteConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -83,7 +94,7 @@ use utoipa::OpenApi;
 )]
 pub struct RecordsApi;
 
-pub fn router<S>() -> Router<S>
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     RecordsState: FromRef<S>,
@@ -94,7 +105,11 @@ where
         .route("/zotero/collections", post(zotero::list_collections))
         .route("/items/{item_id}/zotero/import", post(zotero::import))
         .route("/items/{item_id}/study", get(study::get))
-        .route("/items/{item_id}/study/units", post(study::add_units))
+        .route("/items/{item_id}/study/progress", get(study::progress))
+        .route(
+            "/items/{item_id}/study/units",
+            get(study::units).post(study::add_units),
+        )
         .route("/items/{item_id}/study/plan", put(study::plan))
         .route(
             "/items/{item_id}/study/participants",
@@ -121,7 +136,11 @@ where
             "/items/{item_id}/course/participants",
             get(courses::participants),
         )
-        .route("/items/{item_id}/episodes", post(courses::add_episodes))
+        .route(
+            "/items/{item_id}/episodes",
+            get(courses::episodes).post(courses::add_episodes),
+        )
+        .route("/items/{item_id}/episode-progress", get(courses::progress))
         .route(
             "/episodes/{episode_id}",
             put(courses::update_episode).delete(courses::delete_episode),
@@ -130,4 +149,7 @@ where
             "/episodes/{episode_id}/progress",
             put(courses::set_progress),
         )
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

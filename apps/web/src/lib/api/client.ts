@@ -1,3 +1,8 @@
+import { courseApi } from '$lib/features/courses/api';
+import { loadCourseView } from '$lib/features/courses/course-data';
+import { studyApi } from '$lib/features/study/api';
+import { loadStudyView } from '$lib/features/study/study-data';
+import { recordsApi } from '$lib/features/records/api';
 import { EXPECTED_USER, request, expectOk, fail, ApiError, NetworkError } from '$lib/shared/api';
 export { ApiError, NetworkError } from '$lib/shared/api';
 import {
@@ -748,170 +753,18 @@ export function parseItemProfile(value: Json): ItemProfileView {
   };
 }
 
-// --- 항목 기록 (D-33·D-34·D-36·D-38) -------------------------------------
-
-export type RecordFieldType =
-  | 'text'
-  | 'long_text'
-  | 'date'
-  | 'number'
-  | 'choice'
-  | 'url'
-  | 'tags'
-  | 'person'
-  | 'people'
-  | 'course'
-  /** 이 강좌의 회차(D-123 강의 질문·복습). */
-  | 'episode';
-
-const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
-  'text',
-  'long_text',
-  'date',
-  'number',
-  'choice',
-  'url',
-  'tags',
-  'person',
-  'people',
-  'course',
-  'episode',
-];
-
-export interface ChoiceView {
-  value: string;
-  label: string;
-}
-
-export interface RecordFieldDef {
-  key: string;
-  label: string;
-  type: RecordFieldType;
-  choices: ChoiceView[];
-}
-
-export interface RecordKindView {
-  kind: string;
-  label: string;
-  module_kind: string;
-  date_label: string | null;
-  fields: RecordFieldDef[];
-  file_roles: ChoiceView[];
-}
-
-/** 칸 값: 글자·수·날짜·고른 값·사람 id·사람 id 목록·태그 목록. */
-export type RecordFieldValue = string | number | string[];
-
-export interface RecordFileView {
-  role: string;
-  file_id: string | null;
-  file_name: string;
-  version: number;
-  sha256: string;
-  size: number;
-  available: boolean;
-}
-
-export interface RecordView {
-  id: string;
-  kind: string;
-  title: string;
-  occurred_on: string | null;
-  body: string;
-  fields: Record<string, RecordFieldValue>;
-  files: RecordFileView[];
-  created_by: string;
-  created_by_name: string | null;
-  updated_at: string;
-  version: number;
-  can_edit: boolean;
-  can_delete: boolean;
-}
-
-export interface RecordInput {
-  title: string;
-  occurred_on: string | null;
-  body: string;
-  fields: Record<string, RecordFieldValue>;
-  files: { file_id: string; version: number | null; role: string }[];
-}
-
-function parseChoice(value: Json): ChoiceView {
-  const o = rec(value, 'choice');
-  return { value: str(o, 'value'), label: str(o, 'label') };
-}
-
-export function parseRecordKind(value: Json): RecordKindView {
-  const o = rec(value, 'record kind');
-  return {
-    kind: str(o, 'kind'),
-    label: str(o, 'label'),
-    module_kind: str(o, 'module_kind'),
-    date_label: optStr(o, 'date_label'),
-    fields: parseList(o.fields, (f): RecordFieldDef => {
-      const r = rec(f, 'record field');
-      const type = RECORD_FIELD_TYPES.find((t) => t === r.type);
-      if (type === undefined) throw new TypeError('unknown record field type');
-      return {
-        key: str(r, 'key'),
-        label: str(r, 'label'),
-        type,
-        choices: parseList(r.choices, parseChoice),
-      };
-    }),
-    file_roles: parseList(o.file_roles, parseChoice),
-  };
-}
-
-function recordFieldValue(value: unknown): RecordFieldValue | undefined {
-  if (typeof value === 'string' || typeof value === 'number') return value;
-  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) return value;
-  return undefined;
-}
-
-export function parseRecord(value: Json): RecordView {
-  const o = rec(value, 'record');
-  const raw = rec(o.fields ?? {}, 'record fields');
-  const fields: Record<string, RecordFieldValue> = {};
-  for (const [key, v] of Object.entries(raw)) {
-    const parsed = recordFieldValue(v);
-    if (parsed !== undefined) fields[key] = parsed;
-  }
-  return {
-    id: str(o, 'id'),
-    kind: str(o, 'kind'),
-    title: str(o, 'title'),
-    occurred_on: optStr(o, 'occurred_on'),
-    body: str(o, 'body'),
-    fields,
-    files: parseList(o.files, (f): RecordFileView => {
-      const r = rec(f, 'record file');
-      return {
-        role: str(r, 'role'),
-        file_id: optStr(r, 'file_id'),
-        file_name: str(r, 'file_name'),
-        version: int(r, 'version'),
-        sha256: str(r, 'sha256'),
-        size: int(r, 'size'),
-        available: bool(r, 'available'),
-      };
-    }),
-    created_by: str(o, 'created_by'),
-    created_by_name: optStr(o, 'created_by_name'),
-    updated_at: str(o, 'updated_at'),
-    version: int(o, 'version'),
-    can_edit: bool(o, 'can_edit'),
-    can_delete: bool(o, 'can_delete'),
-  };
-}
-
-// --- Zotero 읽기 (D-34) ------------------------------------------------------
-
-export interface ZoteroLibraryInput {
-  api_key: string;
-  library_type: 'user' | 'group';
-  library_id: string;
-}
+export type {
+  RecordFieldType,
+  ChoiceView,
+  RecordFieldDef,
+  RecordKindView,
+  RecordFieldValue,
+  RecordFileView,
+  RecordView,
+  RecordInput,
+  ZoteroLibraryInput,
+} from '$lib/features/records/model';
+export { parseRecordKind, parseRecord } from '$lib/features/records/model';
 
 // --- 저장한 보기 (D-31) ------------------------------------------------------
 
@@ -933,77 +786,13 @@ export function parseSavedView(value: Json): SavedViewView {
   };
 }
 
-// --- 스터디 계획 (D-36) ------------------------------------------------------
-
-export const STUDY_UNIT_KINDS = ['pages', 'problems', 'minutes', 'items'] as const;
-export type StudyUnitKind = (typeof STUDY_UNIT_KINDS)[number];
-
-export interface StudyUnitView {
-  id: string;
-  number: number;
-  title: string;
-  chapter: string;
-  unit: StudyUnitKind;
-  amount: number;
-  planned_on: string | null;
-  mine: {
-    status: EpisodeStatus;
-    done_amount: number;
-    planned_on: string | null;
-    completed_on: string | null;
-    note: string;
-  };
-  /** 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409). */
-  version: number;
-}
-
-export interface StudyPlanView {
-  units: StudyUnitView[];
-  can_write: boolean;
-}
-
-export interface StudyParticipantView {
-  user_id: string;
-  display_name: string;
-  done: number;
-  in_progress: number;
-  overdue: number;
-  done_amount: number;
-}
-
-function studyUnitKind(value: string): StudyUnitKind {
-  const found = STUDY_UNIT_KINDS.find((k) => k === value);
-  if (found === undefined) throw new TypeError(`unknown study unit ${value}`);
-  return found;
-}
-
-export function parseStudyPlan(value: Json): StudyPlanView {
-  const o = rec(value, 'study plan');
-  return {
-    can_write: bool(o, 'can_write'),
-    units: parseList(o.units, (u): StudyUnitView => {
-      const r = rec(u, 'study unit');
-      const m = rec(r.mine, 'unit progress');
-      return {
-        id: str(r, 'id'),
-        number: int(r, 'number'),
-        title: str(r, 'title'),
-        chapter: str(r, 'chapter'),
-        unit: studyUnitKind(str(r, 'unit')),
-        amount: int(r, 'amount'),
-        planned_on: optStr(r, 'planned_on'),
-        mine: {
-          status: episodeStatus(str(m, 'status')),
-          done_amount: int(m, 'done_amount'),
-          planned_on: optStr(m, 'planned_on'),
-          completed_on: optStr(m, 'completed_on'),
-          note: str(m, 'note'),
-        },
-        version: int(r, 'version'),
-      };
-    }),
-  };
-}
+export type {
+  StudyUnitKind,
+  StudyUnitView,
+  StudyPlanView,
+  StudyParticipantView,
+} from '$lib/features/study/model';
+export { STUDY_UNIT_KINDS } from '$lib/features/study/model';
 
 // --- @ 참조 -------------------------------------------------------------
 
@@ -1866,123 +1655,14 @@ function parseComment(value: Json): CommentView {
   };
 }
 
-export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
-
-export interface CourseDetailsView {
-  subject: string;
-  instructor: string;
-  platform: string;
-  url: string;
-  textbook: string;
-  starts_on: string | null;
-  expires_on: string | null;
-  target_on: string | null;
-}
-
-export interface EpisodeView {
-  id: string;
-  number: number;
-  title: string;
-  chapter: string;
-  duration_seconds: number;
-  url: string;
-  materials: string;
-  planned_on: string | null;
-  mine: {
-    status: EpisodeStatus;
-    planned_on: string | null;
-    completed_on: string | null;
-    watch_count: number;
-    last_position_seconds: number | null;
-    note: string;
-  };
-  /** 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409). */
-  version: number;
-}
-
-export interface CourseView {
-  details: CourseDetailsView;
-  episodes: EpisodeView[];
-  can_write: boolean;
-}
-
-export interface ParticipantView {
-  user_id: string;
-  display_name: string;
-  done: number;
-  in_progress: number;
-  overdue: number;
-  done_seconds: number;
-}
-
-export interface NewEpisodeInput {
-  request_id: string;
-  number?: number;
-  title: string;
-  chapter: string;
-  duration_seconds: number;
-  url: string;
-  materials: string;
-  planned_on: string | null;
-}
-
-function episodeStatus(value: string): EpisodeStatus {
-  if (value === 'not_started' || value === 'in_progress' || value === 'done') return value;
-  throw new TypeError(`unknown episode status ${value}`);
-}
-
-function parseCourse(value: Json): CourseView {
-  const o = rec(value, 'course');
-  const d = rec(o.details, 'course details');
-  return {
-    details: {
-      subject: str(d, 'subject'),
-      instructor: str(d, 'instructor'),
-      platform: str(d, 'platform'),
-      url: str(d, 'url'),
-      textbook: str(d, 'textbook'),
-      starts_on: optStr(d, 'starts_on'),
-      expires_on: optStr(d, 'expires_on'),
-      target_on: optStr(d, 'target_on'),
-    },
-    episodes: parseList(o.episodes, (v): EpisodeView => {
-      const e = rec(v, 'episode');
-      const m = rec(e.mine, 'episode progress');
-      return {
-        id: str(e, 'id'),
-        number: int(e, 'number'),
-        title: str(e, 'title'),
-        chapter: str(e, 'chapter'),
-        duration_seconds: int(e, 'duration_seconds'),
-        url: str(e, 'url'),
-        materials: str(e, 'materials'),
-        planned_on: optStr(e, 'planned_on'),
-        mine: {
-          status: episodeStatus(str(m, 'status')),
-          planned_on: optStr(m, 'planned_on'),
-          completed_on: optStr(m, 'completed_on'),
-          watch_count: int(m, 'watch_count'),
-          last_position_seconds: optInt(m, 'last_position_seconds'),
-          note: str(m, 'note'),
-        },
-        version: int(e, 'version'),
-      };
-    }),
-    can_write: bool(o, 'can_write'),
-  };
-}
-
-function parseParticipant(value: Json): ParticipantView {
-  const o = rec(value, 'participant');
-  return {
-    user_id: str(o, 'user_id'),
-    display_name: str(o, 'display_name'),
-    done: int(o, 'done'),
-    in_progress: int(o, 'in_progress'),
-    overdue: int(o, 'overdue'),
-    done_seconds: int(o, 'done_seconds'),
-  };
-}
+export type {
+  EpisodeStatus,
+  CourseDetailsView,
+  EpisodeView,
+  CourseView,
+  ParticipantView,
+  NewEpisodeInput,
+} from '$lib/features/courses/model';
 
 export interface DeletedWorkspaceView {
   id: string;
@@ -2243,111 +1923,10 @@ export const api = {
     expectOk('DELETE', `/api/comments/${encodeURIComponent(id)}`, none),
   resolveComment: (id: string, resolved: boolean) =>
     expectOk('POST', `/api/comments/${encodeURIComponent(id)}/resolve`, none, { resolved }),
-  course: (item: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(item)}/course`, parseCourse),
-  setCourseDetails: (item: string, details: CourseDetailsView) =>
-    expectOk('PUT', `/api/items/${encodeURIComponent(item)}/course`, none, { ...details }),
-  addEpisodes: (item: string, episodes: NewEpisodeInput[]) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(item)}/episodes`,
-      (v) => int(rec(v, 'episodes added'), 'added'),
-      { episodes: episodes.map((e) => ({ ...e })) },
-    ),
-  /** 회차 공통 정보 고치기. `version`은 읽은 판이며, 그 사이 다른 사람이 고쳤으면 409(아무것도 바뀌지 않음). */
-  updateEpisode: (
-    id: string,
-    version: number,
-    episode: Omit<NewEpisodeInput, 'request_id'> & { number: number },
-  ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}`, none, { version, ...episode }),
-  deleteEpisode: (id: string) =>
-    expectOk('DELETE', `/api/episodes/${encodeURIComponent(id)}`, none),
-  setEpisodeProgress: (
-    id: string,
-    progress: {
-      status: EpisodeStatus;
-      planned_on: string | null;
-      last_position_seconds: number | null;
-      note: string;
-      /** 사용자 시간대의 오늘(완료한 날). */
-      today: string;
-    },
-  ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}/progress`, none, { ...progress }),
-  courseParticipants: (item: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/items/${encodeURIComponent(item)}/course/participants?today=${encodeURIComponent(today)}`,
-      (v) => parseList(v, parseParticipant),
-    ),
-  studyPlan: (item: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(item)}/study`, parseStudyPlan),
-  addStudyUnits: (
-    item: string,
-    units: {
-      request_id: string;
-      title: string;
-      chapter: string;
-      unit: StudyUnitKind;
-      amount: number;
-      planned_on: string | null;
-    }[],
-  ) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(item)}/study/units`,
-      (v) => int(rec(v, 'units added'), 'added'),
-      { units: units.map((u) => ({ ...u })) },
-    ),
-  /** 공통 단위 고치기. `version`은 읽은 판이며, 그 사이 다른 사람이 고쳤으면 409(아무것도 바뀌지 않음). */
-  updateStudyUnit: (
-    id: string,
-    version: number,
-    unit: {
-      number: number;
-      title: string;
-      chapter: string;
-      unit: StudyUnitKind;
-      amount: number;
-      planned_on: string | null;
-    },
-  ) => expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}`, none, { version, ...unit }),
-  deleteStudyUnit: (id: string) =>
-    expectOk('DELETE', `/api/study-units/${encodeURIComponent(id)}`, none),
-  setUnitProgress: (
-    id: string,
-    progress: {
-      status: EpisodeStatus;
-      done_amount: number;
-      planned_on: string | null;
-      note: string;
-      today: string;
-    },
-  ) =>
-    expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}/progress`, none, { ...progress }),
-  planStudyUnits: (item: string, entries: { unit_id: string; planned_on: string | null }[]) =>
-    expectOk(
-      'PUT',
-      `/api/items/${encodeURIComponent(item)}/study/plan`,
-      (v) => int(rec(v, 'units planned'), 'planned'),
-      { entries: entries.map((e) => ({ ...e })) },
-    ),
-  studyParticipants: (item: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/items/${encodeURIComponent(item)}/study/participants?today=${encodeURIComponent(today)}`,
-      (v) =>
-        parseList(v, (p): StudyParticipantView => {
-          const o = rec(p, 'study participant');
-          return {
-            user_id: str(o, 'user_id'),
-            display_name: str(o, 'display_name'),
-            done: int(o, 'done'),
-            in_progress: int(o, 'in_progress'),
-            overdue: int(o, 'overdue'),
-            done_amount: int(o, 'done_amount'),
-          };
-        }),
-    ),
+  ...courseApi,
+  course: loadCourseView,
+  ...studyApi,
+  studyPlan: loadStudyView,
   /** 감사 기록(워크스페이스, 또는 null이면 내 개인 영역). before는 마지막으로 받은 기록 id. */
   audit: (workspaceId: string | null, before?: string) => {
     const base =
@@ -2453,33 +2032,6 @@ export const api = {
       target_workspace_id: target.workspaceId,
       target_item_id: target.itemId,
     }),
-  /** Zotero 컬렉션(D-34). 키는 이 요청에만 쓰고 서버가 저장하지 않는다. */
-  zoteroCollections: (library: ZoteroLibraryInput) =>
-    expectOk(
-      'POST',
-      '/api/zotero/collections',
-      (v) =>
-        parseList(v, (c) => {
-          const o = rec(c, 'zotero collection');
-          return { key: str(o, 'key'), name: str(o, 'name') };
-        }),
-      { ...library },
-    ),
-  /** Zotero 문헌을 연구 항목의 문헌 기록으로 가져온다(같은 문헌은 서지만 새로). */
-  zoteroImport: (itemId: string, library: ZoteroLibraryInput, collectionKey: string | null) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(itemId)}/zotero/import`,
-      (v) => {
-        const o = rec(v, 'zotero import');
-        return {
-          created: int(o, 'created'),
-          updated: int(o, 'updated'),
-          skipped: int(o, 'skipped'),
-        };
-      },
-      { ...library, collection_key: collectionKey },
-    ),
   /** 쓸 수 있는 문서 템플릿(D-27): 그 워크스페이스의 것과 내 개인 노트 템플릿. */
   documentTemplates: (workspaceId: string | null) =>
     expectOk(
@@ -2546,32 +2098,7 @@ export const api = {
     return { kind: 'saved', view: parseSavedView(json) };
   },
   deleteView: (id: string) => expectOk('DELETE', `/api/views/${encodeURIComponent(id)}`, none),
-  recordKinds: () => expectOk('GET', '/api/record-kinds', (v) => parseList(v, parseRecordKind)),
-  itemRecords: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/records`, (v) =>
-      parseList(v, parseRecord),
-    ),
-  createRecord: (itemId: string, requestId: string, kind: string, input: RecordInput) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(itemId)}/records`,
-      (v) => str(rec(v, 'created record'), 'id'),
-      {
-        request_id: requestId,
-        kind,
-        ...input,
-        fields: { ...input.fields },
-        files: [...input.files],
-      },
-    ),
-  updateRecord: (id: string, version: number, input: RecordInput) =>
-    expectOk(
-      'PUT',
-      `/api/records/${encodeURIComponent(id)}`,
-      (v) => int(rec(v, 'record version'), 'version'),
-      { version, ...input, fields: { ...input.fields }, files: [...input.files] },
-    ),
-  deleteRecord: (id: string) => expectOk('DELETE', `/api/records/${encodeURIComponent(id)}`, none),
+  ...recordsApi,
   itemProfile: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
   /** 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */

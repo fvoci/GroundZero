@@ -1,39 +1,22 @@
-//! 스터디 자원과 참여자 읽기.
+//! 스터디 정보·단위·개인 진행을 각각 읽는다.
 
-use super::{MyUnitProgress, StudyParticipant, StudyPlan, StudyUnit};
-use crate::RecordsState;
-use crate::courses::TodayQuery;
-use axum::extract::Query;
+use super::{MyUnitProgress, StudyPlan, StudyUnit};
+use crate::{
+    RecordsState,
+    learning::{self, LearningKind},
+};
 use axum::{
     Json,
     extract::{Path, State},
 };
-use fvoci_core::ids::UserId;
 use fvoci_core::{
     error::{AppError, ErrorBody},
     ids::ItemId,
 };
+use fvoci_db::UserTx;
 use fvoci_http::session::CurrentUser;
-use time::Date;
 use uuid::Uuid;
 
-type UnitRow = (
-    Uuid,
-    i32,
-    String,
-    String,
-    String,
-    i32,
-    Option<Date>,
-    Option<String>,
-    Option<i32>,
-    Option<Date>,
-    Option<Date>,
-    Option<String>,
-    i32,
-);
-
-/// 스터디 계획(볼 수 있는 사람). 스터디 모듈의 항목이 아니면 404.
 #[utoipa::path(get, path = "/api/items/{item_id}/study", operation_id = "get_study_plan",
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = StudyPlan), (status = 404, body = ErrorBody)), tag = "study")]
@@ -43,54 +26,69 @@ pub async fn get(
     Path(item): Path<ItemId>,
 ) -> Result<Json<StudyPlan>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let access: String = sqlx::query_scalar("SELECT app_study_access($1)")
-        .bind(item)
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    let archived: bool = sqlx::query_scalar(
-        "SELECT i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL
-         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
-    )
-    .bind(item)
-    .fetch_one(tx.conn())
-    .await?;
-    let rows: Vec<UnitRow> = sqlx::query_as(
-        "SELECT s.id, s.number, s.title, s.chapter, s.unit, s.amount, s.planned_on,
-                p.status, p.done_amount, p.planned_on, p.completed_on, p.note, s.version
-         FROM study_units s
-         LEFT JOIN unit_progress p ON p.unit_id = s.id AND p.user_id = app_user_id()
-         WHERE s.item_id = $1 ORDER BY s.number, s.created_at, s.id",
+    let access = learning::access(&mut tx, item, LearningKind::Study).await?;
+    tx.commit().await?;
+    Ok(Json(StudyPlan { access }))
+}
+
+#[utoipa::path(get, path = "/api/items/{item_id}/study/units", operation_id = "study_units",
+    params(("item_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [StudyUnit]), (status = 404, body = ErrorBody)), tag = "study")]
+pub async fn units(
+    State(state): State<RecordsState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+) -> Result<Json<Vec<StudyUnit>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    learning::access(&mut tx, item, LearningKind::Study).await?;
+    let rows = sqlx::query_as(
+        "SELECT id, number, title, chapter, unit, amount, planned_on, version
+         FROM study_units WHERE item_id = $1 ORDER BY number, created_at, id",
     )
     .bind(item)
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
-    let units = rows
-        .into_iter()
-        .map(|r| StudyUnit {
-            id: r.0,
-            number: r.1,
-            title: r.2,
-            chapter: r.3,
-            unit: r.4,
-            amount: r.5,
-            planned_on: r.6,
-            mine: MyUnitProgress {
-                status: r.7.unwrap_or_else(|| "not_started".into()),
-                done_amount: r.8.unwrap_or_default(),
-                planned_on: r.9,
-                completed_on: r.10,
-                note: r.11.unwrap_or_default(),
-            },
-            version: r.12,
-        })
-        .collect();
-    Ok(Json(StudyPlan {
-        units,
-        can_write: !archived && matches!(access.as_str(), "owner" | "write"),
-    }))
+    Ok(Json(rows))
 }
+
+#[utoipa::path(get, path = "/api/items/{item_id}/study/progress", operation_id = "my_study_progress",
+    params(("item_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [MyUnitProgress]), (status = 404, body = ErrorBody)), tag = "study")]
+pub async fn progress(
+    State(state): State<RecordsState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+) -> Result<Json<Vec<MyUnitProgress>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    learning::access(&mut tx, item, LearningKind::Study).await?;
+    let rows = sqlx::query_as(
+        "SELECT p.unit_id, p.status, p.done_amount, p.planned_on, p.completed_on, p.note
+         FROM unit_progress p JOIN study_units s ON s.id = p.unit_id
+         WHERE s.item_id = $1 AND p.user_id = app_user_id() ORDER BY s.number, s.created_at, s.id",
+    )
+    .bind(item)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(rows))
+}
+
+pub(crate) async fn load_unit(tx: &mut UserTx, id: Uuid) -> Result<StudyUnit, AppError> {
+    sqlx::query_as(
+        "SELECT id, number, title, chapter, unit, amount, planned_on, version
+         FROM study_units WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?
+    .ok_or(AppError::NotFound)
+}
+
+use super::StudyParticipant;
+use crate::courses::TodayQuery;
+use axum::extract::Query;
+use fvoci_core::ids::UserId;
 
 /// 함께 하는 사람들의 진행 집계(볼 수 있는 사람).
 #[utoipa::path(get, path = "/api/items/{item_id}/study/participants", operation_id = "study_participants",
@@ -111,7 +109,7 @@ pub async fn participants(
     .bind(query.today)
     .fetch_all(tx.conn())
     .await
-    .map_err(AppError::from_db_function)?;
+    .map_err(|error| crate::validation::from_db(error, "today"))?;
     tx.commit().await?;
     Ok(Json(
         rows.into_iter()

@@ -1013,13 +1013,13 @@ async fn course_question_and_review_records_follow_episodes_and_remind() {
             let c = send(
                 app,
                 Method::GET,
-                &format!("/api/items/{item}/course"),
+                &format!("/api/items/{item}/episodes"),
                 Some(admin),
                 None,
             )
             .await;
             assert_eq!(c.status, StatusCode::OK, "{:?}", c.json);
-            c.json["episodes"]
+            c.json
                 .as_array()
                 .unwrap()
                 .iter()

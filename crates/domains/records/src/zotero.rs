@@ -13,12 +13,12 @@ use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::RecordsState;
 use crate::records::{RecordFileInput, validate};
+use crate::{RecordsState, validation as fields_validation};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::UserTx;
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 /// 한 번에 가져오는 최대 문헌 수.
 const MAX_ITEMS: usize = 2000;
@@ -82,19 +82,26 @@ fn library(input: &ZoteroLibrary) -> Result<Library, AppError> {
         "user" => "users",
         "group" => "groups",
         _ => {
-            return Err(AppError::BadRequest(
-                "library_type must be user or group".into(),
+            return Err(fields_validation::invalid(
+                "library_type",
+                "library_type must be user or group",
             ));
         }
     };
     let id = input.library_id.trim();
-    if id.is_empty() || id.len() > 20 || !id.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(AppError::BadRequest("library_id must be a number".into()));
+    fields_validation::length(id, "library_id", 20)?;
+    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(fields_validation::invalid(
+            "library_id",
+            "library_id must be a number",
+        ));
     }
     let key = input.api_key.trim();
-    if key.is_empty() || key.len() > 64 || !key.bytes().all(|b| b.is_ascii_alphanumeric()) {
-        return Err(AppError::BadRequest(
-            "the Zotero API key looks malformed".into(),
+    fields_validation::length(key, "api_key", 64)?;
+    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(fields_validation::invalid(
+            "api_key",
+            "the Zotero API key looks malformed",
         ));
     }
     Ok(Library {
@@ -140,13 +147,20 @@ async fn fetch_all(
         match response.status().as_u16() {
             200 => {}
             403 => {
-                return Err(AppError::BadRequest(
-                    "Zotero refused the key for this library".into(),
+                return Err(fields_validation::invalid(
+                    "api_key",
+                    "Zotero refused the key for this library",
                 ));
             }
             404 => {
-                return Err(AppError::BadRequest(
-                    "no such Zotero library or collection".into(),
+                let field = if path.starts_with("collections/") {
+                    "collection_key"
+                } else {
+                    "library_id"
+                };
+                return Err(fields_validation::invalid(
+                    field,
+                    "no such Zotero library or collection",
                 ));
             }
             429 | 503 => return Err(AppError::Upstream("Zotero is busy; try again later".into())),
@@ -182,8 +196,9 @@ async fn collections(
 
 /// 내 Zotero 라이브러리의 컬렉션(로그인한 사람). 키는 저장하지 않는다.
 #[utoipa::path(post, path = "/api/zotero/collections", operation_id = "zotero_collections",
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
     request_body = ZoteroLibrary,
-    responses((status = 200, body = [ZoteroCollection]), (status = 400, body = ErrorBody),
+    responses((status = 409, body = ErrorBody), (status = 200, body = [ZoteroCollection]), (status = 400, body = ErrorBody),
               (status = 502, body = ErrorBody)), tag = "records")]
 pub async fn list_collections(
     State(state): State<RecordsState>,
@@ -386,7 +401,7 @@ async fn existing_files(tx: &mut UserTx, record: Uuid) -> Result<Vec<RecordFileI
 
 /// Zotero에서 문헌 가져오기(연구 항목에 쓸 수 있는 사람). 같은 Zotero 문헌은 새로 만들지 않고 서지만 고친다.
 #[utoipa::path(post, path = "/api/items/{item_id}/zotero/import", operation_id = "zotero_import",
-    params(("item_id" = String, Path, format = Uuid)), request_body = ZoteroImport,
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC), ("item_id" = String, Path, format = Uuid)), request_body = ZoteroImport,
     responses((status = 200, body = ZoteroImported), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody), (status = 502, body = ErrorBody)),
     tag = "records")]
@@ -402,8 +417,14 @@ pub async fn import(
         .as_deref()
         .is_some_and(|key| !valid_key(key))
     {
-        return Err(AppError::BadRequest(
-            "collection_key looks malformed".into(),
+        fields_validation::length(
+            input.collection_key.as_deref().unwrap_or_default(),
+            "collection_key",
+            16,
+        )?;
+        return Err(fields_validation::invalid(
+            "collection_key",
+            "collection_key looks malformed",
         ));
     }
     // 바깥에 묻기 전에 그 항목에 쓸 수 있는지 먼저 본다.
@@ -418,8 +439,9 @@ pub async fn import(
         match kind {
             None => return Err(AppError::NotFound),
             Some((k, _)) if k != "research" => {
-                return Err(AppError::BadRequest(
-                    "Zotero imports go into research items".into(),
+                return Err(fields_validation::invalid(
+                    "item_id",
+                    "Zotero imports go into research items",
                 ));
             }
             Some((_, access)) if access != "owner" && access != "write" => {

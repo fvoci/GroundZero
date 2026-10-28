@@ -9,7 +9,7 @@ use uuid::Uuid;
 time::serde::format_description!(day, Date, "[year]-[month]-[day]");
 
 /// 연결한 파일 버전.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct RecordFile {
     pub role: String,
     /// 파일이 영구 삭제되었으면 없다(이름·버전·SHA-256은 남는다).
@@ -24,11 +24,12 @@ pub struct RecordFile {
 }
 
 /// 항목 기록.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct Record {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
     pub kind: String,
+    #[schema(min_length = 1, max_length = 300)]
     pub title: String,
     #[serde(with = "day::option")]
     #[schema(value_type = Option<String>, format = Date)]
@@ -47,6 +48,14 @@ pub struct Record {
     pub can_delete: bool,
 }
 
+/// 판 충돌은 현재 기록, 그 밖의 409는 공통 오류 본문이다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum RecordWriteConflict {
+    Stale(Box<fvoci_http::conflict::StaleWrite<Record>>),
+    State(fvoci_core::error::ErrorBody),
+}
+
 /// 연결할 파일 버전. 버전이 없으면 지금 버전.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct RecordFileInput {
@@ -62,6 +71,7 @@ pub struct NewRecord {
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
     pub kind: String,
+    #[schema(min_length = 1, max_length = 300)]
     pub title: String,
     #[serde(default, with = "day::option")]
     #[schema(value_type = Option<String>, format = Date)]
@@ -72,13 +82,15 @@ pub struct NewRecord {
     #[schema(value_type = Object)]
     pub fields: Map<String, Value>,
     #[serde(default)]
+    #[schema(max_items = 50)]
     pub files: Vec<RecordFileInput>,
 }
 
 /// 기록 고치기. `version`은 읽은 판.
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct EditRecord {
     pub version: i32,
+    #[schema(min_length = 1, max_length = 300)]
     pub title: String,
     #[serde(default, with = "day::option")]
     #[schema(value_type = Option<String>, format = Date)]
@@ -89,6 +101,7 @@ pub struct EditRecord {
     #[schema(value_type = Object)]
     pub fields: Map<String, Value>,
     #[serde(default)]
+    #[schema(max_items = 50)]
     pub files: Vec<RecordFileInput>,
 }
 

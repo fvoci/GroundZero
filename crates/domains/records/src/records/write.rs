@@ -1,7 +1,9 @@
 //! 기록 생성·수정·삭제 명령.
 
-use super::{EditRecord, NewRecord, RecordVersion, validate};
-use crate::RecordsState;
+use super::conflict::stale_record;
+use super::{EditRecord, NewRecord, RecordVersion, RecordWriteConflict, validate};
+use crate::{RecordsState, validation as fields_validation};
+use axum::response::{IntoResponse, Response};
 use axum::{
     Json,
     extract::{Path, State},
@@ -12,13 +14,13 @@ use fvoci_core::{
     ids::ItemId,
 };
 use fvoci_db::{is_unique_violation, new_ids};
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 use serde_json::Value;
 use uuid::Uuid;
 
 /// 기록 만들기(항목에 쓸 수 있는 사람). 같은 요청 id면 같은 기록.
 #[utoipa::path(post, path = "/api/items/{item_id}/records", operation_id = "create_record",
-    params(("item_id" = String, Path, format = Uuid)), request_body = NewRecord,
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC), ("item_id" = String, Path, format = Uuid)), request_body = NewRecord,
     responses((status = 201, body = Object), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "records")]
 pub async fn create(
@@ -52,7 +54,7 @@ pub async fn create(
                 .bind(new_ids(2))
                 .fetch_one(tx.conn())
                 .await
-                .map_err(AppError::from_db_function)?;
+                .map_err(|error| fields_validation::from_db(error, "files"))?;
         tx.commit().await?;
         Ok::<Uuid, AppError>(id)
     };
@@ -68,15 +70,16 @@ pub async fn create(
 
 /// 기록 고치기(항목에 쓸 수 있는 사람). 읽은 뒤 바뀌었으면 409.
 #[utoipa::path(put, path = "/api/records/{record_id}", operation_id = "update_record",
-    params(("record_id" = String, Path, format = Uuid)), request_body = EditRecord,
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC), ("record_id" = String, Path, format = Uuid)), request_body = EditRecord,
     responses((status = 200, body = RecordVersion), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "records")]
+              (status = 404, body = ErrorBody), (status = 409, body = RecordWriteConflict)), tag = "records")]
 pub async fn update(
     State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(record): Path<Uuid>,
     Json(input): Json<EditRecord>,
-) -> Result<Json<RecordVersion>, AppError> {
+) -> Result<Response, AppError> {
+    let sent = fields_validation::sent(&input)?;
     let mut tx = state.db.begin_as(user).await?;
     let found: Option<(ItemId, String, Value, i32)> =
         sqlx::query_as("SELECT item_id, kind, fields, version FROM item_records WHERE id = $1")
@@ -88,7 +91,8 @@ pub async fn update(
     // (아직 커밋되지 않은 다음 판을 짐작해 보내면 옛 판의 id로 확인을 건너뛰고, 다음 판이 커밋된 뒤 판이 맞아 저장했다).
     // 판은 늘기만 하므로, 여기와 아래 app_update_record(행 잠금)에서 모두 같으면 그 사이 바뀐 것이 없다.
     if stored_version != input.version {
-        return Err(AppError::Conflict("the record changed; reload it".into()));
+        drop(tx);
+        return stale_record(&state, user, record, &sent, &input.files).await;
     }
     let (fields, files) = validate(
         &mut tx,
@@ -100,25 +104,33 @@ pub async fn update(
         &input.files,
     )
     .await?;
-    let version: i32 = sqlx::query_scalar("SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)")
-        .bind(record)
-        .bind(input.version)
-        .bind(input.title.trim())
-        .bind(input.occurred_on)
-        .bind(&input.body)
-        .bind(fields)
-        .bind(files)
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    let saved =
+        sqlx::query_scalar::<_, i32>("SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)")
+            .bind(record)
+            .bind(input.version)
+            .bind(input.title.trim())
+            .bind(input.occurred_on)
+            .bind(&input.body)
+            .bind(fields)
+            .bind(files)
+            .fetch_one(tx.conn())
+            .await;
+    let version = match saved {
+        Ok(version) => version,
+        Err(error) if fields_validation::is_stale(&error, "record") => {
+            drop(tx);
+            return stale_record(&state, user, record, &sent, &input.files).await;
+        }
+        Err(error) => return Err(fields_validation::from_db(error, "files")),
+    };
     tx.commit().await?;
-    Ok(Json(RecordVersion { version }))
+    Ok(Json(RecordVersion { version }).into_response())
 }
 
 /// 기록 지우기(만든 사람 또는 항목 소유 권한자).
 #[utoipa::path(delete, path = "/api/records/{record_id}", operation_id = "delete_record",
-    params(("record_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC), ("record_id" = String, Path, format = Uuid)),
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "records")]
 pub async fn delete(
     State(state): State<RecordsState>,

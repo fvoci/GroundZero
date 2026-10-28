@@ -1,14 +1,18 @@
 //! 기록 칸 정규화와 참조 검증.
 
 use super::{FieldType, RecordFileInput, RecordKindDef, record_kinds};
-use fvoci_core::{error::AppError, ids::ItemId, module::ModuleKind};
+use fvoci_core::{
+    error::{AppError, InvalidReason},
+    ids::ItemId,
+    module::ModuleKind,
+};
 use fvoci_db::UserTx;
 use serde_json::{Map, Value};
 use time::Date;
 use uuid::Uuid;
 
 fn bad(msg: impl Into<String>) -> AppError {
-    AppError::BadRequest(msg.into())
+    crate::validation::invalid("fields", msg)
 }
 
 fn text_value(value: &Value, key: &str, max: usize) -> Result<Option<Value>, AppError> {
@@ -19,9 +23,7 @@ fn text_value(value: &Value, key: &str, max: usize) -> Result<Option<Value>, App
     if s.is_empty() {
         return Ok(None);
     }
-    if s.chars().count() > max {
-        return Err(bad(format!("{key} is too long")));
-    }
+    crate::validation::length(s, key, max)?;
     Ok(Some(Value::String(s.to_owned())))
 }
 
@@ -44,9 +46,7 @@ fn normalize_tags(value: &Value, key: &str) -> Result<Option<Value>, AppError> {
             tags.push(s);
         }
     }
-    if tags.len() > 50 {
-        return Err(bad(format!("{key} has too many tags")));
-    }
+    crate::validation::count(tags.len(), key, 0, 50)?;
     Ok((!tags.is_empty()).then(|| serde_json::json!(tags)))
 }
 
@@ -65,15 +65,13 @@ fn normalize_people(
             ids.push(id);
         }
     }
-    if ids.len() > 200 {
-        return Err(bad(format!("{key} has too many people")));
-    }
+    crate::validation::count(ids.len(), key, 0, 200)?;
     people.extend(&ids);
     Ok((!ids.is_empty()).then(|| serde_json::json!(ids)))
 }
 
 /// 칸을 정의대로 확인·정리한다. 사람·강좌 칸의 id는 따로 모아 DB에서 확인한다.
-fn normalize_fields(
+pub(super) fn normalize_fields(
     def: &RecordKindDef,
     fields: Map<String, Value>,
     people: &mut Vec<Uuid>,
@@ -110,7 +108,14 @@ fn normalize_fields(
                 let n = value
                     .as_f64()
                     .filter(|n| n.is_finite() && (0.0..=1_000_000_000.0).contains(n))
-                    .ok_or_else(|| bad(format!("{key} must be a number from 0")))?;
+                    .ok_or_else(|| {
+                        AppError::invalid(
+                            &key,
+                            InvalidReason::OutOfRange,
+                            Some(1_000_000_000),
+                            format!("{key} must be a number from 0 to 1000000000"),
+                        )
+                    })?;
                 Some(serde_json::json!(n))
             }
             FieldType::Choice => {
@@ -204,11 +209,13 @@ pub(crate) async fn validate(
     let def = kinds
         .iter()
         .find(|k| k.kind == kind_name && k.module_kind == module_kind)
-        .ok_or_else(|| bad(format!("{kind_name} is not a record kind of this module")))?;
-    let length = title.trim().chars().count();
-    if !(1..=300).contains(&length) {
-        return Err(bad("a record needs a title of 1 to 300 characters"));
-    }
+        .ok_or_else(|| {
+            crate::validation::invalid(
+                "kind",
+                format!("{kind_name} is not a record kind of this module"),
+            )
+        })?;
+    crate::validation::title(title)?;
     let mut people = Vec::new();
     let mut courses = Vec::new();
     let mut episodes = Vec::new();
@@ -231,15 +238,13 @@ pub(crate) async fn validate(
         }
     }
     check_references(tx, item, workspace, &people, &courses, &episodes).await?;
-    if files.len() > 50 {
-        return Err(bad("give at most 50 linked files"));
-    }
+    crate::validation::count(files.len(), "files", 0, 50)?;
     for file in files {
         if !def.file_roles.iter().any(|r| r.value == file.role) {
-            return Err(bad(format!(
-                "{} is not a file role of {kind_name}",
-                file.role
-            )));
+            return Err(crate::validation::invalid(
+                "files.role",
+                format!("{} is not a file role of {kind_name}", file.role),
+            ));
         }
     }
     let files =

@@ -16,6 +16,36 @@ use std::collections::BTreeMap;
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
+/// 한 SQL 스냅샷에서 기록 판과 고정 파일 연결을 함께 읽는다.
+pub(super) async fn load_record(
+    tx: &mut fvoci_db::UserTx,
+    id: Uuid,
+) -> Result<(Record, fvoci_core::module::ModuleKind), AppError> {
+    let row: Option<(Value, String, String)> = sqlx::query_as(
+        "SELECT to_jsonb(r) || jsonb_build_object(
+            'created_by_name', (SELECT u.display_name FROM users u WHERE u.id = r.created_by),
+            'can_edit', false, 'can_delete', false,
+            'files', (SELECT coalesce(jsonb_agg(to_jsonb(f) || jsonb_build_object(
+                'available', f.version_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM files x WHERE x.id = f.file_id AND x.deleted_at IS NULL))
+                ORDER BY f.position), '[]'::jsonb) FROM record_files f WHERE f.record_id = r.id)),
+            m.kind, app_access('record', r.id)
+         FROM item_records r JOIN items i ON i.id = r.item_id JOIN modules m ON m.id = i.module_id
+         WHERE r.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?;
+    let (json, module, access) = row.ok_or(AppError::NotFound)?;
+    let mut record: Record = serde_json::from_value(json)
+        .map_err(|error| AppError::Config(format!("record resource: {error}")))?;
+    let grade = fvoci_core::access::Grade::parse_present(&access)?;
+    record.can_edit = grade.can_write();
+    record.can_delete = grade.can_write() && (record.created_by == tx.user() || grade.is_owner());
+    let module = fvoci_core::module::ModuleKind::parse(&module).ok_or(AppError::NotFound)?;
+    Ok((record, module))
+}
+
 type RecordRow = (
     Uuid,
     String,

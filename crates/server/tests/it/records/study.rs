@@ -47,16 +47,7 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
 }
 
 async fn plan(app: &Router, user: &TestUser, item: &str) -> Value {
-    let r = send(
-        app,
-        Method::GET,
-        &format!("/api/items/{item}/study"),
-        Some(user),
-        None,
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    r.json
+    super::support::view(app, user, item, super::support::LearningKind::Study).await
 }
 
 #[tokio::test]
@@ -363,9 +354,24 @@ async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
     )
     .await;
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
-    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
-    assert_eq!(second.json["error"], "invalid_state");
+    // D-131·#180: 판 충돌은 공유 단위 자원과 요청 중 다른 칸을 돌려준다.
+    assert_eq!(second.json["error"], "conflict");
     assert_eq!(second.json["message"], "the unit changed; reload it");
+    assert_eq!(second.json["current"]["version"], 2);
+    assert_eq!(second.json["current"]["title"], "1장 기술통계");
+    assert!(second.json["current"]["mine"].is_null());
+    assert!(
+        second.json["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("title"))
+    );
+    assert!(
+        !second.json["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("version"))
+    );
     let now = plan(&app, &writer, &item).await["units"][0].clone();
     assert_eq!(now["title"], "1장 기술통계");
     assert_eq!(now["unit"], "pages");

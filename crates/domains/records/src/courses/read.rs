@@ -1,39 +1,34 @@
-//! 학습 정보·단위·참여자 읽기.
+//! 강좌 정보·회차·개인 진도를 각각 읽는다.
 
-use super::{Course, CourseDetails, Episode, MyProgress, Participant, TodayQuery};
-use crate::RecordsState;
-use axum::extract::Query;
+use super::{Course, CourseDetails, Episode, MyProgress};
+use crate::{
+    RecordsState,
+    learning::{self, LearningKind},
+};
 use axum::{
     Json,
     extract::{Path, State},
 };
 use fvoci_core::{
     error::{AppError, ErrorBody},
-    ids::{ItemId, UserId},
+    ids::ItemId,
 };
+use fvoci_db::UserTx;
 use fvoci_http::session::CurrentUser;
 use time::Date;
 use uuid::Uuid;
 
-type EpisodeRow = (
-    Uuid,
-    i32,
+type DetailsRow = (
     String,
     String,
-    i32,
+    String,
     String,
     String,
     Option<Date>,
-    Option<String>,
     Option<Date>,
     Option<Date>,
-    Option<i32>,
-    Option<i32>,
-    Option<String>,
-    i32,
 );
 
-/// 강좌(볼 수 있는 사람). 강의 모듈의 항목이 아니면 404.
 #[utoipa::path(get, path = "/api/items/{item_id}/course", operation_id = "get_course",
     params(("item_id" = String, Path, format = Uuid)),
     responses((status = 200, body = Course), (status = 404, body = ErrorBody)), tag = "courses")]
@@ -43,46 +38,13 @@ pub async fn get(
     Path(item): Path<ItemId>,
 ) -> Result<Json<Course>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let access: String = sqlx::query_scalar("SELECT app_course_access($1)")
-        .bind(item)
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    // 쓰기 검사(app_require_course_write)와 같이 항목이나 그 모듈이 보관되면 읽기 전용이다.
-    let archived: bool = sqlx::query_scalar(
-        "SELECT i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL
-         FROM items i JOIN modules m ON m.id = i.module_id WHERE i.id = $1",
-    )
-    .bind(item)
-    .fetch_one(tx.conn())
-    .await?;
-    type DetailsRow = (
-        String,
-        String,
-        String,
-        String,
-        String,
-        Option<Date>,
-        Option<Date>,
-        Option<Date>,
-    );
+    let access = learning::access(&mut tx, item, LearningKind::Course).await?;
     let details: Option<DetailsRow> = sqlx::query_as(
         "SELECT subject, instructor, platform, url, textbook, starts_on, expires_on, target_on
          FROM course_details WHERE item_id = $1",
     )
     .bind(item)
     .fetch_optional(tx.conn())
-    .await?;
-    let rows: Vec<EpisodeRow> = sqlx::query_as(
-        "SELECT e.id, e.number, e.title, e.chapter, e.duration_seconds, e.url, e.materials, e.planned_on,
-                p.status, p.planned_on, p.completed_on, p.watch_count, p.last_position_seconds, p.note,
-                e.version
-         FROM course_episodes e
-         LEFT JOIN episode_progress p ON p.episode_id = e.id AND p.user_id = app_user_id()
-         WHERE e.item_id = $1 ORDER BY e.number, e.created_at, e.id",
-    )
-    .bind(item)
-    .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
     let details = details.map_or_else(CourseDetails::default, |d| CourseDetails {
@@ -95,34 +57,67 @@ pub async fn get(
         expires_on: d.6,
         target_on: d.7,
     });
-    let episodes = rows
-        .into_iter()
-        .map(|r| Episode {
-            id: r.0,
-            number: r.1,
-            title: r.2,
-            chapter: r.3,
-            duration_seconds: r.4,
-            url: r.5,
-            materials: r.6,
-            planned_on: r.7,
-            mine: MyProgress {
-                status: r.8.unwrap_or_else(|| "not_started".into()),
-                planned_on: r.9,
-                completed_on: r.10,
-                watch_count: r.11.unwrap_or_default(),
-                last_position_seconds: r.12,
-                note: r.13.unwrap_or_default(),
-            },
-            version: r.14,
-        })
-        .collect();
-    Ok(Json(Course {
-        details,
-        episodes,
-        can_write: !archived && matches!(access.as_str(), "owner" | "write"),
-    }))
+    Ok(Json(Course { details, access }))
 }
+
+#[utoipa::path(get, path = "/api/items/{item_id}/episodes", operation_id = "course_episodes",
+    params(("item_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [Episode]), (status = 404, body = ErrorBody)), tag = "courses")]
+pub async fn episodes(
+    State(state): State<RecordsState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+) -> Result<Json<Vec<Episode>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    learning::access(&mut tx, item, LearningKind::Course).await?;
+    let rows = sqlx::query_as(
+        "SELECT id, number, title, chapter, duration_seconds, url, materials, planned_on, version
+         FROM course_episodes WHERE item_id = $1 ORDER BY number, created_at, id",
+    )
+    .bind(item)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(rows))
+}
+
+#[utoipa::path(get, path = "/api/items/{item_id}/episode-progress", operation_id = "my_episode_progress",
+    params(("item_id" = String, Path, format = Uuid)),
+    responses((status = 200, body = [MyProgress]), (status = 404, body = ErrorBody)), tag = "courses")]
+pub async fn progress(
+    State(state): State<RecordsState>,
+    CurrentUser(user): CurrentUser,
+    Path(item): Path<ItemId>,
+) -> Result<Json<Vec<MyProgress>>, AppError> {
+    let mut tx = state.db.begin_as(user).await?;
+    learning::access(&mut tx, item, LearningKind::Course).await?;
+    let rows = sqlx::query_as(
+        "SELECT p.episode_id, p.status, p.planned_on, p.completed_on, p.watch_count,
+                p.last_position_seconds, p.note
+         FROM episode_progress p JOIN course_episodes e ON e.id = p.episode_id
+         WHERE e.item_id = $1 AND p.user_id = app_user_id() ORDER BY e.number, e.created_at, e.id",
+    )
+    .bind(item)
+    .fetch_all(tx.conn())
+    .await?;
+    tx.commit().await?;
+    Ok(Json(rows))
+}
+
+pub(crate) async fn load_episode(tx: &mut UserTx, id: Uuid) -> Result<Episode, AppError> {
+    sqlx::query_as(
+        "SELECT id, number, title, chapter, duration_seconds, url, materials, planned_on, version
+         FROM course_episodes WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?
+    .ok_or(AppError::NotFound)
+}
+
+use super::{Participant, TodayQuery};
+use axum::extract::Query;
+use fvoci_core::ids::UserId;
 
 /// 함께 수강하는 사람들의 진도 집계(볼 수 있는 사람).
 #[utoipa::path(get, path = "/api/items/{item_id}/course/participants", operation_id = "course_participants",
@@ -143,7 +138,7 @@ pub async fn participants(
     .bind(query.today)
     .fetch_all(tx.conn())
     .await
-    .map_err(AppError::from_db_function)?;
+    .map_err(|error| crate::validation::from_db(error, "today"))?;
     tx.commit().await?;
     Ok(Json(
         rows.into_iter()
