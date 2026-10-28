@@ -368,3 +368,177 @@ async fn changed_root_assignee_returns_retryable_conflict_without_waiting_in_a_l
     assert!(retry.json["created"].as_i64().unwrap() > 0);
     recovered(&w, &user, series).await;
 }
+
+#[derive(Debug, Clone, Copy)]
+enum Removal {
+    Organization,
+    Workspace,
+    Leave,
+}
+
+impl Removal {
+    fn count(self) -> &'static str {
+        match self {
+            Self::Organization => "SELECT fvoci.app_remove_organization_member_ids($1,$2)",
+            Self::Workspace => "SELECT fvoci.app_remove_member_ids($1,$2)",
+            Self::Leave => "SELECT fvoci.app_leave_workspace_ids($1)",
+        }
+    }
+
+    fn command(self) -> &'static str {
+        match self {
+            Self::Organization => "SELECT fvoci.app_remove_organization_member($1,$2,$3)",
+            Self::Workspace => "SELECT fvoci.app_remove_member($1,$2,$3)",
+            Self::Leave => "SELECT fvoci.app_leave_workspace($1,$2)",
+        }
+    }
+
+    fn args(self, w: &World, user: &TestUser) -> Vec<Uuid> {
+        match self {
+            Self::Organization => vec![w.org, user.id.0],
+            Self::Workspace => vec![w.ws, user.id.0],
+            Self::Leave => vec![w.ws],
+        }
+    }
+
+    async fn transaction(self, w: &World, user: &TestUser) -> UserTx {
+        let actor = match self {
+            Self::Organization | Self::Workspace => &w.owner,
+            Self::Leave => user,
+        };
+        w.state.db.begin_as(actor.id).await.unwrap()
+    }
+
+    async fn bound(self, tx: &mut UserTx, args: &[Uuid]) -> Result<i32, sqlx::Error> {
+        let mut query = sqlx::query_scalar(self.count());
+        for arg in args {
+            query = query.bind(arg);
+        }
+        query.fetch_one(tx.conn()).await
+    }
+
+    async fn remove(self, tx: &mut UserTx, args: &[Uuid], count: i32) -> Result<(), sqlx::Error> {
+        let mut query = sqlx::query(self.command());
+        for arg in args {
+            query = query.bind(arg);
+        }
+        query
+            .bind(fvoci_db::new_ids(usize::try_from(count).unwrap()))
+            .execute(tx.conn())
+            .await?;
+        Ok(())
+    }
+}
+
+async fn removal_recovered(w: &World, user: &TestUser, series: Uuid, removal: Removal) {
+    recovered(w, user, series).await;
+    if matches!(removal, Removal::Organization) {
+        assert!(
+            rows(
+                &w.state,
+                &w.owner,
+                "SELECT user_id FROM fvoci.organization_members WHERE organization_id=$1 AND user_id=$2",
+                &[w.org, user.id.0],
+            )
+            .await
+            .is_empty()
+        );
+    }
+}
+
+/// 집계가 먼저 멤버를 잠그면 회차는 제거 커밋 뒤에 만들어지고 담당을 복사하지 않는다.
+async fn sync_after_removal_bound(removal: Removal, entry: Entry) {
+    let (w, user, series) = assigned_series().await;
+    let args = removal.args(&w, &user);
+    let mut removing = removal.transaction(&w, &user).await;
+    let count = removal.bound(&mut removing, &args).await.unwrap();
+    let holder = pid(removing.conn()).await;
+    let mut syncing = entry.transaction(&w).await;
+    let waiter = pid(syncing.conn()).await;
+    let target = entry.target(&w, series);
+    let pending = tokio::spawn(async move {
+        let result = on(syncing.conn(), entry.call(), &[target]).await?;
+        syncing.commit().await?;
+        Ok::<_, AppError>(result)
+    });
+    blocked(holder, waiter).await;
+    let result = removal.remove(&mut removing, &args, count).await;
+    assert!(result.is_ok(), "{removal:?} {entry:?}: {result:?}");
+    removing.commit().await.unwrap();
+    let synced = tokio::time::timeout(std::time::Duration::from_secs(10), pending)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(synced[0]["made"].as_i64().unwrap() > 0);
+    removal_recovered(&w, &user, series, removal).await;
+}
+
+/// 회차 트랜잭션이 먼저 멤버를 잠그면 집계는 기다린 뒤 새 담당까지 세어 FV001 없이 제거한다.
+async fn removal_counts_sync_committed_while_waiting(removal: Removal, entry: Entry) {
+    let (w, user, series) = assigned_series().await;
+    let mut syncing = entry.transaction(&w).await;
+    let target = entry.target(&w, series);
+    let synced = on(syncing.conn(), entry.call(), &[target]).await.unwrap();
+    assert!(synced[0]["made"].as_i64().unwrap() > 0);
+    let holder = pid(syncing.conn()).await;
+    let mut removing = removal.transaction(&w, &user).await;
+    let waiter = pid(removing.conn()).await;
+    let args = removal.args(&w, &user);
+    let pending = tokio::spawn(async move {
+        let count = removal.bound(&mut removing, &args).await?;
+        removal.remove(&mut removing, &args, count).await?;
+        removing.commit().await?;
+        Ok::<_, AppError>(())
+    });
+    blocked(holder, waiter).await;
+    syncing.commit().await.unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), pending)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(result.is_ok(), "{removal:?} {entry:?}: {result:?}");
+    removal_recovered(&w, &user, series, removal).await;
+}
+
+#[tokio::test]
+async fn all_sync_entries_after_organization_removal_bound_cannot_leave_assignees() {
+    for entry in [Entry::Item, Entry::Series, Entry::System] {
+        sync_after_removal_bound(Removal::Organization, entry).await;
+    }
+}
+
+#[tokio::test]
+async fn all_sync_entries_after_member_removal_bound_cannot_leave_assignees() {
+    for entry in [Entry::Item, Entry::Series, Entry::System] {
+        sync_after_removal_bound(Removal::Workspace, entry).await;
+    }
+}
+
+#[tokio::test]
+async fn all_sync_entries_after_workspace_leave_bound_cannot_leave_assignees() {
+    for entry in [Entry::Item, Entry::Series, Entry::System] {
+        sync_after_removal_bound(Removal::Leave, entry).await;
+    }
+}
+
+#[tokio::test]
+async fn organization_removal_counts_all_sync_entries_committed_while_waiting() {
+    for entry in [Entry::Item, Entry::Series, Entry::System] {
+        removal_counts_sync_committed_while_waiting(Removal::Organization, entry).await;
+    }
+}
+
+#[tokio::test]
+async fn member_removal_counts_all_sync_entries_committed_while_waiting() {
+    for entry in [Entry::Item, Entry::Series, Entry::System] {
+        removal_counts_sync_committed_while_waiting(Removal::Workspace, entry).await;
+    }
+}
+
+#[tokio::test]
+async fn workspace_leave_counts_all_sync_entries_committed_while_waiting() {
+    for entry in [Entry::Item, Entry::Series, Entry::System] {
+        removal_counts_sync_committed_while_waiting(Removal::Leave, entry).await;
+    }
+}
