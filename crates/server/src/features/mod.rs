@@ -5,6 +5,7 @@ pub mod activity;
 pub mod audit;
 pub mod comments;
 pub mod courses;
+mod document_locks;
 pub mod documents;
 pub mod event_recurrence;
 pub mod events;

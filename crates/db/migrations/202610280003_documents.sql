@@ -8,7 +8,8 @@ SET LOCAL default_table_access_method = heap;
 CREATE TABLE fvoci.document_collab_file_refs (
     document_id uuid NOT NULL,
     file_id uuid NOT NULL,
-    version integer NOT NULL
+    version integer NOT NULL,
+    editor_id uuid NOT NULL
 );
 
 
@@ -20,7 +21,8 @@ CREATE TABLE fvoci.document_collab_states (
     state bytea NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     pending boolean DEFAULT false NOT NULL,
-    editors uuid[] DEFAULT '{}'::uuid[] NOT NULL
+    editors uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    file_ref_editors jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 
@@ -30,7 +32,8 @@ CREATE TABLE fvoci.document_file_refs (
     document_id uuid NOT NULL,
     revision integer NOT NULL,
     file_id uuid NOT NULL,
-    version integer NOT NULL
+    version integer NOT NULL,
+    editor_id uuid NOT NULL
 );
 
 
@@ -67,6 +70,7 @@ CREATE TABLE fvoci.document_revisions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     restored_from integer,
     edited_by uuid[],
+    file_ref_editors jsonb,
     CONSTRAINT document_revisions_restored_from_check CHECK ((restored_from > 0)),
     CONSTRAINT document_revisions_revision_check CHECK ((revision > 0))
 );
@@ -735,6 +739,43 @@ CREATE FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolea
 
 ALTER FUNCTION fvoci.app_record_document_references(p_doc uuid, p_notify boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
+-- 서버가 따로 지닌 노드별 귀속으로 실제 편집자의 자리 등급을 본다(CR183-4). 문서 속성의 사용자 id는 읽지 않는다.
+-- editor가 없는 항목은 방을 열기 전 리비전에서 이어받은 참조다. 그 리비전의 귀속만 이어받고 저장자의 권한을 빌리지 않는다.
+CREATE FUNCTION fvoci.app_authorized_file_refs(p_doc uuid, p_body jsonb, p_editors jsonb, p_author uuid, p_revision integer)
+    RETURNS TABLE(file_id uuid, version integer, editor_id uuid)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    WITH attributed AS (
+      SELECT r.file_id, r.version, coalesce(inherited.editor_id, p_author) AS editor_id
+      FROM app_file_refs(p_body) r
+      LEFT JOIN document_file_refs inherited
+        ON inherited.document_id = p_doc AND inherited.revision = p_revision
+          AND inherited.file_id = r.file_id AND inherited.version = r.version
+      WHERE p_editors IS NULL AND p_author IS NOT NULL
+        AND (inherited.editor_id IS NOT NULL OR NOT EXISTS (
+          SELECT 1 FROM document_revisions previous WHERE previous.document_id = p_doc
+            AND previous.revision = p_revision AND previous.body = p_body))
+      UNION ALL
+      SELECT r.file_id, r.version, coalesce((e->>'editor')::uuid, inherited.editor_id)
+      FROM jsonb_array_elements(coalesce(p_editors, '[]'::jsonb)) e
+      CROSS JOIN LATERAL app_file_refs(e->'value') r
+      LEFT JOIN document_file_refs inherited
+        ON inherited.document_id = p_doc AND inherited.revision = p_revision
+          AND inherited.file_id = r.file_id AND inherited.version = r.version
+    )
+    SELECT DISTINCT r.file_id, r.version, a.editor_id
+    FROM app_file_refs(p_body) r JOIN attributed a USING (file_id, version)
+    JOIN documents d ON d.id = p_doc JOIN files f ON f.id = r.file_id
+    JOIN file_versions v ON v.file_id = r.file_id AND v.version = r.version
+    WHERE app_file_ref_in_scope(d.workspace_id, d.owner_user_id, f.workspace_id, f.owner_user_id)
+      AND a.editor_id IS NOT NULL
+      AND CASE WHEN f.document_id IS NOT NULL THEN app_grade_document(f.document_id, a.editor_id)
+               ELSE app_grade_under_item(f.item_id, a.editor_id) END <> 'none'
+    $$;
+
+ALTER FUNCTION fvoci.app_authorized_file_refs(p_doc uuid, p_body jsonb, p_editors jsonb, p_author uuid, p_revision integer) OWNER TO fvoci_migrator;
+
 -- 리비전 본문이 가리키는 첨부 버전을 고정한다(D-56). 같은 조직 밖의 첨부는 참조로 기록하지 않는다(D-114).
 CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
@@ -745,7 +786,7 @@ CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
   BEGIN
     SELECT * INTO v_doc FROM documents WHERE id = NEW.document_id;
     -- 가리키는 버전 행을 참조를 넣기 전에 공유 잠금한다. 범위 밖 참조(다른 조직의 파일)는 기록하지 않는다(D-114).
-    -- 작성자가 파일의 자리(붙은 문서·항목)를 읽지 못하는 참조도 기록하지 않는다(#177 SR1-16). 파일 자체의 휴지통
+    -- 편집자가 파일의 자리(붙은 문서·항목)를 읽지 못하는 참조도 기록하지 않는다(#177 SR1-16). 파일 자체의 휴지통
     -- 상태는 보지 않아 휴지통 첨부를 가리키는 리비전의 보존(D-56)은 그대로다.
     -- 잠금은 등급과 무관하게 범위 안 후보 전부에 건다. 기록은 잠근 버전 행과 맞춰 있는 버전만 넣는다(CR183-3).
     -- document_file_refs에는 버전 외래 키가 없어, 두 질의 사이에 정리된 버전이나 없는 버전을 가리키지 않게 한다.
@@ -756,13 +797,10 @@ CREATE FUNCTION fvoci.app_record_file_refs() RETURNS trigger
     WHERE app_file_ref_in_scope(v_doc.workspace_id, v_doc.owner_user_id, f.workspace_id, f.owner_user_id)
     ORDER BY v.id
     FOR KEY SHARE OF v;
-    INSERT INTO document_file_refs (document_id, revision, file_id, version)
-    SELECT NEW.document_id, NEW.revision, r.file_id, r.version
-    FROM app_file_refs(NEW.body) r JOIN files f ON f.id = r.file_id
-    JOIN file_versions v ON v.file_id = r.file_id AND v.version = r.version
-    WHERE app_file_ref_in_scope(v_doc.workspace_id, v_doc.owner_user_id, f.workspace_id, f.owner_user_id)
-      AND CASE WHEN f.document_id IS NOT NULL THEN app_grade_document(f.document_id, NEW.author)
-               ELSE app_grade_under_item(f.item_id, NEW.author) END <> 'none'
+    INSERT INTO document_file_refs (document_id, revision, file_id, version, editor_id)
+    SELECT NEW.document_id, NEW.revision, r.file_id, r.version, r.editor_id
+    FROM app_authorized_file_refs(NEW.document_id, NEW.body, NEW.file_ref_editors, NEW.author, NEW.revision - 1) r
+    ORDER BY r.file_id, r.version, r.editor_id
     ON CONFLICT DO NOTHING;
     RETURN NULL;
   END
@@ -813,18 +851,18 @@ CREATE FUNCTION fvoci.app_collab_access(p_doc uuid) RETURNS text
 
 ALTER FUNCTION fvoci.app_collab_access(p_doc uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_collab_load(p_doc uuid) RETURNS TABLE(doc_revision integer, title text, body jsonb, state bytea, editors uuid[])
+CREATE FUNCTION fvoci.app_collab_load(p_doc uuid) RETURNS TABLE(doc_revision integer, title text, body jsonb, state bytea, editors uuid[], file_ref_editors jsonb)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   BEGIN
     PERFORM app_collab_access(p_doc);
     RETURN QUERY
-    SELECT d.revision, d.title, d.body, cs.state, cs.editors
+    SELECT d.revision, d.title, d.body, cs.state, cs.editors, cs.file_ref_editors
     FROM documents d
     -- 상태가 이어받은 리비전 뒤로 본문이 바뀌지 않았으면(제목만 바꾼 저장 등) 그 상태와 편집자를 그대로 쓴다.
     LEFT JOIN LATERAL (
-      SELECT s.state, s.editors FROM document_collab_states s
+      SELECT s.state, s.editors, s.file_ref_editors FROM document_collab_states s
       WHERE s.document_id = d.id
         AND NOT EXISTS (
           SELECT 1 FROM document_revisions r
@@ -1530,7 +1568,7 @@ CREATE FUNCTION fvoci.app_set_document_template(p_doc uuid, p_template boolean, 
 
 ALTER FUNCTION fvoci.app_set_document_template(p_doc uuid, p_template boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[]) RETURNS boolean
+CREATE FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[], p_file_ref_editors jsonb DEFAULT '[]'::jsonb) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -1547,23 +1585,27 @@ CREATE FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_
       RETURN false;
     END IF;
     -- 편집자를 함께 적는다. 리비전으로 남은 상태에는 남길 편집이 없으므로 비운다.
-    INSERT INTO document_collab_states (document_id, revision, state, pending, editors, updated_at)
+    INSERT INTO document_collab_states (document_id, revision, state, pending, editors, updated_at, file_ref_editors)
     VALUES (p_doc, p_revision, p_state, p_pending,
-            CASE WHEN p_pending THEN coalesce(p_editors, '{}') ELSE '{}' END, now())
+            CASE WHEN p_pending THEN coalesce(p_editors, '{}') ELSE '{}' END, now(), coalesce(p_file_ref_editors, '[]'))
     ON CONFLICT (document_id) DO UPDATE
       SET revision = excluded.revision, state = excluded.state, pending = excluded.pending,
-          editors = excluded.editors, updated_at = now();
+          editors = excluded.editors, updated_at = now(), file_ref_editors = excluded.file_ref_editors;
     IF NOT p_pending THEN
       DELETE FROM document_collab_file_refs WHERE document_id = p_doc;
     ELSIF p_body IS NOT NULL THEN
       PERFORM 1 FROM file_versions v
       JOIN (SELECT DISTINCT r.file_id, r.version FROM app_file_refs(p_body) r) r
         ON r.file_id = v.file_id AND r.version = v.version
+      JOIN files f ON f.id = v.file_id JOIN documents d ON d.id = p_doc
+      WHERE app_file_ref_in_scope(d.workspace_id, d.owner_user_id, f.workspace_id, f.owner_user_id)
       ORDER BY v.id
       FOR KEY SHARE OF v;
       DELETE FROM document_collab_file_refs WHERE document_id = p_doc;
-      INSERT INTO document_collab_file_refs (document_id, file_id, version)
-      SELECT DISTINCT p_doc, r.file_id, r.version FROM app_file_refs(p_body) r
+      INSERT INTO document_collab_file_refs (document_id, file_id, version, editor_id)
+      SELECT p_doc, r.file_id, r.version, r.editor_id
+      FROM app_authorized_file_refs(p_doc, p_body, coalesce(p_file_ref_editors, '[]'), NULL, p_revision) r
+      ORDER BY r.file_id, r.version, r.editor_id
       ON CONFLICT DO NOTHING;
     END IF;
     RETURN true;
@@ -1571,7 +1613,7 @@ CREATE FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_
   $$;
 
 
-ALTER FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_system_collab_store(p_doc uuid, p_revision integer, p_state bytea, p_pending boolean, p_body jsonb, p_editors uuid[], p_file_ref_editors jsonb) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_tree_siblings(p_workspace uuid, p_item uuid, p_owner uuid, p_parent uuid) RETURNS SETOF fvoci.documents
     LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -1681,13 +1723,13 @@ CREATE FUNCTION fvoci.documents_tree_check() RETURNS trigger
 ALTER FUNCTION fvoci.documents_tree_check() OWNER TO fvoci_migrator;
 
 ALTER TABLE ONLY fvoci.document_collab_file_refs
-    ADD CONSTRAINT document_collab_file_refs_pkey PRIMARY KEY (document_id, file_id, version);
+    ADD CONSTRAINT document_collab_file_refs_pkey PRIMARY KEY (document_id, file_id, version, editor_id);
 
 ALTER TABLE ONLY fvoci.document_collab_states
     ADD CONSTRAINT document_collab_states_pkey PRIMARY KEY (document_id);
 
 ALTER TABLE ONLY fvoci.document_file_refs
-    ADD CONSTRAINT document_file_refs_pkey PRIMARY KEY (document_id, revision, file_id, version);
+    ADD CONSTRAINT document_file_refs_pkey PRIMARY KEY (document_id, revision, file_id, version, editor_id);
 
 ALTER TABLE ONLY fvoci.document_links
     ADD CONSTRAINT document_links_pkey PRIMARY KEY (document_id, target_kind, target_id);
