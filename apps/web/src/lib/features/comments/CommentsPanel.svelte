@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { activityApi, type CommentTarget, type CommentView } from '$lib/features/activity/api';
   // 댓글(D-27, D-20). 서버가 쓰기를 허용한 대상에만 댓글을 단다. 한 단계 답글, 해결된 스레드는 접어 둔다.
-  import type { CommentTarget, CommentView } from '$lib/api/client';
+
   import { api } from '$lib/api/client';
   import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText, isArchivedRejection } from '$lib/api/errors';
@@ -91,7 +92,7 @@
       error = undefined;
     }
     const mine = ++seq;
-    api
+    activityApi
       .comments(t)
       .then((list) => {
         if (mine === seq) {
@@ -131,7 +132,7 @@
   function post(body: string, root: string | null, requestId: string): Promise<boolean> {
     if (!writable) return Promise.resolve(false);
     return run(
-      () => api.addComment(target, body, root, requestId),
+      () => activityApi.addComment(target, body, root, requestId),
       root === null ? m.comments_posted() : m.comments_replied(),
     );
   }
@@ -140,7 +141,7 @@
 
   /** 지운 댓글이 사라져도 키보드 초점을 잃지 않게 댓글 제목으로 옮긴다. */
   async function remove(id: string): Promise<void> {
-    if (await run(() => api.deleteComment(id), m.comments_deleted())) heading?.focus();
+    if (await run(() => activityApi.deleteComment(id), m.comments_deleted())) heading?.focus();
   }
 </script>
 
@@ -184,7 +185,7 @@
             canWrite={writable}
             {busy}
             onedit={(body: string) =>
-              run(() => api.editComment(t.root.id, body), m.comments_edited())}
+              run(() => activityApi.editComment(t.root.id, body), m.comments_edited())}
             ondelete={() => void remove(t.root.id)}
             onunsaved={(value: boolean) => {
               unsaved[`edit:${t.root.id}`] = value;
@@ -201,7 +202,7 @@
                 canWrite={writable}
                 {busy}
                 onedit={(body: string) =>
-                  run(() => api.editComment(r.id, body), m.comments_edited())}
+                  run(() => activityApi.editComment(r.id, body), m.comments_edited())}
                 ondelete={() => void remove(r.id)}
                 onunsaved={(value: boolean) => {
                   unsaved[`edit:${r.id}`] = value;
@@ -219,7 +220,7 @@
                 variant="ghost"
                 onclick={() =>
                   void run(
-                    () => api.resolveComment(t.root.id, !t.root.resolved),
+                    () => activityApi.resolveComment(t.root.id, !t.root.resolved),
                     t.root.resolved ? m.comments_unresolved() : m.comments_resolved(),
                   )}>{t.root.resolved ? m.comments_unresolve() : m.comments_resolve()}</Button
               >

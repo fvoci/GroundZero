@@ -1,10 +1,11 @@
 import { type MyTasksView } from '$lib/features/home/api';
 import { homeApi } from '$lib/features/home/api';
+import { activityApi, type NotificationPageView } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Activity, ReceivedInvitation } from '@fvoci/api-client';
-import { api, NetworkError, type NotificationPageView } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import MyTasksScreen from '$lib/features/home/MyTasksScreen.svelte';
 import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
@@ -82,7 +83,7 @@ describe('organization summaries', () => {
     expect(screen.queryByRole('heading')).toBeNull();
     expect(home).not.toHaveBeenCalled();
     expect(homeApi.myTasks).not.toHaveBeenCalled();
-    expect(api.recentActivity).not.toHaveBeenCalled();
+    expect(activityApi.recentActivity).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -154,7 +155,7 @@ describe('organization summaries', () => {
     if (item === undefined || created === undefined) throw new Error('missing synthetic task');
     localStorage.setItem(org.key('quick-add-item'), item.id);
     vi.spyOn(homeApi, 'home').mockResolvedValue(home);
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     const add = vi
       .spyOn(work, 'createQuickTask')
       .mockRejectedValueOnce(new NetworkError('offline'))
@@ -219,15 +220,15 @@ describe('notification details', () => {
     };
     const cursor = { before: '2026-10-25T00:00:00Z', before_id: 'first' };
     const notes = vi
-      .spyOn(api, 'notifications')
+      .spyOn(activityApi, 'notifications')
       .mockResolvedValueOnce({
         notifications: [{ ...target, id: 'first', read: true }],
         next: cursor,
       })
       .mockResolvedValue({ notifications: [target], next: null });
-    const count = vi.spyOn(api, 'unreadCount').mockResolvedValue(42);
+    const count = vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(42);
     const read = vi
-      .spyOn(api, 'markNotificationsRead')
+      .spyOn(activityApi, 'markNotificationsRead')
       .mockRejectedValueOnce(new NetworkError('offline'))
       .mockResolvedValue(1);
     const changed = vi.fn();
@@ -251,7 +252,7 @@ describe('notification details', () => {
     const cursor = { before: '2026-10-25T00:00:00Z', before_id: 'first' };
     let finish: (page: NotificationPageView) => void = () => undefined;
     const load = vi
-      .spyOn(api, 'notifications')
+      .spyOn(activityApi, 'notifications')
       .mockResolvedValueOnce({ notifications: [INVITE_NOTIFICATION], next: cursor })
       .mockImplementationOnce(
         () =>
@@ -260,8 +261,8 @@ describe('notification details', () => {
           }),
       )
       .mockResolvedValue({ notifications: [], next: null });
-    vi.spyOn(api, 'unreadCount').mockResolvedValue(20);
-    const read = vi.spyOn(api, 'markNotificationsRead').mockResolvedValue(1);
+    vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(20);
+    const read = vi.spyOn(activityApi, 'markNotificationsRead').mockResolvedValue(1);
     render(NotificationsScreen, { workspaces: [], onchanged: () => undefined });
     await fireEvent.click(await screen.findByRole('button', { name: m.references_load_more() }));
     expect(load).toHaveBeenLastCalledWith('org-1', cursor);
@@ -292,12 +293,12 @@ describe.each(['home', 'inbox'] as const)('same invitation flow in %s', (host) =
         organization_id: invitation.organization_id,
         workspace_id: invitation.workspace_id ?? null,
       });
-      vi.spyOn(api, 'notifications').mockResolvedValue({
+      vi.spyOn(activityApi, 'notifications').mockResolvedValue({
         notifications: [INVITE_NOTIFICATION],
         next: null,
       });
-      vi.spyOn(api, 'unreadCount').mockResolvedValue(1);
-      vi.spyOn(api, 'markNotificationsRead').mockResolvedValue(1);
+      vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(1);
+      vi.spyOn(activityApi, 'markNotificationsRead').mockResolvedValue(1);
       const accepted = vi.fn(() => {
         org.load('user-a', [TEST_ORGANIZATION, INVITED_ORGANIZATION]);
         return Promise.resolve();
@@ -333,12 +334,12 @@ describe.each(['home', 'inbox'] as const)('same invitation flow in %s', (host) =
       pending = false;
       return Promise.resolve(undefined);
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue({
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({
       notifications: [INVITE_NOTIFICATION],
       next: null,
     });
-    vi.spyOn(api, 'unreadCount').mockResolvedValue(1);
-    vi.spyOn(api, 'markNotificationsRead').mockResolvedValue(1);
+    vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(1);
+    vi.spyOn(activityApi, 'markNotificationsRead').mockResolvedValue(1);
     if (host === 'home') render(ReceivedInvitations, { onaccepted: () => Promise.resolve() });
     else {
       router.path = `/notifications/${INVITE_NOTIFICATION.id}`;
@@ -358,7 +359,7 @@ describe('activity feed', () => {
   it('uses target cursors, readable verbs and target links', async () => {
     const activity: Activity[] = ACTIVITY.map((a) => ({ ...a, workspace_id: null }));
     const load = vi
-      .spyOn(api, 'targetActivity')
+      .spyOn(activityApi, 'targetActivity')
       .mockResolvedValueOnce({
         activity: activity.slice(0, 4),
         next_before: '2026-10-25T00:00:00Z',
@@ -385,12 +386,12 @@ describe('activity feed', () => {
 
   it('reloads recent activity after organization changes', async () => {
     org.load('user-a', [TEST_ORGANIZATION, second], TEST_ORGANIZATION.id);
-    vi.mocked(api.recentActivity).mockResolvedValueOnce(ACTIVITY).mockResolvedValue([]);
+    vi.mocked(activityApi.recentActivity).mockResolvedValueOnce(ACTIVITY).mockResolvedValue([]);
     render(ActivityList);
     await screen.findAllByRole('link');
     org.select(second.id);
     await screen.findByText(m.home_activity_empty());
-    expect(api.recentActivity).toHaveBeenLastCalledWith(second.id);
+    expect(activityApi.recentActivity).toHaveBeenLastCalledWith(second.id);
   });
 });
 
@@ -401,7 +402,7 @@ it('refreshes the home notification preview when its invitation is declined', as
     Promise.resolve(pending ? [INVITATION] : []),
   );
   const notifications = vi
-    .spyOn(api, 'notifications')
+    .spyOn(activityApi, 'notifications')
     .mockImplementation(() =>
       Promise.resolve({ notifications: pending ? [INVITE_NOTIFICATION] : [], next: null }),
     );

@@ -1,6 +1,6 @@
+import { type CommentView } from '$lib/features/activity/api';
 import { describe, expect, it } from 'vitest';
 
-import type { CommentView } from '$lib/api/client';
 import { threads } from '$lib/features/comments/threads';
 
 const c = (id: string, parent: string | null, at: string): CommentView => ({

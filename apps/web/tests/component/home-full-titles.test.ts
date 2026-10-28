@@ -1,5 +1,6 @@
 import type { HomeTaskView, HomeView } from '$lib/features/home/api';
 import { homeApi } from '$lib/features/home/api';
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -78,7 +79,7 @@ describe('home full titles', () => {
       dates: [],
       items: [],
     });
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     expect(await screen.findByRole('link', { name: `${LONG} (다음)` })).toHaveTextContent(

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HomeView, MarkedTargetView } from '$lib/features/home/api';
   import { homeApi } from '$lib/features/home/api';
+  import { activityApi, type NotificationView } from '$lib/features/activity/api';
   import { taskData as work } from '$lib/features/tasks/detail-data';
   // 홈(D-19·D-120): 현재 조직 요약. 시간 기록 표시는 앱 상단에서 맡는다.
   import FileText from '@lucide/svelte/icons/file-text';
@@ -8,7 +9,7 @@
   import type { Workspace } from '@fvoci/api-client';
   import { onMount } from 'svelte';
 
-  import type { CalendarView, NotificationView } from '$lib/api/client';
+  import type { CalendarView } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { me } from '$lib/me.svelte';
@@ -108,7 +109,7 @@
           calendars.flatMap((c) => c.dates),
         );
         if (mine !== loadSeq) return;
-        const notes = await api.notifications(organizationId, undefined, 20);
+        const notes = await activityApi.notifications(organizationId, undefined, 20);
         if (mine !== loadSeq) return;
         home = h;
         week = merged;

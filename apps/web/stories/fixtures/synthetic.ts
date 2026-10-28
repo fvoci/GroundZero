@@ -1,4 +1,5 @@
 import type { HomeTaskView, HomeView } from '$lib/features/home/api';
+import { type CommentView, type NotificationView } from '$lib/features/activity/api';
 // 개발 seed와 같은 합성 데이터(deploy/postgres/dev-ui-data.json)를 화면 타입으로 옮긴다. 내용(제목·본문·트리·
 // 스레드·상태)은 `cargo xtask dev`의 "UI 상태 예제" 워크스페이스와 같다. id·시각은 DB가 정하므로 여기서는 고정값을 쓴다
 // (시각은 기준 시각에서 몇 분씩 뒤, 표시 시간대는 preview.ts가 Asia/Seoul로 고정).
@@ -14,10 +15,8 @@ import type {
 
 import type {
   CalendarView,
-  CommentView,
   ItemStatus,
   ItemView,
-  NotificationView,
   SearchResultView,
   SummaryView,
   TaskPriority,

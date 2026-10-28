@@ -1,5 +1,6 @@
 import type { HomeTaskView, HomeView } from '$lib/features/home/api';
 import { homeApi } from '$lib/features/home/api';
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,7 +75,7 @@ describe('home up next counts', () => {
     vi.spyOn(homeApi, 'home').mockResolvedValue(home);
     vi.mocked(homeApi.myTasks).mockResolvedValue(myTasksView(home));
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
-    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
 
     const headings = await screen.findAllByRole('heading', { level: 3 });

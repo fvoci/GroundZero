@@ -1,5 +1,6 @@
 import type { HomeView } from '$lib/features/home/api';
 import { homeApi } from '$lib/features/home/api';
+import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +28,7 @@ beforeEach(async () => {
     dates: [],
     items: [],
   });
-  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+  vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
 });
 
 const workspace: Workspace = {

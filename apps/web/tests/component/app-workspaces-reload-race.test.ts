@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import type { Me, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -70,8 +71,8 @@ beforeEach(async () => {
   );
   vi.spyOn(api, 'me').mockResolvedValue(me);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
-  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
-  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+  vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
   vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);
   vi.spyOn(api, 'modules').mockResolvedValue([]);

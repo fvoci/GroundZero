@@ -15,13 +15,14 @@ description: fvoci 웹(apps/web)을 바꿀 때 무엇을 읽고 어떤 검사를
   - 입력 보존·초안·닫기 확인·기대 사용자: `documents.md`(#d-27 · #d-96 · #d-97)
   - 업무·상태 정의·충돌 재저장·세부 통일(이탈 취소·시간대 대체 등): `tasks.md`(#d-94 · #d-116 · #d-125)
   - 시간 기록: `time.md`(#d-117). 수락 경로: `product.md`(#d-128)
-- 계약: `contracts/openapi.json`(어느 쓰기가 `x-fvoci-expected-user`를 받는지 포함), 공통 요청·오류·기대 사용자 머리 `apps/web/src/lib/shared/api/`, 도메인별 파서 `apps/web/src/lib/api/client.ts`·`features/tasks/api.ts`, 오류 문구 `apps/web/src/lib/api/errors.ts`.
+- 계약: `contracts/openapi.json`(어느 쓰기가 `x-fvoci-expected-user`를 받는지 포함), 공통 요청·오류·기대 사용자 머리 `apps/web/src/lib/shared/api/`, 도메인별 파서 `apps/web/src/lib/api/client.ts`·`features/tasks/api.ts`·`features/activity/api.ts`, 오류 문구 `apps/web/src/lib/api/errors.ts`.
 - 코드 위치(`apps/web/src/lib/`):
   - 조직 문맥 `org.svelte.ts`, 경로 `router.svelte.ts`, 브라우저 저장소 `storage.ts`
   - 폼·업무 CSV 초안의 공통 저장 `features/common/draft-storage.ts`, 폼 정책 `form-draft.ts`·`form-draft.svelte.ts`, 업무 조직 키 래퍼 `features/tasks/drafts.ts`. 이탈 확인 `features/common/leave-guard.svelte.ts`·`DiscardChangesConfirm.svelte`, 같은 줄 확인 `features/common/inline-confirm.ts`
   - 완료·오류 알림과 계정 전환 안전 상태 `features/feedback/feedback.svelte.ts`
   - 공용 입력 `ui/`, 색 토큰 `apps/web/src/styles/app.css`, 문구 `apps/web/messages/<영역>/{ko,en}.json`
   - 상태 정의 편집 `features/tasks/StatusEditor.svelte`
+  - 댓글·알림·활동·감사·고정 읽기·명령은 `features/activity/api.ts`(생성 자원 타입). 댓글 작성·답글·수정의 영구 초안은 기존 공통 폼 저장을 유지한다(D-27·#154).
   - 업무 읽기·명령 `features/tasks/api.ts`(생성 자원 타입), 화면 조합 `board-data.ts`·`detail-data.ts`. 보드 조각 `BoardCard`·`BoardLane`·`BoardQuickAdd`·`BoardFilters`·`board-keyboard.ts`, 상세 조각 `TaskFields`·`TaskDependencies`·`TaskRecurrence`·`TaskSidePanels`와 공통 `ChecklistForm`.
   - 홈·내 업무 집계 읽기와 생성 타입 연결은 `features/home/api.ts`다. 홈의 내 업무 요약은 홈 응답의 `my_tasks`를 주입하며, 독립 내 업무 화면만 `/me/tasks`를 읽는다. 달력·알림·활동은 각 기능 API를 계속 쓴다.
   - 칸반 이동 동기화·되돌리기 `features/tasks/move-sync.ts`. 재번호 뒤에도 원래 이웃이 붙어 있으면 정확히 그 사이로 돌아간다(#50). 판 변경·다시 읽기 실패 시험은 `tests/component/task-move-sync.test.ts`·`task-move-undo.test.ts`.

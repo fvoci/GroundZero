@@ -16,14 +16,11 @@ use axum::extract::{FromRef, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient};
 use openidconnect::{
     AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge,
     PkceCodeVerifier, ProviderMetadataWithLogout, RedirectUrl, Scope, TokenResponse as _,
 };
-use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use utoipa::{IntoParams, ToSchema};
@@ -32,6 +29,7 @@ use crate::config::{Config, OidcConfig};
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, UserId};
+pub(crate) use fvoci_core::random::random_token;
 use fvoci_db::{Db, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, DuplicateCookie, SessionState, single_cookie, token_hash};
 use uuid::Uuid;
@@ -108,12 +106,6 @@ impl OidcProvider {
         *self.metadata.write().await = Some(meta.clone());
         Ok(meta)
     }
-}
-
-pub(crate) fn random_token() -> String {
-    let mut bytes = [0_u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// 요청의 세션 쿠키 토큰 해시(실시간 연결이 세션이 살아 있는지 다시 볼 때 쓴다).
