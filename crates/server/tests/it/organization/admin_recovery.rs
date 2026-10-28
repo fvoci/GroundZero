@@ -40,6 +40,14 @@ async fn demotion_removes_self_join_only_and_cleans_shares_and_assignments() {
     join(&w, &user).await;
     // 반복 참여해도 참여 전의 "행 없음"을 잃지 않는다.
     join(&w, &user).await;
+    let second_workspace = crate::sql_support::workspace(&w.state, &w.owner, w.org).await;
+    rows(
+        &w.state,
+        &user,
+        "SELECT fvoci.app_join_workspace_as_admin($1,@ids)",
+        &[second_workspace],
+    )
+    .await;
     let doc = w.doc().await;
     let task = w.task().await;
     w.share(doc, &user, "read").await;
@@ -49,6 +57,16 @@ async fn demotion_removes_self_join_only_and_cleans_shares_and_assignments() {
     )
     .await;
     demote(&w, &user).await;
+    assert!(
+        rows(
+            &w.state,
+            &w.owner,
+            "SELECT role FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
+            &[second_workspace, user.id.0]
+        )
+        .await
+        .is_empty()
+    );
     assert!(
         rows(
             &w.state,
@@ -117,6 +135,12 @@ async fn restored(role: &str) {
         .await["role"],
         role
     );
+    let recovered = one(&w.state, &w.owner,
+        "SELECT role_source,previous_role,previous_role_source FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
+        &[w.ws,user.id.0]).await;
+    assert_eq!(recovered["role_source"], "admin_assigned");
+    assert_eq!(recovered["previous_role"], serde_json::Value::Null);
+    assert_eq!(recovered["previous_role_source"], serde_json::Value::Null);
 }
 
 #[tokio::test]
@@ -127,6 +151,29 @@ async fn demotion_restores_member_before_self_join() {
 #[tokio::test]
 async fn demotion_restores_readonly_before_self_join() {
     restored("readonly").await;
+}
+
+#[tokio::test]
+async fn demotion_restores_the_original_invitation_path() {
+    let w = World::new().await;
+    let (user, _) = common::add_member(
+        &common::app(&w.state),
+        &w.state,
+        &w.owner,
+        &w.ws.to_string(),
+        "invited",
+        "readonly",
+    )
+    .await;
+    join(&w, &user).await;
+    demote(&w, &user).await;
+    let recovered = one(&w.state, &w.owner,
+        "SELECT role,role_source,previous_role,previous_role_source FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2",
+        &[w.ws,user.id.0]).await;
+    assert_eq!(recovered["role"], "readonly");
+    assert_eq!(recovered["role_source"], "invitation_accepted");
+    assert_eq!(recovered["previous_role"], serde_json::Value::Null);
+    assert_eq!(recovered["previous_role_source"], serde_json::Value::Null);
 }
 
 #[tokio::test]
