@@ -23,11 +23,11 @@ async function display(entry: TimeEntryResource): Promise<TimeEntryView> {
 
 export const timeData = {
   ...timeApi,
-  async currentTimer(this: void) {
+  currentTimer: async () => {
     const entry = await timeApi.currentTimer();
     return entry === null ? null : display(entry);
   },
-  async timeEntries(this: void, from: string, to: string, tz: string): Promise<TimeEntryView[]> {
+  timeEntries: async (from: string, to: string, tz: string): Promise<TimeEntryView[]> => {
     const [entries, targets] = await Promise.all([
       timeApi.timeEntries(from, to, tz),
       timeApi.timeEntryTargets({ from, to, tz }),
@@ -45,17 +45,17 @@ export const timeData = {
     const current = incomplete ? await timeApi.timeEntryTargets({ from, to, tz }) : targets;
     return entries.map((entry) => composeEntry(entry, current));
   },
-  async startTimer(this: void, ...args: Parameters<typeof timeApi.startTimer>) {
+  startTimer: async (...args: Parameters<typeof timeApi.startTimer>) => {
     const started = await timeApi.startTimer(...args);
     return { ...(await display(started)), stopped_entry_id: started.stopped_entry_id };
   },
-  async timerAction(this: void, ...args: Parameters<typeof timeApi.timerAction>) {
+  timerAction: async (...args: Parameters<typeof timeApi.timerAction>) => {
     return display(await timeApi.timerAction(...args));
   },
-  async addTimeEntry(this: void, ...args: Parameters<typeof timeApi.addTimeEntry>) {
+  addTimeEntry: async (...args: Parameters<typeof timeApi.addTimeEntry>) => {
     return display(await timeApi.addTimeEntry(...args));
   },
-  async updateTimeEntry(this: void, ...args: Parameters<typeof timeApi.updateTimeEntry>) {
+  updateTimeEntry: async (...args: Parameters<typeof timeApi.updateTimeEntry>) => {
     const result = await timeApi.updateTimeEntry(...args);
     return result.kind === 'conflict'
       ? { ...result, current: await display(result.current) }
