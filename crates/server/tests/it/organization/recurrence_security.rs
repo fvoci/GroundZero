@@ -333,7 +333,7 @@ async fn changed_root_assignee_returns_retryable_conflict_without_waiting_in_a_l
         .unwrap()
         .unwrap();
     assert_eq!(reply.status, StatusCode::CONFLICT, "{:?}", reply.json);
-    assert_eq!(reply.json["code"], "invalid_state");
+    assert_eq!(reply.json["error"], "invalid_state");
     assert!(
         reply.json["message"]
             .as_str()
