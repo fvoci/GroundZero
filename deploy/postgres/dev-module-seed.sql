@@ -93,7 +93,7 @@ BEGIN
 
     -- 업무는 모든 칸과 함께 한 번에 만든다(D-105). id: 업무·감사·활동 + 담당자마다 감사·활동 2개.
     v_task := app_create_task(v_item, pg_temp.take1(), '대표 업무: 준비 사항 확인', NULL,
-      '모든 담당자가 같은 업무 상태를 공유합니다.', 'in_progress', 'medium', v_today, v_today + 2, 45,
+      '모든 담당자가 같은 업무 상태를 공유합니다.', '진행 중', 'medium', v_today, v_today + 2, 45,
       ARRAY['개발예제'], ARRAY[v_admin, v_user], false, pg_temp.take(7));
     PERFORM app_add_checklist_items(v_task, jsonb_build_array(
       jsonb_build_object('request_id', pg_temp.take1(), 'text', '준비 자료 확인', 'checked', true),
@@ -110,20 +110,20 @@ BEGIN
     PERFORM app_add_time_entry(pg_temp.take1(), now() - interval '90 minutes', now() - interval '60 minutes',
       0, v_time_kind, '개발 예제: 종료된 개인 시간 기록', 'task', v_task, pg_temp.take(1));
     IF v_kind = 'project' THEN
-      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, '', 'done', 'low',
+      v_child := app_create_task(v_item, pg_temp.take1(), '하위 업무: 검토 목록 작성', v_task, '', '완료', 'low',
         v_today, v_today, 15, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
-      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, '', 'todo', 'high',
+      v_milestone := app_create_task(v_item, pg_temp.take1(), '마일스톤: 검토 완료', NULL, '', '할 일', 'high',
         NULL, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], true, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_task, v_milestone, 'FS', 0, NULL, NULL, '[]'::jsonb, pg_temp.take(1));
       -- 관계 종류 예제(D-91): 대표 업무와 함께 시작(SS·1), 함께 끝(FF·0), 그 업무가 시작하기 전에 끝(SF·0).
       -- 날짜는 이미 관계를 채우므로 옮길 업무가 없다.
-      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, '', 'todo', 'medium',
+      v_together := app_create_task(v_item, pg_temp.take1(), '관계 예제: 하루 뒤 함께 시작', NULL, '', '할 일', 'medium',
         v_today + 1, v_today + 3, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_task, v_together, 'SS', 1, NULL, NULL, '[]', pg_temp.take(1));
-      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, '', 'todo', 'low',
+      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 함께 마무리', NULL, '', '할 일', 'low',
         v_today + 1, v_today + 2, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_task, v_linked, 'FF', 0, NULL, NULL, '[]', pg_temp.take(1));
-      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, '', 'todo', 'low',
+      v_linked := app_create_task(v_item, pg_temp.take1(), '관계 예제: 시작 전에 준비 끝', NULL, '', '할 일', 'low',
         v_today - 1, v_today, NULL, ARRAY['개발예제'], ARRAY[v_admin], false, pg_temp.take(5));
       PERFORM app_set_task_dependency(v_together, v_linked, 'SF', 0, NULL, NULL, '[]', pg_temp.take(1));
     END IF;
@@ -269,13 +269,13 @@ BEGIN
         WHERE i.id = v_item AND i.deleted_at IS NULL AND m.deleted_at IS NULL
           AND i.archived_at IS NULL AND m.archived_at IS NULL);
       FOR v_row IN SELECT * FROM jsonb_array_elements(CASE WHEN v_kind = 'project' THEN '[
-        {"title":"API 연결 점검","status":"todo","priority":"high","due":4},
-        {"title":"문서 초안 검토","status":"todo","priority":"low","due":6},
-        {"title":"배포 체크리스트 확인","status":"in_progress","priority":"urgent","due":1},
-        {"title":"회고 일정 잡기","status":"done","priority":"none"}
+        {"title":"API 연결 점검","status":"할 일","priority":"high","due":4},
+        {"title":"문서 초안 검토","status":"할 일","priority":"low","due":6},
+        {"title":"배포 체크리스트 확인","status":"진행 중","priority":"urgent","due":1},
+        {"title":"회고 일정 잡기","status":"완료","priority":"none"}
       ]' ELSE '[
-        {"title":"자료 정리","status":"todo","priority":"medium","due":3},
-        {"title":"지난 활동 돌아보기","status":"done","priority":"low"}
+        {"title":"자료 정리","status":"할 일","priority":"medium","due":3},
+        {"title":"지난 활동 돌아보기","status":"완료","priority":"low"}
       ]' END::jsonb) LOOP
         v_task := app_create_task(v_item, pg_temp.take1(), v_row->>'title', NULL, '개발용 합성 업무입니다.',
           v_row->>'status', v_row->>'priority', NULL,

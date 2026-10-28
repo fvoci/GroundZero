@@ -340,12 +340,17 @@ impl DbUrls {
     }
 
     pub fn at(host_port: &str) -> Self {
+        Self::at_database(host_port, "fvoci")
+    }
+
+    /// 같은 서버의 다른 DB(예: 개발 준비 SQL 시험이 따로 만든 DB). 역할은 서버 전체에 하나다.
+    pub fn at_database(host_port: &str, database: &str) -> Self {
         Self {
-            admin: format!("postgres://fvoci:fvoci-test-password@{host_port}/fvoci"),
+            admin: format!("postgres://fvoci:fvoci-test-password@{host_port}/{database}"),
             migration: format!(
-                "postgres://fvoci_migrator:{TEST_MIGRATOR_PASSWORD}@{host_port}/fvoci"
+                "postgres://fvoci_migrator:{TEST_MIGRATOR_PASSWORD}@{host_port}/{database}"
             ),
-            app: format!("postgres://fvoci_app:{TEST_APP_PASSWORD}@{host_port}/fvoci"),
+            app: format!("postgres://fvoci_app:{TEST_APP_PASSWORD}@{host_port}/{database}"),
         }
     }
 
