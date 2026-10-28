@@ -1,4 +1,3 @@
-import { api } from '$lib/api/client';
 import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
