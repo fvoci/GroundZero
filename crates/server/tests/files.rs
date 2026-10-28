@@ -109,7 +109,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let (reader, _) = add_member(&app, &state, &admin, &ws, "readonly", "readonly").await;
     let outsider = login(&state, "outsider").await;
-    let doc = create_doc(&app, &writer, &ws, "자료").await;
+    let doc = create_doc(&app, &admin, &ws, "자료").await;
     let doc_id = doc["id"].as_str().unwrap();
     let data = content(5 * MIB + 10, 7);
     let request = new_request_id();
@@ -226,7 +226,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     assert_eq!(listed.json[0]["name"], "data.csv");
     assert_eq!(listed.json[0]["can_write"], false);
     assert_eq!(listed.json[0]["size"], data.len());
-    // D-115: 수정 권한도 소유 권한이 아니면 allow_copy가 있어야 내려받는다.
+    // D-115: 문서 작성자가 아닌 수정자·파일 업로더는 allow_copy가 있어야 내려받는다.
     assert_eq!(listed.json[0]["can_download"], false);
     assert_eq!(
         download(&app, &reader, &format!("/api/files/{file_id}/content"))

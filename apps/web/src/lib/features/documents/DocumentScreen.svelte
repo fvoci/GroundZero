@@ -173,7 +173,7 @@
         />
       {/snippet}
       {#snippet more()}
-        {#if shownDoc.can_export && (shownDoc.access === 'owner' || shownDoc.allow_copy)}
+        {#if shownDoc.can_export}
           <DropdownMenu.Item onSelect={() => (exportOpen = true)}
             >{m.documents_export()}</DropdownMenu.Item
           >
@@ -188,7 +188,7 @@
         {/if}
       {/snippet}
     </DocumentActions>
-    {#if doc.can_export && (doc.access === 'owner' || doc.allow_copy)}
+    {#if doc.can_export}
       <ExportDialog
         bind:open={exportOpen}
         returnFocus={moreButton}

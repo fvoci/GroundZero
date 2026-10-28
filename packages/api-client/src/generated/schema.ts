@@ -383,8 +383,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 소유 권한이거나, 볼 수 있고 문서의 `allow_copy`가 켜져 있어야
-         *     하며(수정 권한만으로는 안 된다) 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
+         * 저장된 리비전 하나를 내보낸다(D-75·D-115). 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+         *     있어야 하며 내보내기 기록을 남긴다. 돌려주는 내용은 그 리비전의 제목·본문이다. 그림·첨부는 브라우저가 파일
          *     내용 API로 받으므로 파일마다 내려받기 권한을 다시 확인한다.
          */
         post: operations["export_revision"];
@@ -3371,7 +3371,7 @@ export interface components {
         /** @description 문서 전체. */
         Document: {
             access: components["schemas"]["Access"];
-            /** @description 소유 권한자 외의 사람이 복제할 수 있는지 (D-20). */
+            /** @description 소유 권한자·문서 작성자 외의 사람이 복제·내보내기·내려받기를 할 수 있는지(D-115). */
             allow_copy: boolean;
             /** @description Tiptap JSON. `type`이 `doc`인 객체. */
             body: Record<string, never>;
@@ -3380,8 +3380,8 @@ export interface components {
             /** @description 현재 사용자가 고칠 수 있는지. */
             can_edit: boolean;
             /**
-             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 소유 권한이면 항상 참이고, 그 밖에는 볼 수 있으면서
-             *     문서의 `allow_copy`가 켜졌을 때만 참이다. 수정 권한만으로는 참이 되지 않는다.
+             * @description 이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.
+             *     그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다.
              */
             can_export: boolean;
             /**
@@ -3627,8 +3627,8 @@ export interface components {
         /** @description 첨부 파일. */
         FileView: {
             /**
-             * @description 내려받을 수 있는지(D-115). 소유 권한이면 항상 참이다. 그 밖에 문서 첨부는 볼 수 있으면서 문서의
-             *     `allow_copy`가 켜졌을 때만 참이고(수정 권한만으로는 참이 아니다), 항목 첨부는 볼 수 있으면 참이다.
+             * @description 내려받을 수 있는지(D-115). 문서 첨부는 볼 수 있고 소유 권한·문서 작성자 예외나 `allow_copy` 허용이
+             *     있어야 참이다(수정 권한만으로는 참이 아니다). 항목 첨부는 볼 수 있으면 참이다.
              *     아니어도 안전한 형식은 브라우저 안에서 볼 수 있다.
              */
             can_download: boolean;

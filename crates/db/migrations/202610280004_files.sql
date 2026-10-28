@@ -144,11 +144,11 @@ CREATE FUNCTION fvoci.app_file_can_download(p_file uuid) RETURNS boolean
       RETURN true;
     END IF;
     SELECT document_id INTO v_doc FROM files WHERE id = p_file;
-    -- 항목 첨부에는 문서 플래그가 없다. 문서 첨부는 그 문서의 allow_copy를 따른다.
+    -- 항목 첨부에는 문서 정책이 없다. 문서 첨부는 작성자 예외를 포함한 공통 내보내기 판정을 따른다.
     IF v_doc IS NULL THEN
       RETURN true;
     END IF;
-    RETURN coalesce((SELECT allow_copy FROM documents WHERE id = v_doc), false);
+    RETURN app_document_can_export(v_doc);
   END
   $$;
 
