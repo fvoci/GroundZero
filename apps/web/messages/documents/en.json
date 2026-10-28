@@ -1,5 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "documents_share_limit": "Sharing limit: {permission}",
+  "documents_recipient_unavailable": "Couldn't find the recipient. Enter a verified email from the same organization.",
   "documents_public_links_disabled": "Your organization has disabled public links.",
   "documents_not_found": "This document doesn't exist or you don't have access to it.",
   "documents_load_failed": "Couldn't load the document.",

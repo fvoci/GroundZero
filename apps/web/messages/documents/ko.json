@@ -1,5 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "documents_share_limit": "공유 상한: {permission}",
+  "documents_recipient_unavailable": "받는 사람을 확인하지 못했습니다. 같은 조직의 확인된 이메일을 입력하세요.",
   "documents_public_links_disabled": "조직이 공개 링크를 껐습니다.",
   "documents_not_found": "문서가 없거나 볼 권한이 없습니다.",
   "documents_load_failed": "문서를 불러오지 못했습니다.",

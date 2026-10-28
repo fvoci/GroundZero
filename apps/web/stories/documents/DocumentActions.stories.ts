@@ -23,6 +23,28 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Owner: Story = {};
+export const OutsideMemberShare: Story = {
+  beforeEach: () => {
+    const recipient = {
+      user_id: 'outside-1',
+      email: 'outside@example.test',
+      display_name: 'Outside',
+      recipient_role: 'outside_member' as const,
+      max_permission: 'read' as const,
+    };
+    spyOn(api, 'shareRecipient').mockResolvedValue(recipient);
+    spyOn(api, 'shares').mockResolvedValue([{ ...recipient, id: 'share-1', permission: 'write' }]);
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+    await expect(await screen.findByText('공간 밖 조직원')).toBeInTheDocument();
+    await expect(screen.getByText('공유 상한: 읽기')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('이메일'), 'outside@example.test');
+    await userEvent.click(screen.getByRole('button', { name: '공유 권한' }));
+    await expect(await screen.findByRole('option', { name: '읽기' })).toBeInTheDocument();
+    await expect(screen.queryByRole('option', { name: '수정' })).toBeNull();
+  },
+};
 export const WriterCopyDisabled: Story = {
   args: {
     doc: {

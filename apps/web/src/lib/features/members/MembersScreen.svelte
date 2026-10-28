@@ -20,7 +20,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import RoleSelect from './RoleSelect.svelte';
-  import { roleLabel } from './roles';
+  import { DISPLAY_ROLES, roleLabel } from './roles';
 
   interface Props {
     workspace: Workspace;
@@ -286,6 +286,22 @@
   <h1 id="members-heading" class="text-xl font-semibold">
     {m.members_heading({ workspace: workspace.name })}
   </h1>
+
+  <section
+    aria-labelledby="role-limits-heading"
+    class="flex flex-col gap-2 rounded border p-3 text-sm"
+  >
+    <h2 id="role-limits-heading" class="font-semibold">{m.members_role_limits()}</h2>
+    <dl class="grid grid-cols-2 gap-2">
+      {#each DISPLAY_ROLES as role (role)}
+        <dt>{roleLabel(role)}</dt>
+        <dd>
+          {role === 'admin' || role === 'member' ? m.members_limit_write() : m.members_limit_read()}
+        </dd>
+      {/each}
+    </dl>
+    <p>{m.members_outside_member_hint()}</p>
+  </section>
 
   {#if loadError !== undefined}
     <!-- 멤버·그룹·초대 어느 읽기가 실패해도(목록이 이미 있어도) 다시 읽을 수 있다. -->

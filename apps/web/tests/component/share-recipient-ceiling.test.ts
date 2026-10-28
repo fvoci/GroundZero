@@ -10,6 +10,7 @@ import { org } from '$lib/org.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { ACCESS_DOCUMENT } from '../../stories/fixtures/access';
+import { TEST_ORGANIZATION } from './fixtures/organization';
 
 const workspace: Workspace = {
   id: 'ws-1',
@@ -31,7 +32,7 @@ const recipient = {
 beforeEach(() => {
   localStorage.clear();
   me.userId = 'owner-1';
-  org.currentId = 'org-1';
+  org.load(me.userId, [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
   vi.spyOn(api, 'document').mockResolvedValue(ACCESS_DOCUMENT);
   vi.spyOn(api, 'shares').mockResolvedValue([]);
   vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
@@ -52,7 +53,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   me.userId = '';
-  org.currentId = undefined;
+  org.reset();
   localStorage.clear();
 });
 
