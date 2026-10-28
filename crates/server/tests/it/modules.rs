@@ -11,8 +11,7 @@ use crate::common;
 use axum::Router;
 use axum::http::{Method, StatusCode};
 use common::{
-    TestUser, add_member, create_doc, create_workspace, doc_body, login, login_with_email,
-    new_request_id, send, unique_email,
+    TestUser, add_member, create_doc, create_workspace, doc_body, login, new_request_id, send,
 };
 use serde_json::{Value, json};
 
