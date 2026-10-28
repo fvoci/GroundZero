@@ -8,7 +8,7 @@ mod common;
 
 use axum::Router;
 use axum::http::{Method, StatusCode};
-use common::{TestUser, config_with, create_doc, doc_body, login, new_request_id, send};
+use common::{TestUser, config_with, login, new_request_id, send};
 use fvoci_server::search::{drain, prepare};
 use serde_json::{Value, json};
 use std::time::Duration;
