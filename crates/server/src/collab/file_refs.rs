@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 use yrs::types::text::YChange;
 use yrs::types::xml::{Xml, XmlFragment, XmlOut};
-use yrs::{Assoc, Doc, IndexedSequence, OffsetKind, Out, ReadTxn, Text, Transact, XmlTextRef};
+use yrs::{
+    Assoc, BranchID, Doc, IndexedSequence, OffsetKind, Out, ReadTxn, Text, Transact, XmlTextRef,
+};
 
 use super::convert::{self, FRAGMENT};
 use fvoci_core::error::AppError;
@@ -92,6 +94,14 @@ impl Attribution {
     }
 }
 
+/// DB에 저장하는 노드 키는 yrs의 Debug·Display 출력과 독립된 형식으로 유지한다.
+fn node_key(id: &BranchID) -> String {
+    match id {
+        BranchID::Nested(id) => format!("nested:{}:{}", id.client.get(), id.clock),
+        BranchID::Root(name) => format!("root:{name}"),
+    }
+}
+
 fn collect<T: ReadTxn>(
     txn: &T,
     children: impl Iterator<Item = XmlOut>,
@@ -99,7 +109,7 @@ fn collect<T: ReadTxn>(
     out: &mut Vec<Entry>,
 ) {
     for child in children {
-        let node = format!("{:?}", child.id());
+        let node = node_key(&child.id());
         match child {
             XmlOut::Element(element) => {
                 for (key, value) in element.attributes(txn) {
@@ -237,7 +247,7 @@ fn collect_text<T: ReadTxn>(
                 && let Some(id) = index.id()
             {
                 out.push(Entry {
-                    node: format!("{node}/text/{id}"),
+                    node: format!("{node}/text/{}", node_key(&BranchID::Nested(*id))),
                     value: reference,
                     editor: None,
                     span: None,
@@ -334,6 +344,53 @@ mod tests {
     use std::sync::Arc;
     use yrs::types::Attrs;
     use yrs::types::xml::XmlTextPrelim;
+
+    #[test]
+    fn node_key_format_is_stable_for_nested_and_root_ids() {
+        let nested = BranchID::Nested(yrs::ID::new(yrs::ClientID::new(4_294_967_297), 17));
+        assert_eq!(node_key(&nested), "nested:4294967297:17");
+        assert_eq!(
+            node_key(&BranchID::Root(Arc::from("default"))),
+            "root:default"
+        );
+        assert_eq!(
+            node_key(&BranchID::Root(Arc::from("문서/root:42"))),
+            "root:문서/root:42"
+        );
+    }
+
+    #[test]
+    fn stored_attribute_node_key_uses_explicit_client_and_clock() {
+        let doc = Doc::with_client_id(42);
+        let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+        let text = fragment.push_back(&mut doc.transact_mut(), XmlTextPrelim::new(""));
+        let attrs = Attrs::from([(
+            Arc::from("link"),
+            yrs::Any::from("/api/files/00000000-0000-0000-0000-000000000001/content?version=1"),
+        )]);
+        text.insert_with_attributes(&mut doc.transact_mut(), 0, "attachment", attrs);
+        let mut attribution = Attribution::default();
+        attribution.observe(&doc, None);
+        assert_eq!(attribution.0.len(), 1);
+        assert_eq!(attribution.json().unwrap()[0]["node"], "nested:42:0/link");
+    }
+
+    #[test]
+    fn stored_text_node_key_uses_explicit_client_and_clock() {
+        let doc = Doc::with_client_id(42);
+        let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
+        fragment.push_back(
+            &mut doc.transact_mut(),
+            XmlTextPrelim::new("/api/files/00000000-0000-0000-0000-000000000001/content?version=1"),
+        );
+        let mut attribution = Attribution::default();
+        attribution.observe(&doc, None);
+        assert_eq!(attribution.0.len(), 1);
+        assert_eq!(
+            attribution.json().unwrap()[0]["node"],
+            "nested:42:0/text/nested:42:1"
+        );
+    }
 
     #[test]
     fn removing_a_readers_link_text_cannot_lend_their_identity_to_another_editors_text() {
