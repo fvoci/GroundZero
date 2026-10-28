@@ -16,10 +16,11 @@ async fn demotion_counts_a_self_join_committed_while_waiting_for_the_organizatio
     .await;
     let second = workspace(&w.state, &w.owner, w.org).await;
     let mut joining = w.state.db.begin_as(user.id).await.unwrap();
+    // 이미 참여한 공간의 반복 참여는 행을 바꾸지 않고 실제 참여 함수의 조직 SHARE를 유지한다.
     on(
         joining.conn(),
-        "SELECT id FROM fvoci.organizations WHERE id=$1 FOR SHARE",
-        &[w.org],
+        "SELECT fvoci.app_join_workspace_as_admin($1,@ids)",
+        &[w.ws],
     )
     .await
     .unwrap();
