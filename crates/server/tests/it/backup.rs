@@ -361,8 +361,9 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         .await
         .unwrap_err();
     assert!(
-        err.to_string()
-            .contains(&format!("at migration {last} but the backup is at 202610250001")),
+        err.to_string().contains(&format!(
+            "at migration {last} but the backup is at 202610250001"
+        )),
         "{err}"
     );
 
@@ -376,16 +377,18 @@ async fn backup_restores_only_into_the_same_fully_applied_baseline() {
         .await
         .unwrap_err();
     assert!(
-        err.to_string()
-            .contains(&format!("at migration {last} but the backup is at {partial_at}")),
+        err.to_string().contains(&format!(
+            "at migration {last} but the backup is at {partial_at}"
+        )),
         "{err}"
     );
     let err = backup::restore(&config, &partial.db, &full)
         .await
         .unwrap_err();
     assert!(
-        err.to_string()
-            .contains(&format!("at migration {partial_at} but the backup is at {last}")),
+        err.to_string().contains(&format!(
+            "at migration {partial_at} but the backup is at {last}"
+        )),
         "{err}"
     );
 
