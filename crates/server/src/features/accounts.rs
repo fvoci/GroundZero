@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{FromRef, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient};
