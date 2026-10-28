@@ -21,27 +21,35 @@ pub struct SearchQuery {
     #[param(max_length = 200)]
     pub q: String,
     /// 이 워크스페이스 안에서만(멤버).
-    #[param(value_type = Option<String>, format = Uuid)]
+    #[param(value_type = Option<String>, format = Uuid, nullable = true)]
     pub workspace_id: Option<WorkspaceId>,
     /// 쉼표로 구분한 종류(`document,task,item,event,file,record`). 없으면 전부.
+    #[param(nullable = true)]
     pub kinds: Option<String>,
     /// 이 모듈 안의 것만.
-    #[param(value_type = Option<String>, format = Uuid)]
+    #[param(value_type = Option<String>, format = Uuid, nullable = true)]
     pub module_id: Option<Uuid>,
     /// 업무 상태 범주(`todo`·`doing`·`done`, D-116). 주면 업무만 나온다. 세 낱말 밖은 400.
+    #[param(nullable = true)]
     pub status_category: Option<String>,
     /// 담당자(`me` 또는 사용자 id). 주면 업무만 나온다.
+    #[param(nullable = true)]
     pub assignee: Option<String>,
     /// 날짜 범위 시작(YYYY-MM-DD). 날짜만 있는 값(업무 기한(없으면 시작일), 종일 일정의 시작일, 기록의 발생일)은 그 날짜로,
     /// 실제 시각(문서·항목·파일의 고친 때, 발생일 없는 기록의 고친 때, 시각 일정의 시작)은 `tz`의 그날 0시부터 비교한다.
+    #[param(nullable = true)]
     pub from: Option<String>,
     /// 날짜 범위 끝(YYYY-MM-DD, 포함). 실제 시각은 `tz`의 다음 날 0시 전까지.
+    #[param(nullable = true)]
     pub to: Option<String>,
     /// 날짜 범위의 하루를 정하는 IANA 시간대(예: `Asia/Seoul`). 없으면 저장한 시간대, 그것도 없으면 UTC. 모르는 이름은 400.
+    #[param(nullable = true)]
     pub tz: Option<String>,
     /// 작성자(`me` 또는 사용자 id): 그 사람이 만든 것만(각 대상의 `created_by`). 볼 수 있는 범위는 넓히지 않는다.
+    #[param(nullable = true)]
     pub author: Option<String>,
     /// `true`면 제목에서만 찾는다(본문·첨부 글자·번호는 보지 않는다).
+    #[param(nullable = true)]
     pub title_only: Option<bool>,
 }
 

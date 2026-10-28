@@ -20,6 +20,16 @@ fn search_parameters_stay_in_the_query_and_publish_the_limit() {
             parameter["name"] == "q" || parameter["name"] == "organization_id",
             "{parameter}"
         );
+        if parameter["required"] == false {
+            assert!(
+                parameter["schema"]["type"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|kind| kind == "null"),
+                "{parameter}"
+            );
+        }
     }
     let query = parameters.iter().find(|p| p["name"] == "q").unwrap();
     assert_eq!(query["schema"]["maxLength"], 200);
