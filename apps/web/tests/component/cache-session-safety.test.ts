@@ -156,6 +156,22 @@ it('hides a persisted app synchronously until the same user and fresh data are l
   expect(api.deletedWorkspaces).toHaveBeenCalledTimes(2);
 });
 
+it('keeps pre-cache hiding and verifies only when the page is restored', async () => {
+  await signedIn();
+  const check = vi.spyOn(api, 'me');
+  const previous = screen.getByText('이전 비밀 목록');
+  window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+  expect(previous).not.toBeVisible();
+  expect(check).toHaveBeenCalledTimes(1);
+  vi.spyOn(api, 'deletedWorkspaces').mockResolvedValue([]);
+  pageshow();
+  await waitFor(() => {
+    expect(screen.getByTestId('user-menu')).toBeVisible();
+  });
+  expect(check).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+});
+
 it('goes to login after an anonymous persisted restore without exposing the old screen', async () => {
   await signedIn();
   const previous = screen.getByText('이전 비밀 목록');
