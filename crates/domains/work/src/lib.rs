@@ -12,8 +12,9 @@ pub mod tasks;
 
 use axum::Router;
 use axum::extract::FromRef;
+use axum::middleware::from_extractor_with_state;
 use axum::routing::{get, post, put};
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use utoipa::OpenApi;
 
 pub use state::WorkState;
@@ -86,8 +87,9 @@ pub use state::WorkState;
 )]
 pub struct WorkApi;
 
-/// 업무 경로(`/api` 아래). 조립 crate의 상태 `S`에서 [`WorkState`]와 세션 상태를 꺼낸다.
-pub fn router<S>() -> Router<S>
+/// 업무 경로(`/api` 아래). 조립 crate의 상태 `S`에서 [`WorkState`]와 세션 상태를 꺼낸다. 모든 명령에 기대 사용자
+/// 머리가 있으면 비교한다(D-96 2026-10-28 개정 (가)). 머리가 필수인 업무 쓰기는 처리기가 `ExpectedUser`로 따로 받는다.
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     WorkState: FromRef<S>,
@@ -132,4 +134,7 @@ where
             "/checklist-items/{item_id}",
             put(tasks::update_checklist_item).delete(tasks::delete_checklist_item),
         )
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

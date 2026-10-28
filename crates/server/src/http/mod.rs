@@ -737,7 +737,7 @@ pub fn router(state: AppState) -> Router {
         .unwrap_or(usize::MAX)
         .saturating_add(64 * 1024);
     let api = Router::new()
-        .merge(fvoci_work::router())
+        .merge(fvoci_work::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))

@@ -12122,7 +12122,10 @@ export interface operations {
     plan_predecessor_schedule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 task_id: string;
                 predecessor_id: string;
@@ -12152,6 +12155,15 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description account_changed: 보낸 기대 사용자가 세션 사용자와 다름 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12225,7 +12237,10 @@ export interface operations {
     plan_task_schedule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 task_id: string;
             };
@@ -12254,6 +12269,15 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description account_changed: 보낸 기대 사용자가 세션 사용자와 다름 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

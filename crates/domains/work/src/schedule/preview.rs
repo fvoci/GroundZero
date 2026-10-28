@@ -20,7 +20,7 @@ use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::UserId;
 use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::UserTx;
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 /// 미리보기 요청: 바꾸려는 날짜.
 #[derive(Debug, Deserialize, ToSchema)]
@@ -277,8 +277,11 @@ async fn date_plan(
 
 /// 날짜를 바꿀 때의 재배치 계획(읽기). 옮길 후속 업무와 원인 관계, 날짜가 없어 계산하지 않은 업무.
 #[utoipa::path(post, path = "/api/tasks/{task_id}/schedule-plan", operation_id = "plan_task_schedule",
-    params(("task_id" = String, Path, format = Uuid)), request_body = SchedulePreviewInput,
-    responses((status = 200, body = SchedulePlan), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
+    params(("task_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
+    request_body = SchedulePreviewInput,
+    responses((status = 200, body = SchedulePlan), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "account_changed: 보낸 기대 사용자가 세션 사용자와 다름")),
     tag = "tasks")]
 pub async fn plan(
     State(state): State<WorkState>,
@@ -292,9 +295,11 @@ pub async fn plan(
 /// 관계를 만들거나 바꿀 때의 재배치 계획(읽기). 같은 항목만, 자기 자신·순환·잘못된 지연일은 400, 볼 수 없으면 404.
 #[utoipa::path(post, path = "/api/tasks/{task_id}/predecessors/{predecessor_id}/schedule-plan",
     operation_id = "plan_predecessor_schedule",
-    params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid)),
+    params(("task_id" = String, Path, format = Uuid), ("predecessor_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
     request_body = LinkInput,
-    responses((status = 200, body = SchedulePlan), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
+    responses((status = 200, body = SchedulePlan), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
+              (status = 409, body = ErrorBody, description = "account_changed: 보낸 기대 사용자가 세션 사용자와 다름")),
     tag = "tasks")]
 pub async fn plan_link(
     State(state): State<WorkState>,
