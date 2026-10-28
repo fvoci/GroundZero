@@ -25,7 +25,7 @@ use crate::collab::visibility::CommittedMove;
 use crate::config::Limits;
 use crate::http::AppState;
 use crate::http::cache;
-use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
 use fvoci_db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
@@ -1078,6 +1078,21 @@ pub struct CreateShare {
     pub permission: String,
 }
 
+fn share_error(error: sqlx::Error) -> AppError {
+    if error.as_database_error().is_some_and(|db| {
+        db.code().as_deref() == Some("22023")
+            && db.message() == "the recipient role only allows read access"
+    }) {
+        return AppError::invalid(
+            "permission",
+            InvalidReason::OutOfRange,
+            None,
+            "the recipient role only allows read access",
+        );
+    }
+    AppError::from_db_function(error)
+}
+
 /// 공유 목록(소유 권한자).
 #[utoipa::path(get, path = "/api/documents/{document_id}/shares",
     params(("document_id" = String, Path, format = Uuid)),
@@ -1122,7 +1137,7 @@ pub async fn create_share(
         .bind(new_ids(2))
         .fetch_one(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(share_error)?;
     let share: Share = sqlx::query_as(
         "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission
          FROM document_shares s JOIN users u ON u.id = s.grantee_user_id WHERE s.id = $1",

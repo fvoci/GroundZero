@@ -240,10 +240,6 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
       IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee) THEN
         RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
       END IF;
-      v_role := app_workspace_role(v_doc.workspace_id, v_grantee);
-      IF v_role = 'readonly' AND p_permission = 'write' THEN
-        RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
-      END IF;
     END IF;
     -- 조직 제거·탈퇴(멤버 행 갱신 잠금 → 공유한 문서 행 → 공유 삭제)와 같은 순서로 줄 세운다(D-114, #177 SR1-3 후속).
     -- 문서를 먼저 잠그면 이미 공유한 문서를 제거되는 사람에게 다시 공유할 때 제거와 엇갈려 교착된다.
@@ -256,6 +252,17 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
       FOR SHARE) m;
     IF v_members < num_nonnulls(v_grantee, v_doc.owner_user_id) THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
+    END IF;
+    IF v_doc.owner_user_id IS NULL THEN
+      -- 조직 멤버 → 공간 → 공간 멤버 → 문서. 제거·역할 변경이 끝난 뒤의 역할로 상한을 검사한다.
+      PERFORM 1 FROM workspaces WHERE id = v_doc.workspace_id FOR SHARE;
+      PERFORM 1 FROM workspace_members
+        WHERE workspace_id = v_doc.workspace_id AND user_id IN (app_user_id(), v_grantee)
+        ORDER BY user_id FOR SHARE;
+      v_role := app_workspace_role(v_doc.workspace_id, v_grantee);
+      IF p_permission = 'write' AND (v_role IS NULL OR v_role = 'readonly') THEN
+        RAISE EXCEPTION 'the recipient role only allows read access' USING ERRCODE = '22023';
+      END IF;
     END IF;
     -- 멤버 행을 기다리는 사이 문서가 옮겨졌으면 처음 읽은 자리로 정한 조직이 맞지 않으므로 거절한다(이동과 같은 409).
     SELECT * INTO v_locked FROM documents WHERE id = p_doc FOR UPDATE;

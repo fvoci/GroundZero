@@ -603,10 +603,9 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
     let it = item(&app, &admin, &dev, "항목").await;
     let (_, doc) = item_doc(&app, &admin, &it, "문서").await;
     let doc_id = doc["id"].as_str().unwrap();
-    let email = unique_email("guest");
-    let guest = login_with_email(&state, "guest", &email, true).await;
+    // D-20: write 공유의 보관 전후를 비교하려면 받는 사람이 공간 멤버여야 한다.
+    let (guest, email) = add_member(&app, &state, &admin, &ws, "guest", "member").await;
     let organization = common::organization_of_workspace(&ws).await;
-    common::join_organization(organization, &guest, "member").await;
     let share = send(
         &app,
         Method::POST,
