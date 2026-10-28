@@ -102,6 +102,15 @@ pub async fn set_task(
     })
 }
 
+// 선행 담당 잠금 뒤 새 담당이 생기면 SQL은 열을 쥔 채 기다리지 않고 전체 동기화를 롤백한다.
+fn sync_error(err: sqlx::Error) -> AppError {
+    if err.as_database_error().and_then(|db| db.code()).as_deref() == Some("55P03") {
+        AppError::Conflict("the change collided with another one; try again".into())
+    } else {
+        AppError::from_db_function(err)
+    }
+}
+
 /// 한 반복의 회차를 만든다(별도 트랜잭션: 앞선 변경의 잠금과 섞이지 않게).
 pub(crate) async fn sync_series(
     state: &WorkState,
@@ -119,7 +128,7 @@ pub(crate) async fn sync_series(
         .bind(ids)
         .fetch_one(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(sync_error)?;
     tx.commit().await?;
     Ok(made)
 }
@@ -153,7 +162,7 @@ pub async fn sync_item(
         .bind(ids)
         .fetch_one(tx.conn())
         .await
-        .map_err(AppError::from_db_function)?;
+        .map_err(sync_error)?;
     tx.commit().await?;
     Ok(Json(SyncResult { created }))
 }

@@ -124,6 +124,13 @@ fn is_new_ids_short(err: &AppError) -> bool {
         if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("FV001"))
 }
 
+/// 회차의 새 id 부족 또는 담당 멤버 NOWAIT 경합은 새 트랜잭션으로 다시 시작한다.
+fn is_series_retryable(err: &AppError) -> bool {
+    is_new_ids_short(err)
+        || matches!(err, AppError::Database(e)
+            if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("55P03"))
+}
+
 async fn system_call_once(db: &Db, jobs: &[Job], retention: Retention) -> Result<i32, AppError> {
     let mut tx = db.begin_anonymous().await?;
     let mut total = 0;
@@ -190,8 +197,8 @@ async fn recurrence(db: &Db) -> Result<i32, AppError> {
                     total += made;
                     break;
                 }
-                Err(err) if is_new_ids_short(&err) && attempt < SHORT_ID_ATTEMPTS => {
-                    tracing::warn!(event = "job.new_ids_short", series = %id, attempt,
+                Err(err) if is_series_retryable(&err) && attempt < SHORT_ID_ATTEMPTS => {
+                    tracing::warn!(event = "job.recurrence_retry", series = %id, attempt,
                         "retrying recurrence series with a fresh transaction");
                 }
                 Err(err) => {

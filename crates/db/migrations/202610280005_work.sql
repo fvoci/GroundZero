@@ -707,7 +707,7 @@ ALTER FUNCTION fvoci.app_create_event(p_item uuid, p_request_id uuid, p_kind tex
 
 -- D-105: 업무 한 건의 필드·담당·번호·감사 기록을 같은 트랜잭션으로 만든다. docs/decisions/tasks.md#d-105.
 -- 같은 요청 ID는 입력을 덮거나 비교하지 않고 기존 업무를 반환한다. 삭제된 결과는 FV004이며 권한 검사 뒤에만 알린다.
--- 잠금은 열 → 상위 업무 → 항목 공유 → 멤버 → 번호 순서다. D-105: docs/decisions/tasks.md#d-105.
+-- 잠금은 담당 멤버 → 열 → 상위 업무 → 항목 공유 → 번호 순서다. D-105: docs/decisions/tasks.md#d-105.
 CREATE FUNCTION fvoci.app_create_task(p_item uuid, p_request_id uuid, p_title text, p_parent uuid, p_description text, p_status text, p_priority text, p_start date, p_due date, p_estimate integer, p_tags text[], p_assignees uuid[], p_milestone boolean, p_ids uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -1586,6 +1586,15 @@ CREATE FUNCTION fvoci.app_sync_item_series(p_item uuid, p_ids uuid[]) RETURNS in
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
+    -- 모든 계열의 루트 담당 멤버를 열보다 먼저 잠근다(멤버 제거·강등과 직렬화).
+    PERFORM 1 FROM workspace_members m
+    WHERE EXISTS (
+      SELECT 1 FROM task_series s JOIN tasks r ON r.id = s.root_task_id
+      JOIN task_assignees a ON a.task_id = r.id
+      WHERE s.item_id = p_item AND s.rule IS NOT NULL AND r.deleted_at IS NULL
+        AND m.workspace_id = r.workspace_id AND m.user_id = a.user_id
+    )
+    ORDER BY m.user_id, m.workspace_id FOR SHARE;
     -- 항목의 모든 열을 사용자 요청과 같은 순서(열 id 순)로 먼저 잠근다.
     FOR v_id IN SELECT id FROM task_statuses WHERE item_id = p_item ORDER BY id LOOP
       PERFORM app_lock_lane(v_id);
@@ -1620,9 +1629,26 @@ CREATE FUNCTION fvoci.app_sync_item_series_ids(p_item uuid) RETURNS integer
 ALTER FUNCTION fvoci.app_sync_item_series_ids(p_item uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_sync_task_series(p_series uuid, p_ids uuid[]) RETURNS integer
-    LANGUAGE sql SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
-    AS $$ SELECT app_sync_task_series_as(p_series, false, p_ids) $$;
+    AS $$
+  DECLARE
+    v_root uuid;
+  BEGIN
+    SELECT root_task_id INTO v_root FROM task_series WHERE id = p_series;
+    IF v_root IS NULL THEN
+      RAISE EXCEPTION 'series not found' USING ERRCODE = 'P0002';
+    END IF;
+    PERFORM app_require_task_write(v_root);
+    PERFORM 1 FROM workspace_members m
+    WHERE EXISTS (
+      SELECT 1 FROM tasks r JOIN task_assignees a ON a.task_id = r.id
+      WHERE r.id = v_root AND m.workspace_id = r.workspace_id AND m.user_id = a.user_id
+    )
+    ORDER BY m.user_id, m.workspace_id FOR SHARE;
+    RETURN app_sync_task_series_as(p_series, false, p_ids);
+  END
+  $$;
 
 
 ALTER FUNCTION fvoci.app_sync_task_series(p_series uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
@@ -1714,8 +1740,10 @@ CREATE FUNCTION fvoci.app_sync_task_series_as(p_series uuid, p_system boolean, p
       GET DIAGNOSTICS v_count = ROW_COUNT;
       v_at := v_at + 2 * v_count;
       FOR v_uid IN SELECT a.user_id FROM task_assignees a WHERE a.task_id = v_root.id ORDER BY a.user_id LOOP
-        IF EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id = v_root.workspace_id AND m.user_id = v_uid)
-           AND app_access_as('item', v_root.item_id, v_uid) <> 'none' THEN
+        -- 선행 잠금 뒤 바뀐 담당은 열을 쥔 채 기다리지 않는다. 55P03이면 전체 동기화를 다시 한다.
+        PERFORM 1 FROM workspace_members m
+          WHERE m.workspace_id = v_root.workspace_id AND m.user_id = v_uid FOR SHARE NOWAIT;
+        IF FOUND AND app_access_as('item', v_root.item_id, v_uid) <> 'none' THEN
           INSERT INTO task_assignees (task_id, user_id, assigned_by) VALUES (v_id, v_uid, v_user);
         END IF;
       END LOOP;
@@ -1777,6 +1805,13 @@ CREATE FUNCTION fvoci.app_system_sync_task_series(p_series uuid, p_ids uuid[]) R
     IF app_user_id() IS NOT NULL THEN
       RETURN 0;
     END IF;
+    PERFORM 1 FROM workspace_members m
+    WHERE EXISTS (
+      SELECT 1 FROM task_series s JOIN tasks r ON r.id = s.root_task_id
+      JOIN task_assignees a ON a.task_id = r.id
+      WHERE s.id = p_series AND m.workspace_id = r.workspace_id AND m.user_id = a.user_id
+    )
+    ORDER BY m.user_id, m.workspace_id FOR SHARE;
     RETURN app_sync_task_series_as(p_series, true, p_ids);
   END
   $$;
