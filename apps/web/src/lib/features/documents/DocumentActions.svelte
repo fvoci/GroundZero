@@ -774,8 +774,8 @@
               >{m.documents_share()}</Button
             >
           </form>
-          {#if selectedRecipient !== undefined}
-            <p class="mt-2 flex flex-wrap gap-2 text-sm" aria-live="polite">
+          <p class="mt-2 flex flex-wrap gap-2 text-sm empty:hidden" aria-live="polite">
+            {#if selectedRecipient !== undefined}
               {#if selectedRecipient.recipient_role !== null}
                 <span>{roleLabel(selectedRecipient.recipient_role)}</span>
               {/if}
@@ -787,12 +787,10 @@
                       : m.documents_permission_read(),
                 })}</span
               >
-            </p>
-          {:else if recipientState.kind === 'failed' && recipientState.key === recipientKey}
-            <p class="mt-2 text-sm text-muted-foreground" aria-live="polite">
-              {m.documents_recipient_unavailable()}
-            </p>
-          {/if}
+            {:else if recipientState.kind === 'failed' && recipientState.key === recipientKey}
+              <span class="text-muted-foreground">{m.documents_recipient_unavailable()}</span>
+            {/if}
+          </p>
         </fieldset>
       {/if}
       <div class="flex flex-col gap-2 border-t pt-3">
