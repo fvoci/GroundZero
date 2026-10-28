@@ -20,7 +20,8 @@ tokio.workspace = true
 tracing.workspace = true
 utoipa.workspace = true
 uuid.workspace = true
-zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+# 반출은 Stored ZIP만 쓰므로 압축 backend를 선택하지 않는다.
+zip = { version = "9.0.4", default-features = false }
 
 [lints]
 workspace = true
