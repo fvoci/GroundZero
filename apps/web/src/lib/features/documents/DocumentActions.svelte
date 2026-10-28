@@ -230,6 +230,7 @@
         ...doc,
         visibility: fresh.visibility,
         allow_copy: fresh.allow_copy,
+        can_export: fresh.can_export,
         is_template: fresh.is_template,
       });
     } catch (e: unknown) {
