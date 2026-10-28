@@ -1,3 +1,4 @@
+mod comparisons;
 mod contracts;
 mod privacy;
 mod readonly;
