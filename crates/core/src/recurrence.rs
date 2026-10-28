@@ -83,3 +83,61 @@ impl RecurrenceRule {
 fn out_of_range(field: &str, max: u64, message: &str) -> AppError {
     AppError::invalid(field, InvalidReason::OutOfRange, Some(max), message)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    fn daily() -> RecurrenceRule {
+        RecurrenceRule {
+            freq: Frequency::Daily,
+            interval: 1,
+            weekdays: Vec::new(),
+            until: None,
+            count: None,
+        }
+    }
+
+    async fn assert_invalid(rule: RecurrenceRule, field: &str) {
+        let error = rule
+            .validated()
+            .expect_err("incompatible recurrence fields must be rejected");
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "bad_request");
+        assert_eq!(body["field"], field);
+        assert_eq!(body["reason"], "invalid_format");
+        assert!(body.get("limit").is_none());
+    }
+
+    #[tokio::test]
+    async fn non_weekly_weekdays_name_the_invalid_field() {
+        assert_invalid(
+            RecurrenceRule {
+                weekdays: vec![1],
+                ..daily()
+            },
+            "weekdays",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn simultaneous_until_and_count_name_the_invalid_field() {
+        assert_invalid(
+            RecurrenceRule {
+                until: Some("2026-11-01".into()),
+                count: Some(2),
+                ..daily()
+            },
+            "count",
+        )
+        .await;
+    }
+}
