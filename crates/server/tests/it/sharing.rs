@@ -516,8 +516,6 @@ async fn moving_a_private_document_where_the_mover_loses_access_still_completes(
     common::join_organization(common::organization_for(&alice).await, &boss, "member").await;
     let dst = create_workspace(&app, &boss, "남의 팀").await;
     let alice_email = unique_email("alice-dst");
-    let alice_dst = login_with_email(&state, "alice-dst", &alice_email, true).await;
-    let _ = alice_dst;
     // 앨리스를 대상 워크스페이스의 작성자로 들인다(같은 사람이 다른 이메일로 두 번 로그인하는 대신 초대를 쓴다).
     let inv = send(
         &app,
