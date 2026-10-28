@@ -21,6 +21,7 @@
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
   import { emptyForm, formOf, parseRecordForm, summary, toInput } from './records';
+  import { recordRequestSignature } from './request-signature';
   import ZoteroImport from './ZoteroImport.svelte';
 
   interface Props {
@@ -65,10 +66,44 @@
   let pending = $state<{ requestId: string; signature: string } | null>(null);
   let baseline = $state(JSON.stringify(emptyForm()));
   let busy = $state(false);
+  function baseForm(): RecordForm {
+    try {
+      return parseRecordForm(JSON.parse(baseline)) ?? emptyForm();
+    } catch {
+      return emptyForm();
+    }
+  }
+  function writing(value: RecordForm): RecordForm {
+    const values: Record<string, string> = {};
+    for (const field of defs.find((def) => def.kind === selected)?.fields ?? []) {
+      if (field.type === 'long_text') values[field.key] = value.values[field.key] ?? '';
+    }
+    return { ...emptyForm(), body: value.body, values };
+  }
+  function settings(value: RecordForm): RecordForm {
+    const longKeys = new Set(Object.keys(writing(value).values));
+    return {
+      ...value,
+      body: '',
+      values: Object.fromEntries(
+        Object.entries(value.values).filter(([key]) => !longKeys.has(key)),
+      ),
+    };
+  }
+  function restoreWriting(live: RecordForm, saved: RecordForm): RecordForm {
+    const restored = writing(saved);
+    return { ...live, body: restored.body, values: { ...live.values, ...restored.values } };
+  }
   const draft = createFormDraft({
     name: () =>
       selected === undefined ? undefined : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
     snapshot: () => ({ form, baseline, version: editingVersion, pending }),
+    storedSnapshot: () => ({
+      form: writing(form),
+      baseline: JSON.stringify(writing(baseForm())),
+      version: editingVersion,
+      pending,
+    }),
     parse: (raw) => {
       if (
         !object(raw) ||
@@ -80,11 +115,26 @@
       const parsed = parseRecordForm(raw.form);
       return parsed === undefined
         ? undefined
-        : { form: parsed, baseline: raw.baseline, version: raw.version, pending: raw.pending };
+        : {
+            form: parsed,
+            baseline: raw.baseline,
+            version: raw.version,
+            pending:
+              raw.pending !== null && /^[0-9a-f]{64}$/.test(raw.pending.signature)
+                ? raw.pending
+                : null,
+          };
     },
     restore: (value) => {
-      form = value.form;
-      baseline = value.baseline;
+      const currentBase = baseForm();
+      let savedBase = emptyForm();
+      try {
+        savedBase = parseRecordForm(JSON.parse(value.baseline)) ?? emptyForm();
+      } catch {
+        // An invalid baseline cannot supply any restored values.
+      }
+      form = restoreWriting(form, value.form);
+      baseline = JSON.stringify(restoreWriting(currentBase, savedBase));
       editingVersion = value.version;
       pending = value.pending;
       creating = editingId === undefined;
@@ -96,7 +146,12 @@
       busy = false;
       conflict = undefined;
     },
-    dirty: () => (creating || editingId !== undefined) && JSON.stringify(form) !== baseline,
+    dirty: () =>
+      (creating || editingId !== undefined) &&
+      JSON.stringify(writing(form)) !== JSON.stringify(writing(baseForm())),
+    screenOnly: () =>
+      (creating || editingId !== undefined) &&
+      JSON.stringify(settings(form)) !== JSON.stringify(settings(baseForm())),
     busy: () => busy,
   });
   onMount(draft.attach);
@@ -261,14 +316,19 @@
     error = undefined;
     const base =
       !creating && editingId !== undefined ? { id: editingId, version: baseVersion } : undefined;
-    if (creating) {
-      const signature = JSON.stringify({ item: item.id, kind: def.kind, input: built.input });
-      if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
-    }
-    const attempt = draft.capture();
-    if (attempt === undefined) return;
+    const captured = draft.capture();
+    if (captured === undefined) return;
+    let attempt = captured;
     busy = true;
     try {
+      if (creating) {
+        const signature = await recordRequestSignature(item.id, def.kind, built.input);
+        if (!draft.isCurrent(attempt)) return;
+        if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
+        const submitted = draft.capture();
+        if (submitted === undefined) return;
+        attempt = submitted;
+      }
       let savedStatus: string;
       if (creating && pending !== null) {
         const requestId = pending.requestId;

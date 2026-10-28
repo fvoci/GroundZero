@@ -264,7 +264,8 @@ it('keeps Zotero settings and its API key on screen without any durable copy', a
   expect(screen.queryByTestId('form-draft-offer')).toBeNull();
 });
 
-it('keeps shared checklist entry text on screen with the same leave warning', async () => {
+it('keeps shared checklist entry text on screen and reports unsaved input to its parent guard', async () => {
+  const unsaved = vi.fn();
   render(ChecklistForm, {
     idPrefix: 'policy',
     items: [],
@@ -273,9 +274,10 @@ it('keeps shared checklist entry text on screen with the same leave warning', as
     ontoggle: vi.fn().mockResolvedValue(undefined),
     onrename: vi.fn().mockResolvedValue(undefined),
     onremove: vi.fn().mockResolvedValue(undefined),
+    onunsaved: unsaved,
   });
   const input = screen.getByRole('textbox');
   await fireEvent.input(input, { target: { value: 'SHORT CHECKLIST ENTRY' } });
-  expect(warns()).toBe(true);
+  await waitFor(() => expect(unsaved).toHaveBeenLastCalledWith(true));
   expect(stored()).not.toContain('SHORT CHECKLIST ENTRY');
 });
