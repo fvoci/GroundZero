@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
@@ -402,7 +403,7 @@ describe('item screen groups and unsaved input', () => {
       vi.spyOn(work, 'task').mockResolvedValue(taskDetail);
       vi.spyOn(work, 'assignable').mockResolvedValue([]);
       vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-      vi.spyOn(api, 'comments').mockResolvedValue([]);
+      vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
       await openItem('project');
       await pathIs(itemViewPath(ws, itemId, 'board'));
       const title = screen.getByLabelText<HTMLInputElement>('제목');

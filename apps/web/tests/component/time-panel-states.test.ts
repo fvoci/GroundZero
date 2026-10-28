@@ -1,7 +1,7 @@
+import { timeData } from '$lib/features/time/data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
 import ItemTimePanel from '$lib/features/time/ItemTimePanel.svelte';
 import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -18,7 +18,7 @@ afterEach(() => {
 describe('time panels', () => {
   it('task: says the total failed to load and retries', async () => {
     const load = vi
-      .spyOn(api, 'taskTime')
+      .spyOn(timeData, 'taskTime')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue({
         estimate_minutes: 60,
@@ -40,7 +40,7 @@ describe('time panels', () => {
 
   it('item: says the total failed to load and retries', async () => {
     const load = vi
-      .spyOn(api, 'itemTime')
+      .spyOn(timeData, 'itemTime')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue({ estimate_minutes: 0, kinds: [] });
     render(ItemTimePanel, { props: { itemId: 'i-1' } });

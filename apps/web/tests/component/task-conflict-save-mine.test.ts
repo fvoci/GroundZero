@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -91,7 +92,7 @@ function mount(current: TaskDetailView = v2, people: AssigneeView[] = []) {
   vi.spyOn(work, 'task').mockResolvedValue(current);
   vi.spyOn(work, 'assignable').mockResolvedValue(people);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   return render(TaskDetail, {
     props: {
       taskId: current.id,
@@ -695,7 +696,7 @@ describe('the overwrite question inside the task dialog', () => {
     vi.spyOn(work, 'task').mockResolvedValue(v2);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
     const update = vi.spyOn(work, 'updateTask').mockResolvedValueOnce(titleConflict);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
@@ -732,7 +733,7 @@ describe('the overwrite question inside the task dialog', () => {
     vi.spyOn(work, 'task').mockResolvedValue(v2);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
     const update = vi.spyOn(work, 'updateTask').mockResolvedValueOnce(titleConflict);
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });

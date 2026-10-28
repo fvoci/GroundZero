@@ -265,8 +265,23 @@
         "tags": [
           "comments"
         ],
-        "summary": "댓글 달기(대상을 볼 수 있는 사람). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다.",
+        "summary": "댓글 달기(대상 쓰기 권한). 같은 요청 id면 같은 댓글. 대상을 만든 사람·담당자, 답글이면 스레드 참여자에게 알린다.",
         "operationId": "add_comment",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -335,6 +350,19 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "uuid"
             }
           }
@@ -410,11 +438,34 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -435,6 +486,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -444,7 +505,7 @@
         "tags": [
           "comments"
         ],
-        "summary": "스레드 해결 표시·해제(스레드를 연 사람 또는 대상에 쓸 수 있는 사람).",
+        "summary": "스레드 해결 표시·해제(대상에 쓸 수 있는 사람).",
         "operationId": "resolve_comment",
         "parameters": [
           {
@@ -453,6 +514,19 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "uuid"
             }
           }
@@ -6221,6 +6295,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -6255,6 +6342,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -6485,6 +6582,19 @@
             "schema": {
               "$ref": "#/components/schemas/OrganizationId"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -6529,6 +6639,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -6880,6 +7000,20 @@
         ],
         "summary": "수동 기록 추가(끝난 기록). 같은 `request_id`면 같은 기록.",
         "operationId": "add_time_entry",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "If sent, must match the signed-in user (D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6912,6 +7046,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -7037,6 +7181,20 @@
         ],
         "summary": "타이머 시작. 다른 대상의 기록은 자동으로 끝내며 같은 대상은 명시한 선택을 따른다.",
         "operationId": "start_timer",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "If sent, must match the signed-in user (D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10606,6 +10764,18 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "If sent, must match the signed-in user (D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         ],
         "requestBody": {
@@ -10654,7 +10824,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TimeEntryConflict"
+                  "$ref": "#/components/schemas/TimeEntryWriteConflict"
                 }
               }
             }
@@ -10676,13 +10846,45 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "If sent, must match the signed-in user (D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         ],
         "responses": {
           "204": {
             "description": ""
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -10756,6 +10958,18 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "If sent, must match the signed-in user (D-96).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
         ],
         "requestBody": {
@@ -10779,6 +10993,16 @@
               }
             }
           },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "",
             "content": {
@@ -10790,6 +11014,87 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/time-entry-targets": {
+      "get": {
+        "tags": [
+          "time"
+        ],
+        "summary": "본인 기록의 대상 표시 모음. 타인 기록은 서버 관리자에게도 나오지 않는다.\n공통 참조 해석은 강의 회차·스터디 단위를 지원하지 않아 시간의 다섯 대상 종류를 여기서 읽는다.",
+        "operationId": "time_entry_targets",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeEntryTarget"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -14706,7 +15011,9 @@
         ],
         "properties": {
           "body": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1
           }
         }
       },
@@ -14767,11 +15074,13 @@
             "$ref": "#/components/schemas/TimeKind"
           },
           "memo": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           },
           "paused_seconds": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "minimum": 0
           },
           "started_at": {
             "type": "string",
@@ -16849,7 +17158,9 @@
         ],
         "properties": {
           "body": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1
           },
           "document_id": {
             "oneOf": [
@@ -18833,7 +19144,8 @@
         ],
         "properties": {
           "mark": {
-            "$ref": "#/components/schemas/MarkKind"
+            "$ref": "#/components/schemas/MarkKind",
+            "description": "종류마다 현재 보이는 대상 100개까지 표시할 수 있다."
           },
           "on": {
             "type": "boolean"
@@ -19652,6 +19964,105 @@
           }
         }
       },
+      "StaleWrite_TimeEntry": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "시간 기록.",
+            "required": [
+              "id",
+              "started_at",
+              "paused_seconds",
+              "seconds",
+              "kind",
+              "memo",
+              "version"
+            ],
+            "properties": {
+              "ended_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "진행 중이면 없다."
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/TimeKind"
+              },
+              "memo": {
+                "type": "string"
+              },
+              "paused_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "일시정지 중이면 그 시각."
+              },
+              "paused_seconds": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "seconds": {
+                "type": "integer",
+                "format": "int64",
+                "description": "지금까지의 길이(초). 진행 중이면 응답 시각 기준."
+              },
+              "started_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "target": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TargetInput"
+                  }
+                ]
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
       "StartTimer": {
         "type": "object",
         "description": "타이머 시작.",
@@ -19665,7 +20076,8 @@
             "$ref": "#/components/schemas/TimeKind"
           },
           "memo": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           },
           "mode": {
             "oneOf": [
@@ -20304,29 +20716,13 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Target"
+                "$ref": "#/components/schemas/TargetInput"
               }
             ]
           },
           "version": {
             "type": "integer",
             "format": "int32"
-          }
-        }
-      },
-      "TimeEntryConflict": {
-        "type": "object",
-        "description": "409 응답: 서버 최신본.",
-        "required": [
-          "error",
-          "current"
-        ],
-        "properties": {
-          "current": {
-            "$ref": "#/components/schemas/TimeEntry"
-          },
-          "error": {
-            "type": "string"
           }
         }
       },
@@ -20367,6 +20763,37 @@
             "format": "date-time"
           }
         }
+      },
+      "TimeEntryTarget": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Target"
+          },
+          {
+            "type": "object",
+            "required": [
+              "entry_id"
+            ],
+            "properties": {
+              "entry_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "description": "본인 기록의 대상 표시. 기록 자원과 따로 읽어 웹에서 조합한다."
+      },
+      "TimeEntryWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_TimeEntry"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "409 응답: 서버 최신본."
       },
       "TimeKind": {
         "type": "string",

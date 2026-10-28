@@ -1,3 +1,5 @@
+import { timeData } from '$lib/features/time/data';
+import { activityApi } from '$lib/features/activity/api';
 import type { Me } from '@fvoci/api-client';
 import { cleanup, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,9 +51,9 @@ beforeEach(async () => {
   vi.spyOn(api, 'me').mockResolvedValue(me);
   vi.spyOn(api, 'workspaces').mockResolvedValue([]);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
-  vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
-  vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
-  vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+  vi.spyOn(activityApi, 'unreadCount').mockResolvedValue(0);
+  vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
+  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'deletedWorkspaces').mockResolvedValue([]);
 });
 

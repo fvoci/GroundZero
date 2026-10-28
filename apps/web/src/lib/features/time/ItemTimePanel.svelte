@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { ItemTimeView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+  import type { ItemTimeView } from '$lib/features/time/model';
+  import { timeData } from '$lib/features/time/data';
+
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -20,7 +21,7 @@
     const mine = ++readSeq;
     loadError = undefined;
     try {
-      const next = await api.itemTime(id);
+      const next = await timeData.itemTime(id);
       if (mine === readSeq) time = next;
     } catch (e: unknown) {
       if (mine === readSeq) loadError = errorText(e, m.time_load_failed());

@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -106,7 +107,7 @@ async function openFromBoard(beforeOpen?: () => Promise<void>, list: TaskDetailV
   );
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   const update = vi.spyOn(work, 'updateTask');
   render(TaskBoardRouteHost, { props: { item } });
   await beforeOpen?.();

@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -155,7 +156,7 @@ describe('session expired mid-use', () => {
     );
     render(FeedbackHost);
     const older = api.workspaces();
-    await expect(api.notifications('org-1')).rejects.toThrow();
+    await expect(activityApi.notifications('org-1')).rejects.toThrow();
     await vi.waitFor(() => {
       expect(signInLink()).not.toBeNull();
     });

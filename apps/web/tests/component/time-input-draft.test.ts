@@ -1,7 +1,9 @@
+import { type TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api, ApiError, NetworkError, type TimeEntryView } from '$lib/api/client';
+import { ApiError, NetworkError } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
@@ -32,10 +34,10 @@ beforeEach(async () => {
   await setLocale('ko', { reload: false });
   localStorage.clear();
   Object.assign(me, { userId: 'user-a', timeZone: props.zone, hourCycle: 'h23' });
-  vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-  vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-  vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-  vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
+  vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+  vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+  vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
   props.onclose.mockClear();
   props.onchanged.mockClear();
 });
@@ -55,7 +57,7 @@ async function memo(value: string): Promise<void> {
 }
 
 it('restores manual fields and the failed request ID only on explicit selection', async () => {
-  const add = vi.spyOn(api, 'addTimeEntry').mockRejectedValue(new NetworkError('offline'));
+  const add = vi.spyOn(timeData, 'addTimeEntry').mockRejectedValue(new NetworkError('offline'));
   render(TimeScreen);
   await memo('manual private memo');
   await fireEvent.input(screen.getByLabelText(m.time_date()), { target: { value: '2026-10-20' } });
@@ -80,8 +82,9 @@ it('restores manual fields and the failed request ID only on explicit selection'
 });
 
 it('preserves the edited memo and original base version after a conflict and remount', async () => {
-  const update = vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({
+  const update = vi.spyOn(timeData, 'updateTimeEntry').mockResolvedValue({
     kind: 'conflict',
+    changed: ['memo'],
     current: { ...entry, memo: 'server latest', version: 4 },
   });
   render(TimeEntryDialog, props);
@@ -120,7 +123,9 @@ it('warns on memo-only edits before closing and keeps editing on cancel', async 
 });
 
 it('restores the DST choice, original seconds, target, and unfinished paused string', async () => {
-  const update = vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({ kind: 'updated', entry });
+  const update = vi
+    .spyOn(timeData, 'updateTimeEntry')
+    .mockResolvedValue({ kind: 'updated', entry });
   const linked = {
     ...entry,
     target: { kind: 'task' as const, id: 'task-a', label: 'My task', workspace_id: 'ws-a' },
@@ -161,8 +166,8 @@ it('restores the DST choice, original seconds, target, and unfinished paused str
 });
 
 it('keeps account A private and ignores its late update after account B opens', async () => {
-  let finish: ((value: Awaited<ReturnType<typeof api.updateTimeEntry>>) => void) | undefined;
-  const update = vi.spyOn(api, 'updateTimeEntry').mockReturnValue(
+  let finish: ((value: Awaited<ReturnType<typeof timeData.updateTimeEntry>>) => void) | undefined;
+  const update = vi.spyOn(timeData, 'updateTimeEntry').mockReturnValue(
     new Promise((resolve) => {
       finish = resolve;
     }),
@@ -196,7 +201,7 @@ it('keeps account A private and ignores its late update after account B opens', 
 
 it('keeps new manual input when an earlier account request completes', async () => {
   let finish: ((value: TimeEntryView) => void) | undefined;
-  const add = vi.spyOn(api, 'addTimeEntry').mockReturnValue(
+  const add = vi.spyOn(timeData, 'addTimeEntry').mockReturnValue(
     new Promise((resolve) => {
       finish = resolve;
     }),
@@ -223,7 +228,9 @@ it('keeps new manual input when an earlier account request completes', async () 
 
 it('requires confirmation before applying conflict values and uses their new base only afterwards', async () => {
   const current = { ...entry, memo: 'server value', version: 8 };
-  const update = vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({ kind: 'conflict', current });
+  const update = vi
+    .spyOn(timeData, 'updateTimeEntry')
+    .mockResolvedValue({ kind: 'conflict', current, changed: ['memo'] });
   render(TimeEntryDialog, props);
   await memo('my value');
   await submit();
@@ -243,8 +250,12 @@ it('requires confirmation before applying conflict values and uses their new bas
 // 다시 읽지 않아 이력이 사라졌다.
 it('reloads the revision history after applying the server values', async () => {
   const current = { ...entry, memo: 'server value', version: 8 };
-  vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({ kind: 'conflict', current });
-  const revisions = vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([
+  vi.spyOn(timeData, 'updateTimeEntry').mockResolvedValue({
+    kind: 'conflict',
+    current,
+    changed: ['memo'],
+  });
+  const revisions = vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([
     {
       started_at: entry.started_at,
       ended_at: entry.ended_at,
@@ -284,7 +295,9 @@ it('retains input and leave warnings when storage fails', async () => {
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new Error('quota');
   });
-  const update = vi.spyOn(api, 'updateTimeEntry').mockRejectedValue(new NetworkError('offline'));
+  const update = vi
+    .spyOn(timeData, 'updateTimeEntry')
+    .mockRejectedValue(new NetworkError('offline'));
   render(TimeEntryDialog, props);
   await memo('not durable');
   await submit();
@@ -325,7 +338,7 @@ it('successful manual save removes only its own draft and retains another tab of
       pending: null,
     },
   });
-  vi.spyOn(api, 'addTimeEntry').mockResolvedValue(entry);
+  vi.spyOn(timeData, 'addTimeEntry').mockResolvedValue(entry);
   render(TimeScreen);
   await memo('save this');
   await submit();
@@ -337,7 +350,7 @@ it('successful manual save removes only its own draft and retains another tab of
 it.each([new NetworkError('offline'), new ApiError(403, 'forbidden', 'forbidden')])(
   'keeps an edit durable after a rejected save (%s)',
   async (failure) => {
-    const update = vi.spyOn(api, 'updateTimeEntry').mockRejectedValue(failure);
+    const update = vi.spyOn(timeData, 'updateTimeEntry').mockRejectedValue(failure);
     render(TimeEntryDialog, props);
     await memo('retry later');
     await submit();
@@ -353,8 +366,8 @@ it.each([new NetworkError('offline'), new ApiError(403, 'forbidden', 'forbidden'
 // 저장 중에는 입력이 잠긴다(F-8, `save-input-lock.test.ts`). 잠금을 지나 입력이 바뀐 경우(UI로는 생기지 않는다)에도
 // 옛 스냅숏의 결과로 새 입력을 덮지 않고 그 입력을 초안에 남기는지 지키는 방어 시험이다.
 it('keeps input that changed past the save lock instead of applying the older snapshot', async () => {
-  let finish: ((value: Awaited<ReturnType<typeof api.updateTimeEntry>>) => void) | undefined;
-  vi.spyOn(api, 'updateTimeEntry').mockReturnValue(
+  let finish: ((value: Awaited<ReturnType<typeof timeData.updateTimeEntry>>) => void) | undefined;
+  vi.spyOn(timeData, 'updateTimeEntry').mockReturnValue(
     new Promise((resolve) => {
       finish = resolve;
     }),
@@ -376,7 +389,9 @@ it('keeps input that changed past the save lock instead of applying the older sn
 });
 
 it('keeps restored timezone labels and DST conversion together after settings change', async () => {
-  const update = vi.spyOn(api, 'updateTimeEntry').mockResolvedValue({ kind: 'updated', entry });
+  const update = vi
+    .spyOn(timeData, 'updateTimeEntry')
+    .mockResolvedValue({ kind: 'updated', entry });
   render(TimeEntryDialog, props);
   await memo('timezone draft');
   await fireEvent.input(screen.getByLabelText(m.time_end()), {
@@ -402,7 +417,7 @@ it('keeps restored timezone labels and DST conversion together after settings ch
 });
 
 it('keeps manual timezone visible and sends the restored wall time in that timezone', async () => {
-  const add = vi.spyOn(api, 'addTimeEntry').mockRejectedValue(new NetworkError('offline'));
+  const add = vi.spyOn(timeData, 'addTimeEntry').mockRejectedValue(new NetworkError('offline'));
   render(TimeScreen);
   await memo('timezone manual');
   await fireEvent.input(screen.getByLabelText(m.time_date()), { target: { value: '2026-11-01' } });
@@ -423,7 +438,7 @@ it('keeps manual timezone visible and sends the restored wall time in that timez
 
 // D-82: 일반 완료는 토스트다. 직접 더한 기록의 완료를 낭독용 영역(sr-only)에 또 두지 않는다.
 it('reports an added manual entry once as a toast, not in the page', async () => {
-  vi.spyOn(api, 'addTimeEntry').mockResolvedValue(entry);
+  vi.spyOn(timeData, 'addTimeEntry').mockResolvedValue(entry);
   const done = vi.spyOn(feedback, 'notifyDone');
   render(TimeScreen);
   await memo('save this');

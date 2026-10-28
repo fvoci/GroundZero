@@ -1,3 +1,15 @@
+import { timeData } from '$lib/features/time/data';
+export { TIME_KINDS, parseTimeEntry } from '$lib/features/time/model';
+export type {
+  TimeKind,
+  TimeTargetKind,
+  TimeTargetView,
+  TimeEntryView,
+  TimeEntryInput,
+  TimeSummaryRowView,
+  TaskTimeView,
+  ItemTimeView,
+} from '$lib/features/time/model';
 import { EXPECTED_USER, request, expectOk, fail, ApiError, NetworkError } from '$lib/shared/api';
 export { ApiError, NetworkError } from '$lib/shared/api';
 import {
@@ -40,8 +52,6 @@ import type {
 } from '@fvoci/api-client';
 import type {
   Accepted,
-  Activity,
-  ActivityPage,
   MyTask,
   MyTaskCounts,
   Organization,
@@ -305,52 +315,6 @@ export function parseMyTasks(value: Json): MyTasksView {
       };
     }),
   };
-}
-
-// --- 활동 (D-119, 감사와 분리) ---------------------------------------------
-
-export function parseActivity(value: Json): Activity {
-  const o = rec(value, 'activity');
-  const detail: unknown = o.detail;
-  return {
-    id: str(o, 'id'),
-    kind: str(o, 'kind'),
-    actor_id: optStr(o, 'actor_id'),
-    actor_name: optStr(o, 'actor_name'),
-    workspace_id: optStr(o, 'workspace_id'),
-    target_kind: str(o, 'target_kind'),
-    target_id: str(o, 'target_id'),
-    item_id: optStr(o, 'item_id'),
-    detail: isRecord(detail) ? detail : {},
-    created_at: str(o, 'created_at'),
-  };
-}
-
-export function parseActivityPage(value: Json): ActivityPage {
-  const o = rec(value, 'activity page');
-  return {
-    activity: parseList(o.activity, parseActivity),
-    next_before: optStr(o, 'next_before'),
-    next_before_id: optStr(o, 'next_before_id'),
-  };
-}
-
-/** 커서 조회(D-118·D-119): `before`와 `before_id`는 함께 보낸다. */
-export interface PageCursor {
-  before: string;
-  before_id: string;
-}
-
-function cursorParams(
-  params: URLSearchParams,
-  cursor: PageCursor | undefined,
-  limit?: number,
-): void {
-  if (cursor !== undefined) {
-    params.set('before', cursor.before);
-    params.set('before_id', cursor.before_id);
-  }
-  if (limit !== undefined) params.set('limit', String(limit));
 }
 
 export function parseSummary(value: Json): SummaryView {
@@ -1074,33 +1038,6 @@ export interface BacklinkView {
   item_id: string | null;
 }
 
-export interface NotificationView {
-  id: string;
-  /** mention·comment·reply·due·expiry(강좌 만료·목표일)·review(복습일)·deadline(투고·산출물 마감)·invite(초대, D-118) */
-  kind: string;
-  /** 알림이 속한 조직. 초대는 어느 조직 문맥에서나 보이므로 현재 조직과 다를 수 있다(D-118). */
-  organization_id: string | null;
-  /** `invite`면 수락·거절할 초대 id. */
-  invitation_id: string | null;
-  document_id: string | null;
-  task_id: string | null;
-  /** 대상(문서 또는 업무) 제목. */
-  // 초대 알림의 대상 제목은 계약대로 null이다(D-118).
-  document_title: string | null;
-  document_reference: string | null;
-  workspace_id: string | null;
-  item_id: string | null;
-  comment_id: string | null;
-  excerpt: string | null;
-  due_date: string | null;
-  /** 항목 알림의 대상 이름(기록 제목·강좌 이름). */
-  subject: string | null;
-  /** 워크스페이스를 함께 쓰지 않거나 자동 알림이면 없다. */
-  actor_name: string | null;
-  created_at: string;
-  read: boolean;
-}
-
 export function parseCandidate(value: Json): ReferenceCandidateView {
   const o = rec(value, 'reference candidate');
   return {
@@ -1134,46 +1071,6 @@ export function parseBacklink(value: Json): BacklinkView {
     title: str(o, 'title'),
     workspace_id: optStr(o, 'workspace_id'),
     item_id: optStr(o, 'item_id'),
-  };
-}
-
-export interface NotificationPageView {
-  notifications: NotificationView[];
-  /** 둘 다 null이면 더 읽을 페이지가 없다(D-118). */
-  next: PageCursor | null;
-}
-
-export function parseNotificationPage(value: Json): NotificationPageView {
-  const o = rec(value, 'notification page');
-  const before = optStr(o, 'next_before');
-  const beforeId = optStr(o, 'next_before_id');
-  return {
-    notifications: parseList(o.notifications, parseNotification),
-    next: before !== null && beforeId !== null ? { before, before_id: beforeId } : null,
-  };
-}
-
-export function parseNotification(value: Json): NotificationView {
-  const o = rec(value, 'notification');
-  return {
-    id: str(o, 'id'),
-    kind: str(o, 'kind'),
-    organization_id: optStr(o, 'organization_id'),
-    invitation_id: optStr(o, 'invitation_id'),
-    document_id: optStr(o, 'document_id'),
-    task_id: optStr(o, 'task_id'),
-    // 초대 알림은 대상 제목이 없다(D-118).
-    document_title: optStr(o, 'document_title'),
-    document_reference: optStr(o, 'document_reference'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-    comment_id: optStr(o, 'comment_id'),
-    excerpt: optStr(o, 'excerpt'),
-    due_date: optStr(o, 'due_date'),
-    subject: optStr(o, 'subject'),
-    actor_name: optStr(o, 'actor_name'),
-    created_at: str(o, 'created_at'),
-    read: bool(o, 'read'),
   };
 }
 
@@ -1420,103 +1317,7 @@ function parseCalendar(value: Json): CalendarView {
   };
 }
 
-export const TIME_KINDS = ['work', 'study', 'lecture', 'hobby', 'rest', 'other'] as const;
-export type TimeKind = (typeof TIME_KINDS)[number];
-export type TimeTargetKind = 'task' | 'document' | 'item' | 'episode' | 'study_unit';
-
-export interface TimeTargetView {
-  kind: TimeTargetKind;
-  id: string;
-  /** 지금 볼 수 없으면 없다. */
-  label: string | null;
-  workspace_id: string | null;
-}
-
-export interface TimeEntryView {
-  id: string;
-  started_at: string;
-  /** 진행 중이면 없다. */
-  ended_at: string | null;
-  /** 일시정지 중이면 그 시각. */
-  paused_at: string | null;
-  paused_seconds: number;
-  /** 응답 시각까지의 길이(초). */
-  seconds: number;
-  kind: TimeKind;
-  memo: string;
-  target: TimeTargetView | null;
-  version: number;
-}
-
-export interface TimeEntryInput {
-  started_at: string;
-  ended_at: string | null;
-  paused_seconds: number;
-  kind: TimeKind;
-  memo: string;
-  target: { kind: TimeTargetKind; id: string } | null;
-}
-
-export interface TimeSummaryRowView {
-  period: string;
-  kind: TimeKind;
-  seconds: number;
-}
-
-export interface TaskTimeView {
-  estimate_minutes: number | null;
-  mine_seconds: number;
-}
-
-/** 항목의 시간 합계(D-78). 기록이 있는 종류만. 시간 공유(D-117 제거)는 없다. */
-export interface ItemTimeView {
-  estimate_minutes: number;
-  kinds: { kind: TimeKind; mine_seconds: number }[];
-}
-
-function timeKind(value: string): TimeKind {
-  const found = TIME_KINDS.find((k) => k === value);
-  if (found === undefined) throw new TypeError(`unknown time kind ${value}`);
-  return found;
-}
-
-export function parseTimeEntry(value: Json): TimeEntryView {
-  const o = rec(value, 'time entry');
-  let target: TimeTargetView | null = null;
-  if (o.target !== null && o.target !== undefined) {
-    const t = rec(o.target, 'time target');
-    const kind = str(t, 'kind');
-    if (
-      kind !== 'task' &&
-      kind !== 'document' &&
-      kind !== 'item' &&
-      kind !== 'episode' &&
-      kind !== 'study_unit'
-    )
-      throw new TypeError(`unknown target kind ${kind}`);
-    target = {
-      kind,
-      id: str(t, 'id'),
-      label: optStr(t, 'label'),
-      workspace_id: optStr(t, 'workspace_id'),
-    };
-  }
-  return {
-    id: str(o, 'id'),
-    started_at: str(o, 'started_at'),
-    ended_at: optStr(o, 'ended_at'),
-    paused_at: optStr(o, 'paused_at'),
-    paused_seconds: int(o, 'paused_seconds'),
-    seconds: int(o, 'seconds'),
-    kind: timeKind(str(o, 'kind')),
-    memo: str(o, 'memo'),
-    target,
-    version: int(o, 'version'),
-  };
-}
-
 export type MarkTarget = 'item' | 'document' | 'task';
-export type MarkKind = 'pin' | 'favorite';
 
 export interface HomeTaskView {
   id: string;
@@ -1640,11 +1441,6 @@ function parseHome(value: Json): HomeView {
     pins: parseList(o.pins, parseMarked),
     favorites: parseList(o.favorites, parseMarked),
   };
-}
-
-function parseMarkState(value: Json): { pin: boolean; favorite: boolean } {
-  const o = rec(value, 'mark state');
-  return { pin: bool(o, 'pin'), favorite: bool(o, 'favorite') };
 }
 
 export interface TrashEntryView {
@@ -1832,69 +1628,6 @@ async function putPart(upload: string, number: number, body: Blob, sha256: strin
     }
     fail(response.status, json);
   }
-}
-
-export interface AuditEntryView {
-  id: string;
-  action: string;
-  target_type: string;
-  target_id: string;
-  actor: string | null;
-  actor_name: string | null;
-  detail: unknown;
-  created_at: string;
-}
-
-function parseAudit(value: Json): AuditEntryView {
-  const o = rec(value, 'audit entry');
-  return {
-    id: str(o, 'id'),
-    action: str(o, 'action'),
-    target_type: str(o, 'target_type'),
-    target_id: str(o, 'target_id'),
-    actor: optStr(o, 'actor'),
-    actor_name: optStr(o, 'actor_name'),
-    detail: o.detail,
-    created_at: str(o, 'created_at'),
-  };
-}
-
-export interface CommentView {
-  id: string;
-  parent_id: string | null;
-  body: string;
-  author_id: string;
-  author_name: string | null;
-  created_at: string;
-  edited: boolean;
-  deleted: boolean;
-  resolved: boolean;
-  can_edit: boolean;
-  can_delete: boolean;
-  can_resolve: boolean;
-}
-
-export interface CommentTarget {
-  kind: 'document' | 'task';
-  id: string;
-}
-
-function parseComment(value: Json): CommentView {
-  const o = rec(value, 'comment');
-  return {
-    id: str(o, 'id'),
-    parent_id: optStr(o, 'parent_id'),
-    body: str(o, 'body'),
-    author_id: str(o, 'author_id'),
-    author_name: optStr(o, 'author_name'),
-    created_at: str(o, 'created_at'),
-    edited: bool(o, 'edited'),
-    deleted: bool(o, 'deleted'),
-    resolved: bool(o, 'resolved'),
-    can_edit: bool(o, 'can_edit'),
-    can_delete: bool(o, 'can_delete'),
-    can_resolve: bool(o, 'can_resolve'),
-  };
 }
 
 export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
@@ -2110,6 +1843,8 @@ function versionConflict(status: number, json: Json): unknown {
 }
 
 export const api = {
+  // 다른 조각 소유 호출부를 위한 재노출. 구현·계약은 시간 도메인 한 곳에 있다.
+  ...timeData,
   authInfo: () =>
     expectOk('GET', '/api/auth-info', (v): AuthInfo => ({
       oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),
@@ -2254,26 +1989,6 @@ export const api = {
   completeUpload: (id: string) =>
     expectOk('POST', `/api/uploads/${encodeURIComponent(id)}/complete`, parseUpload),
   abortUpload: (id: string) => expectOk('DELETE', `/api/uploads/${encodeURIComponent(id)}`, none),
-  comments: (target: CommentTarget) =>
-    expectOk(
-      'GET',
-      `/api/${target.kind === 'document' ? 'documents' : 'tasks'}/${encodeURIComponent(target.id)}/comments`,
-      (v) => parseList(v, parseComment),
-    ),
-  addComment: (target: CommentTarget, body: string, parentId: string | null, requestId: string) =>
-    expectOk('POST', '/api/comments', (v) => str(rec(v, 'comment created'), 'id'), {
-      request_id: requestId,
-      document_id: target.kind === 'document' ? target.id : null,
-      task_id: target.kind === 'task' ? target.id : null,
-      parent_id: parentId,
-      body,
-    }),
-  editComment: (id: string, body: string) =>
-    expectOk('PUT', `/api/comments/${encodeURIComponent(id)}`, none, { body }),
-  deleteComment: (id: string) =>
-    expectOk('DELETE', `/api/comments/${encodeURIComponent(id)}`, none),
-  resolveComment: (id: string, resolved: boolean) =>
-    expectOk('POST', `/api/comments/${encodeURIComponent(id)}/resolve`, none, { resolved }),
   course: (item: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(item)}/course`, parseCourse),
   setCourseDetails: (item: string, details: CourseDetailsView) =>
@@ -2379,15 +2094,6 @@ export const api = {
           };
         }),
     ),
-  /** 감사 기록(워크스페이스, 또는 null이면 내 개인 영역). before는 마지막으로 받은 기록 id. */
-  audit: (workspaceId: string | null, before?: string) => {
-    const base =
-      workspaceId === null
-        ? '/api/me/audit'
-        : `/api/workspaces/${encodeURIComponent(workspaceId)}/audit`;
-    const query = before === undefined ? '' : `?before=${encodeURIComponent(before)}`;
-    return expectOk('GET', `${base}${query}`, (v) => parseList(v, parseAudit));
-  },
   deletedWorkspaces: () =>
     expectOk('GET', '/api/me/deleted-workspaces', (v) => parseList(v, parseDeletedWorkspace)),
   restoreWorkspace: (ws: string) =>
@@ -2772,146 +2478,6 @@ export const api = {
       `/api/me/tasks?organization_id=${encodeURIComponent(organizationId)}&today=${encodeURIComponent(today)}`,
       parseMyTasks,
     ),
-  /** 현재 조직의 최근 활동(D-119). */
-  recentActivity: (organizationId: string, limit?: number) => {
-    const params = new URLSearchParams({ organization_id: organizationId });
-    if (limit !== undefined) params.set('limit', String(limit));
-    return expectOk('GET', `/api/me/activity?${params.toString()}`, (v) =>
-      parseList(v, parseActivity),
-    );
-  },
-  /** 항목·문서·업무의 활동(대상을 볼 수 있으면, D-119). */
-  targetActivity: (
-    kind: 'item' | 'document' | 'task',
-    id: string,
-    cursor?: PageCursor,
-    limit?: number,
-  ) => {
-    const params = new URLSearchParams();
-    cursorParams(params, cursor, limit);
-    const base = `/api/${kind === 'item' ? 'items' : kind === 'document' ? 'documents' : 'tasks'}/${encodeURIComponent(id)}/activity`;
-    const query = params.toString();
-    return expectOk('GET', query === '' ? base : `${base}?${query}`, parseActivityPage);
-  },
-  mark: (kind: MarkTarget, id: string) =>
-    expectOk('GET', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState),
-  setMark: (kind: MarkTarget, id: string, mark: MarkKind, on: boolean) =>
-    expectOk('PUT', `/api/me/marks/${kind}/${encodeURIComponent(id)}`, parseMarkState, {
-      mark,
-      on,
-    }),
-  // D-117 개인 시간 계약, 시작 응답의 자동 종료 기록.
-  currentTimer: () =>
-    expectOk('GET', '/api/me/timer', (v) => (v === null ? null : parseTimeEntry(v))),
-  startTimer: (
-    requestId: string,
-    kind: TimeKind,
-    memo: string,
-    target: { kind: TimeTargetKind; id: string } | null,
-    mode?: 'continue' | 'new',
-  ) =>
-    expectOk(
-      'POST',
-      '/api/me/timer',
-      (v) => ({
-        ...parseTimeEntry(v),
-        stopped_entry_id: optStr(rec(v, 'started timer'), 'stopped_entry_id'),
-      }),
-      {
-        request_id: requestId,
-        kind,
-        memo,
-        target: target === null ? null : { ...target },
-        ...(mode === undefined ? {} : { mode }),
-      },
-    ),
-  timerAction: (id: string, action: 'pause' | 'resume' | 'stop') =>
-    expectOk('POST', `/api/time-entries/${encodeURIComponent(id)}/timer`, parseTimeEntry, {
-      action,
-    }),
-  timeEntries: (from: string, to: string, tz: string) =>
-    expectOk(
-      'GET',
-      `/api/me/time-entries?from=${from}&to=${to}&tz=${encodeURIComponent(tz)}`,
-      (v) => parseList(v, parseTimeEntry),
-    ),
-  addTimeEntry: (requestId: string, input: TimeEntryInput) =>
-    expectOk('POST', '/api/me/time-entries', parseTimeEntry, {
-      request_id: requestId,
-      ...input,
-      target: input.target === null ? null : { ...input.target },
-    }),
-  /** 기록 고치기. 기준 버전이 지났으면 `{ kind: 'conflict', current }`. */
-  async updateTimeEntry(
-    id: string,
-    baseVersion: number,
-    input: TimeEntryInput,
-  ): Promise<
-    { kind: 'updated'; entry: TimeEntryView } | { kind: 'conflict'; current: TimeEntryView }
-  > {
-    const { status, json } = await request('PUT', `/api/time-entries/${encodeURIComponent(id)}`, {
-      base_version: baseVersion,
-      ...input,
-      target: input.target === null ? null : { ...input.target },
-    });
-    if (status === 409 && isRecord(json) && json.current !== undefined)
-      return { kind: 'conflict', current: parseTimeEntry(rec(json, 'conflict').current) };
-    if (status !== 200) fail(status, json);
-    return { kind: 'updated', entry: parseTimeEntry(json) };
-  },
-  deleteTimeEntry: (id: string) =>
-    expectOk('DELETE', `/api/time-entries/${encodeURIComponent(id)}`, none),
-  timeEntryRevisions: (id: string) =>
-    expectOk('GET', `/api/time-entries/${encodeURIComponent(id)}/revisions`, (v) =>
-      parseList(v, (r) => {
-        const o = rec(r, 'revision');
-        return {
-          started_at: str(o, 'started_at'),
-          ended_at: optStr(o, 'ended_at'),
-          paused_seconds: int(o, 'paused_seconds'),
-          kind: timeKind(str(o, 'kind')),
-          memo: str(o, 'memo'),
-          changed_at: str(o, 'changed_at'),
-        };
-      }),
-    ),
-  timeSummary: (from: string, to: string, tz: string, group: 'day' | 'week' | 'month') =>
-    expectOk(
-      'GET',
-      `/api/me/time-summary?from=${from}&to=${to}&tz=${encodeURIComponent(tz)}&group=${group}`,
-      (v) =>
-        parseList(v, (r): TimeSummaryRowView => {
-          const o = rec(r, 'summary row');
-          return {
-            period: str(o, 'period'),
-            kind: timeKind(str(o, 'kind')),
-            seconds: int(o, 'seconds'),
-          };
-        }),
-    ),
-  itemTime: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/time`, (v): ItemTimeView => {
-      const o = rec(v, 'item time');
-      if (!Array.isArray(o.kinds)) throw new TypeError('item time kinds');
-      return {
-        estimate_minutes: int(o, 'estimate_minutes'),
-        kinds: o.kinds.map((k: Json) => {
-          const r = rec(k, 'item time kind');
-          return {
-            kind: timeKind(str(r, 'kind')),
-            mine_seconds: int(r, 'mine_seconds'),
-          };
-        }),
-      };
-    }),
-  taskTime: (taskId: string) =>
-    expectOk('GET', `/api/tasks/${encodeURIComponent(taskId)}/time`, (v): TaskTimeView => {
-      const o = rec(v, 'task time');
-      return {
-        estimate_minutes: optInt(o, 'estimate_minutes'),
-        mine_seconds: int(o, 'mine_seconds'),
-      };
-    }),
   /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
   calendar: (
     workspaceId: string,
@@ -3006,27 +2572,6 @@ export const api = {
   itemBacklinks: (id: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
-    ),
-  /** 알림함은 현재 조직 범위이며 초대는 어느 조직 문맥에서나 보인다. 목록은 커서로 더 본다(D-118). */
-  notifications: (organizationId: string, cursor?: PageCursor, limit?: number) => {
-    const params = new URLSearchParams({ organization_id: organizationId });
-    cursorParams(params, cursor, limit);
-    return expectOk('GET', `/api/me/notifications?${params.toString()}`, parseNotificationPage);
-  },
-  /** 안 읽은 수는 서버가 센다(D-118). */
-  unreadCount: (organizationId: string) =>
-    expectOk(
-      'GET',
-      `/api/me/notifications/unread-count?organization_id=${encodeURIComponent(organizationId)}`,
-      (v) => int(rec(v, 'unread count'), 'unread_count'),
-    ),
-  /** id가 null이면 현재 조직의 모두 읽음(초대 포함). 읽음 처리한 수를 돌려준다. */
-  markNotificationsRead: (organizationId: string, id: string | null) =>
-    expectOk(
-      'POST',
-      `/api/me/notifications/read?organization_id=${encodeURIComponent(organizationId)}`,
-      (v) => int(rec(v, 'marked notifications'), 'marked'),
-      { id },
     ),
   modules: (ws: string) =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/modules`, (v) =>

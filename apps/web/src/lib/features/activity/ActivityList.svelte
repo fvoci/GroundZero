@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { activityApi, type PageCursor } from '$lib/features/activity/api';
   import { untrack } from 'svelte';
   import type { Activity } from '@fvoci/api-client';
-  import { api, type PageCursor } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
   import { org } from '$lib/org.svelte';
@@ -38,7 +38,7 @@
     failedCursor = cursor;
     try {
       if (kind !== undefined && targetId !== undefined) {
-        const page = await api.targetActivity(kind, targetId, cursor);
+        const page = await activityApi.targetActivity(kind, targetId, cursor);
         if (ticket !== sequence) return;
         items =
           cursor === undefined
@@ -49,7 +49,7 @@
             ? { before: page.next_before, before_id: page.next_before_id }
             : undefined;
       } else {
-        const recent = await api.recentActivity(organizationId);
+        const recent = await activityApi.recentActivity(organizationId);
         if (ticket !== sequence) return;
         items = recent;
         next = undefined;

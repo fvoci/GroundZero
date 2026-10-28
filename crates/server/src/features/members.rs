@@ -16,14 +16,13 @@ use crate::features::workspaces::member_role;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
+pub use fvoci_core::validate::validate_email;
 use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, needed_ids, new_ids};
 use fvoci_http::session::CurrentUser;
 
 /// 초대 유효 기간(초). 운영 한도로 옮길 수 있게 한곳에 둔다.
 const INVITATION_TTL_SECS: i32 = 14 * 24 * 3600;
-/// 이메일 길이 상한(RFC 5321).
-const MAX_EMAIL: usize = 254;
 
 fn role_str(role: Role) -> &'static str {
     match role {
@@ -241,20 +240,6 @@ pub struct Invitation {
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub expires_at: OffsetDateTime,
-}
-
-pub fn validate_email(raw: &str) -> Result<String, AppError> {
-    let email = raw.trim().to_lowercase();
-    let valid = email.len() <= MAX_EMAIL
-        && email
-            .split_once('@')
-            .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.'))
-        && !email.chars().any(|c| c.is_whitespace() || c.is_control());
-    if valid {
-        Ok(email)
-    } else {
-        Err(AppError::BadRequest("email is not valid".into()))
-    }
 }
 
 /// 초대(관리자). 수락은 그 이메일을 제공자가 검증한 사용자만 할 수 있다 (D-51).
@@ -728,21 +713,4 @@ pub async fn remove_group_member(
     .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::validate_email;
-
-    #[test]
-    fn email_validation() {
-        assert_eq!(
-            validate_email("  Alice@Example.TEST ").unwrap(),
-            "alice@example.test"
-        );
-        assert!(validate_email("no-at-sign").is_err());
-        assert!(validate_email("@example.test").is_err());
-        assert!(validate_email("a@localhost").is_err());
-        assert!(validate_email("a b@example.test").is_err());
-    }
 }

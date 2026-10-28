@@ -1,5 +1,6 @@
+import { type NotificationView } from '$lib/features/activity/api';
 // 알림 문장(종류별). 알림 화면과 홈이 같이 쓴다(홈이 모든 알림을 "언급"으로 보이던 것을 고침).
-import type { NotificationView } from '$lib/api/client';
+
 import { formatDay } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
 

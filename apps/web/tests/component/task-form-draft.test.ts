@@ -1,3 +1,4 @@
+import { activityApi } from '$lib/features/activity/api';
 import { org } from '$lib/org.svelte';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
@@ -90,7 +91,7 @@ function mount(
   vi.spyOn(work, 'task').mockResolvedValue(server);
   vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-  vi.spyOn(api, 'comments').mockResolvedValue([]);
+  vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
     props: {
       taskId: 't-1',
@@ -415,7 +416,7 @@ describe('relation editor input across reloads', () => {
     vi.spyOn(work, 'task').mockResolvedValue(server);
     vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
-    vi.spyOn(api, 'comments').mockResolvedValue([]);
+    vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
     render(TaskDetail, {
       props: {
         taskId: 't-1',
