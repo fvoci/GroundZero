@@ -17,10 +17,10 @@ use uuid::Uuid;
 
 use crate::access::{self, Kind};
 use crate::features::members::OfferOwnership;
-use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
+use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 

@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -156,7 +157,7 @@ describe('draft offers while a create request is in flight', () => {
     expect(key).toBe('item-copy:copied');
     expect(options?.action?.label).toBe(m.modules_copy_open());
     const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
-    options?.action?.onClick();
+    options?.action?.onClick(new MouseEvent('click', { cancelable: true }));
     expect(navigate).toHaveBeenCalledWith(itemPath(item.workspace_id, 'copied'));
     expect(screen.getByRole('button', { name: m.common_draft_restore() })).not.toBeDisabled();
   });
@@ -237,7 +238,7 @@ describe('draft offers while an edit request is in flight', () => {
       leader: null,
     });
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const save = vi.spyOn(api, 'setItemProfile').mockReturnValue(new Promise(() => undefined));
     render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });
     await fireEvent.click(await screen.findByRole('button', { name: m.modules_edit() }));
@@ -327,7 +328,7 @@ describe('draft offers after write access is withdrawn', () => {
       leader: null,
     });
     vi.spyOn(api, 'itemProfile').mockResolvedValue({ ...profile, can_edit: false });
-    const assignable = vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    const assignable = vi.spyOn(work, 'assignable').mockResolvedValue([]);
     render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });
     await expectReadOnlyOffer();
     expect(screen.queryByLabelText(m.modules_goal())).toBeNull();

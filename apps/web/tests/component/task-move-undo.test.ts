@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -65,6 +66,29 @@ function task(id: string, title: string, status: TaskStatus = '할 일', version
 // 이동 완료와 되돌리기는 완료 토스트(key `board-move`)와 그 동작 단추다(D-82). 토스트는 FeedbackHost가 그리므로 여기서는
 // notifyDone·dismissDone이 남긴 토스트 하나를 흉내 낸다.
 describe('kanban undo', () => {
+  it('prevents the toast default while a save is still pending (#163)', async () => {
+    let resolve: (value: Awaited<ReturnType<typeof work.moveTask>>) => void = () => undefined;
+    lists(start, moved);
+    vi.spyOn(work, 'moveTask')
+      .mockResolvedValueOnce({ ...movedA, checklist: [] })
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolve = r;
+          }),
+      );
+    await mount();
+    await moveRight('a');
+    await flush();
+    const action = toast?.action;
+    const pending = moveRight('a');
+    await flush();
+    const event = new MouseEvent('click', { cancelable: true });
+    action?.onClick(event);
+    expect(event.defaultPrevented).toBe(true);
+    resolve({ ...movedA, checklist: [] });
+    await pending;
+  });
   let toast: { message: string; action: DoneAction | undefined } | undefined;
   let done: MockInstance<typeof feedback.notifyDone>;
   beforeEach(async () => {
@@ -72,7 +96,7 @@ describe('kanban undo', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     toast = undefined;
     done = vi.spyOn(feedback, 'notifyDone').mockImplementation((message, key, options) => {
       if (key === 'board-move') toast = { message, action: options?.action };
@@ -94,9 +118,11 @@ describe('kanban undo', () => {
   const movedA = task('a', 'API 연결', '진행 중', 2);
   const moved = [task('b', '문서 검토'), movedA];
 
-  function lists(...answers: (TaskView[] | Promise<TaskView[]>)[]): MockInstance<typeof api.tasks> {
+  function lists(
+    ...answers: (TaskView[] | Promise<TaskView[]>)[]
+  ): MockInstance<typeof work.tasks> {
     let i = 0;
-    return vi.spyOn(api, 'tasks').mockImplementation(() => {
+    return vi.spyOn(work, 'tasks').mockImplementation(() => {
       const answer = answers[Math.min(i, answers.length - 1)] ?? [];
       i += 1;
       return answer instanceof Promise ? answer : Promise.resolve(answer);
@@ -121,7 +147,9 @@ describe('kanban undo', () => {
     const action = toast?.action;
     if (action === undefined) throw new Error('undo');
     toast = undefined;
-    action.onClick();
+    const event = new MouseEvent('click', { cancelable: true });
+    action.onClick(event);
+    if (event.defaultPrevented) toast = { message: '', action };
     await tick();
   }
   const toasted = (text: string): boolean => done.mock.calls.some(([m]) => m.includes(text));
@@ -134,7 +162,7 @@ describe('kanban undo', () => {
   it('offers undo after a confirmed move and moves the card back to where it was', async () => {
     const read = lists(start, moved, moved, start);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValueOnce({ ...movedA, checklist: [] })
       .mockResolvedValueOnce({ ...task('a', 'API 연결', '할 일', 3), checklist: [] });
     await mount();
@@ -172,7 +200,7 @@ describe('kanban undo', () => {
     });
     lists([a, b, c], oldRead, [savedB, savedC], [savedB, savedC], [c, savedB]);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockImplementation((_expectedUser, id, status) =>
         Promise.resolve({ ...(id === 'b' ? savedB : savedC), status, checklist: [] }),
       );
@@ -196,11 +224,11 @@ describe('kanban undo', () => {
     const afterA = [task('b', '문서 검토'), task('c', '회의 준비'), movedA];
     lists(three, afterA, afterA, afterA, afterA);
     let failB: (e: Error) => void = () => undefined;
-    const bMove = new Promise<Awaited<ReturnType<typeof api.moveTask>>>((_, reject) => {
+    const bMove = new Promise<Awaited<ReturnType<typeof work.moveTask>>>((_, reject) => {
       failB = reject;
     });
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockImplementation((_expectedUser, id) =>
         id === 'b' ? bMove : Promise.resolve({ ...movedA, checklist: [] }),
       );
@@ -220,11 +248,11 @@ describe('kanban undo', () => {
 
   it('does not offer undo while the result is unknown', async () => {
     let call = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(() => {
+    vi.spyOn(work, 'tasks').mockImplementation(() => {
       call += 1;
       return call === 1 ? Promise.resolve(start) : Promise.reject(new NetworkError('offline'));
     });
-    vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    vi.spyOn(work, 'moveTask').mockRejectedValue(new NetworkError('reset'));
     await mount();
     await moveRight('a');
     await flush();
@@ -235,7 +263,7 @@ describe('kanban undo', () => {
 
   it('offers undo once a lost response is confirmed from the list', async () => {
     lists(start, moved);
-    vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    vi.spyOn(work, 'moveTask').mockRejectedValue(new NetworkError('reset'));
     await mount();
     await moveRight('a');
     await flush();
@@ -247,7 +275,7 @@ describe('kanban undo', () => {
   it('does not move back when the card changed elsewhere after the move', async () => {
     const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', '완료', 3)];
     lists(start, moved, elsewhere);
-    const move = vi.spyOn(api, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
+    const move = vi.spyOn(work, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
     await mount();
     await moveRight('a');
     await flush();
@@ -264,7 +292,7 @@ describe('kanban undo', () => {
     const reordered = [movedA, task('b', '문서 검토')];
     lists(start, moved, moved, reordered);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockResolvedValueOnce({ ...movedA, checklist: [] })
       .mockRejectedValueOnce(
         new ApiError(409, 'move_conflict', 'the task moved since it was read'),
@@ -283,8 +311,8 @@ describe('kanban undo', () => {
 
   it('withdraws the offer when the same card is moved again', async () => {
     lists(start, moved);
-    const later = new Promise<Awaited<ReturnType<typeof api.moveTask>>>(() => undefined);
-    vi.spyOn(api, 'moveTask')
+    const later = new Promise<Awaited<ReturnType<typeof work.moveTask>>>(() => undefined);
+    vi.spyOn(work, 'moveTask')
       .mockResolvedValueOnce({ ...movedA, checklist: [] })
       .mockReturnValueOnce(later);
     await mount();
@@ -298,13 +326,13 @@ describe('kanban undo', () => {
 
   it('keeps the offer and sends nothing when the current state cannot be read', async () => {
     let call = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(() => {
+    vi.spyOn(work, 'tasks').mockImplementation(() => {
       call += 1;
       if (call === 1) return Promise.resolve(start);
       if (call === 2) return Promise.resolve(moved);
       return Promise.reject(new NetworkError('offline'));
     });
-    const move = vi.spyOn(api, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
+    const move = vi.spyOn(work, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
     await mount();
     await moveRight('a');
     await flush();
@@ -319,7 +347,7 @@ describe('kanban undo', () => {
 
   it('takes the undo toast down when the board is left', async () => {
     lists(start, moved);
-    vi.spyOn(api, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
+    vi.spyOn(work, 'moveTask').mockResolvedValue({ ...movedA, checklist: [] });
     const view = render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     await flush();
     await moveRight('a');

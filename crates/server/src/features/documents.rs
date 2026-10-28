@@ -23,11 +23,11 @@ use uuid::Uuid;
 use crate::collab::room::MoveRequest;
 use crate::collab::visibility::CommittedMove;
 use crate::config::Limits;
-use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::http::cache;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
+use fvoci_core::validate::validate_title;
 use fvoci_db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 

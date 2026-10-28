@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { taskData as work } from '$lib/features/tasks/detail-data';
   // 항목 정보(D-33·D-34·D-36·D-38): 상태·기간·리더·목표·범위와 종류별 정보, 비공개 항목의 멤버(사람·그룹).
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
@@ -139,7 +140,7 @@
       editSession += 1;
       // 편집 열기(startEdit)처럼 고를 수 있는 사람을 읽는다. 그사이 편집을 닫거나 새로 열었으면 버린다.
       const session = editSession;
-      void api
+      void work
         .assignable(item.id)
         .then((list) => {
           if (session === editSession) people = list;
@@ -212,7 +213,7 @@
     };
     baseline = JSON.stringify(form);
     editing = true;
-    people = await api.assignable(item.id).catch(() => []);
+    people = await work.assignable(item.id).catch(() => []);
   }
 
   async function save(e: SubmitEvent): Promise<void> {

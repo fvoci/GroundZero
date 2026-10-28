@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,7 +93,7 @@ const entry: TimeEntryView = {
 describe('selects while a save is in flight', () => {
   it('keeps the item profile status and leader closed', async () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([{ user_id: 'u1', display_name: 'First' }]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([{ user_id: 'u1', display_name: 'First' }]);
     const save = vi.spyOn(api, 'setItemProfile').mockReturnValue(new Promise(() => undefined));
     render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });
     await fireEvent.click(await screen.findByRole('button', { name: m.modules_edit() }));

@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -217,7 +218,7 @@ describe('item profile save on a stale version', () => {
   it('keeps the input, shows the latest and saves mine again on the latest version', async () => {
     await setLocale('ko', { reload: false });
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const latest: ItemProfileView = { ...profile, goal: '다른 사람 목표', version: 2 };
     const sent = serve('/api/items/i1/profile', [
       [409, { error: 'conflict', current: latest }],

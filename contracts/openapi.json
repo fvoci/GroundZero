@@ -30,6 +30,78 @@
         "security": []
       }
     },
+    "/api/checklist-items": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "체크리스트 항목 모음(업무별 순서). 항목 범위로 읽어 화면이 업무마다 완료 수를 센다(부조종사 결정 2026-10-28 Q2 (나)).",
+        "operationId": "list_checklist_items",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "description": "이 항목의 모든 업무.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "task",
+            "in": "query",
+            "description": "이 업무 하나.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChecklistItem"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/checklist-items/{item_id}": {
       "put": {
         "tags": [
@@ -5245,7 +5317,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
@@ -8987,12 +9059,228 @@
         }
       }
     },
+    "/api/task-assignees": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "담당 모음(이름 순).",
+        "operationId": "list_task_assignees",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "description": "이 항목의 모든 업무.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "task",
+            "in": "query",
+            "description": "이 업무 하나.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskAssignee"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-dependencies": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "선행 관계 모음(만든 순). 업무 범위면 그 업무가 선행이거나 후속인 관계 모두다.",
+        "operationId": "list_task_dependencies",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "description": "이 항목의 모든 업무.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "task",
+            "in": "query",
+            "description": "이 업무 하나.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskDependency"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-series": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "반복 계열 모음. 업무 범위면 그 업무가 속한 계열(없으면 빈 목록)이다.",
+        "operationId": "list_task_series",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "query",
+            "description": "이 항목의 모든 업무.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "task",
+            "in": "query",
+            "description": "이 업무 하나.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskSeries"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{task_id}": {
       "get": {
         "tags": [
           "tasks"
         ],
-        "summary": "업무 하나와 체크리스트.",
+        "summary": "업무 하나의 칸. 관계와 체크리스트는 별도 모음으로 읽는다.",
         "operationId": "get_task",
         "parameters": [
           {
@@ -9011,7 +9299,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
@@ -9022,96 +9310,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "업무 고치기(쓰기 권한). 기준 버전이 지났으면 409와 서버 최신본(입력은 클라이언트가 보존).",
-        "operationId": "update_task",
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "x-fvoci-expected-user",
-            "in": "header",
-            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateTask"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "conflict·shift_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskWriteConflict"
                 }
               }
             }
@@ -9192,6 +9390,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "업무 고치기(쓰기 권한). 보낸 칸만 바꾸고, 기준 판이 지났으면 409 `conflict`, 승인한 재배치가 맞지 않게 됐으면 409\n`shift_conflict`다(둘 다 아무것도 바꾸지 않고 지금 업무와 바뀐 칸을 준다).",
+        "operationId": "patch_task",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "이 업무 편집을 시작한 사용자 id(필수). 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 account_changed, 없거나 형식이 틀리면 400. 신원과 권한은 세션으로만 정한다",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "conflict·shift_conflict면 StaleWrite(지금 업무와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskPatchConflict"
                 }
               }
             }
@@ -9385,7 +9673,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChecklistItem"
+                  }
                 }
               }
             }
@@ -9522,7 +9813,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
@@ -9614,7 +9905,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
@@ -9654,7 +9945,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskWriteConflict"
+                  "$ref": "#/components/schemas/TaskPatchConflict"
                 }
               }
             }
@@ -9716,7 +10007,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "$ref": "#/components/schemas/TaskDependency"
                 }
               }
             }
@@ -9752,11 +10043,11 @@
             }
           },
           "409": {
-            "description": "`shift_conflict`·`link_conflict`면 TaskConflict(최신본 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)",
+            "description": "`shift_conflict`·`link_conflict`면 StaleWrite(현재 관계 포함), 기대 사용자 불일치면 ErrorBody(`account_changed`), 보관·동시 변경·id 부족이면 ErrorBody(`invalid_state`)",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PredecessorConflict"
+                  "$ref": "#/components/schemas/DependencyWriteConflict"
                 }
               }
             }
@@ -9800,15 +10091,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
-                }
-              }
-            }
+          "204": {
+            "description": ""
           },
           "400": {
             "description": "",
@@ -9878,6 +10162,19 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
           }
         ],
         "requestBody": {
@@ -9913,6 +10210,16 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 보낸 기대 사용자가 세션 사용자와 다름",
             "content": {
               "application/json": {
                 "schema": {
@@ -9968,7 +10275,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskDetail"
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TaskSeries"
+                    }
+                  ]
                 }
               }
             }
@@ -10004,11 +10318,11 @@
             }
           },
           "409": {
-            "description": "rule_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
+            "description": "rule_conflict면 현재 반복 계열 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskWriteConflict"
+                  "$ref": "#/components/schemas/RuleWriteConflict"
                 }
               }
             }
@@ -10030,6 +10344,19 @@
             "required": true,
             "schema": {
               "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
               "format": "uuid"
             }
           }
@@ -10067,6 +10394,16 @@
           },
           "404": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "account_changed: 보낸 기대 사용자가 세션 사용자와 다름",
             "content": {
               "application/json": {
                 "schema": {
@@ -12880,7 +13217,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NewChecklistItem"
-            }
+            },
+            "maxItems": 200
           }
         }
       },
@@ -13255,6 +13593,7 @@
         "description": "체크리스트 항목.",
         "required": [
           "id",
+          "task_id",
           "text",
           "checked"
         ],
@@ -13263,6 +13602,10 @@
             "type": "boolean"
           },
           "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
             "type": "string",
             "format": "uuid"
           },
@@ -13722,7 +14065,7 @@
       },
       "CreateTask": {
         "type": "object",
-        "description": "업무 만들기. 제목 밖의 칸은 고치기(`UpdateTask`)와 같고 같은 규칙으로 확인해 한 트랜잭션에서 넣는다(D-105): 하나라도\n거절되면 업무도 담당도 남지 않는다. 빠진 칸은 새 업무의 기본값(설명 없음, 할 일, 우선순위 없음, 날짜·예상·태그·담당자\n없음, 이정표 아님)이다. 같은 `request_id`는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도 다시 쓰지 않는다).\n그 업무가 휴지통에 있으면 409 `task_deleted`(새 요청 id로 보낸다).",
+        "description": "업무 만들기. 제목 밖의 칸은 고치기(`PatchTask`)와 같고 같은 규칙으로 확인해 한 트랜잭션에서 넣는다(D-105): 하나라도\n거절되면 업무도 담당도 남지 않는다. 빠진 칸은 새 업무의 기본값(설명 없음, 할 일, 우선순위 없음, 날짜·예상·태그·담당자\n없음, 이정표 아님)이다. 같은 `request_id`는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도 다시 쓰지 않는다).\n그 업무가 휴지통에 있으면 409 `task_deleted`(새 요청 id로 보낸다).",
         "required": [
           "request_id",
           "title"
@@ -13736,7 +14079,8 @@
             "description": "담당자(그 항목을 볼 수 있는 멤버)."
           },
           "description": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 10000
           },
           "due_date": {
             "type": [
@@ -13749,7 +14093,8 @@
               "integer",
               "null"
             ],
-            "format": "int32"
+            "format": "int32",
+            "minimum": 0
           },
           "milestone": {
             "type": "boolean",
@@ -13787,10 +14132,12 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "maxItems": 20
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`."
           }
         }
       },
@@ -13978,6 +14325,17 @@
             "type": "string"
           }
         }
+      },
+      "DependencyWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_Option_TaskDependency"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "관계 설정의 409: 지금 관계(지워졌으면 null)와 다른 칸, 또는 계정·보관 등의 일반 오류."
       },
       "Document": {
         "type": "object",
@@ -14381,9 +14739,23 @@
             "type": "string",
             "description": "기계가 읽는 오류 코드."
           },
+          "field": {
+            "type": "string",
+            "description": "거절된 입력 칸 이름(요청 본문의 칸 이름, 예: `title`·`until`)."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "넘은 한도(글자 수·개수·최댓값). 실행 설정으로 정해지는 한도(제목 `FVOCI_MAX_TITLE_CHARS`)도 여기서 알린다.",
+            "minimum": 0
+          },
           "message": {
             "type": "string",
             "description": "사람이 읽는 설명. 내부 세부는 담지 않는다."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/InvalidReason",
+            "description": "칸 검증 실패(400 `bad_request`)의 안정된 이유. 화면은 `message` 대신 이 값으로 문구를 고른다(D-83, #76·#79)."
           },
           "request_id": {
             "type": "string",
@@ -15112,6 +15484,19 @@
           }
         }
       },
+      "InvalidReason": {
+        "type": "string",
+        "description": "칸 검증 실패의 이유(언어와 상관없는 코드).",
+        "enum": [
+          "required",
+          "too_long",
+          "too_many",
+          "control_characters",
+          "invalid_format",
+          "out_of_range",
+          "until_before_first_occurrence"
+        ]
+      },
       "Invitation": {
         "type": "object",
         "description": "관리자가 보는 초대.",
@@ -15505,7 +15890,9 @@
           },
           "lag_days": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
           }
         }
       },
@@ -15523,7 +15910,9 @@
           "lag_days": {
             "type": "integer",
             "format": "int32",
-            "description": "0 이상의 달력 날짜 수."
+            "description": "0 이상의 달력 날짜 수.",
+            "maximum": 3650,
+            "minimum": 0
           }
         }
       },
@@ -16314,7 +16703,8 @@
             "format": "uuid"
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "항목 글. 상한은 제목과 같다(`limits.max_title_chars`)."
           }
         }
       },
@@ -16499,7 +16889,9 @@
             "type": "string"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1
           }
         }
       },
@@ -17006,6 +17398,109 @@
           }
         }
       },
+      "PatchTask": {
+        "type": "object",
+        "description": "업무 고치기. 보낸 칸만 바꾼다(빠진 칸은 그대로). 날짜·예상 시간은 `null`을 보내면 지운다.",
+        "required": [
+          "base_version"
+        ],
+        "properties": {
+          "assignee_ids": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "description": "담당자 전체 목록(그 항목을 볼 수 있는 멤버)."
+          },
+          "base_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "편집을 시작할 때 읽은 업무의 판(`Task.version`)."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 10000
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`YYYY-MM-DD`, `null`이면 지운다."
+          },
+          "estimate_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "분, `null`이면 지운다.",
+            "minimum": 0
+          },
+          "milestone": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "마일스톤이면 시작일 없이 마감일만."
+          },
+          "priority": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TaskPriority"
+              }
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`YYYY-MM-DD`, `null`이면 지운다."
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "상태 이름(항목이 정의한 것)."
+          },
+          "successor_shifts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SuccessorShift"
+            },
+            "description": "미리보기에서 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 그사이 맞지 않게 됐으면 아무것도 바꾸지 않고\n409 `shift_conflict`.",
+            "maxItems": 500
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "제목. 글자 수 상한은 서버 설정이다(`GET /api/me`의 `limits.max_title_chars`). 넘으면 400 `reason: too_long`과 `limit`."
+          }
+        }
+      },
       "PersonRef": {
         "type": "object",
         "description": "사람(표시 이름).",
@@ -17106,17 +17601,6 @@
             }
           }
         }
-      },
-      "PredecessorConflict": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/TaskConflict"
-          },
-          {
-            "$ref": "#/components/schemas/ErrorBody"
-          }
-        ],
-        "description": "관계 설정의 409 본문(계약 문서용, D-91). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).\n- `TaskConflict`(`error: \"shift_conflict\"` 또는 `\"link_conflict\"`, `current`): 승인한 재배치가 그사이 맞지 않게\n  됨, 또는 편집을 시작한 관계(`base`)가 그사이 바뀌거나 생기거나 지워짐.\n- `ErrorBody`(`current` 없음): 기대 사용자 불일치(`account_changed`), 보관된 항목,\n  동시 변경 재시도(40001·40P01), 새 id 부족(FV001, `invalid_state`)."
       },
       "ProjectedTask": {
         "type": "object",
@@ -17497,7 +17981,8 @@
             ],
             "format": "int32",
             "description": "첫 회차를 포함한 횟수(1~1000).",
-            "minimum": 0
+            "maximum": 1000,
+            "minimum": 1
           },
           "freq": {
             "$ref": "#/components/schemas/Frequency"
@@ -17506,7 +17991,8 @@
             "type": "integer",
             "format": "int32",
             "description": "1~99.",
-            "minimum": 0
+            "maximum": 99,
+            "minimum": 1
           },
           "until": {
             "type": [
@@ -17522,7 +18008,8 @@
               "format": "int32",
               "minimum": 0
             },
-            "description": "매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일."
+            "description": "매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일.",
+            "maxItems": 7
           }
         }
       },
@@ -17835,6 +18322,17 @@
           "member",
           "readonly"
         ]
+      },
+      "RuleWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_Option_TaskSeries"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "반복 설정의 409. 반복이 없으면 현재 자원은 null이다."
       },
       "SaveConflict": {
         "oneOf": [
@@ -18295,13 +18793,16 @@
           },
           "lag_days": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
           },
           "successor_shifts": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SuccessorShift"
-            }
+            },
+            "maxItems": 500
           }
         }
       },
@@ -18648,6 +19149,309 @@
           }
         }
       },
+      "StaleWrite_Option_TaskDependency": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "description": "선행 관계 한 줄(D-31·D-91): 선행 업무가 끝나거나 시작한 뒤 후속 업무가 어떻게 이어지는지.",
+                "required": [
+                  "predecessor_id",
+                  "successor_id",
+                  "kind",
+                  "lag_days"
+                ],
+                "properties": {
+                  "kind": {
+                    "$ref": "#/components/schemas/LinkKind"
+                  },
+                  "lag_days": {
+                    "type": "integer",
+                    "format": "int32",
+                    "maximum": 3650,
+                    "minimum": 0
+                  },
+                  "predecessor_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "successor_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            ]
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
+      "StaleWrite_Option_TaskSeries": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "description": "반복 업무 정보.",
+                "required": [
+                  "id",
+                  "root_task_id",
+                  "timezone"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "root_task_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "첫 회차(규칙은 여기서 바꾼다)."
+                  },
+                  "rule": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RecurrenceRule",
+                        "description": "멈췄으면 없다."
+                      }
+                    ]
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
+      "StaleWrite_Task": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "업무.",
+            "required": [
+              "id",
+              "item_id",
+              "module_id",
+              "workspace_id",
+              "title",
+              "description",
+              "status",
+              "status_category",
+              "priority",
+              "tags",
+              "milestone",
+              "version",
+              "move_version",
+              "updated_at"
+            ],
+            "properties": {
+              "completed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "description": {
+                "type": "string"
+              },
+              "due_date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "estimate_minutes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "item_id": {
+                "$ref": "#/components/schemas/ItemId"
+              },
+              "milestone": {
+                "type": "boolean",
+                "description": "마일스톤이면 마감일 하나만 쓴다."
+              },
+              "module_id": {
+                "$ref": "#/components/schemas/ModuleId"
+              },
+              "move_version": {
+                "type": "integer",
+                "format": "int32",
+                "description": "이동 판(D-89): 열이나 열 안 위치가 바뀔 때마다 오른다. 조건부 이동(`base_move_version`)의 기준."
+              },
+              "occurrence_date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "반복 회차의 날짜(규칙 기준)."
+              },
+              "parent_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "하위 업무면 상위 업무."
+              },
+              "priority": {
+                "$ref": "#/components/schemas/TaskPriority"
+              },
+              "reference": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "예: `DEV-5`."
+              },
+              "series_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "반복 업무의 회차면 그 반복 계열(`GET /api/task-series`)."
+              },
+              "start_date": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "`YYYY-MM-DD`. 시각 없는 날짜(D-50)."
+              },
+              "status": {
+                "type": "string",
+                "description": "상태 이름. 명령(고치기·이동)이 상태를 항목 안에서 겹치지 않는 이름으로 가리키므로(D-116) 이름으로 싣는다."
+              },
+              "status_category": {
+                "$ref": "#/components/schemas/StatusCategory",
+                "description": "상태의 범주(완료 판정). 상태 정의(`GET /api/items/{item_id}/statuses`)와 같은 값이다."
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "title": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32",
+                "description": "칸 고치기의 기준 판(D-94)."
+              },
+              "workspace_id": {
+                "$ref": "#/components/schemas/WorkspaceId"
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
       "StartTimer": {
         "type": "object",
         "description": "타이머 시작.",
@@ -18959,33 +19763,11 @@
           "priority",
           "tags",
           "milestone",
-          "predecessors",
-          "assignees",
-          "checklist_done",
-          "checklist_total",
           "version",
           "move_version",
-          "access",
           "updated_at"
         ],
         "properties": {
-          "access": {
-            "$ref": "#/components/schemas/Access"
-          },
-          "assignees": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Assignee"
-            }
-          },
-          "checklist_done": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "checklist_total": {
-            "type": "integer",
-            "format": "int64"
-          },
           "completed_at": {
             "type": [
               "string",
@@ -19043,13 +19825,6 @@
             "format": "uuid",
             "description": "하위 업무면 상위 업무."
           },
-          "predecessors": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TaskLink"
-            },
-            "description": "선행 관계: 선행 업무, 종류(FS·SS·FF·SF), 지연일(D-91). 후속 업무는 다른 업무의 이 목록을 거꾸로 찾는다."
-          },
           "priority": {
             "$ref": "#/components/schemas/TaskPriority"
           },
@@ -19060,29 +19835,28 @@
             ],
             "description": "예: `DEV-5`."
           },
-          "series": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TaskSeries",
-                "description": "반복 업무의 회차면 그 반복."
-              }
-            ]
+          "series_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "반복 업무의 회차면 그 반복 계열(`GET /api/task-series`)."
           },
           "start_date": {
             "type": [
               "string",
               "null"
             ],
-            "description": "`YYYY-MM-DD`. 시각 없는 날짜."
+            "description": "`YYYY-MM-DD`. 시각 없는 날짜(D-50)."
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "상태 이름. 명령(고치기·이동)이 상태를 항목 안에서 겹치지 않는 이름으로 가리키므로(D-116) 이름으로 싣는다."
           },
           "status_category": {
-            "type": "string"
+            "$ref": "#/components/schemas/StatusCategory",
+            "description": "상태의 범주(완료 판정). 상태 정의(`GET /api/items/{item_id}/statuses`)와 같은 값이다."
           },
           "tags": {
             "type": "array",
@@ -19100,56 +19874,40 @@
           "version": {
             "type": "integer",
             "format": "int32",
-            "description": "필드 고치기의 기준 버전."
+            "description": "칸 고치기의 기준 판(D-94)."
           },
           "workspace_id": {
             "$ref": "#/components/schemas/WorkspaceId"
           }
         }
       },
-      "TaskConflict": {
+      "TaskAssignee": {
         "type": "object",
-        "description": "409 응답: 서버 최신본.",
+        "description": "업무 담당 한 줄.",
         "required": [
-          "error",
-          "current"
+          "task_id",
+          "user_id",
+          "display_name"
         ],
         "properties": {
-          "current": {
-            "$ref": "#/components/schemas/TaskDetail"
-          },
-          "error": {
+          "display_name": {
             "type": "string"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },
-      "TaskDetail": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/Task"
-          },
-          {
-            "type": "object",
-            "required": [
-              "checklist"
-            ],
-            "properties": {
-              "checklist": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/ChecklistItem"
-                }
-              }
-            }
-          }
-        ],
-        "description": "업무와 체크리스트."
-      },
-      "TaskLink": {
+      "TaskDependency": {
         "type": "object",
-        "description": "업무의 선행 관계 하나.",
+        "description": "선행 관계 한 줄(D-31·D-91): 선행 업무가 끝나거나 시작한 뒤 후속 업무가 어떻게 이어지는지.",
         "required": [
-          "task_id",
+          "predecessor_id",
+          "successor_id",
           "kind",
           "lag_days"
         ],
@@ -19159,13 +19917,30 @@
           },
           "lag_days": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
           },
-          "task_id": {
+          "predecessor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "successor_id": {
             "type": "string",
             "format": "uuid"
           }
         }
+      },
+      "TaskPatchConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_Task"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "`PATCH`의 409 본문(계약 문서용). 판 충돌이면 `StaleWrite<Task>`, 기대 사용자 불일치·보관·동시 변경이면 `ErrorBody`."
       },
       "TaskPriority": {
         "type": "string",
@@ -19270,19 +20045,6 @@
             "description": "내 기록의 합계(초)."
           }
         }
-      },
-      "TaskWriteConflict": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/TaskConflict",
-            "description": "업무·이동·반복 규칙의 기준이 오래됨."
-          },
-          {
-            "$ref": "#/components/schemas/ErrorBody",
-            "description": "기대 사용자가 다르거나 현재 상태에서 쓰기를 할 수 없음."
-          }
-        ],
-        "description": "업무 쓰기의 409 본문: 최신 업무를 포함한 충돌 또는 계정 변경 등 일반 오류."
       },
       "TimeEntry": {
         "type": "object",
@@ -19687,7 +20449,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "항목 글. 상한은 제목과 같다(`limits.max_title_chars`)."
           }
         }
       },
@@ -19857,81 +20620,6 @@
           }
         }
       },
-      "UpdateTask": {
-        "type": "object",
-        "description": "업무 고치기. `base_version`이 지났으면 409와 서버 최신본.",
-        "required": [
-          "base_version",
-          "title",
-          "description",
-          "status",
-          "priority",
-          "tags",
-          "assignee_ids",
-          "milestone"
-        ],
-        "properties": {
-          "assignee_ids": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserId"
-            },
-            "description": "담당자 전체 목록(빠지면 지우는 것이므로 생략할 수 없다)."
-          },
-          "base_version": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "description": {
-            "type": "string"
-          },
-          "due_date": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "estimate_minutes": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
-          },
-          "milestone": {
-            "type": "boolean",
-            "description": "마일스톤이면 시작일 없이 마감일만."
-          },
-          "priority": {
-            "$ref": "#/components/schemas/TaskPriority"
-          },
-          "start_date": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "type": "string"
-          },
-          "successor_shifts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SuccessorShift"
-            },
-            "description": "미리보기에서 사용자가 승인한 후속 업무 재배치. 같은 트랜잭션에서 함께 옮기며, 하나라도 기준 버전이\n지났으면 아무것도 바꾸지 않고 409(`shift_conflict`)."
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "title": {
-            "type": "string"
-          }
-        }
-      },
       "UpdateTaskStatus": {
         "type": "object",
         "properties": {
@@ -19955,7 +20643,9 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "maxLength": 50,
+            "minLength": 1
           },
           "position": {
             "type": [

@@ -58,6 +58,10 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
+        // 같은 요청에서 공통 처리(`ExpectedUserIfSent`)와 처리기가 함께 부르면 세션을 한 번만 찾는다.
+        if let Some(found) = parts.extensions.get::<Self>() {
+            return Ok(*found);
+        }
         let state = SessionState::from_ref(state);
         let token = single_cookie(&parts.headers, state.cookie_name)
             .map_err(|DuplicateCookie| AppError::Unauthorized)?
@@ -68,7 +72,9 @@ where
             .fetch_one(tx.conn())
             .await?;
         tx.commit().await?;
-        user.map(CurrentUser).ok_or(AppError::Unauthorized)
+        let found = user.map(CurrentUser).ok_or(AppError::Unauthorized)?;
+        parts.extensions.insert(found);
+        Ok(found)
     }
 }
 
@@ -101,6 +107,33 @@ where
         };
         check_expected_user(user, value.to_str().ok(), EXPECTED_USER_HEADER)?;
         Ok(Self(user))
+    }
+}
+
+/// 머리가 필수가 아닌 명령의 기대 사용자 머리 계약(OpenAPI).
+pub const EXPECTED_USER_IF_SENT_DOC: &str = "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다";
+
+/// 기대 사용자 머리가 있으면 늘 비교하는 공통 처리(D-96 2026-10-28 개정 (가), 사용자 결정 Q5 (다)). 도메인 라우터에
+/// `axum::middleware::from_extractor_with_state`로 걸어 그 도메인의 모든 명령(안전하지 않은 메서드)에 적용한다.
+/// 머리가 없으면 아무것도 하지 않는다. 머리를 꼭 받아야 하는 쓰기(문서 초안·업무 쓰기, 같은 결정 2026-10-26 개정)는
+/// 처리기가 [`ExpectedUser`]를 그대로 받아 빠지면 400이다. 머리가 있으면 [`ExpectedUser`]와 같은 순서로 본다:
+/// 세션 없음 401 → 둘 이상이거나 UUID가 아니면 400 → 세션의 사용자와 다르면 409 `account_changed`. 처리기보다 먼저 끝난다.
+#[derive(Debug, Clone, Copy)]
+pub struct ExpectedUserIfSent;
+
+impl<S> FromRequestParts<S> for ExpectedUserIfSent
+where
+    S: Send + Sync,
+    SessionState: FromRef<S>,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
+        if parts.method.is_safe() || !parts.headers.contains_key(EXPECTED_USER_HEADER) {
+            return Ok(Self);
+        }
+        ExpectedUser::from_request_parts(parts, state).await?;
+        Ok(Self)
     }
 }
 

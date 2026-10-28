@@ -84,6 +84,10 @@ async fn task_csv_title_limit(max: usize) {
         } else {
             assert_eq!(row.status, StatusCode::BAD_REQUEST, "{}", row.json);
             assert_eq!(row.json["error"], "bad_request");
+            // 한도 계약(#79): 거절된 칸과 이유, 설정된 상한을 본문에 싣는다.
+            assert_eq!(row.json["reason"], "too_long");
+            assert_eq!(row.json["field"], "title");
+            assert_eq!(row.json["limit"], max);
         }
     }
     let saved = send(&app, Method::GET, &uri, Some(&user), None).await;

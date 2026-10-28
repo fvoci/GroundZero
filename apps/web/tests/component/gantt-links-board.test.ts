@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -105,7 +106,7 @@ describe('gantt dependency lines on the board', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
   });
   afterEach(() => {
@@ -133,7 +134,7 @@ describe('gantt dependency lines on the board', () => {
   }
 
   it('draws the dependency without a tab stop or a second announcement, and keeps rows usable', async () => {
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
     const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
     const gantt = await mount();
     const layer = q(gantt, '[data-testid="gantt-links"]');
@@ -153,7 +154,7 @@ describe('gantt dependency lines on the board', () => {
   });
 
   it('makes the lines of a focused or hovered row bold, by width and not by colour alone', async () => {
-    vi.spyOn(api, 'tasks').mockResolvedValue([
+    vi.spyOn(work, 'tasks').mockResolvedValue([
       design,
       build,
       task('c', '정리', '2026-10-28', '2026-10-29', ['b']),
@@ -182,9 +183,9 @@ describe('gantt dependency lines on the board', () => {
   });
 
   it('follows the bar while dragging, goes back on Escape, and sends nothing for the line itself', async () => {
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
-    const update = vi.spyOn(api, 'updateTask');
-    const preview = vi.spyOn(api, 'previewSchedule');
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(work, 'updateTask');
+    const preview = vi.spyOn(work, 'previewSchedule');
     const gantt = await mount();
     const bar = q(gantt, '[data-gantt-bar="a"]');
     const before = linkEnds(q(gantt, '[data-gantt-link="a>b"] path'));
@@ -207,8 +208,8 @@ describe('gantt dependency lines on the board', () => {
   });
 
   it('hides the line while the follower is dragged before the first column, and brings it back on Escape', async () => {
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
-    const update = vi.spyOn(api, 'updateTask');
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(work, 'updateTask');
     const gantt = await mount();
     const bar = q(gantt, '[data-gantt-bar="b"]');
     const px =
@@ -228,7 +229,7 @@ describe('gantt dependency lines on the board', () => {
   it('hides the line while the predecessor end is dragged past the last column, instead of pinning it to the edge', async () => {
     // 표는 a 시작(10-20)부터 b 끝(10-27)까지 8열이다. a(열 0~2)를 여섯 칸 뒤로 끌면 끝이 열 8(표 오른쪽 밖)이다.
     // 막대는 표 안에 잘라 그리되, 선은 가장자리에 붙여 긋지 않고 보이지 않는 관계로 센다(#39와 같은 규칙).
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
     const gantt = await mount();
     const bar = q(gantt, '[data-gantt-bar="a"]');
     const px =
@@ -248,7 +249,7 @@ describe('gantt dependency lines on the board', () => {
   });
 
   it('keeps a bar dragged before the first column inside the chart while its line stays hidden', async () => {
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
     const gantt = await mount();
     const bar = q(gantt, '[data-gantt-bar="b"]');
     const px =
@@ -267,8 +268,8 @@ describe('gantt dependency lines on the board', () => {
   it('hides a bar whose preview left the chart entirely instead of drawing it on the edge column', async () => {
     // 표는 10-20~10-27의 8열이다. b(열 5~7)를 아홉 칸 앞으로 끌면 미리 보기는 열 -4~-2(10-16~10-18)라 보이는 열이 없다.
     // 첫 열에 하루짜리 막대로 그리면 실제와 다른 날짜(10-20 하루)를 보이므로 숨긴다. 요소는 남아 끌기가 이어진다.
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
-    const update = vi.spyOn(api, 'updateTask');
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(work, 'updateTask');
     const gantt = await mount();
     const bar = q(gantt, '[data-gantt-bar="b"]');
     const px =
@@ -293,8 +294,8 @@ describe('gantt dependency lines on the board', () => {
 
   it('hides a bar dragged entirely past the last column', async () => {
     // a(열 0~2)를 여덟 칸 뒤로: 미리 보기 열 8~10은 마지막 열(7) 뒤라 마지막 열에 한 칸짜리로 그리지 않는다.
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
-    const update = vi.spyOn(api, 'updateTask');
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
+    const update = vi.spyOn(work, 'updateTask');
     const gantt = await mount();
     const bar = q(gantt, '[data-gantt-bar="a"]');
     const px =
@@ -313,8 +314,8 @@ describe('gantt dependency lines on the board', () => {
     // 마일스톤 m(마감 10-27)은 마지막 열 7의 ◆다. 한 칸 뒤로 끌면 10-28이라 표 밖인데, 전에는 ◆가 그 자리에 그대로 남아
     // 아무것도 움직이지 않은 것처럼 보였다(후속이 없으면 놓자마자 묻지 않고 저장된다).
     const release = { ...task('m', '출시', null, '2026-10-27'), milestone: true };
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, release]);
-    const update = vi.spyOn(api, 'updateTask');
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, release]);
+    const update = vi.spyOn(work, 'updateTask');
     const gantt = await mount();
     const diamond = q(gantt, '[data-gantt-bar="m"]');
     expect(diamond.hasAttribute('data-gantt-offchart')).toBe(false);
@@ -335,18 +336,18 @@ describe('gantt dependency lines on the board', () => {
     const movedA = task('a', '설계', '2026-10-20', '2026-10-23', [], 2);
     const movedB = task('b', '구현', '2026-10-26', '2026-10-28', ['a'], 2);
     const read = vi
-      .spyOn(api, 'tasks')
+      .spyOn(work, 'tasks')
       .mockResolvedValueOnce([design, build]) // 처음
       .mockResolvedValueOnce([movedA, movedB]) // 승인 뒤
       .mockResolvedValue([movedA, movedB]);
-    vi.spyOn(api, 'task').mockResolvedValue(detail(design));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({
+    vi.spyOn(work, 'task').mockResolvedValue(detail(design));
+    vi.spyOn(work, 'previewSchedule').mockResolvedValue({
       shifts: [shift],
       undated: [],
       blocked: null,
     });
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValueOnce({ kind: 'updated', task: detail(movedA) });
     const gantt = await mount();
     expectLineOnBars(gantt);
@@ -367,7 +368,7 @@ describe('gantt dependency lines on the board', () => {
     });
     expectLineOnBars(gantt);
     // 취소: 저장하지 않고 다시 읽음 → 그대로 같다.
-    vi.spyOn(api, 'task').mockResolvedValue(detail(movedA));
+    vi.spyOn(work, 'task').mockResolvedValue(detail(movedA));
     await fireEvent.keyDown(q(gantt, '[data-task-card="a"]'), { key: 'ArrowRight', altKey: true });
     dialog = await screen.findByRole('dialog');
     await fireEvent.click(within(dialog).getByRole('button', { name: '취소' }));
@@ -377,7 +378,7 @@ describe('gantt dependency lines on the board', () => {
     expectLineOnBars(gantt);
     // 서버 실패: 저장되지 않고 다시 읽음 → 같다.
     update.mockRejectedValueOnce(new ApiError(500, 'internal', 'boom'));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    vi.spyOn(work, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     await fireEvent.keyDown(q(gantt, '[data-task-card="a"]'), { key: 'ArrowRight', altKey: true });
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
@@ -390,7 +391,7 @@ describe('gantt dependency lines on the board', () => {
 
   it('says when some relations cannot be drawn, without guessing an end', async () => {
     // 'c'는 날짜가 없어 막대가 없고, 'b'의 다른 선행 'zz'는 이 목록에 없다(볼 수 없거나 거른 업무).
-    vi.spyOn(api, 'tasks').mockResolvedValue([
+    vi.spyOn(work, 'tasks').mockResolvedValue([
       design,
       task('b', '구현', '2026-10-25', '2026-10-27', ['a', 'zz']),
       task('c', '정리', null, null, ['a']),
@@ -411,7 +412,7 @@ describe('gantt dependency lines on the board', () => {
       org.key('board:i1'),
       JSON.stringify({ view: 'gantt', sort: 'position', filter: { text: '구현' } }),
     );
-    vi.spyOn(api, 'tasks').mockResolvedValue([design, build]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([design, build]);
     const gantt = await mount();
     expect(gantt.querySelector('[data-testid="gantt-links"]')).toBeNull();
     expect(screen.getByTestId('gantt-links-hidden').textContent).toContain('관계 1개는');
@@ -419,7 +420,7 @@ describe('gantt dependency lines on the board', () => {
 
   it('uses the singular and plural in English', async () => {
     await setLocale('en', { reload: false });
-    vi.spyOn(api, 'tasks').mockResolvedValue([
+    vi.spyOn(work, 'tasks').mockResolvedValue([
       design,
       task('b', '구현', '2026-10-25', '2026-10-27', ['a', 'zz']),
     ]);

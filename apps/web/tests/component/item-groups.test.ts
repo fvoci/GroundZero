@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -396,10 +397,10 @@ describe('item screen groups and unsaved input', () => {
   it.each(['close button', 'Escape'] as const)(
     'keeps the header input unasked when closing a task opened from the board by the %s',
     async (how) => {
-      vi.spyOn(api, 'tasks').mockResolvedValue([taskDetail]);
-      vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-      vi.spyOn(api, 'task').mockResolvedValue(taskDetail);
-      vi.spyOn(api, 'assignable').mockResolvedValue([]);
+      vi.spyOn(work, 'tasks').mockResolvedValue([taskDetail]);
+      vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+      vi.spyOn(work, 'task').mockResolvedValue(taskDetail);
+      vi.spyOn(work, 'assignable').mockResolvedValue([]);
       vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
       vi.spyOn(api, 'comments').mockResolvedValue([]);
       await openItem('project');

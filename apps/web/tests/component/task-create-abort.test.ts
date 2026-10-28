@@ -1,5 +1,6 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { afterEach, expect, it, vi } from 'vitest';
-import { api } from '$lib/api/client';
+
 import { connection } from '$lib/features/feedback/feedback.svelte';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -18,7 +19,7 @@ it('passes cancellation to fetch without reporting an offline connection', async
       );
     }),
   );
-  const creating = api.createTask(
+  const creating = work.createTask(
     'user-a',
     'item-1',
     'request-1',

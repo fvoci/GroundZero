@@ -12,11 +12,13 @@ import {
 import { newVersion } from '$lib/features/feedback/feedback.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { watchNewVersion } from '$lib/features/feedback/new-version';
-import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
+import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
+import { homeView } from '../../stories/fixtures/synthetic';
+import { homeExtras } from './fixtures/home';
+import { org } from '$lib/org.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
-import { TEST_STATUSES } from './fixtures/task-statuses';
 
 // 새 버전 배포 뒤 옛 청크를 못 읽을 때(`vite:preloadError`): 실패 묶음마다 한 번 다시 읽고(취소), 다시 읽어 뜬 직후 또 나거나 미저장
 // 입력을 초안으로 남기지 못하면 다시 읽지 않고 배너를 띄운다(D-27·D-96·D-82). Storybook 미리보기는
@@ -200,25 +202,27 @@ describe('app: watchNewVersion keeps drafts before reloading', () => {
     }));
   });
 
-  /** 상태 추가 대화상자에 이름을 쳐 미저장 입력을 만든다(공통 초안 `createFormDraft`). */
-  async function dirtyStatusForm(): Promise<void> {
-    render(StatusEditor, {
-      itemId: 'i',
-      statuses: TEST_STATUSES,
-      archived: false,
-      onchanged: vi.fn(),
-    });
-    await fireEvent.click(screen.getByRole('button', { name: m.tasks_status_add() }));
-    await fireEvent.input(screen.getByLabelText(m.tasks_status_name()), {
+  /** 새 업무 제목은 배포 전 영구 초안으로 남긴다(D-27·#154). */
+  async function dirtyTaskTitle(): Promise<void> {
+    homeExtras();
+    const home = homeView();
+    const item = home.active_items.find((value) => value.can_write);
+    if (item === undefined) throw new Error('missing writable item');
+    localStorage.setItem(org.key('quick-add-item'), item.id);
+    vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
+    render(HomeDashboard, { workspaces: [] });
+    await fireEvent.click(await screen.findByRole('button', { name: m.home_quick_add() }));
+    await fireEvent.input(await screen.findByLabelText(m.home_title()), {
       target: { value: '배포 중 입력' },
     });
   }
 
   const draftKeys = (): string[] =>
-    Object.keys(localStorage).filter((key) => key.includes('task-status:i:new'));
+    Object.keys(localStorage).filter((key) => key.includes('form-draft:home-quick-task:'));
 
   it('keeps a dirty form as a draft, then reloads without a leave prompt', async () => {
-    await dirtyStatusForm();
+    await dirtyTaskTitle();
     localStorage.clear();
     let keptBeforeReload = 0;
     const reload = vi.fn(() => {
@@ -242,7 +246,7 @@ describe('app: watchNewVersion keeps drafts before reloading', () => {
 
   it('shows the banner and does not reload when a draft cannot be kept', async () => {
     render(FeedbackHost, { reload: vi.fn() });
-    await dirtyStatusForm();
+    await dirtyTaskTitle();
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('quota', 'QuotaExceededError');
     });

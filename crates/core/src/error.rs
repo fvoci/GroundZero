@@ -20,6 +20,62 @@ pub struct ErrorBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub request_id: Option<String>,
+    /// 칸 검증 실패(400 `bad_request`)의 안정된 이유. 화면은 `message` 대신 이 값으로 문구를 고른다(D-83, #76·#79).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub reason: Option<InvalidReason>,
+    /// 거절된 입력 칸 이름(요청 본문의 칸 이름, 예: `title`·`until`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub field: Option<String>,
+    /// 넘은 한도(글자 수·개수·최댓값). 실행 설정으로 정해지는 한도(제목 `FVOCI_MAX_TITLE_CHARS`)도 여기서 알린다.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub limit: Option<u64>,
+}
+
+impl ErrorBody {
+    /// 칸 검증 정보 없는 오류 본문.
+    pub fn new(error: &'static str, message: String, request_id: Option<String>) -> Self {
+        Self {
+            error,
+            message,
+            request_id,
+            reason: None,
+            field: None,
+            limit: None,
+        }
+    }
+}
+
+/// 칸 검증 실패의 이유(언어와 상관없는 코드).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum InvalidReason {
+    /// 비어 있으면 안 된다.
+    Required,
+    /// 글자 수가 `limit`을 넘는다.
+    TooLong,
+    /// 개수가 `limit`을 넘는다.
+    TooMany,
+    /// 줄바꿈·탭 밖의 제어 문자가 있다.
+    ControlCharacters,
+    /// 형식이 틀렸다(예: 날짜는 `YYYY-MM-DD`).
+    InvalidFormat,
+    /// 허용 범위 밖이다(`limit`이 있으면 그 최댓값).
+    OutOfRange,
+    /// 반복 끝(`until`)이 첫 회차보다 앞선다(#76).
+    UntilBeforeFirstOccurrence,
+}
+
+/// 칸 검증 실패의 세부.
+#[derive(Debug)]
+pub struct Invalid {
+    pub field: String,
+    pub reason: InvalidReason,
+    pub limit: Option<u64>,
+    /// 사람이 읽는 영어 진단 문구.
+    pub message: String,
 }
 
 /// 서버 시작·요청 처리에서 발생하는 오류.
@@ -52,6 +108,9 @@ pub enum AppError {
     /// 입력 검증 실패.
     #[error("bad request: {0}")]
     BadRequest(String),
+    /// 칸 검증 실패: 400 `bad_request`에 칸·이유·한도를 함께 싣는다.
+    #[error("bad request: {}", .0.message)]
+    Invalid(Box<Invalid>),
     /// 현재 상태에서 할 수 없는 요청(예: 소유자 탈퇴, 이미 닫힌 초대).
     #[error("invalid state: {0}")]
     Conflict(String),
@@ -74,7 +133,25 @@ pub enum AppError {
     Upstream(String),
 }
 
+/// 반복 끝이 첫 회차보다 앞설 때 SQL이 올리는 문구(`crates/db/migrations/202610280005_work.sql`).
+const UNTIL_BEFORE_FIRST_OCCURRENCE: &str = "until must not be before the first occurrence";
+
 impl AppError {
+    /// 칸 검증 실패(400 `bad_request`, 칸·이유·한도 포함).
+    pub fn invalid(
+        field: &str,
+        reason: InvalidReason,
+        limit: Option<u64>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::Invalid(Box::new(Invalid {
+            field: field.to_owned(),
+            reason,
+            limit,
+            message: message.into(),
+        }))
+    }
+
     /// 정의자 함수가 올린 오류 코드를 응답으로 바꾼다.
     /// P0002 → 404, 42501 → 403, 22023 → 400, 55000 → 409, FV004 → 409 `task_deleted`. 그 밖은 내부 오류.
     pub fn from_db_function(err: sqlx::Error) -> Self {
@@ -85,6 +162,13 @@ impl AppError {
         match db.code().as_deref() {
             Some("P0002") => Self::NotFound,
             Some("42501") => Self::Forbidden,
+            // 반복 끝 거절은 일정·업무 반복이 함께 쓰는 문구다. 화면이 칸 옆에 이유를 보이도록 이유·칸을 싣는다(#76).
+            Some("22023") if message == UNTIL_BEFORE_FIRST_OCCURRENCE => Self::invalid(
+                "until",
+                InvalidReason::UntilBeforeFirstOccurrence,
+                None,
+                message,
+            ),
             Some("22023") => Self::BadRequest(message),
             Some("55000") if message == "a timer for this target is already running" => {
                 Self::TimerRunning
@@ -120,7 +204,7 @@ impl AppError {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
-            Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            Self::BadRequest(_) | Self::Invalid(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Conflict(_) => (StatusCode::CONFLICT, "invalid_state"),
             Self::AccountChanged => (StatusCode::CONFLICT, "account_changed"),
             Self::TaskDeleted => (StatusCode::CONFLICT, "task_deleted"),
@@ -168,18 +252,57 @@ impl IntoResponse for AppError {
             Self::TaskDeleted => {
                 "the task made by this request was deleted; send a new request id".to_owned()
             }
+            Self::Invalid(invalid) => invalid.message.clone(),
             Self::TimerRunning => self.to_string(),
             _ => status.canonical_reason().unwrap_or("error").to_owned(),
         };
-        let body = ErrorBody {
-            error,
-            message,
-            request_id: crate::logging::current_request_id(),
-        };
+        let mut body = ErrorBody::new(error, message, crate::logging::current_request_id());
+        if let Self::Invalid(invalid) = self {
+            let Invalid {
+                field,
+                reason,
+                limit,
+                ..
+            } = *invalid;
+            body.reason = Some(reason);
+            body.field = Some(field);
+            body.limit = limit;
+        }
         let mut response = (status, Json(body)).into_response();
         response
             .extensions_mut()
             .insert(crate::logging::ErrorCode(error));
         response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn body_of(err: AppError) -> (StatusCode, serde_json::Value) {
+        let response = err.into_response();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn field_errors_keep_bad_request_and_add_reason_field_and_limit() {
+        let (status, body) = body_of(crate::validate::too_long("title", 200)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body,
+            serde_json::json!({ "error": "bad_request", "message": "title must be at most 200 characters",
+                "reason": "too_long", "field": "title", "limit": 200 })
+        );
+        // 칸 정보가 없는 오류는 예전 본문 그대로다(추가 칸 없음).
+        let (_, plain) = body_of(AppError::BadRequest("nope".into())).await;
+        assert_eq!(
+            plain,
+            serde_json::json!({ "error": "bad_request", "message": "nope" })
+        );
     }
 }

@@ -173,7 +173,7 @@ async fn private_items_open_to_their_members_only() {
         StatusCode::NO_CONTENT
     );
     // 업무 담당으로 지정.
-    let assigned = send(&app, Method::PUT, &format!("/api/tasks/{}", task.json["id"].as_str().unwrap()), Some(&owner), Some(json!({
+    let assigned = send(&app, Method::PATCH, &format!("/api/tasks/{}", task.json["id"].as_str().unwrap()), Some(&owner), Some(json!({
         "base_version": task.json["version"], "title": "함께 할 일", "description": "", "status": "할 일", "priority": "none",
         "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [], "milestone": false,
         "assignee_ids": [mate.id.0] }))).await;
@@ -235,7 +235,12 @@ async fn private_items_open_to_their_members_only() {
         None,
     )
     .await;
-    assert_eq!(t.json["assignees"], json!([]), "{:?}", t.json);
+    assert_eq!(
+        common::task_snapshot(&app, &owner, task.json["id"].as_str().unwrap()).await["assignees"],
+        json!([]),
+        "{:?}",
+        t.json
+    );
     let v = send(&app, Method::GET, &profile_uri, Some(&viewer), None).await;
     assert_eq!(v.json["can_edit"], false);
     assert_eq!(v.json["can_manage_members"], false);
@@ -417,7 +422,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     task("화면 설계", Some(&a_id)).await;
     let b = task("구현", None).await;
     let b_id = b["id"].as_str().unwrap().to_owned();
-    let done = send(&app, Method::PUT, &format!("/api/tasks/{a_id}"), Some(&writer), Some(json!({
+    let done = send(&app, Method::PATCH, &format!("/api/tasks/{a_id}"), Some(&writer), Some(json!({
         "base_version": a["version"], "title": "설계", "description": "", "status": "완료", "priority": "high",
         "start_date": null, "due_date": "2026-11-01", "estimate_minutes": 120, "tags": ["ux"], "milestone": false,
         "assignee_ids": [writer.id.0] }))).await;
@@ -553,7 +558,11 @@ async fn items_copy_with_fresh_numbers_and_templates() {
         None,
     )
     .await;
-    let tasks = tasks.json.as_array().unwrap().clone();
+    let mut snapshots = Vec::new();
+    for t in tasks.json.as_array().unwrap() {
+        snapshots.push(common::task_snapshot(&app, &writer, t["id"].as_str().unwrap()).await);
+    }
+    let tasks = snapshots;
     assert_eq!(tasks.len(), 3, "{tasks:?}");
     let by = |title: &str| tasks.iter().find(|t| t["title"] == title).unwrap().clone();
     let (na, na1, nb) = (by("설계"), by("화면 설계"), by("구현"));
@@ -740,7 +749,7 @@ async fn group_changes_and_leaving_end_item_roles() {
         .await;
         assert_eq!(p.status, StatusCode::NO_CONTENT, "{:?}", p.json);
         let t = send(&app, Method::GET, &task_uri, Some(&owner), None).await;
-        let a = send(&app, Method::PUT, &task_uri, Some(&owner), Some(json!({
+        let a = send(&app, Method::PATCH, &task_uri, Some(&owner), Some(json!({
             "base_version": t.json["version"], "title": "할 일", "description": "", "status": "할 일",
             "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null, "tags": [],
             "milestone": false, "assignee_ids": [grouped.id.0] }))).await;
@@ -748,8 +757,9 @@ async fn group_changes_and_leaving_end_item_roles() {
     };
     let roles_cleared = || async {
         let p = send(&app, Method::GET, &profile_uri, Some(&owner), None).await;
-        let t = send(&app, Method::GET, &task_uri, Some(&owner), None).await;
-        p.json["leader"].is_null() && t.json["assignees"] == json!([])
+        p.json["leader"].is_null()
+            && common::task_snapshot(&app, &owner, task.json["id"].as_str().unwrap()).await["assignees"]
+                == json!([])
     };
 
     // 그룹 멤버도 담당자 후보이고, 이동 미리보기에 "새로 보게 되는 사람"으로 나온다.

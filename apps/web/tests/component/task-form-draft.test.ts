@@ -1,3 +1,5 @@
+import { org } from '$lib/org.svelte';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +20,8 @@ const A = 'user-a';
 const B = 'user-b';
 const EDIT = '앞 계정이 치고 저장하지 않은 설명';
 
-const prefix = (user: string): string => `fvoci:${user}:-:form-draft:task:t-1:`;
+const prefix = (user: string): string =>
+  `fvoci:${user}:${org.currentId ?? '-'}:form-draft:task:t-1:`;
 const keysOf = (user: string): string[] =>
   Object.keys(window.localStorage).filter((k) => k.startsWith(prefix(user)));
 
@@ -84,8 +87,8 @@ function mount(
   server: TaskDetailView,
   onunsaved: (dirty: boolean) => void = (): void => undefined,
 ): void {
-  vi.spyOn(api, 'task').mockResolvedValue(server);
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'task').mockResolvedValue(server);
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
   render(TaskDetail, {
@@ -140,8 +143,8 @@ describe('task form input across reloads and account switches', () => {
     const changed = vi.fn();
     mount(detail(), changed);
     await typeDescription('권한 철회 전 입력');
-    vi.mocked(api.task).mockResolvedValue(detail({ access: 'read', version: 2 }));
-    vi.spyOn(api, 'addChecklist').mockResolvedValue(detail());
+    vi.mocked(work.task).mockResolvedValue(detail({ access: 'read', version: 2 }));
+    vi.spyOn(work, 'addChecklist').mockResolvedValue(detail());
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '항목' } });
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
     await waitFor(() => {
@@ -222,7 +225,7 @@ describe('task form input across reloads and account switches', () => {
   it('a save refused with account_changed starts the global switch, sends nothing more and keeps the hidden input stored', async () => {
     let puts = 0;
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-      if (input === '/api/tasks/t-1' && init?.method === 'PUT') {
+      if (input === '/api/tasks/t-1' && init?.method === 'PATCH') {
         puts += 1;
         return Promise.resolve(json(409, { error: 'account_changed', message: 'account changed' }));
       }
@@ -259,7 +262,7 @@ describe('task form input across reloads and account switches', () => {
     });
     reloadLike();
 
-    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+    const update = vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail({ description: EDIT, version: 2 }),
     });
@@ -347,7 +350,7 @@ describe('task form input across reloads and account switches', () => {
     });
     reloadLike();
 
-    const update = vi.spyOn(api, 'updateTask').mockResolvedValue({
+    const update = vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'updated',
       task: detail({ title: '설계 (3판)', description: EDIT, version: 4 }),
     });
@@ -409,8 +412,8 @@ describe('relation editor input across reloads', () => {
       due_date: '2026-10-24',
     });
   function mountLinked(server: TaskDetailView = linked()): void {
-    vi.spyOn(api, 'task').mockResolvedValue(server);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'task').mockResolvedValue(server);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
     vi.spyOn(api, 'comments').mockResolvedValue([]);
     render(TaskDetail, {
@@ -427,14 +430,6 @@ describe('relation editor input across reloads', () => {
     const box = await screen.findByLabelText('지연(일)');
     if (!(box instanceof HTMLInputElement)) throw new Error('지연(일)');
     return box;
-  }
-  function storedLink(): unknown[] {
-    return keysOf(A).map((k) => {
-      const value: unknown = JSON.parse(window.localStorage.getItem(k) ?? 'null');
-      if (typeof value !== 'object' || value === null || !('link' in value))
-        throw new Error('draft');
-      return value.link;
-    });
   }
 
   beforeEach(async () => {
@@ -454,96 +449,16 @@ describe('relation editor input across reloads', () => {
     window.localStorage.clear();
   });
 
-  it('keeps a relation being edited even when the form itself is unchanged, and restores it for an explicit save', async () => {
+  it('keeps relation input in memory, warns on leaving, and never offers it after reload (#154)', async () => {
     mountLinked();
     await fireEvent.click(await screen.findByRole('button', { name: 'KED-0 설계 관계 고치기' }));
     await fireEvent.input(await lagBox(), { target: { value: '3' } });
-    await waitFor(() => {
-      expect(storedLink()).toEqual([
-        {
-          editing: 't-0',
-          predecessor: '',
-          kind: 'FS',
-          lag: '3',
-          base: { kind: 'FS', lag_days: 0 },
-        },
-      ]);
-    });
-    reloadLike();
-
-    // 폼 본문은 서버와 같지만 관계 입력이 남아 있으므로 제안한다.
-    mountLinked();
-    await screen.findByTestId('task-draft-offer');
-    const preview = vi
-      .spyOn(api, 'previewLink')
-      .mockResolvedValue({ shifts: [], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
-      kind: 'updated',
-      task: detail({ predecessors: [{ task_id: 't-0', kind: 'FS', lag_days: 3 }], version: 2 }),
-    });
-    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
     expect((await lagBox()).value).toBe('3');
-    expect(document.getElementById('predecessor-label')).toHaveTextContent('고치기');
-    expect(set).not.toHaveBeenCalled();
-
-    await fireEvent.click(screen.getByRole('button', { name: /^관계 저장$/ }));
-    await waitFor(() => {
-      expect(set).toHaveBeenCalledTimes(1);
-    });
-    expect(preview).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith(A, 't-1', 't-0', 'FS', 3, { kind: 'FS', lag_days: 0 }, []);
-    await waitFor(() => {
-      expect(keysOf(A)).toEqual([]);
-    });
-  });
-
-  it('after restoring, a relation changed elsewhere is reported by the server and the input stays', async () => {
-    mountLinked();
-    await fireEvent.click(await screen.findByRole('button', { name: 'KED-0 설계 관계 고치기' }));
-    await fireEvent.input(await lagBox(), { target: { value: '3' } });
-    await waitFor(() => {
-      expect(storedLink()).toHaveLength(1);
-    });
+    expect(keysOf(A)).toEqual([]);
     reloadLike();
-
-    mountLinked();
-    await screen.findByTestId('task-draft-offer');
-    vi.spyOn(api, 'previewLink').mockResolvedValue({ shifts: [], undated: [], blocked: null });
-    const set = vi.spyOn(api, 'setPredecessor').mockResolvedValue({
-      kind: 'link_conflict',
-      current: detail({ predecessors: [{ task_id: 't-0', kind: 'SS', lag_days: 1 }], version: 2 }),
-    });
-    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
-    await fireEvent.click(screen.getByRole('button', { name: /^관계 저장$/ }));
-    await waitFor(() => {
-      expect(set).toHaveBeenCalledTimes(1);
-    });
-    // 서버의 최신 관계를 알리고 내 입력(지연 3)은 그대로다. 다음 저장은 최신 관계를 기준으로 보낸다.
-    expect(await screen.findByRole('alert')).toHaveTextContent('관계가');
-    expect((await lagBox()).value).toBe('3');
-  });
-
-  it('shows no relation offer to another account and clears the relation input on close', async () => {
-    mountLinked();
-    await fireEvent.click(await screen.findByRole('button', { name: 'KED-0 설계 관계 고치기' }));
-    await fireEvent.input(await lagBox(), { target: { value: '3' } });
-    await waitFor(() => {
-      expect(storedLink()).toHaveLength(1);
-    });
-    reloadLike();
-    me.userId = B;
     mountLinked();
     await descriptionBox();
     expect(screen.queryByTestId('task-draft-offer')).toBeNull();
-    expect(keysOf(A)).toHaveLength(1);
-    cleanup();
-
-    me.userId = A;
-    mountLinked();
-    await screen.findByTestId('task-draft-offer');
-    // 사용자가 닫으면(언마운트) 이 탭의 입력은 지운다.
-    await fireEvent.click(screen.getByRole('button', { name: /^입력 복원$/ }));
-    cleanup();
     expect(keysOf(A)).toEqual([]);
   });
 });

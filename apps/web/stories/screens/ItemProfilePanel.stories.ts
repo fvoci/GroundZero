@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { spyOn, screen, userEvent } from 'storybook/test';
 import { api, ApiError } from '$lib/api/client';
@@ -28,7 +29,7 @@ const meta = {
       can_manage_members: false,
       version: 1,
     });
-    spyOn(api, 'assignable').mockResolvedValue([]);
+    spyOn(work, 'assignable').mockResolvedValue([]);
     spyOn(api, 'setItemProfile').mockRejectedValue(new ApiError(403, 'forbidden', 'forbidden'));
     return () => {
       me.userId = previousUser;

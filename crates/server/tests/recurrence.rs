@@ -75,7 +75,7 @@ async fn dated_task(app: &Router, user: &TestUser, item: &Value, title: &str, du
     )
     .await
     .json;
-    let r = send(app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
+    let r = send(app, Method::PATCH, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(user),
                  Some(json!({ "base_version": t["version"], "title": title, "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": due, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -206,6 +206,30 @@ async fn rules_expand_with_skips_counts_and_limits() {
     }
 }
 
+/// #76: 반복 끝이 첫 회차보다 앞서면 400 `bad_request`에 칸(`until`)과 안정된 이유를 싣는다. 업무 반복과 일정이 같은 서버
+/// 오류 대응을 쓴다(일정 쪽은 `moving_a_repeating_event_past_its_until_is_refused`).
+#[tokio::test]
+async fn a_task_rule_ending_before_its_first_occurrence_names_the_until_field() {
+    let _tick = LANE_TICK.read().await;
+    let state = common::state();
+    let app = common::app(&state);
+    let admin = login(&state, "admin").await;
+    let ws = create_workspace(&app, &admin, "반복 끝").await;
+    let item = module_item(&app, &admin, &ws, "UNT").await;
+    let root = dated_task(&app, &admin, &item, "월간 정산", "2026-11-10").await;
+    let early =
+        json!({"freq":"weekly","interval":1,"weekdays":[],"until":"2026-11-01","count":null});
+    let (status, body) = repeat(&app, &admin, &root, early).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body:?}");
+    assert_eq!(body["error"], "bad_request");
+    assert_eq!(body["reason"], "until_before_first_occurrence");
+    assert_eq!(body["field"], "until");
+    assert_eq!(
+        body["message"],
+        "until must not be before the first occurrence"
+    );
+}
+
 #[tokio::test]
 async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule() {
     let _tick = LANE_TICK.read().await;
@@ -222,7 +246,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     let daily = json!({"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null});
     let (status, detail) = repeat(&app, &admin, &root, daily.clone()).await;
     assert_eq!(status, StatusCode::OK, "{detail:?}");
-    assert_eq!(detail["series"]["rule"]["freq"], "daily");
+    assert_eq!(detail["rule"]["freq"], "daily");
     // 기준일~오늘(4개)과 다음 회차 하나.
     let all = tasks(&app, &admin, &item).await;
     let mut dates: Vec<String> = all
@@ -295,7 +319,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     )
     .await
     .json;
-    let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
+    let r = send(&app, Method::PATCH, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
                  Some(json!({ "base_version": fresh["version"], "title": "월간 보고", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": fresh["due_date"], "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -358,7 +382,7 @@ async fn repeating_tasks_keep_open_occurrences_and_follow_the_original_schedule(
     // 멈추면 이미 만든 회차는 남고 예정도 사라진다.
     let (status, stopped) = repeat_from(&app, &admin, &root, Value::Null, daily.clone()).await;
     assert_eq!(status, StatusCode::OK, "{stopped:?}");
-    assert_eq!(stopped["series"]["rule"], Value::Null);
+    assert_eq!(stopped["rule"], Value::Null);
     let cal = send(
         &app,
         Method::GET,
@@ -582,7 +606,7 @@ async fn changing_a_rule_applies_from_today_and_the_template_stays_top_level() {
     )
     .await
     .json;
-    let r = send(&app, Method::PUT, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
+    let r = send(&app, Method::PATCH, &format!("/api/tasks/{}", root["id"].as_str().unwrap()), Some(&admin),
                  Some(json!({ "base_version": fresh["version"], "title": "정리", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": null, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -787,6 +811,8 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
     assert_eq!(moved.status, StatusCode::BAD_REQUEST, "{:?}", moved.json);
     // #76: 웹(apps/web/src/lib/api/errors.ts의 untilBeforeStart)이 이 경우를 `error`와 `message`의 고정 값으로 알아본다.
     assert_eq!(moved.json["error"], "bad_request");
+    assert_eq!(moved.json["reason"], "until_before_first_occurrence");
+    assert_eq!(moved.json["field"], "until");
     assert_eq!(
         moved.json["message"],
         "until must not be before the first occurrence"
@@ -833,6 +859,7 @@ async fn moving_a_repeating_event_past_its_until_is_refused() {
             "ends_at": "2026-11-03T00:00:00+09:00", "timezone": "Pacific/Kiritimati" }))).await;
     assert_eq!(zone.status, StatusCode::BAD_REQUEST, "{:?}", zone.json);
     assert_eq!(zone.json["error"], "bad_request");
+    assert_eq!(zone.json["reason"], "until_before_first_occurrence");
     assert_eq!(
         zone.json["message"],
         "until must not be before the first occurrence"
@@ -957,16 +984,13 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
     )
     .await
     .json;
-    let finished = send(&app, Method::PUT, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
+    let finished = send(&app, Method::PATCH, &format!("/api/tasks/{}", done_root["id"].as_str().unwrap()), Some(&admin),
         Some(json!({ "base_version": current["version"], "title": "완료 뿌리", "description": "", "status": "완료",
                      "priority": "none", "start_date": null, "due_date": day(today), "estimate_minutes": null,
                      "tags": [], "assignee_ids": [], "milestone": false }))).await;
     assert_eq!(finished.status, StatusCode::OK, "{:?}", finished.json);
-    let done_series = done_rule["series"]["id"].as_str().unwrap().to_owned();
-    for series in [
-        todo_rule["series"]["id"].as_str().unwrap(),
-        done_series.as_str(),
-    ] {
+    let done_series = done_rule["id"].as_str().unwrap().to_owned();
+    for series in [todo_rule["id"].as_str().unwrap(), done_series.as_str()] {
         common::fixture_sql(
             "DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date",
             series,
@@ -1040,7 +1064,7 @@ async fn the_recurrence_tick_takes_lane_locks_in_the_same_order_as_board_moves()
         }
     };
     let done_made = made(done_series.clone()).await;
-    let todo_made = made(todo_rule["series"]["id"].as_str().unwrap().to_owned()).await;
+    let todo_made = made(todo_rule["id"].as_str().unwrap().to_owned()).await;
     owner.close().await;
     assert!(done_made >= 1, "the done-rooted series lost its occurrence");
     assert!(todo_made >= 1, "the todo-rooted series lost its occurrence");
@@ -1066,7 +1090,7 @@ async fn a_lane_lock_failure_skips_only_that_item_in_the_recurrence_tick() {
         let root = dated_task(&app, &admin, &item, "매일", &day(today)).await;
         let (status, rule) = repeat(&app, &admin, &root, daily.clone()).await;
         assert_eq!(status, StatusCode::OK, "{rule:?}");
-        series.push(rule["series"]["id"].as_str().unwrap().to_owned());
+        series.push(rule["id"].as_str().unwrap().to_owned());
         items.push(item["id"].as_str().unwrap().to_owned());
     }
 

@@ -60,7 +60,7 @@ async fn every_task_write_requires_the_user_who_started_it() {
 
     for action in [
         "create",
-        "update",
+        "patch",
         "move",
         "parent",
         "add_checklist",
@@ -120,7 +120,7 @@ async fn every_task_write_requires_the_user_who_started_it() {
         )
         .await;
         assert_eq!(checklist.status, StatusCode::OK, "{:?}", checklist.json);
-        let checklist_id = checklist.json["checklist"][0]["id"].as_str().unwrap();
+        let checklist_id = checklist.json[0]["id"].as_str().unwrap();
         let link_uri = format!("{uri}/predecessors/{related}");
         if action == "remove_predecessor" {
             let linked = send(
@@ -157,12 +157,10 @@ async fn every_task_write_requires_the_user_who_started_it() {
                 json!({"request_id": new_request_id(), "title": "created"}),
                 StatusCode::CREATED,
             ),
-            "update" => (
-                Method::PUT,
+            "patch" => (
+                Method::PATCH,
                 uri.clone(),
-                json!({"base_version": task["version"], "title": "changed", "description": "changed",
-                "status": "할 일", "priority": "high", "start_date": null, "due_date": "2026-01-01", "estimate_minutes": null,
-                "tags": [], "assignee_ids": [], "milestone": false}),
+                json!({"base_version": task["version"], "title": "patched"}),
                 StatusCode::OK,
             ),
             "move" => (
@@ -201,7 +199,12 @@ async fn every_task_write_requires_the_user_who_started_it() {
                 json!({"kind": "FS", "lag_days": 0, "base": null}),
                 StatusCode::OK,
             ),
-            "remove_predecessor" => (Method::DELETE, link_uri, Value::Null, StatusCode::OK),
+            "remove_predecessor" => (
+                Method::DELETE,
+                link_uri,
+                Value::Null,
+                StatusCode::NO_CONTENT,
+            ),
             "recurrence" => (
                 Method::PUT,
                 format!("{uri}/recurrence"),
@@ -283,6 +286,91 @@ async fn every_task_write_requires_the_user_who_started_it() {
             "{action} must exercise a real write"
         );
     }
+}
+
+/// D-96 2026-10-28 개정 (가): 업무 라우터의 모든 명령은 머리가 있으면 늘 비교한다. 머리가 필수가 아닌 요청(재배치
+/// 미리보기)으로 공통 처리만 본다. 머리가 없으면 그대로 처리하고, 있으면 형식 400·불일치 409다. 읽기(안전한 메서드)는
+/// 비교하지 않는다.
+#[tokio::test]
+async fn a_sent_expected_user_is_always_compared_on_work_commands() {
+    let state = common::state();
+    let app = common::app(&state);
+    let alice = login(&state, "alice").await;
+    let bob = login(&state, "bob").await;
+    let alice_id = alice.id.0.to_string();
+    let bob_id = bob.id.0.to_string();
+    let ws = create_workspace(&app, &alice, "optional header").await;
+    let module = send(
+        &app,
+        Method::POST,
+        &format!("/api/workspaces/{ws}/modules"),
+        Some(&alice),
+        Some(
+            json!({"request_id": new_request_id(), "kind": "project", "name": "opt", "key": "OPT"}),
+        ),
+    )
+    .await;
+    let item = send(
+        &app,
+        Method::POST,
+        &format!("/api/modules/{}/items", module.json["id"].as_str().unwrap()),
+        Some(&alice),
+        Some(json!({"request_id": new_request_id(), "title": "opt"})),
+    )
+    .await;
+    let item_id = item.json["id"].as_str().unwrap();
+    let task = send(
+        &app,
+        Method::POST,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&alice),
+        Some(json!({"request_id": new_request_id(), "title": "plan", "due_date": "2026-01-01"})),
+    )
+    .await;
+    let plan = format!(
+        "/api/tasks/{}/schedule-plan",
+        task.json["id"].as_str().unwrap()
+    );
+    let body = json!({"start_date": null, "due_date": "2026-01-05"});
+    for (expected, status, error) in [
+        (vec![], StatusCode::OK, None),
+        (vec![alice_id.as_str()], StatusCode::OK, None),
+        (
+            vec![bob_id.as_str()],
+            StatusCode::CONFLICT,
+            Some("account_changed"),
+        ),
+        (
+            vec!["not-a-user"],
+            StatusCode::BAD_REQUEST,
+            Some("bad_request"),
+        ),
+        (
+            vec![alice_id.as_str(), alice_id.as_str()],
+            StatusCode::BAD_REQUEST,
+            Some("bad_request"),
+        ),
+    ] {
+        let (actual, json) = raw(&app, Method::POST, &plan, Some(&alice), &expected, &body).await;
+        assert_eq!(actual, status, "{expected:?}: {json:?}");
+        if let Some(error) = error {
+            assert_eq!(json["error"], error, "{expected:?}: {json:?}");
+        }
+    }
+    // 머리가 있어도 세션이 없으면 401이다(머리는 신원이 아니다).
+    let (actual, _) = raw(&app, Method::POST, &plan, None, &[&alice_id], &body).await;
+    assert_eq!(actual, StatusCode::UNAUTHORIZED);
+    // 읽기는 비교하지 않는다.
+    let (actual, json) = raw(
+        &app,
+        Method::GET,
+        &format!("/api/items/{item_id}/tasks"),
+        Some(&alice),
+        &[&bob_id],
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(actual, StatusCode::OK, "{json:?}");
 }
 
 /// 머리를 그대로(자동으로 붙이지 않고) 정해 보낸다.

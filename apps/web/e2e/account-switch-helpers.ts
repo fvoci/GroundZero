@@ -8,8 +8,11 @@ import { expect, logIn, recordSensitive, str, testUser } from './fixtures';
 /** 이 사용자의 업무 폼 초안 키(브라우저 저장소). */
 export async function draftKeys(page: Page, userId: string): Promise<string[]> {
   return page.evaluate(
-    (prefix) => Object.keys(window.localStorage).filter((k) => k.startsWith(prefix)),
-    `fvoci:${userId}:-:form-draft:`,
+    (prefix) =>
+      Object.keys(window.localStorage).filter(
+        (k) => k.startsWith(prefix) && k.includes(':form-draft:'),
+      ),
+    `fvoci:${userId}:`,
   );
 }
 

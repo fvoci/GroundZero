@@ -54,7 +54,8 @@ export function untilBeforeStart(error: unknown): boolean {
   return (
     error instanceof ApiError &&
     error.code === 'bad_request' &&
-    error.message === UNTIL_BEFORE_START_MESSAGE
+    error.reason === 'until_before_first_occurrence' &&
+    error.field === 'until'
   );
 }
 

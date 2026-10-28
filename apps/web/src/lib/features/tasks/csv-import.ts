@@ -5,7 +5,12 @@
 import type { TaskView } from '$lib/api/client';
 import { newRequestId } from '$lib/api/client';
 import { canonicalJson, tabId } from '$lib/features/documents/drafts';
-import { readLocal, writeLocal } from '$lib/storage';
+import {
+  readDraftAt,
+  writeDraftAt,
+  listDraftsAt,
+  holdDraftAt,
+} from '$lib/features/common/draft-storage';
 
 import type { TaskRow } from './csv';
 
@@ -39,16 +44,16 @@ export function importTabKey(key: string): string {
 }
 
 export function saveImport(key: string, text: string, rows: readonly RowProgress[]): boolean {
-  const raw =
+  return writeDraftAt(
+    importTabKey(key),
     text === '' && rows.length === 0
-      ? null
-      : JSON.stringify({ text, rows, savedAt: new Date().toISOString() });
-  writeLocal(importTabKey(key), raw);
-  return readLocal(importTabKey(key)) === raw;
+      ? undefined
+      : { text, rows, savedAt: new Date().toISOString() },
+  );
 }
 
 export function restoreImport(key: string): { text: string; rows: RowProgress[] } {
-  const value = parseImport(readLocal(importTabKey(key)));
+  const value = readDraftAt(importTabKey(key), parseImport);
   return value === undefined ? { text: '', rows: [] } : { text: value.text, rows: value.rows };
 }
 
@@ -57,9 +62,8 @@ export interface ImportDraft {
   value: { text: string; rows: RowProgress[]; savedAt: string };
 }
 
-function parseImport(rawText: string | null): ImportDraft['value'] | undefined {
+function parseImport(raw: unknown): ImportDraft['value'] | undefined {
   try {
-    const raw: unknown = JSON.parse(rawText ?? 'null');
     if (
       typeof raw !== 'object' ||
       raw === null ||
@@ -97,38 +101,18 @@ function parseImport(rawText: string | null): ImportDraft['value'] | undefined {
 
 /** 이전 탭과 현재 탭의 보류 입력을 함께 제안한다. 읽는 것만으로 다른 탭의 키를 바꾸지 않는다. */
 export function listImportDrafts(key: string): ImportDraft[] {
-  const entries: ImportDraft[] = [];
-  try {
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const candidate = localStorage.key(i);
-      if (
-        candidate === null ||
-        !(candidate.startsWith(`${key}:tab:`) || candidate.startsWith(`${key}:held:`))
-      )
-        continue;
-      const value = parseImport(readLocal(candidate));
-      if (value !== undefined && (value.text !== '' || value.rows.length > 0))
-        entries.push({ key: candidate, value });
-    }
-  } catch {
-    return [];
-  }
-  return entries.sort((a, b) => b.value.savedAt.localeCompare(a.value.savedAt));
+  return listDraftsAt(`${key}:`, parseImport).filter(
+    (entry) => entry.value.text !== '' || entry.value.rows.length > 0,
+  );
 }
 
 /** 현재 탭의 기존 입력만 보류 키로 옮긴다. 실패하면 원본 키를 예약해 둔다. */
 export function holdImportDraft(key: string, entry: ImportDraft): ImportDraft {
-  if (entry.key !== importTabKey(key)) return entry;
-  const held = `${key}:held:${crypto.randomUUID()}`;
-  const raw = JSON.stringify(entry.value);
-  writeLocal(held, raw);
-  if (readLocal(held) !== raw) return entry;
-  writeLocal(entry.key, null);
-  return { key: held, value: entry.value };
+  return holdDraftAt(importTabKey(key), `${key}:held`, entry);
 }
 
 export function removeImportDraft(key: string): void {
-  writeLocal(key, null);
+  writeDraftAt(key, undefined);
 }
 
 /**

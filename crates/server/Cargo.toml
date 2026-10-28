@@ -22,6 +22,7 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 fvoci-core.workspace = true
 fvoci-db.workspace = true
 fvoci-http.workspace = true
+fvoci-work.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 hmac = "0.13"
@@ -34,7 +35,7 @@ serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+time.workspace = true
 tokio.workspace = true
 tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 tower-http = { version = "0.7", default-features = false, features = ["fs"] }

@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
 import { render, screen } from '@testing-library/svelte';
@@ -82,9 +83,9 @@ describe('lane estimate in the board', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
-    vi.spyOn(api, 'tasks').mockResolvedValue(list);
+    vi.spyOn(work, 'tasks').mockResolvedValue(list);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   });
   afterEach(() => {
     vi.restoreAllMocks();

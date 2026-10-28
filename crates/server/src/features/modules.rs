@@ -23,8 +23,8 @@ use crate::features::documents::{
     SUMMARY_COLUMNS, SummaryRow, TREE_ORDER, initial_body, load_with_access, max_depth,
     to_document, to_summaries,
 };
-use crate::features::workspaces::validate_title;
 use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
 use fvoci_http::session::CurrentUser;
 

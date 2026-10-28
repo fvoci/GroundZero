@@ -1,8 +1,9 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskDetailView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import { formDraftTabKey } from '$lib/features/common/form-draft';
 import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -68,7 +69,7 @@ describe('calendar task creation with another tab draft', () => {
       }),
     );
     const request = held<TaskDetailView>();
-    const create = vi.spyOn(api, 'createTask').mockReturnValueOnce(request.promise);
+    const create = vi.spyOn(work, 'createTask').mockReturnValueOnce(request.promise);
     const oncreated = vi.fn();
     render(CalendarTaskDialog, {
       props: {

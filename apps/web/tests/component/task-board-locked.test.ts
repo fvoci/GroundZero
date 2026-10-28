@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,9 +35,9 @@ const item: ItemView = {
 
 async function mount(locked: boolean): Promise<void> {
   await setLocale('ko', { reload: false });
-  vi.spyOn(api, 'tasks').mockResolvedValue([]);
+  vi.spyOn(work, 'tasks').mockResolvedValue([]);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
   render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined, locked } });
   await screen.findByTestId('task-board');
 }
@@ -62,10 +63,10 @@ describe('task board of an item in an archived module', () => {
 describe('task board losing write access with CSV input', () => {
   it('does not keep the removed CSV guard in the navigation chain', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'tasks').mockResolvedValue([]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-    vi.spyOn(api, 'assignable').mockResolvedValue([]);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'assignable').mockResolvedValue([]);
     const view = render(TaskBoard, {
       props: { item, workspaces: [], openTaskId: undefined, locked: false },
     });

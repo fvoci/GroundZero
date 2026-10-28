@@ -30,11 +30,11 @@ pub async fn require_same_origin(
         if origin != Some(public.0.as_str()) {
             let mut response = (
                 StatusCode::FORBIDDEN,
-                Json(ErrorBody {
-                    error: "bad_origin",
-                    message: "cross-origin request rejected".into(),
-                    request_id: fvoci_core::logging::current_request_id(),
-                }),
+                Json(ErrorBody::new(
+                    "bad_origin",
+                    "cross-origin request rejected".into(),
+                    fvoci_core::logging::current_request_id(),
+                )),
             )
                 .into_response();
             response

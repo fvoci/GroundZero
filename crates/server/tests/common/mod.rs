@@ -165,7 +165,7 @@ fn expects_user(method: &Method, uri: &str) -> bool {
     match *method {
         Method::PUT => matches!(
             segments.as_slice(),
-            ["", "api", "documents" | "tasks" | "checklist-items", id]
+            ["", "api", "documents" | "checklist-items", id]
                 | ["", "api", "tasks", id, "position" | "parent" | "recurrence"]
                 | ["", "api", "tasks", id, "predecessors", _]
                 | ["", "api", "items", id, "statuses", _]
@@ -189,6 +189,7 @@ fn expects_user(method: &Method, uri: &str) -> bool {
                 | ["", "api", "items", id, "statuses", _]
                 if !id.is_empty()
         ),
+        Method::PATCH => matches!(segments.as_slice(), ["", "api", "tasks", id] if !id.is_empty()),
         _ => false,
     }
 }
@@ -476,4 +477,48 @@ async fn prepared_database(admin: &mut sqlx::PgConnection, label: &str) -> Fresh
         name,
         db,
     }
+}
+
+/// 업무 동작 시험이 비교할 스냅샷. 각 관계는 새 자원 읽기로 확인한다.
+pub async fn task_snapshot(app: &Router, user: &TestUser, id: &str) -> Value {
+    let reply = send(
+        app,
+        Method::GET,
+        &format!("/api/tasks/{id}"),
+        Some(user),
+        None,
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+    let mut task = reply.json;
+    for (path, field) in [
+        ("task-assignees", "assignees"),
+        ("checklist-items", "checklist"),
+        ("task-dependencies", "predecessors"),
+        ("task-series", "series"),
+    ] {
+        let reply = send(
+            app,
+            Method::GET,
+            &format!("/api/{path}?task={id}"),
+            Some(user),
+            None,
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+        task[field] = if field == "predecessors" {
+            Value::Array(reply.json.as_array().unwrap().iter().filter(|r| r["successor_id"] == id)
+                .map(|r| json!({ "task_id": r["predecessor_id"], "kind": r["kind"], "lag_days": r["lag_days"] })).collect())
+        } else if field == "series" {
+            reply.json[0].clone()
+        } else {
+            reply.json
+        };
+    }
+    let checklist = task["checklist"].as_array().unwrap();
+    let total = checklist.len();
+    let done = checklist.iter().filter(|r| r["checked"] == true).count();
+    task["checklist_total"] = json!(total);
+    task["checklist_done"] = json!(done);
+    task
 }

@@ -13,7 +13,14 @@ it.each(['ko', 'en'] as const)(
     await setLocale(locale, { reload: false });
     vi.spyOn(api, 'event').mockResolvedValue(recurring);
     vi.spyOn(api, 'updateEvent').mockRejectedValue(
-      new ApiError(400, 'bad_request', 'until must not be before the first occurrence'),
+      new ApiError(
+        400,
+        'bad_request',
+        'until must not be before the first occurrence',
+        undefined,
+        'until_before_first_occurrence',
+        'until',
+      ),
     );
     render(EventDialog, {
       eventId: recurring.id,

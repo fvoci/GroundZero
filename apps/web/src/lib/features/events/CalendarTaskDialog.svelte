@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { taskData as work } from '$lib/features/tasks/detail-data';
   // 달력의 날짜에서 업무 만들기 (D-31·D-80). 만들 대상(항목)을 분명히 한다: 항목 범위면 그 항목, 모듈 범위면 그 모듈의
   // 항목 가운데, 워크스페이스 범위면 모듈과 항목을 고른다(쓸 수 있는 것만: 보관·서식이 아니고 읽기 전용이 아닌 항목).
   // 제목·마감은 한 번의 생성 요청으로 저장한다(#104).
@@ -192,7 +193,7 @@
       if (retry?.payload !== payload) retry = { id: newRequestId(), payload };
       const saving = draft.capture();
       if (saving === undefined) return;
-      const created = await api.createTask(attempt.userId, targetId, retry.id, name, null, {
+      const created = await work.createTask(attempt.userId, targetId, retry.id, name, null, {
         due_date: due,
       });
       if (!draft.complete(saving)) return;

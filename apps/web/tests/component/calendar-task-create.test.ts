@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -110,9 +111,9 @@ describe('creating a task from a calendar day', () => {
   }
 
   it('creates it in the fixed item and puts the chosen day as the due date', async () => {
-    const create = vi.spyOn(api, 'createTask').mockResolvedValue(created());
+    const create = vi.spyOn(work, 'createTask').mockResolvedValue(created());
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValue({ kind: 'updated', task: created(2, '2026-10-23') });
     const oncreated = vi.fn();
     render(CalendarTaskDialog, {
@@ -137,10 +138,10 @@ describe('creating a task from a calendar day', () => {
 
   it('retries the entire atomic creation with the same request id and preserves input', async () => {
     const create = vi
-      .spyOn(api, 'createTask')
+      .spyOn(work, 'createTask')
       .mockRejectedValueOnce(new NetworkError('offline'))
       .mockResolvedValueOnce(created(1, '2026-10-23'));
-    const update = vi.spyOn(api, 'updateTask');
+    const update = vi.spyOn(work, 'updateTask');
     const oncreated = vi.fn();
     render(CalendarTaskDialog, {
       props: {
@@ -171,8 +172,8 @@ describe('creating a task from a calendar day', () => {
       itemView('i3', '보관한 항목', { archived: true }),
       itemView('i4', '서식 항목', { is_template: true }),
     ]);
-    const create = vi.spyOn(api, 'createTask').mockResolvedValue(created());
-    vi.spyOn(api, 'updateTask').mockResolvedValue({ kind: 'updated', task: created(2) });
+    const create = vi.spyOn(work, 'createTask').mockResolvedValue(created());
+    vi.spyOn(work, 'updateTask').mockResolvedValue({ kind: 'updated', task: created(2) });
     render(CalendarTaskDialog, {
       props: {
         workspaceId: 'ws-1',
@@ -222,7 +223,7 @@ describe('creating a task from a calendar day', () => {
         ? Promise.resolve([itemView('i1', '앞 모듈 항목')])
         : new Promise<ItemView[]>(() => undefined),
     );
-    const create = vi.spyOn(api, 'createTask').mockResolvedValue(created());
+    const create = vi.spyOn(work, 'createTask').mockResolvedValue(created());
     render(CalendarTaskDialog, {
       props: {
         workspaceId: 'ws-1',
@@ -246,7 +247,7 @@ describe('creating a task from a calendar day', () => {
   });
 
   it('cannot be closed while the task is being created', async () => {
-    vi.spyOn(api, 'createTask').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(work, 'createTask').mockReturnValue(new Promise(() => undefined));
     const onclose = vi.fn<(made: boolean) => void>();
     render(CalendarTaskDialog, {
       props: {

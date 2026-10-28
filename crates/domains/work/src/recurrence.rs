@@ -1,4 +1,4 @@
-//! 반복 업무·반복 일정 (D-31, D-50, D-57).
+//! 반복 업무와 반복 규칙 (D-31, D-50, D-57). 반복 일정의 처리기는 `event_recurrence`에 있다.
 //!
 //! 규칙은 단순한 형태(매일·매주(요일)·매달·매년, 간격, 끝 날짜 또는 횟수)이며 RFC 5545 전체가 아니다. 펼치기는
 //! DB 함수 `app_recurrence_dates` 하나가 한다. 반복 업무의 회차는 쓰기 요청 안에서만 만든다(백그라운드 작업 구조
@@ -9,21 +9,19 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::events::{Event, EventConflict};
-use crate::features::tasks::{
-    EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, format_date, load_detail, parse_date,
-};
-use crate::http::AppState;
-use fvoci_core::error::{AppError, ErrorBody};
+use crate::state::WorkState;
+use crate::tasks::{EXPECTED_TASK_USER_DOC, TaskSeries, load_series};
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::ItemId;
+use fvoci_core::validate::{format_date, parse_date};
 use fvoci_db::{needed_ids, new_ids};
-use fvoci_http::session::{CurrentUser, ExpectedUser};
+use fvoci_http::conflict::StaleWrite;
+use fvoci_http::session::ExpectedUser;
 
 /// 반복 주기.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -40,27 +38,32 @@ pub enum Frequency {
 pub struct RecurrenceRule {
     pub freq: Frequency,
     /// 1~99.
+    #[schema(minimum = 1, maximum = 99)]
     pub interval: u16,
     /// 매주 반복의 요일(ISO, 월=1 … 일=7). 비우면 기준일의 요일.
+    #[schema(max_items = 7)]
     pub weekdays: Vec<u8>,
     /// 이 날짜까지(포함). `count`와 함께 쓸 수 없다.
     pub until: Option<String>,
     /// 첫 회차를 포함한 횟수(1~1000).
+    #[schema(minimum = 1, maximum = 1000)]
     pub count: Option<u16>,
 }
 
 impl RecurrenceRule {
     /// 확인한 뒤 DB에 넘길 JSON.
-    pub(crate) fn validated(&self) -> Result<serde_json::Value, AppError> {
+    pub fn validated(&self) -> Result<serde_json::Value, AppError> {
         if !(1..=99).contains(&self.interval) {
-            return Err(AppError::BadRequest("interval must be 1 to 99".into()));
+            return Err(out_of_range("interval", 99, "interval must be 1 to 99"));
         }
         let mut weekdays = self.weekdays.clone();
         weekdays.sort_unstable();
         weekdays.dedup();
         if weekdays.iter().any(|d| !(1..=7).contains(d)) {
-            return Err(AppError::BadRequest(
-                "weekdays must be 1 (Monday) to 7 (Sunday)".into(),
+            return Err(out_of_range(
+                "weekdays",
+                7,
+                "weekdays must be 1 (Monday) to 7 (Sunday)",
             ));
         }
         if self.freq != Frequency::Weekly && !weekdays.is_empty() {
@@ -74,7 +77,7 @@ impl RecurrenceRule {
             ));
         }
         if self.count.is_some_and(|c| !(1..=1000).contains(&c)) {
-            return Err(AppError::BadRequest("count must be 1 to 1000".into()));
+            return Err(out_of_range("count", 1000, "count must be 1 to 1000"));
         }
         let until = format_date(parse_date(self.until.as_deref(), "until")?);
         Ok(serde_json::json!({
@@ -87,10 +90,15 @@ impl RecurrenceRule {
     }
 
     /// DB에 저장된 규칙을 읽는다.
-    pub(crate) fn from_db(value: serde_json::Value) -> Result<Self, AppError> {
+    pub fn from_db(value: serde_json::Value) -> Result<Self, AppError> {
         serde_json::from_value(value)
             .map_err(|e| AppError::Config(format!("stored recurrence rule is invalid: {e}")))
     }
+}
+
+/// 반복 규칙 칸이 범위(1..=`max`) 밖이다.
+fn out_of_range(field: &str, max: u64, message: &str) -> AppError {
+    AppError::invalid(field, InvalidReason::OutOfRange, Some(max), message)
 }
 
 /// 업무 반복 정하기. `rule`이 없으면 반복을 멈춘다(이미 만든 회차는 남는다).
@@ -103,15 +111,23 @@ pub struct SetTaskRecurrence {
     pub timezone: String,
 }
 
+/// 반복 설정의 409. 반복이 없으면 현재 자원은 null이다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum RuleWriteConflict {
+    Stale(Box<StaleWrite<Option<TaskSeries>>>),
+    State(ErrorBody),
+}
+
 /// 반복 업무 정하기·바꾸기·멈추기(쓰기 권한, 첫 회차에서). 처음 정하면 그 업무가 첫 회차가 되고, 오늘까지의
 /// 회차와 다음 회차를 만든다. 이미 만든 회차는 바꾸지 않는다.
 #[utoipa::path(put, path = "/api/tasks/{task_id}/recurrence", operation_id = "set_task_recurrence",
     params(("task_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = SetTaskRecurrence,
-    responses((status = 200, body = TaskDetail), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = TaskWriteConflict, description = "rule_conflict면 최신 업무 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
+    responses((status = 200, body = Option<TaskSeries>), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = RuleWriteConflict, description = "rule_conflict면 현재 반복 계열 포함; account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")), tag = "tasks")]
 pub async fn set_task(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(id): Path<Uuid>,
     Json(input): Json<SetTaskRecurrence>,
@@ -148,25 +164,24 @@ pub async fn set_task(
         tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = fvoci_core::logging::safe_error(&e), %series, "recurrence sync after rule change failed");
     }
     let mut tx = state.db.begin_as(user).await?;
-    let detail = load_detail(&mut tx, id).await?;
+    let current = load_series(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(crate::features::tasks::TaskConflict {
-                error: "rule_conflict",
-                current: detail,
-            }),
+        StaleWrite::new(
+            "rule_conflict",
+            "the recurrence rule changed",
+            current,
+            &serde_json::json!({ "rule": rule, "timezone": input.timezone.trim() }),
         )
-            .into_response()
+        .into_response()
     } else {
-        Json(detail).into_response()
+        Json(current).into_response()
     })
 }
 
 /// 한 반복의 회차를 만든다(별도 트랜잭션: 앞선 변경의 잠금과 섞이지 않게).
 pub(crate) async fn sync_series(
-    state: &AppState,
+    state: &WorkState,
     user: fvoci_core::ids::UserId,
     series: Uuid,
 ) -> Result<i32, AppError> {
@@ -200,7 +215,7 @@ pub struct SyncResult {
     responses((status = 200, body = SyncResult), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 보관·동시 변경")), tag = "tasks")]
 pub async fn sync_item(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<SyncResult>, AppError> {
@@ -218,93 +233,4 @@ pub async fn sync_item(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(Json(SyncResult { created }))
-}
-
-/// 일정 반복 정하기. `rule`이 없으면 반복을 멈춘다. 기준일은 일정 시간대의 시작 날짜. `base`는 편집을 시작한
-/// 규칙이다(반복이 없었으면 null). 그사이 규칙이 바뀌었으면 아무것도 바꾸지 않고 409 `rule_conflict`(최신 일정)다.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SetEventRecurrence {
-    pub rule: Option<RecurrenceRule>,
-    pub base: Option<RecurrenceRule>,
-}
-
-/// 일정 반복 정하기·멈추기(쓰기 권한). 기준 규칙과 지금 규칙이 다르면 409 `rule_conflict`(감사 W21: 기준 없이 저장해
-/// 그사이 다른 사람이 바꾼 규칙을 옛 규칙으로 말없이 덮었다).
-#[utoipa::path(put, path = "/api/events/{event_id}/recurrence", operation_id = "set_event_recurrence",
-    params(("event_id" = String, Path, format = Uuid)), request_body = SetEventRecurrence,
-    responses((status = 200, body = Event), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = EventConflict)), tag = "events")]
-pub async fn set_event(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(input): Json<SetEventRecurrence>,
-) -> Result<Response, AppError> {
-    let rule = input
-        .rule
-        .as_ref()
-        .map(RecurrenceRule::validated)
-        .transpose()?;
-    // 기준은 서버가 돌려준 규칙 그대로라 다시 확인하지 않고 같은 모양으로 바꾸기만 한다.
-    let base = input
-        .base
-        .as_ref()
-        .map(serde_json::to_value)
-        .transpose()
-        .map_err(|e| AppError::Config(format!("encode the base rule: {e}")))?;
-    let mut tx = state.db.begin_as(user).await?;
-    let outcome: String = sqlx::query_scalar("SELECT app_set_event_recurrence($1, $2, $3, $4)")
-        .bind(id)
-        .bind(rule.as_ref())
-        .bind(base.as_ref())
-        .bind(new_ids(1))
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    let event = crate::features::events::load(&mut tx, id).await?;
-    tx.commit().await?;
-    Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(EventConflict {
-                error: "rule_conflict",
-                current: event,
-            }),
-        )
-            .into_response()
-    } else {
-        Json(event).into_response()
-    })
-}
-
-/// 반복 일정의 회차 하나 빼기.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct ExcludeOccurrence {
-    /// 일정 시간대 기준의 회차 날짜.
-    pub date: String,
-}
-
-/// 반복 일정의 회차 하나 빼기(쓰기 권한). 이미 뺐으면 그대로.
-#[utoipa::path(post, path = "/api/events/{event_id}/exclusions", operation_id = "exclude_event_occurrence",
-    params(("event_id" = String, Path, format = Uuid)), request_body = ExcludeOccurrence,
-    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "events")]
-pub async fn exclude_event(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<Uuid>,
-    Json(input): Json<ExcludeOccurrence>,
-) -> Result<StatusCode, AppError> {
-    let date = parse_date(Some(&input.date), "date")?
-        .ok_or_else(|| AppError::BadRequest("date is required".into()))?;
-    let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_exclude_event_occurrence($1, $2, $3)")
-        .bind(id)
-        .bind(date)
-        .bind(new_ids(1))
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
 }

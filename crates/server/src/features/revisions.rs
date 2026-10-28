@@ -20,10 +20,10 @@ use crate::features::documents::{
     ConflictBody, Document, SCHEMA_VERSION, access, conflict, document_reply, limit_lock_wait,
     load_with_access, lock_limit_error, to_document, validate_body,
 };
-use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
+use fvoci_core::validate::validate_title;
 use fvoci_db::Db;
 use fvoci_http::session::CurrentUser;
 

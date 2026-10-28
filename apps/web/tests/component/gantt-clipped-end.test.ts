@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -67,7 +68,7 @@ describe('gantt bar clipped at the end of the shown period', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
   });
   afterEach(() => {
@@ -79,7 +80,7 @@ describe('gantt bar clipped at the end of the shown period', () => {
   const short = task('b', '단기', '2026-01-05', '2026-01-10');
 
   async function mount(): Promise<{ gantt: HTMLElement; bar: HTMLElement }> {
-    vi.spyOn(api, 'tasks').mockResolvedValue([long, short]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([long, short]);
     render(TaskBoard, { props: { item, workspaces: [], openTaskId: undefined } });
     const gantt = await screen.findByTestId('task-gantt');
     const bar = gantt.querySelector<HTMLElement>('[data-gantt-bar="a"]');
@@ -117,10 +118,10 @@ describe('gantt bar clipped at the end of the shown period', () => {
   it('saves the real dates when the clipped bar is moved, not the clipped column', async () => {
     // 미리 보기는 잘라 그리지만 저장은 실제 날짜로: 2026-01-01~2028-01-01을 두 칸 옮기면 2026-01-03~2028-01-03.
     const detail = (t: TaskView): TaskDetailView => ({ ...t, checklist: [] });
-    vi.spyOn(api, 'task').mockResolvedValue(detail(long));
-    vi.spyOn(api, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
+    vi.spyOn(work, 'task').mockResolvedValue(detail(long));
+    vi.spyOn(work, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi
-      .spyOn(api, 'updateTask')
+      .spyOn(work, 'updateTask')
       .mockResolvedValue({ kind: 'updated', task: detail(long) });
     const { bar } = await mount();
     const px =

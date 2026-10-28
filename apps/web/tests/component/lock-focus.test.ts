@@ -1,7 +1,7 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
 import { keepFocusAcrossLocks } from '$lib/features/common/lock-focus';
 import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
 import { me } from '$lib/me.svelte';
@@ -199,7 +199,7 @@ it('does not focus into a status dialog that closes on success', async () => {
   const created = TEST_STATUSES[0];
   if (created === undefined) throw new Error('status fixture');
   let finish: (() => void) | undefined;
-  vi.spyOn(api, 'createTaskStatus').mockReturnValue(
+  vi.spyOn(work, 'createTaskStatus').mockReturnValue(
     new Promise((resolve) => {
       finish = () => {
         resolve(created);

@@ -1,6 +1,7 @@
+import { workApi as work } from '$lib/features/tasks/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { api, parseTask } from '$lib/api/client';
+import { parseTask } from '$lib/api/client';
 import { formOf } from '$lib/features/tasks/form';
 
 // 개정 2026-10-26 ⑪(D-116): 새 항목의 기본 상태 이름은 `할 일`·`진행 중`·`완료`다. 이 단계의 화면은 열을 안쪽 id로 다루므로
@@ -71,7 +72,7 @@ describe('seeded status names at the API boundary', () => {
 
   it('sends the selected definition name for creation, editing and lane moves', async () => {
     const { bodies } = capture();
-    await api.createTask('user-a', 'i1', 'r1', '제목', null, {
+    await work.createTask('user-a', 'i1', 'r1', '제목', null, {
       description: '',
       status: '할 일',
       priority: 'none',
@@ -82,7 +83,7 @@ describe('seeded status names at the API boundary', () => {
       assignee_ids: [],
       milestone: false,
     });
-    await api.updateTask('user-a', 't1', 1, {
+    await work.updateTask('user-a', 't1', 1, {
       title: '제목',
       description: '',
       status: '완료',
@@ -94,13 +95,13 @@ describe('seeded status names at the API boundary', () => {
       assignee_ids: [],
       milestone: false,
     });
-    await api.moveTask('user-a', 't1', '진행 중', null);
+    await work.moveTask('user-a', 't1', '진행 중', null);
     expect(bodies.map(status)).toEqual(['할 일', '완료', '진행 중']);
   });
 
   it('passes an item-defined name through unchanged', async () => {
     const { bodies } = capture();
-    await api.updateTask('user-a', 't1', 1, {
+    await work.updateTask('user-a', 't1', 1, {
       title: '제목',
       description: '',
       status: '검토',
@@ -120,7 +121,7 @@ describe('seeded status names at the API boundary', () => {
     async (name) => {
       const { bodies } = capture();
       const task = parseTask({ ...raw, status: name });
-      await api.updateTask('user-a', 't1', 1, {
+      await work.updateTask('user-a', 't1', 1, {
         ...formOf({ ...task, checklist: [] }),
         title: '바꾼 제목',
       });

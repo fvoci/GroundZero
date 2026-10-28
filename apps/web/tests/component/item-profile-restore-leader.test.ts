@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/authenticated';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -89,19 +90,19 @@ afterEach(() => {
 
 describe('restoring an item profile draft', () => {
   it('loads the assignable people so the leader can be changed again', async () => {
-    vi.spyOn(api, 'assignable').mockResolvedValue([first, second]);
+    vi.spyOn(work, 'assignable').mockResolvedValue([first, second]);
     await draftWithLeader();
     render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });
     await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
     await waitFor(() => {
-      expect(api.assignable).toHaveBeenCalledTimes(2);
+      expect(work.assignable).toHaveBeenCalledTimes(2);
     });
     await pickLeader('First User');
     expect(leaderTrigger().textContent.trim()).toBe('First User');
   });
 
   it('keeps the drafted leader name even if the people cannot be read', async () => {
-    const assignable = vi.spyOn(api, 'assignable').mockResolvedValueOnce([first, second]);
+    const assignable = vi.spyOn(work, 'assignable').mockResolvedValueOnce([first, second]);
     await draftWithLeader();
     assignable.mockRejectedValue(new Error('offline'));
     render(ItemProfilePanel, { item, kind: 'project', onchanged: vi.fn() });

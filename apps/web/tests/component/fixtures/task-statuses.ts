@@ -1,6 +1,6 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { TaskStatusDefinition } from '@fvoci/api-client';
 import { beforeEach, vi } from 'vitest';
-import { api } from '$lib/api/client';
 
 export const TEST_STATUSES: TaskStatusDefinition[] = [
   { id: 's-todo', name: '할 일', color: '', position: 0, category: 'todo', task_count: 0 },
@@ -9,5 +9,5 @@ export const TEST_STATUSES: TaskStatusDefinition[] = [
 ];
 
 beforeEach(() => {
-  vi.spyOn(api, 'taskStatuses').mockResolvedValue(TEST_STATUSES);
+  vi.spyOn(work, 'taskStatuses').mockResolvedValue(TEST_STATUSES);
 });

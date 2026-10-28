@@ -13,6 +13,7 @@ use crate::access::Grade;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{DocumentId, OrganizationId, Role, WorkspaceId};
+use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, new_ids};
 use fvoci_http::session::CurrentUser;
 
@@ -51,25 +52,6 @@ pub struct CreateWorkspace {
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
     pub name: String,
-}
-
-/// 이름·제목 검증. 앞뒤 공백을 지우고 비어 있거나 상한을 넘으면 거부한다.
-pub fn validate_title(raw: &str, max_chars: usize, field: &str) -> Result<String, AppError> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err(AppError::BadRequest(format!("{field} must not be empty")));
-    }
-    if trimmed.chars().count() > max_chars {
-        return Err(AppError::BadRequest(format!(
-            "{field} must be at most {max_chars} characters"
-        )));
-    }
-    if trimmed.chars().any(char::is_control) {
-        return Err(AppError::BadRequest(format!(
-            "{field} must not contain control characters"
-        )));
-    }
-    Ok(trimmed.to_owned())
 }
 
 /// 현재 사용자의 워크스페이스 역할. 멤버가 아니면 존재를 숨기고 404.

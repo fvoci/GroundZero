@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -352,11 +353,11 @@ describe('item info form when the task board finds the item changed', () => {
     window.sessionStorage.clear();
     quietServer();
     mockItem(item(), item({ title: '다른 사람이 고친 제목' }));
-    vi.spyOn(api, 'tasks').mockResolvedValue([task('1', '문서 검토')]);
+    vi.spyOn(work, 'tasks').mockResolvedValue([task('1', '문서 검토')]);
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockRejectedValue(new ApiError(403, 'forbidden', 'no longer allowed'));
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
 
@@ -387,11 +388,11 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
     due_date: '2026-10-28',
   };
   mockItem(current);
-  vi.spyOn(api, 'tasks').mockResolvedValue([entry]);
+  vi.spyOn(work, 'tasks').mockResolvedValue([entry]);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-  vi.spyOn(api, 'task').mockResolvedValue({ ...entry, checklist: [] });
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'task').mockResolvedValue({ ...entry, checklist: [] });
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   router.guard = undefined;
   router.path = itemViewPath(ws.id, current.id, 'gantt');
   window.history.replaceState(null, '', router.path);
@@ -407,6 +408,6 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
   router.navigate(itemTaskPath(ws.id, current.id, entry.id));
   await screen.findByRole('dialog');
   await waitFor(() => {
-    expect(api.task).toHaveBeenCalledWith(entry.id);
+    expect(work.task).toHaveBeenCalledWith(entry.id);
   });
 });

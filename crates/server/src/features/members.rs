@@ -12,10 +12,11 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::workspaces::{member_role, validate_title};
+use crate::features::workspaces::member_role;
 use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
+use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, needed_ids, new_ids};
 use fvoci_http::session::CurrentUser;
 

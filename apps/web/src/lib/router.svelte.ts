@@ -317,7 +317,7 @@ class Router {
    * 이미 가드를 거친 기록 이동이 일으킬 popstate 한 번은 다시 묻지 않는다: 가드가 막은 뒤로 가기를 떠나기로 확정했을 때
    * (아래 참고)와 가드가 허락한 `back()`(RA-1: 묻고 버린 입력이나 다음 화면에 남는 입력을 그 popstate가 다시 물었다).
    */
-  private skipGuardOnce = false;
+  private backPermit: { from: string; to: string | undefined } | undefined;
 
   constructor() {
     // 뒤로·앞으로 가기도 미저장 편집 보호를 거친다(D-121). 브라우저는 주소를 먼저 바꾸므로, 가드가 막으면 같은 기록을
@@ -325,10 +325,18 @@ class Router {
     window.addEventListener('popstate', () => {
       const next = window.location.pathname;
       const nextHash = window.location.hash;
-      if (next !== this.path && this.guard !== undefined && !this.skipGuardOnce) {
+      const permit = this.backPermit;
+      this.backPermit = undefined;
+      const permitted =
+        permit?.from === this.path && (permit.to === undefined || permit.to === next);
+      if (next !== this.path && this.guard !== undefined && !permitted) {
         const guard = this.guard;
+        const from = this.path;
+        let resumed = false;
         const allowed = guard(() => {
-          this.skipGuardOnce = true;
+          if (resumed || this.path !== from) return;
+          resumed = true;
+          this.backPermit = { from, to: next };
           window.history.back();
         }, next);
         if (!allowed) {
@@ -336,13 +344,13 @@ class Router {
           return;
         }
       }
-      this.skipGuardOnce = false;
       this.path = next;
       this.hash = nextHash;
     });
   }
 
   navigate(target: string): void {
+    this.backPermit = undefined;
     const at = target.indexOf('#');
     const path = at < 0 ? target : target.slice(0, at);
     const hash = at < 0 ? '' : target.slice(at);
@@ -366,6 +374,7 @@ class Router {
    * 정규화라 이탈 확인을 거치지 않고 기록도 쌓지 않는다.
    */
   replace(target: string): void {
+    this.backPermit = undefined;
     const at = target.indexOf('#');
     const path = at < 0 ? target : target.slice(0, at);
     const hash = at < 0 ? '' : target.slice(at);
@@ -381,6 +390,7 @@ class Router {
    * `navigate`는 그 확정 안에서 다시 묻지 않는다(가드가 proceed 동안 통과시킨다).
    */
   confirmLeave(action: () => void): void {
+    this.backPermit = undefined;
     if (this.guard !== undefined && !this.guard(action)) return;
     action();
   }
@@ -391,6 +401,7 @@ class Router {
    * 경로다. 넘기면 그 경로에서도 마운트된 채인 폼이 묻지 않고 통과한다(RF-1: 항목 머리 폼).
    */
   back(next?: string): boolean {
+    if (this.backPermit?.from === this.path) return true;
     if (
       this.guard !== undefined &&
       !this.guard(() => {
@@ -398,7 +409,7 @@ class Router {
       }, next)
     )
       return false;
-    this.skipGuardOnce = true;
+    this.backPermit = { from: this.path, to: next };
     window.history.back();
     return true;
   }

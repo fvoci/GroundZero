@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::tasks::EXPECTED_TASK_USER_DOC;
-use crate::features::workspaces::validate_title;
-use crate::http::AppState;
-use fvoci_core::error::{AppError, ErrorBody};
+use crate::state::WorkState;
+use crate::tasks::EXPECTED_TASK_USER_DOC;
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::ItemId;
+use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, new_ids};
 use fvoci_http::session::{CurrentUser, ExpectedUser};
 
@@ -40,7 +40,7 @@ impl StatusCategory {
         }
     }
 
-    fn parse(raw: &str) -> Result<Self, AppError> {
+    pub(crate) fn parse(raw: &str) -> Result<Self, AppError> {
         match raw {
             "todo" => Ok(Self::Todo),
             "doing" => Ok(Self::Doing),
@@ -69,6 +69,7 @@ pub struct TaskStatus {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct NewTaskStatus {
+    #[schema(min_length = 1, max_length = 50)]
     pub name: String,
     #[serde(default)]
     pub color: String,
@@ -77,6 +78,7 @@ pub struct NewTaskStatus {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateTaskStatus {
+    #[schema(min_length = 1, max_length = 50)]
     pub name: Option<String>,
     pub color: Option<String>,
     pub category: Option<StatusCategory>,
@@ -128,8 +130,11 @@ fn validate_color(raw: &str) -> Result<String, AppError> {
             .strip_prefix('#')
             .is_some_and(|hex| hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()));
     if !valid {
-        return Err(AppError::BadRequest(
-            "color must be empty or #rrggbb".to_owned(),
+        return Err(AppError::invalid(
+            "color",
+            InvalidReason::InvalidFormat,
+            None,
+            "color must be empty or #rrggbb",
         ));
     }
     Ok(color)
@@ -141,7 +146,7 @@ fn validate_color(raw: &str) -> Result<String, AppError> {
     responses((status = 200, body = [TaskStatus]), (status = 401, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "tasks")]
 pub async fn list(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
 ) -> Result<Json<Vec<TaskStatus>>, AppError> {
@@ -158,7 +163,7 @@ pub async fn list(
     responses((status = 201, body = TaskStatus), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경")), tag = "tasks")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path(item): Path<ItemId>,
     Json(input): Json<NewTaskStatus>,
@@ -192,7 +197,7 @@ pub async fn create(
     responses((status = 200, body = TaskStatus), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 이름 중복·보관·동시 변경")), tag = "tasks")]
 pub async fn update(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path((item, status)): Path<(ItemId, Uuid)>,
     Json(input): Json<UpdateTaskStatus>,
@@ -238,7 +243,7 @@ pub async fn update(
     responses((status = 200, body = DeletedTaskStatus), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody, description = "account_changed: 기대 사용자 불일치; invalid_state: 마지막 상태 삭제·보관·동시 변경")), tag = "tasks")]
 pub async fn delete(
-    State(state): State<AppState>,
+    State(state): State<WorkState>,
     ExpectedUser(user): ExpectedUser,
     Path((item, status)): Path<(ItemId, Uuid)>,
     Query(query): Query<DeleteStatusQuery>,

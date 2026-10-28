@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -132,7 +133,7 @@ function formOf(field: HTMLElement): HTMLFormElement {
 }
 
 it('offers failed calendar creation explicitly after remount and reuses its request id', async () => {
-  const create = vi.spyOn(api, 'createTask').mockRejectedValue(new NetworkError('offline'));
+  const create = vi.spyOn(work, 'createTask').mockRejectedValue(new NetworkError('offline'));
   const props = {
     workspaceId: 'w1',
     day: '2026-10-20',

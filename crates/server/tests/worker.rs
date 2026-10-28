@@ -74,7 +74,7 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
             .await
             .unwrap()
     };
-    let r = send(&app, Method::PUT, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
+    let r = send(&app, Method::PATCH, &format!("/api/tasks/{}", t["id"].as_str().unwrap()), Some(&admin),
                  Some(json!({ "base_version": t["version"], "title": "백업 확인", "description": "", "status": "할 일",
                               "priority": "none", "start_date": null, "due_date": today, "estimate_minutes": null,
                               "tags": [], "assignee_ids": [], "milestone": false }))).await;
@@ -82,7 +82,7 @@ async fn the_worker_purges_only_expired_trash_and_fills_repeating_tasks() {
     let r = send(&app, Method::PUT, &format!("/api/tasks/{}/recurrence", t["id"].as_str().unwrap()), Some(&admin),
                  Some(json!({ "rule": {"freq":"daily","interval":1,"weekdays":[],"until":null,"count":null}, "timezone": "Asia/Seoul" }))).await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    let series = r.json["series"]["id"].as_str().unwrap().to_owned();
+    let series = r.json["id"].as_str().unwrap().to_owned();
     fixture_sql("DELETE FROM fvoci.tasks WHERE series_id = $1::uuid AND occurrence_date > (now() AT TIME ZONE 'Asia/Seoul')::date", &series).await;
 
     // 작업은 DB 전체를 본다. 같은 DB를 쓰는 다른 시험이 남긴 묶음이나, 한국 자정을 넘기면 앞선 시험들의 매일 반복도
