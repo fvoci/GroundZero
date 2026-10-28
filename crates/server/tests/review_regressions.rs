@@ -273,7 +273,17 @@ async fn reference_document(
     ws: Option<Uuid>,
     file: Uuid,
 ) -> Uuid {
-    let body = json!({"type":"doc","content":[{"type":"image","attrs":{"src":format!("/api/files/{file}/content?version=1")}}]});
+    reference_version(state, user, ws, file, 1).await
+}
+
+async fn reference_version(
+    state: &AppState,
+    user: &TestUser,
+    ws: Option<Uuid>,
+    file: Uuid,
+    version: u32,
+) -> Uuid {
+    let body = json!({"type":"doc","content":[{"type":"image","attrs":{"src":format!("/api/files/{file}/content?version={version}")}}]});
     let mut tx = state.db.begin_as(user.id).await.unwrap();
     let doc: Uuid = if let Some(ws) = ws {
         sqlx::query_scalar(
@@ -355,6 +365,28 @@ async fn file_versions_are_kept_only_for_references_their_author_can_read() {
     .await;
     let doc = reference_document(&w.state, &w.owner, Some(a), file).await;
     assert_eq!(reference_state(doc, file).await, (1, true));
+}
+
+/// CR183-3: 참조는 있는 버전만 기록한다. `document_file_refs`에는 버전 외래 키가 없어, 없는 버전(정리됐거나 처음부터
+/// 없는)을 가리키는 본문이 참조 행을 남기면 안 된다. 기록 질의가 `file_versions`와 맞춰 본다.
+#[tokio::test]
+async fn references_to_a_missing_file_version_are_not_recorded() {
+    let w = World::new().await;
+    let upload = made(&w.state, &w.owner,
+        "SELECT fvoci.app_create_upload($1,NULL,'item',$2,'version.txt','','text/plain',10,10,3600,1000,100000,@ids) AS id",
+        &[Uuid::now_v7(), w.item]).await;
+    let file = finish_upload(&w.state, &w.owner, upload).await;
+    let doc = reference_version(&w.state, &w.owner, Some(w.ws), file, 99).await;
+    let mut observer = common::fixture_conn().await;
+    let recorded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM fvoci.document_file_refs WHERE document_id=$1 AND file_id=$2",
+    )
+    .bind(doc)
+    .bind(file)
+    .fetch_one(&mut observer)
+    .await
+    .unwrap();
+    assert_eq!(recorded, 0);
 }
 
 #[tokio::test]
