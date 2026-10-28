@@ -20,14 +20,21 @@
     switchAccount,
     onAccountSwitch,
     watchConnection,
+    hideSession,
   } from './feedback.svelte';
 
   interface Props {
     /** 이 창을 처음부터 다시 읽는다(시험에서 바꿔 끼운다). */
     reload?: () => void;
+    replace?: (url: string) => void;
+    retryLogout?: () => void;
+    retryRestore?: () => void;
   }
 
   const {
+    replace = (url) => window.location.replace(url),
+    retryLogout,
+    retryRestore,
     reload = () => {
       window.location.reload();
     },
@@ -57,7 +64,7 @@
   $effect(() => onAccountSwitch(reload));
   // 뒤로 가기나 늦은 이동이 숨겨 둔 편집 확인창을 새로 열지 못하게 한다.
   $effect(() => {
-    if (!accountSafety.switching) return;
+    if (!accountSafety.switching || accountSafety.reason === 'restore') return;
     const previous = router.guard;
     const stay = (): boolean => false;
     router.guard = stay;
@@ -76,6 +83,7 @@
   // 두 이벤트가 잇달아 와도 확인 요청은 한 번에 하나만 보내고(`checking`), 전환은 `switchAccount()`가 한 번만 시작한다.
   $effect(() => {
     let checking = false;
+    let active = true;
     const recheck = (): void => {
       const signedIn = currentUser.userId;
       if (signedIn === '' || accountSafety.switching || checking) return;
@@ -83,7 +91,11 @@
       void api
         .me()
         .then((now) => {
-          if (now !== undefined && now.id !== signedIn) switchAccount();
+          if (!active || accountSafety.switching || currentUser.userId !== signedIn) return;
+          if (now === undefined) {
+            hideSession('signed-out');
+            replace(router.path + router.hash);
+          } else if (now.id !== signedIn) switchAccount();
         })
         .catch(() => undefined)
         .finally(() => {
@@ -96,6 +108,7 @@
     window.addEventListener('focus', recheck);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      active = false;
       window.removeEventListener('focus', recheck);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -120,12 +133,33 @@
     interactOutsideBehavior="ignore"
   >
     <Dialog.Header>
-      <Dialog.Title>{m.feedback_account_changed_title()}</Dialog.Title>
-      <Dialog.Description>{m.feedback_account_switching()}</Dialog.Description>
+      <Dialog.Title>
+        {#if accountSafety.reason === 'logout'}{m.app_menu_logout()}
+        {:else if accountSafety.reason === 'restore'}{m.feedback_restore_title()}
+        {:else if accountSafety.reason === 'signed-out'}{m.feedback_signed_out_title()}
+        {:else}{m.feedback_account_changed_title()}{/if}
+      </Dialog.Title>
+      <Dialog.Description>
+        {#if accountSafety.reason === 'logout'}{m.feedback_logout_pending()}
+        {:else if accountSafety.reason === 'restore'}{m.feedback_restore_pending()}
+        {:else if accountSafety.reason === 'signed-out'}{m.feedback_signed_out_pending()}
+        {:else}{m.feedback_account_switching()}{/if}
+      </Dialog.Description>
     </Dialog.Header>
-    <Button class="h-auto max-w-full whitespace-normal" onclick={reload}
-      >{m.feedback_reload()}</Button
-    >
+    {#if accountSafety.error !== ''}<p role="alert">{accountSafety.error}</p>{/if}
+    {#if accountSafety.reason === 'logout'}
+      {#if accountSafety.error !== '' && retryLogout !== undefined}
+        <Button onclick={retryLogout}>{m.feedback_logout_retry()}</Button>
+      {/if}
+    {:else if accountSafety.reason === 'restore'}
+      {#if accountSafety.error !== '' && retryRestore !== undefined}
+        <Button onclick={retryRestore}>{m.common_retry()}</Button>
+      {/if}
+    {:else}
+      <Button class="h-auto max-w-full whitespace-normal" onclick={reload}
+        >{m.feedback_reload()}</Button
+      >
+    {/if}
   </Dialog.Content>
 </Dialog.Root>
 <div role="status" aria-live="polite" class="empty:hidden">

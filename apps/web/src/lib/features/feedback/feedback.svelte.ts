@@ -136,14 +136,26 @@ export function watchConnection(): () => void {
 // 다른 계정으로 바뀌어 이 창을 처음부터 다시 읽는 중인지. 이때는 저장 안 한 편집 경고로 다시 읽기를 막지 않는다
 // (막고 남으면 앞 계정의 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 입력은 앞 계정의 초안(사용자별 키)으로
 // 이미 남아 있다.
-export const accountSafety = $state({ switching: false });
+type SafetyReason = 'account' | 'logout' | 'restore' | 'signed-out';
+export const accountSafety = $state({
+  switching: false,
+  reason: 'account' as SafetyReason,
+  error: '',
+});
+
+/** 세션을 확인하거나 끝내는 동안 portal까지 즉시 가린다. */
+export function hideSession(reason: SafetyReason): void {
+  flushSync(() => {
+    accountSafety.reason = reason;
+    accountSafety.error = '';
+    accountSafety.switching = true;
+  });
+}
 
 /** 다른 계정으로 바뀌어 다시 읽기 직전에 부른다. */
 export function markAccountSwitch(): void {
   // reload가 beforeunload에서 취소되어도 이전 계정의 화면을 숨긴 상태로 남긴다.
-  flushSync(() => {
-    accountSafety.switching = true;
-  });
+  hideSession('account');
 }
 
 /** 다른 계정으로 바뀌어 다시 읽는 중인지. */
@@ -164,7 +176,7 @@ export function onAccountSwitch(reload: () => void): () => void {
 
 /** 다른 계정으로 바뀐 것을 알았을 때 부른다: 표시하고 이 창을 처음부터 다시 읽는다. */
 export function switchAccount(): void {
-  if (accountSwitching()) return;
+  if (accountSwitching() && accountSafety.reason !== 'restore') return;
   markAccountSwitch();
   if (reloadForSwitch !== undefined) reloadForSwitch();
   else window.location.reload();

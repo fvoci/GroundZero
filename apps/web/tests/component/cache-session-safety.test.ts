@@ -55,17 +55,6 @@ beforeEach(async () => {
     addEventListener() {},
     removeEventListener() {},
   }));
-  // jsdom의 Location은 교체 불가이므로 창의 나머지 동작은 그대로 위임한다.
-  vi.stubGlobal(
-    'window',
-    new Proxy(window, {
-      get(target, key) {
-        if (key === 'location') return { ...target.location, replace, reload, assign: vi.fn() };
-        const value: unknown = Reflect.get(target, key);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    }),
-  );
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 404 }));
   vi.spyOn(api, 'me').mockResolvedValue(me);
   vi.spyOn(api, 'authInfo').mockResolvedValue({ oidc_enabled: true });
@@ -99,7 +88,7 @@ afterEach(() => {
 });
 
 async function signedIn(): Promise<void> {
-  render(App);
+  render(App, { replace, reload });
   await screen.findByText('이전 비밀 목록');
 }
 
@@ -167,13 +156,18 @@ it('hides a persisted app synchronously until the same user and fresh data are l
 
 it('goes to login after an anonymous persisted restore without exposing the old screen', async () => {
   await signedIn();
+  const previous = screen.getByText('이전 비밀 목록');
   vi.mocked(api.me).mockResolvedValue(undefined);
   pageshow();
+  expect(previous).not.toBeVisible();
   await waitFor(() => {
     expect(replace).toHaveBeenCalled();
   });
   expect(accountSafety.switching).toBe(true);
-  expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+  expect(currentUser.userId).toBe('');
+  await waitFor(() => {
+    expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+  });
 });
 
 it('uses account switching when a persisted session belongs to someone else', async () => {
@@ -200,7 +194,7 @@ it.each(['focus', 'visibilitychange'])(
   async (event) => {
     currentUser.userId = me.id;
     vi.mocked(api.me).mockResolvedValue(undefined);
-    render(FeedbackHost);
+    render(FeedbackHost, { replace, reload });
     if (event === 'focus') window.dispatchEvent(new Event(event));
     else {
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
@@ -215,6 +209,7 @@ it.each(['focus', 'visibilitychange'])(
 
 const publicDoc = {
   title: '철회 전 공개 비밀',
+  updated_at: '2026-10-19T00:00:00Z',
   body: {
     type: 'doc',
     content: [{ type: 'paragraph', content: [{ type: 'text', text: '공개 본문 비밀' }] }],
