@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';

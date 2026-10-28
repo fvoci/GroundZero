@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -181,7 +181,11 @@ describe('task detail dependency kinds', () => {
   it('saves nothing when the preview is cancelled and returns focus to the save button', async () => {
     await setLocale('ko', { reload: false });
     mount();
-    vi.spyOn(work, 'previewLink').mockResolvedValue({ shifts: [shift], undated: [], blocked: null });
+    vi.spyOn(work, 'previewLink').mockResolvedValue({
+      shifts: [shift],
+      undated: [],
+      blocked: null,
+    });
     const set = vi.spyOn(work, 'setPredecessor');
     await editLagTo('3');
     const panel = (await screen.findByRole('heading', { name: /관계를 지키지 못합니다/ })).closest(

@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';

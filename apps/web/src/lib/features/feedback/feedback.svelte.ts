@@ -9,7 +9,7 @@ import { SvelteSet } from 'svelte/reactivity';
 /** 완료 토스트의 동작 단추 하나(복제한 새 항목 열기 등). */
 export interface DoneAction {
   label: string;
-  onClick: () => void;
+  onClick: (event: MouseEvent) => void;
 }
 
 // 동작 단추를 붙여 띄운 완료 토스트의 key. 토스트 라이브러리는 같은 id를 고칠 때 앞 값에 덮어 합치므로, 단추 없는 완료로

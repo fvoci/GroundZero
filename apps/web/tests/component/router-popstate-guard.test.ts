@@ -12,6 +12,27 @@ function popTo(path: string): void {
 }
 
 describe('router popstate guard', () => {
+  it('does not let a pending back token skip an unrelated navigation (#159)', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const guard = vi.fn(() => true);
+    router.guard = guard;
+    router.back('/shared');
+    router.navigate('/time');
+    guard.mockReturnValue(false);
+    popTo('/audit');
+    expect(router.path).toBe('/time');
+    expect(guard).toHaveBeenCalledTimes(3);
+    expect(back).toHaveBeenCalledOnce();
+  });
+
+  it('consumes a permitted back only once when close is pressed twice (#159)', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    router.guard = () => true;
+    router.back('/shared');
+    router.back('/shared');
+    expect(back).toHaveBeenCalledOnce();
+    popTo('/shared');
+  });
   beforeEach(() => {
     router.guard = undefined;
     window.history.replaceState(null, '', '/notes');

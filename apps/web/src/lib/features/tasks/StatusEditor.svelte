@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { workApi as work } from '$lib/features/tasks/api';
+  import { taskData as work } from '$lib/features/tasks/detail-data';
   import { onMount, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import type { StatusCategory, TaskStatusDefinition } from '@fvoci/api-client';
-  import { api } from '$lib/api/client';
+
   import { errorText, statusNameExists } from '$lib/api/errors';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -58,6 +58,7 @@
   });
   const snapshot = (): StatusDraft => ({ name, color, category, position });
   const draft = createFormDraft<StatusDraft>({
+    preserve: false,
     name: () => (open && !removing ? `task-status:${itemId}:${selected?.id ?? 'new'}` : undefined),
     snapshot,
     parse: (value) => {

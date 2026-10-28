@@ -2,16 +2,7 @@
 // 새 세션의 달력 시각만 하루 뒤로 고정한다. 서버 시간·실제 하루 경과·실기기 시험은 아니다.
 import type { Locator, Page } from '@playwright/test';
 
-import {
-  expect,
-  list,
-  listField,
-  nullableStr,
-  selectOrganization,
-  str,
-  test,
-  unique,
-} from './fixtures';
+import { expect, list, nullableStr, selectOrganization, str, test, unique } from './fixtures';
 import { expectViewport, pageOverflows } from './layout';
 
 function day(offset: number): string {
@@ -110,16 +101,17 @@ for (const theme of ['light', 'dark'] as const) {
       await expect
         .poll(async () => nullableStr(await api.get(`/api/tasks/${taskId}`), 'due_date'))
         .toBe(day(2));
-      const saved = await api.get(`/api/tasks/${taskId}`);
-      expect(listField(saved, 'assignees').map((a) => str(a, 'user_id'))).toContain(str(me, 'id'));
+      expect(
+        list(await api.get(`/api/task-assignees?task=${taskId}`)).map((a) => str(a, 'user_id')),
+      ).toContain(str(me, 'id'));
       await dialog.getByRole('button', { name: '선행 업무 추가', exact: true }).click();
       await page.getByRole('option', { name: new RegExp(predecessorTitle) }).click();
       await dialog.getByRole('button', { name: '관계 저장', exact: true }).click();
       await expect
         .poll(async () =>
-          listField(await api.get(`/api/tasks/${taskId}`), 'predecessors').map((p) =>
-            str(p, 'task_id'),
-          ),
+          list(await api.get(`/api/task-dependencies?task=${taskId}`))
+            .filter((p) => str(p, 'successor_id') === taskId)
+            .map((p) => str(p, 'predecessor_id')),
         )
         .toEqual([predecessor]);
       await noOverflow(page);

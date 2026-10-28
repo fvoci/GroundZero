@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { workApi as work } from '$lib/features/tasks/api';
+  import { taskData as work } from '$lib/features/tasks/detail-data';
   // 항목 정보(D-33·D-34·D-36·D-38): 상태·기간·리더·목표·범위와 종류별 정보, 비공개 항목의 멤버(사람·그룹).
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';

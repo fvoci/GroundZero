@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

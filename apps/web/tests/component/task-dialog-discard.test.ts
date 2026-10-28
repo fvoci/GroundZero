@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
@@ -13,7 +13,7 @@ import { itemTaskPath, router } from '$lib/router.svelte';
 import { me } from '$lib/me.svelte';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
-import { storeFormDraft } from '$lib/features/common/form-draft';
+import { storeFormDraft } from '$lib/features/tasks/drafts';
 import { formOf } from '$lib/features/tasks/form';
 
 // 사용자 결정(2026-10-22): 업무 대화상자는 고친 입력이 있어도 Esc·바깥 클릭·닫기 단추로 말없이 닫혀 입력을 버렸다.
@@ -299,7 +299,7 @@ describe('closing the task dialog with unsaved input', () => {
     const { back } = await openBoard([initial, task('t2', { parent_id: 't1' })]);
     const pending = deferred<TaskDetailView>();
     vi.spyOn(work, 'setTaskRecurrence').mockReturnValue(pending.promise);
-    const navigate = vi.spyOn(router, 'navigate');
+    const navigate = vi.spyOn(router, 'replace');
     await type('task-recurrence-interval', '2');
     await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
     await escape(content());
@@ -413,7 +413,9 @@ describe('closing the task dialog with unsaved input', () => {
         const draftValues = () =>
           Object.keys(window.localStorage).map((key) => window.localStorage.getItem(key));
         await waitFor(() => {
-          expect(draftValues().some((value) => value?.includes('명시적으로 버릴 입력'))).toBe(true);
+          expect(draftValues().some((value) => value?.includes('명시적으로 버릴 입력'))).toBe(
+            label === '새 댓글',
+          );
         });
         await fireEvent.click(closeButton());
         const box = await findConfirm();
@@ -700,7 +702,7 @@ describe('opening another task from the dialog with unsaved input', () => {
 
   it('opens at once when nothing was changed', async () => {
     await openBoard(linked());
-    const navigate = vi.spyOn(router, 'navigate');
+    const navigate = vi.spyOn(router, 'replace');
     await fireEvent.click(subtaskLink());
     expect(confirmBox()).toBeNull();
     expect(navigate).toHaveBeenCalledWith(itemTaskPath('ws-1', 'i1', 't2'));
@@ -708,7 +710,7 @@ describe('opening another task from the dialog with unsaved input', () => {
 
   it('asks first, and keeping editing stays on this task with my input and focus', async () => {
     await openBoard(linked());
-    const navigate = vi.spyOn(router, 'navigate');
+    const navigate = vi.spyOn(router, 'replace');
     await type('task-description', '메모');
     const link = subtaskLink();
     link.focus();
@@ -728,7 +730,7 @@ describe('opening another task from the dialog with unsaved input', () => {
 
   it('opens the other task only after I choose to discard', async () => {
     const { reopen } = await openBoard(linked());
-    const navigate = vi.spyOn(router, 'navigate');
+    const navigate = vi.spyOn(router, 'replace');
     const update = vi.spyOn(work, 'updateTask');
     await type('task-title', '새 제목');
     await fireEvent.click(subtaskLink());
@@ -753,7 +755,7 @@ describe('opening another task from the dialog with unsaved input', () => {
     const save = document.getElementById('task-save');
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
-    const navigate = vi.spyOn(router, 'navigate');
+    const navigate = vi.spyOn(router, 'replace');
     await fireEvent.click(subtaskLink());
     await flush();
     expect(confirmBox()).toBeNull();

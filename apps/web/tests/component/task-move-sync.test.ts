@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -69,6 +70,20 @@ function task(id: string, title: string, status: TaskStatus = '할 일', version
 }
 
 describe('move result helpers', () => {
+  it('returns exactly between adjacent original neighbours after lane renumbering (#50)', () => {
+    const original = [task('a', 'A'), task('b', 'B'), task('c', 'C')];
+    const from = originOf(original, 'b');
+    if (from === undefined) throw new Error('origin');
+    const renumbered = [
+      task('a', 'A', '할 일', 2),
+      task('c', 'C', '할 일', 2),
+      task('b', 'B', '진행 중', 2),
+    ];
+    expect(backTo(renumbered, from)).toEqual({
+      plan: { status: '할 일', beforeId: 'c' },
+      exact: true,
+    });
+  });
   const before = [task('a', 'A'), task('b', 'B'), task('c', 'C', '진행 중')];
   const origin = {
     status: '할 일' as const,
@@ -183,7 +198,7 @@ describe('kanban save states', () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.clear();
     vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-    vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
+    vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     done = vi.spyOn(feedback, 'notifyDone');
   });
   /** 이동 완료는 토스트(key `board-move`)로 알린다(D-82). 지금까지 띄운 이동 완료 글. */
@@ -206,9 +221,11 @@ describe('kanban save states', () => {
   const moved = [task('b', '문서 검토'), movedA];
 
   /** 목록 읽기를 차례로 돌려준다(마지막 것을 계속). */
-  function lists(...answers: (TaskView[] | Promise<TaskView[]>)[]): MockInstance<typeof api.tasks> {
+  function lists(
+    ...answers: (TaskView[] | Promise<TaskView[]>)[]
+  ): MockInstance<typeof work.tasks> {
     let i = 0;
-    return vi.spyOn(api, 'tasks').mockImplementation(() => {
+    return vi.spyOn(work, 'tasks').mockImplementation(() => {
       const answer = answers[Math.min(i, answers.length - 1)] ?? [];
       i += 1;
       return Promise.resolve(answer);
@@ -254,8 +271,8 @@ describe('kanban save states', () => {
 
   it('normal save: saving right away, then confirmed', async () => {
     lists(start, moved);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     await moveRight('a');
     expect(laneOf('a')).toBe('진행 중');
@@ -269,8 +286,8 @@ describe('kanban save states', () => {
 
   it('slow success: says the response is delayed, then confirms when it arrives', async () => {
     lists(start, moved);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     await moveRight('a');
     await flush(3000);
@@ -284,7 +301,7 @@ describe('kanban save states', () => {
 
   it('explicit failure: puts the card back and explains, with nothing left pending', async () => {
     lists(start);
-    vi.spyOn(api, 'moveTask').mockRejectedValue(new ApiError(400, 'stale', 'x'));
+    vi.spyOn(work, 'moveTask').mockRejectedValue(new ApiError(400, 'stale', 'x'));
     await mount();
     await moveRight('a');
     await flush();
@@ -296,8 +313,8 @@ describe('kanban save states', () => {
   // 카드는 저장 전에 새 열에 다시 그려진다(앞 요소가 사라짐). 저장을 기다리는 동안에도 초점이 문서 처음으로 빠지지 않는다.
   it('keeps focus on the moved card while saving and after it is put back', async () => {
     lists(start);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     card('a').focus();
     await moveRight('a');
@@ -312,8 +329,8 @@ describe('kanban save states', () => {
 
   it('a save that ends late does not take back focus the user moved elsewhere', async () => {
     lists(start, moved);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     card('a').focus();
     await moveRight('a');
@@ -326,7 +343,7 @@ describe('kanban save states', () => {
 
   it('lost response but saved on the server: confirms after reading the list again', async () => {
     const read = lists(start, moved);
-    const move = vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    const move = vi.spyOn(work, 'moveTask').mockRejectedValue(new NetworkError('reset'));
     await mount();
     await moveRight('a');
     await flush();
@@ -340,7 +357,7 @@ describe('kanban save states', () => {
   it('lost response and not saved: shows the server place, retries once only on request', async () => {
     lists(start, start, start, moved);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockRejectedValueOnce(new NetworkError('reset'))
       .mockResolvedValueOnce({ ...movedA, checklist: [] });
     await mount();
@@ -366,13 +383,13 @@ describe('kanban save states', () => {
 
   it('lost response and the list cannot be read: stays "not confirmed" until checked again', async () => {
     let call = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(() => {
+    vi.spyOn(work, 'tasks').mockImplementation(() => {
       call += 1;
       if (call === 1) return Promise.resolve(start);
       if (call === 2) return Promise.reject(new NetworkError('offline'));
       return Promise.resolve(moved);
     });
-    vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    vi.spyOn(work, 'moveTask').mockRejectedValue(new NetworkError('reset'));
     await mount();
     await moveRight('a');
     await flush();
@@ -392,7 +409,7 @@ describe('kanban save states', () => {
   it('retry is not sent when the list read just before it shows a change made elsewhere', async () => {
     const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', '완료', 2)];
     lists(start, start, elsewhere);
-    const move = vi.spyOn(api, 'moveTask').mockRejectedValue(new NetworkError('reset'));
+    const move = vi.spyOn(work, 'moveTask').mockRejectedValue(new NetworkError('reset'));
     await mount();
     await moveRight('a');
     await flush();
@@ -411,7 +428,7 @@ describe('kanban save states', () => {
     const elsewhere = [task('b', '문서 검토'), task('a', 'API 연결', '완료', 2)];
     const read = lists(start, start, start, elsewhere);
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockRejectedValueOnce(new NetworkError('reset'))
       .mockRejectedValueOnce(
         new ApiError(409, 'move_conflict', 'the task moved since it was read'),
@@ -441,8 +458,8 @@ describe('kanban save states', () => {
 
   it('a request still running is confirmed early when the list already shows it saved', async () => {
     lists(start, moved);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     await moveRight('a');
     await flush(10000);
@@ -456,8 +473,8 @@ describe('kanban save states', () => {
 
   it('a running request is not declared unsaved even if the list still shows the old place', async () => {
     lists(start);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     await moveRight('a');
     await flush(10000);
@@ -471,15 +488,15 @@ describe('kanban save states', () => {
     const early = deferred<TaskView[]>();
     const later = deferred<TaskView[]>();
     let call = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(() => {
+    vi.spyOn(work, 'tasks').mockImplementation(() => {
       call += 1;
       if (call === 1) return Promise.resolve(start);
       if (call === 2) return early.promise;
       if (call === 3) return later.promise;
       return Promise.resolve(moved);
     });
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     await moveRight('a');
     await flush(10000);
@@ -499,13 +516,13 @@ describe('kanban save states', () => {
   });
 
   it('quick add includes the status in one request and keeps the response when reloading fails (#104)', async () => {
-    vi.spyOn(api, 'tasks')
+    vi.spyOn(work, 'tasks')
       .mockResolvedValueOnce(start)
       .mockRejectedValue(new NetworkError('offline'));
     const create = vi
-      .spyOn(api, 'createTask')
+      .spyOn(work, 'createTask')
       .mockResolvedValue({ ...task('n', '새 업무', '진행 중'), checklist: [] });
-    const move = vi.spyOn(api, 'moveTask');
+    const move = vi.spyOn(work, 'moveTask');
     await mount();
     const lane = screen.getByRole('region', { name: /진행 중/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
@@ -530,9 +547,9 @@ describe('kanban save states', () => {
 
   it('a quick add that finishes after leaving the board does not go on to move it', async () => {
     lists(start);
-    const made = deferred<Awaited<ReturnType<typeof api.createTask>>>();
-    vi.spyOn(api, 'createTask').mockReturnValue(made.promise);
-    const move = vi.spyOn(api, 'moveTask');
+    const made = deferred<Awaited<ReturnType<typeof work.createTask>>>();
+    vi.spyOn(work, 'createTask').mockReturnValue(made.promise);
+    const move = vi.spyOn(work, 'moveTask');
     const view = await mount();
     const lane = screen.getByRole('region', { name: /진행 중/ });
     await fireEvent.click(within(lane).getByRole('button', { name: '업무 추가' }));
@@ -550,18 +567,18 @@ describe('kanban save states', () => {
     // 다른 카드를 옮긴 뒤의 목록 읽기가 늦어지는 사이 새 카드를 다른 열에 만든다. 그 늦은 목록에는 새 카드가 없다.
     const slow = deferred<TaskView[]>();
     let call = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(() => {
+    vi.spyOn(work, 'tasks').mockImplementation(() => {
       call += 1;
       if (call === 1) return Promise.resolve(start);
       if (call === 2) return slow.promise;
       if (call === 3) return Promise.reject(new NetworkError('offline'));
       return Promise.resolve([...start, task('n', '새 업무', '진행 중', 2)]);
     });
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask')
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask')
       .mockResolvedValueOnce({ ...task('b', '문서 검토', '진행 중', 2), checklist: [] })
       .mockReturnValueOnce(save.promise);
-    vi.spyOn(api, 'createTask').mockResolvedValue({
+    vi.spyOn(work, 'createTask').mockResolvedValue({
       ...task('n', '새 업무', '진행 중'),
       checklist: [],
     });
@@ -579,15 +596,15 @@ describe('kanban save states', () => {
     await flush();
     expect(laneOf('n')).toBe('진행 중');
     expect(saveState('n')).toBeNull();
-    expect(api.moveTask).toHaveBeenCalledTimes(1);
+    expect(work.moveTask).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a 409 move plan and only resaves it explicitly against the latest move version', async () => {
     const newest = task('a', 'API 연결', '완료', 5);
     lists(start, [newest], [newest]);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
     const move = vi
-      .spyOn(api, 'moveTask')
+      .spyOn(work, 'moveTask')
       .mockRejectedValueOnce(new ApiError(409, 'move_conflict', 'moved elsewhere'))
       .mockReturnValueOnce(save.promise);
     await mount();
@@ -608,8 +625,8 @@ describe('kanban save states', () => {
 
   it('blocks a second move of the same card but not of another card', async () => {
     lists(start);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    const move = vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    const move = vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     await mount();
     await moveRight('a');
     await moveRight('a');
@@ -626,8 +643,8 @@ describe('kanban save states', () => {
   // 끝나도록 둔다(화면 이탈은 서버 저장 취소가 아니다).
   it('leaving the screen clears the board timers and starts nothing afterwards', async () => {
     const reads = lists(start);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    const move = vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    const move = vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     const errors = vi.spyOn(console, 'error');
     const setTimer = vi.spyOn(globalThis, 'setTimeout');
     const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
@@ -669,8 +686,8 @@ describe('kanban save states', () => {
   // 가져가거나 목록을 다시 읽지 않는다(새 보드는 이미 서버 상태를 읽어 보이고 있다).
   it('a late answer for a board that was left does not touch a board opened afterwards', async () => {
     const reads = lists(start);
-    const save = deferred<Awaited<ReturnType<typeof api.moveTask>>>();
-    vi.spyOn(api, 'moveTask').mockReturnValue(save.promise);
+    const save = deferred<Awaited<ReturnType<typeof work.moveTask>>>();
+    vi.spyOn(work, 'moveTask').mockReturnValue(save.promise);
     const first = await mount();
     card('a').focus();
     await moveRight('a');
@@ -696,10 +713,10 @@ describe('kanban save states', () => {
       Promise.resolve(moved),
     ];
     let i = 0;
-    vi.spyOn(api, 'tasks').mockImplementation(
+    vi.spyOn(work, 'tasks').mockImplementation(
       () => answers[Math.min(i++, 2)] ?? Promise.resolve([]),
     );
-    vi.spyOn(api, 'moveTask')
+    vi.spyOn(work, 'moveTask')
       .mockRejectedValueOnce(new ApiError(400, 'stale', 'x'))
       .mockResolvedValueOnce({ ...movedA, checklist: [] });
     await mount();

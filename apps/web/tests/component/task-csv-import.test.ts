@@ -1,11 +1,11 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskStatusDefinition } from '@fvoci/api-client';
 
 import type { TaskDetailView, TaskInput } from '$lib/api/client';
-import { api, ApiError, NetworkError } from '$lib/api/client';
+import { ApiError, NetworkError } from '$lib/api/client';
 import { canonicalJson } from '$lib/features/documents/drafts';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';

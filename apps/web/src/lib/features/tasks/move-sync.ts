@@ -62,6 +62,16 @@ export function backTo(
   origin: MoveOrigin,
 ): { plan: BoardMove; exact: boolean } {
   const lane = lanes(server)[origin.status] ?? [];
+  // 재번호는 이웃의 판도 올린다. 두 이웃 사이에 다른 카드가 없으면 그 틈은 여전히 원래 자리다.
+  const prevAt = lane.findIndex((t) => t.id === origin.prevId);
+  if (
+    origin.prevId !== null &&
+    origin.nextId !== null &&
+    prevAt >= 0 &&
+    lane[prevAt + 1]?.id === origin.nextId
+  ) {
+    return { plan: { status: origin.status, beforeId: origin.nextId }, exact: true };
+  }
   const still = (id: string | null, version: number | null): boolean =>
     id === null || lane.some((t) => t.id === id && t.move_version === version);
   if (still(origin.nextId, origin.nextVersion)) {

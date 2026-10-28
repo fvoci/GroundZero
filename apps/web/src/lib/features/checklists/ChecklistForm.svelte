@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   // 편집기가 없는 화면의 체크리스트 (D-30, O-04). 항목의 원본은 서버의 행이며, 이 구성요소는 표시와 입력만 한다.
   // Markdown 붙여넣기: `- [x]`·`- [ ]` 줄을 항목으로 펼쳐 보여 주고, 사용자가 확인·수정한 뒤 한 번에 덧붙인다.
   import { Button } from '$lib/ui/button';
@@ -33,6 +34,7 @@
     onremove: (id: string, editingUser: string) => Promise<void>;
     onunsaved?: (value: boolean) => void;
     ondraftkept?: (value: boolean) => void;
+    preserveDraft?: boolean;
   }
 
   const {
@@ -45,6 +47,7 @@
     onremove,
     onunsaved,
     ondraftkept,
+    preserveDraft = true,
   }: Props = $props();
 
   /** 문구를 고치는 항목과 입력. */
@@ -86,6 +89,7 @@
       (renaming !== undefined && renaming.text !== renaming.original),
   );
   const formDraft = createFormDraft<ChecklistDraft>({
+    preserve: untrack(() => preserveDraft),
     name: () => `checklist:${idPrefix}`,
     snapshot: () => ({
       draft,

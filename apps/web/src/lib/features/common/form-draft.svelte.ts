@@ -15,6 +15,8 @@ import {
 import { createLeaveGuard, leavingWithDrafts } from './leave-guard.svelte';
 
 interface DraftOptions<T> {
+  /** 짧은 설정 칸은 화면에만 두고 이탈을 경고한다(D-27·D-97). */
+  preserve?: boolean;
   /** Stable form kind and container/parent ID; undefined disables preservation. */
   name: () => string | undefined;
   snapshot: () => T;
@@ -67,6 +69,10 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
 
   function persist(): void {
     if (!owned() || session === undefined) return;
+    if (options.preserve === false) {
+      kept = !options.dirty();
+      return;
+    }
     // A failed move to a held key must never overwrite the offered input.
     if (blocked()) {
       kept = false;
@@ -111,7 +117,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
               key: formDraftTabKey(name, userId),
             };
       offers =
-        session === undefined
+        session === undefined || options.preserve === false
           ? []
           : listFormDrafts(
               name ?? '',

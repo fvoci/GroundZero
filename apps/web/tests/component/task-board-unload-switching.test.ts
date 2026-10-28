@@ -1,4 +1,5 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { org } from '$lib/org.svelte';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,7 +67,7 @@ const detail: TaskDetailView = {
 
 const draftKeys = (): string[] =>
   Object.keys(window.localStorage).filter((k) =>
-    k.startsWith('fvoci:user-a:-:form-draft:task:t-1'),
+    k.startsWith(`fvoci:user-a:${org.currentId ?? '-'}:form-draft:task:t-1`),
   );
 
 function unloadPrevented(): boolean {
@@ -104,7 +105,7 @@ describe('task board unload warning while the account is switching', () => {
     accountSafety.switching = true;
     expect(unloadPrevented()).toBe(true);
   });
-  it.each(['새 댓글', '새 항목'])('allows reload for durably kept %s input', async (label) => {
+  it.each(['새 댓글'])('allows reload for durably kept %s input', async (label) => {
     await mountWithOpenTask();
     await fireEvent.input(await screen.findByLabelText(new RegExp(`^${label}`)), {
       target: { value: '남긴 입력' },
@@ -115,7 +116,7 @@ describe('task board unload warning while the account is switching', () => {
     expect(unloadPrevented()).toBe(false);
   });
 
-  it.each(['새 댓글', '새 항목'])(
+  it.each(['새 댓글'])(
     'keeps warning for failed %s storage and recovers after a successful write',
     async (label) => {
       const quota = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
@@ -135,6 +136,16 @@ describe('task board unload warning while the account is switching', () => {
       expect(unloadPrevented()).toBe(false);
     },
   );
+  it('keeps warning for a checklist entry during account switching because it is screen-only (#154)', async () => {
+    await mountWithOpenTask();
+    await fireEvent.input(await screen.findByLabelText(/^새 항목/), {
+      target: { value: '화면에만 남길 입력' },
+    });
+    accountSafety.switching = true;
+    await Promise.resolve();
+    expect(unloadPrevented()).toBe(true);
+    expect(Object.keys(localStorage).some((key) => key.includes('checklist:task-'))).toBe(false);
+  });
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     me.userId = 'user-a';

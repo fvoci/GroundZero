@@ -1,8 +1,7 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
 import { keepFocusAcrossLocks } from '$lib/features/common/lock-focus';
 import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
 import { me } from '$lib/me.svelte';

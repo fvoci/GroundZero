@@ -82,5 +82,6 @@ export function parseTaskStatusDefinition(value: Json): TaskStatusDefinition {
   };
 }
 
-
-export function none(_value: Json): void { /* HTTP status is sufficient. */ }
+export function none(): void {
+  /* HTTP status is sufficient. */
+}

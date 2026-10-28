@@ -1,7 +1,7 @@
 import { workApi as work } from '$lib/features/tasks/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { api, parseTask } from '$lib/api/client';
+import { parseTask } from '$lib/api/client';
 import { formOf } from '$lib/features/tasks/form';
 
 // 개정 2026-10-26 ⑪(D-116): 새 항목의 기본 상태 이름은 `할 일`·`진행 중`·`완료`다. 이 단계의 화면은 열을 안쪽 id로 다루므로

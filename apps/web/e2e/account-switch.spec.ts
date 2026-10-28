@@ -6,7 +6,7 @@
 // 붙잡아 두는 것(지연 뒤 성공 경로)과 이전 문서 안의 관찰용 기록기(fetch 호출 기록·상태 표본, 동작은 바꾸지 않음)만 쓴다. 실패·취소
 // 경로는 account-switch-failed-reload.spec.ts가 본다.
 import { draftKeys, returnToWindow, switchTo } from './account-switch-helpers';
-import { expect, list, listField, num, str, test, unique } from './fixtures';
+import { expect, list, num, str, test, unique } from './fixtures';
 
 test('unsaved task input survives A→B→A account switches, interrupted reloads and real reloads, for the first account only', async ({
   signIn,
@@ -50,10 +50,12 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
   const newOffer = page.getByTestId('task-new-draft-offer');
   const serverTask = async (): Promise<unknown> => api.get(`/api/tasks/${taskId}`);
   const predecessorsOf = async (): Promise<{ id: string; lag: number }[]> =>
-    listField(await serverTask(), 'predecessors').map((p) => ({
-      id: str(p, 'task_id'),
-      lag: num(p, 'lag_days'),
-    }));
+    list(await api.get(`/api/task-dependencies?task=${taskId}`))
+      .filter((p) => str(p, 'successor_id') === taskId)
+      .map((p) => ({
+        id: str(p, 'predecessor_id'),
+        lag: num(p, 'lag_days'),
+      }));
   // 저장하지 않은 편집의 창 닫기·새로고침 경고(beforeunload)는 떠나기로 답한다. 떠나도 입력은 브라우저에 남아야 한다.
   // (전환 중 다시 읽기는 초안을 남겼을 때만 beforeunload 경고를 내지 않는다 — 문서 편집기·업무 보드의 이탈 가드 규칙(D-96). "취소된
   // 다시 읽기"의 안전 상태는 mock 시험 account-safety-c가, 경고 유무와 실패 경로는 account-switch-failed-reload.spec.ts가 본다.)
@@ -77,8 +79,8 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     await expect(description).toHaveValue('');
     await offer.getByRole('button', { name: '입력 복원', exact: true }).click();
     await expect(description).toHaveValue(edit);
-    await expect(lag).toHaveValue('2');
-    await expect(picker).toContainText(candidateTitle);
+    await expect(lag).toHaveValue('0');
+    await expect(picker).toContainText('업무 고르기');
     expect(str(await serverTask(), 'description')).toBe('');
     expect(await predecessorsOf()).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath('1-a-restored-after-reload.png') });
@@ -227,8 +229,8 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     await page.screenshot({ path: testInfo.outputPath('4-a-offered-after-return.png') });
     await offer.getByRole('button', { name: '입력 복원', exact: true }).click();
     await expect(description).toHaveValue(edit);
-    await expect(lag).toHaveValue('2');
-    await expect(picker).toContainText(candidateTitle);
+    await expect(lag).toHaveValue('0');
+    await expect(picker).toContainText('업무 고르기');
     expect(str(await serverTask(), 'description')).toBe('');
     expect(await predecessorsOf()).toEqual([]);
 
@@ -239,6 +241,10 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     expect(num(await serverTask(), 'version')).toBe(2);
     await expect(save).toBeFocused();
     await expect(save).toBeEnabled();
+    // 관계 입력은 화면에만 남는다(D-97). 다시 골라 명시적으로 저장한다.
+    await picker.click();
+    await page.getByRole('option', { name: new RegExp(candidateTitle) }).click();
+    await lag.fill('2');
     // 선행 지정은 "관계 저장"을 눌러야 가고, 한 번만 반영된다.
     await dialog.getByRole('button', { name: '관계 저장', exact: true }).click();
     await expect.poll(predecessorsOf).toEqual([{ id: candidate, lag: 2 }]);

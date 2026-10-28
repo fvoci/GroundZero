@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -114,7 +114,7 @@ describe('creating while a request is in flight', () => {
     expect(key).toBe('item-copy:copied');
     expect(options?.action?.label).toBe(m.modules_copy_open());
     const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
-    options?.action?.onClick();
+    options?.action?.onClick(new MouseEvent('click', { cancelable: true }));
     expect(navigate).toHaveBeenCalledWith(itemPath(item.workspace_id, 'copied'));
     expect(screen.queryByLabelText(m.modules_copy_new_title())).toBeNull();
     expect(copy).toHaveBeenCalledOnce();
@@ -135,7 +135,7 @@ describe('creating while a request is in flight', () => {
     const other = { ...item, id: 'other', workspace_id: 'ws-b', module_id: 'mod-b' };
     await view.rerender({ item: other, module: { ...mod, id: 'mod-b', workspace_id: 'ws-b' } });
     const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
-    done.mock.calls[0]?.[2]?.action?.onClick();
+    done.mock.calls[0]?.[2]?.action?.onClick(new MouseEvent('click', { cancelable: true }));
     expect(navigate).toHaveBeenCalledWith(itemPath(workspace.id, 'copied'));
   });
 

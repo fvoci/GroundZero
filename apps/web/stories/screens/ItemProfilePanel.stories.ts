@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { spyOn, screen, userEvent } from 'storybook/test';
 import { api, ApiError } from '$lib/api/client';

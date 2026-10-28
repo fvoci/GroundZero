@@ -1,8 +1,8 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { workApi as work, WorkRuleConflict } from '$lib/features/tasks/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskInput } from '$lib/api/client';
-import { api, ApiError, TaskRuleConflict } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 
 // 업무 고치기의 409는 세 갈래다(계약 `TaskConflict`·`ErrorBody`): 기준 버전이 지났으면 `conflict`, 승인한 후속 재배치가
@@ -91,13 +91,32 @@ afterEach(() => {
 });
 
 describe('task update conflicts', () => {
+  it('retains field validation metadata for a rejected title without retrying', async () => {
+    const seen = reply(400, {
+      error: 'bad_request',
+      message: 'title is too long',
+      request_id: 'r-title',
+      reason: 'too_long',
+      field: 'title',
+      limit: 200,
+    });
+    expect(await failure(work.updateTask('user-a', 'b', 3, input))).toMatchObject({
+      status: 400,
+      code: 'bad_request',
+      reason: 'too_long',
+      field: 'title',
+      limit: 200,
+      requestId: 'r-title',
+    });
+    expect(seen).toHaveLength(1);
+  });
   it('turns a stale base version (TaskConflict `conflict`) into a conflict with the latest task', async () => {
     const seen = reply(409, { error: 'conflict', current: task });
     const result = await work.updateTask('user-a', 'b', 2, input);
     expect(result.kind).toBe('conflict');
     expect(result.kind === 'conflict' ? result.current.version : 0).toBe(3);
     // 기준 버전과 필드, 승인한 재배치(기본은 빈 목록)를 함께 보낸다.
-    expect(seen.map((s) => [s.method, s.url])).toEqual([['PUT', '/api/tasks/b']]);
+    expect(seen.map((s) => [s.method, s.url])).toEqual([['PATCH', '/api/tasks/b']]);
     expect(seen[0]?.body).toStrictEqual({ base_version: 2, ...input, successor_shifts: [] });
   });
 
@@ -149,9 +168,14 @@ describe('kanban move (D-89)', () => {
 });
 it('sends the recurrence base and retains the latest rule on 409 without retry', async () => {
   const base = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
-  const seen = reply(409, { error: 'rule_conflict', current: task });
+  const seen = reply(409, {
+    error: 'rule_conflict',
+    message: 'changed',
+    changed: ['rule'],
+    current: { id: 's', root_task_id: 'b', rule: base, timezone: 'Asia/Seoul' },
+  });
   const result = await failure(work.setTaskRecurrence('user-a', 'b', base, 'Asia/Seoul', null));
-  expect(result).toBeInstanceOf(TaskRuleConflict);
+  expect(result).toBeInstanceOf(WorkRuleConflict);
   expect(seen).toHaveLength(1);
   expect(seen[0]?.body).toEqual({ rule: base, timezone: 'Asia/Seoul', base: null });
 });

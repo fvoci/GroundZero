@@ -1,8 +1,8 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskInput } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import { accountSafety, onAccountSwitch } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';

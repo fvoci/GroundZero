@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -157,7 +157,7 @@ describe('draft offers while a create request is in flight', () => {
     expect(key).toBe('item-copy:copied');
     expect(options?.action?.label).toBe(m.modules_copy_open());
     const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
-    options?.action?.onClick();
+    options?.action?.onClick(new MouseEvent('click', { cancelable: true }));
     expect(navigate).toHaveBeenCalledWith(itemPath(item.workspace_id, 'copied'));
     expect(screen.getByRole('button', { name: m.common_draft_restore() })).not.toBeDisabled();
   });

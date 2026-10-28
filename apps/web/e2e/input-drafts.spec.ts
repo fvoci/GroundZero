@@ -1,7 +1,7 @@
 // 실제 서버에서 댓글·체크리스트 초안의 명시 복원과 탭별 보존을 검증한다. 실행은 통합 브라우저 작업자가 맡는다.
-import { expect, list, listField, str, test, unique } from './fixtures';
+import { expect, list, str, test, unique } from './fixtures';
 
-test('reload offers new comments, replies, edits and the complete checklist input without sending them', async ({
+test('reload offers long comment input and clears screen-only checklist input without sending either', async ({
   signIn,
 }) => {
   const { page, api } = await signIn('test-user');
@@ -35,14 +35,17 @@ test('reload offers new comments, replies, edits and the complete checklist inpu
   await comments.getByRole('textbox', { name: '답글', exact: true }).fill('답글 초안');
   await comments.getByRole('button', { name: '고치기', exact: true }).click();
   await comments.getByLabel('댓글 고치기').fill('댓글 수정 초안');
-  await checklist.getByLabel('새 항목', { exact: true }).fill('새 체크리스트 항목');
-  await checklist.getByRole('button', { name: '기존 항목 고치기', exact: true }).click();
-  await checklist.getByLabel('기존 항목의 새 문구').fill('항목 수정 초안');
-  await checklist.getByRole('button', { name: 'Markdown 붙여넣기' }).click();
-  await checklist.getByLabel(/붙여넣을 체크리스트/).fill('- [ ] 원문');
-  await checklist.getByRole('button', { name: '항목으로 펼치기' }).click();
-  await checklist.getByLabel('항목 1 내용').fill('미리보기 수정 초안');
-  await checklist.getByRole('checkbox', { name: '미리보기 수정 초안 완료 여부' }).check();
+  async function typeChecklist(): Promise<void> {
+    await checklist.getByLabel('새 항목', { exact: true }).fill('새 체크리스트 항목');
+    await checklist.getByRole('button', { name: '기존 항목 고치기', exact: true }).click();
+    await checklist.getByLabel('기존 항목의 새 문구').fill('항목 수정 초안');
+    await checklist.getByRole('button', { name: 'Markdown 붙여넣기' }).click();
+    await checklist.getByLabel(/붙여넣을 체크리스트/).fill('- [ ] 원문');
+    await checklist.getByRole('button', { name: '항목으로 펼치기' }).click();
+    await checklist.getByLabel('항목 1 내용').fill('미리보기 수정 초안');
+    await checklist.getByRole('checkbox', { name: '미리보기 수정 초안 완료 여부' }).check();
+  }
+  await typeChecklist();
   await expect
     .poll(() =>
       page.evaluate(
@@ -52,7 +55,7 @@ test('reload offers new comments, replies, edits and the complete checklist inpu
           ).length,
       ),
     )
-    .toBe(4);
+    .toBe(3);
 
   await page.reload();
   await expect(dialog).toBeVisible();
@@ -63,7 +66,6 @@ test('reload offers new comments, replies, edits and the complete checklist inpu
     'comment-draft-offer',
     'comment-reply-draft-offer',
     'comment-edit-draft-offer',
-    'checklist-new-item-draft-offer',
   ]) {
     await dialog.getByTestId(testId).getByRole('button', { name: '입력 되살리기' }).click();
   }
@@ -71,14 +73,12 @@ test('reload offers new comments, replies, edits and the complete checklist inpu
   await expect(comments.getByRole('textbox', { name: '답글', exact: true })).toHaveValue(
     '답글 초안',
   );
-  await expect(checklist.getByLabel('기존 항목의 새 문구')).toHaveValue('항목 수정 초안');
-  await expect(checklist.getByLabel(/붙여넣을 체크리스트/)).toHaveValue('- [ ] 원문');
-  await expect(checklist.getByLabel('항목 1 내용')).toHaveValue('미리보기 수정 초안');
-  await expect(
-    checklist.getByRole('checkbox', { name: '미리보기 수정 초안 완료 여부' }),
-  ).toBeChecked();
+  await expect(checklist.getByTestId('checklist-new-item-draft-offer')).toHaveCount(0);
+  await expect(checklist.getByText('기존 항목', { exact: true })).toBeVisible();
+  // 짧은 칸은 복원하지 않는다. 직접 다시 입력한 뒤 저장한다.
+  await typeChecklist();
   expect(list(await api.get(`/api/tasks/${task}/comments`))).toHaveLength(1);
-  expect(listField(await api.get(`/api/tasks/${task}`), 'checklist')).toHaveLength(1);
+  expect(list(await api.get(`/api/checklist-items?task=${task}`))).toHaveLength(1);
 
   await comments.getByRole('button', { name: '댓글 달기', exact: true }).click();
   await expect(comments.getByLabel('새 댓글(Ctrl·⌘+Enter로 달기)')).toHaveValue('');
@@ -96,7 +96,7 @@ test('reload offers new comments, replies, edits and the complete checklist inpu
     list(await api.get(`/api/tasks/${task}/comments`)).map((entry) => str(entry, 'body')),
   ).toEqual(expect.arrayContaining(['새 댓글 초안', '답글 초안', '댓글 수정 초안']));
   expect(
-    listField(await api.get(`/api/tasks/${task}`), 'checklist').map((entry) => str(entry, 'text')),
+    list(await api.get(`/api/checklist-items?task=${task}`)).map((entry) => str(entry, 'text')),
   ).toEqual(expect.arrayContaining(['새 체크리스트 항목', '미리보기 수정 초안', '항목 수정 초안']));
 });
 
@@ -133,14 +133,13 @@ test('two open tabs keep separate comment and checklist input when one tab saves
   await second.reload();
   const secondDialog = second.getByRole('dialog', { name: title, exact: true });
   await expect(secondDialog.getByTestId('comment-draft-offer')).toContainText('둘째 탭 댓글');
-  await expect(secondDialog.getByTestId('checklist-new-item-draft-offer')).toContainText(
-    '둘째 탭 항목',
-  );
+  await expect(secondDialog.getByTestId('checklist-new-item-draft-offer')).toHaveCount(0);
+  await expect(secondDialog.getByLabel('새 항목', { exact: true })).toHaveValue('');
   expect(
     list(await api.get(`/api/tasks/${task}/comments`)).map((entry) => str(entry, 'body')),
   ).toEqual(['첫 탭 댓글']);
   expect(
-    listField(await api.get(`/api/tasks/${task}`), 'checklist').map((entry) => str(entry, 'text')),
+    list(await api.get(`/api/checklist-items?task=${task}`)).map((entry) => str(entry, 'text')),
   ).toEqual(['첫 탭 항목']);
   await second.close();
 });

@@ -1,5 +1,13 @@
 import { untrack } from 'svelte';
-import { auth, accountSwitching, connection, reportConnectionLost, reportSessionExpired, sessionExpiries, switchAccount } from '$lib/features/feedback/feedback.svelte';
+import {
+  auth,
+  accountSwitching,
+  connection,
+  reportConnectionLost,
+  reportSessionExpired,
+  sessionExpiries,
+  switchAccount,
+} from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { isRecord, type Json } from './parse';
@@ -10,6 +18,9 @@ export class ApiError extends Error {
     message: string,
     /** 서버가 붙인 요청 id(D-83). 운영 로그에서 같은 요청을 찾을 때 쓴다. */
     readonly requestId?: string,
+    readonly reason?: string,
+    readonly field?: string,
+    readonly limit?: number,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -108,7 +119,15 @@ export function fail(status: number, json: Json): never {
           ? `${message} (${m.common_request_id({ requestId })})`
           : m.common_server_error({ requestId });
     }
-    throw new ApiError(status, json.error, message, requestId);
+    throw new ApiError(
+      status,
+      json.error,
+      message,
+      requestId,
+      typeof json.reason === 'string' ? json.reason : undefined,
+      typeof json.field === 'string' ? json.field : undefined,
+      typeof json.limit === 'number' ? json.limit : undefined,
+    );
   }
   // 앱의 오류 본문이 아닌 응답: 앞단 프록시의 게이트웨이 오류(서버에 닿지 않음)거나 예상하지 못한 응답이다.
   // 화면에는 번역된 이유를 보인다(D-81·D-82).

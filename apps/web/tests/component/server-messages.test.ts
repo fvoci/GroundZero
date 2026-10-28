@@ -245,9 +245,18 @@ describe('server messages the web matches', () => {
     );
     expect(statusNameExists(new ApiError(409, 'invalid_state', 'other'))).toBe(false);
     expect(statusNameExists(new Error(STATUS_NAME_EXISTS_MESSAGE))).toBe(false);
-    expect(untilBeforeStart(new ApiError(400, 'bad_request', UNTIL_BEFORE_START_MESSAGE))).toBe(
-      true,
-    );
+    expect(
+      untilBeforeStart(
+        new ApiError(
+          400,
+          'bad_request',
+          UNTIL_BEFORE_START_MESSAGE,
+          undefined,
+          'until_before_first_occurrence',
+          'until',
+        ),
+      ),
+    ).toBe(true);
     expect(untilBeforeStart(new ApiError(400, 'bad_request', 'other'))).toBe(false);
     expect(untilBeforeStart(new Error(UNTIL_BEFORE_START_MESSAGE))).toBe(false);
   });

@@ -1,7 +1,7 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import StatusEditor from '$lib/features/tasks/StatusEditor.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -15,25 +15,22 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-it('preserves status name and color, offers them explicitly, and guards closing', async () => {
+it('keeps a short status name only on screen and guards closing (#154)', async () => {
   const create = vi.spyOn(work, 'createTaskStatus');
   const props = { itemId: 'i', statuses: TEST_STATUSES, archived: false, onchanged: vi.fn() };
   const first = render(StatusEditor, props);
   await fireEvent.click(screen.getByRole('button', { name: '상태 추가' }));
   await fireEvent.input(screen.getByLabelText('상태 이름'), { target: { value: '공동 검토' } });
-  await fireEvent.input(screen.getByLabelText('색 (#rrggbb)'), { target: { value: '#abcdef' } });
   await fireEvent.click(screen.getByRole('button', { name: '취소' }));
   await screen.findByRole('alertdialog');
   await fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+  expect(screen.getByLabelText('상태 이름')).toHaveValue('공동 검토');
+  expect(localStorage.length).toBe(0);
   first.unmount();
   render(StatusEditor, props);
   await fireEvent.click(screen.getByRole('button', { name: '상태 추가' }));
-  await screen.findByTestId('form-draft-offer');
+  expect(screen.queryByTestId('form-draft-offer')).toBeNull();
   expect(screen.getByLabelText('상태 이름')).toHaveValue('');
-  expect(create).not.toHaveBeenCalled();
-  await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
-  expect(screen.getByLabelText('상태 이름')).toHaveValue('공동 검토');
-  expect(screen.getByLabelText('색 (#rrggbb)')).toHaveValue('#abcdef');
   expect(create).not.toHaveBeenCalled();
 });
 

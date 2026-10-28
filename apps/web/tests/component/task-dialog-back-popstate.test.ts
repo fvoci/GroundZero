@@ -1,3 +1,4 @@
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -96,15 +97,17 @@ const title = (): HTMLElement => {
 };
 
 /** 보드를 그리고 `beforeOpen` 뒤 카드를 눌러 상세를 연다. */
-async function openFromBoard(beforeOpen?: () => Promise<void>) {
-  vi.spyOn(api, 'tasks').mockResolvedValue([detail]);
+async function openFromBoard(beforeOpen?: () => Promise<void>, list: TaskDetailView[] = [detail]) {
+  vi.spyOn(work, 'tasks').mockResolvedValue(list);
   vi.spyOn(api, 'savedViews').mockResolvedValue([]);
-  vi.spyOn(api, 'syncRecurrences').mockResolvedValue(0);
-  vi.spyOn(api, 'task').mockResolvedValue(detail);
-  vi.spyOn(api, 'assignable').mockResolvedValue([]);
+  vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
+  vi.spyOn(work, 'task').mockImplementation((id) =>
+    Promise.resolve(list.find((t) => t.id === id) ?? detail),
+  );
+  vi.spyOn(work, 'assignable').mockResolvedValue([]);
   vi.spyOn(api, 'taskBacklinks').mockResolvedValue([]);
   vi.spyOn(api, 'comments').mockResolvedValue([]);
-  const update = vi.spyOn(api, 'updateTask');
+  const update = vi.spyOn(work, 'updateTask');
   render(TaskBoardRouteHost, { props: { item } });
   await beforeOpen?.();
   const push = vi.spyOn(window.history, 'pushState');
@@ -142,6 +145,50 @@ async function closedToBoard(): Promise<void> {
 }
 
 describe('closing a task opened from the board with the real popstate', () => {
+  it('two close presses while popstate is pending consume one history move (#159)', async () => {
+    const { push } = await openFromBoard();
+    push.mockClear();
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const button = within(dialog() ?? document.body).getByRole('button', {
+      name: m.common_close(),
+    });
+    await fireEvent.click(button);
+    await fireEvent.click(button);
+    expect(back).toHaveBeenCalledOnce();
+    expect(push).not.toHaveBeenCalled();
+  });
+  it('browser back keeps board input without asking when the detail is clean (#160)', async () => {
+    await openFromBoard(typeBoardInput);
+    window.history.back();
+    await closedToBoard();
+    expect(screen.getByLabelText(m.tasks_new_title())).toHaveValue('Keep this new title');
+    expect(screen.getByLabelText(m.tasks_view_name_aria())).toHaveValue('Keep this view name');
+  });
+
+  it('detail-to-detail replaces history and close returns to the original board (#162)', async () => {
+    const child = {
+      ...detail,
+      id: '44444444-4444-4444-4444-444444444444',
+      reference: 'KED-2',
+      title: 'Child task',
+      parent_id: TASK,
+    };
+    const { push } = await openFromBoard(undefined, [detail, child]);
+    push.mockClear();
+    const replace = vi.spyOn(window.history, 'replaceState');
+    await fireEvent.click(
+      within(dialog() ?? document.body).getByRole('button', { name: /KED-2\s*Child task/ }),
+    );
+    await waitFor(() => {
+      expect(router.path).toBe(itemTaskPath(WS, ITEM, child.id));
+    });
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalled();
+    await fireEvent.click(
+      within(dialog() ?? document.body).getByRole('button', { name: m.common_close() }),
+    );
+    await closedToBoard();
+  });
   it.each(['close button', 'Escape'] as const)(
     'keeps board input without asking when closing by the %s',
     async (how) => {

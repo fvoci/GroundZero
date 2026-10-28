@@ -1,9 +1,35 @@
 import type { StatusCategory } from '@fvoci/api-client';
 import { EXPECTED_USER, request, expectOk, fail, ApiError } from '$lib/shared/api';
-import { int, isRecord, none, parseList, parseTaskStatusDefinition, rec, str, type Json } from '$lib/shared/api/parse';
+import {
+  int,
+  isRecord,
+  none,
+  parseList,
+  parseTaskStatusDefinition,
+  rec,
+  str,
+  type Json,
+} from '$lib/shared/api/parse';
 import { switchAccount } from '$lib/features/feedback/feedback.svelte';
 import { m } from '$lib/paraglide/messages.js';
-import { parseTask, parseTaskDetail, parseAssignee, parseSchedulePlan, TaskRuleConflict, type TaskInput, type TaskDetailView, type TaskStatus, type SuccessorShift, type RecurrenceRule, type LinkKind, type LinkBase } from './model';
+import {
+  parseTaskResource,
+  parseDependency,
+  parseSeries,
+  parseChecklist,
+  parseAssignee,
+  parseSchedulePlan,
+  type TaskAssignee,
+  type TaskDependency,
+  type TaskSeriesResource,
+  type TaskInput,
+  type TaskResource,
+  type TaskStatus,
+  type SuccessorShift,
+  type RecurrenceRule,
+  type LinkKind,
+  type LinkBase,
+} from './model';
 // 업무 요청의 409 account_changed: 다른 요청과 똑같이 앱 전체 계정 전환(안전 상태·다시 읽기)을 시작한다(D-96; 앞 계정의
 // 화면을 그대로 두면 다른 화면이 새 계정의 세션으로 요청을 보낸다). 업무 폼은 이 오류로 입력을 숨기고, 입력은 앞 계정의
 // 브라우저 초안(common/form-draft.ts, 사용자별 키)으로 남아 그 계정이 다시 열면 되살릴 수 있다. 모든 업무 쓰기는 편집을 시작한
@@ -35,7 +61,26 @@ async function expectTask<T>(
   if (status < 200 || status >= 300) failTask(status, json);
   return parse(json);
 }
+export class WorkRuleConflict extends ApiError {
+  constructor(readonly current: TaskSeriesResource | null) {
+    super(409, 'rule_conflict', 'the recurrence rule changed');
+  }
+}
+
 export const workApi = {
+  assignees: (scope: { item: string } | { task: string }) =>
+    expectOk('GET', scopePath('task-assignees', scope), (v) =>
+      parseList(v, (row): TaskAssignee => ({
+        ...parseAssignee(row),
+        task_id: str(rec(row, 'task assignee'), 'task_id'),
+      })),
+    ),
+  dependencies: (scope: { item: string } | { task: string }) =>
+    expectOk('GET', scopePath('task-dependencies', scope), (v) => parseList(v, parseDependency)),
+  series: (scope: { item: string } | { task: string }) =>
+    expectOk('GET', scopePath('task-series', scope), (v) => parseList(v, parseSeries)),
+  checklist: (scope: { item: string } | { task: string }) =>
+    expectOk('GET', scopePath('checklist-items', scope), (v) => parseList(v, parseChecklist)),
   /** 항목의 상태 정의(D-116). 칸반 열·상태 편집의 정본. */
   taskStatuses: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/statuses`, (v) =>
@@ -87,13 +132,13 @@ export const workApi = {
     ),
   tasks: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/tasks`, (v) =>
-      parseList(v, parseTask),
+      parseList(v, parseTaskResource),
     ),
   assignable: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/assignable`, (v) =>
       parseList(v, parseAssignee),
     ),
-  task: (id: string) => expectOk('GET', `/api/tasks/${encodeURIComponent(id)}`, parseTaskDetail),
+  task: (id: string) => expectOk('GET', `/api/tasks/${encodeURIComponent(id)}`, parseTaskResource),
   /**
    * 업무 만들기. `fields`를 주면 그 칸까지 서버가 한 트랜잭션에서 확인·저장한다(D-105, 하나라도 거절되면 업무가 남지
    * 않는다). 같은 요청 id는 처음 만든 업무를 지금 상태로 돌려준다(보낸 칸이 달라도). `expectedUser`는 편집 시작 시 고정한다.
@@ -111,7 +156,7 @@ export const workApi = {
     expectTask(
       'POST',
       `/api/items/${encodeURIComponent(itemId)}/tasks`,
-      parseTaskDetail,
+      parseTaskResource,
       {
         ...fields,
         request_id: requestId,
@@ -132,7 +177,7 @@ export const workApi = {
     expectTask(
       'POST',
       `/api/items/${encodeURIComponent(itemId)}/tasks`,
-      parseTaskDetail,
+      parseTaskResource,
       {
         request_id: requestId,
         title,
@@ -148,15 +193,15 @@ export const workApi = {
     expectedUser: string,
     id: string,
     baseVersion: number,
-    input: TaskInput,
+    input: Partial<TaskInput>,
     successorShifts: SuccessorShift[] = [],
   ): Promise<
-    | { kind: 'updated'; task: TaskDetailView }
-    | { kind: 'conflict'; current: TaskDetailView }
-    | { kind: 'shift_conflict'; current: TaskDetailView }
+    | { kind: 'updated'; task: TaskResource }
+    | { kind: 'conflict'; current: TaskResource }
+    | { kind: 'shift_conflict'; current: TaskResource }
   > {
     const { status, json } = await request(
-      'PUT',
+      'PATCH',
       `/api/tasks/${encodeURIComponent(id)}`,
       {
         base_version: baseVersion,
@@ -168,13 +213,13 @@ export const workApi = {
     // 409 중 기준 버전 충돌만 서버 최신본이 온다(보관·다시 시도 등은 일반 오류).
     if (status === 409 && isRecord(json) && json.current !== undefined) {
       const body = rec(json, 'conflict');
-      const current = parseTaskDetail(body.current);
+      const current = parseTaskResource(body.current);
       return str(body, 'error') === 'shift_conflict'
         ? { kind: 'shift_conflict', current }
         : { kind: 'conflict', current };
     }
     if (status !== 200) failTask(status, json);
-    return { kind: 'updated', task: parseTaskDetail(json) };
+    return { kind: 'updated', task: parseTaskResource(json) };
   },
   /**
    * 칸반 이동. `baseMoveVersion`을 주면 그 이동 판에서 읽은 업무만 옮긴다(D-89): 그사이 열·위치가 바뀌었으면 서버가
@@ -190,7 +235,7 @@ export const workApi = {
     expectTask(
       'PUT',
       `/api/tasks/${encodeURIComponent(id)}/position`,
-      parseTaskDetail,
+      parseTaskResource,
       {
         status,
         before_id: beforeId,
@@ -226,9 +271,9 @@ export const workApi = {
     base: LinkBase | null,
     successorShifts: SuccessorShift[] = [],
   ): Promise<
-    | { kind: 'updated'; task: TaskDetailView }
-    | { kind: 'shift_conflict'; current: TaskDetailView }
-    | { kind: 'link_conflict'; current: TaskDetailView }
+    | { kind: 'updated'; dependency: TaskDependency }
+    | { kind: 'shift_conflict'; current: TaskDependency | null }
+    | { kind: 'link_conflict'; current: TaskDependency | null }
   > {
     const { status, json } = await request(
       'PUT',
@@ -245,17 +290,20 @@ export const workApi = {
       const body = rec(json, 'conflict');
       const error = str(body, 'error');
       if (error === 'shift_conflict' || error === 'link_conflict') {
-        return { kind: error, current: parseTaskDetail(body.current) };
+        return {
+          kind: error,
+          current: body.current === null ? null : parseDependency(body.current),
+        };
       }
     }
     if (status !== 200) fail(status, json);
-    return { kind: 'updated', task: parseTaskDetail(json) };
+    return { kind: 'updated', dependency: parseDependency(json) };
   },
   removePredecessor: (expectedUser: string, id: string, predecessorId: string) =>
     expectTask(
       'DELETE',
       `/api/tasks/${encodeURIComponent(id)}/predecessors/${encodeURIComponent(predecessorId)}`,
-      parseTaskDetail,
+      none,
       undefined,
       expectedUser,
     ),
@@ -263,7 +311,7 @@ export const workApi = {
     expectTask(
       'PUT',
       `/api/tasks/${encodeURIComponent(id)}/parent`,
-      parseTaskDetail,
+      parseTaskResource,
       {
         parent_id: parentId,
       },
@@ -277,7 +325,7 @@ export const workApi = {
     expectTask(
       'POST',
       `/api/tasks/${encodeURIComponent(taskId)}/checklist`,
-      parseTaskDetail,
+      (v) => parseList(v, parseChecklist),
       {
         items,
       },
@@ -310,7 +358,7 @@ export const workApi = {
     rule: RecurrenceRule | null,
     timezone: string,
     base: RecurrenceRule | null,
-  ): Promise<TaskDetailView> {
+  ): Promise<TaskSeriesResource | null> {
     const { status, json } = await request(
       'PUT',
       `/api/tasks/${encodeURIComponent(id)}/recurrence`,
@@ -327,9 +375,9 @@ export const workApi = {
       json.error === 'rule_conflict' &&
       json.current !== undefined
     )
-      throw new TaskRuleConflict(parseTaskDetail(json.current));
+      throw new WorkRuleConflict(json.current === null ? null : parseSeries(json.current));
     if (status !== 200) failTask(status, json);
-    return parseTaskDetail(json);
+    return json === null ? null : parseSeries(json);
   },
   /** 반복 업무 회차 만들기(쓰기 권한으로 항목을 열 때). 만든 수. */
   syncRecurrences: (expectedUser: string, itemId: string) =>
@@ -349,3 +397,8 @@ export const workApi = {
       expectedUser,
     ),
 };
+
+function scopePath(resource: string, scope: { item: string } | { task: string }): string {
+  const [name, id] = 'item' in scope ? ['item', scope.item] : ['task', scope.task];
+  return `/api/${resource}?${name}=${encodeURIComponent(id)}`;
+}

@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { MembersView, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -535,7 +535,7 @@ describe('members screen', () => {
 });
 
 describe('task status editor', () => {
-  it('locks the offer together with the form while creating a status', async () => {
+  it('locks the screen-only status form while creating a status', async () => {
     otherTabDraft('task-status:i:new', {
       name: '다른 탭 상태',
       color: '',
@@ -558,9 +558,11 @@ describe('task status editor', () => {
     await waitFor(() => {
       expect(work.createTaskStatus).toHaveBeenCalledTimes(1);
     });
-    expectOffersLocked(1);
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
     expect(screen.getByLabelText(m.tasks_status_name())).toBeDisabled();
     create.reject(offline());
-    await expectReleased(1, () => screen.getByLabelText(m.tasks_status_name()));
+    await waitFor(() => {
+      expect(screen.getByLabelText(m.tasks_status_name())).not.toBeDisabled();
+    });
   });
 });

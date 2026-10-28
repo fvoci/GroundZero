@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { workApi as work } from '$lib/features/tasks/api';
+  import { taskData as work } from '$lib/features/tasks/detail-data';
   // 업무 CSV 일괄 등록(D-39). 한 줄씩 기존 업무 만들기 API로 넣는다(같은 검증과 권한). 한 줄은 모든 칸을 실은 요청
   // 하나라(D-105) 서버가 한 트랜잭션에서 확인·저장하고, 거절된 줄은 아무것도 남기지 않는다. 줄마다 진행 상태를 기억해
   // 두어(csv-import.ts) 중간에 실패해도 다시 누르면 다 넣은 줄은 건너뛰고 나머지를 같은 요청 id로 보낸다(응답을 잃은 줄이
@@ -13,7 +13,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
-  import { api, ApiError } from '$lib/api/client';
+  import { ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';

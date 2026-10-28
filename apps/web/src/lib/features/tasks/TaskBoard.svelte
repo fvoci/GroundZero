@@ -1,4 +1,10 @@
 <script lang="ts">
+  import BoardFilters from './BoardFilters.svelte';
+  import BoardCard from './BoardCard.svelte';
+  import BoardLane from './BoardLane.svelte';
+  import BoardQuickAdd from './BoardQuickAdd.svelte';
+  import { handleCardKey } from './board-keyboard';
+  import { taskData as work } from '$lib/features/tasks/detail-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
@@ -26,11 +32,10 @@
   import { m } from '$lib/paraglide/messages.js';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import TaskCsvImport from './TaskCsvImport.svelte';
-  import { itemViewPath, itemTaskPath, router } from '$lib/router.svelte';
+  import { itemViewPath, itemTaskPath, parseRoute, router } from '$lib/router.svelte';
   import { Checkbox } from '$lib/ui/checkbox';
   import { Button } from '$lib/ui/button';
-  import * as Collapsible from '$lib/ui/collapsible';
-  import * as DropdownMenu from '$lib/ui/dropdown-menu';
+
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
   import { NativeSelect } from '$lib/ui/native-select';
@@ -38,14 +43,14 @@
   import TaskTimeStart from '$lib/features/time/TaskTimeStart.svelte';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import type { StoredFormDraft } from '$lib/features/common/form-draft';
+  import type { StoredFormDraft } from '$lib/features/tasks/drafts';
   import {
     clearFormDraft,
     holdFormDraft,
     listFormDrafts,
     removeFormDraftAt,
     storeFormDraft,
-  } from '$lib/features/common/form-draft';
+  } from '$lib/features/tasks/drafts';
   import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -77,14 +82,13 @@
     applyFilter,
     assigneesOf,
     EMPTY_FILTER,
-    hiddenConditionCount,
     isFiltered,
     isRecord,
     readConfig,
     sortTasks,
     VIEWS,
   } from './filters';
-  import { PRIORITY_LABEL, PRIORITY_TONE, undatedText } from './labels';
+  import { undatedText } from './labels';
   import GanttChart from './GanttChart.svelte';
   import { formOf } from './form';
   import ShiftProposals from './ShiftProposals.svelte';
@@ -148,7 +152,6 @@
   let filter = $state<TaskFilter>({ ...EMPTY_FILTER });
   let sort = $state<TaskSort>('position');
   let filtersOpen = $state(false);
-  const hiddenConditions = $derived(hiddenConditionCount(filter, sort));
   let views = $state<SavedViewView[]>([]);
   let selectedView = $state('');
   // 보기를 지우는 중(두 번 눌러 같은 보기를 다시 지우려다 404 실패를 보이지 않게).
@@ -185,6 +188,7 @@
     request: ViewRequest | null;
   }
   const viewDraft = createFormDraft<ViewDraft>({
+    preserve: false,
     name: () => `task-view:${item.id}`,
     snapshot: () => ({
       name: viewName,
@@ -461,23 +465,6 @@
       return m.tasks_view_calendar();
     },
   };
-  const SORT_LABEL: Record<TaskSort, string> = {
-    get position() {
-      return m.tasks_sort_position();
-    },
-    get due() {
-      return m.tasks_sort_due();
-    },
-    get priority() {
-      return m.tasks_sort_priority();
-    },
-    get title() {
-      return m.tasks_sort_title();
-    },
-    get updated() {
-      return m.tasks_sort_updated();
-    },
-  };
 
   // 이 항목의 목록을 한 번이라도 받았는지(실패도 받은 것으로 본다: 오류를 보인다). 받기 전에는 빈 열·"업무가 없습니다"
   // 대신 불러오는 중이라고 보인다. 같은 항목을 다시 읽을 때(옮긴 뒤 등)는 지금 목록을 그대로 둔다.
@@ -591,7 +578,16 @@
   function offerUndo(offer: UndoOffer, message: string): void {
     undoOffer = offer;
     notifyDone(message, BOARD_MOVE, {
-      action: { label: m.tasks_undo(), onClick: () => void undoMove() },
+      action: {
+        label: m.tasks_undo(),
+        onClick: (event) => {
+          if (undoOffer === undefined || busy(undoOffer.id)) {
+            event.preventDefault();
+            return;
+          }
+          void undoMove();
+        },
+      },
     });
   }
   /** 되돌리기 없는 이동 완료. 같은 key라 앞 토스트(다른 카드의 되돌리기 포함)를 바꾸므로 그 되돌리기도 거둔다. */
@@ -613,18 +609,11 @@
   async function undoMove(): Promise<void> {
     const u = undoOffer;
     if (u === undefined) return;
-    // 토스트 단추는 누르면 토스트가 닫힌다. 지금 보내지 않으면 다시 누를 수 있게 되돌리기를 다시 내놓는다.
-    if (busy(u.id)) {
-      // 누른 단추의 토스트가 닫힌 뒤에 띄운다(같은 틱이면 닫히는 토스트에 합쳐져 함께 사라진다).
-      await tick();
-      offerUndo(u, m.tasks_undo_offer({ title: u.title }));
-      return;
-    }
     withdrawUndo();
     status = m.tasks_move_checking({ title: u.title });
     let server: TaskView[];
     try {
-      server = await api.tasks(item.id);
+      server = await work.tasks(item.id);
     } catch {
       if (!alive) return;
       // 지금 상태를 모르면 보내지 않는다. 다시 누를 수 있게 둔다.
@@ -700,7 +689,7 @@
   async function reload(itemId: string = item.id): Promise<void> {
     const mine = ++reloadSeq;
     try {
-      const [server, statuses] = await Promise.all([api.tasks(itemId), api.taskStatuses(itemId)]);
+      const [server, statuses] = await Promise.all([work.tasks(itemId), work.taskStatuses(itemId)]);
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       definitions = [...statuses].sort((a, b) => a.position - b.position);
       settleUnknown(server);
@@ -717,7 +706,7 @@
 
   // 쓰기 권한으로 항목을 열면 반복 업무의 회차를 먼저 맞춘다(독자는 만들지 않는다, O-19 전까지의 방식).
   async function loadItem(itemId: string, write: boolean): Promise<void> {
-    if (write) await api.syncRecurrences(editingUser, itemId).catch(() => 0);
+    if (write) await work.syncRecurrences(editingUser, itemId).catch(() => 0);
     await reload(itemId);
   }
 
@@ -772,8 +761,7 @@
         openedFrom = router.path === path ? from : undefined;
       });
     } else {
-      router.navigate(path);
-      openedFrom = undefined;
+      router.replace(path);
     }
   }
 
@@ -811,15 +799,20 @@
   // 상세 안의 이동·닫기는 보드 입력을 없애지 않는다. 실제 보드 이탈만 보드 입력까지 확인·폐기한다.
   let detailNavigation = false;
   let discardBoardInput = true;
+  function boardStays(next?: string): boolean {
+    if (next === undefined) return false;
+    const route = parseRoute(next);
+    return route.name === 'item' && route.itemId === item.id && route.group === 'tasks';
+  }
 
   const leave = createLeaveGuard({
-    dirty: () =>
+    dirty: (next) =>
       (detailUnsaved && openTaskId !== undefined) ||
-      (!detailNavigation && (newDirty.size > 0 || viewDirty)),
+      (!detailNavigation && !boardStays(next) && (newDirty.size > 0 || viewDirty)),
     busy: () => detailSaving,
     identity: () => openTaskId,
-    onAsk: () => {
-      discardBoardInput = !detailNavigation;
+    onAsk: (next) => {
+      discardBoardInput = !detailNavigation && !boardStays(next);
       const active = document.activeElement;
       keepFocus =
         active instanceof HTMLElement && dialogContent?.contains(active) ? active : dialogContent;
@@ -884,8 +877,8 @@
 
   function close(): void {
     if (openedFrom !== undefined) {
-      // 이탈 확인에서 머물기로 하면 돌아가지 않았으므로 다음 닫기도 뒤로 간다.
-      if (router.back(openedFrom)) openedFrom = undefined;
+      // popstate가 도착할 때까지 원점을 유지해 두 번 누른 닫기도 같은 허가 한 번을 쓴다.
+      router.back(openedFrom);
     } else {
       router.navigate(itemViewPath(item.workspace_id, item.id, 'board'));
     }
@@ -1051,7 +1044,7 @@
   ): Promise<void> {
     ganttNotice = undefined;
     try {
-      const fresh = await api.task(t.id);
+      const fresh = await work.task(t.id);
       if (fresh.start_date !== t.start_date || fresh.due_date !== t.due_date) {
         ganttNotice = m.tasks_gantt_changed({ title: t.title });
         status = ganttNotice;
@@ -1059,7 +1052,7 @@
         return;
       }
       const input = { ...formOf(fresh), ...dates };
-      const plan = await api.previewSchedule(t.id, dates.start_date, dates.due_date);
+      const plan = await work.previewSchedule(t.id, dates.start_date, dates.due_date);
       if (plan.shifts.length === 0) {
         // 저장하다 후속 업무가 바뀌어 다시 묻게 되면 그 물음이 끝날 때까지 기다린다.
         let finish: () => void = () => undefined;
@@ -1110,7 +1103,7 @@
     undated: UndatedTaskView[] = [],
     noShiftNeeded = shifts.length === 0,
   ): Promise<'saved' | 'asked' | 'stopped'> {
-    const result = await api.updateTask(
+    const result = await work.updateTask(
       editingUser,
       t.id,
       baseVersion,
@@ -1131,7 +1124,7 @@
     if (result.kind === 'shift_conflict') {
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
       // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
-      const plan = await api.previewSchedule(t.id, input.start_date, input.due_date);
+      const plan = await work.previewSchedule(t.id, input.start_date, input.due_date);
       if (plan.shifts.length === 0)
         return saveSchedule(t, input, baseVersion, [], done, plan.undated, true);
       ganttAsk = {
@@ -1206,7 +1199,7 @@
   }
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
     const itemId = item.id;
-    const created = await api
+    const created = await work
       .createTask(editingUser, itemId, requestId, title, null, { status: lane })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
@@ -1295,7 +1288,7 @@
       // 다시 시도·되돌리기는 보내기 직전에 읽은 서버 자리의 이동 판을 조건으로 보낸다(D-89): 그사이 다른 곳에서 이
       // 업무의 열·위치가 바뀌었으면 서버가 아무것도 바꾸지 않고 409 `move_conflict`를 돌려준다. 처음 옮기기는 조건 없이.
       const guarded = replacing !== undefined || undo !== undefined;
-      const saved = await api.moveTask(
+      const saved = await work.moveTask(
         editingUser,
         id,
         plan.status,
@@ -1380,7 +1373,7 @@
     const latest = (): boolean => current(id, seq) && checks[id] === check;
     let server: TaskView[];
     try {
-      server = await api.tasks(item.id);
+      server = await work.tasks(item.id);
     } catch {
       if (!latest()) return undefined;
       patch(id, seq, { phase: pending[id]?.inFlight === true ? 'slow' : 'unknown' });
@@ -1445,7 +1438,7 @@
     status = m.tasks_move_checking({ title: p.title });
     let server: TaskView[];
     try {
-      server = await api.tasks(item.id);
+      server = await work.tasks(item.id);
     } catch {
       if (!current(id, p.seq)) return;
       patch(id, p.seq, { phase: 'not_saved' });
@@ -1482,14 +1475,6 @@
     moveNotice = undefined;
   }
 
-  const SAVE_LABEL: Record<SavePhase, () => string> = {
-    saving: () => m.tasks_card_saving(),
-    slow: () => m.tasks_card_slow(),
-    checking: () => m.tasks_card_checking(),
-    unknown: () => m.tasks_card_unknown(),
-    not_saved: () => m.tasks_card_not_saved(),
-  };
-
   /** 같은 열 안 순서(위·아래)는 기본 순서에서만 바꾼다(D-79). 단추·메뉴·키보드·끌기가 같은 규칙을 따른다. */
   const reorderable = (action: BoardAction): boolean =>
     ordered || (action !== 'up' && action !== 'down');
@@ -1522,7 +1507,7 @@
   const SCROLL_EDGE = 48;
   let drag = $state<Drag | undefined>(undefined);
   // 끌기를 마친 직후 같은 손짓의 click이 카드를 열지 않게 한다.
-  let justDragged = false;
+  let justDragged = $state(false);
   const dragging = $derived(drag !== undefined);
 
   function startDrag(event: PointerEvent, id: string, handle: boolean): void {
@@ -1635,17 +1620,7 @@
   }
 
   function onCardKey(event: KeyboardEvent, id: string): void {
-    if (!event.altKey || !canWrite) return;
-    const map: Partial<Record<string, BoardAction>> = {
-      ArrowUp: 'up',
-      ArrowDown: 'down',
-      ArrowLeft: 'left',
-      ArrowRight: 'right',
-    };
-    const action = map[event.key];
-    if (action === undefined) return;
-    event.preventDefault();
-    void move(id, action);
+    handleCardKey(event, id, canWrite, move);
   }
 </script>
 
@@ -1731,189 +1706,77 @@
 
   <!-- 찾기와 "필터·정렬" 단추만 늘 보이고 나머지 조건·저장한 보기는 펼쳐서 쓴다(좁은 화면에서 업무보다 조건이 먼저 한
        화면을 차지했다). 접혀 있어도 단추가 걸린 조건 수를 보인다. 접어도 조건 값은 그대로다. -->
-  <Collapsible.Root
-    bind:open={filtersOpen}
-    class="flex flex-col gap-2 text-sm"
-    role="search"
-    aria-label={m.tasks_filter_region()}
+  <BoardFilters
+    bind:filtersOpen
+    bind:filter
+    bind:sort
+    {statusNames}
+    {people}
+    shownCount={shown.length}
+    total={tasks.length}
   >
     <div class="flex flex-wrap items-end gap-2">
       <label class="flex flex-col gap-0.5">
-        <span class="text-xs text-muted-foreground">{m.tasks_filter_find()}</span>
+        <span class="text-xs text-muted-foreground">{m.tasks_saved_views()}</span>
+        <NativeSelect
+          aria-label={m.tasks_saved_views()}
+          class="w-full"
+          value={selectedView}
+          onchange={(e: Event) => {
+            if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
+          }}
+        >
+          <option value="">{m.tasks_saved_view_choose()}</option>
+          {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+        </NativeSelect>
+      </label>
+      {#each viewDraft.offers as entry (entry.key)}
+        <FormDraftOffer
+          onrestore={() => {
+            viewDraft.restore(entry);
+          }}
+          ondiscard={() => {
+            viewDraft.discard(entry);
+          }}
+        />
+      {/each}
+      <label class="flex flex-col gap-0.5">
+        <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
         <Input
-          class="w-40"
-          type="search"
-          bind:value={filter.text}
-          placeholder={m.tasks_filter_find_placeholder()}
+          class="w-32"
+          bind:value={viewName}
+          aria-label={m.tasks_view_name_aria()}
+          maxlength={100}
         />
       </label>
-      <Collapsible.Trigger>
-        {#snippet child({ props })}
-          <Button {...props} variant="outline" data-testid="task-filter-toggle">
-            {m.tasks_filter_toggle()}
-            {#if hiddenConditions > 0}
-              <span
-                class="rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums"
-                aria-hidden="true">{hiddenConditions}</span
-              >
-              <span class="sr-only">{m.tasks_filter_active({ count: hiddenConditions })}</span>
-            {/if}
-          </Button>
-        {/snippet}
-      </Collapsible.Trigger>
-      {#if isFiltered(filter) || sort !== 'position'}
-        <Button
-          variant="ghost"
-          onclick={() => {
-            filter = { ...EMPTY_FILTER };
-            sort = 'position';
-          }}>{m.tasks_filter_reset()}</Button
-        >
-      {/if}
-      {#if isFiltered(filter)}
-        <span class="self-center text-xs text-muted-foreground" aria-live="polite"
-          >{m.tasks_filter_shown({ shown: shown.length, total: tasks.length })}</span
+      <label class="flex items-center gap-2"
+        ><Checkbox bind:checked={viewDefault} />{m.tasks_default_view()}</label
+      >
+      <Button variant="outline" onclick={() => void saveView()}>{m.tasks_view_save()}</Button>
+      {#if selectedView !== '' && askingViewDelete}
+        <!-- 저장한 보기 지우기는 되돌릴 수 없어 한 번 더 묻는다(다른 지우기와 같다). -->
+        <span class="flex flex-wrap items-center gap-1 self-center text-sm">
+          <span id="view-delete-warning"
+            >{m.tasks_view_delete_confirm({
+              name: views.find((v) => v.id === selectedView)?.name ?? '',
+            })}</span
+          >
+          <Button
+            variant="destructive"
+            bind:ref={viewDeleteConfirm}
+            aria-describedby="view-delete-warning"
+            disabled={deletingView}
+            onclick={() => void deleteView()}>{m.tasks_view_delete()}</Button
+          >
+          <Button variant="ghost" onclick={() => void stopViewDelete()}>{m.common_cancel()}</Button>
+        </span>
+      {:else if selectedView !== ''}
+        <Button id="view-delete" variant="ghost" onclick={() => void askViewDelete()}
+          >{m.tasks_view_delete()}</Button
         >
       {/if}
     </div>
-    <Collapsible.Content class="flex flex-col gap-2">
-      <div class="flex flex-wrap items-end gap-2">
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_status()}</span>
-          <NativeSelect
-            class="w-full"
-            bind:value={filter.status}
-            aria-label={m.tasks_filter_status_aria()}
-          >
-            <option value="any">{m.tasks_filter_all()}</option>
-            {#if filter.status !== 'any' && !statusNames.includes(filter.status)}
-              <option value={filter.status}>{filter.status}</option>
-            {/if}
-            {#each statusNames as s (s)}<option value={s}>{s}</option>{/each}
-          </NativeSelect>
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_assignee()}</span>
-          <NativeSelect
-            class="w-full"
-            bind:value={filter.assignee}
-            aria-label={m.tasks_filter_assignee_aria()}
-          >
-            <option value="any">{m.tasks_filter_all()}</option>
-            <option value="me">{m.tasks_filter_mine()}</option>
-            <option value="none">{m.tasks_filter_unassigned()}</option>
-            {#each people as [id, name] (id)}<option value={id}>{name}</option>{/each}
-          </NativeSelect>
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_priority()}</span>
-          <NativeSelect
-            class="w-full"
-            bind:value={filter.priority}
-            aria-label={m.tasks_filter_priority_aria()}
-          >
-            <option value="any">{m.tasks_filter_all()}</option>
-            {#each ['urgent', 'high', 'medium', 'low', 'none'] as const as p (p)}<option value={p}
-                >{PRIORITY_LABEL[p]}</option
-              >{/each}
-          </NativeSelect>
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_tag()}</span>
-          <Input class="w-24" bind:value={filter.tag} aria-label={m.tasks_filter_tag_aria()} />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_filter_due_from()}</span>
-          <Input
-            class="w-auto"
-            type="date"
-            bind:value={filter.dueFrom}
-            aria-label={m.tasks_filter_due_from_aria()}
-          />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_filter_due_to()}</span>
-          <Input
-            class="w-auto"
-            type="date"
-            bind:value={filter.dueTo}
-            aria-label={m.tasks_filter_due_to_aria()}
-          />
-        </label>
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_sort()}</span>
-          <NativeSelect class="w-full" bind:value={sort} aria-label={m.tasks_sort()}>
-            {#each Object.entries(SORT_LABEL) as [value, label] (value)}<option {value}
-                >{label}</option
-              >{/each}
-          </NativeSelect>
-        </label>
-      </div>
-      <div class="flex flex-wrap items-end gap-2">
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_saved_views()}</span>
-          <NativeSelect
-            aria-label={m.tasks_saved_views()}
-            class="w-full"
-            value={selectedView}
-            onchange={(e: Event) => {
-              if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
-            }}
-          >
-            <option value="">{m.tasks_saved_view_choose()}</option>
-            {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
-          </NativeSelect>
-        </label>
-        {#each viewDraft.offers as entry (entry.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              viewDraft.restore(entry);
-            }}
-            ondiscard={() => {
-              viewDraft.discard(entry);
-            }}
-          />
-        {/each}
-        <label class="flex flex-col gap-0.5">
-          <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
-          <Input
-            class="w-32"
-            bind:value={viewName}
-            aria-label={m.tasks_view_name_aria()}
-            maxlength={100}
-          />
-        </label>
-        <label class="flex items-center gap-2"
-          ><Checkbox bind:checked={viewDefault} />{m.tasks_default_view()}</label
-        >
-        <Button variant="outline" onclick={() => void saveView()}>{m.tasks_view_save()}</Button>
-        {#if selectedView !== '' && askingViewDelete}
-          <!-- 저장한 보기 지우기는 되돌릴 수 없어 한 번 더 묻는다(다른 지우기와 같다). -->
-          <span class="flex flex-wrap items-center gap-1 self-center text-sm">
-            <span id="view-delete-warning"
-              >{m.tasks_view_delete_confirm({
-                name: views.find((v) => v.id === selectedView)?.name ?? '',
-              })}</span
-            >
-            <Button
-              variant="destructive"
-              bind:ref={viewDeleteConfirm}
-              aria-describedby="view-delete-warning"
-              disabled={deletingView}
-              onclick={() => void deleteView()}>{m.tasks_view_delete()}</Button
-            >
-            <Button variant="ghost" onclick={() => void stopViewDelete()}
-              >{m.common_cancel()}</Button
-            >
-          </span>
-        {:else if selectedView !== ''}
-          <Button id="view-delete" variant="ghost" onclick={() => void askViewDelete()}
-            >{m.tasks_view_delete()}</Button
-          >
-        {/if}
-      </div>
-    </Collapsible.Content>
-  </Collapsible.Root>
+  </BoardFilters>
   {#if moveNotice !== undefined}
     <div class="flex flex-wrap items-center gap-2">
       <p role="alert" class="text-sm text-destructive">{moveNotice}</p>
@@ -1949,245 +1812,61 @@
   {:else if view === 'board'}
     <div class="grid gap-3 @2xl:grid-cols-3" data-testid="task-board">
       {#each statusNames as lane (lane)}
-        <section
-          data-lane={lane}
-          class={[
-            'flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/40 p-2',
-            drag?.active === true && drag.slot?.status === lane && 'ring-2 ring-ring',
-          ]}
-          aria-label={m.tasks_lane_aria({ status: lane })}
+        <BoardLane
+          {lane}
+          color={definitions.find((s) => s.name === lane)?.color}
+          count={board[lane]?.length ?? 0}
+          estimate={laneEstimateText(lane)}
+          filtered={isFiltered(filter)}
+          dragActive={drag?.active === true && drag.slot?.status === lane}
         >
-          <!-- 열 이름 옆에 카드 수를 칩으로(참고 제품의 열 머리글 배치), 그 아래 예상 시간 합계. -->
-          <h3 class="flex items-center gap-2 px-1 text-sm font-semibold">
-            <span
-              class="size-2 rounded-full bg-muted-foreground"
-              style:background-color={definitions.find((s) => s.name === lane)?.color}
-              aria-hidden="true"
-            ></span>
-            {lane}
-            <span
-              class="rounded-full bg-background px-2 py-0.5 text-xs font-normal text-muted-foreground tabular-nums"
-              >{board[lane]?.length ?? 0}</span
-            >
-          </h3>
-          {#if laneEstimateText(lane) !== ''}
-            <p class="px-1 text-xs text-muted-foreground" data-lane-estimate={lane}>
-              {laneEstimateText(lane)}
-            </p>
-          {/if}
-          {#if (board[lane]?.length ?? 0) === 0}
-            <p class="px-1 text-xs text-muted-foreground" data-lane-empty={lane}>
-              {isFiltered(filter) ? m.tasks_lane_empty_filtered() : m.tasks_lane_empty()}
-            </p>
-          {/if}
           <ul class="flex min-h-12 flex-col gap-2">
             {#each board[lane] as t (t.id)}
               {#if dropMark(lane, t.id)}
                 <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
               {/if}
-              <li
-                data-board-card={t.id}
-                class={[
-                  'group flex flex-col gap-1.5 rounded-md border bg-card p-2 shadow-xs',
-                  canWrite && 'cursor-grab',
-                  drag?.active === true && drag.id === t.id && 'opacity-40',
-                ]}
-                onpointerdown={(e: PointerEvent) => {
-                  startDrag(e, t.id, false);
+              <BoardCard
+                {t}
+                {canWrite}
+                {ordered}
+                {statusNames}
+                {shown}
+                {justDragged}
+                dragging={drag?.active === true && drag.id === t.id}
+                save={pending[t.id]}
+                actions={{
+                  startDrag,
+                  onCardKey,
+                  open,
+                  busy,
+                  moveAndFocus,
+                  move,
+                  titleOf,
+                  recheck,
+                  retryMove,
+                  keepAsIs,
+                  reorderable,
                 }}
-              >
-                <div class="flex items-start gap-1">
-                  {#if canWrite}
-                    <span
-                      aria-hidden="true"
-                      title={m.tasks_drag_handle()}
-                      class="-ml-1 shrink-0 cursor-grab touch-none px-1 text-muted-foreground select-none"
-                      onpointerdown={(e: PointerEvent) => {
-                        startDrag(e, t.id, true);
-                      }}
-                      oncontextmenu={(e: MouseEvent) => {
-                        e.preventDefault();
-                      }}>⠿</span
-                    >
-                  {/if}
-                  <button
-                    type="button"
-                    data-task-card={t.id}
-                    aria-keyshortcuts={canWrite
-                      ? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight'
-                      : undefined}
-                    onkeydown={(e) => {
-                      onCardKey(e, t.id);
-                    }}
-                    class="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    onclick={() => {
-                      if (!justDragged) open(t.id);
-                    }}
-                  >
-                    <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
-                    <span class="max-w-full min-w-0 font-medium break-words">{t.title}</span>
-                  </button>
-                  <!-- 시간 기록 시작은 업무 카드 안에 둔다(D-117). -->
-                  <TaskTimeStart taskId={t.id} title={t.title} />
-                  {#if canWrite}
-                    <DropdownMenu.Root>
-                      <DropdownMenu.Trigger>
-                        {#snippet child({ props })}
-                          <Button
-                            {...props}
-                            size="sm"
-                            variant="ghost"
-                            class="-mt-0.5 -mr-1 h-6 shrink-0 px-1.5 text-xs"
-                            aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
-                          >
-                        {/snippet}
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content align="end">
-                        {#each statusNames.filter((s) => s !== t.status) as target (target)}
-                          <DropdownMenu.Item
-                            disabled={busy(t.id)}
-                            onSelect={() =>
-                              void moveAndFocus(t.id, { status: target, beforeId: null }, 'menu')}
-                            >{m.tasks_move_to_status({ status: target })}</DropdownMenu.Item
-                          >
-                        {/each}
-                        <!-- 같은 열 안 순서: 화살표 줄은 보조 표시(aria-hidden)이고 Alt+위·아래는 키보드에서만 되므로, 터치
-                             화면의 낭독기 사용자도 쓸 수 있게 메뉴에도 둔다. 정렬이 기본 순서가 아니면 순서를 바꿀 수 없다. -->
-                        {#if ordered}
-                          <DropdownMenu.Separator />
-                          {#each ['up', 'down'] as const as action (action)}
-                            <DropdownMenu.Item
-                              disabled={busy(t.id) ||
-                                planBoardMove(shown, t.id, action, statusNames) === undefined}
-                              onSelect={() => void move(t.id, action)}
-                              >{action === 'up'
-                                ? m.tasks_move_up_menu()
-                                : m.tasks_move_down_menu()}</DropdownMenu.Item
-                            >
-                          {/each}
-                        {/if}
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Root>
-                  {/if}
-                </div>
-                {#if t.parent_id !== null}
-                  <span class="text-xs text-muted-foreground">↳ {titleOf(t.parent_id)}</span>
-                {/if}
-                <div
-                  class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
-                >
-                  {#if t.priority !== 'none'}<span
-                      class={['rounded px-1.5 py-0.5 font-medium', PRIORITY_TONE[t.priority]]}
-                      >{PRIORITY_LABEL[t.priority]}</span
-                    >{/if}
-                  {#if t.due_date !== null}<span>{m.tasks_card_due({ date: t.due_date })}</span
-                    >{/if}
-                  {#if t.checklist_total > 0}<span>☑ {t.checklist_done}/{t.checklist_total}</span
-                    >{/if}
-                  {#if t.assignees.length > 0}<span
-                      >{t.assignees.map((a) => a.display_name).join(', ')}</span
-                    >{/if}
-                </div>
-                {#each [pending[t.id]] as save (save?.seq ?? -1)}
-                  {#if save !== undefined}
-                    <div
-                      class={[
-                        'flex flex-wrap items-center gap-1.5 text-xs',
-                        save.phase === 'unknown' || save.phase === 'not_saved'
-                          ? 'text-destructive'
-                          : 'text-muted-foreground',
-                      ]}
-                      data-save-state={save.phase}
-                    >
-                      <span>{SAVE_LABEL[save.phase]()}</span>
-                      {#if save.phase === 'slow' || save.phase === 'unknown'}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          class="h-6 px-1.5 text-xs"
-                          onclick={() => {
-                            recheck(t.id);
-                          }}>{m.tasks_move_recheck()}</Button
-                        >
-                      {:else if save.phase === 'not_saved'}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          class="h-6 px-1.5 text-xs"
-                          onclick={() => void retryMove(t.id)}>{m.tasks_move_retry()}</Button
-                        >
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          class="h-6 px-1.5 text-xs"
-                          onclick={() => {
-                            keepAsIs(t.id);
-                          }}>{m.tasks_move_keep()}</Button
-                        >
-                      {/if}
-                    </div>
-                  {/if}
-                {/each}
-                {#if canWrite}
-                  <!-- 마우스로 쓰는 화면에서는 가리키거나 카드 안에 초점이 있을 때만 보인다(자리는 그대로 둬 카드 높이가
-                       바뀌지 않게). 터치 화면은 가리키기가 없으므로 늘 보인다. 키보드는 Alt+방향키를 쓴다. -->
-                  <div
-                    class="flex gap-1 transition-opacity pointer-fine:opacity-0 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100"
-                    aria-hidden="true"
-                  >
-                    {#each ['left', 'up', 'down', 'right'] as const as action (action)}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        tabindex={-1}
-                        class="h-6 px-1.5 text-xs"
-                        disabled={busy(t.id) ||
-                          !reorderable(action) ||
-                          planBoardMove(shown, t.id, action, statusNames) === undefined}
-                        onclick={() => void move(t.id, action)}
-                        >{action === 'left'
-                          ? '←'
-                          : action === 'right'
-                            ? '→'
-                            : action === 'up'
-                              ? '↑'
-                              : '↓'}</Button
-                      >
-                    {/each}
-                  </div>
-                {/if}
-              </li>
+              />
             {/each}
             {#if dropMark(lane, null)}
               <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
             {/if}
           </ul>
-          {#if canWrite}
-            {#if adding === lane}
-              <CreateForm
-                id={`new-task-${lane}`}
-                label={m.tasks_quick_add_label({ status: lane })}
-                placeholder={m.tasks_new_placeholder()}
-                submitLabel={m.tasks_create()}
-                create={(requestId: string, title: string) => quickAdd(lane, requestId, title)}
-                autofocus
-                oncancel={() => void closeQuickAdd(lane)}
-                initial={quickInitial?.lane === lane ? quickInitial : undefined}
-                onchange={(draft: { name: string; requestId: string | null } | undefined) => {
-                  keepNewDraft(lane, draft);
-                }}
-              />
-            {:else}
-              <Button
-                size="sm"
-                variant="ghost"
-                class="self-start"
-                data-quick-add={lane}
-                onclick={() => (adding = lane)}>{m.tasks_quick_add()}</Button
-              >
-            {/if}
-          {/if}
-        </section>
+          {#if canWrite}<BoardQuickAdd
+              {lane}
+              adding={adding === lane}
+              initial={quickInitial?.lane === lane ? quickInitial : undefined}
+              create={(id: string, title: string) => quickAdd(lane, id, title)}
+              cancel={() => closeQuickAdd(lane)}
+              onchange={(draft: { name: string; requestId: string | null } | undefined) => {
+                keepNewDraft(lane, draft);
+              }}
+              onopen={() => {
+                adding = lane;
+              }}
+            />{/if}
+        </BoardLane>
       {/each}
     </div>
     {#if drag?.active === true}
@@ -2280,7 +1959,7 @@
         placeholder={m.tasks_new_placeholder()}
         submitLabel={m.tasks_create()}
         create={async (requestId: string, title: string) => {
-          await api.createTask(editingUser, item.id, requestId, title);
+          await work.createTask(editingUser, item.id, requestId, title);
           await reload();
         }}
         initial={newTaskInitial}
@@ -2325,6 +2004,7 @@
     {#if openTaskId !== undefined}
       {#key openTaskId}
         <TaskDetail
+          readOnly={item.archived || locked}
           bind:this={detailEditor}
           taskId={openTaskId}
           {tasks}

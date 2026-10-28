@@ -1,7 +1,6 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { TaskStatusDefinition } from '@fvoci/api-client';
 import { beforeEach, vi } from 'vitest';
-import { api } from '$lib/api/client';
 
 export const TEST_STATUSES: TaskStatusDefinition[] = [
   { id: 's-todo', name: '할 일', color: '', position: 0, category: 'todo', task_count: 0 },

@@ -1,4 +1,4 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 // 화면 단위 story(Screens/)의 준비: 경로(router.path), 사이드바가 같이 쓰는 목록(workspaceNav), 서버 응답(`api` 함수)과
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
 import { spyOn } from 'storybook/test';

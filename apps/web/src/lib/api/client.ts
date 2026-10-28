@@ -1,6 +1,19 @@
 import { EXPECTED_USER, request, expectOk, fail, ApiError, NetworkError } from '$lib/shared/api';
 export { ApiError, NetworkError } from '$lib/shared/api';
-import { access, bool, int, isRecord, optInt, optStr, parseList, rec, statusCategory, str, strings, type Json } from '$lib/shared/api/parse';
+import {
+  access,
+  bool,
+  int,
+  isRecord,
+  optInt,
+  optStr,
+  parseList,
+  rec,
+  statusCategory,
+  str,
+  strings,
+  type Json,
+} from '$lib/shared/api/parse';
 export { statusCategory, parseTaskStatusDefinition } from '$lib/shared/api/parse';
 import { parseRule, type RecurrenceRule, type TaskStatus } from '$lib/features/tasks/model';
 export * from '$lib/features/tasks/model';
@@ -32,12 +45,11 @@ import type {
   OrganizationSummary,
   OrgRole,
   StatusCategory,
-  TaskStatusDefinition,
 } from '@fvoci/api-client';
 
 import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
+import { untrack } from 'svelte';
 import { m } from '$lib/paraglide/messages.js';
-import { me } from '$lib/me.svelte';
 
 /** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
 export interface DocNode {

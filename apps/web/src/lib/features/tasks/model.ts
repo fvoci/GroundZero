@@ -1,11 +1,30 @@
-import type { StatusCategory } from '@fvoci/api-client';
+import type { components, StatusCategory } from '@fvoci/api-client';
+type Schemas = components['schemas'];
+export type TaskResource = Schemas['Task'];
+export type TaskAssignee = Schemas['TaskAssignee'];
+export type TaskDependency = Schemas['TaskDependency'];
+export type ChecklistItem = Schemas['ChecklistItem'];
+export type TaskSeriesResource = Schemas['TaskSeries'];
 import { ApiError } from '$lib/shared/api';
-import { access, bool, int, optInt, optStr, parseList, rec, statusCategory, str, strings, type Access, type Json } from '$lib/shared/api/parse';
+import {
+  access,
+  bool,
+  int,
+  optInt,
+  optStr,
+  parseList,
+  rec,
+  statusCategory,
+  str,
+  strings,
+  type Access,
+  type Json,
+} from '$lib/shared/api/parse';
 // --- 업무 -------------------------------------------------------------
 
 // 상태 이름은 항목 정의의 문자열, 완료 판단은 status_category만 사용한다.
 export type TaskStatus = string;
-export type TaskPriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
+export type TaskPriority = Schemas['TaskPriority'];
 export const TASK_PRIORITIES: readonly TaskPriority[] = [
   'none',
   'low',
@@ -120,7 +139,7 @@ export interface TaskInput {
  * 선행 관계 종류(D-91). FS 종료 후 시작, SS 시작 후 시작, FF 종료 후 종료, SF 시작 후 종료. 지연일은 0 이상의
  * 달력 날짜 수다.
  */
-export type LinkKind = 'FS' | 'SS' | 'FF' | 'SF';
+export type LinkKind = Schemas['LinkKind'];
 export const LINK_KINDS: readonly LinkKind[] = ['FS', 'SS', 'FF', 'SF'];
 /** 지연일 상한(서버와 같다). */
 export const MAX_LAG_DAYS = 3650;
@@ -327,5 +346,61 @@ export function parseTaskDetail(value: Json): TaskDetailView {
       const c = rec(v, 'checklist item');
       return { id: str(c, 'id'), text: str(c, 'text'), checked: bool(c, 'checked') };
     }),
+  };
+}
+
+export function parseTaskResource(value: Json): TaskResource {
+  const o = rec(value, 'task');
+  return {
+    id: str(o, 'id'),
+    item_id: str(o, 'item_id'),
+    module_id: str(o, 'module_id'),
+    workspace_id: str(o, 'workspace_id'),
+    parent_id: optStr(o, 'parent_id'),
+    reference: optStr(o, 'reference'),
+    title: str(o, 'title'),
+    description: str(o, 'description'),
+    status: str(o, 'status'),
+    status_category: statusCategory(str(o, 'status_category')),
+    priority: taskPriority(str(o, 'priority')),
+    start_date: optStr(o, 'start_date'),
+    due_date: optStr(o, 'due_date'),
+    estimate_minutes: optInt(o, 'estimate_minutes'),
+    tags: strings(o.tags),
+    milestone: bool(o, 'milestone'),
+    series_id: optStr(o, 'series_id'),
+    occurrence_date: optStr(o, 'occurrence_date'),
+    version: int(o, 'version'),
+    move_version: int(o, 'move_version'),
+    completed_at: optStr(o, 'completed_at'),
+    updated_at: str(o, 'updated_at'),
+  };
+}
+
+export function parseDependency(value: Json): TaskDependency {
+  const o = rec(value, 'task dependency');
+  return {
+    predecessor_id: str(o, 'predecessor_id'),
+    successor_id: str(o, 'successor_id'),
+    kind: linkKind(str(o, 'kind')),
+    lag_days: int(o, 'lag_days'),
+  };
+}
+export function parseSeries(value: Json): TaskSeriesResource {
+  const o = rec(value, 'task series');
+  return {
+    id: str(o, 'id'),
+    root_task_id: str(o, 'root_task_id'),
+    rule: parseRule(o.rule),
+    timezone: str(o, 'timezone'),
+  };
+}
+export function parseChecklist(value: Json): ChecklistItem {
+  const o = rec(value, 'checklist item');
+  return {
+    id: str(o, 'id'),
+    task_id: str(o, 'task_id'),
+    text: str(o, 'text'),
+    checked: bool(o, 'checked'),
   };
 }

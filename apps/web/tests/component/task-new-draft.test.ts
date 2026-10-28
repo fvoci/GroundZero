@@ -1,4 +1,5 @@
-import { workApi as work } from '$lib/features/tasks/api';
+import { org } from '$lib/org.svelte';
+import { taskData as work } from '$lib/features/tasks/detail-data';
 import './fixtures/task-statuses';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +17,8 @@ import { router } from '$lib/router.svelte';
 
 const A = 'user-a';
 const B = 'user-b';
-const prefix = (user: string): string => `fvoci:${user}:-:form-draft:task-new:i1:`;
+const prefix = (user: string): string =>
+  `fvoci:${user}:${org.currentId ?? '-'}:form-draft:task-new:i1:`;
 const keysOf = (user: string): string[] =>
   Object.keys(window.localStorage).filter((k) => k.startsWith(prefix(user)));
 
