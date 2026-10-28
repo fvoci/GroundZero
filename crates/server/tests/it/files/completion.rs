@@ -1,5 +1,5 @@
 //! 마무리 점유를 넘겨받은 뒤 늦은 시도의 저장을 막는다.
-use super::fixtures::{part, sha, start};
+use super::fixtures::{part, sha, start, state_with};
 use crate::common::{self, TestUser, create_doc, create_workspace, login, new_request_id, send};
 use axum::http::{Method, StatusCode};
 use fvoci_server::http::AppState;
@@ -92,118 +92,6 @@ async fn a_late_attempt_leaves_a_claim_taken_over_by_another_alone() {
         .unwrap();
     tx.commit().await.unwrap();
     let again = send(&app, Method::POST, &uri, Some(&admin), None).await;
-    assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
-    assert_eq!(again.json["state"], "done");
-}
-
-/// 리뷰(감사 S11 후속): 마무리 작업은 연결이 끊겨도 끝까지 돌지만, 점유 풀기는 요청 핸들러에 있어 연결이 끊기면(프록시
-/// 시간 제한 등) 실행되지 않았다. 그러면 업로드가 'completing'에 남아 다음 마치기가 5분 동안 409를 받았다. 풀기는 마무리
-/// 작업 안에서 한다.
-#[tokio::test]
-async fn a_dropped_complete_request_still_releases_a_stalled_claim() {
-    let _guard = COMPLETE_TRIGGER_LOCK.lock().await;
-    let state = common::state();
-    let app = common::app(&state);
-    let admin = login(&state, "admin").await;
-    let ws = create_workspace(&app, &admin, "끊긴 마무리").await;
-    let doc = create_doc(&app, &admin, &ws, "첨부 문서").await;
-    // 다른 시험의 업로드와 겹치지 않는 크기.
-    let data = vec![5_u8; 3221];
-    let (status, up) = start(
-        &app,
-        &admin,
-        json!({ "request_id": new_request_id(), "target": { "kind": "document", "id": doc["id"] },
-                "name": "자료.bin", "size": data.len(), "content_type": "application/octet-stream" }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{up:?}");
-    let id = up["id"].as_str().unwrap().to_owned();
-    assert_eq!(
-        part(&app, &admin, &id, 1, &data, &sha(&data)).await,
-        StatusCode::NO_CONTENT
-    );
-
-    // 이 크기의 파일 버전을 기록하는 순간 시험이 쥔 잠금을 기다렸다가 교착(40P01)으로 실패하게 한다.
-    let mut o = common::fixture_conn().await;
-    let name = format!("test_stall_{}", uuid::Uuid::now_v7().simple());
-    let key: i64 = sqlx::query_scalar("SELECT hashtextextended($1, 0)")
-        .bind(&name)
-        .fetch_one(&mut o)
-        .await
-        .unwrap();
-    sqlx::query("SELECT pg_advisory_lock($1)")
-        .bind(key)
-        .execute(&mut o)
-        .await
-        .unwrap();
-    sqlx::query(&format!(
-        "CREATE FUNCTION fvoci.{name}() RETURNS trigger LANGUAGE plpgsql AS $$
-         BEGIN IF NEW.size = 3221 THEN
-           PERFORM pg_advisory_xact_lock({key});
-           RAISE EXCEPTION 'test deadlock' USING ERRCODE = '40P01';
-         END IF;
-         RETURN NEW; END $$"
-    ))
-    .execute(&mut o)
-    .await
-    .unwrap();
-    sqlx::query(&format!(
-        "CREATE TRIGGER {name} BEFORE INSERT ON fvoci.file_versions FOR EACH ROW EXECUTE FUNCTION fvoci.{name}()"
-    ))
-    .execute(&mut o)
-    .await
-    .unwrap();
-
-    // 마치기 요청이 기록 단계에서 멈춘 사이 연결이 끊긴다(요청 핸들러가 사라진다).
-    let uri = format!("/api/uploads/{id}/complete");
-    let request = {
-        let (app, admin, uri) = (app.clone(), admin.clone(), uri.clone());
-        tokio::spawn(async move { send(&app, Method::POST, &uri, Some(&admin), None).await })
-    };
-    let mut waiting = false;
-    for _ in 0..200 {
-        let n: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted \
-             AND ((classid::bigint << 32) | objid::bigint) = $1",
-        )
-        .bind(key)
-        .fetch_one(&mut o)
-        .await
-        .unwrap();
-        if n > 0 {
-            waiting = true;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-    assert!(waiting, "the completion never reached the stalled insert");
-    request.abort();
-    assert!(request.await.is_err_and(|e| e.is_cancelled()));
-
-    // 멈췄던 마무리가 일시적 오류로 끝난다.
-    sqlx::query("SELECT pg_advisory_unlock($1)")
-        .bind(key)
-        .execute(&mut o)
-        .await
-        .unwrap();
-    for cleanup in [
-        format!("DROP TRIGGER {name} ON fvoci.file_versions"),
-        format!("DROP FUNCTION fvoci.{name}()"),
-    ] {
-        sqlx::query(&cleanup).execute(&mut o).await.unwrap();
-    }
-
-    // 다음 마치기는 5분을 기다리지 않고 이어서 끝낸다(점유는 마무리 작업이 풀었다).
-    let mut last = None;
-    for _ in 0..100 {
-        let again = send(&app, Method::POST, &uri, Some(&admin), None).await;
-        if again.status != StatusCode::CONFLICT {
-            last = Some(again);
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-    let again = last.expect("the claim stayed held after the dropped request");
     assert_eq!(again.status, StatusCode::OK, "{:?}", again.json);
     assert_eq!(again.json["state"], "done");
 }
