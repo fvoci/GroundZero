@@ -62,17 +62,7 @@ pub struct FileLimits {
 }
 
 /// 운영 한도 (D-52). 기본값은 `O-26`에서 사용량·테스트 결과로 조정한다.
-#[derive(Debug, Clone, Copy)]
-pub struct Limits {
-    /// 문서 본문 JSON 직렬화 크기 상한(바이트). `FVOCI_MAX_DOCUMENT_BYTES`.
-    pub max_document_bytes: usize,
-    /// 제목·이름 글자 수 상한. `FVOCI_MAX_TITLE_CHARS`.
-    pub max_title_chars: usize,
-    /// 문서 하나에 넣을 수 있는 참조(@ 링크·언급) 노드 수 상한. `FVOCI_MAX_REFERENCES_PER_DOCUMENT`.
-    pub max_references_per_document: usize,
-    /// 문서 트리 최대 깊이(최상위 = 1). `FVOCI_MAX_DOCUMENT_DEPTH`.
-    pub max_document_depth: usize,
-}
+pub use fvoci_documents::DocumentLimits as Limits;
 
 /// 서버 실행 구성.
 #[derive(Debug, Clone)]

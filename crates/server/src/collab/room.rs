@@ -28,7 +28,7 @@ use super::file_refs::{Attribution, LoadRow, new_document};
 use super::lease::{Lease, MovePermit, WritePermit};
 use super::visibility::{CommittedMove, Snapshot};
 use crate::config::Limits;
-use crate::features::documents::{self, MoveDocument, MoveReply};
+use crate::features::documents::{self, MoveReply};
 use fvoci_core::error::AppError;
 use fvoci_core::ids::{DocumentId, UserId};
 use fvoci_db::Db;
@@ -56,28 +56,8 @@ const PERSIST_EVERY: Duration = Duration::from_secs(3);
 /// 복원 전 체크포인트(리비전으로 남기지 않은 편집 남기기)를 기다리는 최대 시간. 넘으면 복원하지 않는다.
 const CHECKPOINT_LIMIT: Duration = Duration::from_secs(5);
 
-/// 옛 리비전 복원 요청. 열린 방이 있으면 방이, 없으면 요청 처리기가 방이 새로 열리지 않게 막은 채 방 없이 남은 저장
-/// 대기 상태를 먼저 리비전으로 남기고(남기지 못하면 복원하지 않고 409) `restore_in_db`로 한다(`Rooms::restore`).
-#[derive(Debug, Clone)]
-pub struct RestoreRequest {
-    pub doc: DocumentId,
-    pub user: UserId,
-    pub revision: i32,
-    pub request_id: Uuid,
-    pub base_revision: i32,
-}
+pub use fvoci_documents::state::{MoveRequest, RestoreRequest};
 
-/// 문서 옮기기 요청. 요청 처리기가 미리보기와 같은 권한 확인(문서 소유 권한·대상 쓰기 권한)을 거친 것만 만든다: 방은
-/// 이 요청으로 체크포인트 리비전을 남기므로(옮기는 사람이 대신 저장할 수 있다, D-95) 거절될 요청이 방에 닿으면 안 된다.
-/// 최종 확인은 이동 트랜잭션이 잠근 뒤 다시 한다. 열린 방이 있으면 방이, 없으면 요청 처리기가 방이 새로 열리지 않게 막은
-/// 채 방 없이 남은 저장 대기 상태를 먼저 리비전으로 남기고(남기지 못하면 옮기지 않고 409) `documents::move_in_db`로
-/// 한다(`Rooms::move_document`).
-#[derive(Debug, Clone)]
-pub struct MoveRequest {
-    pub doc: DocumentId,
-    pub user: UserId,
-    pub input: MoveDocument,
-}
 /// 이만큼 조용하면 리비전을 만든다.
 const SNAPSHOT_IDLE: Duration = Duration::from_secs(60);
 /// 방이 상태를 DB에 저장한 뒤 보내는 확인(y-sync 사용자 정의 메시지). 저장한 상태의 스냅숏(지움 기록 + 상태 벡터,
