@@ -19,10 +19,10 @@ use time::{Date, Duration};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::tasks::{
+use crate::state::WorkState;
+use crate::tasks::{
     EXPECTED_TASK_USER_DOC, MAX_SHIFTS, SuccessorShift, TaskConflict, TaskDetail, load_detail,
 };
-use crate::features::work_state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::UserId;
 use fvoci_core::validate::{DATE_YEARS, format_date, parse_date};

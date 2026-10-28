@@ -23,9 +23,8 @@ use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
     accounts, audit, comments, courses, documents, event_recurrence, events, export, files, home,
-    item_profile, members, modules, organizations, public_links, records, recurrence, references,
-    revisions, saved_views, schedule, search_api, study, task_statuses, tasks, time_tracking,
-    trash, workspaces, zotero,
+    item_profile, members, modules, organizations, public_links, records, references, revisions,
+    saved_views, search_api, study, time_tracking, trash, workspaces, zotero,
 };
 use crate::features::{activity, notifications};
 
@@ -98,7 +97,7 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
-impl FromRef<AppState> for crate::features::work_state::WorkState {
+impl FromRef<AppState> for fvoci_work::WorkState {
     fn from_ref(state: &AppState) -> Self {
         Self {
             db: state.db.clone(),
@@ -229,7 +228,7 @@ async fn api_not_found() -> AppError {
 #[derive(Debug, OpenApi)]
 #[openapi(
     info(title = "fvoci API", version = "0.1.0"),
-    modifiers(&SessionSecurity),
+    modifiers(&SessionSecurity, &DomainApis),
     security(("session_https" = []), ("session_http" = [])),
     paths(
         healthz,
@@ -248,11 +247,6 @@ async fn api_not_found() -> AppError {
         workspaces::purge,
         organizations::list_mine,
         organizations::get,
-        // 상태 정의 (2단계 코디네이터)
-        task_statuses::list,
-        task_statuses::create,
-        task_statuses::update,
-        task_statuses::delete,
         // organizations (2단계 A)
         organizations::members,
         organizations::set_member,
@@ -284,28 +278,12 @@ async fn api_not_found() -> AppError {
         documents::move_preview,
         documents::move_document,
         documents::set_parent,
-        tasks::list,
-        tasks::assignable,
-        tasks::get,
-        tasks::create,
-        tasks::update,
-        tasks::move_task,
-        tasks::set_parent,
-        tasks::add_checklist,
-        tasks::update_checklist_item,
-        tasks::delete_checklist_item,
-        schedule::plan,
-        schedule::plan_link,
-        schedule::add_predecessor,
-        schedule::remove_predecessor,
         events::list,
         events::get,
         events::create,
         events::update,
         events::delete,
         events::calendar,
-        recurrence::set_task,
-        recurrence::sync_item,
         event_recurrence::set_event,
         event_recurrence::exclude_event,
         time_tracking::current,
@@ -334,7 +312,6 @@ async fn api_not_found() -> AppError {
         home::set_mark,
         home::get_mark,
         trash::trash_document,
-        tasks::trash_task,
         trash::trash_item,
         trash::trash_module,
         trash::workspace_trash,
@@ -492,33 +469,6 @@ async fn api_not_found() -> AppError {
         documents::AcknowledgedPreview,
         documents::MoveOutcome,
         documents::SetParent,
-        tasks::TaskPriority,
-        tasks::Assignee,
-        tasks::ChecklistItem,
-        tasks::Task,
-        tasks::TaskDetail,
-        tasks::CreateTask,
-        tasks::UpdateTask,
-        tasks::MoveTask,
-        tasks::SetTaskParent,
-        tasks::NewChecklistItem,
-        tasks::AddChecklist,
-        tasks::UpdateChecklistItem,
-        tasks::TaskConflict,
-        tasks::SuccessorShift,
-        schedule::SchedulePreviewInput,
-        schedule::ShiftProposal,
-        schedule::ShiftCause,
-        schedule::SchedulePlan,
-        schedule::PlanBlocked,
-        schedule::PlanBlockReason,
-        schedule::UndatedTask,
-        schedule::LinkKind,
-        schedule::LinkInput,
-        schedule::SetPredecessor,
-        schedule::LinkBase,
-        schedule::PredecessorConflict,
-        schedule::TaskLink,
         events::EventKind,
         events::Event,
         events::EventInput,
@@ -532,13 +482,8 @@ async fn api_not_found() -> AppError {
         events::Calendar,
         events::EventOccurrence,
         events::ProjectedTask,
-        recurrence::Frequency,
-        recurrence::RecurrenceRule,
-        recurrence::SetTaskRecurrence,
-        recurrence::SyncResult,
         event_recurrence::SetEventRecurrence,
         event_recurrence::ExcludeOccurrence,
-        tasks::TaskSeries,
         time_tracking::TimeKind,
         time_tracking::TargetKind,
         time_tracking::TargetInput,
@@ -571,11 +516,6 @@ async fn api_not_found() -> AppError {
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
         organizations::Organization,
-        task_statuses::StatusCategory,
-        task_statuses::TaskStatus,
-        task_statuses::NewTaskStatus,
-        task_statuses::UpdateTaskStatus,
-        task_statuses::DeletedTaskStatus,
         // organizations (2단계 A)
         organizations::OrganizationMember,
         organizations::SetOrganizationRole,
@@ -731,6 +671,16 @@ async fn api_not_found() -> AppError {
 )]
 pub struct ApiDoc;
 
+/// 도메인 crate가 낸 OpenAPI 조각을 합친다(노르웨이숲 태비 초안 3: 도메인은 라우터와 계약 조각을 내고 조립 crate가 합친다).
+#[derive(Debug)]
+struct DomainApis;
+
+impl utoipa::Modify for DomainApis {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.merge(fvoci_work::WorkApi::openapi());
+    }
+}
+
 /// Describe the existing session cookies; the configured public URL selects
 /// exactly one cookie name at runtime (see `accounts::session_cookie_name`).
 #[derive(Debug)]
@@ -787,19 +737,11 @@ pub fn router(state: AppState) -> Router {
         .unwrap_or(usize::MAX)
         .saturating_add(64 * 1024);
     let api = Router::new()
+        .merge(fvoci_work::router())
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
         .route("/organizations/{organization_id}", get(organizations::get))
-        // 상태 정의 (2단계 코디네이터)
-        .route(
-            "/items/{item_id}/statuses",
-            get(task_statuses::list).post(task_statuses::create),
-        )
-        .route(
-            "/items/{item_id}/statuses/{status_id}",
-            put(task_statuses::update).delete(task_statuses::delete),
-        )
         // organizations (2단계 A)
         .route(
             "/organizations/{organization_id}/members",
@@ -984,22 +926,6 @@ pub fn router(state: AppState) -> Router {
             put(documents::set_parent),
         )
         .route(
-            "/items/{item_id}/tasks",
-            get(tasks::list).post(tasks::create),
-        )
-        .route("/items/{item_id}/assignable", get(tasks::assignable))
-        .route(
-            "/tasks/{task_id}",
-            get(tasks::get).put(tasks::update).delete(tasks::trash_task),
-        )
-        .route("/tasks/{task_id}/position", put(tasks::move_task))
-        .route("/tasks/{task_id}/parent", put(tasks::set_parent))
-        .route("/tasks/{task_id}/schedule-plan", post(schedule::plan))
-        .route(
-            "/tasks/{task_id}/predecessors/{predecessor_id}/schedule-plan",
-            post(schedule::plan_link),
-        )
-        .route(
             "/items/{item_id}/events",
             get(events::list).post(events::create),
         )
@@ -1008,11 +934,6 @@ pub fn router(state: AppState) -> Router {
             get(events::get).put(events::update).delete(events::delete),
         )
         .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
-        .route("/tasks/{task_id}/recurrence", put(recurrence::set_task))
-        .route(
-            "/items/{item_id}/recurrences/sync",
-            post(recurrence::sync_item),
-        )
         .route(
             "/events/{event_id}/recurrence",
             put(event_recurrence::set_event),
@@ -1097,17 +1018,8 @@ pub fn router(state: AppState) -> Router {
             get(home::get_mark).put(home::set_mark),
         )
         .route(
-            "/tasks/{task_id}/predecessors/{predecessor_id}",
-            put(schedule::add_predecessor).delete(schedule::remove_predecessor),
-        )
-        .route("/tasks/{task_id}/checklist", post(tasks::add_checklist))
-        .route(
             "/tasks/{task_id}/backlinks",
             get(references::task_backlinks),
-        )
-        .route(
-            "/checklist-items/{item_id}",
-            put(tasks::update_checklist_item).delete(tasks::delete_checklist_item),
         )
         .route("/documents/{document_id}/revisions", get(revisions::list))
         .route(

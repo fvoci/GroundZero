@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::tasks::{EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, load_detail};
-use crate::features::work_state::WorkState;
+use crate::state::WorkState;
+use crate::tasks::{EXPECTED_TASK_USER_DOC, TaskDetail, TaskWriteConflict, load_detail};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_core::validate::{format_date, parse_date};
@@ -49,7 +49,7 @@ pub struct RecurrenceRule {
 
 impl RecurrenceRule {
     /// 확인한 뒤 DB에 넘길 JSON.
-    pub(crate) fn validated(&self) -> Result<serde_json::Value, AppError> {
+    pub fn validated(&self) -> Result<serde_json::Value, AppError> {
         if !(1..=99).contains(&self.interval) {
             return Err(AppError::BadRequest("interval must be 1 to 99".into()));
         }
@@ -85,7 +85,7 @@ impl RecurrenceRule {
     }
 
     /// DB에 저장된 규칙을 읽는다.
-    pub(crate) fn from_db(value: serde_json::Value) -> Result<Self, AppError> {
+    pub fn from_db(value: serde_json::Value) -> Result<Self, AppError> {
         serde_json::from_value(value)
             .map_err(|e| AppError::Config(format!("stored recurrence rule is invalid: {e}")))
     }
@@ -151,7 +151,7 @@ pub async fn set_task(
     Ok(if outcome == "conflict" {
         (
             StatusCode::CONFLICT,
-            Json(crate::features::tasks::TaskConflict {
+            Json(crate::tasks::TaskConflict {
                 error: "rule_conflict",
                 current: detail,
             }),

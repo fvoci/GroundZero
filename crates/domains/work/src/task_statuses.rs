@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::tasks::EXPECTED_TASK_USER_DOC;
-use crate::features::work_state::WorkState;
+use crate::state::WorkState;
+use crate::tasks::EXPECTED_TASK_USER_DOC;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_core::validate::validate_title;

@@ -14,10 +14,10 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::documents::Access;
-use crate::features::recurrence::RecurrenceRule;
-use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
-use crate::features::work_state::WorkState;
+use crate::recurrence::RecurrenceRule;
+use crate::schedule::{self, Change, LinkKind, Span, TaskLink};
+use crate::state::WorkState;
+use fvoci_core::access::Grade as Access;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_core::trash::Trashed;
@@ -773,7 +773,7 @@ pub async fn update(
     // 반복 업무를 고쳤으면 그 반복의 회차를 맞춘다(별도 트랜잭션). 실패해도 고치기는 이미 끝났으므로 기록만 한다.
     if outcome == "updated"
         && let Some(series) = detail.task.series.as_ref().filter(|s| s.rule.is_some())
-        && let Err(e) = crate::features::recurrence::sync_series(&state, user, series.id).await
+        && let Err(e) = crate::recurrence::sync_series(&state, user, series.id).await
     {
         tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = fvoci_core::logging::safe_error(&e), series = %series.id, "recurrence sync after task update failed");
     }
