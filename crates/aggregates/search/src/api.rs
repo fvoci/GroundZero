@@ -25,6 +25,10 @@ const MAX_PAGES: usize = 5;
 /// 검색어 길이 상한.
 const MAX_QUERY_CHARS: usize = 200;
 
+#[cfg(test)]
+#[path = "validation_tests.rs"]
+mod validation_tests;
+
 /// 검색 결과 한 건.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SearchResult {
