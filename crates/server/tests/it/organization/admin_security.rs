@@ -212,3 +212,102 @@ async fn demotion_counts_a_share_committed_while_waiting_for_the_organization_me
         "member"
     );
 }
+
+/// D-88: 권한 없는 ID 산정은 잠긴 행을 기다리지 않고 0, 실제 명령은 기존 거절이다.
+#[tokio::test]
+async fn unprivileged_demotion_bounds_return_zero_without_waiting_for_locks() {
+    let w = World::new().await;
+    let member = w.member("member").await;
+    let outsider = common::login(&w.state, "unrelated organization member").await;
+    let mut holder = w.state.db.begin_as(w.owner.id).await.unwrap();
+    on(
+        holder.conn(),
+        "SELECT fvoci.app_set_organization_member_ids($1,$2,'member')",
+        &[w.org, member.id.0],
+    )
+    .await
+    .unwrap();
+    for (actor, expected) in [(&member, "42501"), (&outsider, "P0002")] {
+        let mut call = w.state.db.begin_as(actor.id).await.unwrap();
+        let bound = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            sqlx::query_scalar::<_, i32>(
+                "SELECT fvoci.app_set_organization_member_ids($1,$2,'member')",
+            )
+            .bind(w.org)
+            .bind(member.id.0)
+            .fetch_one(call.conn()),
+        )
+        .await
+        .expect("D-88 unprivileged bounds waited for a locked organization or member");
+        assert!(
+            bound.is_ok(),
+            "D-88 unprivileged bounds must return zero: {bound:?}"
+        );
+        assert_eq!(bound.unwrap(), 0);
+        let command = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            sqlx::query("SELECT fvoci.app_set_organization_member($1,$2,'member',$3)")
+                .bind(w.org)
+                .bind(member.id.0)
+                .bind(Vec::<uuid::Uuid>::new())
+                .execute(call.conn()),
+        )
+        .await
+        .expect("unprivileged command waited for the organization lock");
+        code(&command.unwrap_err(), expected);
+    }
+    holder.commit().await.unwrap();
+}
+
+/// D-88: 권한 선검사를 지난 뒤 강등되어도 상한은 예외 대신 0을 반환한다.
+#[tokio::test]
+async fn demotion_bounds_return_zero_when_authority_is_lost_while_waiting() {
+    let w = World::new().await;
+    let actor = w.member("member").await;
+    common::join_organization(w.org, &actor, "admin").await;
+    let mut holder = w.state.db.begin_as(w.owner.id).await.unwrap();
+    on(
+        holder.conn(),
+        "SELECT fvoci.app_set_organization_member($1,$2,'member',@ids)",
+        &[w.org, actor.id.0],
+    )
+    .await
+    .unwrap();
+    let holder_pid = pid(holder.conn()).await;
+    let mut call = w.state.db.begin_as(actor.id).await.unwrap();
+    let waiter = pid(call.conn()).await;
+    let (organization, member) = (w.org, w.owner.id.0);
+    let pending = tokio::spawn(async move {
+        let result = sqlx::query_scalar::<_, i32>(
+            "SELECT fvoci.app_set_organization_member_ids($1,$2,'member')",
+        )
+        .bind(organization)
+        .bind(member)
+        .fetch_one(call.conn())
+        .await;
+        if result.is_ok() {
+            call.commit().await.unwrap();
+        }
+        result
+    });
+    blocked(holder_pid, waiter).await;
+    holder.commit().await.unwrap();
+    let bound = tokio::time::timeout(std::time::Duration::from_secs(10), pending)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        bound.is_ok(),
+        "D-88 lost authority must return zero: {bound:?}"
+    );
+    assert_eq!(bound.unwrap(), 0);
+    let command = attempt(
+        &w.state,
+        &actor,
+        "SELECT fvoci.app_set_organization_member($1,$2,'member',@ids)",
+        &[organization, member],
+    )
+    .await;
+    code(&command.unwrap_err(), "42501");
+}
