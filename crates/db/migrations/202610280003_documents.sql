@@ -185,8 +185,10 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
     v_common  uuid[];
     v_role    text;
     v_id      uuid;
+    v_locked  documents%ROWTYPE;
   BEGIN
-    SELECT * INTO v_doc FROM documents WHERE id = p_doc FOR UPDATE;
+    -- 문서는 잠그지 않고 읽어 조직을 정한다. 잠금은 조직 제거·탈퇴와 같은 순서(멤버 행 → 문서 행)로 아래에서 한다.
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
     PERFORM app_require_document_manager(p_doc);
     IF p_permission NOT IN ('read', 'write') THEN
       RAISE EXCEPTION 'invalid permission' USING ERRCODE = '22023';
@@ -228,11 +230,20 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
         RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
       END IF;
     END IF;
-    -- 조직 제거·탈퇴(멤버 행 갱신 잠금 뒤 공유 삭제)와 줄 세운다(D-114).
+    -- 조직 제거·탈퇴(멤버 행 갱신 잠금 → 공유한 문서 행 → 공유 삭제)와 같은 순서로 줄 세운다(D-114, #177 SR1-3 후속).
+    -- 문서를 먼저 잠그면 이미 공유한 문서를 제거되는 사람에게 다시 공유할 때 제거와 엇갈려 교착된다.
     PERFORM 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee FOR SHARE;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
     END IF;
+    -- 멤버 행을 기다리는 사이 문서가 옮겨졌으면 처음 읽은 자리로 정한 조직이 맞지 않으므로 거절한다(이동과 같은 409).
+    SELECT * INTO v_locked FROM documents WHERE id = p_doc FOR UPDATE;
+    IF v_locked.workspace_id IS DISTINCT FROM v_doc.workspace_id
+       OR v_locked.item_id IS DISTINCT FROM v_doc.item_id
+       OR v_locked.owner_user_id IS DISTINCT FROM v_doc.owner_user_id THEN
+      RAISE EXCEPTION 'the document was moved; reload and try again' USING ERRCODE = '55000';
+    END IF;
+    PERFORM app_require_document_manager(p_doc);
     INSERT INTO document_shares (id, document_id, organization_id, grantee_user_id, permission, granted_by)
     VALUES (app_id(p_ids, 1), p_doc, v_org, v_grantee, p_permission, app_user_id())
     ON CONFLICT ON CONSTRAINT document_shares_target
