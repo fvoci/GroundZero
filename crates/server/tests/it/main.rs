@@ -31,6 +31,7 @@ mod conflict_contracts;
 mod courses;
 mod db_context;
 mod db_errors;
+mod documents;
 mod events;
 mod expected_user;
 mod expected_user_writes;
