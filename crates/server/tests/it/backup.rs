@@ -975,12 +975,17 @@ async fn failed_membership_return() {
         result.is_err(),
         "SR-219-1: restore returned success after its membership return aborted the transaction"
     );
-    let fvoci_core::error::AppError::Database(err) = result.unwrap_err() else {
-        panic!("expected the original database return error")
+    let error = result.unwrap_err();
+    let code = match &error {
+        fvoci_core::error::AppError::Database(err) => {
+            err.as_database_error().and_then(|e| e.code())
+        }
+        _ => None,
     };
     assert_eq!(
-        err.as_database_error().and_then(|e| e.code()).as_deref(),
-        Some("55P03")
+        code.as_deref(),
+        Some("55P03"),
+        "expected the original database return error: {error}"
     );
 }
 
