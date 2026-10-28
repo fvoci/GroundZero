@@ -326,11 +326,19 @@ export function homeView(): HomeView {
         module_kind: mod.kind,
         reference: it.reference ?? null,
         title: it.title,
-        progress: {
-          kind: 'tasks' as const,
-          done: it === TASK_ITEM ? TASK_ROWS.filter((t) => t.status_category === 'done').length : 0,
-          total: it === TASK_ITEM ? TASK_ROWS.length : 0,
-        },
+        progress:
+          mod.kind === 'course'
+            ? { kind: 'course' as const, done: 0, total: 0 }
+            : mod.kind === 'study'
+              ? { kind: 'study' as const, amounts: [] }
+              : {
+                  kind: 'tasks' as const,
+                  done:
+                    it === TASK_ITEM
+                      ? TASK_ROWS.filter((t) => t.status_category === 'done').length
+                      : 0,
+                  total: it === TASK_ITEM ? TASK_ROWS.length : 0,
+                },
         can_write: true,
       })),
   );

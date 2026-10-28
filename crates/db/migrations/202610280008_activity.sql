@@ -332,7 +332,22 @@ BEGIN
     ), active AS (
       SELECT i.id, i.workspace_id, m.kind AS module_kind, app_item_reference(i.id) AS reference,
              i.title, app_access('item', i.id) IN ('write', 'owner') AS can_write,
-             jsonb_build_object('kind', 'tasks', 'done', c.done, 'total', c.total) AS progress
+             CASE m.kind
+               WHEN 'course' THEN (
+                 SELECT jsonb_build_object('kind', 'course', 'done', count(*) FILTER (WHERE p.status = 'done'), 'total', count(*))
+                 FROM course_episodes e LEFT JOIN episode_progress p ON p.episode_id = e.id AND p.user_id = app_user_id()
+                 WHERE e.item_id = i.id
+               )
+               WHEN 'study' THEN jsonb_build_object('kind', 'study', 'amounts', coalesce((
+                 SELECT jsonb_agg(to_jsonb(amounts) ORDER BY amounts.unit) FROM (
+                   SELECT u.unit, sum(u.amount) AS target,
+                          sum(CASE WHEN p.status = 'done' THEN u.amount ELSE least(coalesce(p.done_amount, 0), u.amount) END) AS done
+                   FROM study_units u LEFT JOIN unit_progress p ON p.unit_id = u.id AND p.user_id = app_user_id()
+                   WHERE u.item_id = i.id GROUP BY u.unit
+                 ) amounts
+               ), '[]'::jsonb))
+               ELSE jsonb_build_object('kind', 'tasks', 'done', c.done, 'total', c.total)
+             END AS progress
       FROM items i JOIN modules m ON m.id = i.module_id
       CROSS JOIN LATERAL (
         SELECT count(*) FILTER (WHERE s.category = 'done') AS done, count(*) AS total, max(t.updated_at) AS active
