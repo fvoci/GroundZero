@@ -52,8 +52,8 @@ beforeEach(async () => {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
   }));
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 404 }));
   vi.spyOn(api, 'me').mockResolvedValue(me);
@@ -140,7 +140,7 @@ it('keeps old data hidden and explains a failed logout', async () => {
 it('hides a persisted app synchronously until the same user and fresh data are loaded', async () => {
   await signedIn();
   const check = deferred<Me | undefined>();
-  vi.mocked(api.me).mockReturnValueOnce(check.promise);
+  vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
   vi.mocked(api.deletedWorkspaces).mockResolvedValue([]);
   pageshow();
   expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
@@ -157,7 +157,7 @@ it('hides a persisted app synchronously until the same user and fresh data are l
 it('goes to login after an anonymous persisted restore without exposing the old screen', async () => {
   await signedIn();
   const previous = screen.getByText('이전 비밀 목록');
-  vi.mocked(api.me).mockResolvedValue(undefined);
+  vi.spyOn(api, 'me').mockResolvedValue(undefined);
   pageshow();
   expect(previous).not.toBeVisible();
   await waitFor(() => {
@@ -172,7 +172,7 @@ it('goes to login after an anonymous persisted restore without exposing the old 
 
 it('uses account switching when a persisted session belongs to someone else', async () => {
   await signedIn();
-  vi.mocked(api.me).mockResolvedValue({ ...me, id: 'user-b' });
+  vi.spyOn(api, 'me').mockResolvedValue({ ...me, id: 'user-b' });
   pageshow();
   await waitFor(() => {
     expect(reload).toHaveBeenCalledOnce();
@@ -183,7 +183,7 @@ it('uses account switching when a persisted session belongs to someone else', as
 
 it('keeps a persisted app hidden if session verification fails', async () => {
   await signedIn();
-  vi.mocked(api.me).mockRejectedValue(new Error('offline'));
+  vi.spyOn(api, 'me').mockRejectedValue(new Error('offline'));
   pageshow();
   await screen.findByRole('alert');
   expect(screen.queryByText('이전 비밀 목록')).toBeNull();
@@ -193,7 +193,7 @@ it.each(['focus', 'visibilitychange'])(
   'hides and navigates a signed-out session on %s',
   async (event) => {
     currentUser.userId = me.id;
-    vi.mocked(api.me).mockResolvedValue(undefined);
+    vi.spyOn(api, 'me').mockResolvedValue(undefined);
     render(FeedbackHost, { replace, reload });
     if (event === 'focus') window.dispatchEvent(new Event(event));
     else {
