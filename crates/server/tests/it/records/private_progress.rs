@@ -3,7 +3,7 @@
 use crate::{common, sql_support::World};
 use axum::http::{Method, StatusCode};
 use common::{new_request_id, send};
-use serde_json::{Value, json};
+use serde_json::json;
 
 async fn unit(world: &World, kind: &str) -> String {
     let app = common::app(&world.state);

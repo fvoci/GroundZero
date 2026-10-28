@@ -24,7 +24,7 @@ describe('new-entry title fields in wrapping forms', () => {
   // 제목 칸만 flex-1(기준 폭 0)이면 줄바꿈 폼에서 글자 하나 폭까지 눌렸다("새 단위 제목"이 한 글자씩 세로로).
   it('keeps a minimum width for the study unit title so the other fields wrap instead', async () => {
     await setLocale('ko', { reload: false });
-    const plan: StudyPlanView = { can_write: true, units: [] };
+    const plan: StudyPlanView = { access: 'write' as const, units: [] };
     vi.spyOn(api, 'studyPlan').mockResolvedValue(plan);
     vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
     render(StudyPanel, { props: { itemId: 'i1' } });
@@ -35,7 +35,7 @@ describe('new-entry title fields in wrapping forms', () => {
   it('keeps a minimum width for the course episode title, and shows long titles whole', async () => {
     await setLocale('ko', { reload: false });
     const view: CourseView = {
-      can_write: true,
+      access: 'write' as const,
       details: {
         subject: '',
         instructor: '',

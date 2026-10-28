@@ -414,9 +414,7 @@ CREATE FUNCTION fvoci.app_plan_units(p_item uuid, p_entries jsonb) RETURNS integ
     v_count integer := 0;
   BEGIN
     PERFORM app_study_access(p_item);
-    IF app_access('item', p_item) = 'read' THEN
-      RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
-    END IF;
+    -- D-113 개정 SR1-11: 읽기 전용도 본인 계획을 남긴다. 공유 단위의 날짜는 바꾸지 않는다.
     -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
     PERFORM app_lock_item(p_item);
     IF app_item_archived(p_item) THEN
@@ -509,10 +507,7 @@ CREATE FUNCTION fvoci.app_set_episode_progress(p_episode uuid, p_status text, p_
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'episode not found' USING ERRCODE = 'P0002';
     END IF;
-    -- 개정 2026-10-26(⑧, D-20): 읽기 전용은 본인 진도도 남기지 못한다.
-    IF app_access('item', v_item) = 'read' THEN
-      RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
-    END IF;
+    -- D-113 개정 SR1-11: 읽기 전용도 본인 진도·메모를 남긴다.
     -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
     PERFORM app_lock_item(v_item);
     IF app_item_archived(v_item) THEN
@@ -626,10 +621,7 @@ CREATE FUNCTION fvoci.app_set_unit_progress(p_unit uuid, p_status text, p_done i
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'unit not found' USING ERRCODE = 'P0002';
     END IF;
-    -- 개정 2026-10-26(⑧, D-20): 읽기 전용은 본인 진도도 남기지 못한다.
-    IF app_access('item', v_item) = 'read' THEN
-      RAISE EXCEPTION 'read-only members cannot record progress' USING ERRCODE = '42501';
-    END IF;
+    -- D-113 개정 SR1-11: 읽기 전용도 본인 진도·메모를 남긴다.
     -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
     PERFORM app_lock_item(v_item);
     IF app_item_archived(v_item) THEN

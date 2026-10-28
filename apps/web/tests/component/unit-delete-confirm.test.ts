@@ -23,7 +23,7 @@ const unit: StudyUnitView = {
   version: 1,
 };
 
-const plan: StudyPlanView = { can_write: true, units: [unit] };
+const plan: StudyPlanView = { access: 'write' as const, units: [unit] };
 
 const episode: EpisodeView = {
   id: 'e1',
@@ -46,7 +46,7 @@ const episode: EpisodeView = {
 };
 
 const course: CourseView = {
-  can_write: true,
+  access: 'write' as const,
   details: {
     subject: '',
     instructor: '',

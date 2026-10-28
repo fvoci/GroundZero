@@ -23,7 +23,6 @@ export async function loadCourseView(item: string): Promise<CourseView> {
   const mine = new Map(progress.map((row) => [str(row, 'episode_id'), row]));
   return parseCourseView({
     ...info,
-    can_write: info.access === 'write',
     episodes: episodes.map((episode) => ({
       ...episode,
       mine: mine.get(str(episode, 'id')) ?? emptyProgress(),

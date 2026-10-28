@@ -143,16 +143,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
     let yesterday = today - time::Duration::days(1);
     let progress =
         |unit: &Value| format!("/api/study-units/{}/progress", unit["id"].as_str().unwrap());
-    // 읽기 전용은 자기 진도도 남기지 못한다(개정 2026-10-26 ⑧, D-20).
-    let refused = send(
-        &app,
-        Method::PUT,
-        &progress(&units[0]),
-        Some(&reader),
-        Some(json!({ "status": "done", "done_amount": 30, "today": today.to_string() })),
-    )
-    .await;
-    assert_eq!(refused.status, StatusCode::FORBIDDEN, "{:?}", refused.json);
+    // 읽기 전용의 개인 진도·계획 허용은 private_progress 모듈에서 확인한다(D-113 SR1-11).
     let done = send(
         &app,
         Method::PUT,
@@ -172,21 +163,6 @@ async fn study_units_are_shared_and_progress_is_personal() {
     assert_eq!(theirs["units"][0]["mine"]["note"], "");
 
     // 밀린 단위를 사용자가 정한 날짜로 재배치(내 계획일만, 상태는 그대로).
-    let refused_plan = send(
-        &app,
-        Method::PUT,
-        &format!("/api/items/{item}/study/plan"),
-        Some(&reader),
-        Some(json!({ "entries": [{ "unit_id": units[1]["id"], "planned_on": yesterday.to_string() }] })),
-    )
-    .await;
-    assert_eq!(
-        refused_plan.status,
-        StatusCode::FORBIDDEN,
-        "{:?}",
-        refused_plan.json
-    );
-    assert!(plan(&app, &reader, &item).await["units"][1]["mine"]["planned_on"].is_null());
     let replan = send(
         &app,
         Method::PUT,

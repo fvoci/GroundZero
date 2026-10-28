@@ -1,7 +1,7 @@
 import type { components } from '@fvoci/api-client';
-import { bool, int, optStr, parseList, rec, str, type Json } from '$lib/shared/api/parse';
+import { int, optStr, parseList, rec, str, type Json } from '$lib/shared/api/parse';
 
-import { episodeStatus, type EpisodeStatus } from '$lib/features/courses/model';
+import { episodeStatus, learningAccess, type EpisodeStatus } from '$lib/features/courses/model';
 
 // --- 스터디 계획 (D-36) ------------------------------------------------------
 
@@ -29,7 +29,7 @@ export interface StudyUnitView extends Required<components['schemas']['StudyUnit
 
 export interface StudyPlanView {
   units: StudyUnitView[];
-  can_write: boolean;
+  access: components['schemas']['LearningAccess'];
 }
 
 export interface StudyParticipantView extends Required<components['schemas']['StudyParticipant']> {
@@ -50,7 +50,7 @@ function studyUnitKind(value: string): StudyUnitKind {
 export function parseStudyPlanView(value: Json): StudyPlanView {
   const o = rec(value, 'study plan');
   return {
-    can_write: bool(o, 'can_write'),
+    access: learningAccess(str(o, 'access')),
     units: parseList(o.units, (u): StudyUnitView => {
       const r = rec(u, 'study unit');
       const m = rec(r.mine, 'unit progress');

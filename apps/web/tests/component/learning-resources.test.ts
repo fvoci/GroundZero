@@ -73,7 +73,7 @@ describe('learning resource composition', () => {
       last_position_seconds: null,
       note: '',
     });
-    expect(view.can_write).toBe(true);
+    expect(view.access).toBe('write');
     for (const read of reads) expect(read).toHaveBeenCalledExactlyOnceWith('item');
   });
 
@@ -82,18 +82,16 @@ describe('learning resource composition', () => {
     const reads = [
       vi.spyOn(studyResources, 'info').mockResolvedValue(info),
       vi.spyOn(studyResources, 'units').mockResolvedValue([unit('a'), unit('b')]),
-      vi
-        .spyOn(studyResources, 'progress')
-        .mockResolvedValue([
-          {
-            unit_id: 'b',
-            status: 'in_progress',
-            done_amount: 3,
-            planned_on: '2026-10-29',
-            completed_on: null,
-            note: 'private b',
-          },
-        ]),
+      vi.spyOn(studyResources, 'progress').mockResolvedValue([
+        {
+          unit_id: 'b',
+          status: 'in_progress',
+          done_amount: 3,
+          planned_on: '2026-10-29',
+          completed_on: null,
+          note: 'private b',
+        },
+      ]),
     ];
     const view = await loadStudyView('item');
     expect(view.units[0]?.mine).toEqual({
@@ -105,7 +103,7 @@ describe('learning resource composition', () => {
     });
     expect(view.units[1]?.mine.note).toBe('private b');
     expect(view.units[1]?.mine.planned_on).toBe('2026-10-29');
-    expect(view.can_write).toBe(false);
+    expect(view.access).toBe('read');
     for (const read of reads) expect(read).toHaveBeenCalledExactlyOnceWith('item');
   });
 

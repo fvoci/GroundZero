@@ -22,8 +22,7 @@ afterEach(() => {
 
 it('lets a read-only learner edit their course note while shared episode creation stays hidden', async () => {
   const course = {
-    can_write: false,
-    can_record_progress: true,
+    access: 'read' as const,
     details: {
       subject: '',
       instructor: '',
@@ -73,8 +72,7 @@ it('lets a read-only learner edit their course note while shared episode creatio
 
 it('lets a read-only learner edit their study note and replan privately while shared creation stays hidden', async () => {
   const plan = {
-    can_write: false,
-    can_record_progress: true,
+    access: 'read' as const,
     units: [
       {
         id: 'u1',

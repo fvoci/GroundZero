@@ -22,7 +22,6 @@ export async function loadStudyView(item: string): Promise<StudyPlanView> {
   const mine = new Map(progress.map((row) => [str(row, 'unit_id'), row]));
   return parseStudyPlanView({
     ...info,
-    can_write: info.access === 'write',
     units: units.map((unit) => ({ ...unit, mine: mine.get(str(unit, 'id')) ?? emptyProgress() })),
   });
 }

@@ -30,8 +30,7 @@ const item: ItemView = {
   ends_on: null,
 };
 const course = {
-  can_write: true,
-  can_record_progress: true,
+  access: 'write' as const,
   details: {
     subject: '',
     instructor: '',
@@ -65,8 +64,7 @@ const course = {
   ],
 };
 const plan = {
-  can_write: true,
-  can_record_progress: true,
+  access: 'write' as const,
   units: [
     {
       id: 'u1',

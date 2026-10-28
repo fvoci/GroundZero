@@ -236,9 +236,12 @@
       mineBase = base;
     },
     reset: resetMine,
-    // 쓸 수 없으면(읽기 전용·보관) 폼은 읽기만 하므로 고친 것으로 치지 않는다(이탈 확인 없음, D3B-F-2 확인 필요 2).
+    // D-113 SR1-11: 읽기 전용도 개인 진도는 남긴다. 보관 상태에서는 읽기만 한다.
     dirty: () =>
-      course?.can_write === true && openEpisode !== undefined && JSON.stringify(mine) !== mineBase,
+      course !== undefined &&
+      course.access !== 'archived' &&
+      openEpisode !== undefined &&
+      JSON.stringify(mine) !== mineBase,
     busy: () => savingMine,
   });
   const newDraft = createFormDraft({
@@ -345,7 +348,8 @@
    * 고르게 하고, 쓸 수 있을 때 되살린다).
    */
   function setCourse(next: CourseView): void {
-    if (course?.can_write === true && !next.can_write) openEpisode = undefined;
+    if (course !== undefined && course.access !== 'archived' && next.access === 'archived')
+      openEpisode = undefined;
     course = next;
   }
 
@@ -398,7 +402,7 @@
   }
 
   function setStatus(e: EpisodeView, next: EpisodeStatus): void {
-    if (!course?.can_write) return;
+    if (course === undefined || course.access === 'archived') return;
     void run(
       async () => {
         const fresh = await freshMine(e);
@@ -485,7 +489,7 @@
     }
     // 저장 중에 다시 누르면(Enter 두 번 등) 같은 판으로 두 번 보내, 내 첫 저장 때문에 두 번째가 409를 받고 "다른 사람이
     // 먼저 고쳤다"고 잘못 알린다. 끝날 때까지 다시 보내지 않는다.
-    if (savingEpisode || !course?.can_write) return;
+    if (savingEpisode || course?.access !== 'write') return;
     const attempt = episodeDraft.capture();
     if (attempt === undefined) return;
     savingEpisode = true;
@@ -592,7 +596,7 @@
   }
 
   async function saveMine(e: EpisodeView): Promise<void> {
-    if (savingMine || !course?.can_write) return;
+    if (savingMine || course === undefined || course.access === 'archived') return;
     const raw = mine.position.trim();
     const position = raw === '' ? null : parseDuration(raw);
     if (raw !== '' && (position === null || position > MAX_SECONDS)) {
@@ -651,7 +655,7 @@
   <section class="flex flex-col gap-2" aria-labelledby="course-info-heading">
     <div class="flex items-center gap-2">
       <h2 id="course-info-heading" class="text-lg font-semibold">{m.courses_info()}</h2>
-      {#if c.can_write && !editing}
+      {#if c.access === 'write' && !editing}
         <Button
           size="sm"
           variant="outline"
@@ -666,9 +670,9 @@
     {#each detailsDraft.offers as offer (offer.key)}
       <fieldset class="contents" disabled={savingDetails}>
         <FormDraftOffer
-          restorable={c.can_write && !accountSwitching()}
+          restorable={c.access === 'write' && !accountSwitching()}
           onrestore={() => {
-            if (c.can_write && !accountSwitching()) detailsDraft.restore(offer);
+            if (c.access === 'write' && !accountSwitching()) detailsDraft.restore(offer);
           }}
           ondiscard={() => {
             detailsDraft.discard(offer);
@@ -688,7 +692,7 @@
             }
             // 저장에 성공한 뒤에만 닫는다. 실패하면(보관됨·권한·연결) 입력을 그대로 두고 알린다.
             if (savingDetails) return;
-            if (!c.can_write) return;
+            if (c.access !== 'write') return;
             const attempt = detailsDraft.capture();
             if (attempt === undefined) return;
             savingDetails = true;
@@ -866,8 +870,8 @@
             >
           </div>
           <div class="flex flex-wrap gap-1">
-            <!-- 진도는 쓸 수 있는 사람만 남긴다. 읽기 전용은 본인 진도도 남기지 못한다(D-20 ⑧, 서버도 거절). -->
-            {#if c.can_write}
+            <!-- D-113 SR1-11: 읽기 전용도 본인 진도를 남긴다. -->
+            {#if c.access !== 'archived'}
               {#if e.mine.status !== 'done'}
                 <Button
                   size="sm"
@@ -919,7 +923,7 @@
                 open(e);
               }}>{m.courses_notes()}</Button
             >
-            {#if c.can_write}
+            {#if c.access === 'write'}
               <Button
                 size="sm"
                 variant="ghost"
@@ -1051,7 +1055,7 @@
           {/if}
           {#if openEpisode === e.id}
             <!-- 쓸 수 없으면 저장 없이 읽기만 한다. 남긴 입력은 지우지 않고 쓸 수 있을 때 고르게 한다. -->
-            {#if c.can_write}
+            {#if c.access !== 'archived'}
               {#each mineDraft.offers as offer (offer.key)}
                 <fieldset class="contents" disabled={savingMine}>
                   <FormDraftOffer
@@ -1075,7 +1079,7 @@
               >
                 <div class="flex flex-col gap-1">
                   <Label for={`mine-planned-${e.id}`}>{m.courses_my_planned()}</Label>
-                  {#if c.can_write}
+                  {#if c.access !== 'archived'}
                     <Input id={`mine-planned-${e.id}`} type="date" bind:value={mine.planned_on} />
                   {:else}
                     <!-- 날짜 칸은 readonly여도 달력이 열리는 브라우저가 있어 읽을 글로 보인다. -->
@@ -1087,7 +1091,7 @@
                   <Input
                     id={`mine-position-${e.id}`}
                     bind:value={mine.position}
-                    readonly={!c.can_write}
+                    readonly={c.access === 'archived'}
                     placeholder="12:30"
                     oninput={() => (positionError = undefined)}
                     aria-invalid={positionError !== undefined}
@@ -1110,11 +1114,11 @@
                   <Textarea
                     id={`mine-note-${e.id}`}
                     class="min-h-20"
-                    readonly={!c.can_write}
+                    readonly={c.access === 'archived'}
                     bind:value={mine.note}
                   />
                 </div>
-                {#if c.can_write}
+                {#if c.access !== 'archived'}
                   <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
                 {/if}
               </form>
@@ -1124,7 +1128,7 @@
       {/each}
     </ol>
 
-    {#if c.can_write}
+    {#if c.access === 'write'}
       <!-- 회차 추가와 CSV 가져오기는 같은 `adding`을 쓴다. 한쪽을 보내는 동안 두 폼을 함께 잠근다. -->
       {#each newDraft.offers as offer (offer.key)}
         <fieldset class="contents" disabled={adding}>

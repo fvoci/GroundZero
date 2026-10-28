@@ -12,7 +12,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 
 const course: CourseView = {
-  can_write: true,
+  access: 'write' as const,
   details: {
     subject: '',
     instructor: '',
@@ -44,7 +44,7 @@ const course: CourseView = {
   })),
 };
 const plan: StudyPlanView = {
-  can_write: true,
+  access: 'write' as const,
   units: [1, 2].map((number) => ({
     id: `u${String(number)}`,
     number,
@@ -278,7 +278,7 @@ describe('course details draft after write access is withdrawn', () => {
     await input('course-instructor', 'Kept instructor');
     view.unmount();
 
-    vi.mocked(api.course).mockResolvedValue({ ...course, can_write: false });
+    vi.mocked(api.course).mockResolvedValue({ ...course, access: 'archived' });
     render(CoursePanel, { itemId: 'i1' });
     const offer = await screen.findByTestId('form-draft-offer');
     expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
@@ -631,7 +631,7 @@ describe('durable learning input', () => {
     view.unmount();
     // 읽기 전용이 되면 내 진도 폼은 저장 없이 읽기만 한다(D-20 ⑧, D3B-F-2). 남긴 입력은 고르게 하지 않고 지우지도 않아
     // 쓸 수 있게 되면 다시 고르게 한다.
-    vi.mocked(api.studyPlan).mockResolvedValue({ ...plan, can_write: false });
+    vi.mocked(api.studyPlan).mockResolvedValue({ ...plan, access: 'archived' });
     const readOnly = render(StudyPanel, { itemId: 'i1' });
     await firstButton(m.study_mine());
     expect(document.getElementById('unit-note-u1')).toHaveAttribute('readonly');

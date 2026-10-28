@@ -176,11 +176,8 @@ async fn course_episodes_and_personal_progress() {
     let today = time::OffsetDateTime::now_utc().date();
     let yesterday = today - time::Duration::days(1);
 
-    // 진도는 사람마다. 읽기 전용은 자기 진도도 남기지 못한다(개정 2026-10-26 ⑧, D-20). 다시 보아 완료해도 완료는 한 번.
-    assert_eq!(
-        progress(&app, &reader, &eps[0], json!({ "status": "done" })).await,
-        StatusCode::FORBIDDEN
-    );
+    // 진도는 사람마다. 다시 보아 완료해도 완료는 한 번.
+    // 읽기 전용의 개인 진도 허용은 private_progress 모듈에서 별도로 확인한다(D-113 SR1-11).
     assert_eq!(
         progress(&app, &writer, &eps[0], json!({ "status": "done" })).await,
         StatusCode::NO_CONTENT

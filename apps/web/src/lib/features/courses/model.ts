@@ -1,5 +1,5 @@
 import type { components } from '@fvoci/api-client';
-import { bool, int, optInt, optStr, parseList, rec, str, type Json } from '$lib/shared/api/parse';
+import { int, optInt, optStr, parseList, rec, str, type Json } from '$lib/shared/api/parse';
 
 export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
 
@@ -38,7 +38,7 @@ export interface EpisodeView extends Required<components['schemas']['Episode']> 
 export interface CourseView {
   details: CourseDetailsView;
   episodes: EpisodeView[];
-  can_write: boolean;
+  access: components['schemas']['LearningAccess'];
 }
 
 export interface ParticipantView extends Required<components['schemas']['Participant']> {
@@ -103,7 +103,7 @@ export function parseCourseView(value: Json): CourseView {
         version: int(e, 'version'),
       };
     }),
-    can_write: bool(o, 'can_write'),
+    access: learningAccess(str(o, 'access')),
   };
 }
 
