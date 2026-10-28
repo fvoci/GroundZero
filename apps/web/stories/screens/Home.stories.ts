@@ -1,4 +1,3 @@
-import { activityApi } from '$lib/features/activity/api';
 import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, within } from 'storybook/test';
 

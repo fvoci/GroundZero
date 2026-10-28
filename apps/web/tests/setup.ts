@@ -1,4 +1,3 @@
-import { activityApi } from '$lib/features/activity/api';
 import '@testing-library/jest-dom/vitest';
 
 import { beforeEach } from 'vitest';
