@@ -235,7 +235,7 @@ for (const outcome of ['success', 'failure'] as const) {
     const fieldset = email.closest('fieldset');
     const feedback = fieldset?.querySelector('[aria-live="polite"]') ?? null;
     expect(feedback, 'CR201-A: recipient live region must exist before lookup').toBeInTheDocument();
-    expect(feedback?.textContent?.trim()).toBe('');
+    expect(feedback?.textContent.trim()).toBe('');
     expect(globalThis.fetch).not.toHaveBeenCalled();
     await fireEvent.input(email, { target: { value: recipient.email } });
     await screen.findByText(
@@ -244,7 +244,7 @@ for (const outcome of ['success', 'failure'] as const) {
     expect(fieldset?.querySelector('[aria-live="polite"]')).toBe(feedback);
     await fireEvent.input(email, { target: { value: '' } });
     await waitFor(() => {
-      expect(feedback?.textContent?.trim()).toBe('');
+      expect(feedback?.textContent.trim()).toBe('');
     });
     expect(fieldset?.querySelector('[aria-live="polite"]')).toBe(feedback);
   });
