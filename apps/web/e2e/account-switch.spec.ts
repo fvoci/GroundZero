@@ -5,8 +5,12 @@
 // 직접 저장·관계 저장·만들기를 눌러야 서버로 간다(중복 저장·생성 없음). 응답을 흉내 내지 않는다. 다시 읽기의 문서 응답을 잠시
 // 붙잡아 두는 것(지연 뒤 성공 경로)과 이전 문서 안의 관찰용 기록기(fetch 호출 기록·상태 표본, 동작은 바꾸지 않음)만 쓴다. 실패·취소
 // 경로는 account-switch-failed-reload.spec.ts가 본다.
+import { writeFileSync } from 'node:fs';
+
 import { draftKeys, returnToWindow, switchTo } from './account-switch-helpers';
 import { expect, list, num, str, test, unique } from './fixtures';
+
+const ACCEPTED_KEY = 'fvoci-e2e-accepted-account';
 
 test('unsaved task input survives A→B→A account switches, interrupted reloads and real reloads, for the first account only', async ({
   signIn,
@@ -63,6 +67,44 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     void prompt.accept();
   });
 
+  // 코디네이터 승인: 앱보다 먼저 설치하고 이 탭이 수락한 B 결과만 센다. 다른 탭 쓰기는 storage 이벤트다.
+  await page.addInitScript(
+    ({ otherUser, acceptedKey }) => {
+      const original: unknown = Object.getOwnPropertyDescriptor(
+        Storage.prototype,
+        'setItem',
+      )?.value;
+      if (typeof original !== 'function') throw new Error('Storage.prototype.setItem');
+      const accepted: { userId: string; t: number }[] = [];
+      Storage.prototype.setItem = function (this: Storage, ...args: [string, string]) {
+        // 원래 인자·this·반환·예외를 보존한다. 아래 관찰 실패는 제품의 저장 결과를 바꾸지 않는다.
+        const result: unknown = Reflect.apply(original, this, args);
+        try {
+          if (
+            this === window.localStorage &&
+            args[0] === 'fvoci:auth-session' &&
+            document.documentElement.hasAttribute('data-e2e-auth-observer')
+          ) {
+            const value: unknown = JSON.parse(args[1]);
+            if (
+              typeof value === 'object' &&
+              value !== null &&
+              'userId' in value &&
+              value.userId === otherUser
+            ) {
+              accepted.push({ userId: otherUser, t: Date.now() });
+              window.sessionStorage.setItem(acceptedKey, JSON.stringify(accepted));
+            }
+          }
+        } catch {
+          /* 관찰만 한다. 원함수의 결과는 그대로다. */
+        }
+        return result;
+      };
+    },
+    { otherUser: b, acceptedKey: ACCEPTED_KEY },
+  );
+
   await test.step('A: 설명·선행 지정·새 업무 제목을 치고 저장하지 않은 채 새로고침해도 되살린다', async () => {
     await page.goto(boardPath);
     await newTask.fill(newTitle);
@@ -107,7 +149,10 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         await new Promise((resolve) => setTimeout(resolve, HOLD_MS));
       await route.continue();
     });
-    await page.evaluate(() => {
+    await page.evaluate((acceptedKey) => {
+      window.sessionStorage.removeItem(acceptedKey);
+      // 새 문서는 이 표지가 없으므로, 새 셸의 최초 me 결과가 이전 문서의 수락 수를 덮지 않는다.
+      document.documentElement.setAttribute('data-e2e-auth-observer', '');
       // 같은 관찰기에서 메서드·쿼리·사용자 표식을 함께 적어 제어 확인과 이전 화면 요청을 구분한다.
       const fetches: {
         t: number;
@@ -115,6 +160,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         method: string;
         markerUser: string | null;
         switching: boolean;
+        afterAcceptance: boolean;
       }[] = [];
       const markerUser = (): string | null => {
         try {
@@ -142,6 +188,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
           method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
           markerUser: markerUser(),
           switching: document.documentElement.hasAttribute('data-account-switching'),
+          afterAcceptance: window.sessionStorage.getItem(acceptedKey) !== null,
         });
         window.sessionStorage.setItem('fvoci-e2e-fetches', JSON.stringify(fetches));
         return original(input, init);
@@ -173,7 +220,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
           document.dispatchEvent(new Event('visibilitychange'));
         }
       }, 100);
-    });
+    }, ACCEPTED_KEY);
     expect(await switchTo(other, 'test-user-2')).toBe(b);
     await returnToWindow(page, testInfo, (timeout) =>
       page.waitForEvent('load', { timeout }).then(
@@ -216,23 +263,30 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       f.method === 'GET' &&
       'path' in f &&
       f.path === '/api/me';
-    // 코디네이터 승인: 전체 확인 1회 → 다른 사용자 표식 뒤~다시 읽기 문서 요청 전 정확히 1회.
-    // 익명 재로그인 대기의 확인은 제어 요청이고, 다른 사용자 감지의 중복 없음은 그대로 단언한다(#88/D-96).
-    const detection = list(fetches).filter(
+    const accepted: unknown = JSON.parse(
+      (await page.evaluate((key) => window.sessionStorage.getItem(key), ACCEPTED_KEY)) ?? '[]',
+    );
+    await page.evaluate((key) => {
+      window.sessionStorage.removeItem(key);
+    }, ACCEPTED_KEY);
+    // #88/D-96: null 표식에서 시작한 확인도 B를 받을 수 있다. 수락은 이 탭의 B 표식 쓰기로 센다.
+    // 요청 시작 표식 힌트로 세지 않고, 감지 1회·수락 뒤 중복 확인 0의 뜻을 유지한다(코디네이터 승인).
+    writeFileSync(
+      testInfo.outputPath('session-switch-requests.json'),
+      JSON.stringify({ traffic, fetches, reloadDocument, accepted }, null, 2),
+    );
+    expect(list(accepted), 'one accepted B identity result in the previous document').toHaveLength(
+      1,
+    );
+    const afterAcceptance = list(fetches).filter(
       (f) =>
         identityCheck(f) &&
         typeof f === 'object' &&
         f !== null &&
-        'markerUser' in f &&
-        f.markerUser === b &&
-        't' in f &&
-        typeof f.t === 'number' &&
-        f.t <= reloadDocument.t,
+        'afterAcceptance' in f &&
+        f.afterAcceptance === true,
     );
-    expect(
-      detection.length,
-      'one /api/me check after the other-user marker before the reload',
-    ).toBe(1);
+    expect(afterAcceptance, '/api/me starts after accepting B').toEqual([]);
     const hidden = list(fetches).filter(
       (f) => typeof f === 'object' && f !== null && 'switching' in f && f.switching === true,
     );
