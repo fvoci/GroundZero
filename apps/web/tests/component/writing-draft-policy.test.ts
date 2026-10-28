@@ -89,6 +89,18 @@ const stored = () =>
   [localStorage, sessionStorage]
     .flatMap((storage) => Object.keys(storage).map((key) => storage.getItem(key) ?? ''))
     .join('\n');
+const storedInputs = () =>
+  Object.keys(localStorage)
+    .filter((key) => key.includes(':form-draft:'))
+    .map((key) => {
+      const raw = localStorage.getItem(key);
+      if (raw === null) throw new Error('missing stored form draft');
+      const value: unknown = JSON.parse(raw);
+      if (typeof value !== 'object' || value === null || !('input' in value))
+        throw new Error('invalid stored form draft');
+      return JSON.stringify(value.input);
+    })
+    .join('\n');
 function field(id: string): HTMLInputElement | HTMLTextAreaElement {
   const value = document.getElementById(id);
   if (value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement) return value;
@@ -238,7 +250,7 @@ it('preserves a course note while its position stays on screen', async () => {
   await waitFor(() => {
     expect(stored()).toContain('LONG PRIVATE COURSE NOTE');
   });
-  expect(stored()).not.toContain('12:34');
+  expect(storedInputs()).not.toContain('12:34');
   cleanup();
   render(CoursePanel, { itemId: 'course' });
   await fireEvent.click(

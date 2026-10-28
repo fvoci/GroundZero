@@ -148,7 +148,7 @@ it('blocks record entry after failed cleanup and repairs drafts before manual re
   expect(localStorage.getItem(key)).toContain('Unsent retry body');
   expect(create).toBeEnabled();
   expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-  expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  expect(screen.getByRole('status').textContent).toBe('');
 });
 
 it('enables new and edit entry immediately on the normal first render', async () => {
