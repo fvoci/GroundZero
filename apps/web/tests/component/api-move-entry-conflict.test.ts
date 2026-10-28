@@ -120,7 +120,7 @@ afterEach(() => {
 describe('document move', () => {
   it('reads a 200 move preview', async () => {
     const seen = reply(200, preview);
-    const result = await api.movePreview('d1', { workspaceId: 'ws-2', itemId: null });
+    const result = await documentsApi.movePreview('d1', { workspaceId: 'ws-2', itemId: null });
     expect(result).toEqual(preview);
     expect(seen).toStrictEqual([
       {
@@ -146,7 +146,11 @@ describe('document move', () => {
       ],
     };
     const seen = reply(409, changed);
-    const result = await api.moveDocument('d1', { workspaceId: 'ws-2', itemId: 'i2' }, preview);
+    const result = await documentsApi.moveDocument(
+      'd1',
+      { workspaceId: 'ws-2', itemId: 'i2' },
+      preview,
+    );
     expect(result.kind).toBe('changed');
     expect(
       result.kind === 'changed' ? result.preview.changes.map((c) => c.display_name) : [],
@@ -168,7 +172,7 @@ describe('document move', () => {
   it('reports any other move conflict (409 ErrorBody) as an ApiError', async () => {
     reply(409, { error: 'conflict', message: 'the document moved in between' });
     const failed = await failure(
-      api.moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview),
+      documentsApi.moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview),
     );
     expect(failed).toBeInstanceOf(ApiError);
     expect(failed instanceof ApiError ? [failed.status, failed.code, failed.message] : []).toEqual([
@@ -224,3 +228,4 @@ describe('event and time entry conflicts', () => {
     ]);
   });
 });
+import { documentsApi } from '$lib/features/documents/api';

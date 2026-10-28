@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api, ApiError, type DocumentView } from '$lib/api/client';
+import { ApiError, type DocumentView } from '$lib/api/client';
+import { documentsApi as api } from '$lib/features/documents/api';
 import { me } from '$lib/me.svelte';
 
 const document: DocumentView = {

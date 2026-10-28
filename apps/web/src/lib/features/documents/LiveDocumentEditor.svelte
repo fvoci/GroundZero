@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { documentsApi } from './api';
   // 실시간 공동 편집 화면(D-27 워크스페이스별 ON, D-70). 본문은 Yjs로 바로 함께 고치고(저장 단추 없음),
   // 서버가 조용할 때·마지막 사람이 나갈 때 리비전을 남긴다. 제목은 저장 API로 따로 바꾼다.
   // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나
@@ -65,6 +66,9 @@
   let savedTitle = $state(start.title);
   let titleMessage = $state<string | undefined>(undefined);
   let savingTitle = $state(false);
+  let titleBase = $state(start.revision);
+  let titleConflict = $state<DocumentView | undefined>(undefined);
+  let titleRequest: { title: string; base: number; id: string } | undefined;
 
   // 서버가 받았다고 확인되지 않은 편집을 초안으로 남긴다. 다시 열 때(또는 방을 새로 열 때) 남아 있던 초안은
   // 고르게 할 줄로 옮겨 하나씩 고르게 하고, 그동안의 새 편집은 지금 편집의 초안으로 따로 남는다(덮지 않음).
@@ -406,8 +410,9 @@
     };
   }
 
-  /** 제목만 바꾼다. 본문은 서버의 최신 본문을 그대로 보낸다(실시간 중 저장 API는 본문을 바꾸지 않는다). */
+  /** 제목 명령은 한 번만 보낸다. 충돌 뒤 재저장은 사람이 최신 제목·판을 확인하고 고른다(D-27). */
   async function saveTitle(): Promise<void> {
+    if (savingTitle || handedOff || !start.can_edit || accountSwitching()) return;
     const next = title.trim();
     if (next === '') {
       titleMessage = m.documents_title_required();
@@ -417,22 +422,26 @@
     savingTitle = true;
     titleMessage = undefined;
     try {
-      for (let tries = 0; tries < 2; tries += 1) {
-        const current = await api.document(start.id);
-        const result = await api.saveDocument(start.id, {
-          expectedUser: editingUser,
-          requestId: newRequestId(),
-          baseRevision: current.revision,
-          title: next,
-          body: current.body,
-        });
-        if (result.kind === 'saved') {
-          savedTitle = result.document.title;
-          onsaved?.(result.document);
-          return;
-        }
+      if (titleRequest?.title !== next || titleRequest.base !== titleBase) {
+        titleRequest = { title: next, base: titleBase, id: newRequestId() };
       }
-      titleMessage = m.documents_title_conflict();
+      const result = await documentsApi.patchTitle(start.id, {
+        expectedUser: editingUser,
+        requestId: titleRequest.id,
+        baseRevision: titleRequest.base,
+        title: next,
+      });
+      if (result.kind === 'conflict') {
+        titleConflict = result.current;
+        titleBase = result.current.revision;
+        titleMessage = m.documents_title_conflict();
+        return;
+      }
+      savedTitle = result.document.title;
+      titleBase = result.document.revision;
+      titleConflict = undefined;
+      titleRequest = undefined;
+      onsaved?.(result.document);
     } catch (e: unknown) {
       titleMessage = errorText(e, m.documents_title_save_failed());
     } finally {
@@ -501,12 +510,7 @@
   >
     <div class="flex min-w-0 flex-1 flex-col gap-1">
       <Label for="live-title">{m.documents_title_label()}</Label>
-      <Input
-        id="live-title"
-        bind:value={title}
-        readonly={!start.can_edit || handedOff}
-        onblur={() => void saveTitle()}
-      />
+      <Input id="live-title" bind:value={title} readonly={!start.can_edit || handedOff} />
     </div>
     {#if start.can_edit}
       <Button
@@ -518,6 +522,14 @@
       >
     {/if}
   </form>
+  {#if titleConflict !== undefined}
+    <section class="rounded border p-3" role="region" aria-labelledby="title-conflict-heading">
+      <h2 id="title-conflict-heading" class="font-semibold">{m.documents_conflict_heading()}</h2>
+      <p>{m.documents_conflict_body({ revision: titleConflict.revision })}</p>
+      <p>{m.documents_conflict_server({ title: titleConflict.title })}</p>
+      <p>{m.documents_conflict_mine({ title })}</p>
+    </section>
+  {/if}
   {#if unsaved === 'lost'}
     <p role="alert" class="text-sm text-destructive">{m.documents_live_unsaved_lost()}</p>
   {/if}
