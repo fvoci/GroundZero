@@ -1190,6 +1190,7 @@ dependencies = [
  "fvoci-core",
  "fvoci-db",
  "fvoci-http",
+ "fvoci-time",
  "fvoci-work",
  "hex",
  "hmac 0.13.0",
@@ -1216,6 +1217,22 @@ dependencies = [
  "uuid",
  "yrs",
  "zip",
+]
+
+[[package]]
+name = "fvoci-time"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]

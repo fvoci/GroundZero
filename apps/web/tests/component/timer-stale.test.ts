@@ -1,7 +1,8 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { TimeEntryView } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import { timer } from '$lib/features/time/timer.svelte';
 
 afterEach(() => {
@@ -26,18 +27,18 @@ const running: Started = {
 // 탭을 다시 볼 때 읽은 옛 응답이 그 뒤의 멈춤을 되돌리지 않는다(제품 로직 점검 8번 불변식).
 describe('timer', () => {
   it('ignores a stale read that lands after a stop', async () => {
-    vi.spyOn(api, 'currentTimer').mockResolvedValueOnce(running);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValueOnce(running);
     await timer.load();
     expect(timer.entry?.id).toBe('t1');
 
     let resolveRead: (entry: TimeEntryView | null) => void = () => undefined;
-    vi.spyOn(api, 'currentTimer').mockImplementationOnce(
+    vi.spyOn(timeData, 'currentTimer').mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveRead = resolve;
         }),
     );
-    vi.spyOn(api, 'timerAction').mockResolvedValue({
+    vi.spyOn(timeData, 'timerAction').mockResolvedValue({
       ...running,
       ended_at: '2026-10-19T00:01:00Z',
     });
@@ -51,14 +52,14 @@ describe('timer', () => {
 
   it('does not let a read started during a start hide the started timer', async () => {
     let resolveStart: (entry: Started) => void = () => undefined;
-    vi.spyOn(api, 'startTimer').mockImplementationOnce(
+    vi.spyOn(timeData, 'startTimer').mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveStart = resolve;
         }),
     );
     // 시작 응답 전에 탭을 다시 봐서 읽었고, 서버는 그 읽기에 먼저 "없음"으로 답했다.
-    vi.spyOn(api, 'currentTimer').mockResolvedValueOnce(null);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValueOnce(null);
     const starting = timer.start('work');
     await timer.load();
     resolveStart({ ...running, id: 't2' });
@@ -69,10 +70,10 @@ describe('timer', () => {
   // 시작을 두 번 눌러 먼저 보낸 것이 늦게 성공하고 뒤의 것이 409로 먼저 실패하면, 서버에서는 타이머가 돈다. 앞의 성공을
   // 버린 채 비워 두지 않고 서버 상태로 맞춘다.
   it('shows the running timer when a later start fails while an earlier one succeeds', async () => {
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     await timer.load();
     let resolveFirst: (entry: Started) => void = () => undefined;
-    vi.spyOn(api, 'startTimer')
+    vi.spyOn(timeData, 'startTimer')
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -82,7 +83,7 @@ describe('timer', () => {
       .mockRejectedValueOnce(new ApiError(409, 'conflict', 'already running'));
     const first = timer.start('work');
     await expect(timer.start('work')).rejects.toThrow();
-    vi.spyOn(api, 'currentTimer').mockResolvedValue({ ...running, id: 't3' });
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue({ ...running, id: 't3' });
     resolveFirst({ ...running, id: 't3' });
     await first;
     expect(timer.entry?.id).toBe('t3');
@@ -90,10 +91,10 @@ describe('timer', () => {
 
   // 먼저 보낸 시작이 성공한 뒤 뒤의 시작이 네트워크 오류로 실패해도, 버린 앞의 성공을 기억해 서버 상태로 맞춘다.
   it('reloads when an earlier start succeeded and the later write then fails on the network', async () => {
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     await timer.load();
     let rejectSecond: (e: Error) => void = () => undefined;
-    vi.spyOn(api, 'startTimer')
+    vi.spyOn(timeData, 'startTimer')
       .mockResolvedValueOnce({ ...running, id: 't4' })
       .mockImplementationOnce(
         () =>
@@ -105,7 +106,7 @@ describe('timer', () => {
     const second = timer.start('work');
     await first;
     expect(timer.entry).toBeNull();
-    vi.spyOn(api, 'currentTimer').mockResolvedValue({ ...running, id: 't4' });
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue({ ...running, id: 't4' });
     rejectSecond(new Error('network'));
     await expect(second).rejects.toThrow('network');
     expect(timer.entry?.id).toBe('t4');
@@ -114,7 +115,7 @@ describe('timer', () => {
   // 옛 읽기의 실패가 그 뒤에 성공한 읽기의 상태 위에 오류를 남기지 않는다.
   it('does not show the error of a read that was overtaken', async () => {
     let rejectOld: (e: Error) => void = () => undefined;
-    vi.spyOn(api, 'currentTimer')
+    vi.spyOn(timeData, 'currentTimer')
       .mockImplementationOnce(
         () =>
           new Promise((_, reject) => {

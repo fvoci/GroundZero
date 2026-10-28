@@ -1,9 +1,11 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
+import type { EventView, ItemProfileView, ItemView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
@@ -264,8 +266,10 @@ describe('draft offers while an edit request is in flight', () => {
       initial: { start: '2026-10-20T04:00', end: '2026-10-20T05:00', pausedMinutes: '0' },
       zone: 'UTC',
     });
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
-    const update = vi.spyOn(api, 'updateTimeEntry').mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
+    const update = vi
+      .spyOn(timeData, 'updateTimeEntry')
+      .mockReturnValue(new Promise(() => undefined));
     render(TimeEntryDialog, { entry, zone: 'UTC', onclose: vi.fn(), onchanged: vi.fn() });
     await screen.findByTestId('time-entry-draft-offer');
     await fireEvent.input(screen.getByLabelText(m.time_memo()), { target: { value: '이 탭' } });
@@ -282,11 +286,11 @@ describe('draft offers while an edit request is in flight', () => {
       zone: 'UTC',
       pending: null,
     });
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     const add = vi
-      .spyOn(api, 'addTimeEntry')
+      .spyOn(timeData, 'addTimeEntry')
       .mockReturnValue(new Promise<TimeEntryView>(() => undefined));
     render(TimeScreen);
     await screen.findByTestId('time-manual-draft-offer');

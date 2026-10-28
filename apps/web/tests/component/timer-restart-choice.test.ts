@@ -1,8 +1,9 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { TimeEntryView } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import { timer } from '$lib/features/time/timer.svelte';
 import TimerRestartDialog from '$lib/features/time/TimerRestartDialog.svelte';
 import { markAccountSwitch } from '$lib/features/feedback/feedback.svelte';
@@ -26,7 +27,7 @@ const running: TimeEntryView & { stopped_entry_id: string | null } = {
 afterEach(async () => {
   timer.chooseRestart(undefined);
   cleanup();
-  vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
   await timer.load();
   vi.restoreAllMocks();
   me.userId = '';
@@ -37,7 +38,7 @@ describe('same-target timer restart choice', () => {
   it('waits for an explicit choice and reuses the request ID for continue', async () => {
     me.userId = 'user-a';
     const start = vi
-      .spyOn(api, 'startTimer')
+      .spyOn(timeData, 'startTimer')
       .mockRejectedValueOnce(new ApiError(409, 'timer_running', 'already running'))
       .mockResolvedValue(running);
     const pending = timer.start('work').catch((error: unknown) => error);
@@ -56,7 +57,7 @@ describe('same-target timer restart choice', () => {
     await setLocale('ko', { reload: false });
     me.userId = 'user-a';
     const start = vi
-      .spyOn(api, 'startTimer')
+      .spyOn(timeData, 'startTimer')
       .mockRejectedValueOnce(new ApiError(409, 'timer_running', 'already running'))
       .mockResolvedValue({ ...running, id: 'new-entry' });
     render(TimerRestartDialog);
@@ -74,7 +75,7 @@ describe('same-target timer restart choice', () => {
 
   it('cancels without sending another write', async () => {
     const start = vi
-      .spyOn(api, 'startTimer')
+      .spyOn(timeData, 'startTimer')
       .mockRejectedValueOnce(new ApiError(409, 'timer_running', 'already running'));
     const pending = timer.start('work');
     await waitFor(() => {
@@ -88,7 +89,7 @@ describe('same-target timer restart choice', () => {
   it('dismisses the pending choice when an account switch begins', async () => {
     me.userId = 'user-a';
     const start = vi
-      .spyOn(api, 'startTimer')
+      .spyOn(timeData, 'startTimer')
       .mockRejectedValueOnce(new ApiError(409, 'timer_running', 'already running'));
     render(TimerRestartDialog);
     const pending = timer.start('work');
@@ -103,7 +104,7 @@ describe('same-target timer restart choice', () => {
 
   it('cancels an older choice when another target starts', async () => {
     const start = vi
-      .spyOn(api, 'startTimer')
+      .spyOn(timeData, 'startTimer')
       .mockRejectedValueOnce(new ApiError(409, 'timer_running', 'already running'))
       .mockResolvedValue({ ...running, id: 'other-target' });
     const first = timer.start('work');
@@ -125,7 +126,7 @@ describe('same-target timer restart choice', () => {
       }),
     );
     vi.stubGlobal('fetch', fetch);
-    await api.startTimer('request-1', 'work', '', null, 'continue');
+    await timeData.startTimer('request-1', 'work', '', null, 'continue');
     expect(fetch).toHaveBeenCalledWith(
       '/api/me/timer',
       expect.objectContaining({
