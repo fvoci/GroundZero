@@ -3038,7 +3038,7 @@ export interface components {
             /** @description 강의·스터디 계획일, 투고·산출물 날짜(D-80). */
             dates: components["schemas"]["CalendarDate"][];
             /** @description 기간 안에 회차가 있는 일정의 정의. */
-            events: components["schemas"]["Event"][];
+            events: components["schemas"]["CalendarEvent"][];
             items: components["schemas"]["CalendarItem"][];
             occurrences: components["schemas"]["EventOccurrence"][];
             projected_tasks: components["schemas"]["ProjectedTask"][];
@@ -3065,6 +3065,37 @@ export interface components {
          * @enum {string}
          */
         CalendarDateKind: "episode" | "study_unit" | "submission" | "revision_due" | "deliverable";
+        /** @description 일정. */
+        CalendarEvent: {
+            access: components["schemas"]["Access"];
+            /** @description 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`. */
+            all_day: boolean;
+            description: string;
+            end_date?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /** @description 뺀 회차(일정 시간대 기준 날짜). */
+            excluded_dates: string[];
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            kind: components["schemas"]["CalendarEventKind"];
+            recurrence?: null | components["schemas"]["RecurrenceRule"];
+            start_date?: string | null;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** @description 일정에 지정한 시간대(IANA). 반복 계산의 기준이다. */
+            timezone: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /**
+         * @description 일정 종류.
+         * @enum {string}
+         */
+        CalendarEventKind: "meeting" | "presentation" | "event";
         /** @description 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해). */
         CalendarItem: {
             id: components["schemas"]["ItemId"];

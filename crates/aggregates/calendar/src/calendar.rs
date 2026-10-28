@@ -1,19 +1,20 @@
-//! 검증·날짜 경계와 출처별 달력 읽기의 조립.
+//! 달력 입력 검증과 SQL 집계 응답의 변환(D-80).
 
-use crate::{CalendarState, model::Calendar, response::CalendarRows};
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use fvoci_core::access::Grade as Access;
-use fvoci_core::error::{AppError, ErrorBody};
-use fvoci_core::ids::WorkspaceId;
-use fvoci_core::validate::parse_date;
-use fvoci_db::UserTx;
-use fvoci_http::session::CurrentUser;
 use serde::Deserialize;
-use time::{Date, OffsetDateTime};
+use time::Date;
 use utoipa::IntoParams;
 use uuid::Uuid;
 
+use crate::CalendarState;
+use crate::model::Calendar;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::WorkspaceId;
+use fvoci_core::validate::parse_date;
+use fvoci_http::session::CurrentUser;
+
+/// 달력 한 번 조회의 최대 기간(일).
 const MAX_RANGE_DAYS: i64 = 62;
 
 /// 달력 기간. `from`·`to`는 날짜(끝 포함), `tz`는 보는 사람의 시간대(시각 있는 일정의 날짜 경계).
@@ -44,43 +45,8 @@ impl CalendarRange {
                 "the range must be 1 to {MAX_RANGE_DAYS} days"
             )));
         }
-
         Ok((from, to))
     }
-}
-
-async fn boundaries(
-    tx: &mut UserTx,
-    ws: WorkspaceId,
-    from: Date,
-    to: Date,
-    tz: &str,
-) -> Result<(OffsetDateTime, OffsetDateTime), AppError> {
-    let access: String = sqlx::query_scalar("SELECT app_access('workspace', $1)")
-        .bind(ws)
-        .fetch_one(tx.conn())
-        .await?;
-    Access::parse(&access)?.ok_or(AppError::NotFound)?;
-    // 보는 사람의 시간대: 브라우저가 아는 이름만(일정 시간대와 같은 규칙).
-    sqlx::query("SELECT app_check_timezone($1)")
-        .bind(tz)
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    // 보는 사람의 날짜 경계. 하루의 시작은 그날 0시가 처음 오는 시점이다(0시가 두 번 오는 날은 앞의 0시, 없는 날은
-    // 건너뛴 직후). 시간 기록·검색의 날 경계(`time_tracking.rs`, `search_api.rs`, 감사 S21)와 같은 식.
-    let (from_at, to_at): (OffsetDateTime, OffsetDateTime) = sqlx::query_as(
-        "SELECT coalesce(app_local_instant($1::date::timestamp, $3), $1::date::timestamp AT TIME ZONE $3),
-                coalesce(app_local_instant(($2::date + 1)::timestamp, $3), ($2::date + 1)::timestamp AT TIME ZONE $3)",
-    )
-    .bind(from)
-    .bind(to)
-    .bind(tz)
-    .fetch_one(tx.conn())
-    .await
-    .map_err(AppError::from_db_function)?;
-
-    Ok((from_at, to_at))
 }
 
 /// 워크스페이스 달력(멤버). 볼 수 있는 업무·예정 회차·일정 회차만 나온다. 기간은 62일까지. 읽기 전용이다.
@@ -96,24 +62,19 @@ pub async fn calendar(
 ) -> Result<Json<Calendar>, AppError> {
     let (from, to) = range.dates()?;
     let mut tx = state.db.begin_as(user).await?;
-    let (from_at, to_at) = boundaries(&mut tx, ws, from, to, range.tz.trim()).await?;
-    let task_rows = crate::sources::tasks(&mut tx, ws, from, to).await?;
-    let projected_rows = crate::sources::projected(&mut tx, ws, from, to).await?;
-    let occurrence_rows =
-        crate::sources::occurrences(&mut tx, ws, from, to, from_at, to_at).await?;
-    let event_rows = crate::events::load(&mut tx, &occurrence_rows).await?;
-    let date_rows = crate::sources::dates(&mut tx, ws, from, to).await?;
-    let mut rows = CalendarRows {
-        task_rows,
-        projected_rows,
-        occurrence_rows,
-        event_rows,
-        date_rows,
-    };
-    if let Some(scope) = crate::scope::calendar_scope(&mut tx, ws, &range).await? {
-        rows.retain(&scope);
-    }
-    let items = rows.items(&mut tx).await?;
+    let value: serde_json::Value =
+        sqlx::query_scalar("SELECT app_calendar($1, $2, $3, $4, $5, $6)")
+            .bind(ws)
+            .bind(from)
+            .bind(to)
+            .bind(range.tz.trim())
+            .bind(range.module_id)
+            .bind(range.item_id)
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
     tx.commit().await?;
-    rows.into_calendar(items).map(Json)
+    serde_json::from_value(value)
+        .map(Json)
+        .map_err(|error| AppError::Config(format!("invalid calendar aggregate: {error}")))
 }

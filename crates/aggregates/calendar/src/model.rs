@@ -1,4 +1,4 @@
-//! 달력 집계의 응답 타입.
+//! 집계가 소유하는 달력 응답. 날짜·시각과 불리언 칸은 기존 JSON 계약을 유지한다.
 
 use fvoci_core::access::Grade as Access;
 use fvoci_core::ids::{ItemId, WorkspaceId};
@@ -11,31 +11,20 @@ use uuid::Uuid;
 /// 일정 종류.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum EventKind {
+pub enum CalendarEventKind {
     Meeting,
     Presentation,
     Event,
 }
 
-impl EventKind {
-    pub(super) fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "meeting" => Some(Self::Meeting),
-            "presentation" => Some(Self::Presentation),
-            "event" => Some(Self::Event),
-            _ => None,
-        }
-    }
-}
-
 /// 일정.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Event {
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct CalendarEvent {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
     pub item_id: ItemId,
     pub workspace_id: WorkspaceId,
-    pub kind: EventKind,
+    pub kind: CalendarEventKind,
     pub title: String,
     pub description: String,
     /// 종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`.
@@ -59,7 +48,7 @@ pub struct Event {
 }
 
 /// 업무·일정 밖의 날짜 출처(D-80). 원래 자리의 날짜를 그대로 읽는다.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CalendarDateKind {
     /// 강의 회차 수강 예정일(내 계획일, 없으면 공통 계획일).
@@ -74,21 +63,8 @@ pub enum CalendarDateKind {
     Deliverable,
 }
 
-impl CalendarDateKind {
-    pub(super) fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "episode" => Some(Self::Episode),
-            "study_unit" => Some(Self::StudyUnit),
-            "submission" => Some(Self::Submission),
-            "revision_due" => Some(Self::RevisionDue),
-            "deliverable" => Some(Self::Deliverable),
-            _ => None,
-        }
-    }
-}
-
 /// 달력의 날짜 하나(D-80).
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CalendarDate {
     pub kind: CalendarDateKind,
     /// 원래 대상(회차·스터디 단위·기록)의 id.
@@ -104,7 +80,7 @@ pub struct CalendarDate {
 }
 
 /// 달력의 업무(시작일~마감일).
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CalendarTask {
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
@@ -119,7 +95,7 @@ pub struct CalendarTask {
 }
 
 /// 달력에 나온 항목의 이름(업무·일정이 어디에 속하는지 보이기 위해).
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CalendarItem {
     pub id: ItemId,
     pub reference: Option<String>,
@@ -127,7 +103,7 @@ pub struct CalendarItem {
 }
 
 /// 일정의 회차 하나(반복이 아니면 그 일정 자체). 종일이면 날짜, 아니면 UTC 시각.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct EventOccurrence {
     #[schema(value_type = String, format = Uuid)]
     pub event_id: Uuid,
@@ -146,7 +122,7 @@ pub struct EventOccurrence {
 }
 
 /// 아직 만들지 않은 반복 업무 회차(예정). 읽기 전용 계산이며 쓰기 권한이 있는 사람이 항목을 열면 실제로 만든다.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ProjectedTask {
     #[schema(value_type = String, format = Uuid)]
     pub series_id: Uuid,
@@ -162,12 +138,12 @@ pub struct ProjectedTask {
 }
 
 /// 기간 안의 볼 수 있는 업무·일정.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct Calendar {
     pub tasks: Vec<CalendarTask>,
     pub projected_tasks: Vec<ProjectedTask>,
     /// 기간 안에 회차가 있는 일정의 정의.
-    pub events: Vec<Event>,
+    pub events: Vec<CalendarEvent>,
     pub occurrences: Vec<EventOccurrence>,
     /// 강의·스터디 계획일, 투고·산출물 날짜(D-80).
     pub dates: Vec<CalendarDate>,

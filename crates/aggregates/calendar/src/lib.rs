@@ -3,11 +3,7 @@
 #![warn(clippy::too_many_lines, clippy::cognitive_complexity)]
 
 mod calendar;
-mod events;
 pub mod model;
-mod response;
-mod scope;
-mod sources;
 
 use axum::Router;
 use axum::extract::FromRef;
@@ -34,8 +30,8 @@ pub struct CalendarState {
         model::Calendar,
         model::EventOccurrence,
         model::ProjectedTask,
-        model::Event,
-        model::EventKind,
+        model::CalendarEvent,
+        model::CalendarEventKind,
     ))
 )]
 pub struct CalendarApi;

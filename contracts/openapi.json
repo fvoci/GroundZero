@@ -13434,7 +13434,7 @@
           "events": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Event"
+              "$ref": "#/components/schemas/CalendarEvent"
             },
             "description": "기간 안에 회차가 있는 일정의 정의."
           },
@@ -13513,6 +13513,112 @@
           "submission",
           "revision_due",
           "deliverable"
+        ]
+      },
+      "CalendarEvent": {
+        "type": "object",
+        "description": "일정.",
+        "required": [
+          "id",
+          "item_id",
+          "workspace_id",
+          "kind",
+          "title",
+          "description",
+          "all_day",
+          "timezone",
+          "excluded_dates",
+          "version",
+          "access"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "all_day": {
+            "type": "boolean",
+            "description": "종일이면 `start_date`·`end_date`(끝 포함), 아니면 `starts_at`·`ends_at`."
+          },
+          "description": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "excluded_dates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "뺀 회차(일정 시간대 기준 날짜)."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CalendarEventKind"
+          },
+          "recurrence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule",
+                "description": "반복 규칙(없으면 한 번). 회차는 달력에서 펼친다."
+              }
+            ]
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "일정에 지정한 시간대(IANA). 반복 계산의 기준이다."
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "CalendarEventKind": {
+        "type": "string",
+        "description": "일정 종류.",
+        "enum": [
+          "meeting",
+          "presentation",
+          "event"
         ]
       },
       "CalendarItem": {
