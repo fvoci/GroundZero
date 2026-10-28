@@ -33,13 +33,24 @@ pub enum TaskOutcome {
 }
 
 /// Meilisearch 연결.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SearchClient {
     base: String,
     key: String,
     http: reqwest::Client,
     /// 이 프로세스에서 색인 설정을 한 번 맞췄는지.
     configured: Arc<AtomicBool>,
+}
+
+impl std::fmt::Debug for SearchClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SearchClient")
+            .field("base", &self.base)
+            .field("key", &"<redacted>")
+            .field("http", &self.http)
+            .field("configured", &self.configured)
+            .finish()
+    }
 }
 
 /// 색인 문서.
@@ -299,7 +310,10 @@ mod tests {
         let key = "search-debug-test-marker";
         let client = SearchClient::new("http://localhost:7700", key);
         for output in [format!("{client:?}"), format!("{client:#?}")] {
-            assert!(!output.contains(key), "Debug must not expose the search key");
+            assert!(
+                !output.contains(key),
+                "Debug must not expose the search key"
+            );
         }
     }
 }
