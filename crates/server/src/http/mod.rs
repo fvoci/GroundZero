@@ -97,6 +97,14 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+impl FromRef<AppState> for fvoci_calendar::CalendarState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_work::WorkState {
     fn from_ref(state: &AppState) -> Self {
         Self {
@@ -283,7 +291,6 @@ async fn api_not_found() -> AppError {
         events::create,
         events::update,
         events::delete,
-        events::calendar,
         event_recurrence::set_event,
         event_recurrence::exclude_event,
         time_tracking::current,
@@ -475,13 +482,6 @@ async fn api_not_found() -> AppError {
         events::CreateEvent,
         events::UpdateEvent,
         events::EventConflict,
-        events::CalendarTask,
-        events::CalendarItem,
-        events::CalendarDate,
-        events::CalendarDateKind,
-        events::Calendar,
-        events::EventOccurrence,
-        events::ProjectedTask,
         event_recurrence::SetEventRecurrence,
         event_recurrence::ExcludeOccurrence,
         time_tracking::TimeKind,
@@ -678,6 +678,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_calendar::CalendarApi::openapi());
     }
 }
 
@@ -738,6 +739,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_calendar::router())
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
         .route("/me/organizations", get(organizations::list_mine))
@@ -933,7 +935,6 @@ pub fn router(state: AppState) -> Router {
             "/events/{event_id}",
             get(events::get).put(events::update).delete(events::delete),
         )
-        .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
         .route(
             "/events/{event_id}/recurrence",
             put(event_recurrence::set_event),
