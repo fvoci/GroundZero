@@ -111,7 +111,9 @@ describe('members screen keeps typed input on failure', () => {
       );
       render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
       const input = await submitWith(locale === 'ko' ? '이메일' : 'Email', 'kim@lab');
-      await vi.waitFor(() => expect(describedText(input)).toBe(text));
+      await vi.waitFor(() => {
+        expect(describedText(input)).toBe(text);
+      });
       expect(input).toHaveAttribute('aria-invalid', 'true');
       expect(input).toHaveValue('kim@lab');
       expect(screen.queryByText('server diagnostic')).toBeNull();

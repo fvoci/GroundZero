@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 import { organizationsApi } from '$lib/features/organizations/api';
 import { errorText } from '$lib/api/errors';
 import { me } from '$lib/me.svelte';
