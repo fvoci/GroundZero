@@ -554,8 +554,8 @@ CREATE FUNCTION fvoci.app_grade_document_at(p_doc uuid, p_workspace uuid, p_item
       WHEN v_base = 'write' OR v_share = 'write' THEN 'write'
       ELSE coalesce(v_base, v_share, 'none')
     END;
-    -- 역할이 개별 공유의 상한이다(D-20): 읽기 전용 멤버는 수정 공유를 받았어도 읽기까지다.
-    IF v_role = 'readonly' AND v_access = 'write' THEN
+    -- D-20: 읽기 전용·공간 밖 조직원은 기존 수정 공유도 읽기로 계산한다. 개인 노트에는 공간 역할 상한이 없다.
+    IF p_owner IS NULL AND (v_role IS NULL OR v_role = 'readonly') AND v_access = 'write' THEN
       v_access := 'read';
     END IF;
     IF v_access IN ('owner', 'write') AND p_item IS NOT NULL AND app_item_archived(p_item) THEN
