@@ -1,4 +1,4 @@
-import { readDraftAt, writeDraftAt } from '$lib/features/common/draft-storage';
+import { writeDraftAt } from '$lib/features/common/draft-storage';
 import { object, retry } from '$lib/features/modules/draft-values';
 import longTextKeys from './long-text-keys.json';
 import { parseRecordForm, recordWriting, type RecordForm } from './records';
@@ -132,26 +132,45 @@ function checkWriting(value: unknown, kind: string | undefined): DraftCheck | un
   };
 }
 
-/**
- * D-27, SR-199-1: old retries contain the complete request. Remove them before any screen opens,
- * across accounts, organizations, tabs and held offers. Snapshot keys before deleting so adjacent
- * entries cannot be skipped. Verify retry metadata, then normalize both form and baseline with the
- * offline allowlist checked against server kinds. Unknown kinds and unreadable values are discarded.
- */
-function clearLegacyRecordDraftAt(key: string): void {
-  if (!RECORD_DRAFT_KEY.test(key)) return;
+function stillStoredAt(key: string, raw: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === raw;
+  } catch {
+    return false;
+  }
+}
+
+/** Normalize only the supplied snapshot; a later writer's value belongs to its own event. */
+function clearLegacyRecordDraftAt(key: string, raw: string | null): void {
+  if (!RECORD_DRAFT_KEY.test(key) || raw === null) return;
   const kind = RECORD_KIND_KEY.exec(key)?.[1];
-  const checked = readDraftAt(key, (value) => checkWriting(value, kind));
-  if (checked === undefined) {
-    writeDraftAt(key, undefined);
-  } else if (checked.state === 'rewrite' && !writeDraftAt(key, checked.value)) {
-    // A failed rewrite must not leave the old short-field snapshot on disk.
+  let checked: DraftCheck | undefined;
+  try {
+    checked = checkWriting(JSON.parse(raw), kind);
+  } catch {
+    // Malformed JSON is discarded only if this exact raw value is still stored.
+  }
+  if (checked?.state === 'current' || !stillStoredAt(key, raw)) return;
+  // localStorage has no atomic compare-and-set across tabs. Compare just before each mutation.
+  if (!writeDraftAt(key, checked?.value) && checked !== undefined && stillStoredAt(key, raw)) {
+    // A failed rewrite may discard only the old snapshot, never newer writing.
     writeDraftAt(key, undefined);
   }
 }
 
+/**
+ * D-27, SR-199-1: remove old raw retries before any screen opens, across accounts, organizations,
+ * tabs and held offers. Snapshot keys so deleting an entry cannot skip the next one. Both startup
+ * and event cleanup use the same writing normalization and compare before changing a stored value.
+ */
 export function clearLegacyRecordDrafts(): void {
-  for (const key of recordDraftKeys()) clearLegacyRecordDraftAt(key);
+  for (const key of recordDraftKeys()) {
+    try {
+      clearLegacyRecordDraftAt(key, window.localStorage.getItem(key));
+    } catch {
+      // A failed read must not discard writing that could not be inspected.
+    }
+  }
 }
 
 /** Other tabs can still run an older release; attach for the App lifetime. */
@@ -163,8 +182,8 @@ export function attachRecordDraftCleanup(): () => void {
     } catch {
       return;
     }
-    // Re-read the current value, since the event's snapshot can already be outdated.
-    clearLegacyRecordDraftAt(event.key);
+    // Normalize this event's value; a newer value is left for its own event.
+    clearLegacyRecordDraftAt(event.key, event.newValue);
   }
   window.addEventListener('storage', onStorage);
   return () => {
