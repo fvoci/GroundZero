@@ -5,7 +5,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 async fn outside(w: &World) -> TestUser {
-    let email = common::unique_email("outside member");
+    let email = common::unique_email("outside-member");
     let user = common::login_with_email(&w.state, "outside member", &email, true).await;
     common::join_organization(w.org, &user, "member").await;
     user

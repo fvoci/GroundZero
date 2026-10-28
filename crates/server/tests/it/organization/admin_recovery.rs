@@ -35,7 +35,7 @@ async fn demote(w: &World, user: &TestUser) {
 #[tokio::test]
 async fn demotion_removes_self_join_only_and_cleans_shares_and_assignments() {
     let w = World::new().await;
-    let email = common::unique_email("admin outside");
+    let email = common::unique_email("admin-outside");
     let user = common::login_with_email(&w.state, "admin outside", &email, true).await;
     join(&w, &user).await;
     // 반복 참여해도 참여 전의 "행 없음"을 잃지 않는다.
