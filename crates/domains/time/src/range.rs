@@ -1,4 +1,7 @@
-use fvoci_core::{error::AppError, validate::parse_date};
+use fvoci_core::{
+    error::{AppError, InvalidReason},
+    validate::parse_date,
+};
 use fvoci_db::UserTx;
 use serde::Deserialize;
 use time::OffsetDateTime;
@@ -19,14 +22,18 @@ pub(crate) struct Window {
 }
 
 pub(crate) async fn window(tx: &mut UserTx, range: &TimeRange) -> Result<Window, AppError> {
-    let from = parse_date(Some(&range.from), "from")?
-        .ok_or_else(|| AppError::BadRequest("from is required".into()))?;
+    let from = parse_date(Some(&range.from), "from")?.ok_or_else(|| {
+        AppError::invalid("from", InvalidReason::Required, None, "from is required")
+    })?;
     let to = parse_date(Some(&range.to), "to")?
-        .ok_or_else(|| AppError::BadRequest("to is required".into()))?;
+        .ok_or_else(|| AppError::invalid("to", InvalidReason::Required, None, "to is required"))?;
     if to < from || (to - from).whole_days() >= MAX_RANGE_DAYS {
-        return Err(AppError::BadRequest(format!(
-            "the range must be 1 to {MAX_RANGE_DAYS} days"
-        )));
+        return Err(AppError::invalid(
+            "to",
+            InvalidReason::OutOfRange,
+            Some(400),
+            format!("the range must be 1 to {MAX_RANGE_DAYS} days"),
+        ));
     }
     // 하루의 시작은 그 시간대에서 그날 0시가 처음 오는 시점이다. 0시가 두 번 오는 시간대(아바나·아소르스의 가을)에서
     // 기본 해석은 뒤의 0시라 앞의 0시~1시가 전날로 밀리고, 집계와 목록이 서로 다른 날에 두었다(감사 S21). 0시가 없는
@@ -40,6 +47,9 @@ pub(crate) async fn window(tx: &mut UserTx, range: &TimeRange) -> Result<Window,
     .bind(range.tz.trim())
     .fetch_one(tx.conn())
     .await
-    .map_err(AppError::from_db_function)?;
+    .map_err(|e| match AppError::from_db_function(e) {
+        AppError::BadRequest(message) => AppError::invalid("tz", InvalidReason::InvalidFormat, None, message),
+        other => other,
+    })?;
     Ok(Window { from_at, to_at })
 }

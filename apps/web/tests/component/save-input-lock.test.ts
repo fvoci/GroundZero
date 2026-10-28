@@ -1,9 +1,11 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, ItemProfileView, ItemView, TimeEntryView } from '$lib/api/client';
+import type { EventView, ItemProfileView, ItemView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemEvents from '$lib/features/events/ItemEvents.svelte';
@@ -255,9 +257,9 @@ describe('saving edits while a request is in flight', () => {
   });
 
   it('locks the time entry form and closes the dialog on its own save', async () => {
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
-    const request = held<Awaited<ReturnType<typeof api.updateTimeEntry>>>();
-    const update = vi.spyOn(api, 'updateTimeEntry').mockReturnValue(request.promise);
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
+    const request = held<Awaited<ReturnType<typeof timeData.updateTimeEntry>>>();
+    const update = vi.spyOn(timeData, 'updateTimeEntry').mockReturnValue(request.promise);
     const onclose = vi.fn();
     render(TimeEntryDialog, { entry, zone: 'UTC', onclose, onchanged: vi.fn() });
     const memo = await screen.findByLabelText(m.time_memo());
@@ -274,11 +276,11 @@ describe('saving edits while a request is in flight', () => {
   });
 
   it('locks manual time input and reports a failed manual entry', async () => {
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
     const request = held<TimeEntryView>();
-    const add = vi.spyOn(api, 'addTimeEntry').mockReturnValue(request.promise);
+    const add = vi.spyOn(timeData, 'addTimeEntry').mockReturnValue(request.promise);
     render(TimeScreen);
     const memo = await screen.findByLabelText(m.time_memo());
     await fireEvent.input(memo, { target: { value: 'manual' } });

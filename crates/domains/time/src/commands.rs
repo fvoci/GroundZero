@@ -10,12 +10,14 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use fvoci_core::{
-    error::{AppError, ErrorBody},
+    error::{AppError, ErrorBody, InvalidReason},
     validate::validate_text,
 };
 use fvoci_db::{is_unique_violation, new_ids};
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::CurrentUser;
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -23,9 +25,12 @@ pub(crate) const MAX_MEMO_CHARS: usize = 2_000;
 
 fn parse_instant(raw: &str, field: &str) -> Result<OffsetDateTime, AppError> {
     OffsetDateTime::parse(raw.trim(), &Rfc3339).map_err(|_| {
-        AppError::BadRequest(format!(
-            "{field} must be a time like 2026-10-17T09:00:00+09:00"
-        ))
+        AppError::invalid(
+            field,
+            InvalidReason::InvalidFormat,
+            None,
+            format!("{field} must be a time like 2026-10-17T09:00:00+09:00"),
+        )
     })
 }
 
@@ -36,8 +41,10 @@ pub struct EntryInput {
     pub started_at: String,
     /// RFC 3339. 진행 중인 타이머를 고칠 때만 없다.
     pub ended_at: Option<String>,
+    #[schema(minimum = 0)]
     pub paused_seconds: i32,
     pub kind: TimeKind,
+    #[schema(max_length = 2000)]
     pub memo: String,
     pub target: Option<TargetInput>,
 }
@@ -61,9 +68,10 @@ pub struct UpdateEntry {
 
 /// 409 응답: 서버 최신본.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct TimeEntryConflict {
-    pub error: &'static str,
-    pub current: TimeEntry,
+#[serde(untagged)]
+pub enum TimeEntryWriteConflict {
+    Stale(Box<StaleWrite<TimeEntry>>),
+    State(ErrorBody),
 }
 
 struct ValidEntry {
@@ -80,8 +88,11 @@ fn validate_entry(input: &EntryInput) -> Result<ValidEntry, AppError> {
         .map(|s| parse_instant(s, "ended_at"))
         .transpose()?;
     if input.paused_seconds < 0 {
-        return Err(AppError::BadRequest(
-            "paused_seconds must not be negative".into(),
+        return Err(AppError::invalid(
+            "paused_seconds",
+            InvalidReason::OutOfRange,
+            None,
+            "paused_seconds must not be negative",
         ));
     }
     Ok(ValidEntry {
@@ -93,7 +104,8 @@ fn validate_entry(input: &EntryInput) -> Result<ValidEntry, AppError> {
 
 /// 수동 기록 추가(끝난 기록). 같은 `request_id`면 같은 기록.
 #[utoipa::path(post, path = "/api/me/time-entries", operation_id = "add_time_entry", request_body = AddEntry,
-    responses((status = 201, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody)),
+    params(("x-fvoci-expected-user" = Option<String>, Header, description = "If sent, must match the signed-in user (D-96).")),
+    responses((status = 201, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "time")]
 pub async fn add(
     State(state): State<TimeState>,
@@ -101,9 +113,14 @@ pub async fn add(
     Json(input): Json<AddEntry>,
 ) -> Result<(StatusCode, Json<TimeEntry>), AppError> {
     let valid = validate_entry(&input.entry)?;
-    let ended = valid
-        .ended
-        .ok_or_else(|| AppError::BadRequest("ended_at is required".into()))?;
+    let ended = valid.ended.ok_or_else(|| {
+        AppError::invalid(
+            "ended_at",
+            InvalidReason::Required,
+            None,
+            "ended_at is required",
+        )
+    })?;
     let (target_kind, target_id) = split_target(input.entry.target);
     let run = || async {
         let mut tx = state.db.begin_as(user).await?;
@@ -120,7 +137,7 @@ pub async fn add(
                 .bind(new_ids(1))
                 .fetch_one(tx.conn())
                 .await
-                .map_err(AppError::from_db_function)?;
+                .map_err(|e| entry_error(e, &input.entry, &valid, None))?;
         let entry = load(&mut tx, id).await?;
         tx.commit().await?;
         Ok(entry)
@@ -136,9 +153,9 @@ pub async fn add(
 
 /// 기록 고치기(본인). 이전 값은 수정 이력에 남는다. 진행 중이면 시작 시각·종류·메모·대상만 바꿀 수 있다.
 #[utoipa::path(put, path = "/api/time-entries/{entry_id}", operation_id = "update_time_entry",
-    params(("entry_id" = String, Path, format = Uuid)), request_body = UpdateEntry,
+    params(("entry_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, description = "If sent, must match the signed-in user (D-96).")), request_body = UpdateEntry,
     responses((status = 200, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = TimeEntryConflict)), tag = "time")]
+              (status = 409, body = TimeEntryWriteConflict)), tag = "time")]
 pub async fn update(
     State(state): State<TimeState>,
     CurrentUser(user): CurrentUser,
@@ -148,6 +165,7 @@ pub async fn update(
     let valid = validate_entry(&input.entry)?;
     let (target_kind, target_id) = split_target(input.entry.target);
     let mut tx = state.db.begin_as(user).await?;
+    let before = load(&mut tx, id).await?;
     let outcome: String =
         sqlx::query_scalar("SELECT app_update_time_entry($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
             .bind(id)
@@ -162,18 +180,12 @@ pub async fn update(
             .bind(new_ids(1))
             .fetch_one(tx.conn())
             .await
-            .map_err(AppError::from_db_function)?;
+            .map_err(|e| entry_error(e, &input.entry, &valid, Some(&before)))?;
     let entry = load(&mut tx, id).await?;
     tx.commit().await?;
     Ok(if outcome == "conflict" {
-        (
-            StatusCode::CONFLICT,
-            Json(TimeEntryConflict {
-                error: "conflict",
-                current: entry,
-            }),
-        )
-            .into_response()
+        let sent = sent_fields(&input.entry, &valid)?;
+        StaleWrite::new("conflict", "the time entry changed", entry, &sent).into_response()
     } else {
         Json(entry).into_response()
     })
@@ -181,8 +193,8 @@ pub async fn update(
 
 /// 기록 지우기(본인).
 #[utoipa::path(delete, path = "/api/time-entries/{entry_id}", operation_id = "delete_time_entry",
-    params(("entry_id" = String, Path, format = Uuid)),
-    responses((status = 204), (status = 404, body = ErrorBody)), tag = "time")]
+    params(("entry_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, description = "If sent, must match the signed-in user (D-96).")),
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "time")]
 pub async fn delete(
     State(state): State<TimeState>,
     CurrentUser(user): CurrentUser,
@@ -196,4 +208,58 @@ pub async fn delete(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn sent_fields(input: &EntryInput, valid: &ValidEntry) -> Result<Value, AppError> {
+    let instant = |at: OffsetDateTime| {
+        at.to_offset(time::UtcOffset::UTC)
+            .format(&Rfc3339)
+            .map_err(|e| AppError::Config(e.to_string()))
+    };
+    Ok(json!({
+        "started_at": instant(valid.started)?,
+        "ended_at": valid.ended.map(instant).transpose()?,
+        "paused_seconds": input.paused_seconds,
+        "kind": input.kind,
+        "memo": valid.memo,
+        "target": input.target,
+    }))
+}
+
+/// SQL의 불변식·기존 긴 기록 허용은 그대로 두고 칸 거절의 진단만 공통 계약으로 바꾼다.
+fn entry_error(
+    error: sqlx::Error,
+    input: &EntryInput,
+    valid: &ValidEntry,
+    current: Option<&TimeEntry>,
+) -> AppError {
+    let message = match AppError::from_db_function(error) {
+        AppError::BadRequest(message) => message,
+        other => return other,
+    };
+    let field = match message.as_str() {
+        "invalid time range" if valid.ended.is_none_or(|end| end < valid.started) => "ended_at",
+        "invalid time range" => "paused_seconds",
+        "a running timer only changes its start, kind, memo and target"
+            if input.ended_at.is_some() =>
+        {
+            "ended_at"
+        }
+        "a running timer only changes its start, kind, memo and target"
+            if current.is_some_and(|entry| entry.paused_seconds != input.paused_seconds) =>
+        {
+            "paused_seconds"
+        }
+        "a running timer only changes its start, kind, memo and target" => "started_at",
+        "the start leaves less time than the timer was paused" => "started_at",
+        _ => return AppError::BadRequest(message),
+    };
+    let limit = (field == "paused_seconds")
+        .then(|| {
+            valid
+                .ended
+                .and_then(|end| u64::try_from((end - valid.started).whole_seconds()).ok())
+        })
+        .flatten();
+    AppError::invalid(field, InvalidReason::OutOfRange, limit, message)
 }

@@ -61,6 +61,7 @@ pub struct StartTimer {
     #[schema(value_type = String, format = Uuid)]
     pub request_id: Uuid,
     pub kind: TimeKind,
+    #[schema(max_length = 2000)]
     pub memo: String,
     pub target: Option<TargetInput>,
     /// 같은 대상이 실행 중이면 필수. 생략 시 409 `timer_running`.
@@ -78,6 +79,7 @@ pub struct StartedTimer {
 
 /// 타이머 시작. 다른 대상의 기록은 자동으로 끝내며 같은 대상은 명시한 선택을 따른다.
 #[utoipa::path(post, path = "/api/me/timer", operation_id = "start_timer", request_body = StartTimer,
+    params(("x-fvoci-expected-user" = Option<String>, Header, description = "If sent, must match the signed-in user (D-96).")),
     responses((status = 201, body = StartedTimer), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, description = "같은 대상 실행 중: timer_running, 그 밖의 상태 충돌: invalid_state", body = ErrorBody)), tag = "time")]
 pub async fn start(
@@ -136,8 +138,8 @@ pub struct TimerActionInput {
 
 /// 타이머 일시정지·재개·종료(본인). 이미 그 상태면 그대로.
 #[utoipa::path(post, path = "/api/time-entries/{entry_id}/timer", operation_id = "timer_action",
-    params(("entry_id" = String, Path, format = Uuid)), request_body = TimerActionInput,
-    responses((status = 200, body = TimeEntry), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
+    params(("entry_id" = String, Path, format = Uuid), ("x-fvoci-expected-user" = Option<String>, Header, description = "If sent, must match the signed-in user (D-96).")), request_body = TimerActionInput,
+    responses((status = 200, body = TimeEntry), (status = 400, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)),
     tag = "time")]
 pub async fn action(
     State(state): State<TimeState>,

@@ -1,6 +1,5 @@
-use crate::targets::{Target, TargetKind};
+use crate::targets::{TargetInput, TargetKind};
 use fvoci_core::error::AppError;
-use fvoci_core::ids::WorkspaceId;
 use fvoci_db::UserTx;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -65,7 +64,7 @@ pub struct TimeEntry {
     pub seconds: i64,
     pub kind: TimeKind,
     pub memo: String,
-    pub target: Option<Target>,
+    pub target: Option<TargetInput>,
     pub version: i32,
 }
 
@@ -81,25 +80,21 @@ pub(crate) struct EntryRow {
     memo: String,
     target_kind: Option<String>,
     target_id: Option<Uuid>,
-    target_label: Option<String>,
-    workspace_id: Option<WorkspaceId>,
     version: i32,
 }
 
 pub(crate) const ENTRY_SELECT: &str =
     "SELECT e.id, e.started_at, e.ended_at, e.paused_at, e.paused_seconds,
         app_entry_seconds(e) AS seconds, e.kind, e.memo, e.target_kind, e.target_id,
-        app_time_target_label(e.target_kind, e.target_id) AS target_label, e.workspace_id, e.version
+        e.version
  FROM time_entries e";
 
 pub(crate) fn to_entry(row: EntryRow) -> Result<TimeEntry, AppError> {
     let target = match (row.target_kind, row.target_id) {
-        (Some(kind), Some(id)) => Some(Target {
+        (Some(kind), Some(id)) => Some(TargetInput {
             kind: TargetKind::parse(&kind)
                 .ok_or_else(|| AppError::Config(format!("unknown target kind {kind}")))?,
             id,
-            label: row.target_label,
-            workspace_id: row.workspace_id,
         }),
         _ => None,
     };

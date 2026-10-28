@@ -1,7 +1,8 @@
 <script lang="ts">
+  import type { TaskTimeView } from '$lib/features/time/model';
+  import { timeData } from '$lib/features/time/data';
   // 업무 행·카드·상세에서 쓰는 내 시간 패널(D-117).
-  import type { TaskTimeView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
@@ -32,7 +33,7 @@
     const mine = ++readSeq;
     loadError = undefined;
     try {
-      const next = await api.taskTime(id);
+      const next = await timeData.taskTime(id);
       if (mine !== readSeq) return;
       time = next;
     } catch (e: unknown) {

@@ -287,3 +287,88 @@ async fn every_time_command_compares_a_sent_expected_user_before_writing() {
     .await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn target_display_preserves_task_document_item_episode_and_study_unit_labels() {
+    use crate::sql_support::{made, one};
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let task = w.task().await;
+    let document = w.doc().await;
+    let mut targets = vec![
+        ("task", task, "SQL-2 SQL task"),
+        ("document", document, "SQL-3 SQL document"),
+        ("item", w.item, "SQL-1 SQL item"),
+    ];
+    for (module_kind, key, add_rows, table, target_kind, title, label) in [
+        (
+            "course",
+            "LEC",
+            "app_add_episodes",
+            "course_episodes",
+            "episode",
+            "벡터",
+            "LEC-1 1회 벡터",
+        ),
+        (
+            "study",
+            "STU",
+            "app_add_study_units",
+            "study_units",
+            "study_unit",
+            "연습",
+            "STU-1 1. 연습",
+        ),
+    ] {
+        let module = made(&w.state, &w.owner,
+            &format!("SELECT fvoci.app_create_module($1,$2,'{module_kind}','time label fixture','{key}',@ids) AS id"),
+            &[w.ws, Uuid::now_v7()]).await;
+        let item = made(
+            &w.state,
+            &w.owner,
+            "SELECT fvoci.app_create_item($1,$2,'target fixture','',@ids) AS id",
+            &[module, Uuid::now_v7()],
+        )
+        .await;
+        one(&w.state, &w.owner,
+            &format!("SELECT fvoci.{add_rows}($1,jsonb_build_array(jsonb_build_object('request_id',$2::uuid,'title','{title}')), @ids) AS count"),
+            &[item, Uuid::now_v7()]).await;
+        let row = one(
+            &w.state,
+            &w.owner,
+            &format!("SELECT id FROM fvoci.{table} WHERE item_id=$1"),
+            &[item],
+        )
+        .await;
+        targets.push((
+            target_kind,
+            Uuid::parse_str(row["id"].as_str().unwrap()).unwrap(),
+            label,
+        ));
+    }
+    let mut expected = Vec::new();
+    for (kind, id, label) in targets {
+        let mut body = input();
+        body["target"] = json!({"kind":kind,"id":id});
+        let entry = add(&w, body).await;
+        assert_eq!(entry["target"], json!({"kind":kind,"id":id}));
+        expected.push((entry["id"].clone(), kind, id, label));
+    }
+    let r = send(
+        &app,
+        Method::GET,
+        "/api/time-entry-targets?from=2026-10-20&to=2026-10-20&tz=UTC",
+        Some(&w.owner),
+        None,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
+    let rows = r.json.as_array().unwrap();
+    assert_eq!(rows.len(), 5);
+    for (entry_id, kind, id, label) in expected {
+        let row = rows.iter().find(|row| row["entry_id"] == entry_id).unwrap();
+        assert_eq!(row["kind"], kind);
+        assert_eq!(row["id"], id.to_string());
+        assert_eq!(row["label"], label);
+    }
+}

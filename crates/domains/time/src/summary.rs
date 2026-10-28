@@ -8,7 +8,7 @@ use axum::{
     extract::{Query, State},
 };
 use fvoci_core::{
-    error::{AppError, ErrorBody},
+    error::{AppError, ErrorBody, InvalidReason},
     validate::format_date,
 };
 use fvoci_http::session::CurrentUser;
@@ -68,7 +68,14 @@ pub async fn summary(
     let week_offset: i32 = match query.week_start.as_deref().unwrap_or("mon") {
         "mon" => 0,
         "sun" => 1,
-        _ => return Err(AppError::BadRequest("week_start must be mon or sun".into())),
+        _ => {
+            return Err(AppError::invalid(
+                "week_start",
+                InvalidReason::InvalidFormat,
+                None,
+                "week_start must be mon or sun",
+            ));
+        }
     };
     let mut tx = state.db.begin_as(user).await?;
     let w = window(&mut tx, &range).await?;

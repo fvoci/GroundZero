@@ -1,3 +1,4 @@
+import { timeData } from '$lib/features/time/data';
 import type { Me, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
@@ -72,7 +73,7 @@ beforeEach(async () => {
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([TEST_ORGANIZATION]);
   vi.spyOn(api, 'unreadCount').mockResolvedValue(0);
   vi.spyOn(api, 'notifications').mockResolvedValue({ notifications: [], next: null });
-  vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
+  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
   vi.spyOn(api, 'wikiDocuments').mockResolvedValue([]);
   vi.spyOn(api, 'modules').mockResolvedValue([]);
   vi.spyOn(api, 'documentTemplates').mockResolvedValue([]);

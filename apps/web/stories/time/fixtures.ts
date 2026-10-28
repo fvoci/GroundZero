@@ -1,4 +1,5 @@
-import type { CourseView, EventView, StudyPlanView, TimeEntryView } from '$lib/api/client';
+import type { TimeEntryView } from '$lib/features/time/model';
+import type { CourseView, EventView, StudyPlanView } from '$lib/api/client';
 
 export const running: TimeEntryView & { stopped_entry_id: string | null } = {
   id: 'timer-1',

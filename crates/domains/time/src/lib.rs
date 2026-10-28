@@ -11,9 +11,10 @@ pub mod summary;
 pub mod targets;
 pub mod timer;
 
+use axum::middleware::from_extractor_with_state;
 use axum::routing::{get, post, put};
 use axum::{Router, extract::FromRef};
-use fvoci_http::session::SessionState;
+use fvoci_http::session::{ExpectedUserIfSent, SessionState};
 use utoipa::OpenApi;
 
 /// 시간 처리기에 필요한 DB 상태.
@@ -36,12 +37,14 @@ pub struct TimeState {
         summary::summary,
         comparison::task_time,
         comparison::item_time,
+        targets::list,
     ),
     components(schemas(
         model::TimeKind,
         targets::TargetKind,
         targets::TargetInput,
         targets::Target,
+        targets::TimeEntryTarget,
         model::TimeEntry,
         timer::StartTimer,
         timer::TimerStartMode,
@@ -51,7 +54,7 @@ pub struct TimeState {
         commands::EntryInput,
         commands::AddEntry,
         commands::UpdateEntry,
-        commands::TimeEntryConflict,
+        commands::TimeEntryWriteConflict,
         read::TimeEntryRevision,
         summary::SummaryGroup,
         summary::TimeSummaryRow,
@@ -63,7 +66,7 @@ pub struct TimeState {
 pub struct TimeApi;
 
 /// 시간 경로(/api 아래).
-pub fn router<S>() -> Router<S>
+pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     TimeState: FromRef<S>,
@@ -81,4 +84,8 @@ where
         .route("/me/time-summary", get(summary::summary))
         .route("/tasks/{task_id}/time", get(comparison::task_time))
         .route("/items/{item_id}/time", get(comparison::item_time))
+        .route("/time-entry-targets", get(targets::list))
+        .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
+            state.clone(),
+        ))
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
+  import type { TimeTargetKind } from '$lib/features/time/model';
   // 시간 기록의 연결 대상 고르기(업무·문서·항목). @ 링크와 같은 후보 검색을 쓴다(볼 수 있는 대상만 나온다).
-  import type { ReferenceCandidateView, TimeTargetKind } from '$lib/api/client';
+  import type { ReferenceCandidateView } from '$lib/api/client';
   import { api } from '$lib/api/client';
   import { m } from '$lib/paraglide/messages.js';
   import { Input } from '$lib/ui/input';

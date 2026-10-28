@@ -1,3 +1,4 @@
+import { timeData } from '$lib/features/time/data';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 // 화면 단위 story(Screens/)의 준비: 경로(router.path), 사이드바가 같이 쓰는 목록(workspaceNav), 서버 응답(`api` 함수)과
 // 빌드 정보(/healthz)를 story 동안만 바꾼다. 실제 서버에 닿는 요청은 하나도 보내지 않는다(preview.ts의 요청 차단).
@@ -38,7 +39,7 @@ export interface ScreenApi {
   calendar: typeof api.calendar;
   notifications: typeof api.notifications;
   myInvitations: typeof api.myInvitations;
-  currentTimer: typeof api.currentTimer;
+  currentTimer: typeof timeData.currentTimer;
   // 업무 보기는 서버 상태 정의를 함께 읽는다.
   taskStatuses: typeof work.taskStatuses;
   tasks: typeof work.tasks;
@@ -150,7 +151,7 @@ export function setUpScreen(path: string, overrides: Partial<ScreenApi> = {}): (
   spyOn(api, 'calendar').mockImplementation(stubs.calendar);
   spyOn(api, 'notifications').mockImplementation(stubs.notifications);
   spyOn(api, 'myInvitations').mockImplementation(stubs.myInvitations);
-  spyOn(api, 'currentTimer').mockImplementation(stubs.currentTimer);
+  spyOn(timeData, 'currentTimer').mockImplementation(stubs.currentTimer);
   spyOn(work, 'tasks').mockImplementation(stubs.tasks);
   // 실제 상태 정의 조회도 합성 응답으로 격리한다.
   spyOn(work, 'taskStatuses').mockImplementation(stubs.taskStatuses);

@@ -1,5 +1,6 @@
+import type { TimeEntryView, TimeKind } from '$lib/features/time/model';
 // 시간 기록 표시 (D-32).
-import type { TimeEntryView, TimeKind } from '$lib/api/client';
+
 import { m } from '$lib/paraglide/messages.js';
 
 // 값은 읽을 때 지금 언어로 만든다(언어는 실행 중에 바뀔 수 있다).
