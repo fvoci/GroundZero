@@ -76,6 +76,15 @@ async fn share_recipient_is_a_manager_only_read_and_hides_foreign_recipients() {
     assert_eq!(reply.json["user_id"], outside.id.0.to_string());
     assert_eq!(reply.json["recipient_role"], "outside_member");
     assert_eq!(reply.json["max_permission"], "read");
+    // 임의의 조직원 id로 이메일을 찾는 내부 함수는 앱 역할에 열지 않는다.
+    crate::sql_support::denied(
+        &w.state,
+        &w.owner,
+        "SELECT * FROM fvoci.app_document_share_recipient($1,$2,$3)",
+        &[doc, outside.id.0, w.org],
+        "42501",
+    )
+    .await;
     w.share(doc, &outside, "read").await;
     assert_eq!(
         common::send(&app, Method::GET, &path, Some(&outside), None)
@@ -95,4 +104,64 @@ async fn share_recipient_is_a_manager_only_read_and_hides_foreign_recipients() {
             .status,
         StatusCode::NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn share_commands_compare_a_sent_expected_user_before_changing_any_share() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let (outside, email) = outsider(&w).await;
+    let doc = w.doc().await;
+    let path = format!("/api/documents/{doc}/shares");
+    let wrong = outside.id.0.to_string();
+    let body = json!({"email":email,"organization_id":w.org,"permission":"read"});
+    let (status, _, _) = common::send_raw(
+        &app,
+        Method::POST,
+        &path,
+        Some(&w.owner),
+        &[
+            ("content-type", "application/json"),
+            ("x-fvoci-expected-user", &wrong),
+        ],
+        serde_json::to_vec(&body).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(
+        crate::sql_support::rows(
+            &w.state,
+            &w.owner,
+            "SELECT id FROM fvoci.document_shares WHERE document_id=$1",
+            &[doc]
+        )
+        .await
+        .is_empty()
+    );
+    // 지금까지 선택이었던 머리는 계속 선택이다.
+    let created = common::send(&app, Method::POST, &path, Some(&w.owner), Some(body)).await;
+    assert_eq!(created.status, StatusCode::CREATED, "{:?}", created.json);
+    let share = created.json["id"].as_str().unwrap();
+    let deletion = format!("/api/document-shares/{share}");
+    let (status, _, _) = common::send_raw(
+        &app,
+        Method::DELETE,
+        &deletion,
+        Some(&w.owner),
+        &[("x-fvoci-expected-user", &wrong)],
+        Vec::new(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let own = w.owner.id.0.to_string();
+    let (status, _, _) = common::send_raw(
+        &app,
+        Method::DELETE,
+        &deletion,
+        Some(&w.owner),
+        &[("x-fvoci-expected-user", &own)],
+        Vec::new(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
 }
