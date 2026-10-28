@@ -1,14 +1,14 @@
 //! 접근 등급(D-113). SQL `app_access(kind, id)` 하나가 none/read/write/owner를 계산하고 서버는 그 결과만 쓴다.
 //! 역할·보관·개별 공유·조직 경계로 등급을 다시 계산하지 않는다. 쓰기의 404(볼 수 없음)·409(보관된 항목)·403(권한
 //! 부족) 구분도 SQL(`app_require_document` 등)이 정하고, 변경 함수는 스스로 검사하므로 서버의 사전 검사는 읽기 경로와
-//! 응답 코드 구분에만 쓴다. DB 정의는 `migrations/202610250001_initial_state.sql`.
+//! 응답 코드 구분에만 쓴다. DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`.
 
 use serde::{Deserialize, Serialize};
 use sqlx::Postgres;
 use utoipa::ToSchema;
 
-use crate::db::UserTx;
-use crate::error::AppError;
+use fvoci_core::error::AppError;
+use fvoci_db::UserTx;
 
 /// `app_access`가 아는 대상 종류.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

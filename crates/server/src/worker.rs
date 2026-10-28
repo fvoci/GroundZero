@@ -13,10 +13,10 @@ use std::time::Duration;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-use crate::db::{Db, needed_ids};
-use crate::error::AppError;
 use crate::search::{SearchClient, drain, prepare};
 use crate::storage::Storage;
+use fvoci_core::error::AppError;
+use fvoci_db::{Db, needed_ids};
 
 /// 한 번 돈 결과(로그·테스트용).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -201,7 +201,7 @@ async fn recurrence(db: &Db) -> Result<i32, AppError> {
                 }
                 Err(err) => {
                     tracing::warn!(event = "recurrence.sync_failed", series = %id,
-                        error_code = err.code(), detail = crate::logging::safe_error(&err),
+                        error_code = err.code(), detail = fvoci_core::logging::safe_error(&err),
                         "recurrence series failed; continuing with the next series");
                     break;
                 }
@@ -310,7 +310,7 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
                     tracing::error!(
                         event = "storage.cleanup_gave_up",
                         error_code = err.code(),
-                        detail = crate::logging::safe_error(&err),
+                        detail = fvoci_core::logging::safe_error(&err),
                         key = key.as_str(),
                         attempts = attempts + 1,
                         "storage cleanup gave up after 10 attempts"
@@ -319,7 +319,7 @@ async fn clean_storage(db: &Db, storage: &Storage) -> Result<i32, AppError> {
                     tracing::warn!(
                         event = "storage.cleanup_retry",
                         error_code = err.code(),
-                        detail = crate::logging::safe_error(&err),
+                        detail = fvoci_core::logging::safe_error(&err),
                         key = key.as_str(),
                         attempts = attempts + 1,
                         "storage cleanup failed; will retry"
@@ -349,7 +349,7 @@ async fn logged(
             tracing::warn!(
                 event = "job.failed",
                 error_code = err.code(),
-                detail = crate::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 "background job failed"
             );
             0

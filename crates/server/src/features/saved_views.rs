@@ -11,11 +11,11 @@ use serde_json::{Map, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation};
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
-use crate::ids::ItemId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::ItemId;
+use fvoci_db::{UserTx, is_unique_violation};
+use fvoci_http::session::CurrentUser;
 
 /// 저장한 보기.
 #[derive(Debug, Serialize, ToSchema)]
@@ -151,7 +151,7 @@ pub async fn create(
                 .bind(item)
                 .bind(&name)
                 .bind(&config)
-                .bind(crate::db::new_ids(1))
+                .bind(fvoci_db::new_ids(1))
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;

@@ -1101,7 +1101,7 @@ async fn a_stale_pending_list_after_realtime_off_is_already_saved() {
     until_no_room(&state, id).await;
 
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
-    let stale_pending: Vec<fvoci_server::ids::DocumentId> =
+    let stale_pending: Vec<fvoci_core::ids::DocumentId> =
         sqlx::query_scalar("SELECT app_collab_pending($1::uuid)")
             .bind(&ws)
             .fetch_all(tx.conn())
@@ -1110,7 +1110,7 @@ async fn a_stale_pending_list_after_realtime_off_is_already_saved() {
     tx.commit().await.unwrap();
     assert_eq!(
         stale_pending,
-        vec![fvoci_server::ids::DocumentId(
+        vec![fvoci_core::ids::DocumentId(
             uuid::Uuid::parse_str(id).unwrap()
         )]
     );
@@ -1159,7 +1159,7 @@ async fn a_stale_pending_list_after_realtime_off_is_already_saved() {
         "unsaved pending state must still refuse OFF completion"
     );
     let mut tx = state.db.begin_as(admin.id).await.unwrap();
-    let pending: Vec<fvoci_server::ids::DocumentId> =
+    let pending: Vec<fvoci_core::ids::DocumentId> =
         sqlx::query_scalar("SELECT app_collab_pending($1::uuid)")
             .bind(&ws)
             .fetch_all(tx.conn())
@@ -2916,8 +2916,7 @@ async fn live_move_race_setup_through(
             .unwrap();
     if let Some(url) = db_url {
         state.db =
-            fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(url.to_owned()))
-                .unwrap();
+            fvoci_db::Db::connect_lazy(&fvoci_core::secret::Secret::new(url.to_owned())).unwrap();
     }
     let app = common::app(&state);
     let addr = serve(app.clone()).await;
@@ -3511,10 +3510,9 @@ async fn rechecks_survive_normally_but_close_on_real_database_delay_and_failure(
     for pause in [true, false] {
         let mut proxy = DbProxy::start().await;
         let mut proxied = state.clone();
-        proxied.db = fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(
-            proxy.url.clone(),
-        ))
-        .unwrap();
+        proxied.db =
+            fvoci_db::Db::connect_lazy(&fvoci_core::secret::Secret::new(proxy.url.clone()))
+                .unwrap();
         let addr = proxy.serve(common::app(&proxied)).await;
         let mut client = connect(addr, Some(&writer), &id, true).await.unwrap();
         let healthy_until =
@@ -3789,8 +3787,7 @@ async fn commit_race_setup(destination_writable: bool) -> CommitRace {
     .unwrap();
     // 준비와 최종 조회도 같은 풀로 한다. COMMIT 장벽은 실제 이동 실행 연결만 멈춘다.
     state.db =
-        fvoci_server::db::Db::connect_lazy(&fvoci_server::config::Secret::new(proxy.url.clone()))
-            .unwrap();
+        fvoci_db::Db::connect_lazy(&fvoci_core::secret::Secret::new(proxy.url.clone())).unwrap();
     let original = common::app(&state);
     let admin = login(&state, "commit-response-admin").await;
     let from = create_workspace(&original, &admin, "commit response source").await;
@@ -4215,7 +4212,7 @@ async fn a_move_dropped_before_the_room_handles_it_changes_nothing() {
     .await;
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
     let request = fvoci_server::collab::room::MoveRequest {
-        doc: fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap()),
+        doc: fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap()),
         user: admin.id,
         input: serde_json::from_value(json!({ "target_workspace_id": to, "target_item_id": null,
             "acknowledged": { "changes": preview.json["changes"] } }))
@@ -4391,7 +4388,7 @@ async fn revision_authors(
 
 /// 이 문서의 방이 닫혀 서버의 방 목록에서 빠질 때까지 기다린다(방은 닫히며 리비전·상태를 다 남긴 뒤에 빠진다).
 async fn until_no_room(state: &fvoci_server::http::AppState, id: &str) {
-    let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
+    let doc = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     while state.collab.has_room(doc) {
         assert!(
@@ -4648,7 +4645,7 @@ async fn a_move_held_past_the_lock_limit_is_refused_and_the_room_carries_on() {
     }
     assert_eq!(closed, None, "the connection was closed");
     assert!(acked(&e), "the held edit was not acknowledged");
-    let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
+    let doc = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
     assert!(state.collab.has_room(doc), "the room closed");
     assert_eq!(
         get_doc(&app, &admin, &id).await["workspace_id"],
@@ -4915,7 +4912,7 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
     assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
     assert_eq!(last_revision(&owner, &id).await, (2, admin.id.0));
     assert_eq!(collab_states(&owner, &id, true).await, 1);
-    assert!(!state.collab.has_room(fvoci_server::ids::DocumentId(
+    assert!(!state.collab.has_room(fvoci_core::ids::DocumentId(
         uuid::Uuid::parse_str(&id).unwrap()
     )));
 
@@ -4992,7 +4989,7 @@ async fn a_connected_writer_saving_for_an_editor_is_recorded_as_a_stand_in() {
     assert!(demoted.status.is_success(), "{:?}", demoted.json);
     assert_eq!(a.closed().await, Some(4403));
     // 반출 직전처럼 방에 지금 리비전을 남기게 한다: 고친 사람은 쓸 수 없고 연결된 다른 작성자가 남긴다.
-    let doc_id = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
+    let doc_id = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
     state
         .collab
         .snapshot_documents(&std::collections::HashSet::from([doc_id]))
@@ -5251,7 +5248,7 @@ async fn a_restore_held_past_the_lock_limit_is_refused() {
     let refused = request.await.unwrap();
     assert_eq!(refused.status, StatusCode::CONFLICT, "{:?}", refused.json);
     assert_eq!(refused.json["error"], "invalid_state", "{:?}", refused.json);
-    let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
+    let doc = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(&id).unwrap());
     assert!(!state.collab.has_room(doc));
     let c = connect(addr, Some(&admin), &id, true).await.unwrap();
     c.close().await;
@@ -5597,7 +5594,7 @@ async fn a_restore_or_move_racing_a_closing_room_keeps_its_edits() {
             .unwrap();
         e.close().await;
         until_waiting_on_lock("FROM documents WHERE id = $1 FOR UPDATE", holder).await;
-        let doc = fvoci_server::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
+        let doc = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
         assert!(
             state.collab.has_room(doc),
             "the closing room left the list early"

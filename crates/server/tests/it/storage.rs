@@ -8,8 +8,9 @@
 
 use bytes::Bytes;
 use futures_util::StreamExt;
-use fvoci_server::config::{S3Config, Secret, StorageConfig};
-use fvoci_server::error::AppError;
+use fvoci_core::error::AppError;
+use fvoci_core::secret::Secret;
+use fvoci_server::config::{S3Config, StorageConfig};
 use fvoci_server::storage::{Part, Storage};
 use sha2::{Digest, Sha256};
 

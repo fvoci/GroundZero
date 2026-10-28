@@ -1,6 +1,6 @@
 //! 홈 (D-19): Up Next(기한 초과·오늘·다가오는 업무), 최근 문서·최근 작업, 진행 중인 항목과 의미에 맞는 진행률,
 //! 고정·즐겨찾기. 모두 볼 수 있는 것만(RLS) 나온다. 주간 달력은 달력 API, 실행 중인 스톱워치는 타이머 API,
-//! 알림은 알림 API를 그대로 쓴다. 고정·즐겨찾기는 `migrations/202610250001_initial_state.sql`의 `app_set_mark`가 처리한다.
+//! 알림은 알림 API를 그대로 쓴다. 고정·즐겨찾기는 `crates/db/migrations/202610250001_initial_state.sql`의 `app_set_mark`가 처리한다.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -9,13 +9,13 @@ use time::{Date, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
 use crate::features::modules::ModuleKind;
 use crate::features::organizations::OrgScope;
 use crate::features::tasks::format_date;
 use crate::http::AppState;
-use crate::ids::{ItemId, OrganizationId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{ItemId, OrganizationId, WorkspaceId};
+use fvoci_http::session::CurrentUser;
 
 /// Up Next 구분.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -309,7 +309,7 @@ fn to_task(row: TaskRow, today: Option<Date>) -> Result<HomeTask, AppError> {
 }
 
 async fn marks(
-    tx: &mut crate::db::UserTx,
+    tx: &mut fvoci_db::UserTx,
     organization: OrganizationId,
 ) -> Result<(Vec<MarkedTarget>, Vec<MarkedTarget>), AppError> {
     type MarkRow = (
@@ -556,7 +556,7 @@ pub async fn set_mark(
 }
 
 async fn mark_state(
-    tx: &mut crate::db::UserTx,
+    tx: &mut fvoci_db::UserTx,
     kind: MarkTarget,
     id: Uuid,
 ) -> Result<MarkState, AppError> {

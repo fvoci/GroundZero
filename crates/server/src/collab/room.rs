@@ -35,10 +35,10 @@ use super::convert::{self, FRAGMENT};
 use super::lease::{Lease, MovePermit, WritePermit};
 use super::visibility::{CommittedMove, Snapshot};
 use crate::config::Limits;
-use crate::db::Db;
-use crate::error::AppError;
 use crate::features::documents::{self, MoveDocument, MoveReply};
-use crate::ids::{DocumentId, UserId};
+use fvoci_core::error::AppError;
+use fvoci_core::ids::{DocumentId, UserId};
+use fvoci_db::Db;
 
 /// 방마다 들어오는 명령·메시지 대기열의 크기.
 const ROOM_QUEUE: usize = 1024;
@@ -610,7 +610,7 @@ impl Rooms {
                 return pending_already_saved(db, doc, admin).await.unwrap_or(false);
             }
             Err(err) => {
-                tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not load a pending live state");
+                tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not load a pending live state");
                 return false;
             }
         }
@@ -1107,7 +1107,7 @@ impl Room {
             match documents::document_for(&self.db, request.user, self.doc_id).await {
                 Ok(document) => outcome.document = document,
                 Err(err) => {
-                    tracing::warn!(event = "collab.move_reload_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not reload the moved document");
+                    tracing::warn!(event = "collab.move_reload_failed", document = %self.doc_id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not reload the moved document");
                 }
             }
         }
@@ -1707,7 +1707,7 @@ impl Room {
                 }
             }
             Err(err) => {
-                tracing::warn!(event = "collab.store_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not store live editing state");
+                tracing::warn!(event = "collab.store_failed", document = %self.doc_id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not store live editing state");
             }
         }
     }
@@ -1773,7 +1773,7 @@ impl Room {
                 }
                 Err(AppError::Forbidden | AppError::NotFound) => {}
                 Err(err) => {
-                    tracing::warn!(event = "collab.save_failed", document = %self.doc_id.0, error_code = err.code(), detail = crate::logging::safe_error(&err), "could not save the live document as a revision");
+                    tracing::warn!(event = "collab.save_failed", document = %self.doc_id.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not save the live document as a revision");
                     return false;
                 }
             }
@@ -2035,7 +2035,7 @@ async fn session_alive(db: &Db, peer: &Peer) -> Option<bool> {
             tracing::warn!(
                 event = "collab.session_check_failed",
                 error_code = err.code(),
-                detail = crate::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 "could not confirm the live editing session"
             );
             None
@@ -2084,7 +2084,7 @@ pub(super) async fn observe_access(db: &Db, doc: DocumentId, peer: &Peer) -> Acc
                 event = "collab.access_check_failed",
                 document = %doc.0,
                 error_code = err.code(),
-                detail = crate::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 "could not confirm live editing access"
             );
             return PeerAccess::Unknown.into();
@@ -2101,7 +2101,7 @@ pub(super) async fn observe_access(db: &Db, doc: DocumentId, peer: &Peer) -> Acc
                 event = "collab.access_check_failed",
                 document = %doc.0,
                 error_code = err.code(),
-                detail = crate::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 "could not confirm live editing access"
             );
             PeerAccess::Unknown

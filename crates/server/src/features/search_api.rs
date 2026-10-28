@@ -14,12 +14,12 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::UserTx;
-use crate::error::{AppError, ErrorBody};
 use crate::features::organizations::OrgScope;
 use crate::http::AppState;
-use crate::ids::{OrganizationId, UserId, WorkspaceId};
 use crate::search::{SearchClient, day_number};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{OrganizationId, UserId, WorkspaceId};
+use fvoci_db::UserTx;
 
 /// 한 번에 돌려주는 결과 수.
 const MAX_RESULTS: usize = 20;
@@ -427,7 +427,7 @@ async fn indexed(
                 tracing::warn!(
                     event = "search.unavailable",
                     error_code = err.code(),
-                    detail = crate::logging::safe_error(&err),
+                    detail = fvoci_core::logging::safe_error(&err),
                     "search service unavailable; using title search"
                 );
                 return Ok(None);
@@ -436,7 +436,7 @@ async fn indexed(
                 tracing::warn!(
                     event = "search.paging_failed",
                     error_code = err.code(),
-                    detail = crate::logging::safe_error(&err),
+                    detail = fvoci_core::logging::safe_error(&err),
                     "search service failed while paging"
                 );
                 break;

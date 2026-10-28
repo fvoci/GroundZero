@@ -1118,6 +1118,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-core"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "fvoci-db"
+version = "0.1.0"
+dependencies = [
+ "fvoci-core",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "fvoci-http"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "sha2 0.11.1",
+ "sqlx",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-server"
 version = "0.1.0"
 dependencies = [
@@ -1127,6 +1163,9 @@ dependencies = [
  "bytes",
  "flate2",
  "futures-util",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
  "hex",
  "hmac 0.13.0",
  "http-body-util",

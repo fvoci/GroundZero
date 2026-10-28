@@ -3,7 +3,7 @@
 //! 업무는 모듈 항목 아래에 있고 모듈 번호열을 함께 쓴다. 권한은 항목을 따르며 DB 함수 `app_access`
 //! 하나로 판정한다(보관 아래 읽기 전용). 필드 고치기는 `base_version`으로 충돌을 막고, 칸반 이동과 체크리스트
 //! 체크는 버전 없이 따로 한다(같은 보드를 여럿이 써도 충돌하지 않게). 날짜는 시각이 없는 날짜로 저장한다(D-50).
-//! 앱 공급 UUIDv7(D-88)과 모든 칸을 한 번에 받는 만들기(D-105)의 SQL 정본은 `migrations/`에 있다.
+//! 앱 공급 UUIDv7(D-88)과 모든 칸을 한 번에 받는 만들기(D-105)의 SQL 정본은 `crates/db/migrations/`에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -15,15 +15,15 @@ use time::{Date, OffsetDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::documents::Access;
 use crate::features::recurrence::RecurrenceRule;
 use crate::features::schedule::{self, Change, LinkKind, Span, TaskLink};
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
-use crate::ids::{ItemId, ModuleId, UserId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
+use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 설명 글자 수 상한.
 const MAX_DESCRIPTION_CHARS: usize = 10_000;
@@ -821,7 +821,7 @@ pub async fn update(
         && let Some(series) = detail.task.series.as_ref().filter(|s| s.rule.is_some())
         && let Err(e) = crate::features::recurrence::sync_series(&state, user, series.id).await
     {
-        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = crate::logging::safe_error(&e), series = %series.id, "recurrence sync after task update failed");
+        tracing::warn!(event = "recurrence.sync_failed", error_code = e.code(), detail = fvoci_core::logging::safe_error(&e), series = %series.id, "recurrence sync after task update failed");
     }
     let error = match outcome.as_str() {
         "conflict" => "conflict",

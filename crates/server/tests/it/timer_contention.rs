@@ -21,7 +21,7 @@ impl Drop for RunningServer {
     }
 }
 
-async fn hold(w: &World) -> (fvoci_server::db::UserTx, i32) {
+async fn hold(w: &World) -> (fvoci_db::UserTx, i32) {
     let mut tx = w.state.db.begin_as(w.owner.id).await.unwrap();
     sqlx::query(
         "SELECT pg_advisory_xact_lock(hashtextextended('fvoci-timer:' || $1::uuid::text,0))",

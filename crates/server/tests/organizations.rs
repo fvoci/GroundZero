@@ -36,7 +36,7 @@ async fn admin_join_rechecks_workspace_after_concurrent_deletion()
         if result.is_ok() {
             join.commit().await?;
         }
-        Ok::<_, fvoci_server::error::AppError>(result)
+        Ok::<_, fvoci_core::error::AppError>(result)
     });
     blocked(holder, waiter).await;
     deletion.commit().await?;

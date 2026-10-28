@@ -156,7 +156,7 @@ function raisedBy(bodies: Map<string, string>, message: string, sqlstate: string
   return [...bodies].filter(([, body]) => body.includes(raise(message, sqlstate))).map(([k]) => k);
 }
 
-const dir = path.resolve(import.meta.dirname, '../../../../crates/server/migrations');
+const dir = path.resolve(import.meta.dirname, '../../../../crates/db/migrations');
 const files: MigrationFile[] = readdirSync(dir)
   .filter((name) => name.endsWith('.sql'))
   .map((name) => ({ name, text: readFileSync(path.join(dir, name), 'utf8') }));

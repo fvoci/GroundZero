@@ -4,7 +4,7 @@
 //! 사용자당 하나이고 서버 시각으로 재므로 앱을 닫아도 이어진다. 기록은 측정 뒤에 종류·대상을 정할 수 있고,
 //! 고치면 본인만 보는 수정 이력에 이전 값이 남는다. 집계는 보는 사람의 시간대 날짜로 하며 기록은 시작한 날에
 //! 센다. 시간 합계도 본인 기록만 돌려준다.
-//! DB 정의는 `migrations/202610250001_initial_state.sql`의 `app_start_timer`·`app_update_time_entry` 등에 있다.
+//! DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`의 `app_start_timer`·`app_update_time_entry` 등에 있다.
 //! 새 UUIDv7은 앱이 공급한다(D-88).
 
 use axum::Json;
@@ -17,12 +17,12 @@ use time::{Date, OffsetDateTime};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::{UserTx, is_unique_violation, new_ids};
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
 use crate::features::tasks::{format_date, parse_date, validate_text};
 use crate::http::AppState;
-use crate::ids::WorkspaceId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::WorkspaceId;
+use fvoci_db::{UserTx, is_unique_violation, new_ids};
+use fvoci_http::session::CurrentUser;
 
 const MAX_MEMO_CHARS: usize = 2_000;
 /// 목록·집계 한 번의 최대 기간(일).

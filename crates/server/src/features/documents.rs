@@ -2,7 +2,7 @@
 //!
 //! 한 문서 엔진을 쓴다. 문서는 워크스페이스 소유(위키) 또는 사용자 소유(개인 노트) 중 하나다 (D-59).
 //! 접근 판정은 DB 함수 `app_access`(owner·write·read·없음) 하나로 하고, RLS와 이 모듈이 같은 함수를
-//! 쓴다(`migrations/202610250001_initial_state.sql`의 `app_access`).
+//! 쓴다(`crates/db/migrations/202610250001_initial_state.sql`의 `app_access`).
 //!
 //! 저장 경계 (D-62): 본문은 Tiptap JSON(`schema_version` 1)이며 저장할 때마다 리비전이 하나 늘어난다.
 //! 이것은 JSON 리비전 저장이고 공동 편집이 아니다. CRDT 도입 시 상태 열을 `body` 옆에 추가하며
@@ -23,13 +23,13 @@ use uuid::Uuid;
 use crate::collab::room::MoveRequest;
 use crate::collab::visibility::CommittedMove;
 use crate::config::Limits;
-use crate::db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
 use crate::http::cache;
-use crate::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
+use fvoci_db::{Db, UserTx, is_unique_violation, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 현재 본문 스키마 버전.
 pub const SCHEMA_VERSION: i32 = 1;

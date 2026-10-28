@@ -16,7 +16,7 @@ use futures_util::{Stream, StreamExt};
 use sha2::{Digest, Sha256};
 
 use crate::config::StorageConfig;
-use crate::error::AppError;
+use fvoci_core::error::AppError;
 
 pub use local::LocalStore;
 pub use s3::S3Store;

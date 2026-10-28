@@ -12,10 +12,11 @@
 
 use std::process::ExitCode;
 
+use fvoci_core::error::AppError;
+use fvoci_db::admin;
+use fvoci_db::config::DbCommandConfig;
 use fvoci_server::backup;
-use fvoci_server::config::{Config, DbCommandConfig};
-use fvoci_server::db::admin;
-use fvoci_server::error::AppError;
+use fvoci_server::config::Config;
 use fvoci_server::http::ApiDoc;
 use utoipa::OpenApi;
 
@@ -211,7 +212,7 @@ fn main() -> ExitCode {
             tracing::error!(
                 event = "server.exit_error",
                 error_code = err.code(),
-                detail = fvoci_server::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 hint = db_failure_hint(&command, &err),
                 "exited with error"
             );

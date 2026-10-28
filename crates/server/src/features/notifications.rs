@@ -1,10 +1,10 @@
 //! 조직 범위 알림함(D-118). 초대는 SQL 계약에 따라 모든 조직 문맥에 보인다.
-use crate::error::{AppError, ErrorBody};
 use crate::features::organizations::OrgScope;
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, OrganizationId, WorkspaceId};
 use axum::Json;
 use axum::extract::{Query, State};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, WorkspaceId};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};

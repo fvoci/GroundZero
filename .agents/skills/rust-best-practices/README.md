@@ -10,6 +10,6 @@ Rust 코드를 쓰거나 고칠 때 에이전트 세션이 참고하는 스킬�
 ## 이 저장소에서 적용할 때
 
 - 저장소 규칙이 우선한다: [AGENTS.md](../../../AGENTS.md), [결정 기록](../../../docs/decisions.md), 저장소의 rustfmt·Clippy 설정(D-09).
-- `crates/server`와 `xtask`는 애플리케이션 코드다. 라이브러리 공개 API 규칙은 엄격하게 적용하지 않는다.
+- `crates/*`와 `xtask`는 애플리케이션 코드다. 라이브러리 공개 API 규칙은 엄격하게 적용하지 않는다.
 - SKILL.md가 권하는 `[lints]`·`lints/` 설정 도입은 검사 규칙 변경이므로 사용자 결정으로만 한다.
 - 이름이 같은 BeautifulRust 플러그인 스킬(`beautiful-rust:rust-best-practices`)이 설치된 머신에서는 이 저장소 스킬을 쓴다(위 예외가 들어 있음).

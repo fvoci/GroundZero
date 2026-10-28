@@ -382,21 +382,16 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
 
     // 관리자 자신이 준 레코드가 없다: 새 레코드를 만들고 그것만 지운다.
     let before = migrator_memberships(&mut admin, &role).await;
-    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
-        .await
-        .unwrap();
+    let borrow = fvoci_db::admin::borrow_migrator(&mut conn).await.unwrap();
     assert!(
-        matches!(
-            borrow,
-            fvoci_server::db::admin::MigratorBorrow::Added { .. }
-        ),
+        matches!(borrow, fvoci_db::admin::MigratorBorrow::Added { .. }),
         "{borrow:?}"
     );
     sqlx::query("SET ROLE fvoci_migrator")
         .execute(&mut conn)
         .await
         .unwrap();
-    fvoci_server::db::admin::release_migrator(&mut conn, borrow)
+    fvoci_db::admin::release_migrator(&mut conn, borrow)
         .await
         .unwrap();
     assert_eq!(migrator_memberships(&mut admin, &role).await, before);
@@ -410,13 +405,11 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
     .unwrap();
     let before = migrator_memberships(&mut admin, &role).await;
     assert_eq!(before.len(), 2, "{before:?}");
-    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
-        .await
-        .unwrap();
+    let borrow = fvoci_db::admin::borrow_migrator(&mut conn).await.unwrap();
     assert!(
         matches!(
             &borrow,
-            fvoci_server::db::admin::MigratorBorrow::Changed { grantor, inherit: true } if *grantor == role
+            fvoci_db::admin::MigratorBorrow::Changed { grantor, inherit: true } if *grantor == role
         ),
         "{borrow:?}"
     );
@@ -424,15 +417,13 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
         .execute(&mut conn)
         .await
         .unwrap();
-    fvoci_server::db::admin::release_migrator(&mut conn, borrow)
+    fvoci_db::admin::release_migrator(&mut conn, borrow)
         .await
         .unwrap();
     assert_eq!(migrator_memberships(&mut admin, &role).await, before);
 
     // 빌린 뒤 연결이 끊겼다(복구 중 장애): 같은 관리자 주소의 새 연결로 되돌린다.
-    let borrow = fvoci_server::db::admin::borrow_migrator(&mut conn)
-        .await
-        .unwrap();
+    let borrow = fvoci_db::admin::borrow_migrator(&mut conn).await.unwrap();
     let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut conn)
         .await
@@ -445,13 +436,13 @@ async fn borrowing_the_migrator_leaves_the_admins_memberships_as_they_were() {
         .unwrap();
     assert!(ended);
     other.close().await.unwrap();
-    let role_url = fvoci_server::config::Secret::new(format!(
+    let role_url = fvoci_core::secret::Secret::new(format!(
         "postgres://{role}:{password}@{}:{}/{}",
         options.get_host(),
         options.get_port(),
         options.get_database().unwrap_or("postgres"),
     ));
-    fvoci_server::db::admin::release_migrator_or_reconnect(&mut conn, &role_url, borrow)
+    fvoci_db::admin::release_migrator_or_reconnect(&mut conn, &role_url, borrow)
         .await
         .unwrap();
     assert_eq!(migrator_memberships(&mut admin, &role).await, before);

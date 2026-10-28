@@ -18,9 +18,11 @@ use sha2::{Digest, Sha256};
 use sqlx::{Connection, PgConnection};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::config::{Config, DbCommandConfig, Secret};
-use crate::error::AppError;
+use crate::config::Config;
 use crate::storage::{Part, Storage};
+use fvoci_core::error::AppError;
+use fvoci_core::secret::Secret;
+use fvoci_db::config::DbCommandConfig;
 
 /// 백업 형식 판.
 const FORMAT: u32 = 1;
@@ -134,7 +136,7 @@ pub async fn create(
     private_dir(&out.join("db")).await?;
     let storage = Storage::new(&config.storage);
     let url = need(db.migration_url.as_ref(), "DATABASE_MIGRATION_URL")?;
-    let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
+    let mut conn = PgConnection::connect_with(&fvoci_db::connect_options(url)?).await?;
     sqlx::query("SELECT pg_advisory_lock($1)")
         .bind(STORAGE_LOCK)
         .execute(&mut conn)
@@ -255,14 +257,14 @@ pub async fn restore(
         )));
     }
     let url = need(db.admin_url.as_ref(), "DATABASE_ADMIN_URL")?;
-    let mut conn = PgConnection::connect_with(&crate::db::connect_options(url)?).await?;
+    let mut conn = PgConnection::connect_with(&fvoci_db::connect_options(url)?).await?;
     // 무엇이든 올리기 전에, 복구 끝에 필요한 관리자 권한(트리거를 잠시 끄는 설정)이 있는지 본다.
     check_replication_role(&mut conn).await?;
     // 표는 마이그레이션 역할(표 소유자)로 읽고 채운다. superuser가 아닌 관리자(셀프호스트 Supabase의 `postgres`)는
     // fvoci 표에 권한이 없다. 관리자 권한은 트리거를 잠시 끄는 설정에만 쓴다(`load_tables`, D-88).
-    let borrow = crate::db::admin::borrow_migrator(&mut conn).await?;
+    let borrow = fvoci_db::admin::borrow_migrator(&mut conn).await?;
     let result = restore_as_owner(config, &mut conn, from, &manifest).await;
-    let released = crate::db::admin::release_migrator_or_reconnect(&mut conn, url, borrow).await;
+    let released = fvoci_db::admin::release_migrator_or_reconnect(&mut conn, url, borrow).await;
     let closed = conn.close().await.map_err(AppError::from);
     // 원래 실패(복구)를 먼저 돌려준다. 뒤따른 정리 실패(멤버십 회수·연결 닫기)도 버리지 않고 로그에 남긴다:
     // 회수 실패(새 관리자 연결로 한 번 더 해 본 뒤)는 관리자에게 임시 SET 멤버십이 남았다는 뜻이다.
@@ -272,7 +274,7 @@ pub async fn restore(
                 event = "backup.restore_cleanup_failed",
                 step,
                 error_code = err.code(),
-                detail = crate::logging::safe_error(err),
+                detail = fvoci_core::logging::safe_error(err),
                 "cleanup after a failed restore also failed"
             );
         }

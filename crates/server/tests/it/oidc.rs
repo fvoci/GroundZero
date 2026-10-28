@@ -166,7 +166,7 @@ async fn oidc_login_identifies_by_issuer_and_subject_then_logout_ends_both_sessi
     let state = common::state();
     let mut tx = state
         .db
-        .begin_as(fvoci_server::ids::UserId(user_id.parse().unwrap()))
+        .begin_as(fvoci_core::ids::UserId(user_id.parse().unwrap()))
         .await
         .unwrap();
     let (iss, sub): (String, String) =
@@ -227,7 +227,7 @@ async fn oidc_second_user_is_denied_first_users_documents() {
     assert_eq!(login(&bob, &base, USER2).await.0, 200);
     // 워크스페이스는 조직 안에 만든다(D-111). 띄운 서버는 시험 DB를 같이 쓰므로 fixture 헬퍼로 조직을 준비한다.
     let alice_user = common::TestUser {
-        id: fvoci_server::ids::UserId(me["id"].as_str().unwrap().parse().unwrap()),
+        id: fvoci_core::ids::UserId(me["id"].as_str().unwrap().parse().unwrap()),
         cookie: String::new(),
     };
     let organization = common::organization_for(&alice_user).await;

@@ -613,7 +613,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     let doc_id = uuid::Uuid::parse_str(doc.json["id"].as_str().unwrap()).unwrap();
     // 버전과 참조를 한 문장으로 넣는다(동시에 도는 다른 테스트의 정리 작업이 참조 없는 순간을 보지 않게).
     // 버전 id는 앱처럼 여기서 만든다(DB에는 id 기본값이 없다, D-88).
-    let version_ids = fvoci_server::db::new_ids(502);
+    let version_ids = fvoci_db::new_ids(502);
     sqlx::query(
         "WITH v AS (
            INSERT INTO fvoci.file_versions (id, file_id, version, size, sha256, content_type, storage_key, uploaded_by,
@@ -1531,7 +1531,7 @@ async fn a_retried_record_create_waiting_on_the_first_returns_that_record() {
     )
     .bind(request)
     .bind(item_id)
-    .bind(fvoci_server::db::new_ids(2))
+    .bind(fvoci_db::new_ids(2))
     .fetch_one(t1.conn())
     .await
     .unwrap();

@@ -12,8 +12,9 @@ use time::OffsetDateTime;
 use url::Url;
 
 use super::{ByteStream, Part};
-use crate::config::{S3Config, Secret};
-use crate::error::AppError;
+use crate::config::S3Config;
+use fvoci_core::error::AppError;
+use fvoci_core::secret::Secret;
 
 const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 

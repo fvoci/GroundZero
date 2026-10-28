@@ -16,13 +16,13 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::access::{self, Kind};
-use crate::db::{UserTx, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::members::OfferOwnership;
 use crate::features::workspaces::validate_title;
 use crate::http::AppState;
-use crate::ids::{OrganizationId, Role, UserId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
+use fvoci_db::{UserTx, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 "관리자로 참여" 뒤에만 본다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

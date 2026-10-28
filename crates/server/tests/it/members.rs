@@ -551,7 +551,7 @@ async fn owner_pool() -> sqlx::PgPool {
 /// 트랜잭션 하나를 열어 둔 채 다른 요청을 보내고, 그 요청이 이 트랜잭션의 잠금을 실제로 기다리게 된 뒤 트랜잭션을
 /// 마친 다음 그 요청의 결과를 돌려준다. 고정 시간만 기다리면 느린 환경에서 요청이 잠금에 닿기 전에 커밋해, 경합을
 /// 재현하지 못한 채 통과하거나 엉뚱한 이유로 실패한다. 끝내 기다리지 않으면 시험을 멈춘다.
-async fn while_open<F>(mut tx: fvoci_server::db::UserTx, request: F) -> common::Reply
+async fn while_open<F>(mut tx: fvoci_db::UserTx, request: F) -> common::Reply
 where
     F: std::future::Future<Output = common::Reply> + Send + 'static,
 {
@@ -637,7 +637,7 @@ async fn removing_a_member_who_is_accepting_ownership_meanwhile_conflicts() {
     let mut t1 = state.db.begin_as(heir.id).await.unwrap();
     sqlx::query("SELECT app_accept_ownership($1, $2)")
         .bind(ws_id)
-        .bind(fvoci_server::db::new_ids(1))
+        .bind(fvoci_db::new_ids(1))
         .execute(t1.conn())
         .await
         .unwrap();
@@ -757,7 +757,7 @@ async fn run_removal_race(
     sqlx::query("SELECT app_remove_member($1, $2, $3)")
         .bind(ws_id)
         .bind(member.id)
-        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .bind(fvoci_db::new_ids(usize::try_from(n).unwrap()))
         .execute(t1.conn())
         .await
         .unwrap();
@@ -821,7 +821,7 @@ async fn revoking_an_invitation_being_accepted_does_not_overwrite_the_acceptance
     let mut t1 = state.db.begin_as(invitee.id).await.unwrap();
     sqlx::query("SELECT app_respond_invitation($1, true, $2)")
         .bind(inv_id)
-        .bind(fvoci_server::db::new_ids(1))
+        .bind(fvoci_db::new_ids(1))
         .execute(t1.conn())
         .await
         .unwrap();
@@ -870,7 +870,7 @@ async fn two_admins_removing_each_other_at_once_leave_one_of_them() {
     sqlx::query("SELECT app_remove_member($1, $2, $3)")
         .bind(ws_id)
         .bind(b.id)
-        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .bind(fvoci_db::new_ids(usize::try_from(n).unwrap()))
         .execute(t1.conn())
         .await
         .unwrap();
@@ -901,7 +901,7 @@ async fn demoting(
     owner: &TestUser,
     ws_id: uuid::Uuid,
     admin: &TestUser,
-) -> fvoci_server::db::UserTx {
+) -> fvoci_db::UserTx {
     let n: i32 = {
         let mut tx = state.db.begin_as(owner.id).await.unwrap();
         let n = sqlx::query_scalar("SELECT app_set_member_role_ids($1, $2)")
@@ -917,7 +917,7 @@ async fn demoting(
     sqlx::query("SELECT app_set_member_role($1, $2, 'member', $3)")
         .bind(ws_id)
         .bind(admin.id)
-        .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+        .bind(fvoci_db::new_ids(usize::try_from(n).unwrap()))
         .execute(t1.conn())
         .await
         .unwrap();

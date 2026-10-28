@@ -5,6 +5,7 @@
 //! 로그인·세션 조회처럼 사용자 문맥 이전의 작업은 [`Db::begin_anonymous`]를 쓴다.
 
 pub mod admin;
+pub mod config;
 
 use std::time::Duration;
 
@@ -13,8 +14,8 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{PgConnection, PgPool, Postgres, Transaction};
 
 use crate::config::DatabaseUrl;
-use crate::error::AppError;
-use crate::ids::UserId;
+use fvoci_core::error::AppError;
+use fvoci_core::ids::UserId;
 use uuid::Uuid;
 
 /// 앱 역할 연결 풀.

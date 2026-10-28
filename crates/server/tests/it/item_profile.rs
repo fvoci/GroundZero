@@ -937,7 +937,7 @@ async fn a_retried_copy_waiting_on_the_first_returns_that_copy() {
     .bind(target_id)
     .bind(request)
     .bind("복제본")
-    .bind(fvoci_server::db::new_ids(usize::try_from(n).unwrap()))
+    .bind(fvoci_db::new_ids(usize::try_from(n).unwrap()))
     .fetch_one(t1.conn())
     .await
     .unwrap();
@@ -1106,7 +1106,7 @@ async fn a_null_base_version_does_not_skip_the_item_version_checks() {
     let details: String =
         sqlx::query_scalar("SELECT app_update_item($1, NULL::integer, '바뀐 제목', '', NULL, $2)")
             .bind(it)
-            .bind(fvoci_server::db::new_ids(2))
+            .bind(fvoci_db::new_ids(2))
             .fetch_one(tx.conn())
             .await
             .unwrap();
@@ -1114,7 +1114,7 @@ async fn a_null_base_version_does_not_skip_the_item_version_checks() {
         "SELECT app_set_item_profile($1, NULL::integer, NULL, '바뀐 목표', '', NULL, NULL, 'active', '{}', $2)",
     )
     .bind(it)
-    .bind(fvoci_server::db::new_ids(2))
+    .bind(fvoci_db::new_ids(2))
     .fetch_one(tx.conn())
     .await
     .unwrap();
@@ -1125,7 +1125,7 @@ async fn a_null_base_version_does_not_skip_the_item_version_checks() {
     let same: String =
         sqlx::query_scalar("SELECT app_update_item($1, NULL::integer, '원래 제목', '', NULL, $2)")
             .bind(it)
-            .bind(fvoci_server::db::new_ids(2))
+            .bind(fvoci_db::new_ids(2))
             .fetch_one(tx.conn())
             .await
             .unwrap();

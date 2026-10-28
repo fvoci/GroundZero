@@ -5,8 +5,8 @@ pub mod cache;
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::extract::{DefaultBodyLimit, MatchedPath, Request, State};
-use axum::http::{HeaderValue, Method, StatusCode, header};
+use axum::extract::{DefaultBodyLimit, FromRef, MatchedPath, Request, State};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
@@ -17,8 +17,9 @@ use utoipa::{OpenApi, ToSchema};
 
 use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
-use crate::db::Db;
-use crate::error::{AppError, ErrorBody};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_db::Db;
+use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
     accounts, audit, comments, courses, documents, events, export, files, home, item_profile,
@@ -82,7 +83,7 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
             tracing::warn!(
                 event = "health.database_unavailable",
                 error_code = err.code(),
-                detail = crate::logging::safe_error(&err),
+                detail = fvoci_core::logging::safe_error(&err),
                 "database ping failed"
             );
             (
@@ -97,39 +98,10 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
-/// 상태를 바꾸는 요청은 브라우저의 `Origin`이 공개 원점과 같아야 한다 (CSRF 방지).
-/// SameSite=Lax 쿠키만으로는 JSON API의 교차 출처 요청을 다 막지 못한다.
-async fn require_same_origin(
-    State(state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let safe = matches!(
-        *request.method(),
-        Method::GET | Method::HEAD | Method::OPTIONS
-    );
-    if !safe {
-        let origin = request
-            .headers()
-            .get(header::ORIGIN)
-            .and_then(|v| v.to_str().ok());
-        if origin != Some(state.config.public_origin().as_str()) {
-            let mut response = (
-                StatusCode::FORBIDDEN,
-                Json(ErrorBody {
-                    error: "bad_origin",
-                    message: "cross-origin request rejected".into(),
-                    request_id: crate::logging::current_request_id(),
-                }),
-            )
-                .into_response();
-            response
-                .extensions_mut()
-                .insert(crate::logging::ErrorCode("bad_origin"));
-            return response;
-        }
+impl FromRef<AppState> for PublicOrigin {
+    fn from_ref(state: &AppState) -> Self {
+        Self(state.config.public_origin())
     }
-    next.run(request).await
 }
 
 /// 요청과 그 오류를 잇는 id(D-83). 앞단 프록시가 준 `x-request-id`가 안전한 모양이면 그대로, 아니면 새로 만든다.
@@ -164,7 +136,7 @@ async fn request_context(request: Request, next: Next) -> Response {
     let path = request.uri().path();
     let quiet = path == "/healthz" || !(path.starts_with("/api/") || path.starts_with("/auth/"));
     let started = Instant::now();
-    let mut response = crate::logging::REQUEST_ID
+    let mut response = fvoci_core::logging::REQUEST_ID
         .scope(id.clone(), next.run(request))
         .await;
     let duration_ms = (started.elapsed().as_secs_f64() * 1_000_000.0).round() / 1000.0;
@@ -176,7 +148,7 @@ async fn request_context(request: Request, next: Next) -> Response {
     // 4xx도 어떤 거절인지(bad_request·invalid_state·bad_origin 등) 접근 줄에서 보이게 응답 오류 코드를 붙인다.
     let error_code = response
         .extensions()
-        .get::<crate::logging::ErrorCode>()
+        .get::<fvoci_core::logging::ErrorCode>()
         .map(|c| c.0);
     macro_rules! access {
         ($level:ident) => {
@@ -231,12 +203,12 @@ async fn json_rejections(request: Request, next: Next) -> Response {
         Json(ErrorBody {
             error,
             message,
-            request_id: crate::logging::current_request_id(),
+            request_id: fvoci_core::logging::current_request_id(),
         }),
     )
         .into_response();
     out.extensions_mut()
-        .insert(crate::logging::ErrorCode(error));
+        .insert(fvoci_core::logging::ErrorCode(error));
     out
 }
 /// 알 수 없는 API 경로는 웹 fallback이 아니라 404 JSON.
@@ -725,7 +697,7 @@ async fn api_not_found() -> AppError {
         public_links::CreatePublicLink,
         public_links::CreatedPublicLink,
         public_links::PublicDocument,
-        crate::ids::Role,
+        fvoci_core::ids::Role,
     )),
     tags(
         (name = "system", description = "서비스 상태"),
@@ -1483,7 +1455,7 @@ mod tests {
                 .as_array()
                 .and_then(|ps| {
                     ps.iter()
-                        .find(|p| p["name"] == crate::features::accounts::EXPECTED_USER_HEADER)
+                        .find(|p| p["name"] == fvoci_http::session::EXPECTED_USER_HEADER)
                 })
                 .cloned()
                 .unwrap_or_default();

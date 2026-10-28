@@ -10,12 +10,13 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::new_ids;
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::{CurrentUser, random_token, token_hash};
+use crate::features::accounts::random_token;
 use crate::features::documents::require_manager;
 use crate::http::AppState;
-use crate::ids::DocumentId;
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::DocumentId;
+use fvoci_db::new_ids;
+use fvoci_http::session::{CurrentUser, token_hash};
 
 /// 공개 링크(소유 권한자가 보는 목록 항목).
 #[derive(Debug, Serialize, ToSchema)]

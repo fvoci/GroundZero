@@ -9,11 +9,11 @@ use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::db::UserTx;
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::CurrentUser;
 use crate::http::AppState;
-use crate::ids::{UserId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{UserId, WorkspaceId};
+use fvoci_db::UserTx;
+use fvoci_http::session::CurrentUser;
 
 /// 한 번에 돌려주는 기록 수.
 const PAGE: i64 = 100;

@@ -21,8 +21,8 @@
 
 ## 변경 종류별 읽을 스킬
 
-- 기준 SQL(`crates/server/migrations/`): `.agents/skills/sql/SKILL.md`
-- 서버(`crates/server`): `.agents/skills/server/SKILL.md`
+- 기준 SQL(`crates/db/migrations/`): `.agents/skills/sql/SKILL.md`
+- 서버(`crates/server`·`crates/core`·`crates/db`·`crates/http`): `.agents/skills/server/SKILL.md`
 - 웹(`apps/web`·`packages/api-client`): `.agents/skills/web/SKILL.md`
 - 시험 도구·Docker·CI(`xtask`·`deploy`·`.github/workflows`): `.agents/skills/test-docker-ci/SKILL.md`
 - Rust 코드를 쓸 때 `.agents/skills/rust-best-practices/`, 검토할 때 `.agents/skills/rust-review/`(D-130). 저장소 규칙이 우선한다.

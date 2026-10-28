@@ -10,7 +10,7 @@ use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 use super::{ByteStream, Part, sha256_hex};
-use crate::error::AppError;
+use fvoci_core::error::AppError;
 
 #[derive(Debug, Clone)]
 pub struct LocalStore {
@@ -203,7 +203,7 @@ impl LocalStore {
                     event = "storage.upload_dir_left",
                     upload = upload_id,
                     error_code = err.code(),
-                    detail = crate::logging::safe_error(&err),
+                    detail = fvoci_core::logging::safe_error(&err),
                     "could not remove the parts of a published upload"
                 );
             }

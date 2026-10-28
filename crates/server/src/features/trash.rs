@@ -3,7 +3,7 @@
 //! 지우면 휴지통 묶음 하나가 생긴다(문서는 하위 문서까지, 업무는 하위 업무까지, 항목은 항목 하나, 일정은 하나).
 //! 지운 것은 접근 함수가 없는 것으로 보므로 어디에도 나오지 않는다. 보존 기간(워크스페이스마다, 기본 30일)이
 //! 지나면 되살릴 수 없고 "만료"로 남으며, 실제 삭제는 관리자(개인 노트는 소유자)가 직접 한다(자동 삭제는 O-19
-//! 뒤). DB 정의는 `migrations/202610230001_initial_state.sql`의 `app_restore_batch`·`app_purge_batch` 등에 있다.
+//! 뒤). DB 정의는 `crates/db/migrations/202610250001_initial_state.sql`의 `app_restore_batch`·`app_purge_batch` 등에 있다.
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -13,12 +13,12 @@ use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::db::{UserTx, needed_ids, new_ids};
-use crate::error::{AppError, ErrorBody};
-use crate::features::accounts::{CurrentUser, ExpectedUser};
 use crate::features::tasks::EXPECTED_TASK_USER_DOC;
 use crate::http::AppState;
-use crate::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
+use fvoci_core::error::{AppError, ErrorBody};
+use fvoci_core::ids::{DocumentId, ItemId, ModuleId, UserId, WorkspaceId};
+use fvoci_db::{UserTx, needed_ids, new_ids};
+use fvoci_http::session::{CurrentUser, ExpectedUser};
 
 /// 지운 결과(되살릴 때 쓰는 휴지통 묶음).
 #[derive(Debug, Serialize, ToSchema)]

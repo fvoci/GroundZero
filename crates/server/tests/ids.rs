@@ -51,9 +51,9 @@ async fn functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones(
             .unwrap_err();
         assert_eq!(sqlstate(&err), code, "{label}: {err}");
         // HTTP 경로: 모자람은 다시 보내라는 409, 잘못된 id는 500.
-        let mapped = fvoci_server::error::AppError::from_db_function(err);
+        let mapped = fvoci_core::error::AppError::from_db_function(err);
         assert_eq!(
-            matches!(mapped, fvoci_server::error::AppError::Conflict(_)),
+            matches!(mapped, fvoci_core::error::AppError::Conflict(_)),
             code == "FV001",
             "{label}: {mapped:?}"
         );
@@ -68,7 +68,7 @@ async fn functions_use_the_ids_the_server_passes_and_never_fill_in_missing_ones(
     .unwrap();
     assert_eq!(made, 0, "a failed call left a workspace behind");
 
-    let ids = fvoci_server::db::new_ids(3);
+    let ids = fvoci_db::new_ids(3);
     let id: Uuid = sqlx::query_scalar("SELECT app_create_workspace($1, $2, 'ids', $3)")
         .bind(request)
         .bind(organization)
@@ -247,7 +247,7 @@ async fn worker_retries_the_whole_job_and_leaves_nothing_on_short_ids() {
     }];
     let err = run_jobs(&state.db, &short).await.unwrap_err();
     assert!(
-        matches!(&err, fvoci_server::error::AppError::Database(e)
+        matches!(&err, fvoci_core::error::AppError::Database(e)
             if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("FV001")),
         "{err:?}"
     );

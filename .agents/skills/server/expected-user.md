@@ -3,7 +3,7 @@
 D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위험을 명시"하라고 한다. 이 표가 그 명시다. 적용을 넓힐지는 사용자 결정이며, 이 표는 지금 코드의 모습만 적는다.
 
 - 웹은 GET·HEAD가 아닌 모든 요청에 `x-fvoci-expected-user`를 붙인다(`apps/web/src/lib/api/client.ts`의 `EXPECTED_USER`).
-- 서버는 처리기 인자에 `ExpectedUser`(`crates/server/src/features/accounts.rs`)가 있을 때만 비교한다. `CurrentUser`만 쓰는 처리기는 머리를 보지 않는다.
+- 서버는 처리기 인자에 `ExpectedUser`(`crates/http/src/session.rs`)가 있을 때만 비교한다. `CurrentUser`만 쓰는 처리기는 머리를 보지 않는다.
 - 줄은 각 처리기 `fn` 줄이다. 코드가 바뀌면 다음으로 다시 찾는다.
   - 적용: `rg -n 'ExpectedUser\(' crates/server/src/features`
   - 전체 쓰기 경로: `rg -n '#\[utoipa::path\((post|put|patch|delete)' crates/server/src`

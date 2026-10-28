@@ -228,7 +228,7 @@ docker compose --env-file .env -f deploy/compose.selfhost.yaml logs --no-log-pre
 
 **잠깐 자세히 보기와 원복**: 레벨·모듈 거르기는 시작할 때 한 번 읽으므로 바꾸면 앱 컨테이너를 다시 만든다(다른 서비스와 데이터는 그대로).
 
-1. `.env`에 `FVOCI_LOG=info,fvoci_server=debug`(특정 모듈만이면 `info,fvoci_server::collab=debug`)를 넣는다. 잘못 쓰면 앱이 시작하지 않고 이유를 출력한다.
+1. `.env`에 `FVOCI_LOG=info,fvoci_server=debug,fvoci_core=debug,fvoci_db=debug,fvoci_http=debug`(서버 crate 넷: 조립 crate와 공통 crate core·db·http. 특정 모듈만이면 `info,fvoci_server::collab=debug`)를 넣는다. 잘못 쓰면 앱이 시작하지 않고 이유를 출력한다.
 2. `docker compose --env-file .env -f deploy/compose.selfhost.yaml up -d app`
 3. 확인이 끝나면 그 줄을 지우고(기본 `info`) 2를 다시 한다.
 
