@@ -12,6 +12,7 @@ use axum::{
     extract::FromRef,
     routing::{get, post, put},
 };
+use fvoci_http::session::SessionState;
 use utoipa::OpenApi;
 
 #[derive(Debug, OpenApi)]
@@ -84,8 +85,9 @@ pub fn router<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
     RecordsState: FromRef<S>,
+    SessionState: FromRef<S>,
 {
-    Router::new()
+    Router::<S>::new()
         .route("/record-kinds", get(records::kinds))
         .route("/zotero/collections", post(zotero::list_collections))
         .route("/items/{item_id}/zotero/import", post(zotero::import))
