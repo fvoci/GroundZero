@@ -1,7 +1,9 @@
 use crate::common::{self, TestUser};
 use crate::sql_support::{World, fixture, one, rows};
 use axum::http::{Method, StatusCode};
+use futures_util::StreamExt;
 use serde_json::json;
+use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
 use uuid::Uuid;
 
 async fn outside(w: &World) -> TestUser {
@@ -65,6 +67,42 @@ async fn outside_member_legacy_write_is_read_without_rewriting_the_share() {
     );
 }
 
+async fn refused_body_connection(app: &axum::Router, user: &TestUser, doc: Uuid) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = app.clone();
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let mut request = format!(
+        "ws://{address}/api/documents/{doc}/collab?write=1&expected_user={}",
+        user.id.0
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("cookie", user.cookie.parse().unwrap());
+    request
+        .headers_mut()
+        .insert("origin", common::PUBLIC_URL.parse().unwrap());
+    let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(10), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let code = match &frame {
+        Message::Close(Some(close)) => Some(u16::from(close.code)),
+        _ => None,
+    };
+    assert_eq!(
+        code,
+        Some(4403),
+        "outside writer was not refused: {frame:?}"
+    );
+    drop(socket);
+    server.abort();
+}
+
 async fn refused_edit(change_body: bool) {
     let w = World::new().await;
     let user = outside(&w).await;
@@ -79,18 +117,15 @@ async fn refused_edit(change_body: bool) {
     )
     .await;
     assert_eq!(before.status, StatusCode::OK);
-    let mut body = before.json["body"].clone();
-    let mut title = before.json["title"].clone();
     if change_body {
-        body = common::doc_body("denied outside edit");
+        refused_body_connection(&app, &user, doc).await;
     } else {
-        title = json!("denied outside title");
+        let reply = common::send(
+            &app, Method::PATCH, &format!("/api/documents/{doc}"), Some(&user),
+            Some(json!({"request_id": Uuid::now_v7(), "base_revision": before.json["revision"], "title":"denied outside title"})),
+        ).await;
+        assert_eq!(reply.status, StatusCode::FORBIDDEN, "{:?}", reply.json);
     }
-    let reply = common::send(
-        &app, Method::PUT, &format!("/api/documents/{doc}"), Some(&user),
-        Some(json!({"request_id": Uuid::now_v7(), "base_revision": before.json["revision"], "title":title, "body":body})),
-    ).await;
-    assert_eq!(reply.status, StatusCode::FORBIDDEN, "{:?}", reply.json);
     let after = common::send(
         &app,
         Method::GET,
@@ -101,6 +136,7 @@ async fn refused_edit(change_body: bool) {
     .await;
     assert_eq!(after.json["title"], before.json["title"]);
     assert_eq!(after.json["body"], before.json["body"]);
+    assert_eq!(after.json["revision"], before.json["revision"]);
 }
 
 #[tokio::test]
