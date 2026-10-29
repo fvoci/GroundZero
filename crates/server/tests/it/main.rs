@@ -27,7 +27,6 @@ mod activity;
 mod archived_management;
 mod backup;
 mod cache;
-mod cache_routes;
 mod calendar;
 mod conflict_contracts;
 mod db_context;
