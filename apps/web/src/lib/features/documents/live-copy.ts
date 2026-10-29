@@ -14,9 +14,18 @@ export async function saveLiveCopy(id: string, body: DocNode, expectedUser: stri
   try {
     await new Promise<void>((resolve, reject) => {
       let applied = false;
+      let latestSnapshot: Y.Snapshot | undefined;
       const timer = setTimeout(() => {
         reject(new Error('live copy was not confirmed'));
       }, 20_000);
+      const confirm = (): void => {
+        if (
+          applied &&
+          latestSnapshot !== undefined &&
+          Y.snapshotContainsUpdate(latestSnapshot, Y.encodeStateAsUpdate(session.document))
+        )
+          resolve();
+      };
       const synced = (ready: boolean): void => {
         if (!ready || applied) return;
         try {
@@ -26,13 +35,14 @@ export async function saveLiveCopy(id: string, body: DocNode, expectedUser: stri
             session.document.getXmlFragment('default'),
           );
           applied = true;
+          confirm();
         } catch (error: unknown) {
           reject(error instanceof Error ? error : new Error('invalid draft content'));
         }
       };
       const persisted = (snapshot: Y.Snapshot): void => {
-        if (applied && Y.snapshotContainsUpdate(snapshot, Y.encodeStateAsUpdate(session.document)))
-          resolve();
+        latestSnapshot = snapshot;
+        confirm();
       };
       const closed = (event: CloseEvent | null): void => {
         if (event !== null && stopFor(event.code) !== undefined)

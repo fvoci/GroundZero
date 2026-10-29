@@ -1073,20 +1073,25 @@ CREATE FUNCTION fvoci.app_document_height(p_doc uuid) RETURNS integer
 
 ALTER FUNCTION fvoci.app_document_height(p_doc uuid) OWNER TO fvoci_migrator;
 
--- 제목 명령도 공간 → 모듈 → 항목 → 문서 순서로 잠근다(PR4a, #186).
+-- 제목·실시간 본문 명령은 공간 → 공간 멤버 → 모듈 → 항목 → 문서 순서로 잠근다(PR4a, #186).
 -- 문서 공유자는 공간 행을 직접 읽지 못해도 같은 잠금 순서를 따른다.
 CREATE FUNCTION fvoci.app_lock_document_workspace(p_doc uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
+  DECLARE
+    v_workspace uuid;
   BEGIN
     IF app_access('document', p_doc) = 'none' THEN
       RETURN;
     END IF;
-    PERFORM 1
+    SELECT w.id INTO v_workspace
     FROM documents d JOIN workspaces w ON w.id = d.workspace_id
     WHERE d.id = p_doc
     FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = v_workspace AND user_id = app_user_id()
+    FOR SHARE;
   END
   $$;
 

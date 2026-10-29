@@ -258,19 +258,7 @@ impl Room {
     ) -> Result<Option<i32>, AppError> {
         let edited_by = (!self.edited_since.contains(&author)).then_some(&self.edited_since[..]);
         let mut tx = self.db.begin_as(author).await?;
-        sqlx::query("SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1))")
-            .bind(self.doc_id)
-            .execute(tx.conn())
-            .await?;
-        let access = documents::access(&mut tx, self.doc_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
-        if !access.can_write() {
-            return Err(AppError::Forbidden);
-        }
-        let current = documents::load_for_update(&mut tx, self.doc_id)
-            .await?
-            .ok_or(AppError::NotFound)?;
+        let (_, current) = documents::lock_for_save(&mut tx, self.doc_id).await?;
         if current.body != self.base_body {
             tx.commit().await?;
             return Ok(None);

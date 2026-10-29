@@ -9,6 +9,7 @@ mod repository;
 mod title;
 mod validation;
 
+pub use crate::document_locks::for_save as lock_for_save;
 pub use crate::model::{
     AcknowledgedPreview, CopyDocument, CreateDocument, CreateShare, Document, DocumentSettings,
     DocumentSummary, DocumentTemplate, MoveAccessChange, MoveConflict, MoveDocument, MoveOutcome,

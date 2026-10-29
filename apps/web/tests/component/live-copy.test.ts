@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { getSchema } from '@tiptap/core';
+import { prosemirrorJSONToYXmlFragment } from '@tiptap/y-tiptap';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import type { LiveSession } from '$lib/features/documents/live';
 import { saveLiveCopy } from '$lib/features/documents/live-copy';
+import { schemaExtensions } from '$lib/features/documents/editor-schema';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 const opened: { session: LiveSession; listeners: Set<(snapshot: Y.Snapshot) => void> }[] = [];
@@ -34,6 +37,7 @@ beforeEach(async () => {
 afterEach(() => {
   opened.length = 0;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 const body = {
   type: 'doc',
@@ -50,9 +54,10 @@ it('waits for synchronization and an acknowledgement that contains the copied bo
   const { session, listeners } = current;
   const close = vi.spyOn(session.provider, 'destroy');
   expect(session.document.getXmlFragment('default').length).toBe(0);
+  const empty = new Y.Doc();
+  for (const listener of listeners) listener(Y.snapshot(empty));
   session.provider.emit('sync', [true]);
   expect(session.document.getXmlFragment('default').toJSON()).toContain('보존할 초안');
-  const empty = new Y.Doc();
   for (const listener of listeners) listener(Y.snapshot(empty));
   empty.destroy();
   await Promise.resolve();
@@ -60,6 +65,34 @@ it('waits for synchronization and an acknowledgement that contains the copied bo
   for (const listener of listeners) listener(Y.snapshot(session.document));
   await copy;
   expect(confirmed).toBe(true);
+  expect(close).toHaveBeenCalledOnce();
+  expect(listeners.size).toBe(0);
+});
+
+it.each([
+  { name: 'an empty draft', draft: { type: 'doc', content: [] } },
+  { name: 'a retry with the same body', draft: body },
+])('accepts the pre-sync persisted snapshot for $name', async ({ draft }) => {
+  vi.useFakeTimers();
+  const outcome = saveLiveCopy('note', draft, 'original-user').then(
+    () => 'confirmed',
+    (error: unknown) => (error instanceof Error ? error.message : 'failed'),
+  );
+  const current = opened.at(-1);
+  if (current === undefined) throw new Error('missing session');
+  const { session, listeners } = current;
+  const close = vi.spyOn(session.provider, 'destroy');
+  prosemirrorJSONToYXmlFragment(
+    getSchema(schemaExtensions({ collaborative: true })),
+    draft,
+    session.document.getXmlFragment('default'),
+  );
+  const persisted = Y.encodeStateAsUpdate(session.document);
+  for (const listener of listeners) listener(Y.snapshot(session.document));
+  session.provider.emit('sync', [true]);
+  expect(Y.encodeStateAsUpdate(session.document)).toEqual(persisted);
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(await outcome).toBe('confirmed');
   expect(close).toHaveBeenCalledOnce();
   expect(listeners.size).toBe(0);
 });
