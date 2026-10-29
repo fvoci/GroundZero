@@ -72,6 +72,111 @@ async fn fake_zotero() -> String {
     format!("http://{addr}")
 }
 
+/// 네트워크 앞 검사를 통과해도 실제 저장 트랜잭션은 멤버 회수를 기다린 뒤 권한을 다시 본다.
+async fn import_during_member_revocation(remove: bool) {
+    use crate::sql_support::{World, fixture, pid};
+    use sqlx::Connection;
+
+    let url = fake_zotero().await;
+    let state =
+        fvoci_server::app::build_state(config_with(&[("FVOCI_ZOTERO_API_URL", &url)])).unwrap();
+    let app = common::app(&state);
+    for scenario in ["create", "refresh"] {
+        let w = World::new().await;
+        fixture(
+            "UPDATE fvoci.modules SET kind='research' WHERE id=$1",
+            &[w.module],
+        )
+        .await;
+        let writer = w.member("member").await;
+        let uri = format!("/api/items/{}/zotero/import", w.item);
+        let body = json!({"api_key":KEY,"library_type":"user","library_id":"7"});
+        if scenario == "refresh" {
+            let first = send(&app, Method::POST, &uri, Some(&writer), Some(body.clone())).await;
+            assert_eq!(first.status, StatusCode::OK, "{}", first.json);
+        }
+        let records_uri = format!("/api/items/{}/records", w.item);
+        let before = send(&app, Method::GET, &records_uri, Some(&w.owner), None).await;
+        assert_eq!(before.status, StatusCode::OK, "{}", before.json);
+        let mut conn = common::fixture_conn().await;
+        let mut held = conn.begin().await.unwrap();
+        sqlx::query(
+            "SELECT 1 FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE",
+        )
+        .bind(w.ws)
+        .bind(writer.id.0)
+        .execute(&mut *held)
+        .await
+        .unwrap();
+        let holder = pid(&mut held).await;
+        let request = tokio::spawn({
+            let app = app.clone();
+            let writer = writer.clone();
+            async move { send(&app, Method::POST, &uri, Some(&writer), Some(body)).await }
+        });
+        let admin_url = std::env::var("FVOCI_TEST_ADMIN_URL").unwrap();
+        let mut observer = sqlx::PgConnection::connect(&admin_url).await.unwrap();
+        let waiting = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let blocked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))")
+                    .bind(holder).fetch_one(&mut observer).await.unwrap();
+                if blocked { return true; }
+                if request.is_finished() { return false; }
+                tokio::task::yield_now().await;
+            }
+        }).await;
+        if !matches!(waiting, Ok(true)) {
+            request.abort();
+        }
+        assert!(
+            matches!(waiting, Ok(true)),
+            "Zotero {scenario} did not wait on the member row"
+        );
+        let revoke = if remove {
+            "DELETE FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2"
+        } else {
+            "UPDATE fvoci.workspace_members SET role='readonly' WHERE workspace_id=$1 AND user_id=$2"
+        };
+        sqlx::query(revoke)
+            .bind(w.ws)
+            .bind(writer.id.0)
+            .execute(&mut *held)
+            .await
+            .unwrap();
+        held.commit().await.unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(10), request)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result.status,
+            if remove {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::FORBIDDEN
+            },
+            "{scenario}: {}",
+            result.json
+        );
+        let after = send(&app, Method::GET, &records_uri, Some(&w.owner), None).await;
+        assert_eq!(after.status, StatusCode::OK, "{}", after.json);
+        assert_eq!(
+            after.json, before.json,
+            "Zotero {scenario} changed shared records"
+        );
+    }
+}
+
+#[tokio::test]
+async fn zotero_import_waits_for_member_demotion_and_rechecks_access() {
+    import_during_member_revocation(false).await;
+}
+
+#[tokio::test]
+async fn zotero_import_waits_for_member_removal_and_rechecks_access() {
+    import_during_member_revocation(true).await;
+}
+
 #[tokio::test]
 async fn zotero_references_import_and_refresh_without_storing_the_key() {
     let url = fake_zotero().await;
