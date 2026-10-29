@@ -8,21 +8,34 @@ use fvoci_core::{
 };
 use fvoci_db::Db;
 use fvoci_organizations::runtime::{OrganizationRuntime, PrepareReply, PreparedRooms, RoomChange};
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct OrganizationCollab {
     pub rooms: Rooms,
     pub limits: Limits,
+    /// 기존 권한 재확인 주기를 준비 전체의 시한으로 재사용한다.
+    pub prepare_timeout: Duration,
 }
 
 impl OrganizationRuntime for OrganizationCollab {
     fn prepare<'a>(&'a self, db: &'a Db, user: UserId, change: RoomChange) -> PrepareReply<'a> {
         let (rooms, limits, db) = (self.rooms.clone(), self.limits, db.clone());
+        let timeout = self.prepare_timeout;
         Box::pin(async move {
             // HTTP 요청 취소로 중간에 guard가 풀리지 않는다. 준비 작업이 끝나면 결과와 함께 해제한다.
-            tokio::spawn(async move { prepare(&rooms, &db, &limits, user, change).await })
+            tokio::spawn(async move {
+                // 시한은 spawn 안에 둔다. 넘으면 준비 future와 그 트랜잭션·guard를 함께 버린다.
+                tokio::time::timeout(timeout, prepare(&rooms, &db, &limits, user, change))
+                    .await
+                    .map_err(|_| {
+                        AppError::Conflict(
+                            "live editing preservation took too long; the command was not applied, try again"
+                                .into(),
+                        )
+                    })?
+            })
                 .await
                 .map_err(|_| {
                     AppError::Conflict(

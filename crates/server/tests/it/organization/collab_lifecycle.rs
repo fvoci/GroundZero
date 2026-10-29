@@ -3,6 +3,7 @@
 mod contracts;
 mod live;
 mod races;
+mod timeouts;
 
 use crate::common::{self, TestUser, send};
 use axum::Router;
@@ -30,10 +31,14 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Self {
-        // 허용된 재확인 지연 안에서 명령 자체의 방 정리를 본다. 주기 재확인이 결함을 가리지 않게 한다.
+        // 주기 재확인이 명령 자체의 방 정리 결함을 가리지 않게 한다.
+        Self::with_recheck("3600").await
+    }
+
+    async fn with_recheck(recheck: &str) -> Self {
         let state = fvoci_server::app::build_state(common::config_with(&[(
             "FVOCI_COLLAB_RECHECK_SECS",
-            "3600",
+            recheck,
         )]))
         .unwrap();
         let app = common::app(&state);

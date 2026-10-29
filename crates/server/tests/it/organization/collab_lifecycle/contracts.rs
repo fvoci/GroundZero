@@ -2,7 +2,7 @@
 
 use super::*;
 
-async fn closed_pending(f: &Fixture) {
+pub(super) async fn closed_pending(f: &Fixture) {
     let mut writer = Client::connect(f.addr, &f.document, &f.writer).await;
     assert!(writer.edit_and_wait(PENDING).await);
     let mut conn = common::fixture_conn().await;
@@ -25,7 +25,7 @@ async fn closed_pending(f: &Fixture) {
     assert!(f.pending().await);
 }
 
-async fn stored(f: &Fixture) -> Value {
+pub(super) async fn stored(f: &Fixture) -> Value {
     let mut conn = common::fixture_conn().await;
     sqlx::query_scalar(
         "SELECT to_jsonb(s) FROM fvoci.document_collab_states s WHERE document_id=$1::uuid",

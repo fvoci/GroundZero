@@ -12,6 +12,7 @@ pub(super) fn api(state: &AppState) -> Router<AppState> {
                 crate::collab::organizations::OrganizationCollab {
                     rooms: state.collab.clone(),
                     limits: state.config.limits,
+                    prepare_timeout: state.config.collab_recheck,
                 },
             )),
         )))
