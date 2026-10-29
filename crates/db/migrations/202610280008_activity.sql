@@ -368,14 +368,16 @@ BEGIN
       SELECT m.mark, m.target_kind AS kind, m.target_id AS id,
              app_time_target_label(m.target_kind, m.target_id) AS label,
              coalesce(t.workspace_id, d.workspace_id, i.workspace_id) AS workspace_id,
-             coalesce(t.item_id, d.item_id) AS item_id, m.created_at
+             CASE WHEN app_access('item', coalesce(t.item_id, d.item_id)) <> 'none'
+                  THEN coalesce(t.item_id, d.item_id) END AS item_id, m.created_at
       FROM user_marks m
       LEFT JOIN tasks t ON m.target_kind = 'task' AND t.id = m.target_id
       LEFT JOIN documents d ON m.target_kind = 'document' AND d.id = m.target_id
       LEFT JOIN items i ON m.target_kind = 'item' AND i.id = m.target_id
       WHERE m.mark IN ('pin', 'favorite')
         AND (coalesce(t.workspace_id, d.workspace_id, i.workspace_id) IN (SELECT app_my_workspace_ids(p_organization))
-             OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id()))
+             OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())
+             OR d.id IN (SELECT id FROM app_shared_with_me(p_organization)))
     )
     SELECT jsonb_build_object(
       'today', to_char(v_today, 'YYYY-MM-DD'),
