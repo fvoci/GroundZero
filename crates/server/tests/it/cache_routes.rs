@@ -3,6 +3,7 @@
 
 use super::*;
 
+use crate::common::{add_member, doc_body, new_request_id};
 use axum::extract::{MatchedPath, Request};
 use axum::middleware::{self, Next};
 use axum::response::Response;
@@ -10,6 +11,12 @@ use fvoci_server::http::ApiDoc;
 use sha2::{Digest, Sha256};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use utoipa::OpenApi;
+
+const REVALIDATE: &str = "private, no-cache, no-transform";
+
+fn save_body(request_id: &str, base: i64, text: &str) -> Value {
+    json!({ "request_id": request_id, "base_revision": base, "title": "문서", "body": doc_body(text) })
+}
 
 fn no_store(status: StatusCode, headers: &HeaderMap, context: &str) {
     assert_eq!(

@@ -114,6 +114,15 @@ for (const theme of ['light', 'dark'] as const) {
             .map((p) => str(p, 'predecessor_id')),
         )
         .toEqual([predecessor]);
+      // 서버에 관계가 보여도 상세 재조회와 입력 초기화는 아직 진행 중일 수 있다(#224).
+      // 화면에 저장한 관계가 나타나고 선행 업무 제목으로 초점이 돌아온 뒤 닫는다(D-97·D-128).
+      const predecessors = dialog.getByRole('region', { name: '선행 업무', exact: true });
+      await expect(
+        predecessors.getByRole('button', { name: new RegExp(`${predecessorTitle}$`) }),
+      ).toBeVisible();
+      await expect(
+        predecessors.getByRole('heading', { name: '선행 업무', exact: true }),
+      ).toBeFocused();
       await noOverflow(page);
       await page.keyboard.press('Escape');
       await expect(dialog).toBeHidden();

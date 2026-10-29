@@ -56,7 +56,11 @@ describe('move conflict responses', () => {
       },
     ];
     reply(409, { ...preview, changes: more });
-    const result = await api.moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview);
+    const result = await documentsApi.moveDocument(
+      'd1',
+      { workspaceId: 'ws-2', itemId: null },
+      preview,
+    );
     expect(result.kind).toBe('changed');
     expect(result.kind === 'changed' ? result.preview : undefined).toEqual({
       ...preview,
@@ -66,7 +70,7 @@ describe('move conflict responses', () => {
 
   it('reports a busy live room (ErrorBody) as an ordinary 409 error, not a changed preview', async () => {
     reply(409, busy);
-    const failed = await api
+    const failed = await documentsApi
       .moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview)
       .then(
         (r: unknown) => r,
@@ -131,7 +135,7 @@ describe('move preview history notice', () => {
   // SR1-15(D-22·D-24): 옮기면 리비전뿐 아니라 댓글·첨부(이전 버전 포함)도 새로 볼 수 있게 되는 사람에게 보인다.
   it('tells that revisions, comments and attachments move with the document', async () => {
     vi.spyOn(api, 'modules').mockResolvedValue([]);
-    vi.spyOn(api, 'movePreview').mockResolvedValue(preview);
+    vi.spyOn(documentsApi, 'movePreview').mockResolvedValue(preview);
     render(DocumentActions, { props: { doc, workspaces, onchanged: () => undefined } });
     await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
     await fireEvent.click(await screen.findByRole('menuitem', { name: '이동' }));
@@ -152,7 +156,7 @@ describe('move panel when the live room is busy', () => {
   // R5 P2 F-4(D-113): 옮길 곳은 서버 접근 등급(`Workspace.access`)으로 고른다. 역할 이름이 관리자여도 읽기 등급이면 뺀다.
   it('offers only workspaces whose server access is not read as move targets', async () => {
     const modules = vi.spyOn(api, 'modules').mockResolvedValue([]);
-    vi.spyOn(api, 'movePreview').mockResolvedValue(preview);
+    vi.spyOn(documentsApi, 'movePreview').mockResolvedValue(preview);
     const readOnlyAdmin: Workspace = {
       access: 'read',
       id: 'ws-3',
@@ -174,7 +178,7 @@ describe('move panel when the live room is busy', () => {
 
   it('shows the error, stays on the page and keeps the preview so the move can be retried', async () => {
     vi.spyOn(api, 'modules').mockResolvedValue([]);
-    vi.spyOn(api, 'movePreview').mockResolvedValue(preview);
+    vi.spyOn(documentsApi, 'movePreview').mockResolvedValue(preview);
     const navigate = vi.spyOn(router, 'navigate').mockImplementation(() => undefined);
     const bodies: unknown[] = [];
     const answers = [
@@ -218,3 +222,4 @@ describe('move panel when the live room is busy', () => {
     ]);
   });
 });
+import { documentsApi } from '$lib/features/documents/api';

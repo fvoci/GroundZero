@@ -9,7 +9,6 @@
   import { errorText } from '$lib/api/errors';
   import { formatInstant } from '$lib/display';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import { focusConfirm, focusConfirmStart } from '$lib/features/common/inline-confirm';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -95,8 +94,9 @@
     };
   });
 
-  // 제출 전의 원문만 보존한다. 두 설정은 각각 저장하므로 초안·성공 처리도 서로 독립적이다(⑱C).
+  // 짧은 설정 칸은 화면 상태와 이탈 경고만 둔다(D-27·#154). 두 설정의 저장은 독립적이다.
   const daysDraft = createFormDraft({
+    preserve: false,
     name: () =>
       workspace !== undefined && isAdmin ? `trash-retention:${workspace.id}` : undefined,
     snapshot: () => days,
@@ -115,6 +115,7 @@
     dirty: () => editingDays && days !== savedDays,
   });
   const versionDraft = createFormDraft({
+    preserve: false,
     name: () =>
       workspace !== undefined && isAdmin ? `trash-version-retention:${workspace.id}` : undefined,
     snapshot: () => versionDays,
@@ -135,7 +136,9 @@
   onMount(daysDraft.attach);
   onMount(versionDraft.attach);
 
-  async function saveRetention(version: boolean): Promise<void> {
+  type RetentionKind = 'trash' | 'versions';
+  async function saveRetention(kind: RetentionKind): Promise<void> {
+    const version = kind === 'versions';
     const draft = version ? versionDraft : daysDraft;
     const ws = workspace?.id;
     if (ws === undefined || !isAdmin || !draft.active || draft.blocked) return;
@@ -225,11 +228,11 @@
     }
   }
   const when = (iso: string): string => formatInstant(iso);
-  const expiredCount = $derived(trash?.entries.filter((e) => e.expired).length ?? 0);
+  const expiredCount = $derived(trash?.entries.filter((e) => e.expiry !== 'active').length ?? 0);
   // 만료된 것 일괄 삭제 확인(관리자 직접 삭제는 참조 때문에 남긴 묶음도 지운다, O-34의 기존 정책).
   const EXPIRED = 'expired';
   const keptCount = $derived(
-    trash?.entries.filter((e) => e.expired && e.kept_for_references).length ?? 0,
+    trash?.entries.filter((e) => e.expiry === 'kept_for_references').length ?? 0,
   );
   const label = (e: TrashEntryView): string =>
     e.member_count > 1
@@ -276,20 +279,10 @@
       class="flex flex-wrap items-end gap-2"
       onsubmit={(e) => {
         e.preventDefault();
-        void saveRetention(false);
+        void saveRetention('trash');
       }}
     >
       <fieldset class="contents" disabled={daysSaving}>
-        {#each daysDraft.offers as entry (entry.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              daysDraft.restore(entry);
-            }}
-            ondiscard={() => {
-              daysDraft.discard(entry);
-            }}
-          />
-        {/each}
         <div class="flex flex-col gap-1">
           <Label for="trash-retention">{m.trash_retention_label()}</Label>
           <Input
@@ -318,20 +311,10 @@
       aria-label={m.trash_version_retention_region()}
       onsubmit={(e) => {
         e.preventDefault();
-        void saveRetention(true);
+        void saveRetention('versions');
       }}
     >
       <fieldset class="contents" disabled={versionDaysSaving}>
-        {#each versionDraft.offers as entry (entry.key)}
-          <FormDraftOffer
-            onrestore={() => {
-              versionDraft.restore(entry);
-            }}
-            ondiscard={() => {
-              versionDraft.discard(entry);
-            }}
-          />
-        {/each}
         <div class="flex flex-col gap-1">
           <Label for="version-retention">{m.trash_version_retention_label()}</Label>
           <Input
@@ -425,15 +408,17 @@
           {label(e)}
           <span class="block text-xs text-muted-foreground">
             {e.deleted_by_name ?? ''} · {m.trash_deleted_at({ when: when(e.deleted_at) })} ·
-            {e.expired ? m.trash_expired() : m.trash_until({ when: when(e.expires_at) })}
+            {e.expiry !== 'active'
+              ? m.trash_expired()
+              : m.trash_until({ when: when(e.expires_at) })}
           </span>
-          {#if e.kept_for_references}
+          {#if e.expiry === 'kept_for_references'}
             <span class="block text-xs text-muted-foreground">
               {m.trash_kept_hint()}
             </span>
           {/if}
         </span>
-        {#if !e.expired || e.kept_for_references}
+        {#if e.expiry !== 'expired'}
           <Button
             size="sm"
             variant="outline"
@@ -445,7 +430,7 @@
         {#if e.can_purge}
           {#if confirmPurge === e.id}
             <span id={`trash-purge-question-${e.id}`}
-              >{e.kept_for_references
+              >{e.expiry === 'kept_for_references'
                 ? m.trash_purge_question_kept()
                 : m.trash_purge_question()}</span
             >

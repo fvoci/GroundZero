@@ -25,30 +25,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Owner: Story = {};
-export const Writer: Story = {
-  beforeEach: () => {
-    spyOn(api, 'document').mockResolvedValue({
-      ...ACCESS_DOCUMENT,
-      access: 'write',
-      can_manage: false,
-      can_delete: false,
-      can_export: false,
-    });
-  },
-};
-export const ReadOnly: Story = {
-  beforeEach: () => {
-    spyOn(api, 'document').mockResolvedValue({
-      ...ACCESS_DOCUMENT,
-      access: 'read',
-      can_edit: false,
-      can_manage: false,
-      can_delete: false,
-      can_export: false,
-    });
-  },
-};
-export const ReadOnlyNarrowDarkLargeText: Story = {
-  ...ReadOnly,
+export const NarrowDarkLargeText: Story = {
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
 };
