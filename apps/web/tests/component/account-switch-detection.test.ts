@@ -1,9 +1,9 @@
 import type { Me } from '@fvoci/api-client';
-import { cleanup, render, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
-import { accountSafety } from '$lib/features/feedback/feedback.svelte';
+import { accountSafety, auth, hideSession } from '$lib/features/feedback/feedback.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { me as currentUser } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -51,7 +51,118 @@ describe('account change detection events', () => {
     vi.unstubAllGlobals();
     currentUser.userId = '';
     accountSafety.switching = false;
+    auth.expired = false;
     visibility('visible');
+  });
+
+  // session-notification-authority의 단독 응답 시험은 표식·잠금 없이 유지한다.
+  it.each(['same', 'anonymous', 'other-user'])(
+    'standalone feedback uses its own %s response during reauthentication',
+    async (kind) => {
+      let finish!: (value: Me | undefined) => void;
+      const read = vi.spyOn(api, 'me').mockReturnValue(
+        new Promise<Me | undefined>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const reload = vi.fn<() => void>();
+      hideSession('reauth');
+      render(FeedbackHost, { reload });
+      window.dispatchEvent(new Event('focus'));
+      finish(kind === 'anonymous' ? undefined : kind === 'same' ? { ...other, id: 'u1' } : other);
+      if (kind === 'same')
+        await waitFor(() => {
+          expect(accountSafety.switching || accountSafety.restoring).toBe(false);
+        });
+      else if (kind === 'anonymous') await screen.findByRole('link', { name: '새 탭에서 로그인' });
+      else
+        await waitFor(() => {
+          expect(reload).toHaveBeenCalledOnce();
+        });
+      expect(accountSafety.switching).toBe(kind !== 'same');
+      expect(read).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('rechecks in the new safety generation after the real request discards an older response', async () => {
+    let finish!: (response: Response) => void;
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+      )
+      .mockResolvedValue(new Response(JSON.stringify(other)));
+    const read = vi.spyOn(api, 'me');
+    const reload = vi.fn<() => void>();
+    render(FeedbackHost, { reload });
+    window.dispatchEvent(new Event('focus'));
+    hideSession('reauth');
+    finish(new Response(JSON.stringify({ ...other, id: 'u1' })));
+    await waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(
+    ['focus', 'visibilitychange', 'pageshow'].flatMap((event) =>
+      ['anonymous', 'other'].map((identity) => ({ event, identity })),
+    ),
+  )(
+    'SR-221-10 standalone queues $event and hides on its own $identity follow-up',
+    async ({ event, identity }) => {
+      let finish!: (value: Me | undefined) => void;
+      let followUp!: (value: Me | undefined) => void;
+      const read = vi
+        .spyOn(api, 'me')
+        .mockReturnValueOnce(
+          new Promise<Me | undefined>((resolve) => {
+            finish = resolve;
+          }),
+        )
+        .mockReturnValueOnce(
+          new Promise<Me | undefined>((resolve) => {
+            followUp = resolve;
+          }),
+        );
+      const reload = vi.fn();
+      render(FeedbackHost, { reload });
+      window.dispatchEvent(new Event('focus'));
+      for (let count = 0; count < 3; count += 1) {
+        if (event === 'visibilitychange') document.dispatchEvent(new Event(event));
+        else window.dispatchEvent(new Event(event));
+      }
+      expect(read).toHaveBeenCalledOnce();
+      finish({ ...other, id: 'u1' });
+      await waitFor(() => {
+        expect(read).toHaveBeenCalledTimes(2);
+      });
+      expect(accountSafety.switching).toBe(false);
+      followUp(identity === 'anonymous' ? undefined : other);
+      if (identity === 'anonymous') await screen.findByRole('link', { name: '새 탭에서 로그인' });
+      else
+        await waitFor(() => {
+          expect(reload).toHaveBeenCalledOnce();
+        });
+      expect(accountSafety.switching).toBe(true);
+      expect(read).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('stops automatic safety-generation rechecks after three requests and stays hidden', async () => {
+    const read = vi.spyOn(api, 'me').mockImplementation(() => {
+      accountSafety.generation += 1;
+      return Promise.resolve({ ...other, id: 'u1' });
+    });
+    render(FeedbackHost, { reload: vi.fn() });
+    window.dispatchEvent(new Event('focus'));
+    await screen.findByRole('alert');
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(accountSafety.switching).toBe(true);
+    expect(accountSafety.error).not.toBe('');
   });
 
   it('checks once for focus and visibilitychange arriving together, then switches and reloads once', async () => {

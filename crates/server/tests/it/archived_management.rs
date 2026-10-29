@@ -67,7 +67,7 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
         async move {
             send(
                 &app,
-                Method::PUT,
+                Method::PATCH,
                 &format!("/api/documents/{doc_id}/settings"),
                 Some(&user),
                 Some(json!({ "visibility": visibility, "allow_copy": false })),

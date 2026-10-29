@@ -59,8 +59,6 @@ import type {
 } from '@fvoci/api-client';
 import type {
   Accepted,
-  MyTask,
-  MyTaskCounts,
   Organization,
   OrganizationLimits,
   OrganizationSummary,
@@ -245,69 +243,6 @@ export function parseAccepted(value: Json): Accepted {
 // --- 항목별 업무 상태 정의 (D-116) ----------------------------------------
 
 // --- 내 업무 (D-120) ---------------------------------------------------
-
-export type MyTaskBucket = 'overdue' | 'today' | 'upcoming' | 'none' | 'done';
-
-export interface MyTaskView extends Omit<MyTask, 'bucket' | 'status_category'> {
-  bucket: MyTaskBucket;
-  status_category: StatusCategory;
-}
-
-export interface MyTasksView {
-  counts: MyTaskCounts;
-  workspaces: { workspace_id: string; workspace_name: string; tasks: MyTaskView[] }[];
-}
-
-function myTaskBucket(value: string): MyTaskBucket {
-  if (
-    value === 'overdue' ||
-    value === 'today' ||
-    value === 'upcoming' ||
-    value === 'none' ||
-    value === 'done'
-  )
-    return value;
-  throw new TypeError(`unknown bucket ${value}`);
-}
-
-function parseMyTask(value: Json): MyTaskView {
-  const o = rec(value, 'my task');
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    status: str(o, 'status'),
-    status_category: statusCategory(str(o, 'status_category')),
-    priority: str(o, 'priority'),
-    start_date: optStr(o, 'start_date'),
-    due_date: optStr(o, 'due_date'),
-    bucket: myTaskBucket(str(o, 'bucket')),
-    updated_at: str(o, 'updated_at'),
-  };
-}
-
-export function parseMyTasks(value: Json): MyTasksView {
-  const o = rec(value, 'my tasks');
-  const c = rec(o.counts, 'my task counts');
-  return {
-    counts: {
-      overdue: int(c, 'overdue'),
-      today: int(c, 'today'),
-      upcoming: int(c, 'upcoming'),
-      undated: int(c, 'undated'),
-      done: int(c, 'done'),
-    },
-    workspaces: parseList(o.workspaces, (v) => {
-      const w = rec(v, 'workspace tasks');
-      return {
-        workspace_id: str(w, 'workspace_id'),
-        workspace_name: str(w, 'workspace_name'),
-        tasks: parseList(w.tasks, parseMyTask),
-      };
-    }),
-  };
-}
 
 export function parseSummary(value: Json): SummaryView {
   const o = rec(value, 'document summary');
@@ -987,132 +922,6 @@ function parseCalendar(value: Json): CalendarView {
   };
 }
 
-export type MarkTarget = 'item' | 'document' | 'task';
-
-export interface HomeTaskView {
-  id: string;
-  item_id: string;
-  workspace_id: string;
-  reference: string | null;
-  title: string;
-  // 홈 계약의 상태는 항목별 사용자 정의 문자열이고 집계는 status_category(D-116).
-  status: string;
-  status_category: StatusCategory;
-  due_date: string | null;
-  bucket: 'overdue' | 'today' | 'upcoming' | null;
-}
-
-export interface HomeView {
-  today: string;
-  up_next: HomeTaskView[];
-  /** 묶음마다의 전체 수. `up_next`는 묶음마다 50개까지라 이보다 적을 수 있다. */
-  up_next_counts: { overdue: number; today: number; upcoming: number };
-  recent_tasks: HomeTaskView[];
-  recent_documents: {
-    id: string;
-    title: string;
-    reference: string | null;
-    workspace_id: string | null;
-    item_id: string | null;
-    updated_at: string;
-  }[];
-  active_items: {
-    id: string;
-    workspace_id: string;
-    module_kind: ModuleKind;
-    reference: string | null;
-    title: string;
-    tasks_done: number;
-    tasks_total: number;
-    can_write: boolean;
-  }[];
-  pins: MarkedTargetView[];
-  favorites: MarkedTargetView[];
-}
-
-export interface MarkedTargetView {
-  kind: MarkTarget;
-  id: string;
-  label: string;
-  workspace_id: string | null;
-  item_id: string | null;
-}
-
-function markTarget(value: string): MarkTarget {
-  if (value === 'item' || value === 'document' || value === 'task') return value;
-  throw new TypeError(`unknown mark target ${value}`);
-}
-
-function parseHomeTask(value: Json): HomeTaskView {
-  const o = rec(value, 'home task');
-  const bucket = optStr(o, 'bucket');
-  if (bucket !== null && bucket !== 'overdue' && bucket !== 'today' && bucket !== 'upcoming')
-    throw new TypeError(`unknown bucket ${bucket}`);
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    workspace_id: str(o, 'workspace_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    status: str(o, 'status'),
-    due_date: optStr(o, 'due_date'),
-    status_category: statusCategory(str(o, 'status_category')),
-    bucket,
-  };
-}
-
-function parseMarked(value: Json): MarkedTargetView {
-  const o = rec(value, 'marked target');
-  return {
-    kind: markTarget(str(o, 'kind')),
-    id: str(o, 'id'),
-    label: str(o, 'label'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-  };
-}
-
-function parseUpNextCounts(value: unknown): HomeView['up_next_counts'] {
-  const c = rec(value, 'up next counts');
-  return { overdue: int(c, 'overdue'), today: int(c, 'today'), upcoming: int(c, 'upcoming') };
-}
-
-function parseHome(value: Json): HomeView {
-  const o = rec(value, 'home');
-  return {
-    today: str(o, 'today'),
-    up_next: parseList(o.up_next, parseHomeTask),
-    up_next_counts: parseUpNextCounts(o.up_next_counts),
-    recent_tasks: parseList(o.recent_tasks, parseHomeTask),
-    recent_documents: parseList(o.recent_documents, (v) => {
-      const d = rec(v, 'home document');
-      return {
-        id: str(d, 'id'),
-        title: str(d, 'title'),
-        reference: optStr(d, 'reference'),
-        workspace_id: optStr(d, 'workspace_id'),
-        item_id: optStr(d, 'item_id'),
-        updated_at: str(d, 'updated_at'),
-      };
-    }),
-    active_items: parseList(o.active_items, (v) => {
-      const i = rec(v, 'home item');
-      return {
-        id: str(i, 'id'),
-        workspace_id: str(i, 'workspace_id'),
-        module_kind: moduleKind(str(i, 'module_kind')),
-        reference: optStr(i, 'reference'),
-        title: str(i, 'title'),
-        tasks_done: int(i, 'tasks_done'),
-        tasks_total: int(i, 'tasks_total'),
-        can_write: bool(i, 'can_write'),
-      };
-    }),
-    pins: parseList(o.pins, parseMarked),
-    favorites: parseList(o.favorites, parseMarked),
-  };
-}
-
 export type {
   EpisodeStatus,
   CourseDetailsView,
@@ -1382,11 +1191,6 @@ export const api = {
     expectOk('GET', `/api/me/shared?organization_id=${encodeURIComponent(organizationId)}`, (v) =>
       parseList(v, parseSharedView),
     ),
-  /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
-  setSettings: (
-    id: string,
-    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
-  ) => expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
   shares: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
@@ -1404,11 +1208,6 @@ export const api = {
       request_id: requestId,
       target_workspace_id: targetWorkspaceId,
       title,
-    }),
-  movePreview: (id: string, target: MoveTargetInput) =>
-    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move/preview`, parseMovePreview, {
-      target_workspace_id: target.workspaceId,
-      target_item_id: target.itemId,
     }),
   /** 쓸 수 있는 문서 템플릿(D-27): 그 워크스페이스의 것과 내 개인 노트 템플릿. */
   documentTemplates: (workspaceId: string | null) =>
@@ -1499,20 +1298,6 @@ export const api = {
       enabled,
     }),
   setTrashRetention: systemApi.setTrashRetention,
-  /** 홈은 현재 조직의 요약이다(D-19·D-120). */
-  home: (organizationId: string, tz: string) =>
-    expectOk(
-      'GET',
-      `/api/me/home?organization_id=${encodeURIComponent(organizationId)}&tz=${encodeURIComponent(tz)}`,
-      parseHome,
-    ),
-  /** 내 업무: 담당=나, 날짜 없음 포함, 워크스페이스별 묶음(D-120). `today`는 사용자 시간대의 오늘(YYYY-MM-DD). */
-  myTasks: (organizationId: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/me/tasks?organization_id=${encodeURIComponent(organizationId)}&today=${encodeURIComponent(today)}`,
-      parseMyTasks,
-    ),
   /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
   calendar: (
     workspaceId: string,
@@ -1543,31 +1328,19 @@ export const api = {
       parseRevision,
     ),
   /** 저장된 리비전 하나를 내보낸다(D-75). 서버가 내보내기 권한을 확인하고 기록을 남긴 뒤 그 리비전을 준다. */
-  exportRevision: (id: string, revision: number, format: 'markdown' | 'zip' | 'pdf') =>
+  exportRevision: (
+    id: string,
+    revision: number,
+    format: 'markdown' | 'zip' | 'pdf',
+    signal?: AbortSignal,
+  ) =>
     expectOk(
       'POST',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/export`,
       parseRevision,
       { format },
+      signal,
     ),
-  /** 옛 리비전 내용으로 새 리비전을 만든다. 보고 있던 리비전이 지났으면 `{ kind: 'conflict', current }`. */
-  async restoreRevision(
-    id: string,
-    revision: number,
-    input: { requestId: string; baseRevision: number },
-  ): Promise<
-    { kind: 'restored'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
-  > {
-    const { status, json, etag } = await request(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
-      { request_id: input.requestId, base_revision: input.baseRevision },
-    );
-    const current = conflictCurrent(status, json);
-    if (current !== undefined) return { kind: 'conflict', current };
-    if (status !== 200) fail(status, json);
-    return { kind: 'restored', document: withEtag(parseDocument(json), etag) };
-  },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
   /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
   search: (
@@ -1598,8 +1371,14 @@ export const api = {
       parseList(v, parseCandidate),
     );
   },
-  resolveReferences: (refs: { kind: ReferenceKind; id: string }[]) =>
-    expectOk('POST', '/api/references/resolve', (v) => parseList(v, parseResolved), { refs }),
+  resolveReferences: (refs: { kind: ReferenceKind; id: string }[], signal?: AbortSignal) =>
+    expectOk(
+      'POST',
+      '/api/references/resolve',
+      (v) => parseList(v, parseResolved),
+      { refs },
+      signal,
+    ),
   documentBacklinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
@@ -1691,29 +1470,6 @@ export const api = {
     expectOk('DELETE', `/api/public-links/${encodeURIComponent(linkId)}`, none),
   publicDocument: (token: string) =>
     expectOk('GET', `/api/public/${encodeURIComponent(token)}`, parsePublicDocument),
-  /** 확인한 미리보기와 함께 이동한다. 그사이 접근 변화가 바뀌면 `{ kind: 'changed', preview }`. */
-  async moveDocument(
-    id: string,
-    target: MoveTargetInput,
-    acknowledged: MovePreviewView,
-  ): Promise<
-    { kind: 'moved'; outcome: MoveOutcomeView } | { kind: 'changed'; preview: MovePreviewView }
-  > {
-    const { status, json } = await request(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/move`,
-      {
-        target_workspace_id: target.workspaceId,
-        target_item_id: target.itemId,
-        acknowledged: { changes: acknowledged.changes },
-      },
-    );
-    if (status === 409 && isRecord(json) && 'changes' in json) {
-      return { kind: 'changed', preview: parseMovePreview(json) };
-    }
-    if (status !== 200) fail(status, json);
-    return { kind: 'moved', outcome: parseMoveOutcome(json) };
-  },
   /**
    * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
    * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.

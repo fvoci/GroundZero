@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aggregates/calendar", "crates/core", "crates/db", "crates/domains/activity", "crates/domains/files", "crates/domains/records", "crates/domains/system", "crates/domains/time", "crates/domains/work", "crates/http", "crates/server", "crates/storage", "xtask"]
+members = ["crates/aggregates/calendar", "crates/aggregates/home", "crates/aggregates/references", "crates/aggregates/search", "crates/core", "crates/db", "crates/domains/activity", "crates/domains/documents", "crates/domains/files", "crates/domains/records", "crates/domains/system", "crates/domains/time", "crates/domains/work", "crates/http", "crates/server", "crates/storage", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -20,8 +20,12 @@ fvoci-calendar = { path = "crates/aggregates/calendar", version = "0.1.0" }
 fvoci-core = { path = "crates/core", version = "0.1.0" }
 fvoci-db = { path = "crates/db", version = "0.1.0" }
 fvoci-files = { path = "crates/domains/files", version = "0.1.0" }
+fvoci-home = { path = "crates/aggregates/home", version = "0.1.0" }
 fvoci-http = { path = "crates/http", version = "0.1.0" }
 fvoci-records = { path = "crates/domains/records", version = "0.1.0" }
+fvoci-search = { path = "crates/aggregates/search", version = "0.1.0" }
+fvoci-references = { path = "crates/aggregates/references", version = "0.1.0" }
+fvoci-documents = { path = "crates/domains/documents", version = "0.1.0" }
 fvoci-storage = { path = "crates/storage", version = "0.1.0" }
 fvoci-system = { path = "crates/domains/system", version = "0.1.0" }
 fvoci-time = { path = "crates/domains/time", version = "0.1.0" }

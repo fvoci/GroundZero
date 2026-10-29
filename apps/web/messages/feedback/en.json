@@ -3,5 +3,13 @@
   "feedback_account_changed_title": "The signed-in account changed",
   "feedback_account_switching": "The signed-in account changed, so the previous screen and its input are hidden. Reload to continue with the current account.",
   "feedback_reload": "Reload for the current account",
-  "feedback_new_version": "A new version has been deployed. Save your work, then reload the page."
+  "feedback_new_version": "A new version has been deployed. Save your work, then reload the page.",
+  "feedback_logout_pending": "The previous screen and data have been cleared. Completing logout before leaving.",
+  "feedback_logout_failed": "Could not log out. The previous screen remains hidden. Please try again.",
+  "feedback_logout_retry": "Try logging out again",
+  "feedback_restore_title": "Checking your session",
+  "feedback_restore_pending": "The previous screen is hidden while we check your session and reload current data.",
+  "feedback_restore_failed": "Could not verify your session. The previous screen remains hidden.",
+  "feedback_signed_out_title": "You have been logged out",
+  "feedback_signed_out_pending": "The previous screen is hidden. Opening the login screen."
 }

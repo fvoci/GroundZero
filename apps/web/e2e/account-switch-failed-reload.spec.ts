@@ -69,11 +69,12 @@ test('a failed reload after an account switch leaves no previous screen, writes 
   const other = await page.context().newPage();
   await test.step('B로 바뀐 뒤 다시 읽기가 연결 끊김으로 실패한다: 이전 화면은 남지 않고 쓰기도 없다', async () => {
     await first.endTrace();
-    expect(await switchTo(other, 'test-user-2')).toBe(b);
+    // SR-221-1: storage 전환이 시작되기 전에 기존 문서 실패 처리를 설치한다(단언·대기 동일).
     await page.route('**/*', async (route) => {
       if (route.request().resourceType() === 'document') await route.abort('internetdisconnected');
       else await route.continue();
     });
+    expect(await switchTo(other, 'test-user-2')).toBe(b);
     writes.length = 0;
     await returnToWindow(page, testInfo, (timeout) =>
       expect(description)
@@ -103,7 +104,6 @@ test('a failed reload after an account switch leaves no previous screen, writes 
   });
 
   await test.step('A로 바뀐 뒤 다시 읽기가 서버 오류(503)로 실패한다: 오류 화면에는 아무 화면도 없고, 다시 읽으면 A가 입력을 되살려 직접 저장한다', async () => {
-    expect(await switchTo(other, 'test-user')).toBe(a);
     await page.route('**/*', async (route) => {
       if (route.request().resourceType() === 'document')
         await route.fulfill({
@@ -113,6 +113,7 @@ test('a failed reload after an account switch leaves no previous screen, writes 
         });
       else await route.continue();
     });
+    expect(await switchTo(other, 'test-user')).toBe(a);
     writes.length = 0;
     await returnToWindow(page, testInfo, (timeout) =>
       expect(description)

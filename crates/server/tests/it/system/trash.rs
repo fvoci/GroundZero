@@ -1550,7 +1550,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     let organization = common::organization_of_workspace(&ws).await;
     let private = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&author),
         Some(json!({ "visibility": "private", "allow_copy": true })),

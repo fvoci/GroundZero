@@ -46,7 +46,8 @@ export async function printDocumentHtml(
 }
 
 /** 인쇄 문서를 보이지 않는 iframe에 넣고 그림을 다 불러온 뒤 인쇄 창을 연다. */
-export async function printToPdf(html: string): Promise<void> {
+export async function printToPdf(html: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
   frame.setAttribute('aria-hidden', 'true');
@@ -61,21 +62,34 @@ export async function printToPdf(html: string): Promise<void> {
       resolve();
     });
   });
+  let abort: () => void = () => undefined;
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    abort = () => {
+      frame.remove();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
   frame.srcdoc = html;
   document.body.append(frame);
   try {
-    await loaded;
+    await Promise.race([loaded, cancelled]);
     const win = frame.contentWindow;
     const doc = frame.contentDocument;
     if (win === null || doc === null) throw new Error('print frame unavailable');
-    await Promise.all(
-      [...doc.images].map((img) =>
-        img.complete ? Promise.resolve() : img.decode().catch(() => undefined),
+    await Promise.race([
+      Promise.all(
+        [...doc.images].map((img) =>
+          img.complete ? Promise.resolve() : img.decode().catch(() => undefined),
+        ),
       ),
-    );
+      cancelled,
+    ]);
+    signal?.throwIfAborted();
     win.focus();
     win.print();
   } finally {
+    signal?.removeEventListener('abort', abort);
     // 인쇄 창이 닫힌 뒤(대부분의 브라우저는 print가 끝날 때까지 기다린다) 정리한다.
     setTimeout(() => {
       frame.remove();

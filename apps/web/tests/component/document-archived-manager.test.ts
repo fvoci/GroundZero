@@ -60,7 +60,7 @@ afterEach(() => {
 
 describe('sharing settings of a document under an archived item', () => {
   it('lets a workspace admin widen sharing, settings and public links without unarchiving', async () => {
-    const settings = vi.spyOn(api, 'setSettings').mockResolvedValue(archivedForAdmin);
+    const settings = vi.spyOn(documentsApi, 'setSettings').mockResolvedValue(archivedForAdmin);
     render(DocumentActions, {
       props: { doc: archivedForAdmin, workspaces, onchanged: () => undefined },
     });
@@ -80,3 +80,4 @@ describe('sharing settings of a document under an archived item', () => {
     expect(settings).toHaveBeenCalledWith('doc-1', { visibility: 'workspace' });
   });
 });
+import { documentsApi } from '$lib/features/documents/api';

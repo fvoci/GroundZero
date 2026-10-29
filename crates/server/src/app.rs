@@ -20,7 +20,10 @@ pub fn build_state(config: Config) -> Result<AppState, AppError> {
         Some(oidc) => Some(Arc::new(OidcProvider::new(oidc, &config.public_url)?)),
         None => None,
     };
-    let search = config.search.as_ref().map(SearchClient::new);
+    let search = config
+        .search
+        .as_ref()
+        .map(|config| SearchClient::new(&config.url, config.key.expose()));
     let storage = crate::storage::Storage::new(&config.storage);
     let upload_permits = Arc::new(tokio::sync::Semaphore::new(config.files.upload_concurrency));
     let export_permits = Arc::new(tokio::sync::Semaphore::new(config.files.export_concurrency));

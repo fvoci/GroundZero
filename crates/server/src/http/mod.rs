@@ -21,10 +21,7 @@ use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
-use crate::features::{
-    accounts, documents, home, item_profile, members, modules, organizations, public_links,
-    references, revisions, search_api, workspaces,
-};
+use crate::features::{accounts, item_profile, members, modules, organizations, workspaces};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -124,6 +121,14 @@ impl FromRef<AppState> for fvoci_calendar::CalendarState {
     }
 }
 
+impl FromRef<AppState> for fvoci_home::HomeState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_activity::ActivityState {
     fn from_ref(state: &AppState) -> Self {
         Self {
@@ -154,6 +159,35 @@ impl FromRef<AppState> for fvoci_records::RecordsState {
         Self {
             db: state.db.clone(),
             zotero_api_url: state.config.zotero_api_url.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_search::SearchState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            search: state.search.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_references::ReferencesState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_documents::DocumentsState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            limits: state.config.limits,
+            public_url: state.config.public_url.clone(),
+            runtime: Arc::new(state.collab.clone()),
         }
     }
 }
@@ -316,38 +350,13 @@ async fn api_not_found() -> AppError {
         organizations::server_organizations,
         organizations::create,
         organizations::server_admins,
-        documents::list_wiki,
-        documents::create_wiki,
-        documents::get,
-        documents::save,
-        documents::my_notes,
-        documents::create_note,
-        documents::set_settings,
-        documents::list_shares,
-        documents::create_share,
-        documents::delete_share,
-        documents::copy,
-        documents::move_preview,
-        documents::move_document,
-        documents::set_parent,
         // personal scope (2단계 B)
-        home::home,
-        home::my_tasks,
-        documents::shared_with_me,
-        search_api::search,
-        documents::templates,
-        documents::set_template,
         item_profile::get,
         item_profile::set,
         item_profile::set_members,
         item_profile::set_module_icon,
         item_profile::copy,
         item_profile::set_template,
-        references::task_backlinks,
-        revisions::list,
-        revisions::get,
-        revisions::export,
-        revisions::restore,
         modules::list_modules,
         modules::get_module,
         modules::create_module,
@@ -359,16 +368,6 @@ async fn api_not_found() -> AppError {
         modules::get_item,
         modules::update_item,
         modules::archive_item,
-        modules::list_item_documents,
-        modules::create_item_document,
-        references::candidates,
-        references::resolve,
-        references::document_backlinks,
-        references::item_backlinks,
-        public_links::list,
-        public_links::create,
-        public_links::revoke,
-        public_links::view,
         members::list_members,
         members::set_role,
         members::remove_member,
@@ -415,32 +414,6 @@ async fn api_not_found() -> AppError {
         workspaces::SetRealtime,
         workspaces::WorkspaceDeleted,
         workspaces::DeletedWorkspace,
-        documents::DocumentSummary,
-        documents::Document,
-        documents::CreateDocument,
-        documents::SaveDocument,
-        documents::ConflictBody,
-        documents::SaveConflict,
-        documents::Access,
-        documents::SharedDocument,
-        documents::DocumentSettings,
-        documents::Share,
-        documents::CreateShare,
-        documents::CopyDocument,
-        documents::MoveTarget,
-        documents::MoveDocument,
-        documents::MovePreview,
-        documents::MoveAccessChange,
-        documents::MoveConflict,
-        documents::AcknowledgedPreview,
-        documents::MoveOutcome,
-        documents::SetParent,
-        home::DueBucket,
-        home::HomeTask,
-        home::HomeDocument,
-        home::HomeItem,
-        home::MarkedTarget,
-        home::Home,
         organizations::OrgRole,
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
@@ -457,10 +430,6 @@ async fn api_not_found() -> AppError {
         organizations::CreateOrganization,
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
-        home::UpNextCounts,
-        search_api::SearchResult,
-        documents::DocumentTemplate,
-        documents::SetDocumentTemplate,
         item_profile::ItemDetails,
         item_profile::ItemProfile,
         item_profile::PersonRef,
@@ -473,12 +442,6 @@ async fn api_not_found() -> AppError {
         item_profile::CopyItem,
         item_profile::CopiedItem,
         item_profile::SetTemplate,
-        revisions::RevisionSummary,
-        revisions::Revision,
-        revisions::ExportFormat,
-        revisions::ExportRequest,
-        revisions::RestoreRevision,
-        revisions::RestoreConflict,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -490,21 +453,6 @@ async fn api_not_found() -> AppError {
         modules::UpdateItem,
         modules::ItemConflict,
         modules::ItemSaveConflict,
-        references::ReferenceKind,
-        references::ReferenceCandidate,
-        references::ReferenceInput,
-        references::ResolveReferences,
-        references::ResolvedReference,
-        references::Backlink,
-        // personal scope (2단계 B)
-        home::MyTask,
-        home::MyTaskCounts,
-        home::WorkspaceTasks,
-        home::MyTasks,
-        public_links::PublicLink,
-        public_links::CreatePublicLink,
-        public_links::CreatedPublicLink,
-        public_links::PublicDocument,
         fvoci_core::ids::Role,
     )),
     tags(
@@ -538,6 +486,10 @@ impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_records::RecordsApi::openapi());
+        openapi.merge(fvoci_home::HomeApi::openapi());
+        openapi.merge(fvoci_search::SearchApi::openapi());
+        openapi.merge(fvoci_references::ReferencesApi::openapi());
+        openapi.merge(fvoci_documents::DocumentsApi::openapi());
         openapi.merge(fvoci_system::SystemApi::openapi());
         openapi.merge(fvoci_files::FilesApi::openapi());
         openapi.merge(fvoci_calendar::CalendarApi::openapi());
@@ -591,6 +543,10 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(fvoci_work::router(&state))
         .merge(fvoci_records::router(&state))
+        .merge(fvoci_home::router(&state))
+        .merge(fvoci_search::router(&state))
+        .merge(fvoci_references::router(&state))
+        .merge(fvoci_documents::router(&state))
         .merge(fvoci_system::router(&state))
         .merge(fvoci_files::router(&state))
         .merge(fvoci_calendar::router())
@@ -653,11 +609,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/workspaces/{workspace_id}", delete(workspaces::delete))
         .route("/me/deleted-workspaces", get(workspaces::deleted))
-        .route("/document-templates", get(documents::templates))
-        .route(
-            "/documents/{document_id}/template",
-            put(documents::set_template),
-        )
         .route(
             "/items/{item_id}/profile",
             get(item_profile::get).put(item_profile::set),
@@ -681,76 +632,7 @@ pub fn router(state: AppState) -> Router {
             "/me/deleted-workspaces/{workspace_id}/restore",
             post(workspaces::restore),
         )
-        .route(
-            "/workspaces/{workspace_id}/wiki/documents",
-            get(documents::list_wiki).post(documents::create_wiki),
-        )
-        .route(
-            "/me/notes",
-            get(documents::my_notes).post(documents::create_note),
-        )
-        .route(
-            "/documents/{document_id}/settings",
-            put(documents::set_settings),
-        )
-        .route(
-            "/documents/{document_id}/shares",
-            get(documents::list_shares).post(documents::create_share),
-        )
-        .route(
-            "/document-shares/{share_id}",
-            delete(documents::delete_share),
-        )
-        .route("/documents/{document_id}/copy", post(documents::copy))
-        .route(
-            "/documents/{document_id}/move/preview",
-            post(documents::move_preview),
-        )
-        .route(
-            "/documents/{document_id}/move",
-            post(documents::move_document),
-        )
-        .route(
-            "/documents/{document_id}/public-links",
-            get(public_links::list).post(public_links::create),
-        )
-        .route("/public-links/{link_id}", delete(public_links::revoke))
-        .route("/reference-candidates", get(references::candidates))
-        .route(
-            "/documents/{document_id}/parent",
-            put(documents::set_parent),
-        )
-        .route(
-            "/tasks/{task_id}/backlinks",
-            get(references::task_backlinks),
-        )
-        .route("/documents/{document_id}/revisions", get(revisions::list))
-        .route(
-            "/documents/{document_id}/revisions/{revision}",
-            get(revisions::get),
-        )
-        .route(
-            "/documents/{document_id}/revisions/{revision}/restore",
-            post(revisions::restore),
-        )
-        .route(
-            "/documents/{document_id}/revisions/{revision}/export",
-            post(revisions::export),
-        )
         // personal scope (2단계 B)
-        .route("/me/home", get(home::home))
-        .route("/me/tasks", get(home::my_tasks))
-        .route("/me/shared", get(documents::shared_with_me))
-        .route("/search", get(search_api::search))
-        .route("/references/resolve", post(references::resolve))
-        .route(
-            "/documents/{document_id}/backlinks",
-            get(references::document_backlinks),
-        )
-        .route(
-            "/items/{item_id}/backlinks",
-            get(references::item_backlinks),
-        )
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),
@@ -772,15 +654,6 @@ pub fn router(state: AppState) -> Router {
             get(modules::get_item).put(modules::update_item),
         )
         .route("/items/{item_id}/archived", put(modules::archive_item))
-        .route(
-            "/items/{item_id}/documents",
-            get(modules::list_item_documents).post(modules::create_item_document),
-        )
-        .route("/public/{token}", get(public_links::view))
-        .route(
-            "/documents/{document_id}",
-            get(documents::get).put(documents::save),
-        )
         .route(
             "/documents/{document_id}/collab",
             get(crate::collab::ws::connect),
@@ -1042,8 +915,8 @@ mod tests {
     #[test]
     fn the_move_conflict_is_a_preview_or_error_body() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
-        let conflict = &doc["paths"]["/api/documents/{document_id}/move"]["post"]["responses"]["409"]
-            ["content"]["application/json"]["schema"];
+        let conflict = &doc["paths"]["/api/documents/{document_id}/placement"]["put"]["responses"]
+            ["409"]["content"]["application/json"]["schema"];
         assert_eq!(
             conflict,
             &serde_json::json!({ "$ref": "#/components/schemas/MoveConflict" })
@@ -1061,7 +934,7 @@ mod tests {
         );
     }
 
-    /// CodeRabbit(`fb3a11e`): 복원의 409도 두 모양이다. 기준이 지났으면 `ConflictBody`(최신본), 실시간 편집을 먼저 남기지
+    /// D-62·D-131: 복원의 409도 두 모양이다. 기준이 지났으면 `StaleWrite_Document`(최신본), 실시간 편집을 먼저 남기지
     /// 못했거나 잠금 한도를 넘었으면 `ErrorBody`. 계약이 둘 다 적는다.
     #[test]
     fn the_restore_conflict_is_a_stale_base_or_error_body() {
@@ -1079,7 +952,7 @@ mod tests {
         assert_eq!(
             one_of,
             [
-                "#/components/schemas/ConflictBody",
+                "#/components/schemas/StaleWrite_Document",
                 "#/components/schemas/ErrorBody"
             ]
         );

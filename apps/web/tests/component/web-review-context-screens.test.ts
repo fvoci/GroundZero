@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { type TimeEntryView, type TimeSummaryRowView } from '$lib/features/time/model';
 import { timeData } from '$lib/features/time/data';
 import { activityApi } from '$lib/features/activity/api';
@@ -185,8 +186,8 @@ describe('time organization context', () => {
 });
 
 it('isolates workspace request IDs by organization and restores the original retry identity', async () => {
-  vi.spyOn(api, 'home').mockReturnValue(new Promise(() => undefined));
-  vi.spyOn(api, 'myTasks').mockReturnValue(new Promise(() => undefined));
+  vi.spyOn(homeApi, 'home').mockReturnValue(new Promise(() => undefined));
+  vi.spyOn(homeApi, 'myTasks').mockReturnValue(new Promise(() => undefined));
   vi.spyOn(activityApi, 'recentActivity').mockResolvedValue([]);
   vi.spyOn(api, 'myInvitations').mockResolvedValue([]);
   const create = vi.spyOn(api, 'createWorkspace').mockRejectedValue(new Error('response lost'));

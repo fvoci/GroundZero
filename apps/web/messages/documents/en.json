@@ -48,6 +48,7 @@
   "documents_upload_failed": "Couldn't finish the upload",
   "documents_title_required": "Enter a title.",
   "documents_title_conflict": "It was saved elsewhere at the same time. Try again.",
+  "documents_live_title_pending": "The unsaved title stays only on this screen. Reopening will lose it, so copy it elsewhere or discard the change first.",
   "documents_title_save_failed": "Couldn't save the title.",
   "documents_live_connected": "Live",
   "documents_live_connecting": "Connecting…",

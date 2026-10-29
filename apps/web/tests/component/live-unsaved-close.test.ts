@@ -4,10 +4,13 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import type { DocumentView } from '$lib/api/client';
+import { api } from '$lib/api/client';
+import { documentsApi } from '$lib/features/documents/api';
 import { loadOffers } from '$lib/features/documents/drafts';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 /** 연 연결들(가장 최근 것이 끝). 서버 대신 이 시험이 닫기 코드와 맞춰짐을 보낸다. */
@@ -84,6 +87,39 @@ function closeWith(code: number): void {
 // 미확인 편집도 사용자 입력이다: 서버가 4403(권한·세션 끝)·4409(문서가 바뀜)로 닫아 반영하지 않아도 브라우저에서
 // 없애지 않는다. 이 사용자의 초안으로 남기고, "저장되지 않았다"고 알리며, 다시 열면 내 노트로 보존하거나 버리게 한다.
 describe('live editor closed by the server with unconfirmed edits', () => {
+  it('keeps the kept-body notice after a title save', async () => {
+    await setLocale('ko', { reload: false });
+    me.userId = 'user-a';
+    vi.spyOn(api, 'document').mockResolvedValue(doc);
+    vi.spyOn(documentsApi, 'patchTitle').mockResolvedValue({
+      kind: 'saved',
+      document: { ...doc, title: '제목만 저장', revision: 4 },
+    });
+    const saved = vi.fn();
+    render(LiveDocumentEditor, { props: { initial: doc, onsaved: saved } });
+    await editUnconfirmed();
+    closeWith(4409);
+    await screen.findByText(m.documents_live_unsaved_kept());
+    expect(opened).toHaveLength(2);
+
+    await fireEvent.input(screen.getByLabelText(m.documents_title_label()), {
+      target: { value: '제목만 저장' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_title_save() }));
+    await waitFor(() => {
+      expect(saved).toHaveBeenCalledOnce();
+    });
+    expect(loadOffers('d1')).toHaveLength(1);
+    expect(JSON.stringify(loadOffers('d1')[0]?.body)).toContain('확인받지 못한 문장');
+    expect(screen.queryByText(m.documents_live_unsaved_kept())).not.toBeNull();
+
+    opened.at(-1)?.provider.emit('sync', [true]);
+    await screen.findByRole('region', { name: m.documents_draft_region() });
+    expect(screen.queryByText(m.documents_live_unsaved_kept())).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_draft_discard() }));
+    expect(loadOffers('d1')).toEqual([]);
+  });
+
   for (const code of [4403, 4409]) {
     it(`keeps them as this user's draft, says so, and offers them again (${String(code)})`, async () => {
       await setLocale('ko', { reload: false });
