@@ -40,8 +40,31 @@ const replace = vi.fn();
 const reload = vi.fn();
 const sessionKey = 'fvoci:auth-session';
 
+function isMarker(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sessionMarker(): Record<string, unknown> {
+  const value: unknown = JSON.parse(localStorage.getItem(sessionKey) ?? '{}');
+  if (!isMarker(value)) throw new Error('invalid marker');
+  return value;
+}
+
+function nextMarkerGeneration(): number {
+  const generation = sessionMarker().generation;
+  return (typeof generation === 'number' ? generation : 0) + 1;
+}
+
 function signalSession(userId: string | null): void {
-  localStorage.setItem(sessionKey, JSON.stringify({ userId, sequence: crypto.randomUUID() }));
+  localStorage.setItem(
+    sessionKey,
+    JSON.stringify({
+      state: 'settled',
+      userId,
+      generation: nextMarkerGeneration(),
+      sequence: crypto.randomUUID(),
+    }),
+  );
 }
 
 function signalLogout(startedAt = Date.now()): string | null {
@@ -51,6 +74,8 @@ function signalLogout(startedAt = Date.now()): string | null {
       state: 'logout-pending',
       userId: me.id,
       startedAt,
+      attemptId: crypto.randomUUID(),
+      generation: nextMarkerGeneration(),
       sequence: crypto.randomUUID(),
     }),
   );
@@ -127,6 +152,151 @@ async function logout(): Promise<void> {
   await fireEvent.click(screen.getByTestId('user-menu'));
   await fireEvent.click(await screen.findByRole('menuitem', { name: '로그아웃' }));
 }
+
+// SR-221-5: /api/me 시작 → 최종 익명 → 옛 A 응답. storage 배달보다 먼저 현재 세대를 읽어야 한다.
+it.each(['initial', 'return', 'live', 'persisted'])(
+  'does not publish an old-user response over a newer final generation during %s verification',
+  async (kind) => {
+    if (kind !== 'initial') await signedIn();
+    const oldCheck = deferred<Me | undefined>();
+    const freshCheck = deferred<Me | undefined>();
+    vi.spyOn(api, 'me').mockReturnValueOnce(oldCheck.promise).mockReturnValue(freshCheck.promise);
+    if (kind === 'initial') render(App, { replace, reload });
+    else if (kind === 'return') window.dispatchEvent(new Event('focus'));
+    else if (kind === 'persisted') pageshow();
+    else {
+      signalSession(null);
+      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    }
+    signalSession(null);
+    const finalMarker = localStorage.getItem(sessionKey);
+    oldCheck.resolve(me);
+    await oldCheck.promise;
+    await tick();
+    expect(localStorage.getItem(sessionKey)).toBe(finalMarker);
+    const menu = screen.queryByTestId('user-menu');
+    if (menu !== null) expect(menu).not.toBeVisible();
+    freshCheck.resolve(undefined);
+    if (kind === 'initial') await screen.findByRole('link', { name: /^로그인$/ });
+    else if (kind === 'persisted')
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalled();
+      });
+    else await screen.findByRole('link', { name: '새 탭에서 로그인' });
+  },
+);
+
+// SR-221-6: 시도 A 시작 → 다른 탭 B의 진행/성공 → A 실패.
+it.each(['pending', 'success'])(
+  "does not let a failed logout replace another attempt's %s marker",
+  async (other) => {
+    const attempt = deferred<string>();
+    vi.spyOn(api, 'logout').mockReturnValueOnce(attempt.promise);
+    await signedIn();
+    await logout();
+    if (other === 'pending') signalLogout();
+    else signalSession(null);
+    const latest = localStorage.getItem(sessionKey);
+    attempt.reject(new Error('old attempt failed'));
+    await screen.findByRole('alert');
+    expect(localStorage.getItem(sessionKey)).toBe(latest);
+    expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+    expect(replace).not.toHaveBeenCalled();
+  },
+);
+
+it('always publishes final anonymity when its logout succeeds after a newer attempt starts', async () => {
+  const attempt = deferred<string>();
+  vi.spyOn(api, 'logout').mockReturnValueOnce(attempt.promise);
+  await signedIn();
+  await logout();
+  signalLogout();
+  attempt.resolve('/signed-out');
+  await waitFor(() => {
+    expect(replace).toHaveBeenCalledWith('/signed-out');
+  });
+  expect(sessionMarker()).toMatchObject({ state: 'settled', userId: null });
+});
+
+// SR-221-7: 진행 표식으로 가림 → 키 소실/읽기 거부/만료 → 새 확인 실패 → 입력을 보존한 재시도.
+it.each(['removed', 'denied', 'expired'])(
+  'recovers a hidden pending logout after its marker is %s and preserves input across a failed check',
+  async (kind) => {
+    const input = await liveInput();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    signalLogout();
+    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    await tick();
+    expect(input).not.toBeVisible();
+    const check = deferred<Me | undefined>();
+    const read = vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
+    const reads = read.mock.calls.length;
+    if (kind === 'removed') localStorage.removeItem(sessionKey);
+    else if (kind === 'denied') {
+      const original: unknown = Object.getOwnPropertyDescriptor(
+        Storage.prototype,
+        'getItem',
+      )?.value;
+      if (typeof original !== 'function') throw new Error('getItem missing');
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key) {
+        if (key === sessionKey) throw new Error('denied');
+        const result: unknown = Reflect.apply(original, this, [key]);
+        if (result === null || typeof result === 'string') return result;
+        throw new Error('invalid storage value');
+      });
+    }
+    await vi.advanceTimersByTimeAsync(30_000);
+    vi.useRealTimers();
+    if (kind === 'expired') signalLogout(Date.now() - 30_000);
+    expect(read).toHaveBeenCalledTimes(reads + 1);
+    expect(input).not.toBeVisible();
+    check.reject(new Error('verification failed'));
+    await screen.findByRole('alert');
+    expect(input).toHaveValue('메모리에만 남긴 입력');
+    read.mockResolvedValue(me);
+    await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    await waitFor(() => {
+      expect(input).toBeVisible();
+    });
+    expect(screen.getByLabelText('새 노트 제목')).toBe(input);
+    expect(api.myNotes).toHaveBeenCalledTimes(1);
+  },
+);
+
+it('checks immediately when storage is cleared after a pending logout', async () => {
+  const input = await liveInput();
+  signalLogout();
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  await tick();
+  const check = deferred<Me | undefined>();
+  const read = vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
+  const reads = read.mock.calls.length;
+  localStorage.removeItem(sessionKey);
+  window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  expect(read).toHaveBeenCalledTimes(reads + 1);
+  expect(input).not.toBeVisible();
+  check.resolve(me);
+  await waitFor(() => {
+    expect(input).toBeVisible();
+  });
+});
+
+it('keeps restored input mounted when a pending marker disappears and verification fails', async () => {
+  const input = await liveInput();
+  signalLogout();
+  pageshow();
+  await tick();
+  const check = deferred<Me | undefined>();
+  vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
+  localStorage.removeItem(sessionKey);
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  check.reject(new Error('offline'));
+  await screen.findByRole('alert');
+  expect(input.isConnected).toBe(true);
+  expect(input).toHaveValue('메모리에만 남긴 입력');
+  expect(input).not.toBeVisible();
+  expect(screen.getByRole('button', { name: '다시 시도' })).toBeVisible();
+});
 
 // SR-221-1 / D-96 / #88: 불일치 표식은 네트워크 응답보다 먼저 가린다. 순번은 비교하지 않는다.
 it('publishes a fresh pending logout before each attempt and the original user after failure', async () => {
@@ -280,8 +450,10 @@ it('publishes an anonymous shell result without making public views publish a ma
   localStorage.removeItem(sessionKey);
   router.navigate('/p/public-token-1234');
   vi.spyOn(api, 'publicDocument').mockResolvedValue(publicDoc);
+  const reads = vi.spyOn(Storage.prototype, 'getItem');
   render(App, { replace, reload });
   await screen.findByText(publicDoc.title);
+  expect(reads.mock.calls.filter(([key]) => key === sessionKey)).toHaveLength(0);
   expect(localStorage.getItem(sessionKey)).toBeNull();
 });
 

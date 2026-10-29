@@ -3,7 +3,7 @@
   // 조작부와 가상 키보드에 가리지 않게 한다. 토스트는 닫기 단추가 있고 Alt+T로 닿는다(svelte-sonner). 배너는 화면
   // 낭독기에 알린다.
   import { api } from '$lib/api/client';
-  import { publishSessionUser } from '$lib/features/auth/session-signal';
+  import { publishSessionUser, readSessionGeneration } from '$lib/features/auth/session-signal';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -93,15 +93,22 @@
       if (signedIn === '' || (sessionHidden && accountSafety.reason !== 'reauth') || checking)
         return;
       const generation = accountSafety.generation;
+      const sessionGeneration = readSessionGeneration();
+      const stillCurrent = (): boolean =>
+        active && generation === accountSafety.generation && currentUser.userId === signedIn;
       checking = true;
       void api
         .me()
-        .then((now) => {
-          if (!active || generation !== accountSafety.generation || currentUser.userId !== signedIn)
-            return;
+        .then(async (now) => {
+          if (!stillCurrent()) return;
           // storage 이벤트 배달 전에 응답이 와도 진행 중인 로그아웃을 먼저 가린다.
           if (syncSessionSignal?.()) return;
-          publishSessionUser(now?.id ?? null);
+          if (!(await publishSessionUser(now?.id ?? null, sessionGeneration))) {
+            syncSessionSignal?.();
+            return;
+          }
+          if (!stillCurrent()) return;
+          if (syncSessionSignal?.()) return;
           if (now === undefined) {
             reportSessionExpired();
             hideSession('reauth');

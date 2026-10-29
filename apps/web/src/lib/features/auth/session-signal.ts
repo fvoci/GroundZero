@@ -5,54 +5,105 @@ const LOGOUT_PENDING_MS = 30_000;
 
 type SessionSignal =
   | { state: 'settled'; userId: string | null }
-  | { state: 'logout-pending'; userId: string; startedAt: number };
+  | { state: 'logout-pending'; userId: string; startedAt: number; attemptId: string };
+
+type StoredSignal = SessionSignal & { generation: number };
+let lastGeneration = 0;
+
+/** 지원 브라우저에서는 판독·비교·갱신을 탭 사이에서 직렬화한다. 네트워크는 잠금 밖이다. */
+async function updateSignal<T>(update: () => T): Promise<T> {
+  if (typeof navigator !== 'undefined' && 'locks' in navigator) {
+    return navigator.locks.request(KEY, update).catch(() => update());
+  }
+  return update();
+}
 
 function publish(signal: SessionSignal): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...signal, sequence: crypto.randomUUID() }));
+    lastGeneration = Math.max(lastGeneration, readSessionGeneration()) + 1;
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ ...signal, generation: lastGeneration, sequence: crypto.randomUUID() }),
+    );
   } catch {
     // 저장소를 막은 브라우저에서도 기존 네트워크 재확인은 계속 쓴다.
   }
 }
 
 /** 같은 사용자·로그아웃을 연달아 알려도 storage 이벤트가 나도록 매번 순번을 바꾼다. */
-export function publishSessionUser(userId: string | null): void {
+export async function publishSessionUser(
+  userId: string | null,
+  observedGeneration: number,
+): Promise<boolean> {
   // 로그아웃 전의 /api/me는 최종 상태가 아니다. 셸 시작·창 복귀·복원 모두 같은 경계를 쓴다.
-  if (readLogoutPendingUntil() !== undefined) return;
-  publish({ state: 'settled', userId });
+  return updateSignal(() => {
+    if (readSessionGeneration() !== observedGeneration || readLogoutPendingUntil() !== undefined)
+      return false;
+    publish({ state: 'settled', userId });
+    return true;
+  });
 }
 
-export function publishLogoutPending(userId: string): void {
-  publish({ state: 'logout-pending', userId, startedAt: Date.now() });
+export async function publishLogoutPending(userId: string, attemptId: string): Promise<void> {
+  await updateSignal(() => {
+    publish({ state: 'logout-pending', userId, startedAt: Date.now(), attemptId });
+  });
 }
 
 /** 요청을 끝낸 탭만 진행 표식을 최종 상태로 바꾼다. */
-export function publishLogoutResult(userId: string | null): void {
-  publish({ state: 'settled', userId });
+export async function publishLogoutResult(userId: string | null, attemptId: string): Promise<void> {
+  await updateSignal(() => {
+    const current = readSignal();
+    if (userId !== null && (current?.state !== 'logout-pending' || current.attemptId !== attemptId))
+      return;
+    publish({ state: 'settled', userId });
+  });
 }
 
 /** 순번은 비교하지 않는다. 없는 표식·손상된 표식·접근 실패는 인증 정보로 쓰지 않는다. */
-function readSignal(): SessionSignal | undefined {
+function readSignal(): StoredSignal | undefined {
   try {
     const raw = localStorage.getItem(KEY);
     const value: unknown = raw === null ? undefined : JSON.parse(raw);
     if (typeof value !== 'object' || value === null || !('userId' in value)) return undefined;
     const userId = value.userId;
     if (userId !== null && (typeof userId !== 'string' || userId === '')) return undefined;
+    const generation =
+      'generation' in value &&
+      typeof value.generation === 'number' &&
+      Number.isSafeInteger(value.generation) &&
+      value.generation >= 0
+        ? value.generation
+        : 0;
+    lastGeneration = Math.max(lastGeneration, generation);
     if ('state' in value && value.state === 'logout-pending') {
       if (
         userId === null ||
         !('startedAt' in value) ||
         typeof value.startedAt !== 'number' ||
-        !Number.isFinite(value.startedAt)
+        !Number.isFinite(value.startedAt) ||
+        !('attemptId' in value) ||
+        typeof value.attemptId !== 'string' ||
+        value.attemptId === ''
       )
         return undefined;
-      return { state: 'logout-pending', userId, startedAt: value.startedAt };
+      return {
+        state: 'logout-pending',
+        userId,
+        startedAt: value.startedAt,
+        attemptId: value.attemptId,
+        generation,
+      };
     }
-    return { state: 'settled', userId };
+    return { state: 'settled', userId, generation };
   } catch {
     return undefined;
   }
+}
+
+/** /api/me 요청 직전에 읽고, 응답을 게시할 때 같은 세대인지 검사한다(SR-221-5). */
+export function readSessionGeneration(): number {
+  return readSignal()?.generation ?? 0;
 }
 
 /** 진행 표식은 사용자 일치로 무시하지 않는다. 만료 뒤에도 익명 신호로 일반 확인을 유도한다. */
@@ -71,5 +122,5 @@ export function readLogoutPendingUntil(): number | undefined {
 }
 
 export function isSessionSignal(event: StorageEvent): boolean {
-  return event.key === KEY;
+  return event.key === KEY || event.key === null;
 }

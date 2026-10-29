@@ -3,6 +3,74 @@ import { expect, str, test, unique } from './fixtures';
 // 실제 BFCache 복원은 이 실행기의 BackForwardCacheDisabledForDelegate로 재현되지 않았다.
 // 코디네이터 승인: 여기서는 일반 기록 이동, persisted=true 복원은 컴포넌트 시험이 검증한다.
 
+test('a late initial old-user response cannot overwrite final logout anonymity', async ({
+  signIn,
+}) => {
+  const owner = await signIn('test-user');
+  await owner.page.goto('/notes');
+  await expect(owner.page.getByTestId('user-menu')).toBeVisible();
+  const userId = str(await owner.api.get('/api/me'), 'id');
+  await owner.endTrace();
+  const late = await owner.context.newPage();
+  // 이 새 문서가 옛 A를 게시하려는 호출을 관찰한다. 저장소의 반환·예외는 그대로다.
+  await late.addInitScript((oldUser: string) => {
+    const original: unknown = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem')?.value;
+    if (typeof original !== 'function') throw new Error('Storage.prototype.setItem');
+    Storage.prototype.setItem = function (this: Storage, key: string, value: string) {
+      const result: unknown = Reflect.apply(original, this, [key, value]);
+      try {
+        const marker: unknown = JSON.parse(value);
+        if (
+          key === 'fvoci:auth-session' &&
+          typeof marker === 'object' &&
+          marker !== null &&
+          'userId' in marker &&
+          marker.userId === oldUser
+        ) {
+          document.documentElement.dataset.oldUserPublished = 'yes';
+        }
+      } catch {
+        /* 관찰 오류는 원래 쓰기의 결과를 바꾸지 않는다. */
+      }
+      return result;
+    };
+  }, userId);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let captured!: () => void;
+  const capturedOldUser = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
+  await late.route('**/api/me', async (route) => {
+    const response = await route.fetch();
+    if (response.status() === 200) {
+      expect(str(await response.json(), 'id')).toBe(userId);
+      captured();
+      await held;
+    }
+    // 실제 서버 응답의 상태·머리글·본문을 그대로, 전달 시점만 늦춘다.
+    await route.fulfill({ response });
+  });
+  const navigation = late.goto('/notes');
+  try {
+    await capturedOldUser;
+    await owner.page.getByTestId('user-menu').click();
+    await owner.page.getByRole('menuitem', { name: '로그아웃' }).click();
+    await expect(owner.page.getByRole('link', { name: '로그인', exact: true })).toBeVisible();
+  } finally {
+    release();
+  }
+  await navigation;
+  await expect(late.getByRole('link', { name: '로그인', exact: true })).toBeVisible();
+  await expect(late.locator('html')).not.toHaveAttribute('data-old-user-published', 'yes');
+  const final: unknown = await late.evaluate((): unknown =>
+    JSON.parse(localStorage.getItem('fvoci:auth-session') ?? '{}'),
+  );
+  expect(final).toMatchObject({ state: 'settled', userId: null });
+});
+
 test('another tab stays hidden when its old-user response precedes logout completion', async ({
   signIn,
 }) => {
