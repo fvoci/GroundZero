@@ -25,7 +25,6 @@
       "path": "/api/organizations/{organization_id}/members/{user_id}",
       "reason": "샴 가3~가5 조립 예정"
     },
-    { "method": "GET", "path": "/api/me/export", "reason": "가6 판정 예정" },
     {
       "method": "GET",
       "path": "/api/organizations/{organization_id}/invitations",
@@ -48,14 +47,12 @@
     },
     { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
     { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
-    { "method": "GET", "path": "/api/workspaces/{workspace_id}/export", "reason": "가6 판정 예정" },
     {
       "method": "GET",
       "path": "/api/workspaces/{workspace_id}/limits",
       "reason": "샴 가3~가5 조립 예정"
     },
     { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
-    { "method": "GET", "path": "/auth/login", "reason": "가6 판정 예정" },
     {
       "method": "POST",
       "path": "/api/organizations/{organization_id}/invitations",

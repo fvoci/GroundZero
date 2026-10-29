@@ -36,6 +36,83 @@ const listedTask: Allowlist = {
   forwarders: [],
   unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '가6 판정 예정' }],
 };
+for (const [method, path] of [
+  ['GET', '/api/typo/42'],
+  ['DELETE', '/api/tasks/42'],
+]) {
+  await test(`SR-250-3: default fetch parameter checks ${method ?? ''} ${path ?? ''}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`
+      function load(fetchImpl: typeof fetch = fetch) {
+        return fetchImpl('${path ?? ''}', { method: '${method ?? ''}' });
+      }
+    `),
+          contract,
+          listedTask,
+        ),
+      /not in OpenAPI/,
+    );
+  });
+}
+await test('SR-250-3: unsupported fetch references fail', () => {
+  assert.throws(
+    () => checkUsage(files('queue(fetch);'), contract, listedTask),
+    /fetch reference.*not statically resolvable/,
+  );
+});
+for (const code of [
+  "window.location.assign('/api/typo/42');",
+  "window.open('/api/typo/42');",
+  "const a = document.createElement('a'); a.href = '/api/typo/42';",
+]) {
+  await test(`SR-250-4: navigation checks paths: ${code}`, () => {
+    assert.throws(
+      () => checkUsage(files(code), contract, listedTask),
+      /GET \/api\/typo\/42.*not in OpenAPI/,
+    );
+  });
+}
+await test('SR-250-4: links use GET and detect a method mismatch', () => {
+  const input = files('');
+  input.set('apps/web/src/lib/Link.svelte', '<a href="/api/tasks/42">link</a>');
+  assert.throws(
+    () =>
+      checkUsage(
+        input,
+        { paths: { '/api/tasks/{id}': { post: {} } } },
+        {
+          forwarders: [],
+          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '가6 판정 예정' }],
+        },
+      ),
+    /GET \/api\/tasks\/42.*not in OpenAPI/,
+  );
+});
+await test('SR-250-4: undeclared WebSocket routes fail', () => {
+  assert.throws(
+    () => checkUsage(files("new WebSocket('wss://example.org/api/wrong');"), contract, listedTask),
+    /WebSocket.*exception|unlisted WebSocket/,
+  );
+});
+for (const [method, path] of [
+  ['GET', '/rhwp/../api/typo/42'],
+  ['DELETE', '/rhwp/%2e%2e/api/tasks/42'],
+  ['GET', '/rhwp/.%2e/api/typo/42'],
+]) {
+  await test(`SR-250-5: reject dot segments before classifying ${method ?? ''} ${path ?? ''}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`fetch('${path ?? ''}', { method: '${method ?? ''}' });`),
+          contract,
+          listedTask,
+        ),
+      /dot segment/,
+    );
+  });
+}
 await test('SR-250-1: direct fetch with a wrong path fails', () => {
   assert.throws(
     () => checkUsage(files("fetch('/api/typo/42');"), contract, listedTask),
@@ -140,12 +217,39 @@ await test('direct fetch resolves imported path functions and function arguments
   );
 });
 
+await test('CodeRabbit: reassigned let URL helpers must fail instead of following their initializer', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+    let url = () => '/api/tasks/42';
+    url = () => '/api/typo/42';
+    fetch(url());
+  `),
+        contract,
+        empty,
+      ),
+    /URL helper.*const|not statically resolvable/,
+  );
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+    let url = () => '42'; url = () => '..';
+    fetch('/api/tasks/' + encodeURIComponent(url()));
+  `),
+        contract,
+        empty,
+      ),
+    /URL helper.*const/,
+  );
+});
+
 await test('direct fetch ignores resources outside contract namespaces and unrelated fetch functions', () => {
   const result = checkUsage(
     files(`
     const scriptUrl = '/pptx-frame.js'; fetch(scriptUrl);
     fetch('/rhwp/manifest.json'); fetch('https://example.org/api/tasks/42');
-    function assets(name: string, host: string) { fetch(\`/rhwp/\${name}\`); fetch(\`https://\${host}/api/data\`); }
     const local = { fetch(path: string) {} }; local.fetch('/api/typo');
   `),
     { paths: {} },
@@ -156,6 +260,8 @@ await test('direct fetch ignores resources outside contract namespaces and unrel
 
 for (const code of [
   'function load(url: string) { fetch(url); }',
+  'function load(name: string) { fetch(`/rhwp/${name}`); }',
+  'function load(host: string) { fetch(`https://${host}/api/data`); }',
   "function load(method: string) { fetch('/api/tasks/42', { method }); }",
   "function load(options: RequestInit) { fetch('/api/tasks/42', options); }",
   "fetch('api/tasks/42');",
@@ -542,11 +648,157 @@ await test('allowlist accepts exactly the two prescribed reason labels and requi
   );
 });
 
+await test('fetch aliases include defaults, const aliases, global members and destructuring', () => {
+  const input = files(`
+    function load(send: typeof fetch = globalThis['fetch']) { const invoke = send; invoke('/api/tasks/42'); }
+    const { fetch: invoke } = window; invoke('/api/tasks/42');
+    load(fetch);
+  `);
+  assert.equal(checkUsage(input, contract, empty).calls, 2);
+});
+for (const code of [
+  'let invoke = fetch; invoke("/api/tasks/42");',
+  'const invoke = fetch.bind(window); invoke("/api/tasks/42");',
+  'function load(send: typeof fetch) { send("/api/tasks/42"); }',
+  'function load(send: typeof fetch = fetch) { send = other; send("/api/tasks/42"); }',
+  'function load(send: typeof fetch = fetch) { send("/api/tasks/42"); } load(other);',
+]) {
+  await test(`unresolved fetch capability fails: ${code}`, () => {
+    assert.throws(
+      () => checkUsage(files(code), contract, listedTask),
+      /fetch reference|fetch parameter/,
+    );
+  });
+}
+
+for (const code of [
+  "new Request('/api/tasks/42', { method: 'DELETE' });",
+  "fetch(new Request('/api/tasks/42'), { method: 'DELETE' });",
+  "const xhr = new XMLHttpRequest(); xhr.open('DELETE', '/api/tasks/42');",
+  "new EventSource('/api/typo/42');",
+  "navigator.sendBeacon('/api/tasks/42', 'payload');",
+  "const a = document.createElement('a'); a.setAttribute('href', '/api/typo/42');",
+  "window.location.href = '/api/typo/42';",
+  "location = '/api/typo/42';",
+]) {
+  await test(`network outlet cannot hide invalid operations: ${code}`, () => {
+    assert.throws(() => checkUsage(files(code), contract, listedTask), /not in OpenAPI/);
+  });
+}
+await test('Request, XMLHttpRequest, EventSource and beacon use their actual methods', () => {
+  const input = files(`
+    fetch(new Request('/api/tasks/42', { method: 'GET' }));
+    const xhr = new XMLHttpRequest(); xhr.open('GET', '/api/tasks/42');
+    new EventSource('/api/tasks/42');
+    navigator.sendBeacon('/api/beacons', 'payload');
+  `);
+  const result = checkUsage(
+    input,
+    { paths: { ...contract.paths, '/api/beacons': { post: {} } } },
+    empty,
+  );
+  assert.deepEqual(result.unused, []);
+  assert.ok(
+    result.exits.every(
+      (row) => row.reason !== '' && ['대조함', '이유 있는 예외'].includes(row.classification),
+    ),
+  );
+});
+await test('href, src and form action use GET or the form method, including HTML entry files', () => {
+  const input = files('');
+  input.set(
+    'apps/web/src/lib/Links.svelte',
+    '<img src="/api/tasks/42"><a href="/api/tasks/42">ok</a><form action="/api/submit" method="post"></form>',
+  );
+  input.set(
+    'apps/web/index.html',
+    '<html><body><script src="/api/tasks/42"></script></body></html>',
+  );
+  const routes = { paths: { ...contract.paths, '/api/submit': { post: {} } } };
+  assert.equal(checkUsage(input, routes, empty).calls, 4);
+  input.set('apps/web/src/lib/Links.svelte', '<form action="/api/submit" method="get"></form>');
+  assert.throws(() => checkUsage(input, routes, empty), /GET \/api\/submit.*not in OpenAPI/);
+});
+await test('WebSocket exception checks y-websocket room composition and never exempts HTTP', () => {
+  const input = files(`
+    import { WebsocketProvider as Provider } from 'y-websocket';
+    new Provider('wss://example.org/api/tasks/42', 'collab', doc);
+  `);
+  const policy = {
+    websockets: [{ path: '/api/tasks/{id}/collab', reason: 'CRDT upgrade outside OpenAPI' }],
+    sites: [],
+  };
+  const result = checkUsage(input, { paths: {} }, empty, policy);
+  assert.equal(result.exits[0]?.classification, '이유 있는 예외');
+  input.set(source, (input.get(source) ?? '').replace("'collab'", "'typo'"));
+  assert.throws(() => checkUsage(input, { paths: {} }, empty, policy), /unlisted WebSocket/);
+  assert.throws(
+    () =>
+      checkUsage(
+        files("fetch('/api/tasks/42/collab', {method: 'DELETE'});"),
+        { paths: {} },
+        empty,
+        policy,
+      ),
+    /DELETE .*not in OpenAPI/,
+  );
+});
+await test('opaque exceptions require exact sites and nonempty reasons; literals still get checked', () => {
+  const input = files('');
+  input.set('apps/web/src/lib/Link.svelte', '<a href={value}>user URL</a>');
+  const policy = {
+    websockets: [],
+    sites: [
+      {
+        file: 'apps/web/src/lib/Link.svelte',
+        kind: 'href',
+        expression: '(value)',
+        reason: 'Runtime document content',
+      },
+    ],
+  };
+  assert.equal(
+    checkUsage(input, { paths: {} }, empty, policy).exits[0]?.classification,
+    '이유 있는 예외',
+  );
+  assert.throws(
+    () =>
+      checkUsage(input, { paths: {} }, empty, {
+        ...policy,
+        sites: [
+          { file: 'apps/web/src/lib/Link.svelte', kind: 'href', expression: '(value)', reason: '' },
+        ],
+      }),
+    /nonempty text/,
+  );
+  input.set('apps/web/src/lib/Link.svelte', '<a href="/api/typo">wrong</a>');
+  assert.throws(
+    () => checkUsage(input, { paths: {} }, empty, policy),
+    /GET \/api\/typo.*not in OpenAPI/,
+  );
+});
+for (const code of [
+  "const suffix = '../api/typo'; fetch('/rhwp/' + suffix);",
+  "fetch(`/rhwp/${encodeURIComponent('..')}/api/typo`);",
+  "new Request('/rhwp/%2E%2E/api/typo', { method: 'DELETE' });",
+  "window.location.assign('/rhwp/.%2e/api/typo');",
+]) {
+  await test(`noncanonical paths fail across outlets: ${code}`, () => {
+    assert.throws(() => checkUsage(files(code), contract, listedTask), /dot segment/);
+  });
+}
+
 for (const [kind, method, path] of [
   ['request', 'GET', '/api/typo/42'],
   ['request', 'DELETE', '/api/tasks/42'],
   ['fetch', 'GET', '/api/typo/42'],
   ['fetch', 'DELETE', '/api/tasks/42'],
+  ['fetch parameter', 'GET', '/api/typo/42'],
+  ['fetch parameter', 'DELETE', '/api/tasks/42'],
+  ['location', 'GET', '/api/typo/42'],
+  ['WebSocket', 'GET', '/api/typo/42'],
+  ['fetch', 'GET', '/rhwp/../api/typo/42'],
+  ['fetch', 'DELETE', '/rhwp/%2e%2e/api/tasks/42'],
 ]) {
   await test(`CLI exits FAIL for deliberately invalid ${kind ?? ''} ${method ?? ''} ${path ?? ''}`, () => {
     const root = mkdtempSync(join(tmpdir(), 'fvoci-web-api-'));
@@ -554,12 +806,22 @@ for (const [kind, method, path] of [
       const input = files(
         kind === 'fetch'
           ? `fetch('${path ?? ''}', { method: '${method ?? ''}' });`
-          : `request('${method ?? ''}', '${path ?? ''}');`,
+          : kind === 'fetch parameter'
+            ? `function load(fetchImpl: typeof fetch = fetch) { fetchImpl('${path ?? ''}', {method: '${method ?? ''}'}); }`
+            : kind === 'location'
+              ? `window.location.assign('${path ?? ''}');`
+              : kind === 'WebSocket'
+                ? `new WebSocket('wss://example.org${path ?? ''}');`
+                : `request('${method ?? ''}', '${path ?? ''}');`,
       );
       input.set('contracts/openapi.json', JSON.stringify(contract));
       input.set(
         'xtask/web-api/allowlist.json',
-        JSON.stringify(kind === 'fetch' ? listedTask : empty),
+        JSON.stringify(kind === 'request' ? empty : listedTask),
+      );
+      input.set(
+        'xtask/web-api/network-exceptions.json',
+        JSON.stringify({ websockets: [], sites: [] }),
       );
       input.set('packages/api-client/src/index.ts', '');
       input.set('packages/api-client/src/generated/schema.ts', '');
@@ -574,7 +836,14 @@ for (const [kind, method, path] of [
         { encoding: 'utf8' },
       );
       assert.equal(result.status, 1, result.stderr);
-      assert.match(result.stderr, /not in OpenAPI/);
+      assert.match(
+        result.stderr,
+        kind === 'WebSocket'
+          ? /unlisted WebSocket/
+          : path?.includes('..') || path?.includes('%2e')
+            ? /dot segment/
+            : /not in OpenAPI/,
+      );
       console.log(`expected FAIL (exit 1): ${kind ?? ''} ${method ?? ''} ${path ?? ''}`);
     } finally {
       rmSync(root, { recursive: true, force: true });

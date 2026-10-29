@@ -1,9 +1,19 @@
 // D-131 가1. Use the installed TS parser and symbols, not a search for URL strings.
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import {
+  capability,
+  networkExit,
+  canonicalPath,
+  compact,
+  readNetworkPolicy,
+  type NetworkPolicy,
+  type NetworkEntry,
+  type Exit,
+} from './network.mts';
 
 const loadSvelte: (id: string) => typeof import('svelte/compiler') = createRequire(
   new URL('../../apps/web/package.json', import.meta.url),
@@ -79,6 +89,8 @@ function svelteSource(source: string): string {
   const ast = parse(source, { modern: true });
   // Offsets in both parsers are UTF-16, not Unicode code points.
   const masked: string[] = source.split('').map((ch) => (ch === '\n' || ch === '\r' ? ch : ' '));
+  const outlets: string[] = [];
+  const actionMethods = new Map<object, string>();
   function copy(start: number, end: number): void {
     for (let index = start; index < end; index++) masked[index] = source[index] ?? ' ';
   }
@@ -96,6 +108,73 @@ function svelteSource(source: string): string {
       value.forEach(visit);
     } else if (typeof value === 'object' && value !== null) {
       const node = record(value);
+      if (
+        node.type === 'RegularElement' &&
+        node.name === 'form' &&
+        Array.isArray(node.attributes)
+      ) {
+        const attributes: unknown[] = node.attributes;
+        const action = attributes.find(
+          (attribute: unknown) => isRecord(attribute) && attribute.name === 'action',
+        );
+        const method = attributes.find(
+          (attribute: unknown) => isRecord(attribute) && attribute.name === 'method',
+        );
+        if (isRecord(action) && isRecord(method)) {
+          const part: unknown = Array.isArray(method.value) ? method.value[0] : method.value;
+          if (isRecord(part) && part.type === 'Text')
+            actionMethods.set(action, JSON.stringify(String(part.data).toUpperCase()));
+          else if (
+            isRecord(part) &&
+            isRecord(part.expression) &&
+            typeof part.expression.start === 'number' &&
+            typeof part.expression.end === 'number'
+          )
+            actionMethods.set(action, source.slice(part.expression.start, part.expression.end));
+        }
+        if (!action) {
+          const line =
+            typeof node.start === 'number' ? source.slice(0, node.start).split('\n').length : 1;
+          outlets.push(`__fvoci_network('form', '', ${String(line)});`);
+        }
+      }
+      if (
+        node.type === 'Attribute' &&
+        typeof node.name === 'string' &&
+        ['href', 'src', 'action', 'srcdoc'].includes(node.name)
+      ) {
+        const parts = Array.isArray(node.value) ? node.value : [node.value];
+        const expression = parts
+          .map((part: unknown) => {
+            const value = record(part);
+            if (value.type === 'Text') return JSON.stringify(value.data);
+            const span = record(value.expression);
+            if (typeof span.start !== 'number' || typeof span.end !== 'number')
+              throw new Error('attribute has no expression offsets');
+            return `(${source.slice(span.start, span.end)})`;
+          })
+          .join(' + ');
+        const line =
+          typeof node.start === 'number' ? source.slice(0, node.start).split('\n').length : 1;
+        outlets.push(
+          `__fvoci_network(${JSON.stringify(node.name)}, ${expression || "''"}, ${String(line)}${actionMethods.has(node) ? `, ${actionMethods.get(node) ?? "'GET'"}` : ''});`,
+        );
+      }
+      if (
+        node.type === 'RegularElement' &&
+        node.name === 'script' &&
+        isRecord(node.fragment) &&
+        Array.isArray(node.fragment.nodes)
+      ) {
+        for (const part of node.fragment.nodes)
+          if (
+            isRecord(part) &&
+            part.type === 'Text' &&
+            typeof part.start === 'number' &&
+            typeof part.end === 'number'
+          )
+            copy(part.start, part.end);
+      }
       const declaration = node.type === 'VariableDeclaration';
       const expression =
         typeof node.type === 'string' &&
@@ -117,17 +196,31 @@ function svelteSource(source: string): string {
     }
   }
   visit(ast.fragment);
-  return masked.join('');
+  return `${masked.join('')}\n${outlets.join('\n')}`;
 }
 
 function sourceProgram(files: Map<string, string>): ts.Program {
   const sources = new Map(
     [...files].map(([file, code]) => {
-      const svelte = file.endsWith('.svelte');
-      const path = resolve(virtualRoot, svelte ? `${file}.ts` : file);
+      const svelte = /\.(svelte|html)$/.test(file);
+      const css = file.endsWith('.css');
+      const path = resolve(virtualRoot, svelte || css ? `${file}.ts` : file);
+      const cssSource = [
+        ...code.matchAll(/url\(\s*['"]?([^)'"\s]+)['"]?\s*\)|@import\s+['"]([^'"]+)['"]/g),
+      ]
+        .map(
+          (match) =>
+            `__fvoci_network('css', ${JSON.stringify(match[1] ?? match[2])}, ${String(code.slice(0, match.index).split('\n').length)});`,
+        )
+        .join('\n');
       return [
         path,
-        ts.createSourceFile(path, svelte ? svelteSource(code) : code, ts.ScriptTarget.Latest, true),
+        ts.createSourceFile(
+          path,
+          svelte ? svelteSource(code) : css ? cssSource : code,
+          ts.ScriptTarget.Latest,
+          true,
+        ),
       ];
     }),
   );
@@ -189,19 +282,18 @@ function apiPath(path: string): boolean {
   return /^\/(?:api|auth|healthz)(?:\/|$)/.test(path);
 }
 
-function outsidePrefix(prefix: string): boolean {
-  return (
-    /^(?:[a-z][\w+.-]*:|\/\/)/i.test(prefix) || (/^\/[^/{}]+\//.test(prefix) && !apiPath(prefix))
-  );
-}
-
 export function checkUsage(
   files: Map<string, string>,
   contract: unknown,
   allowlist: Allowlist,
-): { calls: number; used: string[]; unused: string[] } {
+  policy: NetworkPolicy = { websockets: [], sites: [] },
+): { calls: number; used: string[]; unused: string[]; exits: NetworkEntry[] } {
   // Validate injected test inputs as strictly as the on-disk list.
   allowlist = readAllowlist(allowlist);
+  policy = readNetworkPolicy(policy);
+  const exits: NetworkEntry[] = [];
+  const exceptionsUsed = new Set<NetworkPolicy['sites'][number]>();
+  const websocketsUsed = new Set<NetworkPolicy['websockets'][number]>();
   const program = sourceProgram(files);
   const checker = program.getTypeChecker();
   const problems: string[] = [];
@@ -273,28 +365,7 @@ export function checkUsage(
     return [...new Set(writes)];
   }
   function isFetch(node: ts.Node, seen = new Set<ts.Symbol>()): boolean {
-    if (ts.isParenthesizedExpression(node)) return isFetch(node.expression, seen);
-    if (ts.isIdentifier(node) && node.text === 'fetch' && !symbol(node)) return true;
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      node.name.text === 'fetch' &&
-      ts.isIdentifier(node.expression) &&
-      ['window', 'globalThis', 'self'].includes(node.expression.text) &&
-      !symbol(node.expression)
-    )
-      return true;
-    const found = symbol(node);
-    if (!found || seen.has(found)) return false;
-    seen.add(found);
-    const declaration = found.valueDeclaration;
-    return !!(
-      declaration &&
-      ts.isVariableDeclaration(declaration) &&
-      declaration.initializer &&
-      ts.isVariableDeclarationList(declaration.parent) &&
-      (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
-      isFetch(declaration.initializer, seen)
-    );
+    return capability(node, checker, symbol, seen) === 'fetch';
   }
   function target(node: ts.Node, seen = new Set<ts.Symbol>()): ts.Symbol | undefined {
     if (ts.isParenthesizedExpression(node)) return target(node.expression, seen);
@@ -369,6 +440,41 @@ export function checkUsage(
       values(expression, seen, bindings);
     if (ts.isStringLiteralLike(node)) return [node.text];
     if (
+      node.kind === ts.SyntaxKind.NullKeyword ||
+      (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0
+    )
+      return [''];
+    if (
+      [
+        'window.location.host',
+        'location.host',
+        'window.location.origin',
+        'location.origin',
+      ].includes(node.getText())
+    )
+      return [node.getText().endsWith('origin') ? 'https://fvoci.invalid' : 'fvoci.invalid'];
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === '$derived' &&
+      !symbol(node.expression)
+    )
+      return evaluate(node.arguments[0]);
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.getText() === 'URL.createObjectURL'
+    )
+      return ['blob:fvoci-generated'];
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'URL'
+    )
+      return evaluate(node.arguments?.[0]);
+    if (ts.isNewExpression(node) && capability(node.expression, checker, symbol) === 'Request')
+      return evaluate(node.arguments?.[0]);
+    if (
       ts.isParenthesizedExpression(node) ||
       ts.isAsExpression(node) ||
       ts.isSatisfiesExpression(node)
@@ -382,7 +488,7 @@ export function checkUsage(
       let prefixes = [node.head.text];
       for (const span of node.templateSpans) {
         prefixes = prefixes.flatMap((prefix) =>
-          /[?#]/.test(prefix) || outsidePrefix(prefix)
+          /[?#]/.test(prefix)
             ? [prefix]
             : evaluate(span.expression).map((value) => prefix + value + span.literal.text),
         );
@@ -391,9 +497,7 @@ export function checkUsage(
     }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
       return evaluate(node.left).flatMap((prefix) =>
-        /[?#]/.test(prefix) || outsidePrefix(prefix)
-          ? [prefix]
-          : evaluate(node.right).map((value) => prefix + value),
+        /[?#]/.test(prefix) ? [prefix] : evaluate(node.right).map((value) => prefix + value),
       );
     }
     // Only encoded values may stand for an arbitrary path segment. An unknown
@@ -404,10 +508,28 @@ export function checkUsage(
       node.expression.text === 'encodeURIComponent' &&
       !symbol(node.expression)
     ) {
+      try {
+        return evaluate(node.arguments[0]).map((value) => encodeURIComponent(value));
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          /URL helper must be const|URL function parameter is written/.test(error.message)
+        )
+          throw error;
+        /* Runtime encoded path parameters remain a single symbolic segment. */
+      }
       return ['{}'];
     }
     if (ts.isCallExpression(node)) {
       const declaration = symbol(node.expression)?.valueDeclaration;
+      if (
+        declaration &&
+        ts.isVariableDeclaration(declaration) &&
+        (!ts.isVariableDeclarationList(declaration.parent) ||
+          (declaration.parent.flags & ts.NodeFlags.Const) === 0)
+      ) {
+        throw new Error(`URL helper must be const: ${node.expression.getText()}`);
+      }
       const fn =
         declaration && ts.isVariableDeclaration(declaration)
           ? declaration.initializer
@@ -544,6 +666,158 @@ export function checkUsage(
     return [...new Set(verbs)];
   }
 
+  function filename(file: ts.SourceFile): string {
+    const path = relative(virtualRoot, file.fileName);
+    return files.has(path) ? path : path.replace(/\.(svelte|html|css)\.ts$/, '.$1');
+  }
+  function inspect(exit: Exit, node: ts.Node, file: ts.SourceFile, required = false): void {
+    const row: NetworkEntry = {
+      file: filename(file),
+      line: exit.line ?? file.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+      kind: exit.kind,
+      expression: compact(exit.url?.getText() ?? ''),
+      classification: '대조함',
+      reason: '',
+      operations: [],
+    };
+    exits.push(row);
+    const location = `${row.file}:${String(row.line)}`;
+    const site = policy.sites.find(
+      (site) =>
+        site.file === row.file &&
+        site.kind === row.kind &&
+        compact(site.expression) === row.expression,
+    );
+    const except = (reason: string): void => {
+      row.classification = '이유 있는 예외';
+      row.reason = reason;
+    };
+    try {
+      if (exit.kind === 'location.reload') {
+        except('현재 문서를 다시 읽으며 새 URL을 구성하지 않는다.');
+        return;
+      }
+      if (exit.kind === 'XMLHttpRequest constructor') {
+        except('생성자는 URL이 없고 open(method, url)에서 대조한다.');
+        return;
+      }
+      if (exit.kind === 'form') {
+        except(
+          '명시 action 없는 현재 앱 화면의 폼이다. 제출 처리는 앱 이벤트 핸들러에 있으며 새 계약 URL을 구성하지 않는다.',
+        );
+        return;
+      }
+      if (
+        [
+          'srcdoc',
+          'innerHTML',
+          'outerHTML',
+          'dynamic attribute',
+          'Worker',
+          'SharedWorker',
+          'WASM loader',
+        ].includes(exit.kind)
+      ) {
+        if (!site) throw new Error('network exit requires a reasoned exception');
+        exceptionsUsed.add(site);
+        except(site.reason);
+        return;
+      }
+      if (
+        (exit.kind === 'import' || exit.kind === 'css') &&
+        exit.url &&
+        ts.isStringLiteralLike(exit.url) &&
+        !apiPath(exit.url.text)
+      ) {
+        if (/^(?:\/|[a-z][\w+.-]*:)/i.test(exit.url.text)) canonicalPath(exit.url.text);
+        except('Vite가 해석하는 패키지·상대 경로 자원이며 서버 API 주소가 아니다.');
+        return;
+      }
+      let paths: string[];
+      try {
+        paths = values(exit.url);
+      } catch (error: unknown) {
+        if (!site || exit.kind === 'fetch' || exit.kind === 'Request') throw error;
+        exceptionsUsed.add(site);
+        except(site.reason);
+        return;
+      }
+      let verbs = exit.verb
+        ? [exit.verb]
+        : exit.method
+          ? values(exit.method).map((method) => method.toUpperCase())
+          : fetchMethods(exit.options).map((verb) => verb ?? 'GET');
+      // Fetch inherits a Request's URL/method unless explicit options override it.
+      if (
+        exit.kind === 'fetch' &&
+        exit.url &&
+        ts.isNewExpression(exit.url) &&
+        capability(exit.url.expression, checker, symbol) === 'Request'
+      ) {
+        paths = values(exit.url.arguments?.[0]);
+        const overrides = fetchMethods(exit.options);
+        verbs = overrides.flatMap((verb) =>
+          verb
+            ? [verb]
+            : fetchMethods(
+                exit.url && ts.isNewExpression(exit.url) ? exit.url.arguments?.[1] : undefined,
+              ).map((value) => value ?? 'GET'),
+        );
+      }
+      if (exit.append)
+        paths = paths.flatMap((path) => values(exit.append).map((room) => `${path}/${room}`));
+      for (const raw of [...new Set(paths)]) {
+        canonicalPath(raw);
+        const absolute = /^(?:[a-z][\w+.-]*:|\/\/)/i.test(raw);
+        const socket = exit.kind === 'WebSocket';
+        const path =
+          socket || /^https?:\/\/fvoci\.invalid(?:\/|$)/.test(raw)
+            ? raw.replace(/^(?:https?|wss?):\/\/[^/]+/, '')
+            : raw;
+        const pathname = path.split(/[?#]/, 1)[0] ?? '';
+        if (socket) {
+          const match = policy.websockets.find((entry) => matches(pathname, entry.path));
+          if (!match) throw new Error(`unlisted WebSocket exception: GET ${pathname}`);
+          websocketsUsed.add(match);
+          except(match.reason);
+          continue;
+        }
+        if (!required && ((absolute && path === raw) || !apiPath(pathname))) {
+          if (!absolute && raw !== '' && !raw.startsWith('/') && exit.kind === 'fetch')
+            throw new Error('relative fetch URL is not statically resolvable');
+          except(
+            absolute
+              ? '외부 URL·blob·data 자원이며 OpenAPI의 동일 원점 HTTP 작업이 아니다.'
+              : '앱 화면·정적 자원으로 이동하며 OpenAPI 작업이 아니다.',
+          );
+          continue;
+        }
+        for (const verb of [...new Set(verbs)]) {
+          const matched = operations.filter(
+            (operation) =>
+              operation.startsWith(`${verb} `) &&
+              matches(pathname, operation.slice(verb.length + 1)),
+          );
+          if (matched.length === 0) throw new Error(`${verb} ${pathname} not in OpenAPI`);
+          const operation = matched.sort((a, b) => a.split('{').length - b.split('{').length)[0];
+          if (operation) {
+            used.add(operation);
+            row.operations.push(operation);
+          }
+        }
+      }
+      if (row.operations.length > 0) {
+        row.classification = '대조함';
+        row.reason = 'OpenAPI의 경로·메서드와 대조했다.';
+        calls++;
+      }
+    } catch (error: unknown) {
+      problems.push(
+        `${location}: ${error instanceof Error ? error.message : String(error)} [${row.kind}: ${row.expression}]`,
+      );
+    }
+  }
+
   for (const file of sources) {
     for (const diagnostic of program.getSyntacticDiagnostics(file)) {
       problems.push(
@@ -551,6 +825,105 @@ export function checkUsage(
       );
     }
     walk(file, (node) => {
+      if (
+        ts.isParameter(node) &&
+        node.type &&
+        ts.isTypeQueryNode(node.type) &&
+        isFetch(node.type.exprName) &&
+        (!node.initializer || !isFetch(node.name))
+      )
+        problems.push(
+          `${filename(file)}: fetch reference is not statically resolvable: parameter ${node.name.getText()}`,
+        );
+      if (
+        (ts.isIdentifier(node) ||
+          ts.isPropertyAccessExpression(node) ||
+          ts.isElementAccessExpression(node)) &&
+        [
+          'fetch',
+          'Request',
+          'XMLHttpRequest',
+          'XMLHttpRequest.open',
+          'EventSource',
+          'WebSocket',
+          'WebsocketProvider',
+          'Worker',
+          'SharedWorker',
+          'sendBeacon',
+          'window.open',
+          'location.assign',
+          'location.replace',
+          'location.reload',
+          'xhr',
+        ].includes(capability(node, checker, symbol) ?? '')
+      ) {
+        const parent = node.parent;
+        let type = false;
+        for (
+          let ancestor = parent;
+          !ts.isSourceFile(ancestor) && !ts.isStatement(ancestor);
+          ancestor = ancestor.parent
+        ) {
+          if (ts.isTypeNode(ancestor)) {
+            type = true;
+            break;
+          }
+        }
+        const property = ts.isPropertyAccessExpression(parent) && parent.name === node;
+        const objectMember =
+          capability(node, checker, symbol) === 'xhr' &&
+          (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
+          parent.expression === node;
+        const call =
+          (ts.isCallExpression(parent) || ts.isNewExpression(parent)) && parent.expression === node;
+        const alias =
+          ts.isVariableDeclaration(parent) &&
+          ts.isVariableDeclarationList(parent.parent) &&
+          (parent.parent.flags & ts.NodeFlags.Const) !== 0;
+        const parameter = ts.isParameter(parent);
+        const binding =
+          ts.isBindingElement(parent) &&
+          ts.isObjectBindingPattern(parent.parent) &&
+          ts.isVariableDeclaration(parent.parent.parent) &&
+          ts.isVariableDeclarationList(parent.parent.parent.parent) &&
+          (parent.parent.parent.parent.flags & ts.NodeFlags.Const) !== 0;
+        const recipient = ts.isCallExpression(parent)
+          ? symbol(parent.expression)?.valueDeclaration
+          : undefined;
+        const recipientParameter =
+          recipient && ts.isFunctionDeclaration(recipient) && ts.isCallExpression(parent)
+            ? recipient.parameters[parent.arguments.indexOf(node)]
+            : undefined;
+        const argument = recipientParameter ? isFetch(recipientParameter.name) : false;
+        if (
+          !type &&
+          !property &&
+          !objectMember &&
+          !ts.isImportSpecifier(parent) &&
+          !ts.isExportSpecifier(parent) &&
+          !call &&
+          !alias &&
+          !parameter &&
+          !binding &&
+          !argument &&
+          !ts.isParenthesizedExpression(parent)
+        ) {
+          problems.push(
+            `${filename(file)}: ${isFetch(node) ? 'fetch reference' : 'network reference'} is not statically resolvable: ${node.getText()}`,
+          );
+        }
+        if (
+          parameter &&
+          parent.name === node &&
+          (ts.isFunctionDeclaration(parent.parent) ||
+            ts.isArrowFunction(parent.parent) ||
+            ts.isFunctionExpression(parent.parent) ||
+            ts.isMethodDeclaration(parent.parent))
+        ) {
+          for (const name of parameterWrites(parent.parent, [parent]))
+            problems.push(`${filename(file)}: fetch parameter ${name} is written`);
+        }
+      }
       if (ts.isIdentifier(node)) {
         const found = symbol(node);
         const namespace =
@@ -605,16 +978,36 @@ export function checkUsage(
           );
         }
       }
-      if (!ts.isCallExpression(node)) return;
+      const exit = networkExit(node, checker, symbol);
+      if (!ts.isCallExpression(node)) {
+        if (exit) inspect(exit, node, file);
+        return;
+      }
       const called = target(node.expression);
+      const callee = symbol(node.expression)?.valueDeclaration;
+      if (
+        callee &&
+        (ts.isFunctionDeclaration(callee) ||
+          ts.isFunctionExpression(callee) ||
+          ts.isArrowFunction(callee))
+      ) {
+        callee.parameters.forEach((parameter, index) => {
+          const argument = node.arguments[index];
+          if (argument && isFetch(parameter.name) && !isFetch(argument))
+            problems.push(
+              `${filename(file)}: fetch reference is not statically resolvable: override ${parameter.name.getText()}`,
+            );
+        });
+      }
       const directFetch = isFetch(node.expression);
-      if (!called && !directFetch) return;
+      if (!called && !exit) return;
       const position = file.getLineAndCharacterOfPosition(node.getStart());
       const location = `${relative(virtualRoot, file.fileName).replace(/\.svelte\.ts$/, '.svelte')}:${String(position.line + 1)}:${String(position.character + 1)}`;
       const fn = enclosingFunction(node);
       const ownerSymbol = fn?.name ? symbol(fn.name) : undefined;
       const owner = ownerSymbol ? targets.get(ownerSymbol) : undefined;
       if (
+        called &&
         !directFetch &&
         owner &&
         fn &&
@@ -626,6 +1019,15 @@ export function checkUsage(
         symbol(node.arguments[1]) === symbol(fn.parameters[1].name)
       ) {
         forwarded.set(owner, (forwarded.get(owner) ?? 0) + 1);
+        exits.push({
+          file: filename(file),
+          line: position.line + 1,
+          kind: 'forwarder',
+          expression: compact(node.getText()),
+          classification: '대조함',
+          reason: '매개변수 쓰기 없이 전달하며 도우미 호출 지점에서 대조한다.',
+          operations: [],
+        });
         return;
       }
       try {
@@ -645,36 +1047,25 @@ export function checkUsage(
           const verbs = fetchMethods(node.arguments[1], bindings);
           if (verbs.length !== 1 || verbs[0] !== 'forwarded-method')
             throw new Error('request transport method is not forwarded');
+          exits.push({
+            file: filename(file),
+            line: position.line + 1,
+            kind: 'fetch transport',
+            expression: compact(node.getText()),
+            classification: '대조함',
+            reason: '공통 request의 URL·메서드 전달을 확인했고 호출 지점에서 대조한다.',
+            operations: [],
+          });
           return;
         }
-        const paths = values(node.arguments[directFetch ? 0 : 1]).map(
-          (path) => path.split(/[?#]/, 1)[0] ?? '',
-        );
-        const apiPaths = directFetch
-          ? paths.filter((path) => {
-              if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(path)) return false;
-              if (!path.startsWith('/'))
-                throw new Error('relative fetch URL is not statically resolvable');
-              return apiPath(path);
-            })
-          : paths;
-        if (apiPaths.length === 0) return;
-        calls++;
-        const verbs = directFetch
-          ? fetchMethods(node.arguments[1]).map((verb) => verb ?? 'GET')
-          : values(node.arguments[0]);
-        for (const verb of verbs) {
-          for (const path of apiPaths) {
-            const matched = operations.filter(
-              (operation) =>
-                operation.startsWith(`${verb} `) && matches(path, operation.slice(verb.length + 1)),
-            );
-            if (matched.length === 0) problems.push(`${location}: ${verb} ${path} not in OpenAPI`);
-            // Prefer a static route over a parameter route, as the server does.
-            else
-              used.add(matched.sort((a, b) => a.split('{').length - b.split('{').length)[0] ?? '');
-          }
-        }
+        if (called)
+          inspect(
+            { kind: 'request', url: node.arguments[1], method: node.arguments[0] },
+            node,
+            file,
+            true,
+          );
+        else if (exit) inspect(exit, node, file);
       } catch (error: unknown) {
         problems.push(`${location}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -683,6 +1074,11 @@ export function checkUsage(
   for (const [row, count] of forwarded) {
     if (count !== 1) problems.push(`forwarder must delegate exactly once: ${row.file}:${row.name}`);
   }
+  for (const site of policy.sites)
+    if (!exceptionsUsed.has(site))
+      problems.push(`stale network site exception: ${site.file} ${site.kind} ${site.expression}`);
+  for (const socket of policy.websockets)
+    if (!websocketsUsed.has(socket)) problems.push(`stale WebSocket exception: ${socket.path}`);
   const unused = operations.filter((operation) => !used.has(operation)).sort();
   const listed = new Set<string>();
   for (const row of allowlist.unused) {
@@ -695,7 +1091,7 @@ export function checkUsage(
     if (!listed.has(operation)) problems.push(`unlisted unused operation: ${operation}`);
   }
   if (problems.length > 0) throw new Error(problems.join('\n'));
-  return { calls, used: [...used].sort(), unused };
+  return { calls, used: [...used].sort(), unused, exits };
 }
 
 export function readSources(root: string): Map<string, string> {
@@ -705,12 +1101,14 @@ export function readSources(root: string): Map<string, string> {
       const path = `${directory}/${entry.name}`;
       if (path === 'apps/web/src/lib/paraglide') continue; // Generated translations, not application code.
       if (entry.isDirectory()) visit(path);
-      else if (/\.(?:[cm]?[jt]sx?|svelte)$/.test(path) && !/\.d\.[cm]?ts$/.test(path)) {
+      else if (/\.(?:[cm]?[jt]sx?|svelte|css)$/.test(path) && !/\.d\.[cm]?ts$/.test(path)) {
         files.set(path, readFileSync(resolve(root, path), 'utf8'));
       }
     }
   }
   visit('apps/web/src');
+  if (existsSync(resolve(root, 'apps/web/index.html')))
+    files.set('apps/web/index.html', readFileSync(resolve(root, 'apps/web/index.html'), 'utf8'));
   // Generated literal unions (for example MarkTarget) participate in resolution,
   // but only web sources contain the request call sites under inspection.
   for (const path of [
@@ -731,9 +1129,25 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const list: unknown = JSON.parse(
       readFileSync(resolve(root, 'xtask/web-api/allowlist.json'), 'utf8'),
     );
-    const result = checkUsage(readSources(root), contract, readAllowlist(list));
+    const policy: unknown = JSON.parse(
+      readFileSync(resolve(root, 'xtask/web-api/network-exceptions.json'), 'utf8'),
+    );
+    const result = checkUsage(
+      readSources(root),
+      contract,
+      readAllowlist(list),
+      readNetworkPolicy(policy),
+    );
+    mkdirSync(resolve(root, 'target/web-api'), { recursive: true });
+    writeFileSync(
+      resolve(root, 'target/web-api/network-exits.json'),
+      JSON.stringify(result.exits, null, 2) + '\n',
+    );
     console.log(
       `${String(result.calls)} web calls, ${String(result.used.length)} used operations, ${String(result.unused.length)} reasoned unused operations`,
+    );
+    console.log(
+      `${String(result.exits.length)} network exits classified; target/web-api/network-exits.json`,
     );
   } catch (error: unknown) {
     console.error(error instanceof Error ? error.message : String(error));
