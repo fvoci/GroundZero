@@ -38,7 +38,8 @@ async fn documents_start_from_readable_templates() {
         Method::PATCH,
         &format!("/api/documents/{template_id}/settings"),
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": false })),
+        Some(json!({ "visibility": "workspace", "allow_copy": false,
+            "previous_visibility": template["visibility"], "previous_allow_copy": template["allow_copy"] })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
@@ -123,7 +124,8 @@ async fn documents_start_from_readable_templates() {
         Method::PATCH,
         &format!("/api/documents/{template_id}/settings"),
         Some(&admin),
-        Some(json!({ "visibility": "private", "allow_copy": false })),
+        Some(json!({ "visibility": "private", "allow_copy": false,
+            "previous_visibility": "workspace", "previous_allow_copy": false })),
     )
     .await;
     assert_eq!(

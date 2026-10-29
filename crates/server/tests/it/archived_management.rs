@@ -59,27 +59,35 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
     .await;
     assert_eq!(doc.status, StatusCode::CREATED, "{:?}", doc.json);
     let doc_id = doc.json["id"].as_str().unwrap().to_owned();
-    let settings = |user: &common::TestUser, visibility: &str| {
+    let settings = |user: &common::TestUser, visibility: &str, previous_visibility: &str| {
         let app = app.clone();
         let doc_id = doc_id.clone();
         let user = user.clone();
         let visibility = visibility.to_owned();
+        let previous_visibility = previous_visibility.to_owned();
         async move {
             send(
                 &app,
                 Method::PATCH,
                 &format!("/api/documents/{doc_id}/settings"),
                 Some(&user),
-                Some(json!({ "visibility": visibility, "allow_copy": false })),
+                Some(
+                    json!({ "visibility": visibility, "previous_visibility": previous_visibility }),
+                ),
             )
             .await
         }
     };
-    let visible = settings(&admin, "workspace").await;
+    let visible = settings(
+        &admin,
+        "workspace",
+        doc.json["visibility"].as_str().unwrap(),
+    )
+    .await;
     assert_eq!(visible.status, StatusCode::OK, "{:?}", visible.json);
     // 보관 전: 문서를 볼 수 있는 멤버도 관리자가 아니라 설정을 바꾸지 못한다(403).
     assert_eq!(
-        settings(&member, "workspace").await.status,
+        settings(&member, "workspace", "workspace").await.status,
         StatusCode::FORBIDDEN
     );
 
@@ -94,7 +102,7 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
     assert_eq!(archived.status, StatusCode::OK, "{:?}", archived.json);
 
     // 보관 중: 관리자는 설정·공유를 바꾼다.
-    let changed = settings(&admin, "private").await;
+    let changed = settings(&admin, "private", "workspace").await;
     assert_eq!(changed.status, StatusCode::OK, "{:?}", changed.json);
     let shared = send(
         &app,
@@ -149,7 +157,7 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
     }
     // 멤버는 보관 중 409 그대로.
     assert_eq!(
-        settings(&member, "workspace").await.status,
+        settings(&member, "workspace", "private").await.status,
         StatusCode::CONFLICT
     );
     // 관리자라도 내용 편집은 보관 중 409다.

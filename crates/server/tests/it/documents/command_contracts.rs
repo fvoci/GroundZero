@@ -172,7 +172,7 @@ async fn new_document_command_routes_succeed_and_only_replaced_routes_are_remove
         Method::PATCH,
         &format!("{uri}/settings"),
         &[],
-        &json!({"allow_copy":false}),
+        &json!({"allow_copy":false,"previous_allow_copy":false}),
     )
     .await;
     assert_eq!(settings.status, StatusCode::OK, "{}", settings.body);

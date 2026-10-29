@@ -4,6 +4,7 @@ mod command_contracts;
 mod command_support;
 mod expected_commands;
 mod pr4c_contracts;
+mod settings;
 
 mod cache;
 mod expected_user;

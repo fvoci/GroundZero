@@ -19,7 +19,7 @@ export interface DocumentConflict {
   requestId: StaleWrite['request_id'];
 }
 
-// Only revision conflicts carry a resource. Room failures and account changes remain ErrorBody.
+// Field and revision conflicts carry a resource. Room failures and account changes remain ErrorBody.
 function staleWrite(status: number, json: Json): DocumentConflict | undefined {
   if (status !== 409 || !isRecord(json) || json.error !== 'conflict' || json.current === undefined)
     return undefined;
@@ -33,11 +33,20 @@ function staleWrite(status: number, json: Json): DocumentConflict | undefined {
 }
 
 export const documentsApi = {
-  setSettings: (
+  async setSettings(
     id: string,
-    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
-  ) =>
-    expectOk('PATCH', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
+    change: components['schemas']['DocumentSettings'],
+  ): Promise<{ kind: 'saved'; document: DocumentView } | DocumentConflict> {
+    const { status, json } = await request(
+      'PATCH',
+      `/api/documents/${encodeURIComponent(id)}/settings`,
+      change,
+    );
+    const conflict = staleWrite(status, json);
+    if (conflict !== undefined) return conflict;
+    if (status !== 200) fail(status, json);
+    return { kind: 'saved', document: parseDocument(json) };
+  },
 
   movePreview: (id: string, target: MoveTargetInput) =>
     expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move-plan`, parseMovePreview, {
