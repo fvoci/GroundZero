@@ -87,3 +87,34 @@ fn expected_user_is_documented_as_optional_on_every_command() -> Result<(), serd
     }
     Ok(())
 }
+
+#[test]
+fn study_plan_entries_treat_an_omitted_date_like_null() -> Result<(), serde_json::Error> {
+    use fvoci_records::study::PlanUnits;
+    use serde_json::json;
+
+    let api = serde_json::to_value(RecordsApi::openapi())?;
+    assert_eq!(
+        api["components"]["schemas"]["PlanEntry"]["required"],
+        json!(["unit_id"]),
+        "the plan date must remain optional in the request contract"
+    );
+
+    let unit_id = "01900000-0000-7000-8000-000000000001";
+    let with_null: PlanUnits = serde_json::from_value(json!({
+        "entries": [{ "unit_id": unit_id, "planned_on": null }]
+    }))?;
+    let omitted: PlanUnits = serde_json::from_value(json!({
+        "entries": [{ "unit_id": unit_id }]
+    }))?;
+
+    // The plan handler passes these serialized entries to app_plan_units.
+    let expected = json!([{ "unit_id": unit_id, "planned_on": null }]);
+    assert_eq!(serde_json::to_value(&with_null.entries)?, expected);
+    assert_eq!(
+        serde_json::to_value(&omitted.entries)?,
+        expected,
+        "omitting the date must clear the personal plan just like explicit null"
+    );
+    Ok(())
+}

@@ -149,7 +149,7 @@ pub struct SetUnitProgress {
 pub struct PlanEntry {
     #[schema(value_type = String, format = Uuid)]
     pub unit_id: Uuid,
-    #[serde(with = "day::option")]
+    #[serde(default, with = "day::option")]
     #[schema(value_type = Option<String>, format = Date)]
     pub planned_on: Option<Date>,
 }
