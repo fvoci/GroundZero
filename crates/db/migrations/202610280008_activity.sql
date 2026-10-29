@@ -366,7 +366,10 @@ BEGIN
       FROM my_tasks t GROUP BY workspace_id, workspace_name
     ), marks AS MATERIALIZED (
       SELECT m.mark, m.target_kind AS kind, m.target_id AS id,
-             app_time_target_label(m.target_kind, m.target_id) AS label,
+             CASE WHEN m.target_kind = 'document' AND d.item_id IS NOT NULL
+                       AND app_access('item', d.item_id) = 'none'
+                  THEN d.title
+                  ELSE app_time_target_label(m.target_kind, m.target_id) END AS label,
              coalesce(t.workspace_id, d.workspace_id, i.workspace_id) AS workspace_id,
              CASE WHEN app_access('item', coalesce(t.item_id, d.item_id)) <> 'none'
                   THEN coalesce(t.item_id, d.item_id) END AS item_id, m.created_at
