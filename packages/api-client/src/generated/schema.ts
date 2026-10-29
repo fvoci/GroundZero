@@ -1398,6 +1398,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/last-organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 소속 조직 가운데 마지막으로 고른 조직만 저장한다(D-121). */
+        put: operations["set_last_organization"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/marks/{target_kind}/{target_id}": {
         parameters: {
             query?: never;
@@ -1513,8 +1530,8 @@ export interface paths {
         };
         get?: never;
         /**
-         * 내 표시 설정과 마지막 조직 바꾸기(D-50·D-81·D-109·D-121). 저장된 일정 시각·날짜는 그대로다.
-         *     모르는 설정 값이나 소속하지 않은 조직이면 400.
+         * 내 표시 설정 바꾸기(D-50·D-81·D-109). 저장된 일정 시각·날짜는 그대로다.
+         *     마지막 조직은 별도 명령이다(#178·D-105).
          */
         put: operations["set_my_settings"];
         post?: never;
@@ -4196,15 +4213,10 @@ export interface components {
              */
             watch_count: number;
         };
-        /** @description 내 표시 설정과 마지막 조직 바꾸기. 보내지 않은 칸은 그대로 둔다. */
+        /** @description 내 표시 설정 바꾸기. 보내지 않은 칸은 그대로 둔다. */
         MySettings: {
             /** @description `h12`·`h23`, 빈 문자열이면 지운다. */
             hour_cycle?: string | null;
-            /**
-             * Format: uuid
-             * @description 마지막 조직. 생략하면 유지하고 null이면 지운다. UUID는 소속 조직만 허용한다.
-             */
-            last_organization_id?: string | null;
             /** @description `ko`·`en`, 빈 문자열이면 지운다. */
             locale?: string | null;
             /** @description `system`·`light`·`dark`. 빈 문자열은 받지 않는다(기본이 `system`). */
@@ -4935,6 +4947,11 @@ export interface components {
             /** Format: date */
             starts_on?: string | null;
             status: string;
+        };
+        /** @description 마지막 조직 선택. null은 선택을 지운다. 표시 설정과 별도 명령이다(#178·D-105). */
+        SetLastOrganization: {
+            /** Format: uuid */
+            organization_id: string | null;
         };
         /** @description 고정·즐겨찾기 켜기·끄기. */
         SetMark: {
@@ -8421,7 +8438,9 @@ export interface operations {
     delete_group: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 group_id: string;
             };
@@ -8434,6 +8453,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -8451,12 +8478,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     add_group_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 group_id: string;
                 user_id: string;
@@ -8495,12 +8532,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     remove_group_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 group_id: string;
                 user_id: string;
@@ -8515,6 +8562,14 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8524,6 +8579,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8563,7 +8626,9 @@ export interface operations {
     revoke_invitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 invitation_id: string;
             };
@@ -8576,6 +8641,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -8606,7 +8679,9 @@ export interface operations {
     accept_invitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 invitation_id: string;
             };
@@ -8620,6 +8695,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {
@@ -8643,7 +8726,9 @@ export interface operations {
     decline_invitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 invitation_id: string;
             };
@@ -8656,6 +8741,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -10651,7 +10744,9 @@ export interface operations {
     purge_workspace: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -10665,7 +10760,23 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10678,7 +10789,9 @@ export interface operations {
     restore_workspace: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -10691,6 +10804,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -10774,6 +10895,53 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_last_organization: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetLastOrganization"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11119,7 +11287,9 @@ export interface operations {
     set_my_settings: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -11144,6 +11314,14 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11873,7 +12051,9 @@ export interface operations {
     invite_organization: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 organization_id: components["schemas"]["OrganizationId"];
             };
@@ -11959,7 +12139,9 @@ export interface operations {
     set_organization_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 organization_id: components["schemas"]["OrganizationId"];
                 user_id: components["schemas"]["UserId"];
@@ -11977,6 +12159,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -12007,7 +12197,9 @@ export interface operations {
     remove_organization_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 organization_id: components["schemas"]["OrganizationId"];
                 user_id: components["schemas"]["UserId"];
@@ -12021,6 +12213,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -12185,7 +12385,9 @@ export interface operations {
     join_workspace_as_admin: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 organization_id: components["schemas"]["OrganizationId"];
                 workspace_id: components["schemas"]["WorkspaceId"];
@@ -12199,6 +12401,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -12216,12 +12426,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     offer_organization_workspace_ownership: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 organization_id: components["schemas"]["OrganizationId"];
                 workspace_id: components["schemas"]["WorkspaceId"];
@@ -12264,12 +12484,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     restore_organization_workspace: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 organization_id: components["schemas"]["OrganizationId"];
                 workspace_id: components["schemas"]["WorkspaceId"];
@@ -12283,6 +12513,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -12729,7 +12967,9 @@ export interface operations {
     create_organization: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -12756,6 +12996,14 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14550,7 +14798,9 @@ export interface operations {
     create: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -14592,12 +14842,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     delete_workspace: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -14813,7 +15073,9 @@ export interface operations {
     create_group: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -14831,6 +15093,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Group"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             403: {
@@ -14899,7 +15169,9 @@ export interface operations {
     invite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -14956,7 +15228,9 @@ export interface operations {
     leave: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -14969,6 +15243,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             404: {
                 headers: {
@@ -15116,7 +15398,9 @@ export interface operations {
     set_role: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
                 user_id: string;
@@ -15134,6 +15418,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -15164,7 +15456,9 @@ export interface operations {
     remove_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
                 user_id: string;
@@ -15178,6 +15472,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -15294,7 +15596,9 @@ export interface operations {
     offer_ownership: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -15336,12 +15640,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     cancel_ownership_offer: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -15354,6 +15668,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -15371,12 +15693,22 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     accept_ownership: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
+            };
             path: {
                 workspace_id: string;
             };
@@ -15390,7 +15722,23 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

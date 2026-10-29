@@ -10,6 +10,7 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 - 파일 라우터(`crates/domains/files/src/router.rs`)도 모든 명령에 `ExpectedUserIfSent`를 건다. 업로드 시작은 계속 필수이고, 조각 전송·완료·중단·이름 변경·휴지통·버전 삭제는 머리가 있으면 비교한다. 웹 `features/files/api.ts`는 날것 조각 전송에도 원래 업로더의 머리를 보내고 완료·중단까지 이어 준다.
 - 기록·학습 라우터(`crates/domains/records/src/lib.rs`의 `router`)도 `ExpectedUserIfSent`를 건다. 기록·강좌·스터디·Zotero의 모든 명령과 읽기 POST `list_collections`는 머리가 있으면 비교하며, 머리를 필수로 요구하지 않는다.
 - 시스템 라우터(`crates/domains/system/src/lib.rs`)도 `ExpectedUserIfSent`를 적용한다. 휴지통 명령·보존 설정에 보낸 머리를 비교한다. 없으면 기존처럼 허용하고 GET 반출·목록·설정 읽기는 비교하지 않는다. 시험은 `tests/it/system/contracts.rs`다.
+- 조직 라우터(`crates/domains/organizations/src/lib.rs`)도 명령 29개에 `ExpectedUserIfSent`를 건다. 조직 설정·공간 한도 PUT은 계속 필수이며, 나머지는 보내면 비교한다. 거절 뒤 무변경 시험은 `it/organization/expected_user.rs`다.
 - 그 밖의 처리기(`CurrentUser`만 쓰고 공통 처리를 걸지 않은 라우터)는 머리를 보지 않는다.
 - 줄은 각 처리기 `fn` 줄이다. 코드가 바뀌면 다음으로 다시 찾는다.
   - 적용: `rg -n 'ExpectedUser\(' crates/server/src/features crates/domains`
@@ -35,49 +36,47 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 
 ## 적용된 경로
 
-| 파일                                               | 처리기(줄)                                                                                                                   |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `crates/domains/documents/src/documents/create.rs` | 필수: `create_note`(167)                                                                                                     |
-| `crates/domains/documents/src/documents/save.rs`   | 필수: `save`(37)                                                                                                             |
-| `crates/domains/documents/src/lib.rs`              | 머리는 선택. 문서 생성·제목·설정·공유·복제·이동·부모·템플릿·항목 문서·복원·내보내기·공개 링크 명령 모두 공통 처리가 비교한다 |
-| `crates/aggregates/references/src/lib.rs`          | 머리는 선택. `resolve`도 보내면 공통 처리가 비교한다                                                                         |
-| `crates/domains/system/src/lib.rs`                 | 머리는 선택. 문서·항목·모듈 삭제와 휴지통·보존 설정 명령에서 보내면 비교한다                                                 |
-| `crates/domains/files/src/uploads.rs`              | `create_upload`(필수), `put_part`·`abort_upload`(보내면 비교)                                                                |
-| `crates/domains/files/src/completion.rs`           | `complete_upload`(보내면 비교)                                                                                               |
-| `crates/domains/files/src/commands.rs`             | `rename_file`·`trash_file`·`delete_version`(보내면 비교)                                                                     |
-| `features/organizations.rs`                        | `set_settings`(477), `set_workspace_limits`(538)                                                                             |
-| `crates/domains/work/src/tasks/write.rs`           | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)                                                          |
-| `crates/domains/work/src/tasks/patch.rs`           | `patch`(194)                                                                                                                 |
-| `crates/domains/work/src/tasks/checklist.rs`       | `add_checklist`(25), `update_checklist_item`(68), `delete_checklist_item`(100)                                               |
-| `crates/domains/work/src/task_statuses.rs`         | `create`(165), `update`(199), `delete`(245)                                                                                  |
-| `crates/domains/work/src/recurrence.rs`            | `set_task`(52), `sync_item`(140)                                                                                             |
-| `crates/domains/work/src/schedule/links.rs`        | `add_predecessor`(174), `remove_predecessor`(251)                                                                            |
-| `crates/domains/work/src/schedule/preview.rs`      | 머리가 필수는 아니다. 보내면 업무 라우터 공통 처리가 비교한다: `plan`(286), `plan_link`(304)                                 |
-| `crates/domains/work/src/events.rs`                | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `create`(434), `update`(479), `delete`(520)                               |
-| `crates/domains/work/src/event_recurrence.rs`      | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `set_event`(36), `exclude_event`(98)                                      |
-| `crates/domains/work/src/saved_views.rs`           | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `create`(158), `update`(213), `delete`(248)                               |
-| `crates/domains/activity/src/comments.rs`          | 머리는 선택. 보내면 공통 처리가 비교한다: `add`(192), `edit`(225), `delete`(246), `resolve`(267)                             |
-| `crates/domains/activity/src/notifications.rs`     | 머리는 선택. 보내면 공통 처리가 비교한다: `mark_read`(192)                                                                   |
-| `crates/domains/activity/src/marks.rs`             | 머리는 선택. 보내면 공통 처리가 비교한다: `set_mark`(55)                                                                     |
-| `crates/domains/records/src/records/write.rs`      | `create`(26), `update`(76), `delete`(135). 머리가 있으면 기록·학습 라우터가 비교한다.                                        |
-| `crates/domains/records/src/courses/write.rs`      | `set_details`(27), `add_episodes`(58), `update_episode`(86), `delete_episode`(128)                                           |
-| `crates/domains/records/src/courses/write.rs`      | `set_progress`(148)                                                                                                          |
-| `crates/domains/records/src/study/write.rs`        | `add_units`(28), `update_unit`(56), `delete_unit`(97), `set_progress`(117), `plan`(144)                                      |
-| `crates/domains/records/src/zotero.rs`             | `import`(408), 읽기 POST `list_collections`(203)                                                                             |
-| `collab/ws.rs`                                     | 실시간 연결의 질의 `expected_user`(50). 누락·형식 오류는 400, 다르면 닫기 코드 4412                                          |
+| 파일                                                         | 처리기(줄)                                                                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `crates/domains/documents/src/documents/create.rs`           | 필수: `create_note`(167)                                                                                                     |
+| `crates/domains/documents/src/documents/save.rs`             | 필수: `save`(37)                                                                                                             |
+| `crates/domains/documents/src/lib.rs`                        | 머리는 선택. 문서 생성·제목·설정·공유·복제·이동·부모·템플릿·항목 문서·복원·내보내기·공개 링크 명령 모두 공통 처리가 비교한다 |
+| `crates/aggregates/references/src/lib.rs`                    | 머리는 선택. `resolve`도 보내면 공통 처리가 비교한다                                                                         |
+| `crates/domains/system/src/lib.rs`                           | 머리는 선택. 문서·항목·모듈 삭제와 휴지통·보존 설정 명령에서 보내면 비교한다                                                 |
+| `crates/domains/organizations/src/lib.rs`                    | `router`(112): 도메인 명령 29개, 보낸 머리를 비교한다                                                                        |
+| `crates/domains/organizations/src/organizations/settings.rs` | `set_settings`(177)·`set_workspace_limits`(243)는 계속 머리가 필수다                                                         |
+| `crates/domains/files/src/uploads.rs`                        | `create_upload`(필수), `put_part`·`abort_upload`(보내면 비교)                                                                |
+| `crates/domains/files/src/completion.rs`                     | `complete_upload`(보내면 비교)                                                                                               |
+| `crates/domains/files/src/commands.rs`                       | `rename_file`·`trash_file`·`delete_version`(보내면 비교)                                                                     |
+| `crates/domains/work/src/tasks/write.rs`                     | `create`(29), `move_task`(88), `set_parent`(135), `trash_task`(160)                                                          |
+| `crates/domains/work/src/tasks/patch.rs`                     | `patch`(194)                                                                                                                 |
+| `crates/domains/work/src/tasks/checklist.rs`                 | `add_checklist`(25), `update_checklist_item`(68), `delete_checklist_item`(100)                                               |
+| `crates/domains/work/src/task_statuses.rs`                   | `create`(165), `update`(199), `delete`(245)                                                                                  |
+| `crates/domains/work/src/recurrence.rs`                      | `set_task`(52), `sync_item`(140)                                                                                             |
+| `crates/domains/work/src/schedule/links.rs`                  | `add_predecessor`(174), `remove_predecessor`(251)                                                                            |
+| `crates/domains/work/src/schedule/preview.rs`                | 머리가 필수는 아니다. 보내면 업무 라우터 공통 처리가 비교한다: `plan`(286), `plan_link`(304)                                 |
+| `crates/domains/work/src/events.rs`                          | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `create`(434), `update`(479), `delete`(520)                               |
+| `crates/domains/work/src/event_recurrence.rs`                | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `set_event`(36), `exclude_event`(98)                                      |
+| `crates/domains/work/src/saved_views.rs`                     | 머리가 필수는 아니다. 보내면 공통 처리가 비교한다: `create`(158), `update`(213), `delete`(248)                               |
+| `crates/domains/activity/src/comments.rs`                    | 머리는 선택. 보내면 공통 처리가 비교한다: `add`(192), `edit`(225), `delete`(246), `resolve`(267)                             |
+| `crates/domains/activity/src/notifications.rs`               | 머리는 선택. 보내면 공통 처리가 비교한다: `mark_read`(192)                                                                   |
+| `crates/domains/activity/src/marks.rs`                       | 머리는 선택. 보내면 공통 처리가 비교한다: `set_mark`(55)                                                                     |
+| `crates/domains/records/src/records/write.rs`                | `create`(26), `update`(76), `delete`(135). 머리가 있으면 기록·학습 라우터가 비교한다.                                        |
+| `crates/domains/records/src/courses/write.rs`                | `set_details`(27), `add_episodes`(58), `update_episode`(86), `delete_episode`(128)                                           |
+| `crates/domains/records/src/courses/write.rs`                | `set_progress`(148)                                                                                                          |
+| `crates/domains/records/src/study/write.rs`                  | `add_units`(28), `update_unit`(56), `delete_unit`(97), `set_progress`(117), `plan`(144)                                      |
+| `crates/domains/records/src/zotero.rs`                       | `import`(408), 읽기 POST `list_collections`(203)                                                                             |
+| `collab/ws.rs`                                               | 실시간 연결의 질의 `expected_user`(50). 누락·형식 오류는 400, 다르면 닫기 코드 4412                                          |
 
 ## 빠진 쓰기 경로
 
 경로 앞 `features/`는 줄였다. 처리기마다 괄호 안은 줄과 위험 기호다.
 
-| 파일               | 처리기(줄, 위험)                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `accounts.rs`      | `set_settings`(703, 개인)                                                                                                                                                                                                                                                                                                                                                                                            |
-| `item_profile.rs`  | `set`(318, 귀속), `set_members`(374, 권한), `set_module_icon`(404, 설정), `copy`(486, 귀속), `set_template`(535, 설정)                                                                                                                                                                                                                                                                                               |
-| `members.rs`       | `set_role`(151, 권한), `remove_member`(178, 권한), `leave`(203, 계정), `invite`(265, 권한), `revoke_invitation`(337, 권한), `accept_invitation`(485, 계정), `decline_invitation`(497, 계정), `offer_ownership`(521, 권한), `cancel_ownership_offer`(540, 권한), `accept_ownership`(558, 계정), `create_group`(628, 권한), `delete_group`(658, 권한), `add_group_member`(682, 권한), `remove_group_member`(709, 권한) |
-| `modules.rs`       | `create_module`(378, 귀속), `update_module`(417, 설정), `archive_module`(452, 파괴), `set_description`(483, 귀속), `create_item`(535, 귀속), `update_item`(607, 귀속), `archive_item`(652, 파괴), `create_item_document`(697, 귀속)                                                                                                                                                                                  |
-| `organizations.rs` | `set_member`(288, 권한), `remove_member`(334, 권한), `invite`(378, 권한), `join_as_admin`(629, 권한), `restore_workspace`(671, 파괴), `offer_workspace_ownership`(694, 권한), `create`(753, 설정: 서버 관리자의 조직 만들기)                                                                                                                                                                                         |
-| `workspaces.rs`    | `create`(130, 귀속), `delete`(196, 파괴), `restore`(246, 파괴), `purge`(266, 파괴), `set_realtime`(295, 설정)                                                                                                                                                                                                                                                                                                        |
+| 파일              | 처리기(줄, 위험)                                                                                                                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `item_profile.rs` | `set`(318, 귀속), `set_members`(374, 권한), `set_module_icon`(404, 설정), `copy`(486, 귀속), `set_template`(535, 설정)                                                                                                              |
+| `modules.rs`      | `create_module`(378, 귀속), `update_module`(417, 설정), `archive_module`(452, 파괴), `set_description`(483, 귀속), `create_item`(535, 귀속), `update_item`(607, 귀속), `archive_item`(652, 파괴), `create_item_document`(697, 귀속) |
+| `workspaces.rs`   | `set_realtime`(29, 설정)                                                                                                                                                                                                            |
 
 ## 쓰기가 아닌 POST (표 밖)
 

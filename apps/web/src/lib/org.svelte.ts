@@ -4,7 +4,7 @@
 // 마지막 선택은 서버에 저장해 기기 간 이어지고 브라우저 사본은 사용자별 키를 유지한다(사용자 ①·⑩, 2026-10-26).
 import type { OrganizationSummary } from '@fvoci/api-client';
 
-import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { errorText } from '$lib/api/errors';
 import { accountSwitching, notifyError } from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
@@ -74,7 +74,7 @@ class OrganizationContext {
     this.saves = this.saves.then(async () => {
       if (generation !== this.generation || me.userId !== userId || accountSwitching()) return;
       try {
-        await api.setDisplaySettings({ last_organization_id: organizationId });
+        await organizationsApi.setLastOrganization({ organization_id: organizationId });
       } catch (error: unknown) {
         if (generation === this.generation && this.chosenId === organizationId) {
           notifyError(errorText(error, m.settings_save_failed()), 'organization-selection');

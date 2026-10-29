@@ -15,15 +15,27 @@ const MAX_EMAIL: usize = 254;
 
 pub fn validate_email(raw: &str) -> Result<String, AppError> {
     let email = raw.trim().to_lowercase();
-    let valid = email.len() <= MAX_EMAIL
-        && email
-            .split_once('@')
-            .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.'))
+    if email.len() > MAX_EMAIL {
+        return Err(AppError::invalid(
+            "email",
+            InvalidReason::TooLong,
+            u64::try_from(MAX_EMAIL).ok(),
+            format!("email must be at most {MAX_EMAIL} bytes"),
+        ));
+    }
+    let valid = email
+        .split_once('@')
+        .is_some_and(|(local, domain)| !local.is_empty() && domain.contains('.'))
         && !email.chars().any(|c| c.is_whitespace() || c.is_control());
     if valid {
         Ok(email)
     } else {
-        Err(AppError::BadRequest("email is not valid".into()))
+        Err(AppError::invalid(
+            "email",
+            InvalidReason::InvalidFormat,
+            None,
+            "email is not valid",
+        ))
     }
 }
 
@@ -130,6 +142,8 @@ mod tests {
         assert!(validate_email("@example.test").is_err());
         assert!(validate_email("a@localhost").is_err());
         assert!(validate_email("a b@example.test").is_err());
+        assert!(validate_email(&format!("{}@example.test", "a".repeat(241))).is_ok());
+        assert!(validate_email(&format!("{}@example.test", "a".repeat(242))).is_err());
     }
 
     #[test]

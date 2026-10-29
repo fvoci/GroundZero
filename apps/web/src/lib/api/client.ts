@@ -1069,18 +1069,6 @@ export const api = {
     if (status !== 200) fail(status, json);
     return parseMe(json);
   },
-  /**
-   * 내 표시 설정(D-50 시간대, D-81 언어·주 시작·시각 표시, D-109 화면 밝기). 빈 문자열은 고르지 않음(브라우저·로케일
-   * 제안을 씀). 화면 밝기는 `system`·`light`·`dark`만 받는다. 보내지 않은 칸은 서버가 그대로 둔다.
-   */
-  setDisplaySettings: (settings: {
-    time_zone?: string;
-    locale?: string;
-    week_start?: string;
-    hour_cycle?: string;
-    theme?: string;
-    last_organization_id?: string | null;
-  }) => expectOk('PUT', '/api/me/settings', none, settings),
   async logout(): Promise<string> {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
   },
@@ -1165,11 +1153,6 @@ export const api = {
     expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/invitations`, (v) =>
       parseList(v, parseInvitation),
     ),
-  invite: (ws: string, email: string, newRole: Role) =>
-    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/invitations`, parseInvitation, {
-      email,
-      role: newRole,
-    }),
   revokeInvitation: (id: string) =>
     expectOk('DELETE', `/api/invitations/${encodeURIComponent(id)}`, none),
   myInvitations: () =>

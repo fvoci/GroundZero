@@ -4,7 +4,7 @@
   // 바꾸며 저장된 일정 시각·날짜는 그대로다. 문서 본문 서체(D-86)만 이 브라우저에 둔다.
   import { untrack } from 'svelte';
 
-  import { api } from '$lib/api/client';
+  import { organizationsApi } from '$lib/features/organizations/api';
   import { errorText } from '$lib/api/errors';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { DisplayLocale, HourCycle, WeekStart } from '$lib/display';
@@ -101,7 +101,7 @@
       return;
     }
     try {
-      await api.setDisplaySettings({
+      await organizationsApi.setDisplaySettings({
         time_zone: zone,
         locale,
         week_start: weekStart,
