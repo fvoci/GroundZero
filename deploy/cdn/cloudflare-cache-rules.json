@@ -15,7 +15,7 @@
     },
     {
       "ref": "fvoci_sensitive_bypass",
-      "description": "API, sign-in and health: never cached at the edge, origin Cache-Control (no-store / private, no-cache) passed to browsers unchanged, strong ETags kept for If-Match.",
+      "description": "API, sign-in and health: never cached at the edge, origin Cache-Control (no-store / private, no-cache) passed to browsers unchanged, strong ETags kept for single-document GET If-None-Match/304; writes use base_revision/409 (#228).",
       "expression": "http.request.uri.path eq \"/api\" or starts_with(http.request.uri.path, \"/api/\") or http.request.uri.path eq \"/auth\" or starts_with(http.request.uri.path, \"/auth/\") or http.request.uri.path eq \"/healthz\"",
       "action": "set_cache_settings",
       "action_parameters": {

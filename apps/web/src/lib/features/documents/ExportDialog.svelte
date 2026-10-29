@@ -228,7 +228,7 @@
         {/if}
       </div>
       <div role="status" class="empty:hidden">
-        {#if latest && doc.realtime}
+        {#if latest}
           <p class="text-muted-foreground">
             {m.documents_export_live()}
           </p>

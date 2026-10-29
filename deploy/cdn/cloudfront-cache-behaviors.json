@@ -1,5 +1,5 @@
 {
-  "Comment": "fvoci cache behaviors (D-77): a fragment of a CloudFront DistributionConfig. Origin id fvoci-app is the app (HTTPS). Managed policies: CachingDisabled 4135ea2d-6df8-44a3-9df3-4b5a84be39ad, CachingOptimized 658327ea-f89d-4fab-a63d-7e88639e58f6, AllViewer 216adef6-5c7f-47e4-b989-5492eafa07d3 (all headers incl. Cookie, Authorization, Origin, If-Match, If-None-Match and WebSocket headers; all cookies; all query strings). Behaviors are matched in order.",
+  "Comment": "fvoci cache behaviors (D-77): a fragment of a CloudFront DistributionConfig. Origin id fvoci-app is the app (HTTPS). Managed policies: CachingDisabled 4135ea2d-6df8-44a3-9df3-4b5a84be39ad, CachingOptimized 658327ea-f89d-4fab-a63d-7e88639e58f6, AllViewer 216adef6-5c7f-47e4-b989-5492eafa07d3 (all headers incl. Cookie, Authorization, Origin, If-None-Match and WebSocket headers; all cookies; all query strings). Document GET uses If-None-Match/304; writes use base_revision/409 and ignore If-Match (#228). Behaviors are matched in order.",
   "DefaultCacheBehavior": {
     "TargetOriginId": "fvoci-app",
     "ViewerProtocolPolicy": "redirect-to-https",
