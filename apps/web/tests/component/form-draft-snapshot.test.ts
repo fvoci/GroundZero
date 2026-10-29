@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { me } from '$lib/me.svelte';
 import { router } from '$lib/router.svelte';
 import FormDraftSnapshot from './fixtures/FormDraftSnapshot.svelte';
@@ -17,6 +17,44 @@ afterEach(() => {
   cleanup();
   me.userId = '';
   router.guard = undefined;
+  vi.restoreAllMocks();
+});
+
+it('reports the exact stored value only after a successful write and stays silent on write failure', async () => {
+  const onPersist =
+    vi.fn<
+      (
+        key: string | undefined,
+        value: { savedAt: string; input: { long: string; short: string } } | undefined,
+      ) => void
+    >();
+  render(FormDraftSnapshot, { props: { filtered: true, onPersist } });
+  await input('Long', 'first durable writing');
+  await waitFor(() => {
+    expect(onPersist).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ input: { long: 'first durable writing', short: '' } }),
+    );
+  });
+  const [key, value] = onPersist.mock.lastCall ?? [];
+  if (typeof key !== 'string') throw new Error('missing persisted key');
+  expect(localStorage.getItem(key)).toBe(JSON.stringify(value));
+  onPersist.mockClear();
+  const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new DOMException('draft quota', 'QuotaExceededError');
+  });
+  await input('Long', 'writing while storage is unavailable');
+  expect(onPersist).not.toHaveBeenCalled();
+  expect(localStorage.getItem(key)).toBe(JSON.stringify(value));
+  expect(screen.getByLabelText('Long')).toHaveValue('writing while storage is unavailable');
+  writer.mockRestore();
+  await input('Long', 'writing after storage recovers');
+  await waitFor(() => {
+    expect(onPersist).toHaveBeenCalledWith(
+      key,
+      expect.objectContaining({ input: { long: 'writing after storage recovers', short: '' } }),
+    );
+  });
 });
 
 it('keeps the existing full snapshot behavior when no storedSnapshot option is supplied', async () => {

@@ -178,6 +178,9 @@ it('preserves record writing without short fields or raw retry payloads and reta
   cleanup();
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
   await restore();
+  await waitFor(() => {
+    expect(field('record-risk-body')).toHaveValue('LONG RECORD BODY\nsecond line');
+  });
   expect(field('record-risk-title')).toHaveValue('');
   expect(field('record-risk-amount')).toHaveValue('');
   expect(field('record-risk-body')).toHaveValue('LONG RECORD BODY\nsecond line');

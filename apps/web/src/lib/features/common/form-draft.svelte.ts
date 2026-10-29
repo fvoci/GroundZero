@@ -22,6 +22,8 @@ interface DraftOptions<T> {
   snapshot: () => T;
   /** 저장할 칸만 고른다. 요청 완료 여부는 전체 snapshot으로 비교한다(D-27). */
   storedSnapshot?: () => T;
+  /** Observe successful writes to this session's key, including its exact savedAt and projection. */
+  onPersist?: (key: string, value: Saved<T> | undefined) => void;
   parse: (value: unknown) => T | undefined;
   restore: (value: T) => void;
   /** Clear visible input when its owner or target changes. */
@@ -69,6 +71,12 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return offers.some((entry) => entry.key === session?.key);
   }
 
+  function writeCurrent(key: string | undefined, value: Saved<T> | undefined): boolean {
+    const written = writeFormDraftAt(key, value);
+    if (written && key !== undefined) options.onPersist?.(key, value);
+    return written;
+  }
+
   function persist(): void {
     if (!owned() || session === undefined) return;
     if (options.preserve === false) {
@@ -81,7 +89,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       return;
     }
     const dirty = options.dirty();
-    const written = writeFormDraftAt(
+    const written = writeCurrent(
       session.key,
       dirty
         ? {
@@ -202,7 +210,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       options.storedSnapshot === undefined
         ? entry.value
         : { ...entry.value, input: options.storedSnapshot() };
-    const stored = session !== undefined && writeFormDraftAt(session.key, value);
+    const stored = session !== undefined && writeCurrent(session.key, value);
     restoredKey = stored ? undefined : entry.key;
     offers = offers.filter((candidate) => candidate.key !== entry.key);
     if (stored && entry.key !== session?.key) removeFormDraftAt(entry.key);
@@ -226,7 +234,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   function complete(attempt: FormDraftAttempt): boolean {
     if (!isCurrent(attempt)) return false;
     if (!offers.some((entry) => entry.key === session?.key)) {
-      writeFormDraftAt(session?.key, undefined);
+      writeCurrent(session?.key, undefined);
     }
     if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
     restoredKey = undefined;
