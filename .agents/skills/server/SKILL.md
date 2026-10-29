@@ -23,7 +23,7 @@ description: fvoci 서버(crates/server와 공통 crate core·db·http)를 바�
 ## 바꿀 때 지킬 것
 
 - 핸들러는 입력 검증과 응답 변환만 한다. 권한·불변식·감사는 SQL 정의자 함수. 오류 코드는 D-81 언어 중립(기존 `AppError` 변종).
-- API를 바꾸면 `#[utoipa::path(..., operation_id = "<고유>")]`와 도메인·집계의 OpenAPI·라우터(`WorkApi`·`ActivityApi`·`DocumentsApi`·`ReferencesApi`) 및 `http/mod.rs` 조립을 함께 고치고 `cargo xtask openapi`·`pnpm run generate:api`로 계약·클라이언트를 재생성한다.
+- API를 바꾸면 `#[utoipa::path(..., operation_id = "<고유>")]`와 도메인·집계의 OpenAPI·라우터(`WorkApi`·`ActivityApi`·`DocumentsApi`·`ReferencesApi`) 및 서버 `http/api.rs` 계약·`http/routes.rs` 배선을 함께 고치고 `cargo xtask openapi`·`pnpm run generate:api`로 계약·클라이언트를 재생성한다.
 - 시험은 실제 앱 역할(`state.db.begin_as`)과 실제 HTTP로 거부 경로를 확인한다. 기대값을 `app_access`에서 만들지 않는다. 잠금 대기는 `pg_blocking_pids`로 확인한다(고정 지연 금지). 새 시험은 `crates/server/tests/it/<주제>.rs`에 두고 `it/main.rs`에 모듈로 더한다. 도메인 crate로 옮긴 영역의 시험은 `it/<도메인>/`(예: `it/work/`) 폴더의 `mod.rs`에 더한다. 공유 DB 전체 작업·프로세스 전역 상태를 쓰는 시험만 `tests/` 바로 아래 각자의 실행 파일로 둔다(`it/main.rs` 머리 주석).
 - Rust 코드를 쓸 때는 `.agents/skills/rust-best-practices/`, 검토할 때는 `.agents/skills/rust-review/`(BeautifulRust, CodeRabbit도 rust-review를 씀)를 참고한다. 저장소 규칙이 우선하고, 검사 규칙 변경은 제안하지 않는다.
 
