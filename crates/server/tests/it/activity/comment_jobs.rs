@@ -62,7 +62,7 @@ async fn comments_threads_and_notifications_follow_access() {
         Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": false })),
+        Some(json!({ "visibility": "workspace", "previous_visibility": doc["visibility"] })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
@@ -395,7 +395,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
         Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": false })),
+        Some(json!({ "visibility": "workspace", "previous_visibility": doc["visibility"] })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);

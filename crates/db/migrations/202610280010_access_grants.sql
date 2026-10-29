@@ -744,8 +744,8 @@ GRANT ALL ON FUNCTION fvoci.app_set_last_organization(p_organization uuid) TO fv
 REVOKE ALL ON FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_document_parent(p_doc uuid, p_parent uuid, p_before uuid, p_max_depth integer, p_ids uuid[]) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_previous_visibility text, p_previous_allow_copy boolean, p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_previous_visibility text, p_previous_allow_copy boolean, p_ids uuid[]) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_set_document_template(p_doc uuid, p_template boolean, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_document_template(p_doc uuid, p_template boolean, p_ids uuid[]) TO fvoci_app;

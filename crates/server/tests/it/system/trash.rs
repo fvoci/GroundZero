@@ -1550,7 +1550,8 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
         Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&author),
-        Some(json!({ "visibility": "private", "allow_copy": true })),
+        Some(json!({ "visibility": "private", "allow_copy": true,
+            "previous_visibility": doc["visibility"], "previous_allow_copy": doc["allow_copy"] })),
     )
     .await;
     assert!(private.status.is_success(), "{:?}", private.json);

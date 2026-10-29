@@ -89,7 +89,8 @@ async fn settings(
         Method::PATCH,
         &format!("/api/documents/{}/settings", doc["id"].as_str().unwrap()),
         Some(user),
-        Some(json!({ "visibility": visibility, "allow_copy": allow_copy })),
+        Some(json!({ "visibility": visibility, "allow_copy": allow_copy,
+            "previous_visibility": doc["visibility"], "previous_allow_copy": doc["allow_copy"] })),
     )
     .await
     .status
@@ -660,7 +661,7 @@ async fn document_settings_change_only_the_fields_sent() {
         Method::PATCH,
         &uri,
         Some(&second),
-        Some(json!({ "allow_copy": true })),
+        Some(json!({ "allow_copy": true, "previous_allow_copy": false })),
     )
     .await;
     assert_eq!(copy.status, StatusCode::OK, "{:?}", copy.json);
@@ -672,7 +673,7 @@ async fn document_settings_change_only_the_fields_sent() {
         Method::PATCH,
         &uri,
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": null })),
+        Some(json!({ "visibility": "workspace", "previous_visibility": "private", "allow_copy": null })),
     )
     .await;
     assert_eq!(open.status, StatusCode::OK, "{:?}", open.json);
@@ -686,7 +687,7 @@ async fn document_settings_change_only_the_fields_sent() {
         Method::PATCH,
         &note_uri,
         Some(&admin),
-        Some(json!({ "allow_copy": true })),
+        Some(json!({ "allow_copy": true, "previous_allow_copy": false })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -696,7 +697,7 @@ async fn document_settings_change_only_the_fields_sent() {
         Method::PATCH,
         &note_uri,
         Some(&admin),
-        Some(json!({ "visibility": "workspace" })),
+        Some(json!({ "visibility": "workspace", "previous_visibility": "private" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.json);

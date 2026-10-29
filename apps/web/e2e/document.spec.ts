@@ -2,6 +2,87 @@
 // 입력은 키보드 문자열 입력이며 OS 입력기(IME) 조합 시험이 아니다.
 import { expect, str, test, unique } from './fixtures';
 
+test('keeps a rejected document setting and compares it before an explicit retry', async ({
+  signIn,
+}) => {
+  const { page, api } = await signIn('test-user');
+  const ws = await api.createWorkspace(`설정 경합 ${unique()}`);
+  const created = await api.send('POST', `/api/workspaces/${ws}/wiki/documents`, {
+    request_id: crypto.randomUUID(),
+    title: '설정 비교',
+  });
+  const doc = str(created, 'id');
+  await page.goto(`/w/${ws}/wiki/${doc}`);
+  await expect(page.getByRole('button', { name: '공유·설정' })).toBeVisible();
+  const openingRead = page.waitForResponse(
+    (res) => res.url().endsWith(`/api/documents/${doc}`) && res.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: '공유·설정' }).click();
+  await openingRead;
+  const input = page.getByRole('dialog').locator('#doc-private');
+  await expect(input).not.toBeChecked();
+  // Another tab's request commits after this dialog has read its previous values.
+  const status = await page.evaluate(async (id) => {
+    const me: unknown = await fetch('/api/me').then((res) => res.json());
+    if (typeof me !== 'object' || me === null || !('id' in me) || typeof me.id !== 'string')
+      throw new Error('missing current user');
+    return (
+      await fetch(`/api/documents/${id}/settings`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'x-fvoci-expected-user': me.id },
+        body: JSON.stringify({ visibility: 'private', previous_visibility: 'workspace' }),
+      })
+    ).status;
+  }, doc);
+  expect(status).toBe(200);
+  let hold: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    hold = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/documents/${doc}/settings`, async (route) => {
+    // Deliver the real server reply after exercising the pending-input leave guards.
+    const response = await route.fetch();
+    if (response.status() === 409) {
+      hold();
+      await released;
+    }
+    await route.fulfill({ response });
+  });
+  const rejected = page.waitForResponse(
+    (res) => res.url().endsWith(`/documents/${doc}/settings`) && res.status() === 409,
+  );
+  await input.click();
+  await held;
+  try {
+    await expect(input).toBeChecked();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.getByRole('button', { name: '계속 편집', exact: true }).click();
+    await expect(input).toBeChecked();
+    const warned = await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(warned).toBe(true);
+  } finally {
+    release();
+  }
+  await rejected;
+  const comparison = page.getByRole('region', { name: '지금과 비교' });
+  await expect(comparison).toBeVisible();
+  await expect(input).toBeChecked();
+  await expect(comparison.getByRole('checkbox', { name: /^비공개/ })).toBeChecked();
+  expect(str(await api.get(`/api/documents/${doc}`), 'visibility')).toBe('private');
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+  await expect(comparison).toBeHidden();
+  await expect(input).toBeChecked();
+});
+
 test('creates a wiki document, saves Korean text and keeps it after reload and reopen', async ({
   signIn,
 }) => {

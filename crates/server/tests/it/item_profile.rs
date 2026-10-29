@@ -475,7 +475,8 @@ async fn items_copy_with_fresh_numbers_and_templates() {
             mine.json["id"].as_str().unwrap()
         ),
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": true })),
+        Some(json!({ "visibility": "workspace", "allow_copy": true,
+            "previous_visibility": mine.json["visibility"], "previous_allow_copy": mine.json["allow_copy"] })),
     )
     .await;
     assert_eq!(allow.status, StatusCode::OK, "{:?}", allow.json);
