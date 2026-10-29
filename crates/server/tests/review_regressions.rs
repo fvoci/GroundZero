@@ -556,7 +556,7 @@ async fn archived_items_answer_409_before_403_for_everyone_who_can_see() {
     rows(
         &w.state,
         &w.owner,
-        "SELECT fvoci.app_set_document_settings($1,'private',true,@ids)",
+        "SELECT fvoci.app_set_document_settings($1,'private',true,'workspace',false,@ids)",
         &[private_doc],
     )
     .await;

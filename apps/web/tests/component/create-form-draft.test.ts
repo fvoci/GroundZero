@@ -59,8 +59,11 @@ it('offers a failed request on remount and retries only after restore with the s
   });
   expect(create.mock.calls[1]?.slice(0, 2)).toEqual([id, '남긴 이름']);
   await waitFor(() => {
-    expect(keys()).toHaveLength(0);
+    expect(input()).toHaveValue('');
   });
+  expect(keys()).toHaveLength(1); // B keeps the restored source, but removes this session's key.
+  expect(localStorage.getItem(formDraftTabKey(props.draftName) ?? '')).toBeNull();
+  expect(localStorage.getItem(keys()[0] ?? '')).toContain('남긴 이름');
 });
 
 it('keeps offered input intact when typing a different input before deciding', async () => {
@@ -264,7 +267,7 @@ it('preserves newly typed input as another offer when restoring an older draft',
   await fireEvent.input(input(), { target: { value: 'newer' } });
   await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
   expect(input()).toHaveValue('older');
-  expect(keys()).toHaveLength(2);
+  expect(keys()).toHaveLength(3); // Offered source, held new input, and current restored copy.
   expect(keys().some((key) => localStorage.getItem(key)?.includes('newer'))).toBe(true);
 });
 
@@ -283,7 +286,10 @@ it('allows an explicitly restored draft to save even if storage subsequently fil
   await waitFor(() => {
     expect(create).toHaveBeenCalledOnce();
   });
-  expect(keys()).toHaveLength(0);
+  await waitFor(() => expect(input()).toHaveValue(''));
+  expect(localStorage.getItem(formDraftTabKey(props.draftName) ?? '')).toBeNull();
+  expect(keys()).toHaveLength(1);
+  expect(localStorage.getItem(keys()[0] ?? '')).toContain('restore then save');
 });
 
 it('preserves a template and retry ID together and changes the ID for a different template', async () => {

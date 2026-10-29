@@ -108,13 +108,15 @@ describe('document command contracts (#178, PR3 #189, D-96)', () => {
 
   it('patches only the supplied settings with the expected user', async () => {
     const fetch = reply(200, { ...document, allow_copy: true });
-    await api.setSettings('d/1', { allow_copy: true });
+    await expect(
+      api.setSettings('d/1', { allow_copy: true, previous_allow_copy: false }),
+    ).resolves.toEqual({ kind: 'saved', document: { ...document, allow_copy: true } });
     expect(fetch).toHaveBeenCalledWith(
       '/api/documents/d%2F1/settings',
       expect.objectContaining({ method: 'PATCH' }),
     );
     const init = fetch.mock.calls[0]?.[1];
-    expect(sentBody(init)).toEqual({ allow_copy: true });
+    expect(sentBody(init)).toEqual({ allow_copy: true, previous_allow_copy: false });
     expect(new Headers(init?.headers).get('x-fvoci-expected-user')).toBe('user-a');
   });
 

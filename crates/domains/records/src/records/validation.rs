@@ -315,6 +315,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn long_text_keys_match_web_draft_allowlist() -> Result<(), serde_json::Error> {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        let expected: BTreeMap<String, Vec<String>> = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../apps/web/src/lib/features/records/long-text-keys.json"
+        )))?;
+        let mut seen = BTreeSet::new();
+        for kind in record_kinds() {
+            let keys: Vec<String> = kind
+                .fields
+                .iter()
+                .filter(|field| field.field_type == FieldType::LongText)
+                .map(|field| field.key.to_owned())
+                .collect();
+            assert_eq!(
+                expected.get(kind.kind),
+                Some(&keys),
+                "web draft long_text keys drifted for {:?}/{}",
+                kind.module_kind,
+                kind.kind
+            );
+            seen.insert(kind.kind);
+        }
+        assert_eq!(
+            expected.len(),
+            seen.len(),
+            "web allowlist has unknown kinds"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn kinds_are_unique_and_choices_are_set() {
         let kinds = record_kinds();
         // 종류 이름은 모듈 안에서 유일하다(`review`는 스터디·강의 양쪽에 있다, D-36·D-123).

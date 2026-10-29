@@ -16,8 +16,10 @@ use uuid::Uuid;
 const COPY_TO_NOTE: &str = "SELECT fvoci.app_copy_document($1,$2,NULL,'사본',@ids) AS id";
 const COPY_TO_SPACE: &str = "SELECT fvoci.app_copy_document($1,$2,$3,'사본',@ids) AS id";
 const MOVE: &str = "SELECT * FROM fvoci.app_move_document($1,$2,NULL,@ids)";
-const ALLOW_COPY: &str = "SELECT fvoci.app_set_document_settings($1,'workspace',true,@ids)";
-const ALLOW_NOTE_COPY: &str = "SELECT fvoci.app_set_document_settings($1,'private',true,@ids)";
+const ALLOW_COPY: &str =
+    "SELECT fvoci.app_set_document_settings($1,'workspace',true,'workspace',false,@ids)";
+const ALLOW_NOTE_COPY: &str =
+    "SELECT fvoci.app_set_document_settings($1,'private',true,'private',false,@ids)";
 
 /// 조직 X(`w.org`)와 그 밖의 조직 Y. `w.owner`는 둘 다의 관리자이고, X의 둘째 공간과 Y의 공간이 있다.
 struct Two {
