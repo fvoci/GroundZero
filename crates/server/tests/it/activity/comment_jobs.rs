@@ -59,7 +59,7 @@ async fn comments_threads_and_notifications_follow_access() {
     let doc_id = doc["id"].as_str().unwrap();
     let open = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": false })),
@@ -392,7 +392,7 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     let doc_id = doc["id"].as_str().unwrap().to_owned();
     let open = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": false })),
@@ -435,8 +435,8 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
     // 댓글이 달린 문서를 새 공간으로 옮기면 옛 공간을 영구 삭제할 수 있고, 반출은 새 공간에서 댓글을 담는다.
     let preview = send(
         &app,
-        Method::POST,
-        &format!("/api/documents/{doc_id}/move"),
+        Method::PUT,
+        &format!("/api/documents/{doc_id}/placement"),
         Some(&admin),
         Some(json!({ "target_workspace_id": new })),
     )
@@ -448,8 +448,8 @@ async fn moved_documents_live_excerpts_and_single_notifications() {
         let ack = json!({ "changes": preview.json["changes"] });
         send(
             &app,
-            Method::POST,
-            &format!("/api/documents/{doc_id}/move"),
+            Method::PUT,
+            &format!("/api/documents/{doc_id}/placement"),
             Some(&admin),
             Some(json!({ "target_workspace_id": new, "acknowledged": ack })),
         )

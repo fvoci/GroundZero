@@ -16,14 +16,14 @@ description: fvoci 서버(crates/server와 공통 crate core·db·http)를 바�
 - 달력 집계는 `crates/aggregates/calendar`(`fvoci-calendar`)의 `CalendarState`·`CalendarApi`·라우터이며, SQL `app_calendar` 하나로 읽는다. 시험은 `tests/it/calendar/`에 있다(D-80). 반복 규칙·검증 정본은 `fvoci_core::recurrence`이고 업무 도메인은 기존 `work::recurrence` 경로로 재노출한다.
 - 개인 시간은 `crates/domains/time`(`fvoci-time`)에 있고 시험은 `it/time/`이다. 기록 자원과 대상 표시 모음(`/time-entry-targets`)은 따로 읽어 웹의 `features/time/data.ts`에서 조합한다. 업무·항목 예상/실제 비교는 시간 함수와 업무 표를 SQL 한 문장으로 읽으며 도메인 crate끼리 의존하지 않는다.
 - 부르는 SQL 함수의 시그니처·id 개수는 `crates/db/migrations/`의 영역 기준 파일에서 직접 확인한다(`grep -n '^CREATE FUNCTION fvoci.<이름>(' crates/db/migrations/*.sql`). 새 행 id는 서버가 만든다(`new_ids(n)`, 가변은 `needed_ids`).
-- 기대 사용자(D-96): `ExpectedUser`를 받는 처리기는 머리가 필수다. 업무·소통활동 도메인 라우터의 `ExpectedUserIfSent`는 머리가 있으면 모든 명령에서 비교하고 400/409(`account_changed`)를 낸다. 머리는 비교에만 쓰며, 소통활동 명령의 머리는 계속 선택이다(D-96 개정). 파일 도메인도 같은 처리를 걸며 업로드 시작만 계속 필수이고 다른 파일 명령은 머리를 보내면 비교한다. 붙은 경로·빠진 경로와 빠진 경로의 위험은 [expected-user.md](expected-user.md).
-- 템플릿으로 새 문서(`features/documents.rs` `initial_body`): 위키·항목 문서는 SQL `app_template_body`가 본문을 준다. 공간 문서 템플릿은 같은 조직 공간에서만 쓰고(다른 조직이면 409) 원본에 복제 감사를 남긴다(D-114·D-115). 개인 노트는 문서 RLS로 읽을 수 있는 템플릿만 쓴다.
+- 기대 사용자(D-96): `ExpectedUser`를 받는 처리기는 머리가 필수다. 업무·소통활동·문서 도메인과 참조 집계 라우터의 `ExpectedUserIfSent`는 머리가 있으면 모든 명령에서 비교하고 400/409(`account_changed`)를 낸다. 머리는 비교에만 쓰며, 문서는 기존 개인 노트 생성·본문 PUT만 필수이고 다른 문서·소통활동 명령은 계속 선택이다(D-96 개정). 파일 도메인도 같은 처리를 걸며 업로드 시작만 계속 필수이고 다른 파일 명령은 머리를 보내면 비교한다. 붙은 경로·빠진 경로와 빠진 경로의 위험은 [expected-user.md](expected-user.md).
+- 문서 처리기는 `crates/domains/documents`(`fvoci-documents`), 참조 후보·resolve 집계는 `crates/aggregates/references`(`fvoci-references`)에 있다. `DocumentsState`는 DB·문서 한도·공개 URL·이동/복원 runtime 접점만 받으며 방·WS·전체 Config는 server에 남는다. 제목은 `PATCH /documents/{id}`, 본문 PUT·실시간 경로는 유지한다. 템플릿으로 새 문서(`documents/create.rs` `initial_body`): 위키·항목 문서는 SQL `app_template_body`가 본문을 준다. 공간 문서 템플릿은 같은 조직 공간에서만 쓰고(다른 조직이면 409) 원본에 복제 감사를 남긴다(D-114·D-115). 개인 노트는 문서 RLS로 읽을 수 있는 템플릿만 쓴다.
 - 마감 알림(#86): 보관이 커밋된 뒤에는 마감 알림이 없다. 기준 SQL `app_notify`의 `due` 분기가 `app_lock_item`으로 잠근 뒤 `app_item_archived`를 다시 본다. 시험 `tests/it/activity/comment_archive_race.rs`의 `due_notifications_wait_for_archive_and_do_not_notify_after_commit`.
 
 ## 바꿀 때 지킬 것
 
 - 핸들러는 입력 검증과 응답 변환만 한다. 권한·불변식·감사는 SQL 정의자 함수. 오류 코드는 D-81 언어 중립(기존 `AppError` 변종).
-- API를 바꾸면 `#[utoipa::path(..., operation_id = "<고유>")]`와 도메인의 OpenAPI·라우터(`WorkApi`·`ActivityApi`) 및 `http/mod.rs` 조립을 함께 고치고 `cargo xtask openapi`·`pnpm run generate:api`로 계약·클라이언트를 재생성한다.
+- API를 바꾸면 `#[utoipa::path(..., operation_id = "<고유>")]`와 도메인·집계의 OpenAPI·라우터(`WorkApi`·`ActivityApi`·`DocumentsApi`·`ReferencesApi`) 및 `http/mod.rs` 조립을 함께 고치고 `cargo xtask openapi`·`pnpm run generate:api`로 계약·클라이언트를 재생성한다.
 - 시험은 실제 앱 역할(`state.db.begin_as`)과 실제 HTTP로 거부 경로를 확인한다. 기대값을 `app_access`에서 만들지 않는다. 잠금 대기는 `pg_blocking_pids`로 확인한다(고정 지연 금지). 새 시험은 `crates/server/tests/it/<주제>.rs`에 두고 `it/main.rs`에 모듈로 더한다. 도메인 crate로 옮긴 영역의 시험은 `it/<도메인>/`(예: `it/work/`) 폴더의 `mod.rs`에 더한다. 공유 DB 전체 작업·프로세스 전역 상태를 쓰는 시험만 `tests/` 바로 아래 각자의 실행 파일로 둔다(`it/main.rs` 머리 주석).
 - Rust 코드를 쓸 때는 `.agents/skills/rust-best-practices/`, 검토할 때는 `.agents/skills/rust-review/`(BeautifulRust, CodeRabbit도 rust-review를 씀)를 참고한다. 저장소 규칙이 우선하고, 검사 규칙 변경은 제안하지 않는다.
 

@@ -1803,11 +1803,6 @@ export const api = {
     expectOk('GET', `/api/me/shared?organization_id=${encodeURIComponent(organizationId)}`, (v) =>
       parseList(v, parseSharedView),
     ),
-  /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
-  setSettings: (
-    id: string,
-    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
-  ) => expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
   shares: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
@@ -1825,11 +1820,6 @@ export const api = {
       request_id: requestId,
       target_workspace_id: targetWorkspaceId,
       title,
-    }),
-  movePreview: (id: string, target: MoveTargetInput) =>
-    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move/preview`, parseMovePreview, {
-      target_workspace_id: target.workspaceId,
-      target_item_id: target.itemId,
     }),
   /** Zotero 컬렉션(D-34). 키는 이 요청에만 쓰고 서버가 저장하지 않는다. */
   zoteroCollections: (library: ZoteroLibraryInput) =>
@@ -2023,24 +2013,6 @@ export const api = {
       parseRevision,
       { format },
     ),
-  /** 옛 리비전 내용으로 새 리비전을 만든다. 보고 있던 리비전이 지났으면 `{ kind: 'conflict', current }`. */
-  async restoreRevision(
-    id: string,
-    revision: number,
-    input: { requestId: string; baseRevision: number },
-  ): Promise<
-    { kind: 'restored'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
-  > {
-    const { status, json, etag } = await request(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
-      { request_id: input.requestId, base_revision: input.baseRevision },
-    );
-    const current = conflictCurrent(status, json);
-    if (current !== undefined) return { kind: 'conflict', current };
-    if (status !== 200) fail(status, json);
-    return { kind: 'restored', document: withEtag(parseDocument(json), etag) };
-  },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
   /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
   search: (
@@ -2164,29 +2136,6 @@ export const api = {
     expectOk('DELETE', `/api/public-links/${encodeURIComponent(linkId)}`, none),
   publicDocument: (token: string) =>
     expectOk('GET', `/api/public/${encodeURIComponent(token)}`, parsePublicDocument),
-  /** 확인한 미리보기와 함께 이동한다. 그사이 접근 변화가 바뀌면 `{ kind: 'changed', preview }`. */
-  async moveDocument(
-    id: string,
-    target: MoveTargetInput,
-    acknowledged: MovePreviewView,
-  ): Promise<
-    { kind: 'moved'; outcome: MoveOutcomeView } | { kind: 'changed'; preview: MovePreviewView }
-  > {
-    const { status, json } = await request(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/move`,
-      {
-        target_workspace_id: target.workspaceId,
-        target_item_id: target.itemId,
-        acknowledged: { changes: acknowledged.changes },
-      },
-    );
-    if (status === 409 && isRecord(json) && 'changes' in json) {
-      return { kind: 'changed', preview: parseMovePreview(json) };
-    }
-    if (status !== 200) fail(status, json);
-    return { kind: 'moved', outcome: parseMoveOutcome(json) };
-  },
   /**
    * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
    * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.

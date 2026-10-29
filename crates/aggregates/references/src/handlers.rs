@@ -1,22 +1,16 @@
-//! @ 링크·사용자 언급·역방향 링크·알림 (D-18, D-27, D-39).
-//!
-//! 본문의 참조 노드는 종류와 내부 id만 가진다. 표시 이름은 여기서 권한을 확인해 만든다.
-//! 볼 수 없는 대상과 없는 대상은 같은 모양(`visible: false`)으로 돌려준다(존재 여부를 드러내지 않는다).
-//! 링크·언급 기록과 알림 생성은 저장 트랜잭션 안의 DB 함수 `app_record_document_references`가 한다
-//! (`crates/db/migrations/202610280003_documents.sql`). 새 UUIDv7은 앱이 공급하며(D-88), 언급은 접근 권한을 주지 않는다.
+//! 다영역 참조 후보 검색과 일괄 해석(D-18).
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::features::documents::access;
-use crate::http::AppState;
-use fvoci_core::error::{AppError, ErrorBody};
-use fvoci_core::ids::{DocumentId, ItemId, WorkspaceId};
+use crate::state::ReferencesState;
+use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
+use fvoci_core::ids::{ItemId, WorkspaceId};
 use fvoci_db::UserTx;
-use fvoci_http::session::CurrentUser;
 
 /// 종류별 후보 수 상한.
 const CANDIDATES_PER_KIND: i64 = 8;
@@ -79,6 +73,7 @@ pub struct ReferenceInput {
 /// 해석 요청.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ResolveReferences {
+    #[schema(max_items = 100)]
     pub refs: Vec<ReferenceInput>,
 }
 
@@ -108,16 +103,6 @@ impl ResolvedReference {
             item_id: None,
         }
     }
-}
-
-/// 이 대상을 가리키는 문서(내가 볼 수 있는 것만).
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Backlink {
-    pub id: DocumentId,
-    pub reference: Option<String>,
-    pub title: String,
-    pub workspace_id: Option<WorkspaceId>,
-    pub item_id: Option<ItemId>,
 }
 
 /// LIKE 패턴 이스케이프(`\`, `%`, `_`).
@@ -179,7 +164,7 @@ async fn search_scope(
     ws: Option<WorkspaceId>,
 ) -> Result<Vec<WorkspaceId>, AppError> {
     if let Some(ws) = ws {
-        crate::access::require_visible(tx, crate::access::Kind::Workspace, ws).await?;
+        fvoci_db::access::require_visible(tx, fvoci_db::access::Kind::Workspace, ws).await?;
         return Ok(vec![ws]);
     }
     let ids: Vec<WorkspaceId> = sqlx::query_scalar("SELECT app_my_workspace_ids(NULL::uuid)")
@@ -241,15 +226,21 @@ async fn by_reference(
 
 /// @ 입력 후보: 사람·항목·문서를 종류별로 찾는다. 볼 수 있는 것만 나온다.
 #[utoipa::path(get, path = "/api/reference-candidates", params(CandidateQuery),
-    responses((status = 200, body = [ReferenceCandidate]), (status = 404, body = ErrorBody)), tag = "references")]
+    responses((status = 200, body = [ReferenceCandidate]), (status = 404, body = ErrorBody),
+              (status = 400, body = ErrorBody)), tag = "references")]
 pub async fn candidates(
-    State(state): State<AppState>,
+    State(state): State<ReferencesState>,
     CurrentUser(user): CurrentUser,
     Query(query): Query<CandidateQuery>,
 ) -> Result<Json<Vec<ReferenceCandidate>>, AppError> {
     let q = query.q.trim();
-    if q.chars().count() > state.config.limits.max_title_chars {
-        return Err(AppError::BadRequest("query is too long".into()));
+    if q.chars().count() > state.max_title_chars {
+        return Err(AppError::invalid(
+            "q",
+            InvalidReason::TooLong,
+            u64::try_from(state.max_title_chars).ok(),
+            "query is too long",
+        ));
     }
     let mut tx = state.db.begin_as(user).await?;
     // `이름/질의`: 내가 속한 워크스페이스 중 이름이 그렇게 시작하는 곳에서 찾는다(D-18의 `@A/DEV-1`).
@@ -360,17 +351,22 @@ type ResolveRow = (
 );
 
 /// 참조 해석. 볼 수 없는 대상과 없는 대상은 같은 모양으로 돌려준다. 한 번의 질의로 처리한다.
-#[utoipa::path(post, path = "/api/references/resolve", request_body = ResolveReferences,
-    responses((status = 200, body = [ResolvedReference]), (status = 400, body = ErrorBody)), tag = "references")]
+#[utoipa::path(post,
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), path = "/api/references/resolve", request_body = ResolveReferences,
+    responses((status = 200, body = [ResolvedReference]), (status = 400, body = ErrorBody),
+              (status = 409, body = ErrorBody)), tag = "references")]
 pub async fn resolve(
-    State(state): State<AppState>,
+    State(state): State<ReferencesState>,
     CurrentUser(user): CurrentUser,
     Json(input): Json<ResolveReferences>,
 ) -> Result<Json<Vec<ResolvedReference>>, AppError> {
     if input.refs.len() > MAX_RESOLVE {
-        return Err(AppError::BadRequest(format!(
-            "at most {MAX_RESOLVE} references per request"
-        )));
+        return Err(AppError::invalid(
+            "refs",
+            InvalidReason::TooMany,
+            u64::try_from(MAX_RESOLVE).ok(),
+            format!("at most {MAX_RESOLVE} references per request"),
+        ));
     }
     let ids = |kind: ReferenceKind| -> Vec<Uuid> {
         input
@@ -429,135 +425,9 @@ pub async fn resolve(
     ))
 }
 
-type BacklinkRow = (
-    DocumentId,
-    Option<String>,
-    String,
-    Option<WorkspaceId>,
-    Option<ItemId>,
-);
-
-async fn backlinks_to(
-    tx: &mut UserTx,
-    kind: &str,
-    target: Uuid,
-) -> Result<Vec<Backlink>, AppError> {
-    // document_links와 documents 모두 RLS로 출발 문서를 볼 수 있는 것만 남는다.
-    let rows: Vec<BacklinkRow> = sqlx::query_as(
-        "SELECT d.id, app_document_reference(d.id), d.title, d.workspace_id,
-                CASE WHEN app_access('item', d.item_id) <> 'none' THEN d.item_id END
-         FROM document_links l JOIN documents d ON d.id = l.document_id
-         WHERE l.target_kind = $1 AND l.target_id = $2
-         ORDER BY d.updated_at DESC",
-    )
-    .bind(kind)
-    .bind(target)
-    .fetch_all(tx.conn())
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(|(id, reference, title, workspace_id, item_id)| Backlink {
-            id,
-            reference,
-            title,
-            workspace_id,
-            item_id,
-        })
-        .collect())
-}
-
-/// 이 문서를 가리키는 문서. 대상 문서를 볼 수 없으면 404.
-#[utoipa::path(get, path = "/api/documents/{document_id}/backlinks",
-    params(("document_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
-pub async fn document_backlinks(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<DocumentId>,
-) -> Result<Json<Vec<Backlink>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    access(&mut tx, id).await?.ok_or(AppError::NotFound)?;
-    let links = backlinks_to(&mut tx, "document", id.0).await?;
-    tx.commit().await?;
-    Ok(Json(links))
-}
-
-/// 이 업무를 가리키는 문서. 업무를 볼 수 없으면 404.
-#[utoipa::path(get, path = "/api/tasks/{task_id}/backlinks",
-    params(("task_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
-pub async fn task_backlinks(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<Uuid>,
-) -> Result<Json<Vec<Backlink>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_access('task', $1) <> 'none'")
-        .bind(id)
-        .fetch_one(tx.conn())
-        .await?;
-    if !visible {
-        return Err(AppError::NotFound);
-    }
-    let links = backlinks_to(&mut tx, "task", id).await?;
-    tx.commit().await?;
-    Ok(Json(links))
-}
-
-/// 이 항목을 가리키는 문서. 항목을 볼 수 없으면 404.
-#[utoipa::path(get, path = "/api/items/{item_id}/backlinks",
-    params(("item_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = [Backlink]), (status = 404, body = ErrorBody)), tag = "references")]
-pub async fn item_backlinks(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<ItemId>,
-) -> Result<Json<Vec<Backlink>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let visible: bool = sqlx::query_scalar("SELECT app_access('item', $1) <> 'none'")
-        .bind(id)
-        .fetch_one(tx.conn())
-        .await?;
-    if !visible {
-        return Err(AppError::NotFound);
-    }
-    let links = backlinks_to(&mut tx, "item", id.0).await?;
-    tx.commit().await?;
-    Ok(Json(links))
-}
-
-/// 공개 보기용: 참조 노드를 자리표시 글자 노드로 바꾼다(내부 id와 대상 존재를 익명 방문자에게 숨긴다).
-/// 저장된 본문은 serde_json의 중첩 한도 안에서 읽혔으므로 재귀 깊이가 제한된다.
-pub fn strip_references(node: &mut serde_json::Value) {
-    use serde_json::Value;
-    match node {
-        Value::Array(items) => items.iter_mut().for_each(strip_references),
-        Value::Object(map) => {
-            if map.get("type").and_then(Value::as_str) == Some("reference") {
-                *node = serde_json::json!({ "type": "text", "text": "[참조]" });
-                return;
-            }
-            map.values_mut().for_each(strip_references);
-        }
-        _ => {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn public_bodies_drop_reference_ids() {
-        let id = "0198f1f2-0000-7000-8000-000000000001";
-        let mut body = serde_json::json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [
-            { "type": "text", "text": "참고 " },
-            { "type": "reference", "attrs": { "kind": "item", "id": id } }
-        ] }] });
-        strip_references(&mut body);
-        assert!(!body.to_string().contains(id));
-        assert_eq!(body["content"][0]["content"][1]["text"], "[참조]");
-    }
 
     #[test]
     fn reference_queries_are_parsed_case_insensitively() {

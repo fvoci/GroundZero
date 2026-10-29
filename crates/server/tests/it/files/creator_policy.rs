@@ -24,7 +24,7 @@ async fn setup() -> (World, Router, TestUser, TestUser, Uuid) {
     let doc: Uuid = made.json["id"].as_str().unwrap().parse().unwrap();
     let settings = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc}/settings"),
         Some(&w.owner),
         Some(json!({"visibility":"workspace", "allow_copy":false})),
@@ -132,7 +132,7 @@ async fn a_document_creator_can_export_with_copy_disabled_but_cannot_change_the_
     for user in [&author, &peer] {
         let refused = send(
             &app,
-            Method::PUT,
+            Method::PATCH,
             &format!("/api/documents/{doc}/settings"),
             Some(user),
             Some(json!({"allow_copy":true})),

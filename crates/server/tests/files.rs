@@ -263,7 +263,7 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
     );
     let allowed = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": true })),

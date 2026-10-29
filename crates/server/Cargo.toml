@@ -29,6 +29,8 @@ fvoci-storage.workspace = true
 fvoci-system.workspace = true
 fvoci-time.workspace = true
 fvoci-work.workspace = true
+fvoci-documents.workspace = true
+fvoci-references.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 hex = "0.4"
 openidconnect = { version = "4", default-features = false, features = ["reqwest", "native-tls"] }

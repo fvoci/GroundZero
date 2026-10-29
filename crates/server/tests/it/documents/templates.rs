@@ -36,7 +36,7 @@ async fn documents_start_from_readable_templates() {
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
     let open = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{template_id}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": false })),
@@ -121,7 +121,7 @@ async fn documents_start_from_readable_templates() {
     );
     send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{template_id}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "private", "allow_copy": false })),

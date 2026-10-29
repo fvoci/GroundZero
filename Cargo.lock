@@ -1178,6 +1178,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-documents"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-files"
 version = "0.1.0"
 dependencies = [
@@ -1212,6 +1230,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvoci-references"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "fvoci-server"
 version = "0.1.0"
 dependencies = [
@@ -1225,8 +1258,10 @@ dependencies = [
  "fvoci-calendar",
  "fvoci-core",
  "fvoci-db",
+ "fvoci-documents",
  "fvoci-files",
  "fvoci-http",
+ "fvoci-references",
  "fvoci-storage",
  "fvoci-system",
  "fvoci-time",
