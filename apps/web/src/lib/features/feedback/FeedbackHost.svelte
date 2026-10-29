@@ -5,6 +5,7 @@
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
+  import { publishSessionCheck, readSessionGeneration } from '$lib/features/auth/session-signal';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -115,6 +116,7 @@
         for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
           if (!canCheck()) return;
           const generation = accountSafety.generation;
+          const sessionGeneration = readSessionGeneration();
           try {
             const now = await api.me();
             if (!canCheck()) return;
@@ -122,6 +124,7 @@
               if (refresh()) continue;
               return;
             }
+            void publishSessionCheck(sessionGeneration);
             if (now === undefined) {
               reportSessionExpired();
               hideSession('reauth');
