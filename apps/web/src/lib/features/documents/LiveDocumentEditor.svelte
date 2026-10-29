@@ -455,7 +455,7 @@
       titleBase = result.document.revision;
       titleConflict = undefined;
       titleRequest = undefined;
-      if (!hasPending()) unsaved = undefined;
+      if (unsaved === 'lost' && !hasPending()) unsaved = undefined;
       onsaved?.(result.document);
     } catch (e: unknown) {
       titleMessage = errorText(e, m.documents_title_save_failed());
