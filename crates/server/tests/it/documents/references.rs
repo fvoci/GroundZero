@@ -203,7 +203,7 @@ async fn backlinks_follow_access_to_the_source_document() {
     // 출발 문서가 비공개가 되면 역링크에서도 사라진다.
     let r = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{}/settings", source["id"].as_str().unwrap()),
         Some(&admin),
         Some(json!({ "visibility": "private", "allow_copy": false })),
@@ -314,7 +314,7 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
     // 문서가 비공개가 되면(접근 철회) 알림 목록에서 사라진다.
     send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("{doc_uri}/settings"),
         Some(&admin),
         Some(json!({ "visibility": "private", "allow_copy": false })),

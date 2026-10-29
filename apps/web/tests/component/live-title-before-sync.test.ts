@@ -11,8 +11,7 @@ import { me } from '$lib/me.svelte';
 import { scopedKey } from '$lib/storage';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
-// CodeRabbit(#60 8e42036): 첫 동기화 전이라 편집기가 본문을 넘기지 않았을 때 제목만 고치고 계정이 바뀌어도(4412) 그
-// 제목을 앞 계정의 초안으로 남기고 다시 읽는다(남기지 못한다고 멈추거나 떠나기를 막지 않는다).
+// D-27 (#154): 첫 동기화 전 제목만 고친 경우에도 이탈은 경고하되 영구 초안에 넣지 않는다.
 
 const opened: LiveSession[] = [];
 
@@ -70,7 +69,7 @@ const doc: DocumentView = {
 };
 
 describe('a title edited before the first live sync', () => {
-  it('is kept for the first account on a 4412 and on leaving', async () => {
+  it('stays in memory on a 4412 and warns on leaving without creating a draft', async () => {
     await setLocale('ko', { reload: false });
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: false,
@@ -87,7 +86,7 @@ describe('a title edited before the first live sync', () => {
     if (!(title instanceof HTMLInputElement)) throw new Error('live-title');
     await fireEvent.input(title, { target: { value: '동기화 전에 고친 제목' } });
 
-    // 창을 닫으려 하면 남기고(초안), 반영되지 않은 편집이 있으니 다른 폼처럼 경고한다(D-27 개정 2026-10-27, #141 R8 A).
+    // 짧은 제목은 화면에 두고 떠날 때 경고한다.
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
@@ -97,10 +96,11 @@ describe('a title edited before the first live sync', () => {
       new CloseEvent('close', { code: 4412 }),
       last.provider,
     ]);
-    expect(reload).toHaveBeenCalledOnce();
+    expect(reload).not.toHaveBeenCalled();
+    expect(title.value).toBe('동기화 전에 고친 제목');
     const kept = Object.keys(window.localStorage)
       .filter((k) => k.startsWith(scopedKey('draft:d1', 'user-a', undefined)))
       .map((k) => window.localStorage.getItem(k) ?? '');
-    expect(kept.some((v) => v.includes('동기화 전에 고친 제목'))).toBe(true);
+    expect(kept).toEqual([]);
   });
 });

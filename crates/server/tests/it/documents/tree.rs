@@ -200,7 +200,7 @@ async fn parents_must_be_in_the_same_place_and_hidden_parents_are_not_revealed()
     let private_parent = create_doc(&app, &writer, &ws, "비공개 부모").await;
     send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!(
             "/api/documents/{}/settings",
             private_parent["id"].as_str().unwrap()
@@ -257,10 +257,13 @@ async fn moving_a_parent_elsewhere_leaves_its_children_on_the_old_parent() {
     let section = child(&app, &admin, &ws, &top, "구역").await;
     child(&app, &admin, &ws, &section, "구역 안").await;
 
-    let uri = format!("/api/documents/{}/move", section["id"].as_str().unwrap());
+    let uri = format!(
+        "/api/documents/{}/placement",
+        section["id"].as_str().unwrap()
+    );
     let preview = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&admin),
         Some(json!({ "target_workspace_id": dst })),
@@ -271,7 +274,7 @@ async fn moving_a_parent_elsewhere_leaves_its_children_on_the_old_parent() {
     let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&admin),
         Some(json!({ "target_workspace_id": dst, "acknowledged": ack })),
@@ -395,10 +398,13 @@ async fn retries_precision_and_left_behind_order() {
     let b = create_doc(&app, &admin, &ws, "나").await;
     child(&app, &admin, &ws, &section, "첫째").await;
     child(&app, &admin, &ws, &section, "둘째").await;
-    let move_uri = format!("/api/documents/{}/move", section["id"].as_str().unwrap());
+    let move_uri = format!(
+        "/api/documents/{}/placement",
+        section["id"].as_str().unwrap()
+    );
     let preview = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &move_uri,
         Some(&admin),
         Some(json!({ "target_workspace_id": dst })),
@@ -408,7 +414,7 @@ async fn retries_precision_and_left_behind_order() {
     let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &move_uri,
         Some(&admin),
         Some(json!({ "target_workspace_id": dst, "acknowledged": ack })),
@@ -442,10 +448,13 @@ async fn concurrent_moves_creates_and_reparents_do_not_deadlock() {
         let parent = create_doc(&app, &admin, &ws, &format!("부모 {i}")).await;
         let kid = child(&app, &admin, &ws, &parent, &format!("자식 {i}")).await;
         let other = create_doc(&app, &admin, &ws, &format!("다른 {i}")).await;
-        let move_uri = format!("/api/documents/{}/move", parent["id"].as_str().unwrap());
+        let move_uri = format!(
+            "/api/documents/{}/placement",
+            parent["id"].as_str().unwrap()
+        );
         let preview = send(
             &app,
-            Method::POST,
+            Method::PUT,
             &move_uri,
             Some(&admin),
             Some(json!({ "target_workspace_id": dst })),
@@ -456,7 +465,7 @@ async fn concurrent_moves_creates_and_reparents_do_not_deadlock() {
         let (moved, reparented, created) = tokio::join!(
             send(
                 &app,
-                Method::POST,
+                Method::PUT,
                 &move_uri,
                 Some(&admin),
                 Some(json!({ "target_workspace_id": dst, "acknowledged": ack }))

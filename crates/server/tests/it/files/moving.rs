@@ -39,10 +39,10 @@ async fn moving_a_document_takes_its_attachments_along() {
     );
     let early_batch = early_trashed.json["batch_id"].as_str().unwrap().to_owned();
 
-    let uri = format!("/api/documents/{doc_id}/move");
+    let uri = format!("/api/documents/{doc_id}/placement");
     let preview = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice),
         Some(json!({ "target_workspace_id": dst })),
@@ -53,7 +53,7 @@ async fn moving_a_document_takes_its_attachments_along() {
     let ack = json!({ "changes": preview.json["changes"] });
     let moved = send(
         &app,
-        Method::POST,
+        Method::PUT,
         &uri,
         Some(&alice),
         Some(json!({ "target_workspace_id": dst, "acknowledged": ack })),
@@ -89,16 +89,16 @@ async fn moving_a_document_takes_its_attachments_along() {
             send(
                 &app,
                 Method::GET,
-                &format!("/api/workspaces/{ws}/trash"),
+                &format!("/api/trash-batches?workspace_id={ws}"),
                 Some(&user),
                 None,
             )
             .await
-            .json["entries"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["id"] == batch.as_str())
+            .json
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["id"] == batch.as_str())
         }
     };
     for batch in [batch, early_batch] {
@@ -107,7 +107,7 @@ async fn moving_a_document_takes_its_attachments_along() {
         let restore = send(
             &app,
             Method::POST,
-            &format!("/api/trash/{batch}/restore"),
+            &format!("/api/trash-batches/{batch}/restore"),
             Some(&src_admin),
             None,
         )
@@ -116,7 +116,7 @@ async fn moving_a_document_takes_its_attachments_along() {
         let purge = send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&src_admin),
             None,
         )

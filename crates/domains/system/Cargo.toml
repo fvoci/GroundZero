@@ -1,0 +1,27 @@
+[package]
+name = "fvoci-system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+bytes = "1"
+fvoci-core.workspace = true
+fvoci-db.workspace = true
+fvoci-http.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+# 반출은 Stored ZIP만 쓰므로 압축 backend를 선택하지 않는다.
+zip = { version = "9.0.4", default-features = false }
+
+[lints]
+workspace = true

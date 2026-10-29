@@ -1905,7 +1905,7 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{id}/move/preview"),
+        &format!("/api/documents/{id}/move-plan"),
         Some(&admin),
         Some(target),
     )
@@ -1913,8 +1913,8 @@ async fn a_moved_room_follows_its_document_to_the_new_workspace() {
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
     let moved = send(
         &app,
-        Method::POST,
-        &format!("/api/documents/{id}/move"),
+        Method::PUT,
+        &format!("/api/documents/{id}/placement"),
         Some(&admin),
         Some(json!({ "target_workspace_id": to, "target_item_id": null,
                      "acknowledged": { "changes": preview.json["changes"] } })),
@@ -2564,7 +2564,7 @@ async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edi
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{id}/move/preview"),
+        &format!("/api/documents/{id}/move-plan"),
         Some(&admin),
         Some(target),
     )
@@ -2572,8 +2572,8 @@ async fn moving_a_live_document_into_a_realtime_off_workspace_keeps_the_live_edi
     assert_eq!(preview.status, StatusCode::OK, "{:?}", preview.json);
     let moved = send(
         &app,
-        Method::POST,
-        &format!("/api/documents/{id}/move"),
+        Method::PUT,
+        &format!("/api/documents/{id}/placement"),
         Some(&admin),
         Some(json!({ "target_workspace_id": to, "target_item_id": null,
                      "acknowledged": { "changes": preview.json["changes"] } })),
@@ -2649,7 +2649,7 @@ async fn move_to(app: &Router, user: &TestUser, id: &str, to: &str) -> common::R
     let preview = send(
         app,
         Method::POST,
-        &format!("/api/documents/{id}/move/preview"),
+        &format!("/api/documents/{id}/move-plan"),
         Some(user),
         Some(target),
     )
@@ -2658,8 +2658,8 @@ async fn move_to(app: &Router, user: &TestUser, id: &str, to: &str) -> common::R
     let ack = json!({ "changes": preview.json["changes"] });
     send(
         app,
-        Method::POST,
-        &format!("/api/documents/{id}/move"),
+        Method::PUT,
+        &format!("/api/documents/{id}/placement"),
         Some(user),
         Some(json!({ "target_workspace_id": to, "target_item_id": null, "acknowledged": ack })),
     )
@@ -2777,8 +2777,8 @@ async fn a_move_without_permission_leaves_the_room_alone() {
     // 미리보기는 권한이 없어 거절되므로, 형식만 맞는 확인 값으로 바로 옮기기를 보낸다.
     let refused = send(
         &app,
-        Method::POST,
-        &format!("/api/documents/{id}/move"),
+        Method::PUT,
+        &format!("/api/documents/{id}/placement"),
         Some(&writer),
         Some(
             json!({ "target_workspace_id": elsewhere, "target_item_id": null,
@@ -4136,8 +4136,8 @@ async fn edits_held_by_a_move_that_does_not_happen_are_accepted() {
             // 미리보기와 다른 확인 값: 잠근 뒤 다시 계산한 미리보기와 달라 옮기지 않는다.
             send(
                 &app,
-                Method::POST,
-                &format!("/api/documents/{id}/move"),
+                Method::PUT,
+                &format!("/api/documents/{id}/placement"),
                 Some(&admin),
                 Some(json!({ "target_workspace_id": to, "target_item_id": null,
                              "acknowledged": { "changes": [{ "change": "gain", "user_id": uuid::Uuid::now_v7(),
@@ -4216,7 +4216,7 @@ async fn a_move_dropped_before_the_room_handles_it_changes_nothing() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{id}/move/preview"),
+        &format!("/api/documents/{id}/move-plan"),
         Some(&admin),
         Some(json!({ "target_workspace_id": to, "target_item_id": null })),
     )

@@ -34,7 +34,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     let r = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{batch}/restore"),
+        &format!("/api/trash-batches/{batch}/restore"),
         Some(&admin),
         None,
     )
@@ -89,7 +89,7 @@ async fn trashed_content_leaves_the_index_and_returns_on_restore() {
     let r = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{item_batch}/restore"),
+        &format!("/api/trash-batches/{item_batch}/restore"),
         Some(&admin),
         None,
     )
