@@ -1,9 +1,9 @@
 import type { Me } from '@fvoci/api-client';
-import { cleanup, render, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
-import { accountSafety } from '$lib/features/feedback/feedback.svelte';
+import { accountSafety, auth, hideSession } from '$lib/features/feedback/feedback.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { me as currentUser } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -51,7 +51,73 @@ describe('account change detection events', () => {
     vi.unstubAllGlobals();
     currentUser.userId = '';
     accountSafety.switching = false;
+    auth.expired = false;
+    localStorage.removeItem('fvoci:auth-session');
     visibility('visible');
+  });
+
+  it.each(['anonymous', 'other-user'])(
+    'uses its own %s response when a newer same-user marker rejects publication',
+    async (kind) => {
+      const key = 'fvoci:auth-session';
+      localStorage.setItem(key, JSON.stringify({ state: 'settled', userId: 'u1', generation: 10 }));
+      let finish!: (value: Me | undefined) => void;
+      const read = vi.spyOn(api, 'me').mockReturnValue(
+        new Promise<Me | undefined>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const reload = vi.fn<() => void>();
+      render(FeedbackHost, { reload, syncSessionSignal: () => false });
+      window.dispatchEvent(new Event('focus'));
+      const marker = JSON.stringify({ state: 'settled', userId: 'u1', generation: 11 });
+      localStorage.setItem(key, marker);
+      finish(kind === 'anonymous' ? undefined : other);
+      if (kind === 'anonymous') await screen.findByRole('link', { name: '새 탭에서 로그인' });
+      else
+        await waitFor(() => {
+          expect(reload).toHaveBeenCalledOnce();
+        });
+      expect(accountSafety.switching).toBe(true);
+      expect(read).toHaveBeenCalledOnce();
+      expect(localStorage.getItem(key)).toBe(marker);
+    },
+  );
+
+  it('rechecks in the new safety generation after the real request discards an older response', async () => {
+    let finish!: (response: Response) => void;
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+      )
+      .mockResolvedValue(new Response(JSON.stringify(other)));
+    const read = vi.spyOn(api, 'me');
+    const reload = vi.fn<() => void>();
+    render(FeedbackHost, { reload });
+    window.dispatchEvent(new Event('focus'));
+    hideSession('reauth');
+    finish(new Response(JSON.stringify({ ...other, id: 'u1' })));
+    await waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops automatic safety-generation rechecks after three requests and stays hidden', async () => {
+    const read = vi.spyOn(api, 'me').mockImplementation(() => {
+      accountSafety.generation += 1;
+      return Promise.resolve({ ...other, id: 'u1' });
+    });
+    render(FeedbackHost, { reload: vi.fn() });
+    window.dispatchEvent(new Event('focus'));
+    await screen.findByRole('alert');
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(accountSafety.switching).toBe(true);
+    expect(accountSafety.error).not.toBe('');
   });
 
   it('checks once for focus and visibilitychange arriving together, then switches and reloads once', async () => {

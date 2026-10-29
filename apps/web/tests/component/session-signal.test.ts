@@ -88,3 +88,31 @@ it('makes final anonymity newer than both attempts and rejects their old respons
   expect(await stale).toBe(false);
   expect(localStorage.getItem(key)).toBe(final);
 });
+
+it.each(['missing', 'rejected', 'throws'])(
+  'skips conditional writes when Web Locks is %s but still publishes logout hiding signals',
+  async (mode) => {
+    if (mode === 'missing') Reflect.deleteProperty(navigator, 'locks');
+    else
+      Object.defineProperty(navigator, 'locks', {
+        configurable: true,
+        value: {
+          request: () => {
+            if (mode === 'throws') throw new Error('locks denied');
+            return Promise.reject(new Error('locks denied'));
+          },
+        },
+      });
+    expect.soft(await publishSessionUser('user-a', readSessionGeneration())).toBe(false);
+    expect.soft(await publishSessionUser(null, readSessionGeneration())).toBe(false);
+    expect.soft(localStorage.getItem(key)).toBeNull();
+    await publishLogoutPending('user-a', 'attempt-a');
+    const pending = localStorage.getItem(key);
+    expect(pending).toContain('logout-pending');
+    await publishLogoutResult('user-a', 'attempt-a');
+    expect.soft(localStorage.getItem(key)).toBe(pending);
+    await publishLogoutResult(null, 'attempt-a');
+    const final: unknown = JSON.parse(localStorage.getItem(key) ?? '{}');
+    expect(final).toMatchObject({ state: 'settled', userId: null });
+  },
+);

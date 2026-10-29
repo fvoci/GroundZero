@@ -2,6 +2,8 @@
 const KEY = 'fvoci:auth-session';
 // 끝을 알리지 못하고 닫힌 탭이 다른 탭을 영구히 가리지 않게 한다(SR-221-4).
 const LOGOUT_PENDING_MS = 30_000;
+/** 안전 세대 변경 뒤 무한 확인을 피한다. 첫 요청과 재확인 두 번이다(SR-221-8). */
+export const SESSION_CHECK_MAX_ATTEMPTS = 3;
 
 type SessionSignal =
   | { state: 'settled'; userId: string | null }
@@ -11,11 +13,23 @@ type StoredSignal = SessionSignal & { generation: number };
 let lastGeneration = 0;
 
 /** 지원 브라우저에서는 판독·비교·갱신을 탭 사이에서 직렬화한다. 네트워크는 잠금 밖이다. */
-async function updateSignal<T>(update: () => T): Promise<T> {
-  if (typeof navigator !== 'undefined' && 'locks' in navigator) {
-    return navigator.locks.request(KEY, update).catch(() => update());
+async function updateSignal<T>(update: () => T): Promise<T | undefined> {
+  try {
+    if (typeof navigator !== 'undefined' && 'locks' in navigator) {
+      return await navigator.locks.request(KEY, update);
+    }
+  } catch {
+    // 비교와 쓰기를 직렬화할 수 없으면 조건부 갱신을 포기한다(SR-221-9).
   }
-  return update();
+  return undefined;
+}
+
+async function publishHidingSignal(signal: SessionSignal): Promise<void> {
+  const published = await updateSignal(() => {
+    publish(signal);
+    return true;
+  });
+  if (published !== true) publish(signal);
 }
 
 function publish(signal: SessionSignal): void {
@@ -36,26 +50,29 @@ export async function publishSessionUser(
   observedGeneration: number,
 ): Promise<boolean> {
   // 로그아웃 전의 /api/me는 최종 상태가 아니다. 셸 시작·창 복귀·복원 모두 같은 경계를 쓴다.
-  return updateSignal(() => {
-    if (readSessionGeneration() !== observedGeneration || readLogoutPendingUntil() !== undefined)
-      return false;
-    publish({ state: 'settled', userId });
-    return true;
-  });
+  return (
+    (await updateSignal(() => {
+      if (readSessionGeneration() !== observedGeneration || readLogoutPendingUntil() !== undefined)
+        return false;
+      publish({ state: 'settled', userId });
+      return true;
+    })) ?? false
+  );
 }
 
 export async function publishLogoutPending(userId: string, attemptId: string): Promise<void> {
-  await updateSignal(() => {
-    publish({ state: 'logout-pending', userId, startedAt: Date.now(), attemptId });
-  });
+  await publishHidingSignal({ state: 'logout-pending', userId, startedAt: Date.now(), attemptId });
 }
 
 /** 요청을 끝낸 탭만 진행 표식을 최종 상태로 바꾼다. */
 export async function publishLogoutResult(userId: string | null, attemptId: string): Promise<void> {
+  if (userId === null) {
+    await publishHidingSignal({ state: 'settled', userId });
+    return;
+  }
   await updateSignal(() => {
     const current = readSignal();
-    if (userId !== null && (current?.state !== 'logout-pending' || current.attemptId !== attemptId))
-      return;
+    if (current?.state !== 'logout-pending' || current.attemptId !== attemptId) return;
     publish({ state: 'settled', userId });
   });
 }

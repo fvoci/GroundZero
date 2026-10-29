@@ -14,6 +14,7 @@
     readLogoutPendingUntil,
     readSessionGeneration,
     readSessionUser,
+    SESSION_CHECK_MAX_ATTEMPTS,
   } from '$lib/features/auth/session-signal';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
@@ -102,17 +103,36 @@
     clearTimeout(logoutWait);
   });
 
-  async function load(verified?: Me): Promise<boolean> {
+  async function load(verified?: Me, attempt = 0): Promise<boolean> {
     const mine = ++sessionSequence;
     const generation = router.route.name === 'public' ? 0 : readSessionGeneration();
+    const safetyGeneration = accountSafety.generation;
+    let acceptedMarker = generation;
+    const retryLoad = async (): Promise<boolean> => {
+      if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
+      return load(undefined, attempt + 1);
+    };
     try {
       const me = verified ?? (await api.me());
       if (mine !== sessionSequence) return false;
       if (verified === undefined && router.route.name !== 'public') {
-        const accepted = await publishSessionUser(me?.id ?? null, generation);
+        if (
+          safetyGeneration !== accountSafety.generation ||
+          (me !== undefined &&
+            generation !== readSessionGeneration() &&
+            readSessionUser() !== me.id)
+        )
+          return await retryLoad();
+        await publishSessionUser(me?.id ?? null, generation);
         if (mine !== sessionSequence) return false;
-        // 늦은 첫 응답도 최종 익명 표식을 덮지 못한다. 새 세대는 새 요청으로 확인한다.
-        if (!accepted && readLogoutPendingUntil() === undefined) return await load();
+        if (
+          safetyGeneration !== accountSafety.generation ||
+          (me !== undefined &&
+            generation !== readSessionGeneration() &&
+            readSessionUser() !== me.id)
+        )
+          return await retryLoad();
+        acceptedMarker = readSessionGeneration();
       }
       if (me === undefined) {
         const info = await api.authInfo();
@@ -143,10 +163,22 @@
       if (mine !== sessionSequence) return false;
       org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };
-      syncSessionSignal();
+      if (
+        verified === undefined &&
+        router.route.name !== 'public' &&
+        (readLogoutPendingUntil() !== undefined || acceptedMarker !== readSessionGeneration())
+      )
+        syncSessionSignal();
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence) return false;
+      if (verified === undefined && safetyGeneration !== accountSafety.generation) {
+        try {
+          return await retryLoad();
+        } catch {
+          /* 아래 안전한 시작 실패 화면을 쓴다. */
+        }
+      }
       // 브라우저·서버의 원문 대신 번역된 문구(D-81). 서버에 닿지 않은 경우는 다시 시도하면 된다고 알린다.
       const network =
         e instanceof NetworkError || (e instanceof ApiError && e.code === 'unreachable');
@@ -342,7 +374,7 @@
     hideSession('restore');
   }
 
-  async function restoreSession(): Promise<void> {
+  async function restoreSession(attempt = 0): Promise<void> {
     if (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
       return;
     const mine = ++restoreSequence;
@@ -351,20 +383,52 @@
     hideSession('restore');
     const pendingAtStart = readLogoutPendingUntil() !== undefined;
     const generation = readSessionGeneration();
+    const safetyGeneration = accountSafety.generation;
+    const active = (): boolean =>
+      mine === restoreSequence &&
+      sessionHidden &&
+      (accountSafety.reason === 'restore' || accountSafety.reason === 'reauth');
+    const recheck = (): void => {
+      preservePendingInput = true;
+      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void restoreSession(attempt + 1);
+      else {
+        accountSafety.switching = true;
+        accountSafety.error = m.feedback_restore_failed();
+      }
+    };
     try {
       const now = await api.me();
-      if (mine !== restoreSequence || !restoring()) return;
-      if (waitForLogout()) return;
-      if (pendingAtStart || generation !== readSessionGeneration()) {
-        signaledUser = undefined;
-        void restoreSession();
+      if (!active()) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
         return;
       }
-      if (!(await publishSessionUser(now?.id ?? null, generation))) {
-        if (!waitForLogout()) void restoreSession();
+      const pending = waitForLogout();
+      if (now?.id === restoringUserId && pending) return;
+      if (
+        now?.id === restoringUserId &&
+        (pendingAtStart || generation !== readSessionGeneration()) &&
+        readSessionUser() !== now.id
+      ) {
+        recheck();
         return;
       }
-      if (mine !== restoreSequence || !restoring()) return;
+      await publishSessionUser(now?.id ?? null, generation);
+      if (!active()) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      if (
+        now?.id === restoringUserId &&
+        generation !== readSessionGeneration() &&
+        readSessionUser() !== undefined &&
+        readSessionUser() !== now.id
+      ) {
+        recheck();
+        return;
+      }
+      const acceptedMarker = readSessionGeneration();
       preservePendingInput = false;
       signaledUser = undefined;
       if (now === undefined) {
@@ -382,7 +446,7 @@
         const loaded = await load(now);
         if (mine !== restoreSequence || !restoring()) return;
         if (loaded) {
-          if (syncSessionSignal()) return;
+          if (acceptedMarker !== readSessionGeneration() && syncSessionSignal()) return;
           restoringUserId = undefined;
           accountSafety.restoring = false;
         } else {
@@ -391,7 +455,11 @@
         }
       }
     } catch (error: unknown) {
-      if (mine !== restoreSequence || !restoring()) return;
+      if (!active()) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
       // 진행 표식을 보고 가린 입력은 표식 소실 뒤 확인 실패에도 남긴다(SR-221-7).
       if (!preservePendingInput) flushSync(clearSession);
       accountSafety.switching = true;
@@ -410,35 +478,59 @@
 
   /** 살아 있던 화면의 짧은 값·저장 실패 입력은 재마운트하지 않는다(D-27/D-96/#88, 코디네이터 SR 정정). */
   function verifyingSignal(mine: number): boolean {
-    return mine === restoreSequence && accountSafety.reason === 'reauth';
+    return (
+      mine === restoreSequence &&
+      sessionHidden &&
+      (accountSafety.reason === 'reauth' || accountSafety.reason === 'restore')
+    );
   }
 
-  async function verifySessionSignal(): Promise<void> {
-    if (sessionHidden && accountSafety.reason !== 'reauth') return;
+  async function verifySessionSignal(attempt = 0): Promise<void> {
+    if (sessionHidden && accountSafety.reason !== 'reauth' && accountSafety.reason !== 'restore')
+      return;
     const expected = currentUser.userId;
     const mine = ++restoreSequence;
     checkingSignal = true;
     hideSession('reauth');
     const pendingAtStart = readLogoutPendingUntil() !== undefined;
     const generation = readSessionGeneration();
+    const safetyGeneration = accountSafety.generation;
+    const recheck = (): void => {
+      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void verifySessionSignal(attempt + 1);
+      else accountSafety.error = m.feedback_restore_failed();
+    };
     try {
       const now = await api.me();
       if (!verifyingSignal(mine)) return;
-      if (waitForLogout()) return;
-      if (pendingAtStart || generation !== readSessionGeneration()) {
-        signaledUser = undefined;
-        void verifySessionSignal();
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      const pending = waitForLogout();
+      if (now?.id === expected && pending) return;
+      if (
+        now?.id === expected &&
+        (pendingAtStart || generation !== readSessionGeneration()) &&
+        readSessionUser() !== now.id
+      ) {
+        recheck();
         return;
       }
       signaledUser = now?.id ?? null;
-      if (!(await publishSessionUser(signaledUser, generation))) {
-        if (!waitForLogout()) void verifySessionSignal();
+      await publishSessionUser(signaledUser, generation);
+      if (!verifyingSignal(mine)) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
         return;
       }
-      if (!verifyingSignal(mine)) return;
       // 잠금을 기다리는 동안 들어온 최종 표식도 가림을 풀기 전에 확인한다.
-      if (readSessionUser() !== undefined && readSessionUser() !== signaledUser) {
-        syncSessionSignal();
+      if (
+        now?.id === expected &&
+        generation !== readSessionGeneration() &&
+        readSessionUser() !== undefined &&
+        readSessionUser() !== now.id
+      ) {
+        recheck();
         return;
       }
       preservePendingInput = false;
@@ -452,7 +544,11 @@
         accountSafety.restoring = false;
       }
     } catch (error: unknown) {
-      if (mine === restoreSequence && accountSafety.reason === 'reauth') {
+      if (verifyingSignal(mine)) {
+        if (safetyGeneration !== accountSafety.generation) {
+          recheck();
+          return;
+        }
         accountSafety.error = errorText(error, m.feedback_restore_failed());
       }
     } finally {

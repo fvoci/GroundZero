@@ -3,7 +3,12 @@
   // 조작부와 가상 키보드에 가리지 않게 한다. 토스트는 닫기 단추가 있고 Alt+T로 닿는다(svelte-sonner). 배너는 화면
   // 낭독기에 알린다.
   import { api } from '$lib/api/client';
-  import { publishSessionUser, readSessionGeneration } from '$lib/features/auth/session-signal';
+  import { errorText } from '$lib/api/errors';
+  import {
+    publishSessionUser,
+    readSessionGeneration,
+    SESSION_CHECK_MAX_ATTEMPTS,
+  } from '$lib/features/auth/session-signal';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -92,37 +97,73 @@
       const signedIn = currentUser.userId;
       if (signedIn === '' || (sessionHidden && accountSafety.reason !== 'reauth') || checking)
         return;
-      const generation = accountSafety.generation;
-      const sessionGeneration = readSessionGeneration();
-      const stillCurrent = (): boolean =>
-        active && generation === accountSafety.generation && currentUser.userId === signedIn;
+      const canCheck = (): boolean =>
+        active &&
+        currentUser.userId === signedIn &&
+        (!(accountSafety.switching || accountSafety.restoring) ||
+          accountSafety.reason === 'reauth' ||
+          accountSafety.reason === 'restore');
+      const refresh = (): boolean => {
+        if (!canCheck() || syncSessionSignal?.()) return false;
+        hideSession('reauth');
+        return true;
+      };
       checking = true;
-      void api
-        .me()
-        .then(async (now) => {
-          if (!stillCurrent()) return;
-          // storage 이벤트 배달 전에 응답이 와도 진행 중인 로그아웃을 먼저 가린다.
-          if (syncSessionSignal?.()) return;
-          if (!(await publishSessionUser(now?.id ?? null, sessionGeneration))) {
-            syncSessionSignal?.();
+      const verify = async (): Promise<void> => {
+        for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
+          if (!canCheck()) return;
+          const generation = accountSafety.generation;
+          const sessionGeneration = readSessionGeneration();
+          try {
+            const now = await api.me();
+            if (!canCheck()) return;
+            if (generation !== accountSafety.generation) {
+              if (refresh()) continue;
+              return;
+            }
+            // 자기 응답으로 먼저 가린다. 표식 게시 거절은 화면 결정을 취소하지 않는다.
+            if (now === undefined) {
+              reportSessionExpired();
+              hideSession('reauth');
+            } else if (now.id !== signedIn) hideSession('reauth');
+            else if (syncSessionSignal?.()) return;
+            const acceptedGeneration = accountSafety.generation;
+            await publishSessionUser(now?.id ?? null, sessionGeneration);
+            if (!canCheck()) return;
+            if (acceptedGeneration !== accountSafety.generation) {
+              if (refresh()) continue;
+              return;
+            }
+            if (now === undefined) return;
+            if (now.id !== signedIn) switchAccount();
+            else {
+              if (syncSessionSignal?.()) return;
+              if (accountSafety.reason === 'reauth') {
+                accountSafety.switching = false;
+                accountSafety.restoring = false;
+                auth.expired = false;
+              }
+            }
+            return;
+          } catch (error: unknown) {
+            if (!canCheck()) return;
+            if (generation !== accountSafety.generation) {
+              if (refresh()) continue;
+              return;
+            }
+            if (accountSafety.switching || accountSafety.restoring)
+              accountSafety.error = errorText(error, m.feedback_restore_failed());
             return;
           }
-          if (!stillCurrent()) return;
-          if (syncSessionSignal?.()) return;
-          if (now === undefined) {
-            reportSessionExpired();
-            hideSession('reauth');
-          } else if (now.id !== signedIn) switchAccount();
-          else if (accountSafety.reason === 'reauth') {
-            accountSafety.switching = false;
-            accountSafety.restoring = false;
-            auth.expired = false;
-          }
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          checking = false;
-        });
+        }
+        if (canCheck()) {
+          hideSession('reauth');
+          accountSafety.error = m.feedback_restore_failed();
+        }
+      };
+      void verify().finally(() => {
+        checking = false;
+      });
     };
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') recheck();

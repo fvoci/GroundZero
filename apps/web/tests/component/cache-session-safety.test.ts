@@ -39,6 +39,7 @@ const me: Me = {
 const replace = vi.fn();
 const reload = vi.fn();
 const sessionKey = 'fvoci:auth-session';
+let originalLocks: PropertyDescriptor | undefined;
 
 function isMarker(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -97,6 +98,13 @@ function pageshow(persisted = true): void {
 }
 
 beforeEach(async () => {
+  originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: {
+      request: (_name: string, update: () => unknown) => Promise.resolve(update()),
+    },
+  });
   localStorage.removeItem(sessionKey);
   auth.expired = false;
   await setLocale('ko', { reload: false });
@@ -130,6 +138,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
+  if (originalLocks === undefined) Reflect.deleteProperty(navigator, 'locks');
+  else Object.defineProperty(navigator, 'locks', originalLocks);
   vi.useRealTimers();
   hideSession('account');
   accountSafety.switching = false;
@@ -152,6 +162,106 @@ async function logout(): Promise<void> {
   await fireEvent.click(screen.getByTestId('user-menu'));
   await fireEvent.click(await screen.findByRole('menuitem', { name: '로그아웃' }));
 }
+
+it.each([
+  ['return', 'other'],
+  ['live', 'other'],
+  ['persisted', 'other'],
+  ['return', 'anonymous'],
+  ['live', 'anonymous'],
+  ['persisted', 'anonymous'],
+] as const)(
+  'uses its own identity during %s verification (%s) even when publication loses to a same-user marker',
+  async (mode, identity) => {
+    const input = await liveInput();
+    const own = deferred<Me | undefined>();
+    const ignored = deferred<Me | undefined>();
+    const read = vi
+      .spyOn(api, 'me')
+      .mockReturnValueOnce(own.promise)
+      .mockReturnValue(ignored.promise);
+    const before = read.mock.calls.length;
+    if (mode === 'return') window.dispatchEvent(new Event('focus'));
+    else if (mode === 'persisted') pageshow();
+    else {
+      signalSession(null);
+      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    }
+    signalSession(me.id);
+    own.resolve(identity === 'anonymous' ? undefined : { ...me, id: 'user-b' });
+    if (mode === 'persisted')
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalled();
+      });
+    else if (identity === 'other')
+      await waitFor(() => {
+        expect(reload).toHaveBeenCalledOnce();
+      });
+    else await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    expect(read).toHaveBeenCalledTimes(before + 1);
+    expect(input).not.toBeVisible();
+    ignored.resolve(undefined);
+  },
+);
+
+it.each(['live', 'persisted'])(
+  'bounds automatic safety-generation verification to three requests during %s and preserves input on failure',
+  async (mode) => {
+    const input = await liveInput();
+    const read = vi.spyOn(api, 'me').mockImplementation(() => {
+      accountSafety.generation += 1;
+      return Promise.resolve(me);
+    });
+    const before = read.mock.calls.length;
+    if (mode === 'persisted') pageshow();
+    else {
+      signalSession(null);
+      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    }
+    await screen.findByRole('alert');
+    expect(read).toHaveBeenCalledTimes(before + 3);
+    expect(input.isConnected).toBe(true);
+    expect(input).not.toBeVisible();
+    expect(input).toHaveValue('메모리에만 남긴 입력');
+    read.mockResolvedValue(me);
+    await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('새 노트 제목')).toBeVisible();
+    });
+    expect(read).toHaveBeenCalledTimes(before + 4);
+  },
+);
+
+it.each(['missing', 'rejected'])(
+  'keeps startup, live input and persisted restoration usable when locks are %s without repeating denied publication',
+  async (mode) => {
+    if (mode === 'missing') Reflect.deleteProperty(navigator, 'locks');
+    else
+      Object.defineProperty(navigator, 'locks', {
+        configurable: true,
+        value: { request: () => Promise.reject(new Error('denied')) },
+      });
+    const input = await liveInput();
+    const read = vi.spyOn(api, 'me');
+    expect(read).toHaveBeenCalledOnce();
+    expect(localStorage.getItem(sessionKey)).toBeNull();
+    signalSession(null);
+    const marker = localStorage.getItem(sessionKey);
+    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    await waitFor(() => {
+      expect(input).toBeVisible();
+    });
+    expect(input).toHaveValue('메모리에만 남긴 입력');
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem(sessionKey)).toBe(marker);
+    pageshow();
+    await waitFor(() => {
+      expect(screen.getByLabelText('새 노트 제목')).toBeVisible();
+    });
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(localStorage.getItem(sessionKey)).toBe(marker);
+  },
+);
 
 // SR-221-5: /api/me 시작 → 최종 익명 → 옛 A 응답. storage 배달보다 먼저 현재 세대를 읽어야 한다.
 it.each(['initial', 'return', 'live', 'persisted'])(
