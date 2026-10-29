@@ -4296,7 +4296,7 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
-    // 리비전 2(저장 API, 실시간을 켜기 전): 복원하면 본문이 바뀌도록. 저장 대기 상태가 없을 문서도 같이 만든다.
+    // CRDT로 리비전 2를 남겨 복원하면 본문이 바뀌도록 한다. 저장 대기 상태가 없을 문서도 같이 만든다.
     let mut ids = Vec::new();
     for title in ["방 없는 복원", "대기 상태 없는 문서"] {
         let doc = common::create_doc(&app, &admin, &ws, title).await;
@@ -4391,7 +4391,19 @@ async fn a_restore_without_a_room_saves_a_live_state_left_pending_first() {
         "{:?}",
         plain_restored.json
     );
-    assert_eq!(collab_states(&owner, &plain_id, false).await, 0);
+    // 본문 fixture도 CRDT를 쓰므로 완료된 상태 행은 있다. 저장 대기 편집 없이 정확한 옛 본문으로 복원해야 한다.
+    assert_eq!(collab_states(&owner, &plain_id, false).await, 1);
+    assert_eq!(collab_states(&owner, &plain_id, true).await, 0);
+    let source = send(
+        &app,
+        Method::GET,
+        &format!("/api/documents/{plain_id}/revisions/1"),
+        Some(&admin),
+        None,
+    )
+    .await;
+    assert_eq!(plain_restored.json["body"], source.json["body"]);
+    assert_eq!(plain_restored.json["revision"], 3);
     owner.close().await;
 }
 
