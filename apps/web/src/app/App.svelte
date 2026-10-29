@@ -293,7 +293,6 @@
     unreadCount = 0;
     unreadAt = 0;
     unreadOrganization = undefined;
-    workspacesPending = false;
     timer.chooseRestart(undefined);
     timer.entry = null;
     timer.error = undefined;
