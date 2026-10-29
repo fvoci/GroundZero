@@ -298,3 +298,175 @@ async fn records_commands_hold_shared_workspace_and_member_locks_until_transacti
         }
     }
 }
+
+const COPY_ITEM: &str = "SELECT * FROM fvoci.app_copy_item($1,$2,$3,'learning copy',false,@ids)";
+const COPY_ITEM_RESET: &str =
+    "SELECT * FROM fvoci.app_copy_item($1,$2,$3,'learning copy',true,@ids)";
+
+async fn copy_fixture(kind: &str) -> (World, TestUser, Uuid) {
+    let w = World::of_kind(kind).await;
+    let member = w.member("member").await;
+    if kind == "course" {
+        rows(&w.state, &w.owner,
+            "SELECT fvoci.app_set_course_details($1,'source subject','','','','',NULL,NULL,NULL,@ids)",
+            &[w.item]).await;
+        rows(&w.state, &w.owner,
+            "SELECT fvoci.app_add_episodes($1,jsonb_build_array(jsonb_build_object('title','source episode','request_id',$2)),@ids)",
+            &[w.item, Uuid::now_v7()]).await;
+    } else {
+        rows(&w.state, &w.owner,
+            "SELECT fvoci.app_add_study_units($1,jsonb_build_array(jsonb_build_object('title','source unit','request_id',$2)),@ids)",
+            &[w.item, Uuid::now_v7()]).await;
+    }
+    let target = made(&w.state, &w.owner,
+        "SELECT fvoci.app_create_module($1,$2,(SELECT kind FROM fvoci.modules WHERE id=$3),'copy target','TARGET',@ids) AS id",
+        &[w.ws, Uuid::now_v7(), w.module]).await;
+    (w, member, target)
+}
+
+async fn copy_contents(w: &World) -> Result<Value, sqlx::Error> {
+    let mut conn = common::fixture_conn().await;
+    sqlx::query_scalar(
+        "SELECT jsonb_build_array(
+           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM fvoci.items r WHERE workspace_id=$1),
+           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.item_id) FROM fvoci.course_details r WHERE workspace_id=$1),
+           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM fvoci.course_episodes r WHERE workspace_id=$1),
+           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM fvoci.study_units r WHERE workspace_id=$1),
+           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM fvoci.audit_log r WHERE workspace_id=$1))",
+    )
+    .bind(w.ws)
+    .fetch_one(&mut conn)
+    .await
+}
+
+async fn copy_during_revocation(remove: bool) -> TestResult {
+    for kind in ["course", "study"] {
+        for sql in [COPY_ITEM, COPY_ITEM_RESET] {
+            let (w, member, target) = copy_fixture(kind).await;
+            let before = copy_contents(&w).await?;
+            let mut fixture = common::fixture_conn().await;
+            let mut held = fixture.begin().await?;
+            sqlx::query("SELECT 1 FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE")
+                .bind(w.ws).bind(member.id.0).execute(&mut *held).await?;
+            let holder = pid(&mut held).await;
+            let mut tx = w.state.db.begin_as(member.id).await?;
+            let waiter = pid(tx.conn()).await;
+            let call = tokio::spawn(async move {
+                let result = on(tx.conn(), sql, &[w.item, target, Uuid::now_v7()]).await;
+                (tx, result)
+            });
+            wait_for_member(holder, waiter, &call, sql).await?;
+            // 복제도 멤버 행을 기다리기 전에 원본·대상 모듈이나 항목을 잡지 않는다.
+            let mut observer = common::fixture_conn().await;
+            let mut probe = observer.begin().await?;
+            sqlx::query(
+                "SELECT 1 FROM fvoci.modules WHERE id=ANY($1) ORDER BY id FOR UPDATE NOWAIT",
+            )
+            .bind(vec![w.module, target])
+            .execute(&mut *probe)
+            .await?;
+            sqlx::query("SELECT 1 FROM fvoci.items WHERE id=$1 FOR UPDATE NOWAIT")
+                .bind(w.item)
+                .execute(&mut *probe)
+                .await?;
+            probe.rollback().await?;
+            let revoke = if remove {
+                "DELETE FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2"
+            } else {
+                "UPDATE fvoci.workspace_members SET role='readonly' WHERE workspace_id=$1 AND user_id=$2"
+            };
+            sqlx::query(revoke)
+                .bind(w.ws)
+                .bind(member.id.0)
+                .execute(&mut *held)
+                .await?;
+            held.commit().await?;
+            let (tx, result) = tokio::time::timeout(Duration::from_secs(10), call).await??;
+            let Err(error) = result else {
+                return Err(format!("{kind}: copy succeeded after revocation: {sql}").into());
+            };
+            code(&error, if remove { "P0002" } else { "42501" });
+            drop(tx);
+            assert_eq!(copy_contents(&w).await?, before, "{kind}: {sql}");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn learning_item_copies_wait_for_member_demotion_and_recheck_access() -> TestResult {
+    copy_during_revocation(false).await
+}
+
+#[tokio::test]
+async fn learning_item_copies_wait_for_member_removal_and_recheck_access() -> TestResult {
+    copy_during_revocation(true).await
+}
+
+#[tokio::test]
+async fn learning_item_copies_hold_shared_workspace_and_member_locks_until_commit() {
+    for kind in ["course", "study"] {
+        for sql in [COPY_ITEM, COPY_ITEM_RESET] {
+            let (w, member, target) = copy_fixture(kind).await;
+            let mut tx = w.state.db.begin_as(member.id).await.unwrap();
+            let result = on(tx.conn(), sql, &[w.item, target, Uuid::now_v7()])
+                .await
+                .unwrap();
+            let copied: Uuid = result[0]["copied_item"].as_str().unwrap().parse().unwrap();
+            let table = if kind == "course" {
+                "course_episodes"
+            } else {
+                "study_units"
+            };
+            let count: i64 =
+                sqlx::query_scalar(&format!("SELECT count(*) FROM {table} WHERE item_id=$1"))
+                    .bind(copied)
+                    .fetch_one(tx.conn())
+                    .await
+                    .unwrap();
+            assert_eq!(count, 1, "{kind}: {sql}");
+            if kind == "course" {
+                let subject: String =
+                    sqlx::query_scalar("SELECT subject FROM course_details WHERE item_id=$1")
+                        .bind(copied)
+                        .fetch_one(tx.conn())
+                        .await
+                        .unwrap();
+                assert_eq!(subject, "source subject");
+            }
+            let mut observer = common::fixture_conn().await;
+            let locks = [
+                (
+                    "SELECT 1 FROM fvoci.workspaces WHERE id=$1 FOR NO KEY UPDATE NOWAIT",
+                    vec![w.ws],
+                ),
+                (
+                    "SELECT 1 FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR NO KEY UPDATE NOWAIT",
+                    vec![w.ws, member.id.0],
+                ),
+            ];
+            for (lock, args) in &locks {
+                let mut probe = observer.begin().await.unwrap();
+                code(&on(&mut probe, lock, args).await.unwrap_err(), "55P03");
+                probe.rollback().await.unwrap();
+            }
+            let mut probe = observer.begin().await.unwrap();
+            on(
+                &mut probe,
+                "SELECT 1 FROM fvoci.workspaces WHERE id=$1 FOR SHARE NOWAIT",
+                &[w.ws],
+            )
+            .await
+            .unwrap();
+            on(&mut probe, "SELECT 1 FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR SHARE NOWAIT", &[w.ws, member.id.0]).await.unwrap();
+            probe.rollback().await.unwrap();
+            tx.commit().await.unwrap();
+            // 커밋 뒤에는 같은 두 행의 배타 잠금도 바로 잡을 수 있다.
+            let mut probe = observer.begin().await.unwrap();
+            for (lock, args) in &locks {
+                on(&mut probe, lock, args).await.unwrap();
+            }
+            probe.rollback().await.unwrap();
+        }
+    }
+}
