@@ -412,9 +412,13 @@
     };
   }
 
+  function canSaveTitle(): boolean {
+    return start.can_edit && !handedOff && !accountSwitching();
+  }
+
   /** 제목 명령은 한 번만 보낸다. 충돌 뒤 재저장은 사람이 최신 제목·판을 확인하고 고른다(D-27). */
   async function saveTitle(): Promise<void> {
-    if (savingTitle || handedOff || !start.can_edit || accountSwitching()) return;
+    if (savingTitle || !canSaveTitle()) return;
     const next = title.trim();
     if (next === '') {
       titleMessage = m.documents_title_required();
@@ -425,6 +429,13 @@
     titleMessage = undefined;
     try {
       if (titleRequest?.title !== next || titleRequest.base !== titleBase) {
+        // 본문 체크포인트도 판을 올린다. 제목이 그대로일 때만 확인한 새 판을 쓰고,
+        // 다른 사람이 바꾼 제목은 기존 판으로 보내 서버의 409와 명시적 재저장으로 처리한다.
+        const current = await api.document(start.id);
+        if (!canSaveTitle()) return;
+        if (current.title === savedTitle && current.revision > titleBase) {
+          titleBase = current.revision;
+        }
         titleRequest = { title: next, base: titleBase, id: newRequestId() };
       }
       const result = await documentsApi.patchTitle(start.id, {
@@ -444,6 +455,7 @@
       titleBase = result.document.revision;
       titleConflict = undefined;
       titleRequest = undefined;
+      if (!hasPending()) unsaved = undefined;
       onsaved?.(result.document);
     } catch (e: unknown) {
       titleMessage = errorText(e, m.documents_title_save_failed());

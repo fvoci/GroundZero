@@ -6,6 +6,7 @@ use super::{
 };
 
 impl Room {
+    /// 문서를 옮긴다(`Command::Move`, 감사 S6·#71). 이 명령을 처리하는 동안 들어온 메시지는 대기열에서 기다린다(넣지도
     /// 확인하지도 않음). 옮겼으면 거짓(방을 닫는다).
     pub(super) async fn move_document(
         &mut self,
