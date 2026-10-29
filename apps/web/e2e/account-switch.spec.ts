@@ -5,8 +5,12 @@
 // 직접 저장·관계 저장·만들기를 눌러야 서버로 간다(중복 저장·생성 없음). 응답을 흉내 내지 않는다. 다시 읽기의 문서 응답을 잠시
 // 붙잡아 두는 것(지연 뒤 성공 경로)과 이전 문서 안의 관찰용 기록기(fetch 호출 기록·상태 표본, 동작은 바꾸지 않음)만 쓴다. 실패·취소
 // 경로는 account-switch-failed-reload.spec.ts가 본다.
+import { writeFileSync } from 'node:fs';
+
 import { draftKeys, returnToWindow, switchTo } from './account-switch-helpers';
 import { expect, list, num, str, test, unique } from './fixtures';
+
+const ACCEPTED_KEY = 'fvoci-e2e-accepted-account';
 
 test('unsaved task input survives A→B→A account switches, interrupted reloads and real reloads, for the first account only', async ({
   signIn,
@@ -63,6 +67,47 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     void prompt.accept();
   });
 
+  // 코디네이터 승인: 앱보다 먼저 설치하고 이 탭이 판독한 실제 B 응답만 센다.
+  // 표식 게시는 생략될 수 있으므로 사용자 확인의 관찰점이 아니다.
+  await page.addInitScript(
+    ({ otherUser, acceptedKey }) => {
+      const original: unknown = Object.getOwnPropertyDescriptor(Response.prototype, 'text')?.value;
+      if (typeof original !== 'function') throw new Error('Response.prototype.text');
+      const accepted: { userId: string; t: number }[] = [];
+      Response.prototype.text = function (this: Response): Promise<string> {
+        // 실제 본문 판독의 this·결과·거절을 보존한다. 관찰 실패는 제품 결과를 바꾸지 않는다.
+        const result: unknown = Reflect.apply(original, this, []);
+        return Promise.resolve(result).then((text: unknown) => {
+          if (typeof text !== 'string') throw new Error('Response.text result');
+          try {
+            const url = new URL(this.url);
+            if (
+              url.pathname === '/api/me' &&
+              url.search === '' &&
+              this.status === 200 &&
+              document.documentElement.hasAttribute('data-e2e-auth-observer')
+            ) {
+              const value: unknown = JSON.parse(text);
+              if (
+                typeof value === 'object' &&
+                value !== null &&
+                'id' in value &&
+                value.id === otherUser
+              ) {
+                accepted.push({ userId: otherUser, t: Date.now() });
+                window.sessionStorage.setItem(acceptedKey, JSON.stringify(accepted));
+              }
+            }
+          } catch {
+            /* 관찰만 한다. 원함수의 결과는 그대로다. */
+          }
+          return text;
+        });
+      };
+    },
+    { otherUser: b, acceptedKey: ACCEPTED_KEY },
+  );
+
   await test.step('A: 설명·선행 지정·새 업무 제목을 치고 저장하지 않은 채 새로고침해도 되살린다', async () => {
     await page.goto(boardPath);
     await newTask.fill(newTitle);
@@ -89,7 +134,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
   const other = await page.context().newPage();
   await test.step('B로 바뀐 뒤 창 복귀: 다시 읽기가 끝나지 않는 동안 이전 화면은 안전 상태로 가려지고 API를 부르지 않는다', async () => {
     await first.endTrace();
-    expect(await switchTo(other, 'test-user-2')).toBe(b);
+    // 계정 전환 뒤 복귀 확인을 관찰하도록 보류·기록기를 먼저 설치한다.
     // 다시 읽기의 문서 응답을 2.5초 붙잡아 둔다(느린 다시 읽기). 그동안 이전 문서가 살아 있다. 이동이 걸려 있는 동안은 Playwright
     // 조작이 막히므로, 이전 문서 안의 기록기가 안전 상태를 0.1초마다 표본으로 남기고(세션 저장소, 같은 탭의 다시 읽기 뒤에도
     // 남는다) 복귀 이벤트를 계속 내서 이전 화면이 요청을 보내는지 네트워크에서 본다.
@@ -107,20 +152,31 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         await new Promise((resolve) => setTimeout(resolve, HOLD_MS));
       await route.continue();
     });
-    await page.evaluate(() => {
-      // 이전 문서가 보내는 API 호출을 호출 시점의 전환 상태와 함께 적는다(네트워크 이벤트의 시각 순서는 수 ms 어긋날 수 있다).
-      const fetches: { path: string; switching: boolean }[] = [];
+    await page.evaluate((acceptedKey) => {
+      window.sessionStorage.removeItem(acceptedKey);
+      // 새 문서는 이 표지가 없으므로, 새 셸의 최초 me 결과가 이전 문서의 수락 수를 덮지 않는다.
+      document.documentElement.setAttribute('data-e2e-auth-observer', '');
+      // 메서드·쿼리와 자기 응답 수락 시점을 함께 적어 제어 확인과 이전 화면 요청을 구분한다.
+      const fetches: {
+        t: number;
+        path: string;
+        method: string;
+        switching: boolean;
+        afterAcceptance: boolean;
+      }[] = [];
       const original = window.fetch.bind(window);
       window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        if (url.includes('/api/')) {
-          fetches.push({
-            path: new URL(url, window.location.origin).pathname,
-            switching: document.documentElement.hasAttribute('data-account-switching'),
-          });
-          window.sessionStorage.setItem('fvoci-e2e-fetches', JSON.stringify(fetches));
-        }
+        const target = new URL(url, window.location.origin);
+        fetches.push({
+          t: Date.now(),
+          path: target.pathname + target.search,
+          method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
+          switching: document.documentElement.hasAttribute('data-account-switching'),
+          afterAcceptance: window.sessionStorage.getItem(acceptedKey) !== null,
+        });
+        window.sessionStorage.setItem('fvoci-e2e-fetches', JSON.stringify(fetches));
         return original(input, init);
       };
       const start = Date.now();
@@ -129,6 +185,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         switching: boolean;
         safeVisible: boolean;
         descriptionVisible: boolean;
+        returnEvents: number;
       }[] = [];
       const visible = (el: Element | null): boolean =>
         el !== null &&
@@ -137,21 +194,24 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       window.setInterval(() => {
         const safe = document.querySelector('[data-testid="account-safe-state"]');
         const box = document.querySelector('[role="dialog"] textarea');
-        samples.push({
+        const sample = {
           t: Date.now() - start,
           switching: document.documentElement.hasAttribute('data-account-switching'),
           safeVisible: visible(safe),
           descriptionVisible: visible(box),
-        });
-        window.sessionStorage.setItem('fvoci-e2e-probe', JSON.stringify(samples.slice(-60)));
-        // 전환이 켜진 뒤에만 복귀 이벤트를 더 낸다(감지 자체는 탭 전환 또는 시험이 낸 focus가 하고, 그 뒤에는 확인 요청조차
-        // 나가지 않아야 한다).
+          returnEvents: 0,
+        };
+        samples.push(sample);
+        // B를 수락해 가린 뒤 복귀 이벤트가 와도 이전 문서는 더 요청하지 않는다(#88/D-96).
         if (document.documentElement.hasAttribute('data-account-switching')) {
           window.dispatchEvent(new Event('focus'));
           document.dispatchEvent(new Event('visibilitychange'));
+          sample.returnEvents = 2;
         }
+        window.sessionStorage.setItem('fvoci-e2e-probe', JSON.stringify(samples.slice(-60)));
       }, 100);
-    });
+    }, ACCEPTED_KEY);
+    expect(await switchTo(other, 'test-user-2')).toBe(b);
     await returnToWindow(page, testInfo, (timeout) =>
       page.waitForEvent('load', { timeout }).then(
         () => true,
@@ -175,27 +235,57 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         'safeVisible' in s &&
         s.safeVisible === true &&
         'descriptionVisible' in s &&
-        s.descriptionVisible === false,
+        s.descriptionVisible === false &&
+        'returnEvents' in s &&
+        s.returnEvents === 2,
     );
     expect(covered.length, 'samples with the previous screen covered').toBeGreaterThanOrEqual(10);
-    // 이전 화면은 다시 읽기가 걸려 있는 동안 API를 부르지 않았다(확인 요청 /api/me 한 번 뒤 문서 요청, 그 뒤로는 없음). 확인 요청이
-    // 돌아오기 전의 복귀 갱신(타이머·안 읽은 수 읽기)은 아직 전환을 모르는 상태라 나갈 수 있다(⑫의 남는 위험과 같은 창, 읽기뿐).
     const reloadDocument = traffic.find((r) => r.kind === 'document');
     if (reloadDocument === undefined) throw new Error('no reload document request recorded');
-    const detection = traffic.filter((r) => r.path === '/api/me' && r.t <= reloadDocument.t);
-    expect(detection.length, 'one /api/me check before the reload').toBe(1);
-    // 이전 문서가 전환이 켜진 뒤에 보낸 API 호출은 없어야 한다(호출 시점의 전환 상태로 판정; 네트워크 이벤트의 시각 순서는
-    // 수 ms 어긋날 수 있어 쓰지 않는다). 확인 요청이 돌아오기 전의 복귀 갱신(타이머·안 읽은 수 읽기)은 전환을 모르는 상태라
-    // 나갈 수 있다(⑫의 남는 위험과 같은 창, 읽기뿐).
     const fetches: unknown = JSON.parse(
       (await page.evaluate(() => window.sessionStorage.getItem('fvoci-e2e-fetches'))) ?? '[]',
     );
     await page.evaluate(() => {
       window.sessionStorage.removeItem('fvoci-e2e-fetches');
     });
-    const leaked = list(fetches).filter(
+    const identityCheck = (f: unknown): boolean =>
+      typeof f === 'object' &&
+      f !== null &&
+      'method' in f &&
+      f.method === 'GET' &&
+      'path' in f &&
+      f.path === '/api/me';
+    const accepted: unknown = JSON.parse(
+      (await page.evaluate((key) => window.sessionStorage.getItem(key), ACCEPTED_KEY)) ?? '[]',
+    );
+    await page.evaluate((key) => {
+      window.sessionStorage.removeItem(key);
+    }, ACCEPTED_KEY);
+    // #88/D-96: 이 탭의 실제 B 본문 판독으로 감지 1회·수락 뒤 중복 확인 0을 센다.
+    writeFileSync(
+      testInfo.outputPath('session-switch-requests.json'),
+      JSON.stringify({ traffic, fetches, reloadDocument, accepted }, null, 2),
+    );
+    expect(list(accepted), 'one accepted B identity result in the previous document').toHaveLength(
+      1,
+    );
+    const afterAcceptance = list(fetches).filter(
+      (f) =>
+        identityCheck(f) &&
+        typeof f === 'object' &&
+        f !== null &&
+        'afterAcceptance' in f &&
+        f.afterAcceptance === true,
+    );
+    expect(afterAcceptance, '/api/me starts after accepting B').toEqual([]);
+    const hidden = list(fetches).filter(
       (f) => typeof f === 'object' && f !== null && 'switching' in f && f.switching === true,
     );
+    expect(hidden, 'no requests while hidden despite repeated return events').toEqual([]);
+    expect(hidden.every(identityCheck), 'only exact GET /api/me without a query while hidden').toBe(
+      true,
+    );
+    const leaked = hidden.filter((f) => !identityCheck(f));
     expect(leaked, 'API calls from the previous screen after the switch').toEqual([]);
     expect(list(fetches).length, 'API calls recorded by the previous screen').toBeGreaterThan(0);
     page.removeAllListeners('request');

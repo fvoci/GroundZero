@@ -14,6 +14,9 @@ use fvoci_http::session::EXPECTED_USER_HEADER;
 use fvoci_server::app::build_state;
 use serde_json::{Value, json};
 
+#[path = "cache_routes.rs"]
+mod routes;
+
 pub(crate) fn header(h: &HeaderMap, name: &str) -> Option<String> {
     h.get(name).map(|v| v.to_str().unwrap().to_owned())
 }
