@@ -34,25 +34,36 @@ pub(super) async fn scope_filter(
             quote(workspaces.iter().map(Uuid::to_string))
         ));
     }
-    // 공유 표는 수신자에게 직접 열리지 않는다. 현재 조직의 유효한 공유를 읽는 기존 함수를 재사용하고,
-    // 첨부도 같은 문서 범위에 넣는다. 공유 변경 때문에 재색인을 기다릴 필요는 없다.
-    let shared: Vec<(String, Uuid)> = sqlx::query_as(
-        "WITH shared AS MATERIALIZED (SELECT id FROM app_shared_with_me($1))
-         SELECT 'document'::text, id FROM shared
-         UNION ALL
-         SELECT 'file', f.id FROM files f JOIN shared s ON s.id = f.document_id",
-    )
-    .bind(organization)
-    .fetch_all(tx.conn())
-    .await?;
-    for kind in ["document", "file"] {
-        let ids: Vec<String> = shared
-            .iter()
-            .filter(|(k, _)| k == kind)
-            .map(|(_, id)| id.to_string())
-            .collect();
-        if !ids.is_empty() {
-            scope.push(format!("(kind = \"{kind}\" AND id IN {})", quote(ids)));
+    // 공유 표는 수신자에게 직접 열리지 않는다. 요청한 종류의 공유만 읽으며, 두 종류를 함께 찾을 때는
+    // 공유 문서 집합을 한 번 읽어 첨부에도 쓴다. 공유 변경 때문에 재색인을 기다릴 필요는 없다.
+    let shared_query = match (kinds.contains(&"document"), kinds.contains(&"file")) {
+        (true, true) => Some(
+            "WITH shared AS MATERIALIZED (SELECT id FROM app_shared_with_me($1))
+             SELECT 'document'::text, id FROM shared
+             UNION ALL
+             SELECT 'file', f.id FROM files f JOIN shared s ON s.id = f.document_id",
+        ),
+        (true, false) => Some("SELECT 'document'::text, id FROM app_shared_with_me($1)"),
+        (false, true) => Some(
+            "SELECT 'file'::text, f.id FROM files f
+             JOIN app_shared_with_me($1) s ON s.id = f.document_id",
+        ),
+        (false, false) => None,
+    };
+    if let Some(query) = shared_query {
+        let shared: Vec<(String, Uuid)> = sqlx::query_as(query)
+            .bind(organization)
+            .fetch_all(tx.conn())
+            .await?;
+        for kind in ["document", "file"] {
+            let ids: Vec<String> = shared
+                .iter()
+                .filter(|(k, _)| k == kind)
+                .map(|(_, id)| id.to_string())
+                .collect();
+            if !ids.is_empty() {
+                scope.push(format!("(kind = \"{kind}\" AND id IN {})", quote(ids)));
+            }
         }
     }
     Ok(format!("({kind_filter}) AND ({})", scope.join(" OR ")))
@@ -65,8 +76,17 @@ pub(super) async fn visible(
 ) -> Result<HashSet<(String, Uuid)>, AppError> {
     let kinds: Vec<&str> = candidates.iter().map(|(k, _)| k.as_str()).collect();
     let ids: Vec<Uuid> = candidates.iter().map(|(_, id)| *id).collect();
-    let rows: Vec<(String, Uuid)> =
-        sqlx::query_as("SELECT v.kind, v.id FROM app_search_visible($1, $2) v
+    let shared_document = match (kinds.contains(&"document"), kinds.contains(&"file")) {
+        (true, true) => Some("coalesce(d.id, fd.id)"),
+        (true, false) => Some("d.id"),
+        (false, true) => Some("fd.id"),
+        (false, false) => None,
+    };
+    let shared_filter = shared_document
+        .map(|id| format!(" OR {id} IN (SELECT id FROM app_shared_with_me($3))"))
+        .unwrap_or_default();
+    let query = format!(
+        "SELECT v.kind, v.id FROM app_search_visible($1, $2) v
              LEFT JOIN documents d ON v.kind = 'document' AND d.id = v.id
              LEFT JOIN tasks t ON v.kind = 'task' AND t.id = v.id
              LEFT JOIN items i ON v.kind = 'item' AND i.id = v.id
@@ -77,13 +97,14 @@ pub(super) async fn visible(
              WHERE coalesce(d.workspace_id,t.workspace_id,i.workspace_id,e.workspace_id,f.workspace_id,r.workspace_id)
                        IN (SELECT app_my_workspace_ids($3))
                 OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())
-                OR (f.workspace_id IS NULL AND fd.owner_user_id = app_user_id())
-                OR coalesce(d.id, fd.id) IN (SELECT id FROM app_shared_with_me($3))")
-            .bind(&kinds)
-            .bind(&ids)
-            .bind(organization)
-            .fetch_all(tx.conn())
-            .await?;
+                OR (f.workspace_id IS NULL AND fd.owner_user_id = app_user_id()){shared_filter}"
+    );
+    let rows: Vec<(String, Uuid)> = sqlx::query_as(&query)
+        .bind(&kinds)
+        .bind(&ids)
+        .bind(organization)
+        .fetch_all(tx.conn())
+        .await?;
     Ok(rows.into_iter().collect())
 }
 
