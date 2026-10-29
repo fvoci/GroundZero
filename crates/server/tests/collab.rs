@@ -13,6 +13,8 @@ mod sql_support;
 
 #[path = "it/collab_file_refs.rs"]
 mod collab_file_refs;
+#[path = "it/collab_note_lock_order.rs"]
+mod collab_note_lock_order;
 #[path = "it/collab_poison.rs"]
 mod collab_poison;
 #[path = "it/files/flush_refs.rs"]
@@ -4197,7 +4199,7 @@ async fn a_move_without_a_room_held_past_the_lock_limit_is_refused() {
         let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
         async move { move_to(&app, &admin, &id, &to).await }
     });
-    until_waiting_on_lock("FROM documents WHERE id = $1 FOR UPDATE", holder).await;
+    until_waiting_on_lock("app_lock_move", holder).await;
     let answered = finishes_within(&request, Duration::from_secs(30)).await;
     hold.rollback().await.unwrap();
     assert!(answered, "the move kept waiting on the lock past the limit");
@@ -4743,42 +4745,44 @@ struct RevokedDuringMove {
     from: String,
 }
 
-/// 잠금을 기다리는 방 안 이동 중에 작성자의 쓰기 권한을 거둔다(`demote`: 독자로, 아니면 워크스페이스에서 내보냄). 거두기는
-/// 이동 트랜잭션과 잠금을 나누지 않아(0081의 워크스페이스 행 `FOR NO KEY UPDATE`·멤버 행 잠금도 이동이 기다리는 동안에는
-/// 이동이 쥔 잠금과 겹치지 않는다) 이동이 기다리는 동안 커밋된다. 거두기 전에 보낸 편집은 확인을 받은 뒤다.
-async fn revoke_while_a_move_waits(
-    recheck_secs: &str,
-    label: &str,
-    demote: bool,
-) -> RevokedDuringMove {
-    let (writer, (_state, app, _addr, admin, from, to, id, mut e, mut r)) =
+/// 강등을 먼저 준비해 이동이 공간 잠금을 기다릴 때 커밋하고, 이동은 이어서 트리를 기다린다(#223).
+/// 다음 재확인 전의 편집을 받아들여 재시도한 이동에 보존하는지 본다. 제거는 #235의 hold 시험이 따로 확인한다.
+async fn revoke_while_a_move_waits(recheck_secs: &str, label: &str) -> RevokedDuringMove {
+    let (writer, (state, app, _addr, admin, from, to, id, mut e, mut r)) =
         live_move_race_setup_rechecking(label, recheck_secs).await;
     assert!(
         e.until(acked).await,
         "the edit before the wait was never acknowledged"
     );
+    let doc = fvoci_core::ids::DocumentId(id.parse().unwrap());
+    state
+        .collab
+        .snapshot_documents(&std::collections::HashSet::from([doc]))
+        .await;
+    assert!(
+        get_doc(&app, &admin, &id).await["body"]
+            .to_string()
+            .contains("체크포인트 전 문단")
+    );
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
     let (hold, holder) = hold_tree(&owner, &to).await;
+    let mut demotion = state.db.begin_as(admin.id).await.unwrap();
+    crate::sql_support::on(
+        demotion.conn(),
+        "SELECT fvoci.app_set_member_role($1,$2,'readonly',@ids)",
+        &[from.parse().unwrap(), writer.id.0],
+    )
+    .await
+    .unwrap();
+    let demotion_holder = crate::sql_support::pid(demotion.conn()).await;
     let request = tokio::spawn({
         let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
         async move { move_to(&app, &admin, &id, &to).await }
     });
+    until_waiting_on_lock("app_lock_move", demotion_holder).await;
+    demotion.commit().await.unwrap();
     until_waiting_on_lock("app_lock_move", holder).await;
-    let path = format!("/api/workspaces/{from}/members/{}", writer.id.0);
-    let revoked = if demote {
-        send(
-            &app,
-            Method::PUT,
-            &path,
-            Some(&admin),
-            Some(json!({ "role": "readonly" })),
-        )
-        .await
-    } else {
-        send(&app, Method::DELETE, &path, Some(&admin), None).await
-    };
-    assert!(revoked.status.is_success(), "{:?}", revoked.json);
     assert!(
         !request.is_finished(),
         "the revocation did not commit while the move waited"
@@ -4788,28 +4792,25 @@ async fn revoke_while_a_move_waits(
     hold.rollback().await.unwrap();
     let reply = request.await.unwrap();
     let after_relayed = r.until(|c| c.text().contains("거둔 뒤 보낸 문단")).await;
-    if demote {
-        // D-114: 이름이 같아도 write→read로 바뀐 미리보기는 다시 확인해야 한다.
-        assert_eq!(reply.status, StatusCode::CONFLICT, "{:?}", reply.json);
-        let change = reply.json["changes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|row| row["user_id"] == json!(writer.id.0))
-            .unwrap();
-        assert_eq!(change["from_grade"], "read");
-        assert_eq!(change["to_grade"], serde_json::Value::Null);
-        assert_eq!(
-            get_doc(&app, &admin, &id).await["workspace_id"],
-            from.as_str()
-        );
-        let retried = move_to(&app, &admin, &id, &to).await;
-        assert_eq!(retried.status, StatusCode::OK, "{:?}", retried.json);
-    }
+    // D-114: 이름이 같아도 write→read로 바뀐 미리보기는 다시 확인해야 한다.
+    assert_eq!(reply.status, StatusCode::CONFLICT, "{:?}", reply.json);
+    let change = reply.json["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["user_id"] == json!(writer.id.0))
+        .unwrap();
+    assert_eq!(change["from_grade"], "read");
+    assert_eq!(change["to_grade"], serde_json::Value::Null);
+    assert_eq!(
+        get_doc(&app, &admin, &id).await["workspace_id"],
+        from.as_str()
+    );
+    let retried = move_to(&app, &admin, &id, &to).await;
+    assert_eq!(retried.status, StatusCode::OK, "{:?}", retried.json);
     let closed = match closed_early {
         Some(code) => Some(code),
-        None if demote || reply.status == StatusCode::OK => e.closed().await,
-        None => None,
+        None => e.closed().await,
     };
     let doc = get_doc(&app, &admin, &id).await;
     let after_acked = acked(&e);
@@ -4832,7 +4833,7 @@ async fn revoke_while_a_move_waits(
 /// 문서화된 권한 철회 지연(재확인 간격 안의 편집은 들어간다)과 같다. 간격이 지나면 대기 중에도 닫힌다(아래 시험).
 #[tokio::test]
 async fn an_edit_within_the_recheck_interval_after_a_demotion_during_a_move_is_kept() {
-    let out = revoke_while_a_move_waits("3600", "기다리는 이동 중 강등", true).await;
+    let out = revoke_while_a_move_waits("3600", "기다리는 이동 중 강등").await;
     assert_eq!(
         out.reply.status,
         StatusCode::CONFLICT,
@@ -4854,26 +4855,46 @@ async fn an_edit_within_the_recheck_interval_after_a_demotion_during_a_move_is_k
     assert_eq!(out.closed, Some(4403));
 }
 
-/// 재확인 간격 `SHORT_RECHECK`인 방에서 이동이 잠금을 기다리는 동안 작성자를 독자로 바꾼다. `later_lock`이면 이동이 첫 잠금(새 자리
-/// 나무)을 지난 뒤 문서 행 잠금(`FOR UPDATE`)에서 기다리게 한다(재확인 뒤 남은 잠금에서 오래 기다리는 경우). 강등 응답
-/// 뒤 연결이 닫히기까지 걸린 시간(측정값)을 돌려준다.
+/// #223의 공간 잠금은 이동 뒤에 시작한 강등도 기다리게 한다. 실제 앱 역할의 강등을 먼저 준비하고 이동이 그 공간을
+/// 기다리는 동안 커밋한다. 이동은 이어서 트리 또는 문서 행(`later_lock`)을 기다리고 재확인은 계속 돈다.
+/// 강등 커밋 뒤 연결이 닫히기까지 걸린 시간(측정값)을 돌려준다.
 async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> Duration {
-    let (writer, (_state, app, _addr, admin, from, to, id, mut e, r)) =
+    let (writer, (state, app, _addr, admin, from, to, id, mut e, r)) =
         live_move_race_setup_rechecking(label, &short_recheck_secs()).await;
     assert!(
         e.until(acked).await,
         "the edit before the wait was never acknowledged"
     );
+    // 이동 전 체크포인트가 먼저 끝나야 이동 트랜잭션의 잠금 대기와 재확인을 시험한다.
+    let doc = fvoci_core::ids::DocumentId(id.parse().unwrap());
+    state
+        .collab
+        .snapshot_documents(&std::collections::HashSet::from([doc]))
+        .await;
+    assert!(
+        get_doc(&app, &admin, &id).await["body"]
+            .to_string()
+            .contains("체크포인트 전 문단")
+    );
     let owner_url = std::env::var("FVOCI_TEST_MIGRATION_URL").expect("run via `cargo xtask test`");
     let owner = sqlx::PgPool::connect(&owner_url).await.unwrap();
     let (tree, tree_holder) = hold_tree(&owner, &to).await;
+    let mut demotion = state.db.begin_as(admin.id).await.unwrap();
+    crate::sql_support::on(
+        demotion.conn(),
+        "SELECT fvoci.app_set_member_role($1,$2,'readonly',@ids)",
+        &[from.parse().unwrap(), writer.id.0],
+    )
+    .await
+    .unwrap();
+    let demotion_holder = crate::sql_support::pid(demotion.conn()).await;
     let request = tokio::spawn({
         let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
         async move { move_to(&app, &admin, &id, &to).await }
     });
-    until_waiting_on_lock("app_lock_move", tree_holder).await;
-    let row = if later_lock {
-        // 체크포인트는 이미 끝났다. 문서 행을 쥔 뒤 나무 잠금을 풀어 이동이 다음 잠금에서 기다리게 한다.
+    until_waiting_on_lock("app_lock_move", demotion_holder).await;
+    let (row, row_holder) = if later_lock {
+        // 강등 커밋 뒤 이동이 트리를 지나 문서 행에서 기다리게 한다.
         let mut row = owner.begin().await.unwrap();
         let row_holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
             .fetch_one(&mut *row)
@@ -4885,21 +4906,13 @@ async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> 
             .await
             .unwrap();
         tree.rollback().await.unwrap();
-        until_waiting_on_lock("FROM documents WHERE id = $1 FOR UPDATE", row_holder).await;
-        row
+        (row, row_holder)
     } else {
-        tree
+        (tree, tree_holder)
     };
-    let demoted = send(
-        &app,
-        Method::PUT,
-        &format!("/api/workspaces/{from}/members/{}", writer.id.0),
-        Some(&admin),
-        Some(json!({ "role": "readonly" })),
-    )
-    .await;
-    assert!(demoted.status.is_success(), "{:?}", demoted.json);
+    demotion.commit().await.unwrap();
     let demoted_at = tokio::time::Instant::now();
+    until_waiting_on_lock("app_lock_move", row_holder).await;
     // 이동이 아직 기다리는 동안 다음 재확인이 연결을 닫는다(고치기 전: 닫히지 않고 이동이 끝나지 않음).
     let closed_while_waiting = e.closed().await;
     let close_after = demoted_at.elapsed();
@@ -4947,7 +4960,7 @@ async fn demote_while_a_rechecking_move_waits(label: &str, later_lock: bool) -> 
     owner.close().await;
     r.close().await;
     eprintln!(
-        "MEASURED {label}: demotion response -> 4403 close {close_after:?} (recheck interval {SHORT_RECHECK:?})"
+        "MEASURED {label}: demotion commit -> 4403 close {close_after:?} (recheck interval {SHORT_RECHECK:?})"
     );
     close_after
 }
@@ -5135,7 +5148,7 @@ async fn a_restore_or_move_racing_a_closing_room_keeps_its_edits() {
             .await
             .unwrap();
         e.close().await;
-        until_waiting_on_lock("FROM documents WHERE id = $1 FOR UPDATE", holder).await;
+        until_waiting_on_lock("app_lock_document_workspace", holder).await;
         let doc = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
         assert!(
             state.collab.has_room(doc),

@@ -199,7 +199,7 @@ pub async fn move_in_db(
 ) -> Result<MoveReply, AppError> {
     let mut tx = db.begin_as(user).await?;
     limit_lock_wait(&mut tx).await?;
-    // 잠금 순서(자리 → 문서 행 → 항목 → 번호): 원래 자리와 새 자리를 먼저 잠근다.
+    // SQL 이동과 같은 사전 잠금: 공간(id 순) → 트리 → 모듈·항목 → 업로드 → 문서. 잠근 뒤 자리·권한도 다시 본다.
     sqlx::query("SELECT app_lock_move($1, $2, $3)")
         .bind(id)
         .bind(input.target_workspace_id)
@@ -207,21 +207,6 @@ pub async fn move_in_db(
         .execute(tx.conn())
         .await
         .map_err(move_lock_error)?;
-    // 소유 권한자만 잠글 수 있다(RLS 갱신 정책). 다른 사람에게는 행이 없고, 아래 함수가 권한 오류를 낸다.
-    sqlx::query("SELECT 1 FROM documents WHERE id = $1 FOR UPDATE")
-        .bind(id)
-        .execute(tx.conn())
-        .await
-        .map_err(move_lock_error)?;
-    // 원래 항목과 대상 항목(과 그 모듈)도 잠가, 확인한 접근 변화가 이동 시점과 같게 한다.
-    sqlx::query(
-        "SELECT app_lock_item((SELECT item_id FROM documents WHERE id = $1)), app_lock_item($2)",
-    )
-    .bind(id)
-    .bind(input.target_item_id)
-    .execute(tx.conn())
-    .await
-    .map_err(move_lock_error)?;
     // 잠근 뒤 미리보기를 다시 계산해 사용자가 확인한 것과 같을 때만 옮긴다.
     let current = preview(&mut tx, id, input.target_workspace_id, input.target_item_id).await?;
     let confirmed = input.acknowledged.as_ref().is_some_and(|ack| {
