@@ -98,24 +98,32 @@ async fn prepare(
             .await
             .is_err()
         {
-            return Err(blocked(db, user, doc, workspace).await);
+            return Err(blocked(db, user, doc, workspace, None).await);
         }
     }
     // 이미 닫히는 중이던 방의 마지막 저장까지 포함해 한 번 더 확인한다.
     for (doc, workspace) in pending(db, user, change).await? {
-        guard.include_document(rooms, doc)?;
+        if let Err(error) = guard.include_document(rooms, doc) {
+            return Err(blocked(db, user, doc, workspace, Some(error)).await);
+        }
         if rooms
             .prepare_organization_document(db, limits, doc, user)
             .await
             .is_err()
         {
-            return Err(blocked(db, user, doc, workspace).await);
+            return Err(blocked(db, user, doc, workspace, None).await);
         }
     }
     Ok(Box::new(guard))
 }
 
-async fn blocked(db: &Db, user: UserId, doc: DocumentId, workspace: Option<Uuid>) -> AppError {
+async fn blocked(
+    db: &Db,
+    user: UserId,
+    doc: DocumentId,
+    workspace: Option<Uuid>,
+    visible_error: Option<AppError>,
+) -> AppError {
     // 명령 권한으로 찾은 문서가 호출자에게 보인다는 뜻은 아니다. 조회 실패도 종류와 위치를 숨긴다.
     let visible = async {
         let mut tx = db.begin_as(user).await?;
@@ -130,6 +138,9 @@ async fn blocked(db: &Db, user: UserId, doc: DocumentId, workspace: Option<Uuid>
             "an item you cannot open has pending edits; nothing was changed. Ask its owner or an editor to save the edits and retry"
                 .into(),
         );
+    }
+    if let Some(error) = visible_error {
+        return error;
     }
     let document = format!("document {}", doc.0);
     let Some(workspace) = workspace else {

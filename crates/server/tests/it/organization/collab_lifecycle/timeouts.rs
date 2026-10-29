@@ -4,7 +4,7 @@ use super::*;
 use sqlx::{Connection, PgConnection};
 use std::time::Duration;
 
-async fn blocked_backend(observer: &mut PgConnection, holder: i32) -> i32 {
+pub(super) async fn blocked_backend(observer: &mut PgConnection, holder: i32) -> i32 {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let blocked = sqlx::query_scalar(
