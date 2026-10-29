@@ -441,6 +441,7 @@ export function parseShareView(value: Json): ShareView {
 function recipientRole(value: string | null): ShareRecipientRole | null {
   if (
     value === null ||
+    value === 'owner' ||
     value === 'admin' ||
     value === 'member' ||
     value === 'readonly' ||

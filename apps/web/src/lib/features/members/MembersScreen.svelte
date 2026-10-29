@@ -296,7 +296,9 @@
       {#each DISPLAY_ROLES as role (role)}
         <dt>{roleLabel(role)}</dt>
         <dd>
-          {role === 'admin' || role === 'member' ? m.members_limit_write() : m.members_limit_read()}
+          {role === 'owner' || role === 'admin' || role === 'member'
+            ? m.members_limit_write()
+            : m.members_limit_read()}
         </dd>
       {/each}
     </dl>

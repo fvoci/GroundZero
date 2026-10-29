@@ -8,6 +8,7 @@ use utoipa::ToSchema;
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
 pub enum ShareRecipientRole {
+    Owner,
     Admin,
     Member,
     Readonly,

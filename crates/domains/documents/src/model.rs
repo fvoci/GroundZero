@@ -123,7 +123,7 @@ pub enum SaveConflict {
 pub struct SharedDocument {
     pub id: DocumentId,
     pub title: String,
-    /// `read` 또는 `write`.
+    /// 저장 공유를 현재 접근 등급으로 낮춘 실효 공유 권한(`read` 또는 `write`)이다.
     pub permission: String,
     /// 공유한 사람의 이름. 워크스페이스 이름은 멤버가 아닌 사람에게 알리지 않는다.
     pub shared_by: String,

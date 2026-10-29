@@ -20638,6 +20638,7 @@
         "type": "string",
         "description": "공간 문서 공유 수신자의 계산 역할. 개인 노트의 수신자에는 공간 역할을 적용하지 않는다.",
         "enum": [
+          "owner",
           "admin",
           "member",
           "readonly",
@@ -20660,7 +20661,7 @@
           },
           "permission": {
             "type": "string",
-            "description": "`read` 또는 `write`."
+            "description": "저장 공유를 현재 접근 등급으로 낮춘 실효 공유 권한(`read` 또는 `write`)이다."
           },
           "shared_by": {
             "type": "string",

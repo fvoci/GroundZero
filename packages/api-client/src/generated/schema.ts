@@ -5012,11 +5012,11 @@ export interface components {
          * @description 공간 문서 공유 수신자의 계산 역할. 개인 노트의 수신자에는 공간 역할을 적용하지 않는다.
          * @enum {string}
          */
-        ShareRecipientRole: "admin" | "member" | "readonly" | "outside_member";
+        ShareRecipientRole: "owner" | "admin" | "member" | "readonly" | "outside_member";
         /** @description 공유받은 문서. */
         SharedDocument: {
             id: components["schemas"]["DocumentId"];
-            /** @description `read` 또는 `write`. */
+            /** @description 저장 공유를 현재 접근 등급으로 낮춘 실효 공유 권한(`read` 또는 `write`)이다. */
             permission: string;
             /** @description 공유한 사람의 이름. 워크스페이스 이름은 멤버가 아닌 사람에게 알리지 않는다. */
             shared_by: string;
