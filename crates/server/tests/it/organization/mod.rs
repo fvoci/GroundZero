@@ -18,6 +18,7 @@ mod organizations_api;
 mod recurrence_security;
 mod role_sources;
 mod share_ceiling;
+mod share_display;
 mod share_races;
 mod share_resources;
 mod source_organization;

@@ -16,7 +16,7 @@ export const running: TimeEntryView & { stopped_entry_id: string | null } = {
   stopped_entry_id: null,
 };
 export const course: CourseView = {
-  can_write: true,
+  access: 'write',
   details: {
     subject: '선형대수',
     instructor: '',
@@ -50,7 +50,7 @@ export const course: CourseView = {
   ],
 };
 export const study: StudyPlanView = {
-  can_write: true,
+  access: 'write',
   units: [
     {
       id: 'unit-1',

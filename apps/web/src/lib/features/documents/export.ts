@@ -95,6 +95,7 @@ export interface PreparedExport {
 
 export interface PrepareOptions {
   format: ExportFormat;
+  signal?: AbortSignal;
   /** 참조 대상으로 가는 앱 경로(볼 수 없으면 null). */
   hrefFor: (target: ResolvedReferenceView) => string | null;
   /** 이 앱의 원점(링크를 절대 주소로). */
@@ -135,11 +136,13 @@ export function exportFileName(title: string, format: ExportFormat): string {
 
 async function resolveAll(
   refs: { kind: ReferenceKind; id: string }[],
+  signal?: AbortSignal,
 ): Promise<Map<string, ResolvedReferenceView>> {
   const out = new Map<string, ResolvedReferenceView>();
   for (let start = 0; start < refs.length; start += 100) {
+    signal?.throwIfAborted();
     const part = refs.slice(start, start + 100);
-    const resolved = await api.resolveReferences(part);
+    const resolved = await api.resolveReferences(part, signal);
     resolved.forEach((r) => out.set(`${r.kind}:${r.id}`, r));
   }
   return out;
@@ -159,6 +162,7 @@ export async function prepareExport(
   stored: DocNode,
   options: PrepareOptions,
 ): Promise<PreparedExport> {
+  options.signal?.throwIfAborted();
   const notes: string[] = [];
   const doc = toJson(stored);
 
@@ -184,7 +188,7 @@ export async function prepareExport(
   const resolved =
     refs.size === 0
       ? new Map<string, ResolvedReferenceView>()
-      : await resolveAll([...refs.values()]);
+      : await resolveAll([...refs.values()], options.signal);
   let hidden = 0;
 
   // ZIP: 받을 수 있는 파일만 담는다. PDF: 받을 수 있는 그림만 그 주소로 두고 나머지는 안내로 바꾼다.
@@ -193,15 +197,19 @@ export async function prepareExport(
   const missing: string[] = [];
   if (options.format === 'zip' || options.format === 'pdf') {
     for (const [key, f] of fileRefs) {
+      options.signal?.throwIfAborted();
       let name = f.id;
       try {
-        name = (await api.file(f.id)).name;
+        name = (await api.file(f.id, options.signal)).name;
       } catch {
+        options.signal?.throwIfAborted();
         // 이름을 볼 수 없으면 id로 둔다(아래 내용 요청도 대부분 실패한다).
       }
       try {
+        options.signal?.throwIfAborted();
         const response = await fetch(fileContentUrl(f.id, f.version), {
           credentials: 'same-origin',
+          signal: options.signal ?? null,
         });
         if (!response.ok) throw new Error(String(response.status));
         if (options.format === 'zip') {
@@ -213,6 +221,7 @@ export async function prepareExport(
           local.set(key, `${options.origin}${fileContentUrl(f.id, f.version)}`);
         }
       } catch {
+        options.signal?.throwIfAborted();
         missing.push(name === f.id ? m.documents_export_unnamed_attachment() : name);
       }
     }
@@ -279,6 +288,7 @@ export async function prepareExport(
   if (hidden > 0) {
     notes.push(m.documents_export_hidden_refs({ count: hidden, label: hiddenReferenceLabel() }));
   }
+  options.signal?.throwIfAborted();
   return { title, revision, body, files, notes };
 }
 

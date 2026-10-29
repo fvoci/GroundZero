@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
@@ -30,8 +31,8 @@ beforeEach(async () => {
   vi.spyOn(api, 'modules').mockResolvedValue([]);
   vi.spyOn(api, 'myNotes').mockResolvedValue([]);
   vi.spyOn(api, 'myInvitations').mockResolvedValue([]);
-  vi.spyOn(api, 'home').mockImplementation(() => new Promise(() => undefined));
-  vi.spyOn(api, 'myTasks').mockImplementation(() => new Promise(() => undefined));
+  vi.spyOn(homeApi, 'home').mockImplementation(() => new Promise(() => undefined));
+  vi.spyOn(homeApi, 'myTasks').mockImplementation(() => new Promise(() => undefined));
   vi.spyOn(activityApi, 'recentActivity').mockResolvedValue([]);
 });
 afterEach(() => {

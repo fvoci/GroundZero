@@ -31,7 +31,10 @@ function unit(over: Partial<StudyUnitView> = {}): StudyUnitView {
   };
 }
 
-const plan = (u: StudyUnitView): StudyPlanView => ({ can_write: true, units: [u] });
+const plan = (u: StudyUnitView): StudyPlanView => ({
+  access: 'write' as const,
+  units: [u],
+});
 
 function mockPlan(...plans: StudyPlanView[]): void {
   const spy = vi.spyOn(api, 'studyPlan');

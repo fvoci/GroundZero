@@ -2,7 +2,7 @@ import type { Workspace } from '@fvoci/api-client';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
+import { api, parseShareView } from '$lib/api/client';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import { me } from '$lib/me.svelte';
@@ -56,6 +56,44 @@ afterEach(() => {
   org.reset();
   localStorage.clear();
 });
+
+for (const [locale, label] of [
+  ['ko', '소유자'],
+  ['en', 'Owner'],
+] as const) {
+  it(`identifies workspace owners in recipient lookup and saved shares (${locale})`, async () => {
+    await setLocale(locale, { reload: false });
+    const owner = { ...recipient, recipient_role: 'owner', max_permission: 'write' };
+    vi.mocked(api.shares).mockResolvedValue([
+      parseShareView({ ...owner, id: 'owner-share', permission: 'read' }),
+    ]);
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(owner), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    render(DocumentActions, {
+      doc: ACCESS_DOCUMENT,
+      workspaces: [workspace],
+      onchanged: () => undefined,
+    });
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_share_settings() }));
+    await screen.findByText(label);
+    await fireEvent.input(await screen.findByLabelText(m.documents_email()), {
+      target: { value: owner.email },
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText(label)).toHaveLength(2);
+    });
+    await fireEvent.keyDown(screen.getByRole('button', { name: m.documents_share_permission() }), {
+      key: 'ArrowDown',
+    });
+    expect(
+      await screen.findByRole('option', { name: m.documents_permission_write() }),
+    ).toBeInTheDocument();
+  });
+}
 
 for (const [locale, role, cap] of [
   ['ko', '공간 밖 조직원', '공유 상한: 읽기'],

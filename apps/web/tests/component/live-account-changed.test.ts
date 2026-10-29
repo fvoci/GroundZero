@@ -234,7 +234,7 @@ describe('leaving the live editor with edits the server has not got', () => {
 
     expect(reload).not.toHaveBeenCalled();
     expect((await screen.findByRole('alert')).textContent).toMatch(
-      /이 브라우저에도 남기지 못했습니다/,
+      /저장하지 않은 제목은 이 화면에만/,
     );
     expect(unload().defaultPrevented).toBe(true);
   });

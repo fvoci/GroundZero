@@ -1,3 +1,10 @@
+import { courseApi } from '$lib/features/courses/api';
+import { loadCourseView } from '$lib/features/courses/course-data';
+import { studyApi } from '$lib/features/study/api';
+import { loadStudyView } from '$lib/features/study/study-data';
+import { recordsApi } from '$lib/features/records/api';
+import { systemApi, readTrash } from '$lib/features/trash/api';
+export type { TrashEntryView, TrashView } from '$lib/features/trash/api';
 import { filesApi } from '$lib/features/files/api';
 export { fileContentUrl } from '$lib/features/files/api';
 export type { FileView, FileVersionView, UploadView, FileTarget } from '$lib/features/files/model';
@@ -56,8 +63,6 @@ import type {
 } from '@fvoci/api-client';
 import type {
   Accepted,
-  MyTask,
-  MyTaskCounts,
   Organization,
   OrganizationLimits,
   OrganizationSummary,
@@ -243,69 +248,6 @@ export function parseAccepted(value: Json): Accepted {
 
 // --- 내 업무 (D-120) ---------------------------------------------------
 
-export type MyTaskBucket = 'overdue' | 'today' | 'upcoming' | 'none' | 'done';
-
-export interface MyTaskView extends Omit<MyTask, 'bucket' | 'status_category'> {
-  bucket: MyTaskBucket;
-  status_category: StatusCategory;
-}
-
-export interface MyTasksView {
-  counts: MyTaskCounts;
-  workspaces: { workspace_id: string; workspace_name: string; tasks: MyTaskView[] }[];
-}
-
-function myTaskBucket(value: string): MyTaskBucket {
-  if (
-    value === 'overdue' ||
-    value === 'today' ||
-    value === 'upcoming' ||
-    value === 'none' ||
-    value === 'done'
-  )
-    return value;
-  throw new TypeError(`unknown bucket ${value}`);
-}
-
-function parseMyTask(value: Json): MyTaskView {
-  const o = rec(value, 'my task');
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    status: str(o, 'status'),
-    status_category: statusCategory(str(o, 'status_category')),
-    priority: str(o, 'priority'),
-    start_date: optStr(o, 'start_date'),
-    due_date: optStr(o, 'due_date'),
-    bucket: myTaskBucket(str(o, 'bucket')),
-    updated_at: str(o, 'updated_at'),
-  };
-}
-
-export function parseMyTasks(value: Json): MyTasksView {
-  const o = rec(value, 'my tasks');
-  const c = rec(o.counts, 'my task counts');
-  return {
-    counts: {
-      overdue: int(c, 'overdue'),
-      today: int(c, 'today'),
-      upcoming: int(c, 'upcoming'),
-      undated: int(c, 'undated'),
-      done: int(c, 'done'),
-    },
-    workspaces: parseList(o.workspaces, (v) => {
-      const w = rec(v, 'workspace tasks');
-      return {
-        workspace_id: str(w, 'workspace_id'),
-        workspace_name: str(w, 'workspace_name'),
-        tasks: parseList(w.tasks, parseMyTask),
-      };
-    }),
-  };
-}
-
 export function parseSummary(value: Json): SummaryView {
   const o = rec(value, 'document summary');
   return {
@@ -439,6 +381,7 @@ export function parseShareView(value: Json): ShareView {
 function recipientRole(value: string | null): ShareRecipientRole | null {
   if (
     value === null ||
+    value === 'owner' ||
     value === 'admin' ||
     value === 'member' ||
     value === 'readonly' ||
@@ -732,244 +675,28 @@ export function parseItemProfile(value: Json): ItemProfileView {
   };
 }
 
-// --- 항목 기록 (D-33·D-34·D-36·D-38) -------------------------------------
-
-export type RecordFieldType =
-  | 'text'
-  | 'long_text'
-  | 'date'
-  | 'number'
-  | 'choice'
-  | 'url'
-  | 'tags'
-  | 'person'
-  | 'people'
-  | 'course'
-  /** 이 강좌의 회차(D-123 강의 질문·복습). */
-  | 'episode';
-
-const RECORD_FIELD_TYPES: readonly RecordFieldType[] = [
-  'text',
-  'long_text',
-  'date',
-  'number',
-  'choice',
-  'url',
-  'tags',
-  'person',
-  'people',
-  'course',
-  'episode',
-];
-
-export interface ChoiceView {
-  value: string;
-  label: string;
-}
-
-export interface RecordFieldDef {
-  key: string;
-  label: string;
-  type: RecordFieldType;
-  choices: ChoiceView[];
-}
-
-export interface RecordKindView {
-  kind: string;
-  label: string;
-  module_kind: string;
-  date_label: string | null;
-  fields: RecordFieldDef[];
-  file_roles: ChoiceView[];
-}
-
-/** 칸 값: 글자·수·날짜·고른 값·사람 id·사람 id 목록·태그 목록. */
-export type RecordFieldValue = string | number | string[];
-
-export interface RecordFileView {
-  role: string;
-  file_id: string | null;
-  file_name: string;
-  version: number;
-  sha256: string;
-  size: number;
-  available: boolean;
-}
-
-export interface RecordView {
-  id: string;
-  kind: string;
-  title: string;
-  occurred_on: string | null;
-  body: string;
-  fields: Record<string, RecordFieldValue>;
-  files: RecordFileView[];
-  created_by: string;
-  created_by_name: string | null;
-  updated_at: string;
-  version: number;
-  can_edit: boolean;
-  can_delete: boolean;
-}
-
-export interface RecordInput {
-  title: string;
-  occurred_on: string | null;
-  body: string;
-  fields: Record<string, RecordFieldValue>;
-  files: { file_id: string; version: number | null; role: string }[];
-}
-
-function parseChoice(value: Json): ChoiceView {
-  const o = rec(value, 'choice');
-  return { value: str(o, 'value'), label: str(o, 'label') };
-}
-
-export function parseRecordKind(value: Json): RecordKindView {
-  const o = rec(value, 'record kind');
-  return {
-    kind: str(o, 'kind'),
-    label: str(o, 'label'),
-    module_kind: str(o, 'module_kind'),
-    date_label: optStr(o, 'date_label'),
-    fields: parseList(o.fields, (f): RecordFieldDef => {
-      const r = rec(f, 'record field');
-      const type = RECORD_FIELD_TYPES.find((t) => t === r.type);
-      if (type === undefined) throw new TypeError('unknown record field type');
-      return {
-        key: str(r, 'key'),
-        label: str(r, 'label'),
-        type,
-        choices: parseList(r.choices, parseChoice),
-      };
-    }),
-    file_roles: parseList(o.file_roles, parseChoice),
-  };
-}
-
-function recordFieldValue(value: unknown): RecordFieldValue | undefined {
-  if (typeof value === 'string' || typeof value === 'number') return value;
-  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) return value;
-  return undefined;
-}
-
-export function parseRecord(value: Json): RecordView {
-  const o = rec(value, 'record');
-  const raw = rec(o.fields ?? {}, 'record fields');
-  const fields: Record<string, RecordFieldValue> = {};
-  for (const [key, v] of Object.entries(raw)) {
-    const parsed = recordFieldValue(v);
-    if (parsed !== undefined) fields[key] = parsed;
-  }
-  return {
-    id: str(o, 'id'),
-    kind: str(o, 'kind'),
-    title: str(o, 'title'),
-    occurred_on: optStr(o, 'occurred_on'),
-    body: str(o, 'body'),
-    fields,
-    files: parseList(o.files, (f): RecordFileView => {
-      const r = rec(f, 'record file');
-      return {
-        role: str(r, 'role'),
-        file_id: optStr(r, 'file_id'),
-        file_name: str(r, 'file_name'),
-        version: int(r, 'version'),
-        sha256: str(r, 'sha256'),
-        size: int(r, 'size'),
-        available: bool(r, 'available'),
-      };
-    }),
-    created_by: str(o, 'created_by'),
-    created_by_name: optStr(o, 'created_by_name'),
-    updated_at: str(o, 'updated_at'),
-    version: int(o, 'version'),
-    can_edit: bool(o, 'can_edit'),
-    can_delete: bool(o, 'can_delete'),
-  };
-}
-
-// --- Zotero 읽기 (D-34) ------------------------------------------------------
-
-export interface ZoteroLibraryInput {
-  api_key: string;
-  library_type: 'user' | 'group';
-  library_id: string;
-}
+export type {
+  RecordFieldType,
+  ChoiceView,
+  RecordFieldDef,
+  RecordKindView,
+  RecordFieldValue,
+  RecordFileView,
+  RecordView,
+  RecordInput,
+  ZoteroLibraryInput,
+} from '$lib/features/records/model';
+export { parseRecordKind, parseRecord } from '$lib/features/records/model';
 
 // --- 저장한 보기 (D-31) ------------------------------------------------------
 
-// --- 스터디 계획 (D-36) ------------------------------------------------------
-
-export const STUDY_UNIT_KINDS = ['pages', 'problems', 'minutes', 'items'] as const;
-export type StudyUnitKind = (typeof STUDY_UNIT_KINDS)[number];
-
-export interface StudyUnitView {
-  id: string;
-  number: number;
-  title: string;
-  chapter: string;
-  unit: StudyUnitKind;
-  amount: number;
-  planned_on: string | null;
-  mine: {
-    status: EpisodeStatus;
-    done_amount: number;
-    planned_on: string | null;
-    completed_on: string | null;
-    note: string;
-  };
-  /** 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409). */
-  version: number;
-}
-
-export interface StudyPlanView {
-  units: StudyUnitView[];
-  can_write: boolean;
-}
-
-export interface StudyParticipantView {
-  user_id: string;
-  display_name: string;
-  done: number;
-  in_progress: number;
-  overdue: number;
-  done_amount: number;
-}
-
-function studyUnitKind(value: string): StudyUnitKind {
-  const found = STUDY_UNIT_KINDS.find((k) => k === value);
-  if (found === undefined) throw new TypeError(`unknown study unit ${value}`);
-  return found;
-}
-
-export function parseStudyPlan(value: Json): StudyPlanView {
-  const o = rec(value, 'study plan');
-  return {
-    can_write: bool(o, 'can_write'),
-    units: parseList(o.units, (u): StudyUnitView => {
-      const r = rec(u, 'study unit');
-      const m = rec(r.mine, 'unit progress');
-      return {
-        id: str(r, 'id'),
-        number: int(r, 'number'),
-        title: str(r, 'title'),
-        chapter: str(r, 'chapter'),
-        unit: studyUnitKind(str(r, 'unit')),
-        amount: int(r, 'amount'),
-        planned_on: optStr(r, 'planned_on'),
-        mine: {
-          status: episodeStatus(str(m, 'status')),
-          done_amount: int(m, 'done_amount'),
-          planned_on: optStr(m, 'planned_on'),
-          completed_on: optStr(m, 'completed_on'),
-          note: str(m, 'note'),
-        },
-        version: int(r, 'version'),
-      };
-    }),
-  };
-}
+export type {
+  StudyUnitKind,
+  StudyUnitView,
+  StudyPlanView,
+  StudyParticipantView,
+} from '$lib/features/study/model';
+export { STUDY_UNIT_KINDS } from '$lib/features/study/model';
 
 // --- @ 참조 -------------------------------------------------------------
 
@@ -1227,308 +954,14 @@ function parseCalendar(value: Json): CalendarView {
   };
 }
 
-export type MarkTarget = 'item' | 'document' | 'task';
-
-export interface HomeTaskView {
-  id: string;
-  item_id: string;
-  workspace_id: string;
-  reference: string | null;
-  title: string;
-  // 홈 계약의 상태는 항목별 사용자 정의 문자열이고 집계는 status_category(D-116).
-  status: string;
-  status_category: StatusCategory;
-  due_date: string | null;
-  bucket: 'overdue' | 'today' | 'upcoming' | null;
-}
-
-export interface HomeView {
-  today: string;
-  up_next: HomeTaskView[];
-  /** 묶음마다의 전체 수. `up_next`는 묶음마다 50개까지라 이보다 적을 수 있다. */
-  up_next_counts: { overdue: number; today: number; upcoming: number };
-  recent_tasks: HomeTaskView[];
-  recent_documents: {
-    id: string;
-    title: string;
-    reference: string | null;
-    workspace_id: string | null;
-    item_id: string | null;
-    updated_at: string;
-  }[];
-  active_items: {
-    id: string;
-    workspace_id: string;
-    module_kind: ModuleKind;
-    reference: string | null;
-    title: string;
-    tasks_done: number;
-    tasks_total: number;
-    can_write: boolean;
-  }[];
-  pins: MarkedTargetView[];
-  favorites: MarkedTargetView[];
-}
-
-export interface MarkedTargetView {
-  kind: MarkTarget;
-  id: string;
-  label: string;
-  workspace_id: string | null;
-  item_id: string | null;
-}
-
-function markTarget(value: string): MarkTarget {
-  if (value === 'item' || value === 'document' || value === 'task') return value;
-  throw new TypeError(`unknown mark target ${value}`);
-}
-
-function parseHomeTask(value: Json): HomeTaskView {
-  const o = rec(value, 'home task');
-  const bucket = optStr(o, 'bucket');
-  if (bucket !== null && bucket !== 'overdue' && bucket !== 'today' && bucket !== 'upcoming')
-    throw new TypeError(`unknown bucket ${bucket}`);
-  return {
-    id: str(o, 'id'),
-    item_id: str(o, 'item_id'),
-    workspace_id: str(o, 'workspace_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    status: str(o, 'status'),
-    due_date: optStr(o, 'due_date'),
-    status_category: statusCategory(str(o, 'status_category')),
-    bucket,
-  };
-}
-
-function parseMarked(value: Json): MarkedTargetView {
-  const o = rec(value, 'marked target');
-  return {
-    kind: markTarget(str(o, 'kind')),
-    id: str(o, 'id'),
-    label: str(o, 'label'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-  };
-}
-
-function parseUpNextCounts(value: unknown): HomeView['up_next_counts'] {
-  const c = rec(value, 'up next counts');
-  return { overdue: int(c, 'overdue'), today: int(c, 'today'), upcoming: int(c, 'upcoming') };
-}
-
-function parseHome(value: Json): HomeView {
-  const o = rec(value, 'home');
-  return {
-    today: str(o, 'today'),
-    up_next: parseList(o.up_next, parseHomeTask),
-    up_next_counts: parseUpNextCounts(o.up_next_counts),
-    recent_tasks: parseList(o.recent_tasks, parseHomeTask),
-    recent_documents: parseList(o.recent_documents, (v) => {
-      const d = rec(v, 'home document');
-      return {
-        id: str(d, 'id'),
-        title: str(d, 'title'),
-        reference: optStr(d, 'reference'),
-        workspace_id: optStr(d, 'workspace_id'),
-        item_id: optStr(d, 'item_id'),
-        updated_at: str(d, 'updated_at'),
-      };
-    }),
-    active_items: parseList(o.active_items, (v) => {
-      const i = rec(v, 'home item');
-      return {
-        id: str(i, 'id'),
-        workspace_id: str(i, 'workspace_id'),
-        module_kind: moduleKind(str(i, 'module_kind')),
-        reference: optStr(i, 'reference'),
-        title: str(i, 'title'),
-        tasks_done: int(i, 'tasks_done'),
-        tasks_total: int(i, 'tasks_total'),
-        can_write: bool(i, 'can_write'),
-      };
-    }),
-    pins: parseList(o.pins, parseMarked),
-    favorites: parseList(o.favorites, parseMarked),
-  };
-}
-
-export interface TrashEntryView {
-  id: string;
-  kind: 'item' | 'document' | 'task' | 'event' | 'file' | 'module';
-  root_id: string;
-  title: string;
-  member_count: number;
-  deleted_by: string;
-  deleted_by_name: string | null;
-  deleted_at: string;
-  expires_at: string;
-  expired: boolean;
-  /** 만료됐지만 살아 있는 기록·문서가 참조하는 버전이 있어 자동으로 지우지 않는다(D-56). */
-  kept_for_references: boolean;
-  can_purge: boolean;
-}
-
-export interface TrashView {
-  retention_days: number;
-  /** 이전 파일 버전 보존 기간(일, D-56). null이면 영구 보존. */
-  version_retention_days: number | null;
-  entries: TrashEntryView[];
-}
-
-function parseTrash(value: Json): TrashView {
-  const o = rec(value, 'trash');
-  return {
-    retention_days: int(o, 'retention_days'),
-    version_retention_days:
-      typeof o.version_retention_days === 'number' ? o.version_retention_days : null,
-    entries: parseList(o.entries, (v): TrashEntryView => {
-      const e = rec(v, 'trash entry');
-      const kind = str(e, 'kind');
-      if (
-        kind !== 'item' &&
-        kind !== 'document' &&
-        kind !== 'task' &&
-        kind !== 'event' &&
-        kind !== 'file' &&
-        kind !== 'module'
-      )
-        throw new TypeError(`unknown trash kind ${kind}`);
-      return {
-        id: str(e, 'id'),
-        kind,
-        root_id: str(e, 'root_id'),
-        title: str(e, 'title'),
-        member_count: int(e, 'member_count'),
-        deleted_by: str(e, 'deleted_by'),
-        deleted_by_name: optStr(e, 'deleted_by_name'),
-        deleted_at: str(e, 'deleted_at'),
-        expires_at: str(e, 'expires_at'),
-        expired: bool(e, 'expired'),
-        kept_for_references: bool(e, 'kept_for_references'),
-        can_purge: bool(e, 'can_purge'),
-      };
-    }),
-  };
-}
-
-export type EpisodeStatus = 'not_started' | 'in_progress' | 'done';
-
-export interface CourseDetailsView {
-  subject: string;
-  instructor: string;
-  platform: string;
-  url: string;
-  textbook: string;
-  starts_on: string | null;
-  expires_on: string | null;
-  target_on: string | null;
-}
-
-export interface EpisodeView {
-  id: string;
-  number: number;
-  title: string;
-  chapter: string;
-  duration_seconds: number;
-  url: string;
-  materials: string;
-  planned_on: string | null;
-  mine: {
-    status: EpisodeStatus;
-    planned_on: string | null;
-    completed_on: string | null;
-    watch_count: number;
-    last_position_seconds: number | null;
-    note: string;
-  };
-  /** 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409). */
-  version: number;
-}
-
-export interface CourseView {
-  details: CourseDetailsView;
-  episodes: EpisodeView[];
-  can_write: boolean;
-}
-
-export interface ParticipantView {
-  user_id: string;
-  display_name: string;
-  done: number;
-  in_progress: number;
-  overdue: number;
-  done_seconds: number;
-}
-
-export interface NewEpisodeInput {
-  request_id: string;
-  number?: number;
-  title: string;
-  chapter: string;
-  duration_seconds: number;
-  url: string;
-  materials: string;
-  planned_on: string | null;
-}
-
-function episodeStatus(value: string): EpisodeStatus {
-  if (value === 'not_started' || value === 'in_progress' || value === 'done') return value;
-  throw new TypeError(`unknown episode status ${value}`);
-}
-
-function parseCourse(value: Json): CourseView {
-  const o = rec(value, 'course');
-  const d = rec(o.details, 'course details');
-  return {
-    details: {
-      subject: str(d, 'subject'),
-      instructor: str(d, 'instructor'),
-      platform: str(d, 'platform'),
-      url: str(d, 'url'),
-      textbook: str(d, 'textbook'),
-      starts_on: optStr(d, 'starts_on'),
-      expires_on: optStr(d, 'expires_on'),
-      target_on: optStr(d, 'target_on'),
-    },
-    episodes: parseList(o.episodes, (v): EpisodeView => {
-      const e = rec(v, 'episode');
-      const m = rec(e.mine, 'episode progress');
-      return {
-        id: str(e, 'id'),
-        number: int(e, 'number'),
-        title: str(e, 'title'),
-        chapter: str(e, 'chapter'),
-        duration_seconds: int(e, 'duration_seconds'),
-        url: str(e, 'url'),
-        materials: str(e, 'materials'),
-        planned_on: optStr(e, 'planned_on'),
-        mine: {
-          status: episodeStatus(str(m, 'status')),
-          planned_on: optStr(m, 'planned_on'),
-          completed_on: optStr(m, 'completed_on'),
-          watch_count: int(m, 'watch_count'),
-          last_position_seconds: optInt(m, 'last_position_seconds'),
-          note: str(m, 'note'),
-        },
-        version: int(e, 'version'),
-      };
-    }),
-    can_write: bool(o, 'can_write'),
-  };
-}
-
-function parseParticipant(value: Json): ParticipantView {
-  const o = rec(value, 'participant');
-  return {
-    user_id: str(o, 'user_id'),
-    display_name: str(o, 'display_name'),
-    done: int(o, 'done'),
-    in_progress: int(o, 'in_progress'),
-    overdue: int(o, 'overdue'),
-    done_seconds: int(o, 'done_seconds'),
-  };
-}
+export type {
+  EpisodeStatus,
+  CourseDetailsView,
+  EpisodeView,
+  CourseView,
+  ParticipantView,
+  NewEpisodeInput,
+} from '$lib/features/courses/model';
 
 export interface DeletedWorkspaceView {
   id: string;
@@ -1603,8 +1036,6 @@ function parseSearchResult(value: Json): SearchResultView {
     snippet: optStr(o, 'snippet'),
   };
 }
-
-const parseBatch = (v: Json): string => str(rec(v, 'trashed'), 'batch_id');
 
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
@@ -1708,111 +1139,10 @@ export const api = {
       { name },
     ),
   ...filesApi,
-  course: (item: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(item)}/course`, parseCourse),
-  setCourseDetails: (item: string, details: CourseDetailsView) =>
-    expectOk('PUT', `/api/items/${encodeURIComponent(item)}/course`, none, { ...details }),
-  addEpisodes: (item: string, episodes: NewEpisodeInput[]) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(item)}/episodes`,
-      (v) => int(rec(v, 'episodes added'), 'added'),
-      { episodes: episodes.map((e) => ({ ...e })) },
-    ),
-  /** 회차 공통 정보 고치기. `version`은 읽은 판이며, 그 사이 다른 사람이 고쳤으면 409(아무것도 바뀌지 않음). */
-  updateEpisode: (
-    id: string,
-    version: number,
-    episode: Omit<NewEpisodeInput, 'request_id'> & { number: number },
-  ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}`, none, { version, ...episode }),
-  deleteEpisode: (id: string) =>
-    expectOk('DELETE', `/api/episodes/${encodeURIComponent(id)}`, none),
-  setEpisodeProgress: (
-    id: string,
-    progress: {
-      status: EpisodeStatus;
-      planned_on: string | null;
-      last_position_seconds: number | null;
-      note: string;
-      /** 사용자 시간대의 오늘(완료한 날). */
-      today: string;
-    },
-  ) => expectOk('PUT', `/api/episodes/${encodeURIComponent(id)}/progress`, none, { ...progress }),
-  courseParticipants: (item: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/items/${encodeURIComponent(item)}/course/participants?today=${encodeURIComponent(today)}`,
-      (v) => parseList(v, parseParticipant),
-    ),
-  studyPlan: (item: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(item)}/study`, parseStudyPlan),
-  addStudyUnits: (
-    item: string,
-    units: {
-      request_id: string;
-      title: string;
-      chapter: string;
-      unit: StudyUnitKind;
-      amount: number;
-      planned_on: string | null;
-    }[],
-  ) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(item)}/study/units`,
-      (v) => int(rec(v, 'units added'), 'added'),
-      { units: units.map((u) => ({ ...u })) },
-    ),
-  /** 공통 단위 고치기. `version`은 읽은 판이며, 그 사이 다른 사람이 고쳤으면 409(아무것도 바뀌지 않음). */
-  updateStudyUnit: (
-    id: string,
-    version: number,
-    unit: {
-      number: number;
-      title: string;
-      chapter: string;
-      unit: StudyUnitKind;
-      amount: number;
-      planned_on: string | null;
-    },
-  ) => expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}`, none, { version, ...unit }),
-  deleteStudyUnit: (id: string) =>
-    expectOk('DELETE', `/api/study-units/${encodeURIComponent(id)}`, none),
-  setUnitProgress: (
-    id: string,
-    progress: {
-      status: EpisodeStatus;
-      done_amount: number;
-      planned_on: string | null;
-      note: string;
-      today: string;
-    },
-  ) =>
-    expectOk('PUT', `/api/study-units/${encodeURIComponent(id)}/progress`, none, { ...progress }),
-  planStudyUnits: (item: string, entries: { unit_id: string; planned_on: string | null }[]) =>
-    expectOk(
-      'PUT',
-      `/api/items/${encodeURIComponent(item)}/study/plan`,
-      (v) => int(rec(v, 'units planned'), 'planned'),
-      { entries: entries.map((e) => ({ ...e })) },
-    ),
-  studyParticipants: (item: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/items/${encodeURIComponent(item)}/study/participants?today=${encodeURIComponent(today)}`,
-      (v) =>
-        parseList(v, (p): StudyParticipantView => {
-          const o = rec(p, 'study participant');
-          return {
-            user_id: str(o, 'user_id'),
-            display_name: str(o, 'display_name'),
-            done: int(o, 'done'),
-            in_progress: int(o, 'in_progress'),
-            overdue: int(o, 'overdue'),
-            done_amount: int(o, 'done_amount'),
-          };
-        }),
-    ),
+  ...courseApi,
+  course: loadCourseView,
+  ...studyApi,
+  studyPlan: loadStudyView,
   deletedWorkspaces: () =>
     expectOk('GET', '/api/me/deleted-workspaces', (v) => parseList(v, parseDeletedWorkspace)),
   restoreWorkspace: (ws: string) =>
@@ -1876,11 +1206,6 @@ export const api = {
     expectOk('GET', `/api/me/shared?organization_id=${encodeURIComponent(organizationId)}`, (v) =>
       parseList(v, parseSharedView),
     ),
-  /** 바꾸는 칸만 보낸다. 없는 칸은 서버의 지금 값 그대로다. */
-  setSettings: (
-    id: string,
-    change: { visibility?: 'workspace' | 'private'; allow_copy?: boolean },
-  ) => expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/settings`, parseDocument, change),
   shares: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
@@ -1907,38 +1232,6 @@ export const api = {
       target_workspace_id: targetWorkspaceId,
       title,
     }),
-  movePreview: (id: string, target: MoveTargetInput) =>
-    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/move/preview`, parseMovePreview, {
-      target_workspace_id: target.workspaceId,
-      target_item_id: target.itemId,
-    }),
-  /** Zotero 컬렉션(D-34). 키는 이 요청에만 쓰고 서버가 저장하지 않는다. */
-  zoteroCollections: (library: ZoteroLibraryInput) =>
-    expectOk(
-      'POST',
-      '/api/zotero/collections',
-      (v) =>
-        parseList(v, (c) => {
-          const o = rec(c, 'zotero collection');
-          return { key: str(o, 'key'), name: str(o, 'name') };
-        }),
-      { ...library },
-    ),
-  /** Zotero 문헌을 연구 항목의 문헌 기록으로 가져온다(같은 문헌은 서지만 새로). */
-  zoteroImport: (itemId: string, library: ZoteroLibraryInput, collectionKey: string | null) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(itemId)}/zotero/import`,
-      (v) => {
-        const o = rec(v, 'zotero import');
-        return {
-          created: int(o, 'created'),
-          updated: int(o, 'updated'),
-          skipped: int(o, 'skipped'),
-        };
-      },
-      { ...library, collection_key: collectionKey },
-    ),
   /** 쓸 수 있는 문서 템플릿(D-27): 그 워크스페이스의 것과 내 개인 노트 템플릿. */
   documentTemplates: (workspaceId: string | null) =>
     expectOk(
@@ -1959,32 +1252,7 @@ export const api = {
     ),
   setDocumentTemplate: (id: string, template: boolean) =>
     expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/template`, none, { template }),
-  recordKinds: () => expectOk('GET', '/api/record-kinds', (v) => parseList(v, parseRecordKind)),
-  itemRecords: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/records`, (v) =>
-      parseList(v, parseRecord),
-    ),
-  createRecord: (itemId: string, requestId: string, kind: string, input: RecordInput) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(itemId)}/records`,
-      (v) => str(rec(v, 'created record'), 'id'),
-      {
-        request_id: requestId,
-        kind,
-        ...input,
-        fields: { ...input.fields },
-        files: [...input.files],
-      },
-    ),
-  updateRecord: (id: string, version: number, input: RecordInput) =>
-    expectOk(
-      'PUT',
-      `/api/records/${encodeURIComponent(id)}`,
-      (v) => int(rec(v, 'record version'), 'version'),
-      { version, ...input, fields: { ...input.fields }, files: [...input.files] },
-    ),
-  deleteRecord: (id: string) => expectOk('DELETE', `/api/records/${encodeURIComponent(id)}`, none),
+  ...recordsApi,
   itemProfile: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
   /** 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
@@ -2040,60 +1308,19 @@ export const api = {
     expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
     ),
-  trashDocument: (id: string) =>
-    expectOk('DELETE', `/api/documents/${encodeURIComponent(id)}`, parseBatch),
-  trashItem: (id: string) => expectOk('DELETE', `/api/items/${encodeURIComponent(id)}`, parseBatch),
-  /** 모듈을 휴지통으로(관리자, D-78). 항목은 모듈과 함께 보이지 않고, 되살리면 모듈만 돌아온다. */
-  trashModule: (id: string) =>
-    expectOk('DELETE', `/api/modules/${encodeURIComponent(id)}`, parseBatch),
-  /** 워크스페이스 휴지통, 또는 null이면 내 개인 노트 휴지통. */
-  trash: (workspaceId: string | null) =>
-    expectOk(
-      'GET',
-      workspaceId === null
-        ? '/api/me/trash'
-        : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash`,
-      parseTrash,
-    ),
-  restoreTrash: (batch: string) =>
-    expectOk('POST', `/api/trash/${encodeURIComponent(batch)}/restore`, none),
-  purgeTrash: (batch: string) =>
-    expectOk('DELETE', `/api/trash/${encodeURIComponent(batch)}`, none),
-  purgeExpiredTrash: (workspaceId: string | null) =>
-    expectOk(
-      'POST',
-      workspaceId === null
-        ? '/api/me/trash/purge-expired'
-        : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash/purge-expired`,
-      (v) => int(rec(v, 'purged'), 'purged'),
-    ),
-  /** 이전 파일 버전 보존 기간(D-56). null이면 영구 보존. */
-  setVersionRetention: (workspaceId: string, days: number | null) =>
-    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/version-retention`, none, {
-      days,
-    }),
+  trashDocument: systemApi.trashDocument,
+  trashItem: systemApi.trashItem,
+  trashModule: systemApi.trashModule,
+  trash: readTrash,
+  restoreTrash: systemApi.restoreTrash,
+  purgeTrash: systemApi.purgeTrash,
+  purgeExpiredTrash: systemApi.purgeExpiredTrash,
+  setVersionRetention: systemApi.setVersionRetention,
   setWorkspaceRealtime: (workspaceId: string, enabled: boolean) =>
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/realtime`, none, {
       enabled,
     }),
-  setTrashRetention: (workspaceId: string, days: number) =>
-    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
-      days,
-    }),
-  /** 홈은 현재 조직의 요약이다(D-19·D-120). */
-  home: (organizationId: string, tz: string) =>
-    expectOk(
-      'GET',
-      `/api/me/home?organization_id=${encodeURIComponent(organizationId)}&tz=${encodeURIComponent(tz)}`,
-      parseHome,
-    ),
-  /** 내 업무: 담당=나, 날짜 없음 포함, 워크스페이스별 묶음(D-120). `today`는 사용자 시간대의 오늘(YYYY-MM-DD). */
-  myTasks: (organizationId: string, today: string) =>
-    expectOk(
-      'GET',
-      `/api/me/tasks?organization_id=${encodeURIComponent(organizationId)}&today=${encodeURIComponent(today)}`,
-      parseMyTasks,
-    ),
+  setTrashRetention: systemApi.setTrashRetention,
   /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
   calendar: (
     workspaceId: string,
@@ -2124,31 +1351,19 @@ export const api = {
       parseRevision,
     ),
   /** 저장된 리비전 하나를 내보낸다(D-75). 서버가 내보내기 권한을 확인하고 기록을 남긴 뒤 그 리비전을 준다. */
-  exportRevision: (id: string, revision: number, format: 'markdown' | 'zip' | 'pdf') =>
+  exportRevision: (
+    id: string,
+    revision: number,
+    format: 'markdown' | 'zip' | 'pdf',
+    signal?: AbortSignal,
+  ) =>
     expectOk(
       'POST',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/export`,
       parseRevision,
       { format },
+      signal,
     ),
-  /** 옛 리비전 내용으로 새 리비전을 만든다. 보고 있던 리비전이 지났으면 `{ kind: 'conflict', current }`. */
-  async restoreRevision(
-    id: string,
-    revision: number,
-    input: { requestId: string; baseRevision: number },
-  ): Promise<
-    { kind: 'restored'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
-  > {
-    const { status, json, etag } = await request(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
-      { request_id: input.requestId, base_revision: input.baseRevision },
-    );
-    const current = conflictCurrent(status, json);
-    if (current !== undefined) return { kind: 'conflict', current };
-    if (status !== 200) fail(status, json);
-    return { kind: 'restored', document: withEtag(parseDocument(json), etag) };
-  },
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
   /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
   search: (
@@ -2179,8 +1394,14 @@ export const api = {
       parseList(v, parseCandidate),
     );
   },
-  resolveReferences: (refs: { kind: ReferenceKind; id: string }[]) =>
-    expectOk('POST', '/api/references/resolve', (v) => parseList(v, parseResolved), { refs }),
+  resolveReferences: (refs: { kind: ReferenceKind; id: string }[], signal?: AbortSignal) =>
+    expectOk(
+      'POST',
+      '/api/references/resolve',
+      (v) => parseList(v, parseResolved),
+      { refs },
+      signal,
+    ),
   documentBacklinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
@@ -2272,29 +1493,6 @@ export const api = {
     expectOk('DELETE', `/api/public-links/${encodeURIComponent(linkId)}`, none),
   publicDocument: (token: string) =>
     expectOk('GET', `/api/public/${encodeURIComponent(token)}`, parsePublicDocument),
-  /** 확인한 미리보기와 함께 이동한다. 그사이 접근 변화가 바뀌면 `{ kind: 'changed', preview }`. */
-  async moveDocument(
-    id: string,
-    target: MoveTargetInput,
-    acknowledged: MovePreviewView,
-  ): Promise<
-    { kind: 'moved'; outcome: MoveOutcomeView } | { kind: 'changed'; preview: MovePreviewView }
-  > {
-    const { status, json } = await request(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/move`,
-      {
-        target_workspace_id: target.workspaceId,
-        target_item_id: target.itemId,
-        acknowledged: { changes: acknowledged.changes },
-      },
-    );
-    if (status === 409 && isRecord(json) && 'changes' in json) {
-      return { kind: 'changed', preview: parseMovePreview(json) };
-    }
-    if (status !== 200) fail(status, json);
-    return { kind: 'moved', outcome: parseMoveOutcome(json) };
-  },
   /**
    * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
    * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.

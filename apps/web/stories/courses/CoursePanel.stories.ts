@@ -65,10 +65,10 @@ export const RestoreDraft: Story = {
   },
 };
 
-/** 읽기 전용·보관 항목: 진도 단추는 없고, 내 메모·날짜는 저장 단추 없는 읽기 전용(readonly) 칸으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
-export const ReadOnly: Story = {
+/** 보관 항목은 개인 진도를 읽기만 한다. 읽기 전용 사용자의 개인 진도는 허용한다(D-113 SR1-11). */
+export const Archived: Story = {
   beforeEach: () => {
-    spyOn(api, 'course').mockResolvedValue({ ...course, can_write: false });
+    spyOn(api, 'course').mockResolvedValue({ ...course, access: 'archived' });
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

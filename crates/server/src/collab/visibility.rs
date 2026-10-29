@@ -3,15 +3,7 @@
 use fvoci_core::error::AppError;
 use fvoci_db::AnonTx;
 
-/// 성공적으로 커밋된 이동의 top-level xid8. 롤백된 이동에는 만들지 않는다.
-#[derive(Debug, Clone, Copy)]
-pub struct CommittedMove(u64);
-
-impl CommittedMove {
-    pub(crate) fn new(xid: u64) -> Self {
-        Self(xid)
-    }
-}
+pub use fvoci_documents::state::CommittedMove;
 
 /// pg_snapshot의 xid8 상한과 진행 중 top-level 트랜잭션 목록.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,7 +35,7 @@ impl Snapshot {
 
     /// 성공이 확인된 top-level xid에만 적용한다. 진행 중/미래 xid는 보이지 않는다.
     pub(super) fn sees(&self, moved: CommittedMove) -> bool {
-        moved.0 < self.upper && !self.in_progress.contains(&moved.0)
+        moved.transaction_id() < self.upper && !self.in_progress.contains(&moved.transaction_id())
     }
 
     #[cfg(test)]

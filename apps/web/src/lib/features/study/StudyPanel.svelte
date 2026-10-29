@@ -217,9 +217,12 @@
       mineBase = base;
     },
     reset: resetMine,
-    // 쓸 수 없으면(읽기 전용·보관) 폼은 읽기만 하므로 고친 것으로 치지 않는다(이탈 확인 없음, D3B-F-2 확인 필요 2).
+    // D-113 SR1-11: 읽기 전용도 개인 진도는 남긴다. 보관 상태에서는 읽기만 한다.
     dirty: () =>
-      plan?.can_write === true && openUnit !== undefined && JSON.stringify(mine) !== mineBase,
+      plan !== undefined &&
+      plan.access !== 'archived' &&
+      openUnit !== undefined &&
+      JSON.stringify(mine) !== mineBase,
     busy: () => savingMine,
   });
   // 재배치 시작일·하루 단위 수는 조회가 아니라 작업 설정이라 다른 학습 폼처럼 남긴다(⑱).
@@ -246,7 +249,7 @@
       error = m.study_per_day_invalid();
       return;
     }
-    if (replanning || !plan?.can_write) return;
+    if (replanning || plan === undefined || plan.access === 'archived') return;
     const attempt = replanDraft.capture();
     if (attempt === undefined) return;
     const start = replanStart;
@@ -328,7 +331,8 @@
    * 고르게 하고, 쓸 수 있을 때 되살린다).
    */
   function setPlan(next: StudyPlanView): void {
-    if (plan?.can_write === true && !next.can_write) openUnit = undefined;
+    if (plan !== undefined && plan.access !== 'archived' && next.access === 'archived')
+      openUnit = undefined;
     plan = next;
   }
 
@@ -339,7 +343,7 @@
   }
 
   function setStatus(u: StudyUnitView, next: EpisodeStatus): void {
-    if (!plan?.can_write) return;
+    if (plan === undefined || plan.access === 'archived') return;
     void run(
       async () => {
         const fresh = await freshMine(u);
@@ -418,7 +422,7 @@
       return;
     }
     // 저장 중에 다시 누르면 같은 판으로 두 번 보내 두 번째가 내 첫 저장 때문에 409를 받는다(잘못된 "먼저 고쳤다" 안내).
-    if (savingUnit || !plan?.can_write) return;
+    if (savingUnit || plan?.access !== 'write') return;
     const attempt = unitDraft.capture();
     if (attempt === undefined) return;
     savingUnit = true;
@@ -479,7 +483,7 @@
 
   async function addUnit(e: SubmitEvent): Promise<void> {
     e.preventDefault();
-    if (adding || !plan?.can_write) return;
+    if (adding || plan?.access !== 'write') return;
     const amount = wholeAmount(draft.amount);
     if (draft.title.trim() === '' || amount === undefined) {
       error = m.study_unit_invalid();
@@ -515,7 +519,7 @@
   }
 
   async function saveMine(u: StudyUnitView): Promise<void> {
-    if (savingMine || !plan?.can_write) return;
+    if (savingMine || plan === undefined || plan.access === 'archived') return;
     const doneAmount = wholeAmount(mine.done_amount);
     if (doneAmount === undefined) {
       error = m.study_done_amount_invalid();
@@ -604,7 +608,7 @@
       </div>
     </div>
 
-    {#if p.overdue.length > 0 && current.can_write}
+    {#if p.overdue.length > 0 && current.access !== 'archived'}
       <!-- 이 파일의 폼은 모두 저장하는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 저장을 버리게 하고,
            만들기는 다시 내면 새 요청 id로 하나 더 만들며, 판이 있는 고치기는 기준 판을 못 옮겨 자기 저장과 409로 부딪친다. -->
       {#each replanDraft.offers as offer (offer.key)}
@@ -672,8 +676,8 @@
             <span class="ml-auto">{statusLabel(u.mine.status)}</span>
           </div>
           <div class="flex flex-wrap gap-1">
-            <!-- 진도는 쓸 수 있는 사람만 남긴다. 읽기 전용은 본인 진도도 남기지 못한다(D-20 ⑧, 서버도 거절). -->
-            {#if current.can_write}
+            <!-- D-113 SR1-11: 읽기 전용도 본인 진도를 남긴다. -->
+            {#if current.access !== 'archived'}
               {#each ['not_started', 'in_progress', 'done'] as const as s (s)}
                 {#if u.mine.status !== s}
                   <Button
@@ -706,7 +710,7 @@
                 ? m.time_recording()
                 : m.study_track()}</Button
             >
-            {#if current.can_write}
+            {#if current.access === 'write'}
               <Button
                 size="sm"
                 variant="ghost"
@@ -829,7 +833,7 @@
           {/if}
           {#if openUnit === u.id}
             <!-- 쓸 수 없으면 저장 없이 읽기만 한다. 남긴 입력은 지우지 않고 쓸 수 있을 때 고르게 한다. -->
-            {#if current.can_write}
+            {#if current.access !== 'archived'}
               {#each mineDraft.offers as offer (offer.key)}
                 <fieldset class="contents" disabled={savingMine}>
                   <FormDraftOffer
@@ -858,13 +862,13 @@
                   <Input
                     id={`unit-done-${u.id}`}
                     inputmode="numeric"
-                    readonly={!current.can_write}
+                    readonly={current.access === 'archived'}
                     bind:value={mine.done_amount}
                   />
                 </div>
                 <div class="flex flex-col gap-1">
                   <Label for={`unit-plan-${u.id}`}>{m.study_my_planned()}</Label>
-                  {#if current.can_write}
+                  {#if current.access !== 'archived'}
                     <Input id={`unit-plan-${u.id}`} type="date" bind:value={mine.planned_on} />
                   {:else}
                     <!-- 날짜 칸은 readonly여도 달력이 열리는 브라우저가 있어 읽을 글로 보인다. -->
@@ -880,11 +884,11 @@
                   <Textarea
                     id={`unit-note-${u.id}`}
                     rows={2}
-                    readonly={!current.can_write}
+                    readonly={current.access === 'archived'}
                     bind:value={mine.note}
                   />
                 </div>
-                {#if current.can_write}
+                {#if current.access !== 'archived'}
                   <div><Button type="submit" size="sm">{m.common_save()}</Button></div>
                 {/if}
               </form>
@@ -896,7 +900,7 @@
       {/each}
     </ol>
 
-    {#if current.can_write}
+    {#if current.access === 'write'}
       {#each newDraft.offers as offer (offer.key)}
         <fieldset class="contents" disabled={adding}>
           <FormDraftOffer

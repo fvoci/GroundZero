@@ -132,7 +132,7 @@ describe('course panel', () => {
     version: 1,
   };
   const course: CourseView = {
-    can_write: true,
+    access: 'write' as const,
     details: {
       subject: '',
       instructor: '',
@@ -292,7 +292,7 @@ describe('study panel', () => {
     mine: { status: 'not_started', done_amount: 0, planned_on: null, note: '', completed_on: null },
     version: 1,
   };
-  const plan: StudyPlanView = { can_write: true, units: [unit] };
+  const plan: StudyPlanView = { access: 'write' as const, units: [unit] };
 
   beforeEach(() => {
     vi.spyOn(api, 'studyPlan').mockResolvedValue(plan);

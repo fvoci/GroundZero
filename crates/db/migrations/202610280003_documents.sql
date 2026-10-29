@@ -202,7 +202,9 @@ RETURNS TABLE(user_id uuid, email text, display_name text, recipient_role text, 
       RETURN;
     END IF;
     IF v_doc.owner_user_id IS NULL THEN
-      v_role := coalesce(app_workspace_role(v_doc.workspace_id, p_user), 'outside_member');
+      v_role := CASE WHEN EXISTS (
+        SELECT 1 FROM workspaces WHERE id = v_doc.workspace_id AND owner_id = p_user
+      ) THEN 'owner' ELSE coalesce(app_workspace_role(v_doc.workspace_id, p_user), 'outside_member') END;
     END IF;
     RETURN QUERY SELECT u.id, u.email, u.display_name, v_role,
       CASE WHEN v_role IN ('readonly', 'outside_member') THEN 'read' ELSE 'write' END
@@ -374,7 +376,11 @@ CREATE FUNCTION fvoci.app_shared_with_me(p_organization uuid DEFAULT NULL::uuid)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT d.id, d.title, s.permission, granter.display_name, d.updated_at
+    -- 저장 공유는 보존하고 현재 접근 등급으로 낮춘다. 읽기 공유가 공간 권한 때문에 수정 공유로 올라가지는 않는다(D-20·D-113).
+    SELECT d.id, d.title,
+      CASE WHEN s.permission = 'write' AND app_access('document', d.id) IN ('write', 'owner')
+           THEN 'write' ELSE 'read' END,
+      granter.display_name, d.updated_at
     FROM document_shares s
     JOIN documents d ON d.id = s.document_id
     JOIN users granter ON granter.id = s.granted_by

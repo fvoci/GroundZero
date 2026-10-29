@@ -181,15 +181,13 @@ async fn episode_api_counts_scalars_and_rejected_batches_leave_no_rows()
     let stored = send(
         &app,
         Method::GET,
-        &format!("/api/items/{item_id}/course"),
+        &format!("/api/items/{item_id}/episodes"),
         Some(&user),
         None,
     )
     .await;
     assert_eq!(stored.status, StatusCode::OK, "{:?}", stored.json);
-    let rows = stored.json["episodes"]
-        .as_array()
-        .ok_or("missing episodes")?;
+    let rows = stored.json.as_array().ok_or("missing episodes")?;
     assert_eq!(rows.len(), titles.len());
     for title in titles {
         assert!(rows.iter().any(|row| row["title"] == title));

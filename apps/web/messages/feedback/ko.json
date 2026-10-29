@@ -3,5 +3,13 @@
   "feedback_account_changed_title": "로그인 계정이 바뀌었습니다",
   "feedback_account_switching": "로그인 계정이 바뀌어 이전 화면과 입력을 가렸습니다. 지금 계정으로 다시 읽어 계속해 주세요.",
   "feedback_reload": "지금 계정으로 다시 읽기",
-  "feedback_new_version": "새 버전이 배포되었습니다. 입력한 내용을 저장한 뒤 페이지를 새로고침해 주세요."
+  "feedback_new_version": "새 버전이 배포되었습니다. 입력한 내용을 저장한 뒤 페이지를 새로고침해 주세요.",
+  "feedback_logout_pending": "이전 화면과 데이터를 지웠습니다. 로그아웃을 완료하고 이동합니다.",
+  "feedback_logout_failed": "로그아웃하지 못했습니다. 이전 화면은 계속 가려져 있습니다. 다시 시도해 주세요.",
+  "feedback_logout_retry": "로그아웃 다시 하기",
+  "feedback_restore_title": "로그인 상태 확인",
+  "feedback_restore_pending": "이전 화면을 가린 채 로그인 상태와 최신 데이터를 다시 확인합니다.",
+  "feedback_restore_failed": "로그인 상태를 확인하지 못했습니다. 이전 화면은 계속 가려져 있습니다.",
+  "feedback_signed_out_title": "로그아웃되었습니다",
+  "feedback_signed_out_pending": "이전 화면을 가렸습니다. 로그인 화면으로 이동합니다."
 }

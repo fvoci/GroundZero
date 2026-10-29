@@ -1,6 +1,6 @@
 //! 캐시 범위와 조건부 요청(D-77). CDN이 없는 셀프호스트와 CDN 뒤에서 같은 머리글을 낸다.
 //!
-//! - `/api`·`/auth`·`/healthz`: 핸들러가 재검증을 허용한 GET·HEAD의 200·304(문서 단건 조회)만
+//! - `/api`·`/auth`·`/healthz`: 정확한 문서 단건 GET·HEAD의 200·304만
 //!   `private, no-cache, no-transform`, 나머지는 모두 `no-store, no-transform`. 공유 캐시에 남지 않고, 중간 장치가
 //!   본문을 압축·변환하며 ETag를 약하게 바꾸지 않게 한다.
 //! - 해시 파일명 정적 자원(`/assets/*`, `/rhwp/<입력 해시>/*`): `public, max-age=31536000, immutable`.
@@ -25,6 +25,42 @@ enum Scope {
     Api,
     Immutable,
     Revalidate,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DocumentCache {
+    Read,
+    LegacyWrite,
+    None,
+}
+
+fn document_cache(method: &Method, path: &str) -> DocumentCache {
+    let Some(rest) = path.strip_prefix("/api/documents/") else {
+        return DocumentCache::None;
+    };
+    if rest.is_empty() {
+        return DocumentCache::None;
+    }
+    if !rest.contains('/') {
+        return match *method {
+            Method::GET | Method::HEAD => DocumentCache::Read,
+            Method::PUT | Method::PATCH => DocumentCache::LegacyWrite,
+            _ => DocumentCache::None,
+        };
+    }
+    if *method == Method::POST
+        && let Some((id, tail)) = rest.split_once('/')
+        && !id.is_empty()
+        && let Some(revision) = tail
+            .strip_prefix("revisions/")
+            .and_then(|tail| tail.strip_suffix("/restore"))
+        && !revision.is_empty()
+        && !revision.contains('/')
+    {
+        DocumentCache::LegacyWrite
+    } else {
+        DocumentCache::None
+    }
 }
 
 fn under(path: &str, prefix: &str) -> bool {
@@ -53,18 +89,20 @@ fn scope(path: &str) -> Scope {
 /// 모든 응답의 마지막에 범위별 `Cache-Control`을 정한다(라우터 맨 바깥 층).
 pub async fn policy(request: Request, next: Next) -> Response {
     let scope = scope(request.uri().path());
-    let safe = matches!(*request.method(), Method::GET | Method::HEAD);
+    let document = document_cache(request.method(), request.uri().path());
     let mut response = next.run(request).await;
     let status = response.status();
     let ok = status == StatusCode::OK || status == StatusCode::NOT_MODIFIED;
     let headers = response.headers_mut();
     let value = match scope {
         Scope::Api => {
-            let revalidate = safe
-                && ok
-                && headers
-                    .get(header::CACHE_CONTROL)
-                    .is_some_and(|v| v == PRIVATE_REVALIDATE);
+            let revalidate = document == DocumentCache::Read && ok;
+            // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
+            // 정확한 PUT·PATCH 단건·POST 리비전 복원 200만 다음 If-Match용 ETag를 남긴다.
+            let legacy_etag = document == DocumentCache::LegacyWrite && status == StatusCode::OK;
+            if !revalidate && !legacy_etag {
+                headers.remove(header::ETAG);
+            }
             if revalidate {
                 PRIVATE_REVALIDATE
             } else {
@@ -89,6 +127,144 @@ pub async fn policy(request: Request, next: Next) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Router, body::Body, middleware};
+    use tower::ServiceExt;
+
+    // SR-221-3 / D-77: 처리기가 성공 응답에 잘못 단 머리글도 바깥 층이 강제한다.
+    async fn downstream(method: Method, path: &str, status: StatusCode) -> Response {
+        Router::new()
+            .fallback(move || async move {
+                (
+                    status,
+                    [
+                        (header::CACHE_CONTROL, PRIVATE_REVALIDATE),
+                        (header::ETAG, "\"downstream\""),
+                    ],
+                )
+            })
+            .layer(middleware::from_fn(policy))
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    fn assert_no_store(response: &Response) {
+        assert_eq!(response.headers()[header::CACHE_CONTROL], NO_STORE);
+        assert!(!response.headers().contains_key(header::ETAG));
+    }
+
+    #[tokio::test]
+    async fn policy_overrides_sensitive_success_headers_outside_the_allowlist() {
+        for path in [
+            "/api/workspaces",
+            "/api",
+            "/auth/login",
+            "/healthz",
+            "/api/documents",
+            "/api/documents/",
+            "/api/documents/x/",
+            "/api/documents/x/revisions",
+            "/api/documents/x/collab",
+            "/api/documents-other/x",
+            "/api/documents//revisions/1/restore",
+            "/api/files/x/content?inline=true",
+        ] {
+            for method in [Method::GET, Method::HEAD] {
+                for status in [StatusCode::OK, StatusCode::NOT_MODIFIED] {
+                    let response = downstream(method.clone(), path, status).await;
+                    assert_no_store(&response);
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn policy_preserves_only_single_document_reads_and_three_legacy_write_etags() {
+        for method in [Method::GET, Method::HEAD] {
+            for status in [StatusCode::OK, StatusCode::NOT_MODIFIED] {
+                let response =
+                    downstream(method.clone(), "/api/documents/x?view=body", status).await;
+                assert_eq!(
+                    response.headers()[header::CACHE_CONTROL],
+                    PRIVATE_REVALIDATE
+                );
+                assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
+            }
+        }
+        // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
+        for (method, path) in [
+            (Method::PUT, "/api/documents/x"),
+            (Method::PATCH, "/api/documents/x"),
+            (Method::POST, "/api/documents/x/revisions/1/restore"),
+        ] {
+            let response = downstream(method, path, StatusCode::OK).await;
+            assert_eq!(response.headers()[header::CACHE_CONTROL], NO_STORE);
+            assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
+        }
+    }
+
+    #[tokio::test]
+    async fn policy_removes_etags_for_disallowed_methods_and_statuses() {
+        for (method, path) in [
+            (Method::POST, "/api/documents/x"),
+            (Method::DELETE, "/api/documents/x"),
+            (Method::PUT, "/api/documents/x/"),
+            (Method::PATCH, "/api/documents"),
+            (Method::PATCH, "/api/documents/"),
+            (Method::PATCH, "/api/documents/x/"),
+            (Method::PATCH, "/api/documents/x/settings"),
+            (Method::PATCH, "/api/documents-other/x"),
+            (Method::PATCH, "/api/documents/x/revisions/1/restore"),
+            (Method::GET, "/api/documents/x/revisions/1/restore"),
+            (Method::PUT, "/api/documents/x/revisions/1/restore"),
+            (Method::POST, "/api/documents/x/revisions/1/restore/"),
+            (Method::POST, "/api/documents/x/revisions//restore"),
+            (Method::POST, "/api/documents/x/revisions/1/extra/restore"),
+        ] {
+            assert_no_store(&downstream(method, path, StatusCode::OK).await);
+        }
+        for status in [
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+            StatusCode::NOT_FOUND,
+            StatusCode::CONFLICT,
+            StatusCode::PRECONDITION_FAILED,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
+        ] {
+            for method in [Method::GET, Method::HEAD, Method::PUT, Method::PATCH] {
+                assert_no_store(&downstream(method, "/api/documents/x", status).await);
+            }
+            assert_no_store(
+                &downstream(Method::POST, "/api/documents/x/revisions/1/restore", status).await,
+            );
+        }
+        for status in [
+            StatusCode::CREATED,
+            StatusCode::NO_CONTENT,
+            StatusCode::NOT_MODIFIED,
+        ] {
+            assert_no_store(&downstream(Method::PUT, "/api/documents/x", status).await);
+            assert_no_store(&downstream(Method::PATCH, "/api/documents/x", status).await);
+            assert_no_store(
+                &downstream(Method::POST, "/api/documents/x/revisions/1/restore", status).await,
+            );
+        }
+        assert_no_store(
+            &downstream(
+                Method::GET,
+                "/api/documents/x/collab",
+                StatusCode::SWITCHING_PROTOCOLS,
+            )
+            .await,
+        );
+    }
 
     #[test]
     fn scopes_follow_the_path() {

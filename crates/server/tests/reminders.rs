@@ -99,12 +99,12 @@ async fn item_reminders_reach_people_who_can_see_the_item_once_a_day() {
     let c = send(
         &app,
         Method::GET,
-        &format!("/api/items/{course}/course"),
+        &format!("/api/items/{course}/episodes"),
         Some(&learner),
         None,
     )
     .await;
-    let episode = c.json["episodes"][0]["id"].as_str().unwrap().to_owned();
+    let episode = c.json[0]["id"].as_str().unwrap().to_owned();
     send(
         &app,
         Method::PUT,

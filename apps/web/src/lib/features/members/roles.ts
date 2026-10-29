@@ -2,9 +2,11 @@ import type { Role, ShareRecipientRole } from '@fvoci/api-client';
 
 import { m } from '$lib/paraglide/messages.js';
 
-/** 역할 표시 이름(D-112: 관리자·멤버·읽기 전용). 색만이 아니라 이름으로 구분한다(D-66). 표시 언어가 바뀔 수 있어 부를 때 계산한다. */
+/** 공간·공유 수신자의 역할 표시 이름(D-20·D-112). 색만이 아니라 이름으로 구분한다(D-66). 표시 언어가 바뀔 수 있어 부를 때 계산한다. */
 export function roleLabel(role: Role | ShareRecipientRole): string {
   switch (role) {
+    case 'owner':
+      return m.members_owner();
     case 'admin':
       return m.members_role_admin();
     case 'member':
@@ -18,6 +20,7 @@ export function roleLabel(role: Role | ShareRecipientRole): string {
 
 export const ROLES: Role[] = ['admin', 'member', 'readonly'];
 export const DISPLAY_ROLES: ShareRecipientRole[] = [
+  'owner',
   'admin',
   'member',
   'readonly',

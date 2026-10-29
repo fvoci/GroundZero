@@ -78,7 +78,7 @@ describe('export dialog server permission (D-115, SR-200-1)', () => {
     await clickExport(doc);
 
     await waitFor(() => {
-      expect(exportRevision).toHaveBeenCalledWith(doc.id, 3, 'markdown');
+      expect(exportRevision).toHaveBeenCalledWith(doc.id, 3, 'markdown', expect.any(AbortSignal));
     });
     await waitFor(() => {
       expect(exporter.saveBlob).toHaveBeenCalledOnce();

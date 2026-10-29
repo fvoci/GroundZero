@@ -1,9 +1,11 @@
+import { type MyTasksView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { activityApi, type NotificationPageView } from '$lib/features/activity/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Activity, ReceivedInvitation } from '@fvoci/api-client';
-import { api, NetworkError, type MyTasksView } from '$lib/api/client';
+import { api, NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import MyTasksScreen from '$lib/features/home/MyTasksScreen.svelte';
 import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
@@ -75,18 +77,18 @@ const mine: MyTasksView = {
 describe('organization summaries', () => {
   it('makes no personal requests until an organization is selected', async () => {
     org.reset();
-    const home = vi.spyOn(api, 'home');
+    const home = vi.spyOn(homeApi, 'home');
     const { unmount } = render(HomeDashboard, { workspaces: [] });
     expect(await screen.findByText(m.app_organization_required())).toBeVisible();
     expect(screen.queryByRole('heading')).toBeNull();
     expect(home).not.toHaveBeenCalled();
-    expect(api.myTasks).not.toHaveBeenCalled();
+    expect(homeApi.myTasks).not.toHaveBeenCalled();
     expect(activityApi.recentActivity).not.toHaveBeenCalled();
     unmount();
   });
 
   it('groups my tasks by workspace, sorts due date then update, and keeps undated custom statuses', async () => {
-    vi.mocked(api.myTasks).mockResolvedValue(mine);
+    vi.mocked(homeApi.myTasks).mockResolvedValue(mine);
     render(MyTasksScreen);
     const links = await screen.findAllByRole('link');
     expect(links.map((a) => a.textContent)).toEqual([
@@ -100,7 +102,7 @@ describe('organization summaries', () => {
   });
 
   it('puts undated tasks under a "날짜 없음" heading inside their workspace (D-120)', async () => {
-    vi.mocked(api.myTasks).mockResolvedValue(mine);
+    vi.mocked(homeApi.myTasks).mockResolvedValue(mine);
     render(MyTasksScreen);
     const section = (await screen.findByRole('heading', { name: '연구실 · 3' })).closest('section');
     if (section === null) throw new Error('workspace section');
@@ -120,7 +122,7 @@ describe('organization summaries', () => {
   it('reloads on organization change and discards a late task response', async () => {
     org.load('user-a', [TEST_ORGANIZATION, second], TEST_ORGANIZATION.id);
     let finish: (value: MyTasksView) => void = () => undefined;
-    vi.mocked(api.myTasks)
+    vi.mocked(homeApi.myTasks)
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -136,7 +138,7 @@ describe('organization summaries', () => {
     await screen.findByText(m.home_my_tasks_empty());
     finish(mine);
     await waitFor(() => {
-      expect(api.myTasks).toHaveBeenLastCalledWith(second.id, expect.any(String));
+      expect(homeApi.myTasks).toHaveBeenLastCalledWith(second.id, expect.any(String));
     });
     expect(screen.queryByText(task.title)).toBeNull();
     org.reset();
@@ -152,7 +154,7 @@ describe('organization summaries', () => {
     const created = taskViews()[0];
     if (item === undefined || created === undefined) throw new Error('missing synthetic task');
     localStorage.setItem(org.key('quick-add-item'), item.id);
-    vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
     vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     const add = vi
       .spyOn(work, 'createQuickTask')
@@ -176,7 +178,7 @@ describe('organization summaries', () => {
     expect(localStorage.getItem(org.key('quick-add-item'))).toBe(item.id);
     org.select(second.id);
     await waitFor(() => {
-      expect(api.home).toHaveBeenLastCalledWith(second.id, expect.any(String));
+      expect(homeApi.home).toHaveBeenLastCalledWith(second.id, expect.any(String));
     });
     expect(localStorage.getItem(org.key('quick-add-item'))).toBeNull();
   });
@@ -395,7 +397,7 @@ describe('activity feed', () => {
 
 it('refreshes the home notification preview when its invitation is declined', async () => {
   let pending = true;
-  vi.spyOn(api, 'home').mockResolvedValue(emptyHomeView());
+  vi.spyOn(homeApi, 'home').mockResolvedValue(emptyHomeView());
   vi.spyOn(api, 'myInvitations').mockImplementation(() =>
     Promise.resolve(pending ? [INVITATION] : []),
   );

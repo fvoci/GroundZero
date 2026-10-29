@@ -56,6 +56,8 @@
   "home_favorites_empty": "항목·문서·업무 화면의 “즐겨찾기”로 더할 수 있습니다.",
   "home_active": "진행 중인 항목",
   "home_tasks_done": "업무 {done}/{total} 완료",
+  "home_course_done": "강의 {done}/{total} 완료",
+  "home_study_done": "공부 {done} / 목표 {target}",
   "home_active_empty": "진행 중인 항목이 없습니다.",
   "home_recent": "최근 작업",
   "home_recent_empty": "최근에 고친 문서·업무가 없습니다.",
