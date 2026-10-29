@@ -116,7 +116,7 @@ async fn prepare(
 }
 
 async fn blocked(db: &Db, user: UserId, doc: DocumentId, workspace: Option<Uuid>) -> AppError {
-    // 명령 권한으로 찾은 문서가 호출자에게 보인다는 뜻은 아니다. 조회 실패도 식별자를 숨긴다.
+    // 명령 권한으로 찾은 문서가 호출자에게 보인다는 뜻은 아니다. 조회 실패도 종류와 위치를 숨긴다.
     let visible = async {
         let mut tx = db.begin_as(user).await?;
         let grade = access::grade(&mut tx, access::Kind::Document, doc).await?;
@@ -125,13 +125,13 @@ async fn blocked(db: &Db, user: UserId, doc: DocumentId, workspace: Option<Uuid>
     }
     .await
     .unwrap_or(false);
-    let document = if visible {
-        format!("document {}", doc.0)
-    } else if workspace.is_some() {
-        "a document".into()
-    } else {
-        "a shared personal note".into()
-    };
+    if !visible {
+        return AppError::Conflict(
+            "an item you cannot open has pending edits; nothing was changed. Ask its owner or an editor to save the edits and retry"
+                .into(),
+        );
+    }
+    let document = format!("document {}", doc.0);
     let Some(workspace) = workspace else {
         return AppError::Conflict(format!(
             "{document} has pending edits; nothing was changed. Ask its owner or an editor to save the edits and retry"

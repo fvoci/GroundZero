@@ -84,6 +84,10 @@ async fn pending_lookup_checks_command_authority_and_returns_only_ids() {
 
 #[tokio::test]
 async fn unjoined_organization_admin_gets_actionable_409_and_keeps_closed_state() {
+    inaccessible_workspace_conflict().await;
+}
+
+pub(super) async fn inaccessible_workspace_conflict() -> Value {
     let f = Fixture::new().await;
     closed_pending(&f).await;
     let admin = common::login(&f.state, "metadata admin").await;
@@ -104,13 +108,16 @@ async fn unjoined_organization_admin_gets_actionable_409_and_keeps_closed_state(
     let uri = format!("/api/organizations/{org}/members/{}", f.writer.id.0);
     let blocked = send(&f.app, Method::DELETE, &uri, Some(&admin), None).await;
     assert_eq!(blocked.status, StatusCode::CONFLICT, "{:?}", blocked.json);
+    let body = blocked.json.to_string();
     let message = blocked.json["message"].as_str().unwrap();
     assert!(
-        !blocked.json.to_string().contains(&f.document) && message.contains(&f.workspace),
-        "{message}"
+        !body.contains(&f.document)
+            && !body.contains(&f.workspace)
+            && !body.contains("personal note"),
+        "hidden document metadata leaked: {body}"
     );
     assert!(
-        message.contains("join as admin") && message.contains("save"),
+        message.contains("save") && message.contains("retry"),
         "{message}"
     );
     assert!(
@@ -124,6 +131,7 @@ async fn unjoined_organization_admin_gets_actionable_409_and_keeps_closed_state(
     assert!(rejoined.edit_and_wait("409 뒤 보존한 편집 계속").await);
     rejoined.close().await;
     f.stop().await;
+    blocked.json
 }
 
 #[tokio::test]
@@ -234,9 +242,13 @@ async fn read_shared_organization_admin_cannot_proxy_save_closed_pending_edits()
     .await;
     assert_eq!(blocked.status, StatusCode::CONFLICT, "{:?}", blocked.json);
     let message = blocked.json["message"].as_str().unwrap();
-    assert!(
-        message.contains(&f.document) && message.contains(&f.workspace),
-        "readable document id was hidden: {message}"
+    assert_eq!(
+        message,
+        format!(
+            "document {} in workspace {} has pending edits; nothing was changed. Ask an editor to save the edits, or join as admin and retry. Restore trashed content first if needed",
+            f.document, f.workspace
+        ),
+        "readable document conflict changed"
     );
     assert_eq!(
         stored(&f).await,

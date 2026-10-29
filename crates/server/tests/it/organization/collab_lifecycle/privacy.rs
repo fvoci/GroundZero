@@ -1,9 +1,9 @@
-//! 조직 명령의 409는 호출자가 볼 수 없는 개인 노트의 식별자를 숨긴다(D-49·D-112·D-113).
+//! 조직 명령의 409는 호출자가 볼 수 없는 문서의 종류와 식별자를 숨긴다(D-49·D-112·D-113).
 
 use super::*;
 
 #[tokio::test]
-async fn inaccessible_shared_personal_note_hides_id_and_preserves_membership_and_edits() {
+async fn inaccessible_personal_note_and_workspace_document_share_a_generic_conflict() {
     let mut f = Fixture::new().await;
     let org = common::organization_of_workspace(&f.workspace).await;
     let note = send(
@@ -106,13 +106,24 @@ async fn inaccessible_shared_personal_note_hides_id_and_preserves_membership_and
     rejoined.close().await;
     let body = blocked.json.to_string();
     assert!(
-        !body.contains(&f.document),
-        "private note id leaked: {body}"
+        !body.contains(&f.document)
+            && !body.contains(&f.workspace)
+            && !body.contains("personal note"),
+        "hidden personal note metadata leaked: {body}"
     );
     let message = blocked.json["message"].as_str().unwrap();
     assert!(
-        message.contains("personal note") && message.contains("save"),
+        message.contains("save") && message.contains("retry"),
         "{message}"
     );
     f.stop().await;
+    let mut personal = blocked.json;
+    let mut workspace = contracts::inaccessible_workspace_conflict().await;
+    // 요청 추적 id만 다르다. 문서 종류에 따라 나머지 응답이 달라지면 안 된다.
+    personal.as_object_mut().unwrap().remove("request_id");
+    workspace.as_object_mut().unwrap().remove("request_id");
+    assert_eq!(
+        personal, workspace,
+        "hidden document kinds are distinguishable"
+    );
 }
