@@ -62,8 +62,6 @@ pub struct Document {
     pub can_delete: bool,
     /// 템플릿으로 표시됨(D-27). 읽을 수 있는 사람이 새 문서의 본문으로 쓴다.
     pub is_template: bool,
-    /// 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다.
-    pub realtime: bool,
     /// 이 사람이 내보낼 수 있는지(D-75·D-115). 볼 수 있고 소유 권한이나 문서 작성자 예외에 들면 참이다.
     /// 그 밖에는 문서의 `allow_copy`를 따르며, 수정 권한만으로는 참이 되지 않는다.
     pub can_export: bool,
@@ -82,39 +80,6 @@ pub struct CreateDocument {
     #[serde(default)]
     #[schema(value_type = Option<String>, format = Uuid)]
     pub template_id: Option<DocumentId>,
-}
-
-/// 문서 저장 요청.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SaveDocument {
-    #[schema(value_type = String, format = Uuid)]
-    pub request_id: Uuid,
-    /// 편집을 시작한 리비전.
-    pub base_revision: i32,
-    pub title: String,
-    #[schema(value_type = Object)]
-    pub body: Value,
-}
-
-/// 저장 충돌 응답. `current`가 서버 최신본이다.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConflictBody {
-    /// `conflict`(409, `base_revision`이 지남) 또는 `precondition_failed`(412, `If-Match`가 맞지 않음).
-    pub error: &'static str,
-    pub current: Document,
-    /// `current`를 이 사람이 단건 조회했을 때의 ETag(D-77). 서버 최신본을 받아들인 뒤 `If-Match`로 쓴다.
-    pub etag: String,
-}
-
-/// 문서 저장의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-/// - `ConflictBody`(`error: "conflict"`, `current`): `base_revision`이 지남.
-/// - `ErrorBody`(`current` 없음): `account_changed`(기대 사용자가 세션의 사용자와 다름), `invalid_state`(실시간 편집
-///   중 본문 변경, 동시 변경 재시도 등).
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(untagged)]
-pub enum SaveConflict {
-    Stale(Box<ConflictBody>),
-    State(ErrorBody),
 }
 
 /// 공유받은 문서.

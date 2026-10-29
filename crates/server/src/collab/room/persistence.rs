@@ -9,19 +9,13 @@ use super::{
 impl Room {
     /// 방이 아직 문서를 불러오지 않았으면 불러온다(옮기기·복원하는 사람의 권한으로). 방을 연 연결의 참여 요청보다 이동·복원
     /// 명령이 먼저 닿으면(방 목록에 넣은 뒤 참여 요청을 보내기 전에 `Rooms::hold`가 그 방을 찾음) 저장 대기 상태를 이어받지
-    /// 않은 채 복원·이동해 그 편집을 잃을 수 있다(#64 반박 검증). 실시간이 꺼졌으면(409) 이어받을 상태가 없다.
+    /// 않은 채 복원·이동해 그 편집을 잃을 수 있다(#64 반박 검증).
     pub(super) async fn ensure_loaded(&mut self, user: UserId) -> Result<(), AppError> {
         if self.doc.is_some() {
             return Ok(());
         }
-        match self.load(user).await {
-            Ok(doc) => {
-                self.doc = Some(doc);
-                Ok(())
-            }
-            Err(AppError::Conflict(_)) => Ok(()),
-            Err(err) => Err(err),
-        }
+        self.doc = Some(self.load(user).await?);
+        Ok(())
     }
 
     /// 들어오는 사람의 권한으로 저장 상태·편집자·귀속을 이어받거나 본문에서 방을 만든다(D-95).

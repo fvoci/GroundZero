@@ -108,10 +108,7 @@ impl MovePermit {
             !closed
                 .snapshot
                 .is_some_and(|snapshot| snapshot.sees(self.committed))
-                || !matches!(
-                    closed.reason,
-                    CloseReason::AccessLost | CloseReason::RealtimeOff
-                )
+                || closed.reason != CloseReason::AccessLost
         }) {
             return None;
         }
@@ -278,9 +275,6 @@ impl Lease {
                 }
             }
             PeerAccess::Denied => self.close_observed(CloseReason::AccessLost, observed.snapshot),
-            PeerAccess::RealtimeOff => {
-                self.close_observed(CloseReason::RealtimeOff, observed.snapshot)
-            }
             PeerAccess::Unknown => self.close(CloseReason::Busy),
         }
     }
@@ -412,7 +406,6 @@ mod tests {
         for (result, expected) in [
             (PeerAccess::Unknown, CloseReason::Busy),
             (PeerAccess::Denied, CloseReason::AccessLost),
-            (PeerAccess::RealtimeOff, CloseReason::RealtimeOff),
         ] {
             let lease = Lease::new(true, Instant::now(), Duration::from_secs(1));
             tokio::time::timeout(
@@ -450,9 +443,7 @@ mod tests {
         let commit = CommittedMove::new(100);
         for (reason, closed_after_commit, allowed) in [
             (CloseReason::AccessLost, true, true),
-            (CloseReason::RealtimeOff, true, true),
             (CloseReason::AccessLost, false, false),
-            (CloseReason::RealtimeOff, false, false),
             (CloseReason::Busy, true, false),
             (CloseReason::Invalid, true, false),
         ] {
@@ -569,7 +560,7 @@ mod tests {
         let committed = CommittedMove::new(100);
         let permit = permit.freeze_move(committed).unwrap();
         lease.close_observed(
-            CloseReason::RealtimeOff,
+            CloseReason::AccessLost,
             Some(Arc::new(Snapshot::destination())),
         );
         assert_eq!(

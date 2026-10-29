@@ -7,7 +7,6 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
 use axum::response::Response;
 use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
@@ -330,9 +329,9 @@ pub async fn restore(
     tx.commit().await?;
     let doc = to_document(row, access);
     if outcome == "conflict" {
-        return stale_reply(StatusCode::CONFLICT, "conflict", user, doc, &sent);
+        return Ok(stale_reply(doc, &sent));
     }
-    document_reply(user, &doc)
+    Ok(document_reply(&doc))
 }
 
 /// 복원 SQL: 한도 확인 뒤 `app_restore_document_revision`(권한·기준 확인 포함). `restored`·`unchanged`·`conflict`.

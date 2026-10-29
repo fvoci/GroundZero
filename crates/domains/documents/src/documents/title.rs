@@ -1,13 +1,11 @@
-//! 제목만 바꾸는 문서 명령. 본문과 리비전의 조건부 저장 순서를 유지한다(D-62·D-77).
+//! 제목만 바꾸는 문서 명령. 본문을 유지하고 기준 리비전으로 충돌을 판단한다(D-62, #212 A).
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::DocumentId;
 use fvoci_core::validate::validate_title;
-use fvoci_http::cache;
 use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 use serde::{Deserialize, Serialize};
@@ -15,7 +13,7 @@ use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::{Document, document_reply, representation, stale_reply, to_document, write_revision};
+use super::{Document, document_reply, stale_reply, to_document, write_revision};
 use crate::document_locks;
 use crate::state::DocumentsState;
 
@@ -36,27 +34,24 @@ pub enum DocumentTitleConflict {
     State(ErrorBody),
 }
 
-/// 권한·잠금 → 멱등 재시도 → If-Match → 기준 판 → 같은 제목 확인 → 리비전 저장 순서다.
+/// 권한·잠금 → 멱등 재시도 → 기준 판 → 같은 제목 확인 → 리비전 저장 순서다.
 #[utoipa::path(patch, path = "/api/documents/{document_id}", operation_id = "patch_document_title",
     params(("document_id" = String, Path, format = Uuid),
-           ("If-Match" = Option<String>, Header, description = "현재 문서의 강한 ETag. 다르면 412"),
            ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
     request_body = PatchDocumentTitle,
-    responses((status = 200, body = Document, headers(("ETag" = String))),
+    responses((status = 200, body = Document),
               (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = DocumentTitleConflict),
-              (status = 412, body = StaleWrite<Document>)), tag = "documents")]
+              (status = 404, body = ErrorBody), (status = 409, body = DocumentTitleConflict)), tag = "documents")]
 pub async fn patch_title(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
-    headers: HeaderMap,
     Json(input): Json<PatchDocumentTitle>,
 ) -> Result<Response, AppError> {
     let title = validate_title(&input.title, state.limits.max_title_chars, "title")?;
     let sent = json!({"title": title.as_str()});
     let mut tx = state.db.begin_as(user).await?;
-    let (access, current, _) = document_locks::for_save(&mut tx, id).await?;
+    let (access, current) = document_locks::for_save(&mut tx, id).await?;
     let replay: Option<(i32, Option<i32>)> = sqlx::query_as(
         "SELECT revision, restored_from FROM document_revisions
          WHERE document_id = $1 AND request_id = $2 AND author = app_user_id()",
@@ -77,38 +72,18 @@ pub async fn patch_title(
         tx.commit().await?;
         let doc = to_document(current, access);
         return if doc.revision == revision {
-            document_reply(user, &doc)
+            Ok(document_reply(&doc))
         } else {
-            stale_reply(StatusCode::CONFLICT, "conflict", user, doc, &sent)
+            Ok(stale_reply(doc, &sent))
         };
-    }
-    if headers.contains_key(header::IF_MATCH) {
-        let now = to_document(current.clone(), access);
-        let (_, etag) = representation(user, &now)?;
-        if cache::if_match(&headers, &etag) == Some(false) {
-            tx.commit().await?;
-            return stale_reply(
-                StatusCode::PRECONDITION_FAILED,
-                "precondition_failed",
-                user,
-                now,
-                &sent,
-            );
-        }
     }
     if current.revision != input.base_revision {
         tx.commit().await?;
-        return stale_reply(
-            StatusCode::CONFLICT,
-            "conflict",
-            user,
-            to_document(current, access),
-            &sent,
-        );
+        return Ok(stale_reply(to_document(current, access), &sent));
     }
     if current.title == title {
         tx.commit().await?;
-        return document_reply(user, &to_document(current, access));
+        return Ok(document_reply(&to_document(current, access)));
     }
     let row = write_revision(
         &mut tx,
@@ -121,5 +96,5 @@ pub async fn patch_title(
     )
     .await?;
     tx.commit().await?;
-    document_reply(user, &to_document(row, access))
+    Ok(document_reply(&to_document(row, access)))
 }

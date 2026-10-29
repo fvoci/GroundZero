@@ -304,7 +304,6 @@ async fn api_not_found() -> AppError {
         workspaces::list,
         workspaces::create,
         workspaces::delete,
-        workspaces::set_realtime,
         workspaces::deleted,
         workspaces::restore,
         workspaces::purge,
@@ -412,7 +411,6 @@ async fn api_not_found() -> AppError {
         workspaces::Workspace,
         workspaces::CreateWorkspace,
         workspaces::DeleteWorkspace,
-        workspaces::SetRealtime,
         workspaces::WorkspaceDeleted,
         workspaces::DeletedWorkspace,
         home::DueBucket,
@@ -746,10 +744,6 @@ pub fn router(state: AppState) -> Router {
             get(crate::collab::ws::connect),
         )
         .route(
-            "/workspaces/{workspace_id}/realtime",
-            put(workspaces::set_realtime),
-        )
-        .route(
             "/workspaces/{workspace_id}/members",
             get(members::list_members),
         )
@@ -958,29 +952,11 @@ mod tests {
         );
     }
 
-    /// 문서 저장의 409는 두 모양이다(#60): 리비전 충돌이면 `ConflictBody`, `account_changed`·`invalid_state`면
-    /// `ErrorBody`. 기대 사용자 머리는 적용 경로(문서 저장·내 노트 만들기)에서 필수다.
+    /// 남은 필수 기대 사용자 명령은 계약에서도 필수 머리를 표시한다(D-96).
     #[test]
-    fn the_save_conflict_and_the_expected_user_header_are_in_the_contract() {
+    fn required_expected_user_headers_are_in_the_contract() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
-        let save = &doc["paths"]["/api/documents/{document_id}"]["put"];
-        assert_eq!(
-            save["responses"]["409"]["content"]["application/json"]["schema"],
-            serde_json::json!({ "$ref": "#/components/schemas/SaveConflict" })
-        );
-        let one_of: Vec<&str> = doc["components"]["schemas"]["SaveConflict"]["oneOf"]
-            .as_array()
-            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
-            .unwrap_or_default();
-        assert_eq!(
-            one_of,
-            [
-                "#/components/schemas/ConflictBody",
-                "#/components/schemas/ErrorBody"
-            ]
-        );
         for operation in [
-            save,
             &doc["paths"]["/api/me/notes"]["post"],
             &doc["paths"]["/api/uploads"]["post"],
         ] {

@@ -26,7 +26,6 @@ pub use state::{DocumentLimits, DocumentsState};
         documents::list_wiki,
         documents::create_wiki,
         documents::get,
-        documents::save,
         documents::patch_title,
         documents::my_notes,
         documents::create_note,
@@ -59,11 +58,8 @@ pub use state::{DocumentLimits, DocumentsState};
         documents::DocumentSummary,
         documents::Document,
         documents::CreateDocument,
-        documents::SaveDocument,
         documents::PatchDocumentTitle,
         documents::DocumentTitleConflict,
-        documents::ConflictBody,
-        documents::SaveConflict,
         documents::Access,
         documents::SharedDocument,
         documents::DocumentSettings,
@@ -117,6 +113,8 @@ mod tests {
         );
         let schemas = &doc["components"]["schemas"];
         assert!(schemas["Document"]["properties"].get("realtime").is_none());
+        assert!(schemas["StaleWrite_Document"]["properties"].is_object());
+        assert!(schemas["StaleWrite_Document"]["properties"].get("etag").is_none());
         for removed in ["SaveDocument", "SaveConflict", "ConflictBody"] {
             assert!(schemas.get(removed).is_none(), "{removed}");
         }
@@ -208,9 +206,7 @@ where
         .route("/public/{token}", get(public_links::view))
         .route(
             "/documents/{document_id}",
-            get(documents::get)
-                .put(documents::save)
-                .patch(documents::patch_title),
+            get(documents::get).patch(documents::patch_title),
         )
         .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
             state.clone(),

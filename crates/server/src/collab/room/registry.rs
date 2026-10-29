@@ -1,10 +1,9 @@
 //! 열린 방 목록, 참가와 보류·종료 조정.
 
 use super::{
-    AppError, Change, CloseReason, ClosingGuard, Command, Db, DocumentId, Duration, Handle,
-    HashMap, HashSet, HoldGuard, Instant, Limits, Membership, MoveReply, MoveRequest, Ordering,
-    Peer, ROOM_QUEUE, RestoreRequest, Room, Rooms, TrySendError, UserId, Uuid, documents, mpsc,
-    oneshot, recovery,
+    AppError, Change, CloseReason, Command, Db, DocumentId, Duration, Handle, HashMap, HashSet,
+    HoldGuard, Instant, Limits, Membership, MoveReply, MoveRequest, Ordering, Peer, ROOM_QUEUE,
+    RestoreRequest, Room, Rooms, TrySendError, UserId, Uuid, documents, mpsc, oneshot, recovery,
 };
 
 impl Drop for HoldGuard {
@@ -18,23 +17,6 @@ impl Drop for HoldGuard {
             *count -= 1;
             if *count == 0 {
                 held.remove(&self.doc);
-            }
-        }
-    }
-}
-
-impl Drop for ClosingGuard {
-    fn drop(&mut self) {
-        let _rooms = self.rooms.lock();
-        if self.epoch != self.rooms.recovery.current() {
-            return;
-        }
-        let mut closing = self.rooms.closing_set();
-        // 같은 워크스페이스를 동시에 끄는 다른 요청이 있으면 그 막음은 남긴다.
-        if let Some(count) = closing.get_mut(&self.workspace) {
-            *count -= 1;
-            if *count == 0 {
-                closing.remove(&self.workspace);
             }
         }
     }
@@ -74,11 +56,6 @@ impl Rooms {
         recovery::lock(self)
     }
 
-    /// 끄는 중인 워크스페이스 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
-    pub(super) fn closing_set(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, usize>> {
-        recovery::list(&self.closing, &self.recovery) // 오염된 닫기 막음은 버리고 저장 상태에서 다시 연다(#172).
-    }
-
     /// 옮기거나 방 없이 복원하는 중인 문서 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
     pub(super) fn held_set(&self) -> std::sync::MutexGuard<'_, HashMap<DocumentId, usize>> {
         recovery::list(&self.held, &self.recovery) // 오염된 이동·복원 막음도 옛 방과 함께 버린다(#172).
@@ -87,17 +64,6 @@ impl Rooms {
     /// 열린(닫히는 중이 아닌) 방.
     pub(super) fn live_room(&self, doc: DocumentId) -> Option<Handle> {
         self.lock().get(&doc).filter(|h| !h.tx.is_closed()).cloned()
-    }
-
-    /// 이 워크스페이스에 방이 새로 열리지 않게 한다(실시간 끄기 동안). 이미 열린 방은 `close_workspace`로 닫는다.
-    pub fn begin_closing(&self, workspace: Uuid) -> ClosingGuard {
-        let _rooms = self.lock();
-        *self.closing_set().entry(workspace).or_default() += 1;
-        ClosingGuard {
-            rooms: self.clone(),
-            workspace,
-            epoch: self.recovery.current(),
-        }
     }
 
     /// 방에 들어간다(없으면 연다). 문서를 읽을 수 없으면 오류.
@@ -131,12 +97,6 @@ impl Rooms {
         workspace: Option<Uuid>,
     ) -> Result<Handle, AppError> {
         let mut rooms = self.lock();
-        // 실시간을 끄는 중이면 열지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 꺼졌으면 4410을 받는다.
-        if workspace.is_some_and(|w| self.closing_set().contains_key(&w)) {
-            return Err(AppError::Upstream(
-                "live editing is being turned off".into(),
-            ));
-        }
         // 옮기거나 방 없이 복원하는 중이면 들어가지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 새 자리의
         // 권한·설정(복원했으면 복원한 본문)으로 연다.
         if self.held_set().contains_key(&doc) {
@@ -363,64 +323,14 @@ impl Rooms {
         ))
     }
 
-    /// 워크스페이스가 실시간을 끈다(또는 껐다). 그 워크스페이스의 방은 리비전을 남기고 닫는다. 끝날 때까지 기다린다.
-    /// 모든 방의 편집이 리비전으로 남았으면 참(`begin_closing`과 함께 써서 그동안 새 방이 열리지 않게 한다).
-    pub async fn close_workspace(&self, workspace: Uuid, admin: UserId) -> bool {
-        let handles: Vec<Handle> = self
-            .lock()
-            .values()
-            .filter(|h| h.workspace == Some(workspace))
-            .cloned()
-            .collect();
-        close_all(handles, CloseReason::RealtimeOff, Some(admin)).await
-    }
-
-    /// 방 없이 남은 실시간 상태(리비전으로 남지 않은 편집)를 리비전으로 남긴다. 실시간을 끄기 전, 방을 모두 닫은
-    /// 뒤(`begin_closing` 아래)에 쓴다. 작성자는 그 상태를 고친 사람(`load`가 이어받은 편집자, 마지막이 앞) 가운데 아직 쓸
-    /// 수 있는 사람, 없으면 실시간을 끄는 관리자다(대신 저장, 실제 편집자를 리비전에 따로 적는다, D-95). 남겼거나 남길
-    /// 것이 없으면 참.
-    pub async fn save_pending(
-        &self,
-        db: &Db,
-        limits: &Limits,
-        doc: DocumentId,
-        admin: UserId,
-    ) -> bool {
-        let generation = self.next.fetch_add(1, Ordering::Relaxed);
-        let mut room = Room::new(
-            doc,
-            generation,
-            db.clone(),
-            *limits,
-            Duration::from_secs(30),
-            self.clone(),
-        );
-        match room.load(admin).await {
-            Ok(loaded) => room.doc = Some(loaded),
-            // 다른 OFF 요청이 같은 pending 목록을 먼저 저장하고 실시간을 껐을 수 있다.
-            // load의 55000만 다시 확인하며, 실제 pending이나 권한/DB 실패는 계속 거부한다.
-            Err(AppError::Conflict(_)) => {
-                return pending_already_saved(db, doc, admin).await.unwrap_or(false);
-            }
-            Err(err) => {
-                tracing::warn!(event = "collab.load_failed", document = %doc.0, error_code = err.code(), detail = fvoci_core::logging::safe_error(&err), "could not load a pending live state");
-                return false;
-            }
-        }
-        room.dirty_since_snapshot = true;
-        room.snapshot_with(Some(admin)).await
-    }
-
     /// 방 없이 남은 실시간 상태를 옮기거나 복원하기 전에 리비전으로 남긴다(#71 리뷰, D-95 조건 4). 앞선 방이 리비전을
     /// 남기지 못하고 닫혔거나(쓸 수 있는 사람이 없음) 서버가 주기 저장 뒤 갑자기 멈춘 경우로, 그 편집은 이미 저장 확인을
-    /// 받았을 수 있다. 실시간이 꺼진 곳으로 옮기거나 다른 리비전으로 복원하면 그 상태는 이어받을 수 없게 되고(`app_collab_load`)
-    /// 다음 일반 저장이 버린다. `hold` 아래에서 불러 그사이 방이 열려 그 상태를 이어받지 않는다.
+    /// 받았을 수 있다. `hold` 아래에서 불러 그사이 새 방이 열려 그 상태를 이어받지 않게 한다.
     ///
     /// 새로 만든 방이라 연결이 없으므로 작성자 순서는 그 상태와 함께 저장된 편집자(마지막 리비전 뒤로 고친 사람, 마지막이
-    /// 앞) 가운데 아직 쓸 수 있는 사람이다. 옮길 때는 그다음 옮기는 사람이 대신 남기고(`save_pending`의 관리자 자리, 방 안
-    /// 체크포인트와 같다) 실제 편집자를 리비전에 따로 적는다(D-95, 편집자 기록이 없는 옛 상태면 빈 목록). 복원하는 사람은
+    /// 앞) 가운데 아직 쓸 수 있는 사람이다. 옮길 때는 그다음 옮기는 사람이 대신 남기고(방 안 체크포인트와 같다) 실제 편집자를 리비전에 따로 적는다(D-95, 편집자 기록이 없는 옛 상태면 빈 목록). 복원하는 사람은
     /// 대신 남기지 않는다(연결이 없으므로 연결된 작성자 자리도 없다, D-95 docs/decisions/documents.md#d-95). 남길 것이 없으면(저장된 상태가
-    /// 없음·본문과 같은 내용, 실시간이 꺼짐) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409로 하지 않고
+    /// 없음·본문과 같은 내용) 아무것도 하지 않는다. 남기지 못하면 방 안 체크포인트와 같은 409로 하지 않고
     /// 상태는 그대로 둔다.
     pub(super) async fn save_pending_before(
         &self,
@@ -439,13 +349,7 @@ impl Rooms {
             Duration::from_secs(30),
             self.clone(),
         );
-        let loaded = match room.load(user).await {
-            Ok(loaded) => loaded,
-            // 실시간이 꺼진 문서(`app_collab_access`의 55000): 끌 때 남은 상태를 먼저 리비전으로 남겼다. 잠그지 않고 읽기만
-            // 하는 함수라 다른 409(동시 변경 충돌 등)는 여기서 나지 않는다(`peer_access`와 같은 판단).
-            Err(AppError::Conflict(_)) => return Ok(()),
-            Err(err) => return Err(err),
-        };
+        let loaded = room.load(user).await?;
         // 이어받은 상태에 아직 리비전이 아닌 편집이 있을 때만 남긴다(`load`가 본다). 본문에서 새로 만들었으면(저장된 상태가
         // 없거나 그 뒤로 본문이 바뀜) 남길 것이 없고 상태 행도 만들지 않는다.
         if !room.dirty_since_snapshot {
@@ -470,29 +374,6 @@ impl Rooms {
         }
     }
 }
-async fn pending_already_saved(db: &Db, doc: DocumentId, admin: UserId) -> Result<bool, AppError> {
-    let mut tx = db.begin_as(admin).await?;
-    let workspace: Option<Option<Uuid>> =
-        sqlx::query_scalar("SELECT workspace_id FROM documents WHERE id=$1")
-            .bind(doc)
-            .fetch_optional(tx.conn())
-            .await?;
-    let Some(Some(workspace)) = workspace else {
-        return Ok(false);
-    };
-    // 기존 관리자 전용 pending 판정을 그대로 쓴다. 문서 비가시성·관리자 철회는 성공으로 삼지 않는다.
-    let pending: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM app_collab_pending($1) pending WHERE pending=$2)",
-    )
-    .bind(workspace)
-    .bind(doc)
-    .fetch_one(tx.conn())
-    .await
-    .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
-    Ok(!pending)
-}
-
 /// 방마다 명령을 보내고 답을 모두 합쳐 `wait`까지 기다린다. 대기열이 찬(바쁜) 방은 건너뛴다.
 async fn ask_all<T: Send + 'static>(
     handles: Vec<Handle>,

@@ -84,8 +84,6 @@ pub enum CloseReason {
     AccountChanged,
     /// 문서가 다른 길로 바뀌었거나 클라이언트 상태가 맞지 않아 새 문서로 다시 열어야 함.
     Reload,
-    /// 워크스페이스가 실시간을 끔.
-    RealtimeOff,
     /// 너무 느리거나 너무 많이 보냄. 잠시 뒤 다시 붙는다.
     Busy,
     /// 서버를 다시 시작함. 다시 붙는다.
@@ -100,7 +98,6 @@ impl CloseReason {
             Self::AccessLost => 4403,
             Self::AccountChanged => 4412,
             Self::Reload => 4409,
-            Self::RealtimeOff => 4410,
             Self::Busy => 4503,
             Self::Restart => 1012,
         }
@@ -113,7 +110,6 @@ impl CloseReason {
             Self::AccessLost => "access ended",
             Self::AccountChanged => "signed-in account changed",
             Self::Reload => "document changed; reload",
-            Self::RealtimeOff => "realtime editing turned off",
             Self::Busy => "too much traffic; reconnect later",
             Self::Restart => "server restarting",
         }
@@ -196,8 +192,6 @@ struct Handle {
 #[derive(Debug, Clone, Default)]
 pub struct Rooms {
     inner: Arc<Mutex<HashMap<DocumentId, Handle>>>,
-    /// 실시간을 끄는 중인 워크스페이스. 이 동안은 방을 새로 열지 않는다(방 목록과 같은 잠금 아래에서 본다).
-    closing: Arc<Mutex<HashMap<Uuid, usize>>>,
     /// 옮기거나 방 없이 복원하는 중인 문서. 이 동안은 그 문서의 방을 새로 열지 않는다(방 목록과 같은 잠금 아래에서 본다).
     held: Arc<Mutex<HashMap<DocumentId, usize>>>,
     recovery: Arc<recovery::Epoch>,
@@ -209,14 +203,6 @@ pub struct Rooms {
 struct HoldGuard {
     rooms: Rooms,
     doc: DocumentId,
-    epoch: u64,
-}
-
-/// 실시간을 끄는 동안 그 워크스페이스에 방이 새로 열리지 않게 막는다. 놓으면 풀린다.
-#[derive(Debug)]
-pub struct ClosingGuard {
-    rooms: Rooms,
-    workspace: Uuid,
     epoch: u64,
 }
 
@@ -335,7 +321,6 @@ pub enum PeerAccess {
         can_write: bool,
     },
     Denied,
-    RealtimeOff,
     /// DB 오류 등으로 알 수 없음. 연결은 재접속 가능한 오류로 종료한다.
     Unknown,
 }

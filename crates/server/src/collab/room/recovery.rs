@@ -36,7 +36,7 @@ impl Epoch {
     }
 }
 
-/// 오염된 방 목록은 이어 쓰지 않는다. 세 목록은 한 불변식을 이루므로 함께 비우고, 독립된 watch로 모든 옛 방을 닫는다.
+/// 오염된 방 목록은 이어 쓰지 않는다. 두 목록은 한 불변식을 이루므로 함께 비우고, 독립된 watch로 모든 옛 방을 닫는다.
 /// 깨진 목록에서 빠진 핸들도 있을 수 있어 목록에 남은 핸들만 순회해서 닫지 않는다. 프로세스·저장 상태는 유지한다.
 pub(super) fn lock(rooms: &Rooms) -> MutexGuard<'_, HashMap<DocumentId, Handle>> {
     let mut inner = rooms
@@ -44,23 +44,16 @@ pub(super) fn lock(rooms: &Rooms) -> MutexGuard<'_, HashMap<DocumentId, Handle>>
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if rooms.inner.is_poisoned()
-        || rooms.closing.is_poisoned()
         || rooms.held.is_poisoned()
         || rooms.recovery.reset_needed.swap(false, Ordering::AcqRel)
     {
-        let mut closing = rooms
-            .closing
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut held = rooms
             .held
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         inner.clear();
-        closing.clear();
         held.clear();
         rooms.inner.clear_poison();
-        rooms.closing.clear_poison();
         rooms.held.clear_poison();
         rooms.recovery.invalidate();
         rooms.recovery.reset_needed.store(false, Ordering::Release);
@@ -116,7 +109,6 @@ impl Drop for Room {
 #[derive(Debug, Clone, Copy)]
 pub enum Registry {
     Rooms,
-    Closing,
     Held,
 }
 
@@ -132,10 +124,6 @@ pub fn poison(rooms: &super::Rooms, registry: Registry) {
             guard.clear(); // 목록에서 빠진 방도 독립된 epoch로 종료해야 한다.
             std::panic::resume_unwind(Box::new("injected room registry panic"));
         }
-        Registry::Closing => {
-            let _guard = rooms.closing.lock();
-            std::panic::resume_unwind(Box::new("injected closing registry panic"));
-        }
         Registry::Held => {
             let _guard = rooms.held.lock();
             std::panic::resume_unwind(Box::new("injected held registry panic"));
@@ -147,23 +135,6 @@ pub fn poison(rooms: &super::Rooms, registry: Registry) {
 mod tests {
     use super::*;
     use uuid::Uuid;
-
-    #[test]
-    fn an_old_closing_guard_cannot_release_a_new_barrier_after_recovery() {
-        let rooms = Rooms::default();
-        let workspace = Uuid::now_v7();
-        let old = rooms.begin_closing(workspace);
-        poison(&rooms, Registry::Closing);
-        let new = rooms.begin_closing(workspace);
-        drop(old);
-        {
-            let _rooms = rooms.lock();
-            assert_eq!(rooms.closing_set().get(&workspace), Some(&1));
-        }
-        drop(new);
-        let _rooms = rooms.lock();
-        assert!(rooms.closing_set().is_empty());
-    }
 
     #[test]
     fn an_old_hold_guard_cannot_release_a_new_barrier_after_recovery() {
