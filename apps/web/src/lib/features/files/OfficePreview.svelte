@@ -143,7 +143,8 @@
     clearHwp();
     error = undefined;
     if (hidden) return;
-    if (size > (kind === 'hwp' ? HWP_PREVIEW_MAX_BYTES : OFFICE_PREVIEW_MAX_BYTES)) {
+    const maxBytes = kind === 'hwp' ? HWP_PREVIEW_MAX_BYTES : OFFICE_PREVIEW_MAX_BYTES;
+    if (size > maxBytes) {
       error = m.files_too_large();
       return;
     }
@@ -154,8 +155,22 @@
           signal: controller.signal,
         });
         if (!response.ok) throw new Error(String(response.status));
+        if (!current()) {
+          await response.body?.cancel();
+          return;
+        }
+        const contentLength = response.headers.get('content-length');
+        if (contentLength !== null && Number(contentLength) > maxBytes) {
+          await response.body?.cancel();
+          if (current()) error = m.files_too_large();
+          return;
+        }
         const bytes = await response.arrayBuffer();
         if (!current()) return;
+        if (bytes.byteLength > maxBytes) {
+          error = m.files_too_large();
+          return;
+        }
         if (kind === 'docx') {
           const html = await docxSrcdoc(bytes);
           if (current()) srcdoc = html;
@@ -169,7 +184,10 @@
           }
         } else {
           const result = await xlsxSheets(bytes);
-          if (current()) sheets = result;
+          if (current()) {
+            if (active < 0 || active >= result.length) active = 0;
+            sheets = result;
+          }
         }
       } catch {
         if (current()) error = m.files_preview_failed();

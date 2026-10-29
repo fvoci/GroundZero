@@ -99,6 +99,95 @@ async function start(format: 'zip' | 'pdf') {
   return view;
 }
 
+it.each(['revision', 'references', 'file'])(
+  'cancels a held %s preparation request on close and can export again before that response arrives',
+  async (stage) => {
+    vi.spyOn(api, 'exportRevision').mockRestore();
+    vi.spyOn(api, 'file').mockRestore();
+    const body =
+      stage === 'references'
+        ? {
+            type: 'doc',
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'reference',
+                    attrs: { kind: 'item', id: '0198f1f2-0000-7000-8000-000000000001' },
+                  },
+                ],
+              },
+            ],
+          }
+        : doc.body;
+    const revision = {
+      revision: 1,
+      title: doc.title,
+      body,
+      schema_version: 1,
+      created_at: doc.updated_at,
+      author_name: 'A',
+      restored_from: null,
+      edited_by_names: null,
+    };
+    const target =
+      stage === 'revision'
+        ? '/api/documents/doc/revisions/1/export'
+        : stage === 'references'
+          ? '/api/references/resolve'
+          : '/api/files/0198f1f2-0000-7000-8000-0000000000aa';
+    let signal: AbortSignal | null | undefined;
+    let release: (() => void) | undefined;
+    let held = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const path =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const response = () =>
+        path.endsWith('/export')
+          ? new Response(JSON.stringify(revision))
+          : path === '/api/references/resolve'
+            ? new Response('[]')
+            : path.includes('/content')
+              ? new Response('attachment')
+              : new Response('{"error":"not_found"}', { status: 404 });
+      if (path !== target || held) return Promise.resolve(response());
+      held = true;
+      signal = init?.signal;
+      return new Promise<Response>((resolve, reject) => {
+        release = () => {
+          resolve(response());
+        };
+        signal?.addEventListener(
+          'abort',
+          () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          },
+          { once: true },
+        );
+      });
+    });
+    const view = await start('zip');
+    try {
+      await waitFor(() => {
+        expect(release).toBeDefined();
+      });
+      await view.rerender({ ...props, open: false });
+      expect.soft(signal?.aborted).toBe(true);
+      await view.rerender({ ...props, open: true });
+      const retry = await screen.findByRole('button', { name: /^내보내기$/ });
+      expect(retry).toBeEnabled();
+      await fireEvent.click(retry);
+      await waitFor(() => {
+        expect(exporting.saveBlob).toHaveBeenCalledOnce();
+      });
+      expect(printToPdf).not.toHaveBeenCalled();
+    } finally {
+      release?.();
+    }
+  },
+);
+
 // SR-221-2 / D-96: 공통 request 밖 첨부도 로그아웃·다른 탭 신호·닫기에서 중단한다.
 it.each([
   ['logout', 'zip'],

@@ -142,7 +142,7 @@
     error = undefined;
     notes = undefined;
     try {
-      const rev = await api.exportRevision(doc.id, selected, format);
+      const rev = await api.exportRevision(doc.id, selected, format, started.controller.signal);
       if (!current()) return;
       const prepared = await prepareExport(rev.title, rev.revision, rev.body, {
         format,

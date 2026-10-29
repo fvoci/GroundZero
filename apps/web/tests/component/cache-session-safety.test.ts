@@ -396,6 +396,40 @@ it('rechecks an abandoned logout at 30 seconds without another browser event', a
   expect(api.myNotes).toHaveBeenCalledTimes(1);
 });
 
+it('rejects the expired-pending old response when a deduplicated final anonymous marker has a newer generation', async () => {
+  const input = await liveInput();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const oldCheck = deferred<Me | undefined>();
+  const freshCheck = deferred<Me | undefined>();
+  const read = vi
+    .spyOn(api, 'me')
+    .mockResolvedValueOnce(me)
+    .mockReturnValueOnce(oldCheck.promise)
+    .mockReturnValueOnce(freshCheck.promise);
+  signalLogout();
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(input).not.toBeVisible();
+  const expiredReads = read.mock.calls.length;
+  signalSession(null);
+  const final = localStorage.getItem(sessionKey);
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  // 같은 null 신호는 중복 억제된다. 응답 수락 경계의 세대 검사가 이 경합을 막는다.
+  expect(read).toHaveBeenCalledTimes(expiredReads);
+  oldCheck.resolve(me);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(expiredReads + 1);
+  expect(input).not.toBeVisible();
+  expect(localStorage.getItem(sessionKey)).toBe(final);
+  freshCheck.resolve(undefined);
+  await vi.advanceTimersByTimeAsync(0);
+  vi.useRealTimers();
+  await screen.findByRole('link', { name: '새 탭에서 로그인' });
+  expect(input).not.toBeVisible();
+  expect(input).toHaveValue('메모리에만 남긴 입력');
+  expect(sessionMarker()).toMatchObject({ state: 'settled', userId: null });
+});
+
 it.each([true, false])(
   'discards an old-user verification after final anonymity (storage delivered: %s)',
   async (delivered) => {

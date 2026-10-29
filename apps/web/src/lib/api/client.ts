@@ -2102,12 +2102,18 @@ export const api = {
       parseRevision,
     ),
   /** 저장된 리비전 하나를 내보낸다(D-75). 서버가 내보내기 권한을 확인하고 기록을 남긴 뒤 그 리비전을 준다. */
-  exportRevision: (id: string, revision: number, format: 'markdown' | 'zip' | 'pdf') =>
+  exportRevision: (
+    id: string,
+    revision: number,
+    format: 'markdown' | 'zip' | 'pdf',
+    signal?: AbortSignal,
+  ) =>
     expectOk(
       'POST',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/export`,
       parseRevision,
       { format },
+      signal,
     ),
   /** 옛 리비전 내용으로 새 리비전을 만든다. 보고 있던 리비전이 지났으면 `{ kind: 'conflict', current }`. */
   async restoreRevision(
@@ -2157,8 +2163,14 @@ export const api = {
       parseList(v, parseCandidate),
     );
   },
-  resolveReferences: (refs: { kind: ReferenceKind; id: string }[]) =>
-    expectOk('POST', '/api/references/resolve', (v) => parseList(v, parseResolved), { refs }),
+  resolveReferences: (refs: { kind: ReferenceKind; id: string }[], signal?: AbortSignal) =>
+    expectOk(
+      'POST',
+      '/api/references/resolve',
+      (v) => parseList(v, parseResolved),
+      { refs },
+      signal,
+    ),
   documentBacklinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),

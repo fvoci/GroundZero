@@ -78,7 +78,8 @@ export const filesApi = {
     ),
   itemFiles: (id: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(id)}/files`, (v) => parseList(v, parseFile)),
-  file: (id: string) => expectOk('GET', `/api/files/${encodeURIComponent(id)}`, parseFile),
+  file: (id: string, signal?: AbortSignal) =>
+    expectOk('GET', `/api/files/${encodeURIComponent(id)}`, parseFile, undefined, signal),
   fileVersions: (id: string) =>
     expectOk('GET', `/api/files/${encodeURIComponent(id)}/versions`, (v) =>
       parseList(v, parseVersion),
