@@ -13,6 +13,8 @@ mod sql_support;
 
 #[path = "it/collab_file_refs.rs"]
 mod collab_file_refs;
+#[path = "it/collab_note_lock_order.rs"]
+mod collab_note_lock_order;
 #[path = "it/collab_poison.rs"]
 mod collab_poison;
 #[path = "it/files/flush_refs.rs"]
@@ -5135,7 +5137,7 @@ async fn a_restore_or_move_racing_a_closing_room_keeps_its_edits() {
             .await
             .unwrap();
         e.close().await;
-        until_waiting_on_lock("FROM documents WHERE id = $1 FOR UPDATE", holder).await;
+        until_waiting_on_lock("app_lock_document_workspace", holder).await;
         let doc = fvoci_core::ids::DocumentId(uuid::Uuid::parse_str(id).unwrap());
         assert!(
             state.collab.has_room(doc),

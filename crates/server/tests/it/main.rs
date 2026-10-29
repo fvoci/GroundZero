@@ -48,6 +48,7 @@ mod modules;
 mod oidc;
 mod openapi_review;
 mod organization;
+mod personal_note_lock_order;
 mod personal_scope;
 mod progress_privacy;
 mod records;
