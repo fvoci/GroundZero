@@ -387,6 +387,10 @@ CREATE FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_worksp
     LANGUAGE sql STABLE SECURITY INVOKER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
+WITH shared AS MATERIALIZED (
+  SELECT id FROM app_shared_with_me(p_organization)
+  WHERE p_kinds && ARRAY['document', 'file']::text[]
+)
 SELECT kind, id, title, workspace_id,
                 CASE WHEN r.item_id IS NOT NULL AND app_access('item', r.item_id) <> 'none' THEN r.item_id END
          FROM (
@@ -432,7 +436,10 @@ SELECT kind, id, title, workspace_id,
            AND (r.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
                 OR (r.workspace_id IS NULL AND (
                     (r.kind = 'document' AND EXISTS (SELECT 1 FROM documents d WHERE d.id = r.id AND d.owner_user_id = app_user_id()))
-                    OR (r.kind = 'file' AND EXISTS (SELECT 1 FROM files f JOIN documents d ON d.id = f.document_id WHERE f.id = r.id AND d.owner_user_id = app_user_id())))))
+                    OR (r.kind = 'file' AND EXISTS (SELECT 1 FROM files f JOIN documents d ON d.id = f.document_id WHERE f.id = r.id AND d.owner_user_id = app_user_id()))))
+                OR ('document' = ANY(p_kinds) AND r.kind = 'document' AND r.id IN (SELECT id FROM shared))
+                OR ('file' = ANY(p_kinds) AND r.kind = 'file' AND EXISTS (
+                    SELECT 1 FROM files f WHERE f.id = r.id AND f.document_id IN (SELECT id FROM shared))))
          ORDER BY r.updated_at DESC LIMIT 60
     $$;
 

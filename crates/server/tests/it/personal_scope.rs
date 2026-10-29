@@ -203,11 +203,15 @@ async fn home_shared_and_search_stay_in_current_organization() {
         let results = search.as_array().unwrap();
         assert!(results.iter().any(|r| r["id"] == doc.to_string()));
         assert!(results.iter().any(|r| r["id"] == own_note.to_string()));
-        assert!(
-            results
-                .iter()
-                .all(|r| r["workspace_id"] == ws.to_string() || r["id"] == own_note.to_string())
+        // #230: 본인 노트 외에 현재 조직에서 공유받은 노트도 검색된다. 다른 조직에서는 제외한다.
+        assert_eq!(
+            results.iter().any(|r| r["id"] == shared_note.to_string()),
+            org == other.org,
+            "shared note must follow its sharing organization: {search}"
         );
+        assert!(results.iter().all(|r| r["workspace_id"] == ws.to_string()
+            || r["id"] == own_note.to_string()
+            || (org == other.org && r["id"] == shared_note.to_string())));
     }
     let empty = get(
         &w,
