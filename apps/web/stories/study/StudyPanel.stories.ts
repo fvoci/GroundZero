@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, userEvent, within } from 'storybook/test';
 import StudyPanel from '$lib/features/study/StudyPanel.svelte';
 import { storeFormDraft } from '$lib/features/common/form-draft';
-import { api, newRequestId } from '$lib/api/client';
+import { api } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import MainFrame from '../fixtures/MainFrame.svelte';
@@ -43,24 +43,24 @@ export const NarrowDark200: Story = {
 
 export const RestoreDraft: Story = {
   beforeEach: () => {
-    storeFormDraft('study:item-1:new', {
+    storeFormDraft('study:item-1:unit:unit-1:mine', {
       savedAt: '2026-10-27T00:00:00Z',
       input: {
-        title: '다음 학습 / Next unit',
-        chapter: '2장',
-        amount: '12oops',
-        unit: 'pages',
-        planned_on: '2026-11-01',
-        requestId: newRequestId(),
-        requestPayload: '',
+        note: '개인 학습 메모 / Private study note',
+        done_amount: '',
+        planned_on: '',
+        base: JSON.stringify({ note: '' }),
       },
     });
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.study_mine() }));
     await userEvent.click(await canvas.findByRole('button', { name: m.common_draft_restore() }));
-    await expect(canvas.getByLabelText(m.study_new_title())).toHaveValue('다음 학습 / Next unit');
-    await expect(canvas.getByLabelText(m.study_amount())).toHaveValue('12oops');
+    await expect(canvas.getByLabelText(m.study_note())).toHaveValue(
+      '개인 학습 메모 / Private study note',
+    );
+    await expect(canvasElement.querySelector('#unit-done-unit-1')).toHaveValue('0');
   },
 };
 

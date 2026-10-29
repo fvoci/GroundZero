@@ -162,6 +162,17 @@
     sharedBase = JSON.stringify(shared);
     baseVersion = String(u?.version ?? 0);
   }
+  // 저장하는 기준값에서도 긴 작성 입력만 꺼낸다(D-27 개정).
+  function baselineText(base: string, key: string): string {
+    try {
+      const value: unknown = JSON.parse(base);
+      if (typeof value !== 'object' || value === null) return '';
+      const text: unknown = Reflect.get(value, key);
+      return typeof text === 'string' ? text : '';
+    } catch {
+      return '';
+    }
+  }
   function resetMine(): void {
     const u = plan?.units.find((entry) => entry.id === openUnit);
     mine = {
@@ -172,6 +183,7 @@
     mineBase = JSON.stringify(mine);
   }
   const newDraft = createFormDraft({
+    preserve: false,
     name: () => `study:${itemId}:new`,
     snapshot: () => ({ ...draft, requestId, requestPayload }),
     parse: (raw) => textFields(raw, { ...draft, requestId: '', requestPayload: '' }),
@@ -195,6 +207,7 @@
     busy: () => adding,
   });
   const unitDraft = createFormDraft({
+    preserve: false,
     name: () =>
       editingUnit === undefined ? undefined : `study:${itemId}:unit:${editingUnit.id}:edit`,
     snapshot: () => ({ ...shared, base: sharedBase, version: baseVersion }),
@@ -211,10 +224,20 @@
   const mineDraft = createFormDraft({
     name: () => (openUnit === undefined ? undefined : `study:${itemId}:unit:${openUnit}:mine`),
     snapshot: () => ({ ...mine, base: mineBase }),
+    storedSnapshot: () => ({
+      done_amount: '',
+      planned_on: '',
+      note: mine.note,
+      base: JSON.stringify({ note: baselineText(mineBase, 'note') }),
+    }),
     parse: (raw) => textFields(raw, { ...mine, base: '' }),
-    restore: ({ base, ...input }) => {
-      mine = input;
-      mineBase = base;
+    restore: ({ base, note }) => {
+      mine = { ...mine, note };
+      mineBase = JSON.stringify({
+        done_amount: baselineText(mineBase, 'done_amount'),
+        planned_on: baselineText(mineBase, 'planned_on'),
+        note: baselineText(base, 'note'),
+      });
     },
     reset: resetMine,
     // D-113 SR1-11: 읽기 전용도 개인 진도는 남긴다. 보관 상태에서는 읽기만 한다.
@@ -222,11 +245,19 @@
       plan !== undefined &&
       plan.access !== 'archived' &&
       openUnit !== undefined &&
-      JSON.stringify(mine) !== mineBase,
+      mine.note !== baselineText(mineBase, 'note'),
+    screenOnly: () =>
+      plan !== undefined &&
+      plan.access !== 'archived' &&
+      openUnit !== undefined &&
+      ['planned_on', 'done_amount'].some(
+        (key) => Reflect.get(mine, key) !== baselineText(mineBase, key),
+      ),
     busy: () => savingMine,
   });
-  // 재배치 시작일·하루 단위 수는 조회가 아니라 작업 설정이라 다른 학습 폼처럼 남긴다(⑱).
+  // D-27 개정: 재배치 날짜·하루 단위 수는 짧은 설정이므로 화면 상태와 이탈 경고만 둔다.
   const replanDraft = createFormDraft({
+    preserve: false,
     name: () => `study:${itemId}:replan`,
     snapshot: () => ({ start: replanStart, perDay: replanPerDay }),
     parse: (raw) => textFields(raw, { start: '', perDay: '' }),

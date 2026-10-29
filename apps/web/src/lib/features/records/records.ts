@@ -41,6 +41,13 @@ export function emptyForm(): RecordForm {
   };
 }
 
+/** Live drafts and startup migration share the same writing-only projection (D-27). */
+export function recordWriting(value: RecordForm, longTextKeys: readonly string[]): RecordForm {
+  const values: Record<string, string> = {};
+  for (const key of longTextKeys) values[key] = value.values[key] ?? '';
+  return { ...emptyForm(), body: value.body, values };
+}
+
 /** Restore all editor values, including incomplete numbers and attachment references. */
 export function parseRecordForm(raw: unknown): RecordForm | undefined {
   if (

@@ -7,6 +7,9 @@ import { me } from '$lib/me.svelte';
 import { scopedKey } from '$lib/storage';
 import { holdDraftAt, listDraftsAt, writeDraftAt } from './draft-storage';
 
+// sessionStorage is copied when a tab is duplicated; this UUID belongs only to this page instance.
+let pageInstance: string | undefined;
+
 /** 저장소에 남은 입력 하나와 그 키. */
 export interface StoredFormDraft<T> {
   key: string;
@@ -33,7 +36,9 @@ export function formDraftTabKey(
   organizationId?: string,
 ): string | undefined {
   const b = base(name, userId, organizationId);
-  return b === undefined ? undefined : `${b}:tab:${tabId()}`;
+  if (b === undefined) return undefined;
+  pageInstance ??= crypto.randomUUID();
+  return `${b}:page:${pageInstance}:tab:${tabId()}`;
 }
 
 export { writeDraftAt as writeFormDraftAt } from './draft-storage';
