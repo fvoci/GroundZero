@@ -1165,6 +1165,10 @@ GRANT ALL ON FUNCTION fvoci.app_item_time(p_item uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_task_time(p_task uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_task_time(p_task uuid) TO fvoci_app;
 
+-- 홈 집계는 호출자 권한과 기존 RLS로 읽는다.
+REVOKE ALL ON FUNCTION fvoci.app_home(p_organization uuid, p_tz text) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_home(p_organization uuid, p_tz text) TO fvoci_app;
+
 REVOKE ALL ON FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_my_tasks(p_organization uuid, p_today date) TO fvoci_app;
 
@@ -1338,6 +1342,10 @@ GRANT SELECT ON TABLE fvoci.organizations TO fvoci_app;
 GRANT SELECT ON TABLE fvoci.server_admins TO fvoci_app;
 
 GRANT SELECT ON TABLE fvoci.task_statuses TO fvoci_app;
+
+-- 검색 집계 읽기(호출자 RLS, SQL01).
+REVOKE ALL ON FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid) TO fvoci_app;
 
 -- 달력 집계(D-80): 기존 권한 덩어리와 분리해 추가한다.
 REVOKE ALL ON FUNCTION fvoci.app_calendar(uuid, date, date, text, uuid, uuid) FROM PUBLIC;

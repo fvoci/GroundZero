@@ -2,8 +2,8 @@
 
 use super::AppState;
 use crate::features::{
-    accounts, courses, home, item_profile, members, modules, organizations, records, search_api,
-    study, workspaces, zotero,
+    accounts, courses, item_profile, members, modules, organizations, records, study, workspaces,
+    zotero,
 };
 use axum::routing::{delete, get, post, put};
 use axum::{Router, middleware};
@@ -11,6 +11,8 @@ use axum::{Router, middleware};
 pub(super) fn api(state: &AppState) -> Router<AppState> {
     Router::new()
         .merge(fvoci_work::router(state))
+        .merge(fvoci_home::router(state))
+        .merge(fvoci_search::router(state))
         .merge(fvoci_references::router(state))
         .merge(fvoci_documents::router(state))
         .merge(fvoci_system::router(state))
@@ -27,8 +29,6 @@ pub(super) fn api(state: &AppState) -> Router<AppState> {
         .merge(item_profile_routes())
         .merge(modules_routes())
         .merge(courses_routes())
-        .merge(home_routes())
-        .merge(search_api_routes())
         .merge(collab_routes())
         .merge(members_routes())
         .fallback(super::api_not_found)
@@ -209,16 +209,6 @@ fn courses_routes() -> Router<AppState> {
             "/episodes/{episode_id}/progress",
             put(courses::set_progress),
         )
-}
-
-fn home_routes() -> Router<AppState> {
-    Router::new()
-        .route("/me/home", get(home::home))
-        .route("/me/tasks", get(home::my_tasks))
-}
-
-fn search_api_routes() -> Router<AppState> {
-    Router::new().route("/search", get(search_api::search))
 }
 
 fn collab_routes() -> Router<AppState> {

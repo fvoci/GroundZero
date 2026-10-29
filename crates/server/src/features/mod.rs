@@ -3,13 +3,11 @@
 pub mod accounts;
 pub mod courses;
 pub mod file_text;
-pub mod home;
 pub mod item_profile;
 pub mod members;
 pub mod modules;
 pub mod organizations;
 pub mod records;
-pub mod search_api;
 pub mod search_text;
 pub mod study;
 pub mod workspaces;

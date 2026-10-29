@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
@@ -51,14 +52,14 @@ function expectNoEmptyClaims(): void {
 
 describe('home empty texts before the first load', () => {
   it('does not say a section is empty while the home is loading', async () => {
-    vi.spyOn(api, 'home').mockImplementation(() => new Promise(() => undefined));
+    vi.spyOn(homeApi, 'home').mockImplementation(() => new Promise(() => undefined));
     render(HomeDashboard, { props: { workspaces: [workspace] } });
     await screen.findByRole('heading', { level: 1, name: '오늘' });
     expectNoEmptyClaims();
   });
 
   it('does not say a section is empty after the home failed to load', async () => {
-    vi.spyOn(api, 'home').mockRejectedValue(new NetworkError('offline'));
+    vi.spyOn(homeApi, 'home').mockRejectedValue(new NetworkError('offline'));
     render(HomeDashboard, { props: { workspaces: [workspace] } });
     await screen.findByText(/홈을 불러오지 못했습니다\./);
     expectNoEmptyClaims();

@@ -124,6 +124,14 @@ impl FromRef<AppState> for fvoci_calendar::CalendarState {
     }
 }
 
+impl FromRef<AppState> for fvoci_home::HomeState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_activity::ActivityState {
     fn from_ref(state: &AppState) -> Self {
         Self {
@@ -145,6 +153,15 @@ impl FromRef<AppState> for fvoci_work::WorkState {
         Self {
             db: state.db.clone(),
             max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_search::SearchState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            search: state.search.clone(),
         }
     }
 }

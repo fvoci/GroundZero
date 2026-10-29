@@ -3,8 +3,8 @@
 use super::Health;
 use crate::build_info::BuildInfo;
 use crate::features::{
-    accounts, courses, home, item_profile, members, modules, organizations, records, search_api,
-    study, workspaces, zotero,
+    accounts, courses, item_profile, members, modules, organizations, records, study, workspaces,
+    zotero,
 };
 use fvoci_core::error::ErrorBody;
 use utoipa::OpenApi;
@@ -49,9 +49,6 @@ use utoipa::OpenApi;
         organizations::create,
         organizations::server_admins,
         // personal scope (2단계 B)
-        home::home,
-        home::my_tasks,
-        search_api::search,
         study::get,
         study::add_units,
         study::update_unit,
@@ -135,12 +132,6 @@ use utoipa::OpenApi;
         workspaces::DeleteWorkspace,
         workspaces::WorkspaceDeleted,
         workspaces::DeletedWorkspace,
-        home::DueBucket,
-        home::HomeTask,
-        home::HomeDocument,
-        home::HomeItem,
-        home::MarkedTarget,
-        home::Home,
         organizations::OrgRole,
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
@@ -157,8 +148,6 @@ use utoipa::OpenApi;
         organizations::CreateOrganization,
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
-        home::UpNextCounts,
-        search_api::SearchResult,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -218,11 +207,6 @@ use utoipa::OpenApi;
         modules::UpdateItem,
         modules::ItemConflict,
         modules::ItemSaveConflict,
-        // personal scope (2단계 B)
-        home::MyTask,
-        home::MyTaskCounts,
-        home::WorkspaceTasks,
-        home::MyTasks,
         fvoci_core::ids::Role,
     )),
     tags(
@@ -255,6 +239,8 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_home::HomeApi::openapi());
+        openapi.merge(fvoci_search::SearchApi::openapi());
         openapi.merge(fvoci_references::ReferencesApi::openapi());
         openapi.merge(fvoci_documents::DocumentsApi::openapi());
         openapi.merge(fvoci_system::SystemApi::openapi());

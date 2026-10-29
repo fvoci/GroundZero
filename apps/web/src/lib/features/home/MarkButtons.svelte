@@ -1,7 +1,7 @@
 <script lang="ts">
   import { activityApi, type MarkKind } from '$lib/features/activity/api';
   // 홈에 고정·즐겨찾기(D-19). 본인만 보는 표시이며 볼 수 있는 대상에만 켤 수 있다.
-  import type { MarkTarget } from '$lib/api/client';
+  import type { MarkTarget } from '$lib/features/activity/api';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';

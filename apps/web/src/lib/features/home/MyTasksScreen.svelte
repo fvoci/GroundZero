@@ -1,8 +1,9 @@
 <script lang="ts">
+  import type { MyTasksView, MyTaskView } from '$lib/features/home/api';
+  import { homeApi } from '$lib/features/home/api';
   // 내 업무(D-120): 담당자가 나인 업무를 현재 조직 전체에서 워크스페이스별로 묶어 보인다. 기한 없는 업무는 "날짜 없음"
   // 묶음이다. 범주 기준 집계(`counts`)는 서버가 센다.
-  import type { MyTasksView, MyTaskView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+
   import { errorText } from '$lib/api/errors';
   import { displaySettings } from '$lib/display';
   import { dayIn } from '$lib/features/events/time';
@@ -12,26 +13,32 @@
   import { Button } from '$lib/ui/button';
   import { formatDay } from '$lib/display';
 
-  const { summary = false, version = 0 }: { summary?: boolean; version?: number } = $props();
+  type Source = { kind: 'screen' } | { kind: 'summary'; data: MyTasksView };
+  const { source = { kind: 'screen' } }: { source?: Source } = $props();
+  const summary = $derived(source.kind === 'summary');
 
   let data = $state<MyTasksView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let retry = $state(0);
 
   let loadSeq = 0;
-  const request = $derived({ retry, version, organizationId: org.currentId });
+  const request = $derived({ retry, organizationId: org.currentId });
   $effect(() => {
     const { organizationId } = request;
     const mine = ++loadSeq;
     data = undefined;
     error = undefined;
+    if (source.kind === 'summary') {
+      data = source.data;
+      return;
+    }
     if (organizationId === undefined) {
       data = undefined;
       error = m.app_organization_required();
       return;
     }
     const today = dayIn(new Date().toISOString(), displaySettings().timeZone);
-    void api
+    void homeApi
       .myTasks(organizationId, today)
       .then((d) => {
         if (mine !== loadSeq) return;

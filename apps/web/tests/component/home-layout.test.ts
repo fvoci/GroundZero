@@ -1,9 +1,11 @@
+import type { HomeView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CalendarView, HomeView } from '$lib/api/client';
+import type { CalendarView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
@@ -28,6 +30,7 @@ const LONG_URL =
   'https://example.test/workspaces/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/tasks/ffffffff-0000-1111-2222-333333333333';
 
 const home: HomeView = {
+  my_tasks: { counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 }, workspaces: [] },
   today: '2026-10-21',
   up_next: [],
   up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
@@ -61,7 +64,7 @@ const calendar: CalendarView = {
 describe('home layout at narrow widths', () => {
   it('gives the dashboard grid a shrinkable column and lets long week entries break', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
     vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });

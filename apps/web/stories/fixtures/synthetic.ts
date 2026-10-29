@@ -1,3 +1,4 @@
+import type { HomeTaskView, HomeView } from '$lib/features/home/api';
 import { type CommentView, type NotificationView } from '$lib/features/activity/api';
 // 개발 seed와 같은 합성 데이터(deploy/postgres/dev-ui-data.json)를 화면 타입으로 옮긴다. 내용(제목·본문·트리·
 // 스레드·상태)은 `cargo xtask dev`의 "UI 상태 예제" 워크스페이스와 같다. id·시각은 DB가 정하므로 여기서는 고정값을 쓴다
@@ -14,8 +15,6 @@ import type {
 
 import type {
   CalendarView,
-  HomeTaskView,
-  HomeView,
   ItemStatus,
   ItemView,
   SearchResultView,
@@ -325,13 +324,48 @@ export function homeView(): HomeView {
         module_kind: mod.kind,
         reference: it.reference ?? null,
         title: it.title,
-        tasks_done:
-          it === TASK_ITEM ? TASK_ROWS.filter((t) => t.status_category === 'done').length : 0,
-        tasks_total: it === TASK_ITEM ? TASK_ROWS.length : 0,
+        progress:
+          mod.kind === 'course'
+            ? { kind: 'course' as const, done: 0, total: 0 }
+            : mod.kind === 'study'
+              ? { kind: 'study' as const, amounts: [] }
+              : {
+                  kind: 'tasks' as const,
+                  done:
+                    it === TASK_ITEM
+                      ? TASK_ROWS.filter((t) => t.status_category === 'done').length
+                      : 0,
+                  total: it === TASK_ITEM ? TASK_ROWS.length : 0,
+                },
         can_write: true,
       })),
   );
+  const mine = TASK_ROWS.filter((t) => t.mine).map((t) => ({
+    ...homeTask(t),
+    priority: 'none',
+    start_date: t.start_date,
+    updated_at: at(0),
+    bucket:
+      t.status_category === 'done'
+        ? ('done' as const)
+        : (bucketOf(t.due_date) ?? ('none' as const)),
+  }));
+  const taskCount = (bucket: (typeof mine)[number]['bucket']): number =>
+    mine.filter((t) => t.bucket === bucket).length;
   return {
+    my_tasks: {
+      counts: {
+        overdue: taskCount('overdue'),
+        today: taskCount('today'),
+        upcoming: taskCount('upcoming'),
+        undated: taskCount('none'),
+        done: taskCount('done'),
+      },
+      workspaces:
+        mine.length === 0
+          ? []
+          : [{ workspace_id: WORKSPACE.id, workspace_name: WORKSPACE.name, tasks: mine }],
+    },
     today: TODAY,
     up_next: upNext,
     up_next_counts: {
@@ -383,6 +417,10 @@ export function homeView(): HomeView {
 /** 처음 쓰는 사람의 홈: 오늘 날짜만 있다. */
 export function emptyHomeView(): HomeView {
   return {
+    my_tasks: {
+      counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 },
+      workspaces: [],
+    },
     today: TODAY,
     up_next: [],
     up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
