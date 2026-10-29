@@ -169,7 +169,6 @@ CREATE TABLE fvoci.organizations (
     max_file_bytes bigint,
     max_storage_bytes bigint,
     max_concurrent_uploads integer,
-    notification_rate_per_hour integer,
     activity_retention_days integer,
     audit_retention_days integer,
     CONSTRAINT organizations_activity_retention_days_check CHECK (((activity_retention_days IS NULL) OR ((activity_retention_days >= 1) AND (activity_retention_days <= 3650)))),
@@ -178,8 +177,7 @@ CREATE TABLE fvoci.organizations (
     CONSTRAINT organizations_max_concurrent_uploads_check CHECK (((max_concurrent_uploads IS NULL) OR (max_concurrent_uploads >= 1))),
     CONSTRAINT organizations_max_file_bytes_check CHECK (((max_file_bytes IS NULL) OR (max_file_bytes >= 1))),
     CONSTRAINT organizations_max_storage_bytes_check CHECK (((max_storage_bytes IS NULL) OR (max_storage_bytes >= 0))),
-    CONSTRAINT organizations_name_check CHECK ((length(btrim(name)) > 0)),
-    CONSTRAINT organizations_notification_rate_per_hour_check CHECK (((notification_rate_per_hour IS NULL) OR (notification_rate_per_hour >= 1)))
+    CONSTRAINT organizations_name_check CHECK ((length(btrim(name)) > 0))
 );
 
 CREATE TABLE fvoci.ownership_offers (
@@ -284,7 +282,6 @@ CREATE TABLE fvoci.workspaces (
     max_file_bytes bigint,
     max_storage_bytes bigint,
     max_concurrent_uploads integer,
-    notification_rate_per_hour integer,
     activity_retention_days integer,
     audit_retention_days integer,
     CONSTRAINT workspaces_activity_retention_days_check CHECK (((activity_retention_days IS NULL) OR ((activity_retention_days >= 1) AND (activity_retention_days <= 3650)))),
@@ -294,7 +291,6 @@ CREATE TABLE fvoci.workspaces (
     CONSTRAINT workspaces_max_file_bytes_check CHECK (((max_file_bytes IS NULL) OR (max_file_bytes >= 1))),
     CONSTRAINT workspaces_max_storage_bytes_check CHECK (((max_storage_bytes IS NULL) OR (max_storage_bytes >= 0))),
     CONSTRAINT workspaces_name_check CHECK ((length(btrim(name)) > 0)),
-    CONSTRAINT workspaces_notification_rate_per_hour_check CHECK (((notification_rate_per_hour IS NULL) OR (notification_rate_per_hour >= 1))),
     CONSTRAINT workspaces_trash_retention_days_check CHECK (((trash_retention_days >= 1) AND (trash_retention_days <= 3650))),
     CONSTRAINT workspaces_version_retention_days_check CHECK (((version_retention_days IS NULL) OR ((version_retention_days >= 1) AND (version_retention_days <= 3650))))
 );
@@ -1136,7 +1132,7 @@ CREATE FUNCTION fvoci.app_set_organization_settings(p_organization uuid, p_patch
     END IF;
     FOR v_key IN SELECT jsonb_object_keys(p_patch) LOOP
       IF v_key NOT IN ('name', 'public_links_enabled', 'max_file_bytes', 'max_storage_bytes', 'max_concurrent_uploads',
-                       'notification_rate_per_hour', 'activity_retention_days', 'audit_retention_days') THEN
+                       'activity_retention_days', 'audit_retention_days') THEN
         RAISE EXCEPTION 'unknown setting %', v_key USING ERRCODE = '22023';
       END IF;
     END LOOP;
@@ -1152,9 +1148,6 @@ CREATE FUNCTION fvoci.app_set_organization_settings(p_organization uuid, p_patch
                                ELSE max_storage_bytes END,
       max_concurrent_uploads = CASE WHEN p_patch ? 'max_concurrent_uploads' THEN (p_patch ->> 'max_concurrent_uploads')::integer
                                     ELSE max_concurrent_uploads END,
-      notification_rate_per_hour = CASE WHEN p_patch ? 'notification_rate_per_hour'
-                                        THEN (p_patch ->> 'notification_rate_per_hour')::integer
-                                        ELSE notification_rate_per_hour END,
       activity_retention_days = CASE WHEN p_patch ? 'activity_retention_days'
                                      THEN (p_patch ->> 'activity_retention_days')::integer ELSE activity_retention_days END,
       audit_retention_days = CASE WHEN p_patch ? 'audit_retention_days' THEN (p_patch ->> 'audit_retention_days')::integer
@@ -1186,7 +1179,7 @@ CREATE FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, 
       RAISE EXCEPTION 'settings must be an object' USING ERRCODE = '22023';
     END IF;
     FOR v_key IN SELECT jsonb_object_keys(p_patch) LOOP
-      IF v_key NOT IN ('max_file_bytes', 'max_storage_bytes', 'max_concurrent_uploads', 'notification_rate_per_hour',
+      IF v_key NOT IN ('max_file_bytes', 'max_storage_bytes', 'max_concurrent_uploads',
                        'activity_retention_days', 'audit_retention_days') THEN
         RAISE EXCEPTION 'unknown setting %', v_key USING ERRCODE = '22023';
       END IF;
@@ -1211,9 +1204,6 @@ CREATE FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, 
                                ELSE max_storage_bytes END,
       max_concurrent_uploads = CASE WHEN p_patch ? 'max_concurrent_uploads' THEN (p_patch ->> 'max_concurrent_uploads')::integer
                                     ELSE max_concurrent_uploads END,
-      notification_rate_per_hour = CASE WHEN p_patch ? 'notification_rate_per_hour'
-                                        THEN (p_patch ->> 'notification_rate_per_hour')::integer
-                                        ELSE notification_rate_per_hour END,
       activity_retention_days = CASE WHEN p_patch ? 'activity_retention_days'
                                      THEN (p_patch ->> 'activity_retention_days')::integer ELSE activity_retention_days END,
       audit_retention_days = CASE WHEN p_patch ? 'audit_retention_days' THEN (p_patch ->> 'audit_retention_days')::integer
@@ -1224,12 +1214,10 @@ CREATE FUNCTION fvoci.app_set_workspace_limits(p_workspace uuid, p_patch jsonb, 
                       jsonb_build_object(
                         'from', jsonb_build_object('max_file_bytes', v_old.max_file_bytes, 'max_storage_bytes', v_old.max_storage_bytes,
                                                    'max_concurrent_uploads', v_old.max_concurrent_uploads,
-                                                   'notification_rate_per_hour', v_old.notification_rate_per_hour,
                                                    'activity_retention_days', v_old.activity_retention_days,
                                                    'audit_retention_days', v_old.audit_retention_days),
                         'to', jsonb_build_object('max_file_bytes', v_new.max_file_bytes, 'max_storage_bytes', v_new.max_storage_bytes,
                                                  'max_concurrent_uploads', v_new.max_concurrent_uploads,
-                                                 'notification_rate_per_hour', v_new.notification_rate_per_hour,
                                                  'activity_retention_days', v_new.activity_retention_days,
                                                  'audit_retention_days', v_new.audit_retention_days)));
   END
@@ -1249,13 +1237,11 @@ CREATE FUNCTION fvoci.app_effective_limit(p_workspace uuid, p_name text, p_defau
          WHEN 'max_file_bytes' THEN w.max_file_bytes
          WHEN 'max_storage_bytes' THEN w.max_storage_bytes
          WHEN 'max_concurrent_uploads' THEN w.max_concurrent_uploads::bigint
-         WHEN 'notification_rate_per_hour' THEN w.notification_rate_per_hour::bigint
        END FROM workspaces w WHERE w.id = p_workspace),
       (SELECT CASE p_name
          WHEN 'max_file_bytes' THEN o.max_file_bytes
          WHEN 'max_storage_bytes' THEN o.max_storage_bytes
          WHEN 'max_concurrent_uploads' THEN o.max_concurrent_uploads::bigint
-         WHEN 'notification_rate_per_hour' THEN o.notification_rate_per_hour::bigint
        END FROM workspaces w JOIN organizations o ON o.id = w.organization_id WHERE w.id = p_workspace))
   $$;
 

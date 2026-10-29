@@ -760,7 +760,7 @@ async fn settings_validate_patch_preserve_null_and_require_expected_user() {
     let org = format!("/api/organizations/{}", w.org);
     let settings = format!("{org}/settings");
     let limits = format!("/api/workspaces/{}/limits", w.ws);
-    let patch = json!({"max_file_bytes":100,"max_storage_bytes":0,"max_concurrent_uploads":2,"notification_rate_per_hour":3,"activity_retention_days":4,"audit_retention_days":3650});
+    let patch = json!({"max_file_bytes":100,"max_storage_bytes":0,"max_concurrent_uploads":2,"activity_retention_days":4,"audit_retention_days":3650});
     let updated = expect(
         &app,
         Method::PUT,
@@ -796,7 +796,6 @@ async fn settings_validate_patch_preserve_null_and_require_expected_user() {
             json!({"max_file_bytes":0}),
             json!({"max_storage_bytes":-1}),
             json!({"max_concurrent_uploads":0}),
-            json!({"notification_rate_per_hour":0}),
             json!({"activity_retention_days":0}),
             json!({"audit_retention_days":3651}),
             json!({"max_concurrent_uploads":2147483648_i64}),

@@ -119,7 +119,6 @@ async fn organization_and_workspace_limits_report_each_bad_field_without_applyin
             ("max_file_bytes", json!(0), "out_of_range", None),
             ("max_storage_bytes", json!(-1), "out_of_range", None),
             ("max_concurrent_uploads", json!(0), "out_of_range", None),
-            ("notification_rate_per_hour", json!(0), "out_of_range", None),
             ("activity_retention_days", json!(0), "out_of_range", None),
             (
                 "activity_retention_days",
@@ -219,6 +218,71 @@ async fn organization_and_workspace_limits_report_each_bad_field_without_applyin
             "organization settings",
             &mut failures,
         );
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// D-124 개정 2026-10-28: 외부 채널이 없는 발송률 설정은 HTTP와 SQL 모두 알 수 없는 키로 거절한다.
+#[tokio::test]
+async fn notification_rate_is_an_unknown_organization_and_workspace_setting() {
+    let w = World::new().await;
+    let app = common::app(&w.state);
+    let org = format!("/api/organizations/{}", w.org);
+    let limits = format!("/api/workspaces/{}/limits", w.ws);
+    let mut failures = Vec::new();
+    for (read, write, function, target) in [
+        (
+            org.clone(),
+            format!("{org}/settings"),
+            "app_set_organization_settings",
+            w.org,
+        ),
+        (limits.clone(), limits, "app_set_workspace_limits", w.ws),
+    ] {
+        let before = common::send(&app, Method::GET, &read, Some(&w.owner), None)
+            .await
+            .json;
+        let settings = before.get("limits").unwrap_or(&before);
+        if settings.get("notification_rate_per_hour").is_some() {
+            failures.push(format!("{read}: removed setting is still returned"));
+        }
+        for value in [json!(3), Value::Null, json!(0)] {
+            let patch = json!({"notification_rate_per_hour":value,"max_file_bytes":12});
+            let reply = request(&app, &w.owner, Method::PUT, &write, patch.clone()).await;
+            check(
+                &reply,
+                "notification_rate_per_hour",
+                "invalid_format",
+                None,
+                &format!("{write} {value}"),
+                &mut failures,
+            );
+            let mut tx = w.state.db.begin_as(w.owner.id).await.unwrap();
+            let result = sqlx::query(&format!("SELECT {function}($1, $2, $3)"))
+                .bind(target)
+                .bind(patch)
+                .bind(crate::sql_support::ids())
+                .execute(tx.conn())
+                .await;
+            match result {
+                Err(error)
+                    if error.as_database_error().is_some_and(|error| {
+                        error.code().as_deref() == Some("22023")
+                            && error.message() == "unknown setting notification_rate_per_hour"
+                    }) => {}
+                other => failures.push(format!(
+                    "{function} {value}: expected unknown setting (22023), got {other:?}"
+                )),
+            }
+            drop(tx);
+            assert_eq!(
+                common::send(&app, Method::GET, &read, Some(&w.owner), None)
+                    .await
+                    .json,
+                before,
+                "{write}: rejected setting must not apply a known field"
+            );
+        }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
