@@ -366,16 +366,21 @@ BEGIN
       FROM my_tasks t GROUP BY workspace_id, workspace_name
     ), marks AS MATERIALIZED (
       SELECT m.mark, m.target_kind AS kind, m.target_id AS id,
-             app_time_target_label(m.target_kind, m.target_id) AS label,
+             CASE WHEN m.target_kind = 'document' AND d.item_id IS NOT NULL
+                       AND app_access('item', d.item_id) = 'none'
+                  THEN d.title
+                  ELSE app_time_target_label(m.target_kind, m.target_id) END AS label,
              coalesce(t.workspace_id, d.workspace_id, i.workspace_id) AS workspace_id,
-             coalesce(t.item_id, d.item_id) AS item_id, m.created_at
+             CASE WHEN app_access('item', coalesce(t.item_id, d.item_id)) <> 'none'
+                  THEN coalesce(t.item_id, d.item_id) END AS item_id, m.created_at
       FROM user_marks m
       LEFT JOIN tasks t ON m.target_kind = 'task' AND t.id = m.target_id
       LEFT JOIN documents d ON m.target_kind = 'document' AND d.id = m.target_id
       LEFT JOIN items i ON m.target_kind = 'item' AND i.id = m.target_id
       WHERE m.mark IN ('pin', 'favorite')
         AND (coalesce(t.workspace_id, d.workspace_id, i.workspace_id) IN (SELECT app_my_workspace_ids(p_organization))
-             OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id()))
+             OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id())
+             OR d.id IN (SELECT id FROM app_shared_with_me(p_organization)))
     )
     SELECT jsonb_build_object(
       'today', to_char(v_today, 'YYYY-MM-DD'),
@@ -1113,7 +1118,7 @@ CREATE FUNCTION fvoci.app_system_item_reminders(p_today date, p_ids uuid[]) RETU
       JOIN workspaces w ON w.id = i.workspace_id
       CROSS JOIN LATERAL (VALUES ('date', r.occurred_on),
                                  ('revision_due', CASE WHEN r.kind = 'submission'
-                                                       THEN (r.fields->>'revision_due')::date END)) AS x(key, on_date)
+                                                       THEN app_iso_date(r.fields->>'revision_due') END)) AS x(key, on_date)
       WHERE r.kind IN ('review', 'submission', 'deliverable')
         AND x.on_date IN (p_today, p_today + 1)
         AND coalesce(r.fields->>'status', '') NOT IN ('accepted', 'published', 'rejected', 'done')
@@ -1169,7 +1174,7 @@ CREATE FUNCTION fvoci.app_system_item_reminders_ids(p_today date) RETURNS intege
          JOIN workspaces w ON w.id = i.workspace_id
          CROSS JOIN LATERAL (VALUES ('date', r.occurred_on),
                                     ('revision_due', CASE WHEN r.kind = 'submission'
-                                                          THEN (r.fields->>'revision_due')::date END)) AS x(key, on_date)
+                                                          THEN app_iso_date(r.fields->>'revision_due') END)) AS x(key, on_date)
          CROSS JOIN LATERAL (
            SELECT r.created_by
            UNION SELECT (jsonb_array_elements_text(coalesce(r.fields->'coauthors', '[]')))::uuid

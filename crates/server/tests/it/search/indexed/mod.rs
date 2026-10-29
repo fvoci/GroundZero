@@ -23,6 +23,7 @@ mod access;
 mod dates;
 mod filters;
 mod lifecycle;
+mod shares;
 
 /// Meilisearch를 쓰는 상태. `cargo xtask test`가 테스트용 주소와 키를 넣는다.
 async fn search_state() -> AppState {

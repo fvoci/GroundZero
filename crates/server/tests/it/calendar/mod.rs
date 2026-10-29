@@ -8,6 +8,7 @@
 use crate::common;
 
 mod privacy;
+mod revision_due;
 mod scope;
 mod time_exclusion;
 

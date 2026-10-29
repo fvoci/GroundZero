@@ -222,4 +222,26 @@ describe('account change detection events', () => {
     expect(accountSafety.switching).toBe(false);
     expect(reload).not.toHaveBeenCalled();
   });
+
+  it('publishes its own verified user without letting denied locks change the screen', async () => {
+    const locks = Object.getOwnPropertyDescriptor(navigator, 'locks');
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: () => Promise.reject(new Error('denied')) },
+    });
+    try {
+      const check = vi.spyOn(api, 'me').mockResolvedValue({ ...other, id: 'u1' });
+      const reload = vi.fn();
+      render(FeedbackHost, { reload });
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => {
+        expect(check).toHaveBeenCalledOnce();
+      });
+      expect(accountSafety.switching).toBe(false);
+      expect(reload).not.toHaveBeenCalled();
+    } finally {
+      if (locks === undefined) Reflect.deleteProperty(navigator, 'locks');
+      else Object.defineProperty(navigator, 'locks', locks);
+    }
+  });
 });
