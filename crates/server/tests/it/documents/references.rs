@@ -28,15 +28,12 @@ fn body_with(nodes: Vec<Value>) -> Value {
 
 /// 본문을 저장하고 새 문서 JSON을 돌려준다.
 async fn save_body(app: &Router, user: &TestUser, doc: &Value, body: Value) -> (StatusCode, Value) {
-    let r = send(
+    let r = common::live::save(
         app,
-        Method::PUT,
+        user,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(user),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
+        &json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
                      "title": doc["title"], "body": body }),
-        ),
     )
     .await;
     (r.status, r.json)

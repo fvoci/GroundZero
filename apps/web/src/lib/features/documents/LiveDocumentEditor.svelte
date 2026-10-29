@@ -202,6 +202,7 @@
       editingUser,
     );
     watch?.stop();
+    bodyPending = false;
     watch = watchUnsynced(next.document, next.provider, next.persisted, {
       // 편집기가 본문을 넘긴 뒤에 남긴다.
       onDirty: () => {
@@ -478,8 +479,6 @@
         return m.documents_live_invalid();
       case 'reload':
         return m.documents_live_reload();
-      case 'off':
-        return m.documents_live_off();
       case 'account':
         return accountUnsavedLost
           ? m.documents_live_account_stopped()

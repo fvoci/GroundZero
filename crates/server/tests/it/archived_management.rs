@@ -154,13 +154,7 @@ async fn admins_manage_sharing_and_settings_of_archived_documents_but_cannot_edi
     );
     // 관리자라도 내용 편집은 보관 중 409다.
     let base: i64 = doc.json["revision"].as_i64().unwrap_or(0);
-    let edit = send(
-        &app,
-        Method::PUT,
-        &format!("/api/documents/{doc_id}"),
-        Some(&admin),
-        Some(json!({ "request_id": new_request_id(), "base_revision": base, "title": "보관될 문서", "body": doc_body("보관 중 편집") })),
-    )
+    let edit = common::live::save(&app, &admin, &format!("/api/documents/{doc_id}"), &json!({ "request_id": new_request_id(), "base_revision": base, "title": "보관될 문서", "body": doc_body("보관 중 편집") }))
     .await;
     assert_eq!(edit.status, StatusCode::CONFLICT, "{:?}", edit.json);
 }

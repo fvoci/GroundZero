@@ -23,7 +23,6 @@ const ACCESS_WORKSPACE: Workspace = {
   organization_id: TEST_ORGANIZATION.id,
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 beforeEach(async () => {

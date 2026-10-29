@@ -170,10 +170,6 @@ export class Api {
     return str(doc, 'id');
   }
 
-  async setRealtime(workspace: string, enabled: boolean): Promise<void> {
-    await this.send('PUT', `/api/workspaces/${workspace}/realtime`, { enabled });
-  }
-
   /** 관리자가 이메일로 초대한다. 받는 사람은 그 이메일이 확인된 계정으로 로그인해 받아들인다. */
   async invite(
     workspace: string,

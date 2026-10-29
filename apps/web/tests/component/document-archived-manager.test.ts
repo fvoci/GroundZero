@@ -20,7 +20,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'admin',
     is_owner: false,
-    realtime_enabled: false,
   },
 ];
 
@@ -43,7 +42,6 @@ const archivedForAdmin: DocumentView = {
   can_manage: true,
   can_delete: false,
   is_template: false,
-  realtime: false,
   can_export: true,
 };
 

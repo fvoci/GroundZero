@@ -417,13 +417,12 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let doc_id = doc.json["id"].as_str().unwrap().to_owned();
     let image = json!({ "type": "doc", "content": [{ "type": "image",
         "attrs": { "src": format!("/api/files/{file}/content?version=3&inline=true") } }] });
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &writer,
         &format!("/api/documents/{doc_id}"),
-        Some(&writer),
-        Some(json!({
-        "request_id": new_request_id(), "base_revision": 1, "title": "그림", "body": image })),
+        &json!({
+        "request_id": new_request_id(), "base_revision": 1, "title": "그림", "body": image }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
@@ -647,9 +646,9 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     let save = |src: String| {
         let (app, outsider, note_id) = (app.clone(), outsider.clone(), note_id.clone());
         async move {
-            send(&app, Method::PUT, &format!("/api/documents/{note_id}"), Some(&outsider), Some(json!({
+            common::live::save(&app, &outsider, &format!("/api/documents/{note_id}"), &json!({
                 "request_id": new_request_id(), "base_revision": 1, "title": "남의 버전",
-                "body": { "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] } })))
+                "body": { "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] } }))
             .await
             .status
         }
@@ -728,13 +727,7 @@ async fn file_exists(owner: &sqlx::PgPool, file: &str) -> bool {
 async fn save_image(app: &Router, user: &TestUser, doc: &str, file: &str) -> StatusCode {
     let body = json!({ "type": "doc", "content": [{ "type": "image",
         "attrs": { "src": format!("/api/files/{file}/content?version=1") } }] });
-    send(
-        app,
-        Method::PUT,
-        &format!("/api/documents/{doc}"),
-        Some(user),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "참조", "body": body })),
-    )
+    common::live::save(app, user, &format!("/api/documents/{doc}"), &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "참조", "body": body }))
     .await
     .status
 }

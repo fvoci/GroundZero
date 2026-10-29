@@ -87,7 +87,6 @@ async fn required_expected_user_is_checked_before_every_write_and_audit() {
     let doc = w.doc().await;
     let other = w.member("member").await;
     let requests = [
-        (Method::PUT, format!("/api/documents/{doc}"), save()),
         (
             Method::POST,
             "/api/me/notes".to_owned(),
@@ -148,7 +147,8 @@ async fn expected_user_is_not_authentication_or_permission() {
         (Some(&outsider), outsider.id.0, StatusCode::NOT_FOUND),
         (Some(&outsider), w.owner.id.0, StatusCode::CONFLICT),
     ] {
-        let (actual, response) = raw(&w, session, Method::PUT, &uri, Some(expected), &save()).await;
+        let (actual, response) =
+            raw(&w, session, Method::PATCH, &uri, Some(expected), &save()).await;
         assert_eq!(actual, status, "{response}");
         assert_eq!(snapshot(&w).await, before);
     }

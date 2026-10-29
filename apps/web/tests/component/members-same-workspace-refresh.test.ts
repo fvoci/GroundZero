@@ -21,7 +21,6 @@ const workspace: Workspace = {
   name: '연구실',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 const other: Workspace = { ...workspace, id: 'ws-2', name: '다른 공간' };
 const invitation = {

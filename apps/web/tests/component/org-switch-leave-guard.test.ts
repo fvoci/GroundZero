@@ -46,7 +46,6 @@ function workspace(id: string, organizationId: string, name: string): Workspace 
     name,
     role: 'admin',
     is_owner: true,
-    realtime_enabled: false,
     access: 'owner',
   };
 }

@@ -17,7 +17,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'admin',
     is_owner: true,
-    realtime_enabled: false,
   },
 ];
 
@@ -40,7 +39,6 @@ const doc: DocumentView = {
   can_manage: true,
   can_delete: true,
   is_template: false,
-  realtime: false,
   can_export: true,
 };
 

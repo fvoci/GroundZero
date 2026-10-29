@@ -180,7 +180,6 @@ describe('dates inside localized text', () => {
       name: 'Space',
       role: 'member',
       is_owner: false,
-      realtime_enabled: false,
     };
     const item: ItemView = {
       id: 'i1',

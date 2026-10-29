@@ -16,15 +16,12 @@ use common::{
 use serde_json::{Value, json};
 
 async fn save(app: &Router, user: &TestUser, doc: &Value, text: &str) -> Value {
-    let r = send(
+    let r = common::live::save(
         app,
-        Method::PUT,
+        user,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(user),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
+        &json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
                      "title": doc["title"], "body": doc_body(text) }),
-        ),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
@@ -267,11 +264,11 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
     let save_rid = new_request_id();
     let saved = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
         Some(&admin),
         Some(
-            json!({ "request_id": save_rid, "base_revision": v2["revision"], "title": doc["title"],
+            json!({ "request_id": save_rid, "base_revision": v2["revision"], "title": "셋째",
                                   "body": doc_body("셋째") }),
         ),
     )
@@ -289,7 +286,7 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
     assert_eq!(status, StatusCode::OK);
     let reuse = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
         Some(&admin),
         Some(
@@ -310,15 +307,12 @@ async fn restore_is_denied_without_write_access_and_request_ids_do_not_cross() {
     // 언급이 든 리비전을 복원해도 복원한 사람 이름으로 알림이 가지 않는다.
     let mention = json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [
         { "type": "reference", "attrs": { "kind": "user", "id": member.id.0.to_string() } } ] }] });
-    let with_mention = send(
+    let with_mention = common::live::save(
         &app,
-        Method::PUT,
+        &admin,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(&admin),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": restored["revision"],
+        &json!({ "request_id": new_request_id(), "base_revision": restored["revision"],
                                          "title": doc["title"], "body": mention }),
-        ),
     )
     .await
     .json;

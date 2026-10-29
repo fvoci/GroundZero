@@ -49,7 +49,6 @@ const workspace: Workspace = {
   access: 'owner',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 const mod: Module = {
   id: 'mod',

@@ -119,7 +119,6 @@ export const WORKSPACE: Workspace = {
   name: data.workspace,
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 /** 같은 워크스페이스를 다른 역할로 본다(읽기 전용 등). */

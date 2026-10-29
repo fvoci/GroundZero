@@ -91,22 +91,6 @@ async fn room_memory_measure() {
         saved, 0,
         "stored collab state changes the loading path; regenerate T6 data"
     );
-    let enabled = sqlx::query("UPDATE fvoci.workspaces SET realtime_enabled = true WHERE id = $1")
-        .bind(
-            record["workspace"]
-                .as_str()
-                .unwrap()
-                .parse::<uuid::Uuid>()
-                .unwrap(),
-        )
-        .execute(&mut fixture)
-        .await
-        .unwrap();
-    assert_eq!(
-        enabled.rows_affected(),
-        1,
-        "enable only the measurement workspace"
-    );
     fixture.close().await.unwrap();
     let files = root.join("source-files").to_string_lossy().into_owned();
     let state = fvoci_server::app::build_state(common::config_with(&[

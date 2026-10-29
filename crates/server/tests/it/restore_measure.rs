@@ -346,15 +346,15 @@ async fn restore_measure_generate() {
         let id = id_of(&doc);
         let mut revision = doc["revision"].as_i64().unwrap();
         for save in 1..=2 {
-            let saved = ok(
+            let saved = common::live::save(
                 &app,
                 &owner,
-                Method::PUT,
                 &format!("/api/documents/{id}"),
-                json!({ "request_id": new_request_id(), "base_revision": revision,
+                &json!({ "request_id": new_request_id(), "base_revision": revision,
                          "title": format!("문서 {n:04}"), "body": doc_text(n, save) }),
             )
-            .await;
+            .await
+            .json;
             revision = saved["revision"].as_i64().unwrap();
         }
         per_item[slot].push(id.clone());

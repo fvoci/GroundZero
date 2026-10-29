@@ -1,9 +1,10 @@
-import { fireEvent, render } from '@testing-library/svelte';
+import { editUnconfirmedBody } from './fixtures/live-editor';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
-import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
+import DocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
 import { auth } from '$lib/features/feedback/feedback.svelte';
 import { me as currentUser } from '$lib/me.svelte';
@@ -45,7 +46,6 @@ const doc: DocumentView = {
   can_manage: false,
   can_delete: false,
   is_template: false,
-  realtime: false,
   can_export: true,
 };
 
@@ -79,7 +79,6 @@ describe('account switch reload and the unsaved-edit warning', () => {
       removeEventListener: () => undefined,
     }));
     // 저장은 끝나지 않게 해 편집이 저장 안 한 채로 남게 한다.
-    vi.spyOn(api, 'saveDocument').mockReturnValue(new Promise(() => undefined));
     let blockedOnReload: boolean | undefined;
     render(FeedbackHost, {
       props: {
@@ -90,9 +89,8 @@ describe('account switch reload and the unsaved-edit warning', () => {
     });
     render(DocumentEditor, { props: { initial: doc } });
 
-    const title = document.getElementById('doc-title');
-    if (!(title instanceof HTMLInputElement)) throw new Error('doc-title');
-    await fireEvent.input(title, { target: { value: '고친 제목' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
+    editUnconfirmedBody();
     // 보통 떠나기는 여전히 경고한다.
     expect(unloadBlocked()).toBe(true);
 
@@ -130,7 +128,6 @@ describe('account switch reload and the unsaved-edit warning', () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     }));
-    vi.spyOn(api, 'saveDocument').mockReturnValue(new Promise(() => undefined));
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError');
     });
@@ -144,9 +141,8 @@ describe('account switch reload and the unsaved-edit warning', () => {
     });
     render(DocumentEditor, { props: { initial: doc } });
 
-    const title = document.getElementById('doc-title');
-    if (!(title instanceof HTMLInputElement)) throw new Error('doc-title');
-    await fireEvent.input(title, { target: { value: '고친 제목' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
+    editUnconfirmedBody();
 
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(

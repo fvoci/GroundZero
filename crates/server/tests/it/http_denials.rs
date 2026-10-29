@@ -156,7 +156,7 @@ async fn readonly_writes_are_forbidden_and_archived_writes_conflict() {
     let task = w.task().await;
     let file = attachment(&w, doc).await;
     let requests = [
-        (Method::PUT, format!("/api/documents/{doc}"), save()),
+        (Method::PATCH, format!("/api/documents/{doc}"), save()),
         (
             Method::POST,
             "/api/comments".to_owned(),
@@ -397,7 +397,7 @@ async fn individual_read_share_reaches_a_nonmember_but_does_not_allow_writes() {
     assert!(share.status.is_success(), "{} {}", share.status, share.json);
     let read = send(&app, Method::GET, &path, Some(&recipient), None).await;
     assert_eq!(read.status, StatusCode::OK, "{}", read.json);
-    let write = send(&app, Method::PUT, &path, Some(&recipient), Some(save())).await;
+    let write = send(&app, Method::PATCH, &path, Some(&recipient), Some(save())).await;
     assert_eq!(write.status, StatusCode::FORBIDDEN, "{}", write.json);
     assert_eq!(
         one(

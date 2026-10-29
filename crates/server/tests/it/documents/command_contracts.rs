@@ -10,10 +10,8 @@ async fn stale_title_returns_current_changes_and_request_id_without_writes() {
     let w = World::new().await;
     let doc = w.doc().await;
     let uri = format!("/api/documents/{doc}");
-    let expected = w.owner.id.0.to_string();
-    let saved = call(&w, &w.owner, Method::PUT, &uri, &[(HEADER,&expected)],
-        &json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"server title","body":common::doc_body("server body")})).await;
-    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    let saved = common::live::save(&common::app(&w.state), &w.owner, &uri, &json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"server title","body":common::doc_body("server body")})).await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.json);
     let before = snapshot(&w).await;
     let stale = call(
         &w,
@@ -25,7 +23,7 @@ async fn stale_title_returns_current_changes_and_request_id_without_writes() {
     )
     .await;
     assert_stale(&stale, json!(["title"]));
-    assert_eq!(stale.body["current"], saved.body);
+    assert_eq!(stale.body["current"], saved.json);
     assert_eq!(snapshot(&w).await, before);
     let unchanged = call(
         &w,
@@ -45,10 +43,8 @@ async fn stale_restore_returns_sorted_content_fields_and_request_id_without_writ
     let w = World::new().await;
     let doc = w.doc().await;
     let uri = format!("/api/documents/{doc}");
-    let expected = w.owner.id.0.to_string();
-    let saved = call(&w, &w.owner, Method::PUT, &uri, &[(HEADER,&expected)],
-        &json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"server title","body":common::doc_body("server body")})).await;
-    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
+    let saved = common::live::save(&common::app(&w.state), &w.owner, &uri, &json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"server title","body":common::doc_body("server body")})).await;
+    assert_eq!(saved.status, StatusCode::OK, "{}", saved.json);
     let before = snapshot(&w).await;
     let restored = call(
         &w,
@@ -67,26 +63,45 @@ async fn stale_restore_returns_sorted_content_fields_and_request_id_without_writ
 async fn document_limits_report_reason_field_and_limit_without_writes() {
     let mut w = World::new().await;
     let doc = w.doc().await;
+    let reference_doc = w.doc().await;
+    let reference = json!({"type":"reference","attrs":{"kind":"item","id":w.item}});
+    for (id, body) in [
+        (doc, common::doc_body(&"x".repeat(100_001))),
+        (
+            reference_doc,
+            json!({"type":"doc","content":[reference.clone(),reference.clone(),reference]}),
+        ),
+    ] {
+        let uri = format!("/api/documents/{id}");
+        let read = call(&w, &w.owner, Method::GET, &uri, &[], &json!(null)).await;
+        let saved = common::live::save(
+            &common::app(&w.state),
+            &w.owner,
+            &uri,
+            &json!({"request_id":Uuid::now_v7(),"title":read.body["title"],"body":body}),
+        )
+        .await;
+        assert_eq!(saved.json["revision"], 2);
+    }
     let mut config = (*w.state.config).clone();
     config.limits.max_document_bytes = 100_000;
     config.limits.max_references_per_document = 2;
     config.limits.max_title_chars = 16;
     w.state.config = std::sync::Arc::new(config);
     let expected = w.owner.id.0.to_string();
-    let reference = json!({"type":"reference","attrs":{"kind":"item","id":w.item}});
     let cases = [
         (
-            Method::PUT,
-            format!("/api/documents/{doc}"),
-            json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"size","body":common::doc_body(&"x".repeat(100_001))}),
+            Method::POST,
+            format!("/api/documents/{doc}/revisions/2/restore"),
+            json!({"request_id":Uuid::now_v7(),"base_revision":2}),
             "body",
             "too_long",
             100_000,
         ),
         (
-            Method::PUT,
-            format!("/api/documents/{doc}"),
-            json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"references","body":{"type":"doc","content":[reference.clone(),reference.clone(),reference]}}),
+            Method::POST,
+            format!("/api/documents/{reference_doc}/revisions/2/restore"),
+            json!({"request_id":Uuid::now_v7(),"base_revision":2}),
             "body",
             "too_many",
             2,
@@ -209,109 +224,12 @@ async fn new_document_command_routes_succeed_and_only_replaced_routes_are_remove
             "title":renamed.body["title"],"body":renamed.body["body"]}),
     )
     .await;
-    assert_eq!(retained.status, StatusCode::OK, "{}", retained.body);
-}
-
-#[tokio::test]
-async fn title_retries_precede_etag_checks_and_etags_precede_revision_checks() {
-    let w = World::new().await;
-    let doc = w.doc().await;
-    let uri = format!("/api/documents/{doc}");
-    let read = call(&w, &w.owner, Method::GET, &uri, &[], &json!(null)).await;
-    let etag = read.headers.get("etag").unwrap().to_str().unwrap();
-    let request = rename("first title", 1, Uuid::now_v7());
-    let saved = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[("if-match", etag)],
-        &request,
-    )
-    .await;
-    assert_eq!(saved.status, StatusCode::OK, "{}", saved.body);
-    let before = snapshot(&w).await;
-    let replay = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[("if-match", etag)],
-        &request,
-    )
-    .await;
-    assert_eq!(replay.status, StatusCode::OK, "{}", replay.body);
-    assert_eq!(replay.body, saved.body);
-    assert_eq!(snapshot(&w).await, before);
-    let precondition = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[("if-match", etag)],
-        &rename("next title", 1, Uuid::now_v7()),
-    )
-    .await;
     assert_eq!(
-        precondition.status,
-        StatusCode::PRECONDITION_FAILED,
+        retained.status,
+        StatusCode::METHOD_NOT_ALLOWED,
         "{}",
-        precondition.body
+        retained.body
     );
-    assert_eq!(precondition.body["error"], "precondition_failed");
-    assert_eq!(precondition.body["current"], saved.body);
-    assert_eq!(snapshot(&w).await, before);
-    let current_etag = saved.headers.get("etag").unwrap().to_str().unwrap();
-    let weak = format!("W/{current_etag}");
-    let precondition = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[("if-match", &weak)],
-        &rename("next title", 2, Uuid::now_v7()),
-    )
-    .await;
-    assert_eq!(
-        precondition.status,
-        StatusCode::PRECONDITION_FAILED,
-        "{}",
-        precondition.body
-    );
-    assert_eq!(snapshot(&w).await, before);
-    let stale = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[],
-        &rename("next title", 1, Uuid::now_v7()),
-    )
-    .await;
-    assert_stale(&stale, json!(["title"]));
-    assert_eq!(snapshot(&w).await, before);
-    let newer = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[],
-        &rename("newer title", 2, Uuid::now_v7()),
-    )
-    .await;
-    assert_eq!(newer.status, StatusCode::OK, "{}", newer.body);
-    let before = snapshot(&w).await;
-    let replay = call(
-        &w,
-        &w.owner,
-        Method::PATCH,
-        &uri,
-        &[("if-match", etag)],
-        &request,
-    )
-    .await;
-    assert_stale(&replay, json!(["title"]));
-    assert_eq!(snapshot(&w).await, before);
 }
 
 #[tokio::test]
@@ -330,15 +248,7 @@ async fn a_title_retry_after_write_access_is_revoked_is_rejected_before_replay()
     )
     .await;
     let before = snapshot(&w).await;
-    let retry = call(
-        &w,
-        &writer,
-        Method::PATCH,
-        &uri,
-        &[("if-match", "\"old\"")],
-        &request,
-    )
-    .await;
+    let retry = call(&w, &writer, Method::PATCH, &uri, &[], &request).await;
     assert_eq!(retry.status, StatusCode::FORBIDDEN, "{}", retry.body);
     assert_eq!(snapshot(&w).await, before);
 }

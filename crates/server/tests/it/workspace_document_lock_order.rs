@@ -7,7 +7,7 @@
 
 use crate::common;
 use crate::sql_support::*;
-use axum::http::{Method, StatusCode};
+use axum::http::StatusCode;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -54,19 +54,14 @@ async fn saving_waits_for_workspace_removal_before_locking_the_document() {
     let (mut removal, holder) = workspace_holder(&w).await;
     let app = common::app(&w.state);
     let owner = w.owner.clone();
-    let saving = tokio::spawn(async move {
-        common::send(
-            &app,
-            Method::PUT,
-            &format!("/api/documents/{doc}"),
-            Some(&owner),
-            Some(json!({
+    let saving =
+        tokio::spawn(async move {
+            common::live::save(&app, &owner, &format!("/api/documents/{doc}"), &json!({
                 "request_id": Uuid::now_v7(), "base_revision": 1, "title": "saved during removal",
                 "body": {"type":"doc","content":[]}
-            })),
-        )
+            }))
         .await
-    });
+        });
     // 이전 구현은 여기서 문서 UPDATE를 쥔 채 공간 SHARE를 기다린다. 새 구현은 공간부터 기다린다.
     has_waiter(holder).await;
     let removed = on(

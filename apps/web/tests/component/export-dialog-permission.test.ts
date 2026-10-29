@@ -27,7 +27,6 @@ function documentView(canExport: boolean): DocumentView {
     can_manage: false,
     can_delete: true,
     is_template: false,
-    realtime: false,
     // D-115: 서버는 owner가 아닌 작성자에게도 내보내기를 허용한다.
     can_export: canExport,
   };

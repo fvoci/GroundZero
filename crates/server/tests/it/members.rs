@@ -202,13 +202,7 @@ async fn roles_are_enforced_and_only_admins_manage_members() {
     let read = send(&app, Method::GET, &uri, Some(&writer), None).await;
     assert_eq!(read.status, StatusCode::OK);
     assert_eq!(read.json["can_edit"], false);
-    let save = send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&writer),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "x", "body": common::doc_body("x") })),
-    )
+    let save = common::live::save(&app, &writer, &uri, &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "x", "body": common::doc_body("x") }))
     .await;
     assert_eq!(save.status, StatusCode::FORBIDDEN);
     let create = send(

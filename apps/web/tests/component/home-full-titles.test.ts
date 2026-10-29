@@ -25,7 +25,6 @@ const workspace: Workspace = {
   name: '공간',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 const LONG = '2026학년도 2학기 대학원 연구실 공동 세미나 발표 자료와 회의록을 한곳에 모아 정리하기';

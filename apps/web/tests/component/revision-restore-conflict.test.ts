@@ -34,7 +34,6 @@ function documentAt(revision: number, text: string): DocumentView {
     can_manage: true,
     can_delete: true,
     is_template: false,
-    realtime: true,
     can_export: true,
   };
 }

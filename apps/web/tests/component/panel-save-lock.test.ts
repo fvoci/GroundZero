@@ -467,7 +467,6 @@ describe('members screen', () => {
     name: '연구실',
     role: 'admin',
     is_owner: true,
-    realtime_enabled: false,
   };
   const view: MembersView = {
     can_manage_members: true,

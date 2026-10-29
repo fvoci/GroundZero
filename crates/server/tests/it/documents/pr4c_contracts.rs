@@ -48,13 +48,25 @@ async fn title_ignores_if_match_and_uses_base_revision_without_write_etags() {
     let w = World::new().await;
     let doc = w.doc().await;
     let uri = format!("/api/documents/{doc}");
-    let request = rename("first title", 1, Uuid::now_v7());
+    let original = call(&w, &w.owner, Method::GET, &uri, &[], &json!(null)).await;
+    let old_etag = original.headers.get("etag").unwrap().to_str().unwrap();
+    let first = call(
+        &w,
+        &w.owner,
+        Method::PATCH,
+        &uri,
+        &[],
+        &rename("first title", 1, Uuid::now_v7()),
+    )
+    .await;
+    assert_eq!(first.status, StatusCode::OK);
+    let request = rename("second title", 2, Uuid::now_v7());
     let saved = call(
         &w,
         &w.owner,
         Method::PATCH,
         &uri,
-        &[("if-match", "\"unrelated\"")],
+        &[("if-match", old_etag)],
         &request,
     )
     .await;
@@ -64,6 +76,18 @@ async fn title_ignores_if_match_and_uses_base_revision_without_write_etags() {
     let retry = call(&w, &w.owner, Method::PATCH, &uri, &[], &request).await;
     assert_eq!(retry.status, StatusCode::OK);
     assert_eq!(retry.body, saved.body);
+    assert_eq!(snapshot(&w).await, before);
+    let same = call(
+        &w,
+        &w.owner,
+        Method::PATCH,
+        &uri,
+        &[],
+        &rename(" second title ", 3, Uuid::now_v7()),
+    )
+    .await;
+    assert_eq!(same.status, StatusCode::OK);
+    assert_eq!(same.body, saved.body);
     assert_eq!(snapshot(&w).await, before);
     let stale = call(
         &w,
@@ -90,6 +114,8 @@ async fn title_ignores_if_match_and_uses_base_revision_without_write_etags() {
     .await;
     assert_eq!(restored.status, StatusCode::OK, "{}", restored.body);
     assert!(restored.headers.get("etag").is_none());
+    let replay = call(&w, &w.owner, Method::PATCH, &uri, &[], &request).await;
+    assert_stale(&replay, json!(["title"]));
     let read = call(&w, &w.owner, Method::GET, &uri, &[], &json!(null)).await;
     assert!(read.headers.get("etag").is_some());
 }

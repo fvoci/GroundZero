@@ -15,7 +15,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'admin',
     is_owner: true,
-    realtime_enabled: false,
   },
 ];
 
@@ -39,7 +38,6 @@ function documentWith(visibility: 'workspace' | 'private', allowCopy: boolean): 
     can_manage: true,
     can_delete: true,
     is_template: false,
-    realtime: false,
     can_export: true,
   };
 }

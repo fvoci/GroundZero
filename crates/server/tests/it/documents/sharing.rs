@@ -39,13 +39,7 @@ async fn save(
     text: &str,
 ) -> (StatusCode, Value) {
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
-    let r = send(
-        app,
-        Method::PUT,
-        &uri,
-        Some(user),
-        Some(json!({ "request_id": new_request_id(), "base_revision": base, "title": doc["title"], "body": doc_body(text) })),
-    )
+    let r = common::live::save(app, user, &uri, &json!({ "request_id": new_request_id(), "base_revision": base, "title": doc["title"], "body": doc_body(text) }))
     .await;
     (r.status, r.json)
 }

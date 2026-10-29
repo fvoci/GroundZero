@@ -1,17 +1,12 @@
 //! #172: 목록 오염 뒤 저장된 상태와 클라이언트의 미반영 변경을 합친다.
 
 use super::*;
-use crate::sql_support::{World, fixture};
+use crate::sql_support::World;
 use fvoci_server::collab::room::recovery::{Registry, poison};
 
 async fn reopen_after_poison(registry: Registry) {
     let w = World::new().await;
     let target = w.doc().await;
-    fixture(
-        "UPDATE fvoci.workspaces SET realtime_enabled=true WHERE id=$1",
-        &[w.ws],
-    )
-    .await;
     let addr = serve(common::app(&w.state)).await;
     let id = target.to_string();
     let mut client = connect(addr, Some(&w.owner), &id, true).await.unwrap();
@@ -47,7 +42,7 @@ async fn reopen_after_poison(registry: Registry) {
             .await
     );
     w.state.collab.persist_all().await;
-    assert!(w.state.collab.close_workspace(w.ws, w.owner.id).await);
+    w.state.collab.shutdown().await;
     let mut reopened = connect(addr, Some(&w.owner), &id, true).await.unwrap();
     assert!(
         reopened
@@ -63,11 +58,6 @@ async fn reopen_after_poison(registry: Registry) {
 #[tokio::test]
 async fn poisoned_room_registry_reopens_and_merges_unacknowledged_edits() {
     reopen_after_poison(Registry::Rooms).await;
-}
-
-#[tokio::test]
-async fn poisoned_closing_registry_reopens_and_merges_unacknowledged_edits() {
-    reopen_after_poison(Registry::Closing).await;
 }
 
 #[tokio::test]

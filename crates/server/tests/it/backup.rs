@@ -122,15 +122,12 @@ async fn backup_restores_documents_tasks_and_files_into_a_fresh_install() {
     let ws = workspace.json["id"].as_str().unwrap().to_owned();
     let doc = create_doc(&app, &owner, &ws, "회의록").await;
     let doc_id = doc["id"].as_str().unwrap().to_owned();
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &owner,
         &format!("/api/documents/{doc_id}"),
-        Some(&owner),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "회의록",
+        &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "회의록",
                      "body": doc_body("복구될 내용") }),
-        ),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);

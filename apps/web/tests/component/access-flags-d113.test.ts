@@ -18,12 +18,9 @@ function workspace(access: Workspace['access']): Workspace {
     name: '공간',
     role: 'admin',
     is_owner: false,
-    realtime_enabled: false,
     access,
   };
 }
-
-const REALTIME = '실시간 공동 편집(문서를 여럿이 동시에 고침)';
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
@@ -38,12 +35,14 @@ afterEach(() => {
 });
 
 describe('permission flags come from app_access (D-113)', () => {
-  it('shows workspace administration only for the owner grade, whatever the role says', () => {
+  it('allows document creation only with write access, whatever the role says', async () => {
     const { unmount } = render(WorkspaceScreen, { props: { workspace: workspace('read') } });
-    expect(screen.queryByRole('checkbox', { name: REALTIME })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: m.workspaces_new_doc_title() })).toBeNull();
     unmount();
     render(WorkspaceScreen, { props: { workspace: workspace('owner') } });
-    expect(screen.getByRole('checkbox', { name: REALTIME })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('textbox', { name: m.workspaces_new_doc_title() }),
+    ).toBeInTheDocument();
   });
 
   it('shows member management only when the server says it is allowed', async () => {

@@ -45,7 +45,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'member',
     is_owner: false,
-    realtime_enabled: true,
   },
 ];
 
@@ -73,7 +72,6 @@ function liveDocument(id: string, title: string, revision = 3): DocumentView {
     can_manage: false,
     can_delete: false,
     is_template: false,
-    realtime: true,
     can_export: false,
   };
 }
@@ -105,7 +103,7 @@ afterEach(() => {
 });
 
 it('warns and can cancel navigation with only an unsaved document comment', async () => {
-  vi.spyOn(api, 'document').mockResolvedValue({ ...liveDocument('A', 'A 제목'), realtime: false });
+  vi.spyOn(api, 'document').mockResolvedValue(liveDocument('A', 'A 제목'));
   render(DocumentScreen, { props: { documentId: 'A', workspaces } });
   const input = await screen.findByLabelText(/새 댓글/);
   const cleanUnload = new Event('beforeunload', { cancelable: true });

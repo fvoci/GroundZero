@@ -40,7 +40,6 @@ describe('multi-column layouts follow the content width', () => {
       name: '공간',
       role: 'admin',
       is_owner: true,
-      realtime_enabled: false,
     };
     const home: HomeView = {
       today: '2026-10-21',
@@ -109,7 +108,7 @@ describe('content panels split by the content width', () => {
     'src/lib/features/study/StudyPanel.svelte',
     'src/lib/features/modules/ItemProfilePanel.svelte',
     'src/lib/features/records/RecordEditor.svelte',
-    'src/lib/features/documents/DocumentEditor.svelte',
+    'src/lib/features/documents/DocumentScreen.svelte',
   ];
   it.each(panels)('%s uses container variants for its columns', (file) => {
     const source = readFileSync(path.resolve(import.meta.dirname, '../..', file), 'utf8');

@@ -18,7 +18,6 @@ const workspace: Workspace = {
   role: 'admin',
   access: 'owner',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 beforeEach(async () => {

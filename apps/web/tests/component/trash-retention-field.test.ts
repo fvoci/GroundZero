@@ -18,7 +18,6 @@ const workspace: Workspace = {
   name: '연구실',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 function describedText(input: HTMLElement): string | undefined {

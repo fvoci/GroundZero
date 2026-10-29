@@ -55,7 +55,6 @@ function documentAt(revision: number): DocumentView {
     can_manage: true,
     can_delete: true,
     is_template: false,
-    realtime: false,
     can_export: true,
   };
 }

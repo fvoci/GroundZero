@@ -76,11 +76,6 @@ async fn deletion(insertion: Inserter) {
     )
     .await;
     let target = w.doc().await;
-    fixture(
-        "UPDATE fvoci.workspaces SET realtime_enabled=true WHERE id=$1",
-        &[w.ws],
-    )
-    .await;
     let app = common::app(&w.state);
     let addr = serve(app).await;
     let (inserter, saver): (&TestUser, &TestUser) = match insertion {
@@ -158,7 +153,7 @@ async fn deletion(insertion: Inserter) {
         Inserter::Hidden => vec![],
     };
     assert_eq!(pending, expected_editors);
-    assert!(w.state.collab.close_workspace(w.ws, w.owner.id).await);
+    w.state.collab.shutdown().await;
     let saved: Vec<Uuid> = sqlx::query_scalar("SELECT DISTINCT editor_id FROM fvoci.document_file_refs WHERE document_id=$1 AND file_id=$2")
         .bind(target).bind(file).fetch_all(&mut observer).await.unwrap();
     assert_eq!(saved, expected_editors);

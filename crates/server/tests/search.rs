@@ -182,14 +182,13 @@ async fn search_returns_only_what_each_person_can_see() {
     let other_ws = create_workspace(&app, &outsider, "남의 공간").await;
 
     let doc = create_doc(&app, &admin, &ws, &format!("회의록 {tok}")).await;
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(&admin),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
+        &json!({ "request_id": new_request_id(), "base_revision": 1,
                      "title": format!("회의록 {tok}"),
-                     "body": doc_body(&format!("안건 정리와 {tok}body 결정")) })),
+                     "body": doc_body(&format!("안건 정리와 {tok}body 결정")) }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
@@ -801,14 +800,13 @@ async fn author_and_title_only_narrow_results_without_widening_access() {
     let ws = create_workspace(&app, &admin, "작성자 검색").await;
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let mine = create_doc(&app, &admin, &ws, &format!("{tok} 관리자 문서")).await;
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin,
         &format!("/api/documents/{}", mine["id"].as_str().unwrap()),
-        Some(&admin),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
+        &json!({ "request_id": new_request_id(), "base_revision": 1,
                      "title": format!("{tok} 관리자 문서"),
-                     "body": doc_body(&format!("본문에만 있는 {body_tok}")) })),
+                     "body": doc_body(&format!("본문에만 있는 {body_tok}")) }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
@@ -1128,15 +1126,12 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     assert_eq!(posts(), sent, "a pending task was submitted again");
     assert_eq!(row(id.clone()).await.unwrap(), attempts);
     // 3. 그 사이 제목을 바꾼다(더 새 세대).
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin_user,
         &format!("/api/documents/{id}"),
-        Some(&admin_user),
-        Some(
-            json!({ "request_id": common::new_request_id(), "base_revision": doc["revision"],
+        &json!({ "request_id": common::new_request_id(), "base_revision": doc["revision"],
                      "title": "바뀐 제목", "body": doc["body"] }),
-        ),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
