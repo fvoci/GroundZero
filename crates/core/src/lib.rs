@@ -9,6 +9,7 @@ pub mod module;
 pub mod random;
 pub mod recurrence;
 pub mod secret;
+pub mod share;
 pub mod trash;
 pub mod validate;
 

@@ -13,6 +13,7 @@
     MovePreviewView,
     MoveTargetInput,
     PublicLinkView,
+    ShareRecipientView,
     ShareView,
   } from '$lib/api/client';
   import { api, newRequestId } from '$lib/api/client';
@@ -23,6 +24,7 @@
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { me } from '$lib/me.svelte';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
+  import { roleLabel } from '$lib/features/members/roles';
   import { m } from '$lib/paraglide/messages.js';
   import { org } from '$lib/org.svelte';
   import { pathFor, router, workspacePath } from '$lib/router.svelte';
@@ -104,6 +106,56 @@
   let shareEmail = $state('');
   let sharePermission = $state<'read' | 'write'>('read');
   let sharing = $state(false);
+  type RecipientState =
+    | { kind: 'idle' }
+    | { kind: 'loading'; key: string }
+    | { kind: 'ready'; key: string; recipient: ShareRecipientView }
+    | { kind: 'failed'; key: string };
+  let recipientState = $state<RecipientState>({ kind: 'idle' });
+  const recipientKey = $derived(
+    JSON.stringify([doc.id, org.currentId, me.userId, shareEmail.trim().toLowerCase()]),
+  );
+  const selectedRecipient = $derived(
+    recipientState.kind === 'ready' && recipientState.key === recipientKey
+      ? recipientState.recipient
+      : undefined,
+  );
+  const canOfferWrite = $derived(
+    doc.placement === 'personal' || selectedRecipient?.max_permission === 'write',
+  );
+  const offeredPermission = $derived(canOfferWrite ? sharePermission : 'read');
+
+  $effect(() => {
+    const documentId = doc.id;
+    const organizationId = org.currentId;
+    const email = shareEmail.trim();
+    const key = recipientKey;
+    if (
+      panel !== 'share' ||
+      doc.placement === 'personal' ||
+      organizationId === undefined ||
+      !email.includes('@')
+    ) {
+      recipientState = { kind: 'idle' };
+      return;
+    }
+    recipientState = { kind: 'loading', key };
+    let current = true;
+    const timer = setTimeout(() => {
+      void api.shareRecipient(documentId, email, organizationId).then(
+        (recipient) => {
+          if (current) recipientState = { kind: 'ready', key, recipient };
+        },
+        () => {
+          if (current) recipientState = { kind: 'failed', key };
+        },
+      );
+    }, 200);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  });
   interface ShareDraft {
     email: string;
     permission: 'read' | 'write';
@@ -164,7 +216,7 @@
     if (attempt === undefined) return;
     sharing = true;
     try {
-      await api.share(doc.id, shareEmail, sharePermission, organizationId);
+      await api.share(doc.id, shareEmail, offeredPermission, organizationId);
       if (!shareDraft.isOwner(attempt)) return;
       if (shareDraft.complete(attempt)) notifyDone(m.common_saved());
       await loadShares();
@@ -616,12 +668,24 @@
       <ul class="flex flex-col gap-1" data-testid="share-list">
         {#each shares as s (s.id)}
           {@const recipient = s.email ?? s.display_name}
+          {@const effectivePermission = s.max_permission === 'read' ? 'read' : s.permission}
           <li class="flex flex-wrap items-center gap-2 text-sm">
             <span>{recipient}</span>
             <span class="text-muted-foreground"
-              >{s.permission === 'write'
+              >{effectivePermission === 'write'
                 ? m.documents_permission_write()
                 : m.documents_permission_read()}</span
+            >
+            {#if s.recipient_role !== null}
+              <span class="rounded border px-1 text-xs">{roleLabel(s.recipient_role)}</span>
+            {/if}
+            <span class="text-xs text-muted-foreground"
+              >{m.documents_share_limit({
+                permission:
+                  s.max_permission === 'write'
+                    ? m.documents_permission_write()
+                    : m.documents_permission_read(),
+              })}</span
             >
             {#if asking?.kind === 'share' && asking.id === s.id}
               <span class="ml-auto flex flex-wrap items-center gap-1">
@@ -687,13 +751,13 @@
             <Select.Root
               type="single"
               disabled={sharing}
-              value={sharePermission}
+              value={offeredPermission}
               onValueChange={(v: string) => {
-                sharePermission = v === 'write' ? 'write' : 'read';
+                sharePermission = v === 'write' && canOfferWrite ? 'write' : 'read';
               }}
             >
               <Select.Trigger class="w-24" aria-label={m.documents_share_permission()}
-                >{sharePermission === 'write'
+                >{offeredPermission === 'write'
                   ? m.documents_permission_write()
                   : m.documents_permission_read()}</Select.Trigger
               >
@@ -701,15 +765,34 @@
                 <Select.Item value="read" label={m.documents_permission_read()}
                   >{m.documents_permission_read()}</Select.Item
                 >
-                <Select.Item value="write" label={m.documents_permission_write()}
-                  >{m.documents_permission_write()}</Select.Item
-                >
+                {#if canOfferWrite}
+                  <Select.Item value="write" label={m.documents_permission_write()}
+                    >{m.documents_permission_write()}</Select.Item
+                  >
+                {/if}
               </Select.Content>
             </Select.Root>
             <Button type="submit" disabled={sharing || shareEmail.trim() === ''}
               >{m.documents_share()}</Button
             >
           </form>
+          <p class="mt-2 flex flex-wrap gap-2 text-sm empty:hidden" aria-live="polite">
+            {#if selectedRecipient !== undefined}
+              {#if selectedRecipient.recipient_role !== null}
+                <span>{roleLabel(selectedRecipient.recipient_role)}</span>
+              {/if}
+              <span
+                >{m.documents_share_limit({
+                  permission:
+                    selectedRecipient.max_permission === 'write'
+                      ? m.documents_permission_write()
+                      : m.documents_permission_read(),
+                })}</span
+              >
+            {:else if recipientState.kind === 'failed' && recipientState.key === recipientKey}
+              <span class="text-muted-foreground">{m.documents_recipient_unavailable()}</span>
+            {/if}
+          </p>
         </fieldset>
       {/if}
       <div class="flex flex-col gap-2 border-t pt-3">

@@ -537,8 +537,20 @@ async fn the_last_status_survives_concurrent_deletes() {
 async fn archived_items_answer_409_before_403_for_everyone_who_can_see() {
     let w = World::new().await;
     let reader = w.member("readonly").await;
-    let shared = verified_user(&w.state, "review shared writer").await;
-    common::join_organization(w.org, &shared, "member").await;
+    // D-20: write 공유 수신자는 공간 멤버다. 비공개 항목에는 reader만 넣어 문서 공유와 항목 접근을 구분한다.
+    let shared = w.member("member").await;
+    fixture(
+        "UPDATE fvoci.items SET visibility='private' WHERE id=$1",
+        &[w.item],
+    )
+    .await;
+    rows(
+        &w.state,
+        &w.owner,
+        "SELECT fvoci.app_set_item_members($1,ARRAY[$2],'{}'::uuid[],@ids)",
+        &[w.item, reader.id.0],
+    )
+    .await;
     let public_doc = w.doc().await;
     let private_doc = w.doc().await;
     rows(

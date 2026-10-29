@@ -14,6 +14,8 @@ it('sends the selected organization when sharing a document', async () => {
         email: 'reader@example.test',
         display_name: 'Reader',
         permission: 'read',
+        recipient_role: 'outside_member',
+        max_permission: 'read',
       }),
       { status: 201, headers: { 'Content-Type': 'application/json' } },
     ),

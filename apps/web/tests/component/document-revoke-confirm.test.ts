@@ -48,7 +48,14 @@ beforeEach(async () => {
   await setLocale('ko', { reload: false });
   vi.spyOn(api, 'document').mockResolvedValue(doc);
   vi.spyOn(api, 'shares').mockResolvedValue([
-    { id: 's1', email: 'second@example.test', display_name: '두 번째 사용자', permission: 'read' },
+    {
+      id: 's1',
+      email: 'second@example.test',
+      display_name: '두 번째 사용자',
+      permission: 'read',
+      recipient_role: 'member',
+      max_permission: 'write',
+    },
   ]);
   vi.spyOn(api, 'publicLinks').mockResolvedValue([
     { id: 'l1', created_at: '2026-10-20T00:00:00Z', expires_at: null, active: true },
@@ -67,7 +74,14 @@ async function openShare(): Promise<HTMLElement> {
 describe('revoking access asks first', () => {
   it('shows the recipient name without an email, including the revocation confirmation', async () => {
     vi.mocked(api.shares).mockResolvedValue([
-      { id: 's2', email: null, display_name: '이메일 없는 수신자', permission: 'read' },
+      {
+        id: 's2',
+        email: null,
+        display_name: '이메일 없는 수신자',
+        permission: 'read',
+        recipient_role: 'member',
+        max_permission: 'write',
+      },
     ]);
     const unshare = vi.spyOn(api, 'unshare').mockResolvedValue(undefined);
     const dialog = await openShare();

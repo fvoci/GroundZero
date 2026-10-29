@@ -2,6 +2,7 @@
 
 use fvoci_core::error::ErrorBody;
 use fvoci_core::ids::{DocumentId, ItemId, OrganizationId, UserId, WorkspaceId};
+use fvoci_core::share::{SharePermission, ShareRecipientRole};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::OffsetDateTime;
@@ -122,7 +123,7 @@ pub enum SaveConflict {
 pub struct SharedDocument {
     pub id: DocumentId,
     pub title: String,
-    /// `read` 또는 `write`.
+    /// 저장 공유를 현재 접근 등급으로 낮춘 실효 공유 권한(`read` 또는 `write`)이다.
     pub permission: String,
     /// 공유한 사람의 이름. 워크스페이스 이름은 멤버가 아닌 사람에게 알리지 않는다.
     pub shared_by: String,
@@ -149,26 +150,37 @@ pub struct DocumentSettings {
     pub allow_copy: Option<bool>,
 }
 
-/// 공유 항목.
+/// 저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다.
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Share {
-    pub organization_id: OrganizationId,
-    pub grantee_user_id: UserId,
-    pub display_name: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,
+    pub organization_id: OrganizationId,
+    pub grantee_user_id: UserId,
     pub email: Option<String>,
-    /// `read` 또는 `write`.
-    pub permission: String,
+    pub display_name: String,
+    pub permission: SharePermission,
+    /// 개인 노트에는 공간 역할을 적용하지 않아 null이다.
+    pub recipient_role: Option<ShareRecipientRole>,
+    pub max_permission: SharePermission,
 }
 
-/// 공유 추가 요청. 같은 이메일이면 권한을 바꾼다.
+/// 공유할 사람의 계산 역할과 상한. 조회만으로 공유를 만들지 않는다.
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
+pub struct ShareRecipient {
+    pub user_id: UserId,
+    pub email: Option<String>,
+    pub display_name: String,
+    pub recipient_role: Option<ShareRecipientRole>,
+    pub max_permission: SharePermission,
+}
+
+/// 공유 추가 요청. 같은 이메일이면 저장 권한을 바꾼다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateShare {
     pub organization_id: Option<OrganizationId>,
     pub email: String,
-    /// `read` 또는 `write`.
-    pub permission: String,
+    pub permission: SharePermission,
 }
 
 /// 복제 요청. `target_workspace_id`가 없으면 내 개인 노트로 만든다.

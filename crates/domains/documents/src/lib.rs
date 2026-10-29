@@ -34,6 +34,7 @@ pub use state::{DocumentLimits, DocumentsState};
         documents::list_shares,
         documents::create_share,
         documents::delete_share,
+        documents::recipient,
         documents::copy,
         documents::move_preview,
         documents::move_document,
@@ -69,6 +70,9 @@ pub use state::{DocumentLimits, DocumentsState};
         documents::DocumentSettings,
         documents::Share,
         documents::CreateShare,
+        documents::ShareRecipient,
+        fvoci_core::share::ShareRecipientRole,
+        fvoci_core::share::SharePermission,
         documents::CopyDocument,
         documents::MoveTarget,
         documents::MoveDocument,
@@ -126,6 +130,10 @@ where
         .route(
             "/document-shares/{share_id}",
             delete(documents::delete_share),
+        )
+        .route(
+            "/documents/{document_id}/share-recipient",
+            get(documents::recipient),
         )
         .route("/documents/{document_id}/copy", post(documents::copy))
         .route(

@@ -55,6 +55,10 @@ import type {
   ModuleKind,
   ReceivedInvitation,
   Role,
+  Share,
+  SharePermission,
+  ShareRecipient,
+  ShareRecipientRole,
   Workspace,
 } from '@fvoci/api-client';
 import type {
@@ -308,12 +312,14 @@ export interface SharedView {
   updated_at: string;
 }
 
-export interface ShareView {
-  id: string;
+/** 옵션인 nullable 응답 칸은 런타임 파서가 null로 통일한다. */
+interface ShareIdentity {
   email: string | null;
-  display_name: string;
-  permission: 'read' | 'write';
+  recipient_role: ShareRecipientRole | null;
 }
+export type ShareView = Pick<Share, 'id' | 'display_name' | 'permission' | 'max_permission'> &
+  ShareIdentity;
+export type ShareRecipientView = Omit<ShareRecipient, 'email' | 'recipient_role'> & ShareIdentity;
 
 /** 이동 전후의 사용자별 접근 등급 변화(D-114). `gain`이면 from_grade가, `lose`면 to_grade가 null이다. */
 export interface MoveAccessChangeView {
@@ -344,7 +350,7 @@ export interface MoveOutcomeView {
   document: DocumentView | null;
 }
 
-function permission(value: string): 'read' | 'write' {
+function permission(value: string): SharePermission {
   if (value === 'read' || value === 'write') return value;
   throw new TypeError('unknown permission');
 }
@@ -367,6 +373,32 @@ export function parseShareView(value: Json): ShareView {
     email: optStr(o, 'email'),
     display_name: str(o, 'display_name'),
     permission: permission(str(o, 'permission')),
+    recipient_role: recipientRole(optStr(o, 'recipient_role')),
+    max_permission: permission(str(o, 'max_permission')),
+  };
+}
+
+function recipientRole(value: string | null): ShareRecipientRole | null {
+  if (
+    value === null ||
+    value === 'owner' ||
+    value === 'admin' ||
+    value === 'member' ||
+    value === 'readonly' ||
+    value === 'outside_member'
+  )
+    return value;
+  throw new TypeError('unknown share recipient role');
+}
+
+function parseShareRecipient(value: Json): ShareRecipientView {
+  const o = rec(value, 'share recipient');
+  return {
+    user_id: str(o, 'user_id'),
+    email: optStr(o, 'email'),
+    display_name: str(o, 'display_name'),
+    recipient_role: recipientRole(optStr(o, 'recipient_role')),
+    max_permission: permission(str(o, 'max_permission')),
   };
 }
 
@@ -1195,7 +1227,15 @@ export const api = {
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
       parseList(v, parseShareView),
     ),
-  share: (id: string, email: string, perm: 'read' | 'write', organizationId: string) =>
+  shareRecipient: (id: string, email: string, organizationId: string) => {
+    const query = new URLSearchParams({ email, organization_id: organizationId });
+    return expectOk(
+      'GET',
+      `/api/documents/${encodeURIComponent(id)}/share-recipient?${query.toString()}`,
+      parseShareRecipient,
+    );
+  },
+  share: (id: string, email: string, perm: SharePermission, organizationId: string) =>
     expectOk('POST', `/api/documents/${encodeURIComponent(id)}/shares`, parseShareView, {
       email,
       permission: perm,

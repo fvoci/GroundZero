@@ -48,6 +48,7 @@ mod migration_baseline;
 mod modules;
 mod oidc;
 mod openapi_review;
+mod organization;
 mod organization_removal_lock_order;
 mod organizations_api;
 mod personal_scope;

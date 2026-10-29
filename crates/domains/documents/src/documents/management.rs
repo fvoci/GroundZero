@@ -1,5 +1,9 @@
-//! 트리·설정·공유·템플릿 명령.
+//! 트리·설정·템플릿 명령.
 
+use super::{
+    Document, DocumentSettings, DocumentTemplate, SetDocumentTemplate, SetParent, TemplateQuery,
+    load_with_access, to_document,
+};
 use crate::state::{DocumentLimits as Limits, DocumentsState};
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -8,12 +12,6 @@ use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
 use fvoci_db::{UserTx, new_ids};
 use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
-use uuid::Uuid;
-
-use super::{
-    CreateShare, Document, DocumentSettings, DocumentTemplate, SetDocumentTemplate, SetParent,
-    Share, TemplateQuery, load_with_access, require_manager, to_document,
-};
 
 /// DB 함수에 넘길 트리 깊이 한도.
 pub(crate) fn max_depth(limits: &Limits) -> i32 {
@@ -85,87 +83,6 @@ pub async fn set_settings(
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(to_document(row, access)))
-}
-
-/// 공유 목록(소유 권한자).
-#[utoipa::path(get, path = "/api/documents/{document_id}/shares",
-    params(("document_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = [Share]), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "documents")]
-pub async fn list_shares(
-    State(state): State<DocumentsState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<DocumentId>,
-) -> Result<Json<Vec<Share>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    require_manager(&mut tx, id).await?;
-    let rows: Vec<Share> = sqlx::query_as(
-        "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission FROM document_shares s
-         JOIN users u ON u.id = s.grantee_user_id WHERE s.document_id = $1 ORDER BY s.created_at",
-    )
-    .bind(id)
-    .fetch_all(tx.conn())
-    .await?;
-    tx.commit().await?;
-    Ok(Json(rows))
-}
-
-/// 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.
-#[utoipa::path(post, path = "/api/documents/{document_id}/shares",
-    params(("document_id" = String, Path, format = Uuid),
-           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateShare,
-    responses((status = 201, body = Share), (status = 400, body = ErrorBody),
-              (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ErrorBody)), tag = "documents")]
-pub async fn create_share(
-    State(state): State<DocumentsState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<DocumentId>,
-    Json(input): Json<CreateShare>,
-) -> Result<(StatusCode, Json<Share>), AppError> {
-    let email = fvoci_core::validate::validate_email(&input.email)?;
-    let mut tx = state.db.begin_as(user).await?;
-    let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4, $5)")
-        .bind(id)
-        .bind(&email)
-        .bind(&input.permission)
-        .bind(input.organization_id)
-        .bind(new_ids(2))
-        .fetch_one(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    let share: Share = sqlx::query_as(
-        "SELECT s.id, s.organization_id, s.grantee_user_id, u.email, u.display_name, s.permission
-         FROM document_shares s JOIN users u ON u.id = s.grantee_user_id WHERE s.id = $1",
-    )
-    .bind(share_id)
-    .fetch_one(tx.conn())
-    .await?;
-    tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(share)))
-}
-
-/// 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.
-#[utoipa::path(delete, path = "/api/document-shares/{share_id}",
-    params(("share_id" = String, Path, format = Uuid),
-           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 400, body = ErrorBody),
-              (status = 409, body = ErrorBody)), tag = "documents")]
-pub async fn delete_share(
-    State(state): State<DocumentsState>,
-    CurrentUser(user): CurrentUser,
-    Path(share): Path<Uuid>,
-) -> Result<StatusCode, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_unshare_document($1, $2)")
-        .bind(share)
-        .bind(new_ids(1))
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    tx.commit().await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// 쓸 수 있는 문서 템플릿(읽을 수 있는 것만, 제목순).

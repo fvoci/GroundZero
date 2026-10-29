@@ -433,6 +433,23 @@ export interface paths {
         patch: operations["set_settings"];
         trace?: never;
     };
+    "/api/documents/{document_id}/share-recipient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 공유 대상의 계산 역할과 공유 상한을 조회한다. 조회만으로 공유를 만들지 않는다. */
+        get: operations["document_share_recipient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/{document_id}/shares": {
         parameters: {
             query?: never;
@@ -3326,12 +3343,11 @@ export interface components {
              */
             expires_at?: string | null;
         };
-        /** @description 공유 추가 요청. 같은 이메일이면 권한을 바꾼다. */
+        /** @description 공유 추가 요청. 같은 이메일이면 저장 권한을 바꾼다. */
         CreateShare: {
             email: string;
             organization_id?: null | components["schemas"]["OrganizationId"];
-            /** @description `read` 또는 `write`. */
-            permission: string;
+            permission: components["schemas"]["SharePermission"];
         };
         /**
          * @description 업무 만들기. 제목 밖의 칸은 고치기(`PatchTask`)와 같고 같은 규칙으로 확인해 한 트랜잭션에서 넣는다(D-105): 하나라도
@@ -5024,21 +5040,40 @@ export interface components {
              */
             days?: number | null;
         };
-        /** @description 공유 항목. */
+        /** @description 저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다. */
         Share: {
             display_name: string;
             email?: string | null;
             grantee_user_id: components["schemas"]["UserId"];
             /** Format: uuid */
             id: string;
+            max_permission: components["schemas"]["SharePermission"];
             organization_id: components["schemas"]["OrganizationId"];
-            /** @description `read` 또는 `write`. */
-            permission: string;
+            permission: components["schemas"]["SharePermission"];
+            recipient_role?: null | components["schemas"]["ShareRecipientRole"];
         };
+        /**
+         * @description 개별 공유에 저장하거나 수신자 상한으로 반환하는 권한. owner 등급은 공유로 부여하지 않는다.
+         * @enum {string}
+         */
+        SharePermission: "read" | "write";
+        /** @description 공유할 사람의 계산 역할과 상한. 조회만으로 공유를 만들지 않는다. */
+        ShareRecipient: {
+            display_name: string;
+            email?: string | null;
+            max_permission: components["schemas"]["SharePermission"];
+            recipient_role?: null | components["schemas"]["ShareRecipientRole"];
+            user_id: components["schemas"]["UserId"];
+        };
+        /**
+         * @description 공간 문서 공유 수신자의 계산 역할. 개인 노트의 수신자에는 공간 역할을 적용하지 않는다.
+         * @enum {string}
+         */
+        ShareRecipientRole: "owner" | "admin" | "member" | "readonly" | "outside_member";
         /** @description 공유받은 문서. */
         SharedDocument: {
             id: components["schemas"]["DocumentId"];
-            /** @description `read` 또는 `write`. */
+            /** @description 저장 공유를 현재 접근 등급으로 낮춘 실효 공유 권한(`read` 또는 `write`)이다. */
             permission: string;
             /** @description 공유한 사람의 이름. 워크스페이스 이름은 멤버가 아닌 사람에게 알리지 않는다. */
             shared_by: string;
@@ -6455,7 +6490,7 @@ export interface operations {
             query?: never;
             header?: {
                 /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
             };
             path: {
                 share_id: string;
@@ -7493,6 +7528,54 @@ export interface operations {
             };
         };
     };
+    document_share_recipient: {
+        parameters: {
+            query: {
+                organization_id: components["schemas"]["OrganizationId"];
+                email: string;
+            };
+            header?: never;
+            path: {
+                document_id: components["schemas"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareRecipient"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_shares: {
         parameters: {
             query?: never;
@@ -7535,7 +7618,7 @@ export interface operations {
             query?: never;
             header?: {
                 /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
-                "x-fvoci-expected-user"?: string | null;
+                "x-fvoci-expected-user"?: null | components["schemas"]["UserId"];
             };
             path: {
                 document_id: string;

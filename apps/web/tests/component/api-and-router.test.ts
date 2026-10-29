@@ -29,20 +29,38 @@ describe('response validation', () => {
     'parses a share with email %s and its display name',
     (email) => {
       expect(
-        parseShareView({ id, email, display_name: '공유 수신자', permission: 'read' }),
+        parseShareView({
+          id,
+          email,
+          display_name: '공유 수신자',
+          permission: 'read',
+          recipient_role: 'outside_member',
+          max_permission: 'read',
+        }),
       ).toEqual({
         id,
         email: email ?? null,
         display_name: '공유 수신자',
         permission: 'read',
+        recipient_role: 'outside_member',
+        max_permission: 'read',
       });
     },
   );
 
   it('rejects malformed share identity fields', () => {
-    const share = { id, email: null, display_name: '공유 수신자', permission: 'read' };
+    const share = {
+      id,
+      email: null,
+      display_name: '공유 수신자',
+      permission: 'read',
+      recipient_role: 'outside_member',
+      max_permission: 'read',
+    };
     expect(() => parseShareView({ ...share, email: 1 })).toThrow();
     expect(() => parseShareView({ ...share, display_name: undefined })).toThrow();
+    expect(() => parseShareView({ ...share, recipient_role: 'external_admin' })).toThrow();
+    expect(() => parseShareView({ ...share, max_permission: 'owner' })).toThrow();
   });
 
   const valid = {
