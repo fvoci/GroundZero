@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
 import { emptyForm } from '$lib/features/records/records';
+import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
@@ -367,6 +368,98 @@ it.each(['rewrite', 'remove'])(
     expect(localStorage.getItem(recordKey)).toBe(newer);
   },
 );
+
+it.each(['comparison', 'failed rewrite'])(
+  'rechecks the replacement snapshot during a full cleanup after %s',
+  (stage) => {
+    const old = draft(null);
+    old.input.form.title = 'SHORT_OLD_SNAPSHOT';
+    const raw = JSON.stringify(old);
+    const replacement = draft(null);
+    replacement.input.form.title = 'SHORT_REPLACEMENT';
+    replacement.input.form.body = 'Newest unsent writing';
+    const newer = JSON.stringify(replacement);
+    localStorage.setItem(recordKey, raw);
+    const write = localStorage.setItem.bind(localStorage);
+    if (stage === 'comparison') {
+      const parse = JSON.parse;
+      vi.spyOn(JSON, 'parse').mockImplementation((value: string) => {
+        const parsed: unknown = parse(value);
+        if (value === raw) write(recordKey, newer);
+        return parsed;
+      });
+    } else {
+      const writeSession = sessionStorage.setItem.bind(sessionStorage);
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+        this: Storage,
+        key: string,
+        value: string,
+      ) {
+        if (this === localStorage && key === recordKey && localStorage.getItem(key) === raw) {
+          write(key, newer);
+          throw new DOMException('rewrite unavailable', 'SecurityError');
+        }
+        if (this === localStorage) write(key, value);
+        else writeSession(key, value);
+      });
+    }
+
+    expect(clearLegacyRecordDrafts()).toBe('ready');
+
+    const stored = localStorage.getItem(recordKey);
+    expect(stored).toContain('Newest unsent writing');
+    expect(stored).not.toContain('SHORT_REPLACEMENT');
+    expect(stored).not.toContain('SHORT_OLD_SNAPSHOT');
+  },
+);
+
+it('rechecks a writing-only snapshot replaced by a raw retry before declaring cleanup ready', () => {
+  const raw = saved(null);
+  const newer = saved({ requestId, signature: legacySignature });
+  localStorage.setItem(recordKey, raw);
+  const parse = JSON.parse;
+  vi.spyOn(JSON, 'parse').mockImplementation((value: string) => {
+    const parsed: unknown = parse(value);
+    if (value === raw) localStorage.setItem(recordKey, newer);
+    return parsed;
+  });
+
+  expect(clearLegacyRecordDrafts()).toBe('ready');
+
+  expect(localStorage.getItem(recordKey)).toBeNull();
+});
+
+it('returns retry after three changing snapshots and repairs the latest writing on the next cleanup', () => {
+  const versions = Array.from({ length: 11 }, (_, index) => {
+    const value = draft(null);
+    value.input.form.title = `SHORT_RACING_${String(index)}`;
+    value.input.form.body = `Unsent racing writing ${String(index)}`;
+    return JSON.stringify(value);
+  });
+  const first = versions[0];
+  if (first === undefined) throw new Error('missing initial racing draft');
+  localStorage.setItem(recordKey, first);
+  let replacements = 0;
+  const parse = JSON.parse;
+  const parser = vi.spyOn(JSON, 'parse').mockImplementation((value: string) => {
+    const parsed: unknown = parse(value);
+    const next = versions[replacements + 1];
+    if (value === versions[replacements] && next !== undefined) {
+      replacements += 1;
+      localStorage.setItem(recordKey, next);
+    }
+    return parsed;
+  });
+
+  expect(clearLegacyRecordDrafts()).toBe('retry');
+
+  expect(replacements).toBe(3);
+  expect(localStorage.getItem(recordKey)).toBe(versions[3]);
+  parser.mockRestore();
+  expect(clearLegacyRecordDrafts()).toBe('ready');
+  expect(localStorage.getItem(recordKey)).toContain('Unsent racing writing 3');
+  expect(localStorage.getItem(recordKey)).not.toContain('SHORT_RACING_');
+});
 
 it('ignores unrelated storage events and stops record cleanup when App unmounts', async () => {
   await startWithoutOpeningRecords();

@@ -109,6 +109,54 @@ function failDraftRead(key: string) {
   });
 }
 
+it.each(['after render', 'before render'])(
+  'blocks offered writing from entering an editor during failed cleanup (%s)',
+  async (timing) => {
+    const offeredKey = lateDraftKey.replace('unopened', item.id);
+    localStorage.setItem(offeredKey, lateLegacyDraft());
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    const restore = await screen.findByRole('button', { name: m.common_draft_restore() });
+    expect(restore).toBeEnabled();
+    expect(document.getElementById('record-risk-body')).toBeNull();
+    const enumeration = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new DOMException('enumeration unavailable', 'SecurityError');
+    });
+
+    window.dispatchEvent(new Event('focus'));
+    if (timing === 'before render') {
+      // Dispatch in the same turn, while the DOM still has the old enabled button.
+      restore.click();
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: '새 위험' })).toBeDisabled();
+      });
+      expect(document.getElementById('record-risk-body')).toBeNull();
+    } else {
+      await waitFor(() => {
+        expect(restore).toBeDisabled();
+      });
+      await fireEvent.click(restore);
+      expect(document.getElementById('record-risk-body')).toBeNull();
+    }
+    expect(localStorage.getItem(offeredKey)).toContain('Unsent late body');
+    const discard = screen.getByRole('button', { name: m.common_draft_discard() });
+    expect(discard).toBeEnabled();
+    enumeration.mockRestore();
+    if (timing === 'after render') {
+      // A failed cleanup must not prevent the user's explicit discard.
+      await fireEvent.click(discard);
+      expect(localStorage.getItem(offeredKey)).toBeNull();
+    } else {
+      await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+      await waitFor(() => {
+        expect(restore).toBeEnabled();
+      });
+      await fireEvent.click(restore);
+      expect(input('body')).toHaveValue('Unsent late body');
+      expect(input('mitigation')).toHaveValue('Unsent mitigation');
+    }
+  },
+);
+
 it.each(['focus', 'visibilitychange'])(
   'blocks entry when %s cleanup fails after the record panel was ready',
   async (event) => {

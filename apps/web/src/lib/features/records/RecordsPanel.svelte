@@ -430,7 +430,9 @@
 {#each draft.offers as entry (entry.key)}
   <fieldset class="contents" disabled={busy}>
     <FormDraftOffer
+      restoreDisabled={draftReadiness !== 'ready'}
       onrestore={() => {
+        if (draftReadiness !== 'ready') return;
         draft.restore(entry);
       }}
       ondiscard={() => {

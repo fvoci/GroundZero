@@ -7,6 +7,8 @@ const RECORD_DRAFT_KEY = /^fvoci:[^:]+:[^:]+:form-draft:record:/;
 const RECORD_KIND_KEY =
   /^fvoci:[^:]+:[^:]+:form-draft:record:[^:]+:([^:]+):[^:]+:(?:tab|held):[^:]+$/;
 const LONG_TEXT_KEYS: Readonly<Record<string, readonly string[]>> = longTextKeys;
+// Bound synchronous cleanup per key while allowing a transient competing writer to settle.
+const RECORD_DRAFT_CLEANUP_ATTEMPTS = 3;
 
 interface RecordDraftInput {
   form: RecordForm;
@@ -134,7 +136,7 @@ function checkWriting(value: unknown, kind: string | undefined): DraftCheck | un
   };
 }
 
-function storedStateAt(key: string, raw: string): 'same' | 'changed' | 'unavailable' {
+function storedStateAt(key: string, raw: string | null): 'same' | 'changed' | 'unavailable' {
   try {
     return window.localStorage.getItem(key) === raw ? 'same' : 'changed';
   } catch {
@@ -142,24 +144,24 @@ function storedStateAt(key: string, raw: string): 'same' | 'changed' | 'unavaila
   }
 }
 
-/** Normalize only the supplied snapshot; a later writer's value belongs to its own event. */
-function clearLegacyRecordDraftAt(key: string, raw: string | null): RecordDraftCleanup {
-  if (!RECORD_DRAFT_KEY.test(key) || raw === null) return 'ready';
+/** Inspect one snapshot without overwriting a different one; full scans retry changed keys. */
+function clearLegacyRecordDraftAt(key: string, raw: string | null): RecordDraftCleanup | 'changed' {
+  if (!RECORD_DRAFT_KEY.test(key)) return 'ready';
   const kind = RECORD_KIND_KEY.exec(key)?.[1];
   let checked: DraftCheck | undefined;
   try {
-    checked = checkWriting(JSON.parse(raw), kind);
+    if (raw !== null) checked = checkWriting(JSON.parse(raw), kind);
   } catch {
     // Malformed JSON is discarded only if this exact raw value is still stored.
   }
-  if (checked?.state === 'current') return 'ready';
   const stored = storedStateAt(key, raw);
-  if (stored !== 'same') return stored === 'changed' ? 'ready' : 'retry';
+  if (stored !== 'same') return stored === 'changed' ? 'changed' : 'retry';
+  if (raw === null || checked?.state === 'current') return 'ready';
   // localStorage has no atomic compare-and-set across tabs. Compare just before each mutation.
   if (writeDraftAt(key, checked?.value)) return 'ready';
   if (checked === undefined) return 'retry';
   const fallback = storedStateAt(key, raw);
-  if (fallback !== 'same') return fallback === 'changed' ? 'ready' : 'retry';
+  if (fallback !== 'same') return fallback === 'changed' ? 'changed' : 'retry';
   // A failed rewrite may discard only the old snapshot, never newer writing.
   return writeDraftAt(key, undefined) ? 'ready' : 'retry';
 }
@@ -175,8 +177,15 @@ export function clearLegacyRecordDrafts(): RecordDraftCleanup {
   let state: RecordDraftCleanup = 'ready';
   for (const key of keys) {
     try {
-      if (clearLegacyRecordDraftAt(key, window.localStorage.getItem(key)) === 'retry')
-        state = 'retry';
+      let checked: RecordDraftCleanup | 'changed' = 'changed';
+      for (
+        let attempt = 0;
+        attempt < RECORD_DRAFT_CLEANUP_ATTEMPTS && checked === 'changed';
+        attempt += 1
+      ) {
+        checked = clearLegacyRecordDraftAt(key, window.localStorage.getItem(key));
+      }
+      if (checked !== 'ready') state = 'retry';
     } catch {
       // A failed read must not discard writing that could not be inspected.
       state = 'retry';
