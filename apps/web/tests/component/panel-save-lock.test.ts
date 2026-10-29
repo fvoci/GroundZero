@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CourseView, EpisodeView, StudyPlanView, StudyUnitView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { formDraftTabKey, writeFormDraftAt } from '$lib/features/common/form-draft';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
@@ -492,25 +493,28 @@ describe('members screen', () => {
     render(MembersScreen, { workspace, meId: 'user-a', onchanged: () => undefined });
   };
 
-  it('locks the invite form, its role select and its offer while inviting', async () => {
+  it('locks the invite form and role select without offering old persistent email input', async () => {
     otherTabDraft('members-invite:ws-1', { email: 'other@example.test', role: 'admin' });
     const invite = held<never>();
-    vi.spyOn(api, 'invite').mockReturnValue(invite.promise);
+    vi.spyOn(organizationsApi, 'invite').mockReturnValue(invite.promise);
     mount();
     await fireEvent.input(await screen.findByLabelText(m.members_email()), {
       target: { value: 'new@example.test' },
     });
     await fireEvent.submit(formOf('invite-email'));
     await waitFor(() => {
-      expect(api.invite).toHaveBeenCalledTimes(1);
+      expect(organizationsApi.invite).toHaveBeenCalledTimes(1);
     });
-    expectOffersLocked(1);
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
     expect(field('invite-email')).toBeDisabled();
     const role = (): HTMLElement =>
       screen.getByRole('button', { name: new RegExp(`^${m.members_invite_role()}`) });
     expect(await opens(role())).toBe(false);
     invite.reject(offline());
-    await expectReleased(1, byId('invite-email'), role);
+    await waitFor(() => {
+      expect(field('invite-email')).not.toBeDisabled();
+      expect(role()).not.toBeDisabled();
+    });
     expect(await opens(role())).toBe(true);
   });
 

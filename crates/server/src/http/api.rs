@@ -2,7 +2,7 @@
 
 use super::Health;
 use crate::build_info::BuildInfo;
-use crate::features::{accounts, item_profile, members, modules, organizations, workspaces};
+use crate::features::{accounts, item_profile, modules};
 use fvoci_core::error::ErrorBody;
 use utoipa::OpenApi;
 
@@ -17,34 +17,8 @@ use utoipa::OpenApi;
         accounts::login,
         accounts::callback,
         accounts::logout,
-        accounts::me,
-        accounts::set_settings,
         accounts::auth_info,
-        workspaces::list,
-        workspaces::create,
-        workspaces::delete,
-        workspaces::deleted,
-        workspaces::restore,
-        workspaces::purge,
-        organizations::list_mine,
-        organizations::get,
         // organizations (2단계 A)
-        organizations::members,
-        organizations::set_member,
-        organizations::removal_preview,
-        organizations::remove_member,
-        organizations::invite,
-        organizations::invitations,
-        organizations::set_settings,
-        organizations::workspace_limits,
-        organizations::set_workspace_limits,
-        organizations::workspaces,
-        organizations::join_as_admin,
-        organizations::restore_workspace,
-        organizations::offer_workspace_ownership,
-        organizations::server_organizations,
-        organizations::create,
-        organizations::server_admins,
         // personal scope (2단계 B)
         item_profile::get,
         item_profile::set,
@@ -63,67 +37,14 @@ use utoipa::OpenApi;
         modules::get_item,
         modules::update_item,
         modules::archive_item,
-        members::list_members,
-        members::set_role,
-        members::remove_member,
-        members::leave,
-        members::invite,
-        members::list_invitations,
-        members::revoke_invitation,
-        members::my_invitations,
-        members::accept_invitation,
-        members::decline_invitation,
-        members::offer_ownership,
-        members::cancel_ownership_offer,
-        members::accept_ownership,
-        members::list_groups,
-        members::create_group,
-        members::delete_group,
-        members::add_group_member,
-        members::remove_group_member,
     ),
     components(schemas(
-        members::Member,
-        members::MembersView,
-        members::SetRole,
-        members::CreateInvitation,
-        members::Invitation,
-        members::ReceivedInvitation,
-        members::Accepted,
-        members::InvitationTarget,
-        members::OfferOwnership,
-        members::Group,
-        members::CreateGroup,
         Health,
         BuildInfo,
         ErrorBody,
-        accounts::Me,
-        // 작업자 D · #79 입력 한도 계약.
-        accounts::InputLimits,
-        accounts::MySettings,
         accounts::AuthInfo,
         accounts::LogoutResponse,
-        workspaces::Workspace,
-        workspaces::CreateWorkspace,
-        workspaces::DeleteWorkspace,
-        workspaces::WorkspaceDeleted,
-        workspaces::DeletedWorkspace,
-        organizations::OrgRole,
-        organizations::OrganizationSummary,
-        organizations::OrganizationLimits,
-        organizations::Organization,
         // organizations (2단계 A)
-        organizations::OrganizationMember,
-        organizations::SetOrganizationRole,
-        organizations::OrganizationRemovalPreview,
-        organizations::InviteOrganization,
-        organizations::OrganizationInvitation,
-        organizations::OrganizationSettingsPatch,
-        organizations::OrganizationWorkspace,
-        organizations::ServerOrganization,
-        organizations::CreateOrganization,
-        organizations::CreatedOrganization,
-        organizations::ServerAdmin,
         item_profile::ItemDetails,
         item_profile::ItemProfile,
         item_profile::PersonRef,
@@ -178,6 +99,7 @@ struct DomainApis;
 
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi.merge(fvoci_organizations::OrganizationsApi::openapi());
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_records::RecordsApi::openapi());
         openapi.merge(fvoci_home::HomeApi::openapi());

@@ -9,21 +9,23 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::access::{self, Kind};
-use crate::features::members::OfferOwnership;
-use crate::http::AppState;
+use crate::OrganizationsState;
+use crate::members::OfferOwnership;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{OrganizationId, Role, UserId, WorkspaceId};
 use fvoci_core::validate::validate_title;
+use fvoci_db::access::{self, Kind};
 use fvoci_db::{UserTx, needed_ids, new_ids};
-use fvoci_http::session::{CurrentUser, ExpectedUser};
+use fvoci_http::session::CurrentUser;
 
 mod role_ids;
+pub mod settings;
+
+pub use settings::{OrganizationLimits, OrganizationSettingsPatch};
 
 /// 조직 역할(D-112). 조직 관리자는 메타데이터만 다루고 내용은 "관리자로 참여" 뒤에만 본다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -65,25 +67,6 @@ pub struct OrganizationSummary {
     pub created_at: OffsetDateTime,
 }
 
-/// 조직·워크스페이스의 한도·보존 설정값(D-124). `null`은 해당 단계에서 미설정이라는 뜻이다.
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
-pub struct OrganizationLimits {
-    #[schema(minimum = 1)]
-    pub max_file_bytes: Option<i64>,
-    #[schema(minimum = 0)]
-    pub max_storage_bytes: Option<i64>,
-    #[schema(minimum = 1)]
-    pub max_concurrent_uploads: Option<i32>,
-    /// 이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.
-    /// 현재 외부 채널은 구현되어 있지 않다.
-    #[schema(minimum = 1)]
-    pub notification_rate_per_hour: Option<i32>,
-    #[schema(minimum = 1, maximum = 3650)]
-    pub activity_retention_days: Option<i32>,
-    #[schema(minimum = 1, maximum = 3650)]
-    pub audit_retention_days: Option<i32>,
-}
-
 /// 조직 상세(멤버에게). 설정 변경은 관리자만.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Organization {
@@ -103,7 +86,7 @@ pub use fvoci_http::organization::OrgScope;
 #[utoipa::path(get, path = "/api/me/organizations", operation_id = "list_my_organizations",
     responses((status = 200, body = [OrganizationSummary]), (status = 401, body = ErrorBody)), tag = "organizations")]
 pub async fn list_mine(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<OrganizationSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -146,7 +129,7 @@ type OrganizationRow = (
     responses((status = 200, body = Organization), (status = 401, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn get(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(organization): Path<OrganizationId>,
 ) -> Result<Json<Organization>, AppError> {
@@ -220,7 +203,7 @@ pub struct OrganizationMember {
     params(("organization_id" = OrganizationId, Path)),
     responses((status = 200, body = [OrganizationMember]), (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn members(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
 ) -> Result<Json<Vec<OrganizationMember>>, AppError> {
@@ -254,11 +237,11 @@ pub struct SetOrganizationRole {
 }
 
 #[utoipa::path(put, path = "/api/organizations/{organization_id}/members/{user_id}", operation_id = "set_organization_member",
-    params(("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)), request_body = SetOrganizationRole,
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)), request_body = SetOrganizationRole,
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn set_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
     Json(input): Json<SetOrganizationRole>,
@@ -289,7 +272,7 @@ pub struct OrganizationRemovalPreview {
     responses((status = 200, body = OrganizationRemovalPreview), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn removal_preview(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
 ) -> Result<Json<OrganizationRemovalPreview>, AppError> {
@@ -301,11 +284,11 @@ pub async fn removal_preview(
 }
 
 #[utoipa::path(delete, path = "/api/organizations/{organization_id}/members/{user_id}", operation_id = "remove_organization_member",
-    params(("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("user_id" = UserId, Path)),
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn remove_member(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
 ) -> Result<StatusCode, AppError> {
@@ -345,11 +328,11 @@ pub struct OrganizationInvitation {
 }
 
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/invitations", operation_id = "invite_organization",
-    params(("organization_id" = OrganizationId, Path)), request_body = InviteOrganization,
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path)), request_body = InviteOrganization,
     responses((status = 201, body = OrganizationInvitation), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn invite(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
     Json(input): Json<InviteOrganization>,
@@ -387,7 +370,7 @@ pub async fn invite(
     responses((status = 200, body = [OrganizationInvitation]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn invitations(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
 ) -> Result<Json<Vec<OrganizationInvitation>>, AppError> {
@@ -408,124 +391,6 @@ pub async fn invitations(
             })
         })
         .collect::<Result<_, AppError>>()?;
-    tx.commit().await?;
-    Ok(Json(result))
-}
-
-/// 키 생략은 유지, 한도의 null은 미설정으로 되돌린다. 원본 JSON을 SQL에 전달한다.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct OrganizationSettingsPatch {
-    #[schema(nullable = false)]
-    pub name: Option<String>,
-    pub public_links_enabled: Option<bool>,
-    #[serde(flatten)]
-    pub limits: OrganizationLimits,
-}
-
-/// SQL의 열 CHECK와 같은 입력 범위. SQL의 23514/22P02는 내부 오류이므로 HTTP 입력에서 검증한다.
-fn validate_limits(limits: &OrganizationLimits) -> Result<(), AppError> {
-    if limits.max_file_bytes.is_some_and(|v| v < 1)
-        || limits.max_storage_bytes.is_some_and(|v| v < 0)
-        || limits.max_concurrent_uploads.is_some_and(|v| v < 1)
-        || limits.notification_rate_per_hour.is_some_and(|v| v < 1)
-        || limits
-            .activity_retention_days
-            .is_some_and(|v| !(1..=3650).contains(&v))
-        || limits
-            .audit_retention_days
-            .is_some_and(|v| !(1..=3650).contains(&v))
-    {
-        return Err(AppError::BadRequest(
-            "limit is outside its allowed range".into(),
-        ));
-    }
-    Ok(())
-}
-
-#[utoipa::path(put, path = "/api/organizations/{organization_id}/settings", operation_id = "set_organization_settings",
-    params(("organization_id" = OrganizationId, Path), ("x-fvoci-expected-user" = UserId, Header)),
-    request_body = OrganizationSettingsPatch,
-    responses((status = 200, body = Organization), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
-pub async fn set_settings(
-    State(state): State<AppState>,
-    ExpectedUser(user): ExpectedUser,
-    Path(org): Path<OrganizationId>,
-    Json(mut patch): Json<Value>,
-) -> Result<Json<Organization>, AppError> {
-    let input = OrganizationSettingsPatch::deserialize(&patch)
-        .map_err(|_| AppError::BadRequest("invalid organization settings".into()))?;
-    if patch.get("name").is_some() {
-        let name = input
-            .name
-            .as_deref()
-            .ok_or_else(|| AppError::BadRequest("the organization needs a name".into()))?;
-        let name = validate_title(name, state.config.limits.max_title_chars, "name")?;
-        patch["name"] = Value::String(name);
-    }
-    validate_limits(&input.limits)?;
-    let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_organization_settings($1, $2, $3)")
-        .bind(org)
-        .bind(patch)
-        .bind(new_ids(1))
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    let result = read_organization(&mut tx, org).await?;
-    tx.commit().await?;
-    Ok(Json(result))
-}
-
-async fn read_workspace_limits(
-    tx: &mut UserTx,
-    ws: WorkspaceId,
-) -> Result<OrganizationLimits, AppError> {
-    access::require_owner(tx, Kind::Workspace, ws).await?;
-    sqlx::query_as("SELECT max_file_bytes, max_storage_bytes, max_concurrent_uploads,
-        notification_rate_per_hour, activity_retention_days, audit_retention_days FROM workspaces WHERE id = $1")
-        .bind(ws).fetch_optional(tx.conn()).await?.ok_or(AppError::NotFound)
-}
-
-/// 관리자가 편집하는 설정값만 반환한다(실효 한도는 계산하지 않는다).
-#[utoipa::path(get, path = "/api/workspaces/{workspace_id}/limits", operation_id = "workspace_limits",
-    params(("workspace_id" = WorkspaceId, Path)),
-    responses((status = 200, body = OrganizationLimits), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "organizations")]
-pub async fn workspace_limits(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(ws): Path<WorkspaceId>,
-) -> Result<Json<OrganizationLimits>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    let result = read_workspace_limits(&mut tx, ws).await?;
-    tx.commit().await?;
-    Ok(Json(result))
-}
-
-#[utoipa::path(put, path = "/api/workspaces/{workspace_id}/limits", operation_id = "set_workspace_limits",
-    params(("workspace_id" = WorkspaceId, Path), ("x-fvoci-expected-user" = UserId, Header)),
-    request_body = OrganizationLimits,
-    responses((status = 200, body = OrganizationLimits), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "organizations")]
-pub async fn set_workspace_limits(
-    State(state): State<AppState>,
-    ExpectedUser(user): ExpectedUser,
-    Path(ws): Path<WorkspaceId>,
-    Json(patch): Json<Value>,
-) -> Result<Json<OrganizationLimits>, AppError> {
-    let input = OrganizationLimits::deserialize(&patch)
-        .map_err(|_| AppError::BadRequest("invalid workspace limits".into()))?;
-    validate_limits(&input)?;
-    let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_workspace_limits($1, $2, $3)")
-        .bind(ws)
-        .bind(patch)
-        .bind(new_ids(1))
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
-    let result = read_workspace_limits(&mut tx, ws).await?;
     tx.commit().await?;
     Ok(Json(result))
 }
@@ -551,7 +416,7 @@ pub struct OrganizationWorkspace {
     responses((status = 200, body = [OrganizationWorkspace]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn workspaces(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path(org): Path<OrganizationId>,
 ) -> Result<Json<Vec<OrganizationWorkspace>>, AppError> {
@@ -597,10 +462,10 @@ pub async fn workspaces(
 }
 
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin", operation_id = "join_workspace_as_admin",
-    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "organizations")]
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    responses((status = 409, body = ErrorBody), (status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn join_as_admin(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
 ) -> Result<StatusCode, AppError> {
@@ -638,11 +503,11 @@ async fn require_organization_workspace(
 
 /// 조직 관리자가 보존 기간 안의 삭제된 워크스페이스를 복원한다.
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore", operation_id = "restore_organization_workspace",
-    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    responses((status = 400, body = ErrorBody), (status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn restore_workspace(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
 ) -> Result<StatusCode, AppError> {
@@ -660,12 +525,12 @@ pub async fn restore_workspace(
 
 /// 조직 관리자가 워크스페이스 멤버에게 소유권 인계를 제안한다.
 #[utoipa::path(post, path = "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer", operation_id = "offer_organization_workspace_ownership",
-    params(("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
+    params(("x-fvoci-expected-user" = Option<UserId>, Header), ("organization_id" = OrganizationId, Path), ("workspace_id" = WorkspaceId, Path)),
     request_body = OfferOwnership,
-    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+    responses((status = 409, body = ErrorBody), (status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "organizations")]
 pub async fn offer_workspace_ownership(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
     Json(input): Json<OfferOwnership>,
@@ -697,7 +562,7 @@ pub struct ServerOrganization {
 #[utoipa::path(get, path = "/api/server/organizations", operation_id = "server_organizations",
     responses((status = 200, body = [ServerOrganization]), (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn server_organizations(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<ServerOrganization>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
@@ -719,16 +584,16 @@ pub struct CreatedOrganization {
     pub id: OrganizationId,
 }
 
-#[utoipa::path(post, path = "/api/server/organizations", operation_id = "create_organization",
+#[utoipa::path(post, params(("x-fvoci-expected-user" = Option<UserId>, Header)), path = "/api/server/organizations", operation_id = "create_organization",
     request_body = CreateOrganization,
-    responses((status = 201, body = CreatedOrganization), (status = 400, body = ErrorBody),
+    responses((status = 409, body = ErrorBody), (status = 201, body = CreatedOrganization), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn create(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
     Json(input): Json<CreateOrganization>,
 ) -> Result<(StatusCode, Json<CreatedOrganization>), AppError> {
-    let name = validate_title(&input.name, state.config.limits.max_title_chars, "name")?;
+    let name = validate_title(&input.name, state.max_title_chars, "name")?;
     let mut tx = state.db.begin_as(user).await?;
     let id = sqlx::query_scalar("SELECT app_create_organization($1, $2, $3, $4)")
         .bind(input.request_id)
@@ -754,7 +619,7 @@ pub struct ServerAdmin {
 #[utoipa::path(get, path = "/api/server/admins", operation_id = "server_admins",
     responses((status = 200, body = [ServerAdmin]), (status = 403, body = ErrorBody)), tag = "organizations")]
 pub async fn server_admins(
-    State(state): State<AppState>,
+    State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<ServerAdmin>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;

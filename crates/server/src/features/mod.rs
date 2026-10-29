@@ -3,10 +3,9 @@
 pub mod accounts;
 pub mod file_text;
 pub mod item_profile;
-pub mod members;
+pub use fvoci_organizations::members;
 pub mod modules;
-pub mod organizations;
+pub use fvoci_organizations::organizations;
 pub mod search_text;
-pub mod workspaces;
 
 pub use fvoci_documents::{documents, public_links, references, revisions};

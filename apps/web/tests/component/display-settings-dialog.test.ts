@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { api, ApiError } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { applyDocFont, setDocFont } from '$lib/doc-font';
 import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
 import { me } from '$lib/me.svelte';
@@ -37,7 +38,7 @@ describe('display settings dialog', () => {
   // (c) 서버 오류(세션 만료 401 등)를 영어 원문 그대로("Unauthorized") 보였다. 다른 화면처럼 errorText로 옮긴다.
   it('shows a failed save in the display language', async () => {
     me.timeZone = 'Asia/Seoul';
-    vi.spyOn(api, 'setDisplaySettings').mockRejectedValue(
+    vi.spyOn(organizationsApi, 'setDisplaySettings').mockRejectedValue(
       new ApiError(401, 'unauthorized', 'Unauthorized'),
     );
     await openDialog();
@@ -70,7 +71,7 @@ describe('display settings dialog', () => {
     expect(document.documentElement.dataset.docFont).toBe('serif');
 
     me.timeZone = 'Asia/Seoul';
-    vi.spyOn(api, 'setDisplaySettings').mockRejectedValue(
+    vi.spyOn(organizationsApi, 'setDisplaySettings').mockRejectedValue(
       new ApiError(401, 'unauthorized', 'Unauthorized'),
     );
     const selects = await openDialog();
@@ -89,7 +90,9 @@ describe('display settings dialog', () => {
 // 이것만 바꾸면 바로 적용하고 화면을 새로 읽지 않는다.
 describe('display settings dialog theme', () => {
   it('offers system, light and dark, saves the choice to the account and applies it without a reload', async () => {
-    const saveAccount = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const saveAccount = vi
+      .spyOn(organizationsApi, 'setDisplaySettings')
+      .mockResolvedValue(undefined);
     const reload = vi.fn();
     vi.stubGlobal('location', { reload });
     me.theme = 'system';

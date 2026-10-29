@@ -95,6 +95,30 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+impl FromRef<AppState> for fvoci_organizations::OrganizationsState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_organizations::AccountState {
+    fn from_ref(state: &AppState) -> Self {
+        let limits = state.config.limits;
+        Self {
+            db: state.db.clone(),
+            limits: fvoci_organizations::accounts::InputLimits {
+                max_title_chars: limits.max_title_chars,
+                max_document_bytes: limits.max_document_bytes,
+                max_references_per_document: limits.max_references_per_document,
+                max_document_depth: limits.max_document_depth,
+            },
+        }
+    }
+}
+
 impl fvoci_files::PersistWorkspace for crate::collab::Rooms {
     fn persist_workspace(
         &self,
@@ -446,7 +470,12 @@ mod tests {
     fn organization_selection_and_timer_modes_are_typed_contracts() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
         let schemas = &doc["components"]["schemas"];
-        let selection = &schemas["MySettings"]["properties"]["last_organization_id"];
+        assert!(
+            schemas["MySettings"]["properties"]
+                .get("last_organization_id")
+                .is_none()
+        );
+        let selection = &schemas["SetLastOrganization"]["properties"]["organization_id"];
         assert_eq!(selection["format"], "uuid");
         assert!(
             selection["type"]
@@ -454,9 +483,9 @@ mod tests {
                 .is_some_and(|types| types.contains(&serde_json::json!("null")))
         );
         assert!(
-            !schemas["MySettings"]["required"]
+            schemas["SetLastOrganization"]["required"]
                 .as_array()
-                .is_some_and(|fields| fields.contains(&serde_json::json!("last_organization_id")))
+                .is_some_and(|fields| fields.contains(&serde_json::json!("organization_id")))
         );
         assert_eq!(
             schemas["TimerStartMode"]["enum"],

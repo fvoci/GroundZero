@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import { conventionalHourCycle, conventionalWeekStart } from '$lib/display';
 import { applyDocFont, storedDocFont } from '$lib/doc-font';
 import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
@@ -53,7 +53,7 @@ async function saveAndReload(): Promise<void> {
 describe('display settings dialog keeps edits until save', () => {
   it('saves every changed field when settings were saved before', async () => {
     Object.assign(me, { timeZone: 'Asia/Seoul', locale: 'ko', weekStart: 'sun', hourCycle: 'h12' });
-    const set = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const set = vi.spyOn(organizationsApi, 'setDisplaySettings').mockResolvedValue(undefined);
     render(DisplaySettingsDialog, { props: { open: true } });
 
     // 저장한 주 시작·시각 표시는 언어를 바꿔도 다시 제안하지 않는다(언어를 나중에 바꾼다). 두 언어의 관례와 다른
@@ -75,7 +75,7 @@ describe('display settings dialog keeps edits until save', () => {
   });
 
   it('saves every changed field when nothing was saved yet', async () => {
-    const set = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const set = vi.spyOn(organizationsApi, 'setDisplaySettings').mockResolvedValue(undefined);
     render(DisplaySettingsDialog, { props: { open: true } });
 
     // 언어를 먼저 바꾼다(아직 저장하지 않은 칸은 언어를 바꾸면 다시 제안하므로).
@@ -141,7 +141,7 @@ describe('display settings dialog keeps edits until save', () => {
 
   it('does not write the account settings when only the document typeface changed', async () => {
     Object.assign(me, { timeZone: 'Asia/Seoul', locale: 'ko', weekStart: 'sun', hourCycle: 'h23' });
-    const set = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const set = vi.spyOn(organizationsApi, 'setDisplaySettings').mockResolvedValue(undefined);
     render(DisplaySettingsDialog, { props: { open: true } });
     await choose(FONT, 'serif');
 
@@ -156,7 +156,7 @@ describe('display settings dialog keeps edits until save', () => {
 
   it('still saves the account settings when the typeface changed together with them', async () => {
     Object.assign(me, { timeZone: 'Asia/Seoul', locale: 'ko', weekStart: 'sun', hourCycle: 'h23' });
-    const set = vi.spyOn(api, 'setDisplaySettings').mockResolvedValue(undefined);
+    const set = vi.spyOn(organizationsApi, 'setDisplaySettings').mockResolvedValue(undefined);
     render(DisplaySettingsDialog, { props: { open: true } });
     await choose(FONT, 'serif');
     await choose(WEEK, 'mon');

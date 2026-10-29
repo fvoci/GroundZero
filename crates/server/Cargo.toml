@@ -25,6 +25,7 @@ fvoci-core.workspace = true
 fvoci-db.workspace = true
 fvoci-files.workspace = true
 fvoci-http.workspace = true
+fvoci-organizations.workspace = true
 fvoci-home.workspace = true
 fvoci-search.workspace = true
 fvoci-storage.workspace = true

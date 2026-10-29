@@ -946,18 +946,37 @@ ALTER FUNCTION fvoci.app_remove_organization_member_preview(p_organization uuid,
 
 -- 조직 탈퇴·제거에 필요한 새 id 수: 공간마다 app_remove_member_ids + 조직 로그 1.
 CREATE FUNCTION fvoci.app_remove_organization_member_ids(p_organization uuid, p_user uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    -- 본인 또는 조직 관리자만. 조직 전체의 받은 공유(공간 멤버십과 무관)마다 활동 1 + 공간마다 (감사 1 + 담당·리더 해제 2배) + 조직 로그 1.
-    SELECT CASE WHEN app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
-                     OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN 0 ELSE
-      1 + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-           WHERE s.organization_id = p_organization AND s.grantee_user_id = p_user AND d.workspace_id IS NOT NULL)::integer
-        + coalesce((SELECT sum(1 + app_unseen_assignees_bound(NULL, m.workspace_id, p_user) * 2)
-                    FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
-                    WHERE w.organization_id = p_organization AND m.user_id = p_user), 0)::integer
-    END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
+       OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN
+      RETURN 0;
+    END IF;
+    -- 명령과 같은 순서로 먼저 잠근 뒤 센다. 권한 없는 집계는 잠그지 않고 0(D-88).
+    PERFORM 1 FROM organizations WHERE id = p_organization FOR NO KEY UPDATE;
+    IF app_user_id() IS NULL OR app_access('organization', p_organization) = 'none'
+       OR (app_user_id() <> p_user AND app_access('organization', p_organization) <> 'owner') THEN
+      RETURN 0;
+    END IF;
+    PERFORM 1 FROM organization_members
+    WHERE organization_id = p_organization AND user_id = p_user FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN 0;
+    END IF;
+    PERFORM 1 FROM workspaces WHERE organization_id = p_organization ORDER BY id FOR NO KEY UPDATE;
+    -- 공유는 조직 멤버·공간 잠금, 새 담당·리더는 공간 멤버 잠금에서 기다린다.
+    PERFORM 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+    WHERE w.organization_id = p_organization AND m.user_id = p_user
+    ORDER BY m.workspace_id FOR UPDATE OF m;
+    RETURN 1 + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+                WHERE s.organization_id = p_organization AND s.grantee_user_id = p_user
+                  AND d.workspace_id IS NOT NULL)::integer
+      + coalesce((SELECT sum(1 + app_unseen_assignees_bound(NULL, m.workspace_id, p_user) * 2)
+                  FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                  WHERE w.organization_id = p_organization AND m.user_id = p_user), 0)::integer;
+  END
   $$;
 
 
@@ -1659,28 +1678,49 @@ CREATE FUNCTION fvoci.app_remove_member_preview(p_workspace uuid, p_member uuid)
 ALTER FUNCTION fvoci.app_remove_member_preview(p_workspace uuid, p_member uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_remove_member_ids(p_workspace uuid, p_member uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_access('workspace', p_workspace) = 'owner'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member)
-                       + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-                          WHERE d.workspace_id = p_workspace AND s.grantee_user_id = p_member)::integer
-                ELSE 0 END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    -- 공간 → 멤버 순서로 공유·그룹 변경·담당 추가를 막고 커밋된 뒤의 상한을 센다(D-88).
+    PERFORM app_lock_live_workspace(p_workspace);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = p_workspace AND user_id IN (app_user_id(), p_member)
+    ORDER BY user_id FOR UPDATE;
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member)
+      + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+         WHERE d.workspace_id = p_workspace AND s.grantee_user_id = p_member)::integer;
+  END
   $$;
 
 
 ALTER FUNCTION fvoci.app_remove_member_ids(p_workspace uuid, p_member uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_leave_workspace_ids(p_workspace uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_user_id() IS NOT NULL AND app_access('workspace', p_workspace) <> 'none'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, app_user_id())
-                       + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
-                          WHERE d.workspace_id = p_workspace AND s.grantee_user_id = app_user_id())::integer
-                ELSE 0 END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) = 'none' THEN
+      RETURN 0;
+    END IF;
+    -- 공간 → 멤버 순서로 공유·그룹 변경·담당 추가를 막고 커밋된 뒤의 상한을 센다(D-88).
+    PERFORM app_lock_live_workspace(p_workspace);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = p_workspace AND user_id = app_user_id() FOR UPDATE;
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) = 'none' THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, app_user_id())
+      + (SELECT count(*) FROM document_shares s JOIN documents d ON d.id = s.document_id
+         WHERE d.workspace_id = p_workspace AND s.grantee_user_id = app_user_id())::integer;
+  END
   $$;
 
 
@@ -2210,11 +2250,16 @@ CREATE FUNCTION fvoci.app_delete_group(p_group uuid, p_ids uuid[]) RETURNS void
       RAISE EXCEPTION 'group not found' USING ERRCODE = 'P0002';
     END IF;
     PERFORM app_require_admin(v_ws);
+    PERFORM app_lock_live_workspace(v_ws);
     -- 멤버 행을 먼저 잠근다: 동시에 담당자로 지정하는 쪽(멤버 행 공유 잠금)이 정리가 끝날 때까지 기다린다.
     PERFORM 1 FROM workspace_members m JOIN group_members gm ON gm.user_id = m.user_id
     WHERE m.workspace_id = v_ws AND gm.group_id = p_group
     ORDER BY m.user_id
     FOR UPDATE OF m;
+    PERFORM app_require_admin(v_ws);
+    IF NOT EXISTS (SELECT 1 FROM groups WHERE id = p_group AND workspace_id = v_ws) THEN
+      RAISE EXCEPTION 'group not found' USING ERRCODE = 'P0002';
+    END IF;
     DELETE FROM groups WHERE id = p_group;
     v_used := app_drop_unseen_assignees(NULL, v_ws, NULL, 'group_deleted', p_ids);
     PERFORM app_audit(app_id(p_ids, v_used + 1), v_ws, 'delete', 'group', p_group, '{}'::jsonb);
@@ -2225,12 +2270,27 @@ CREATE FUNCTION fvoci.app_delete_group(p_group uuid, p_ids uuid[]) RETURNS void
 ALTER FUNCTION fvoci.app_delete_group(p_group uuid, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_delete_group_ids(p_group uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_access('workspace', g.workspace_id) = 'owner'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, g.workspace_id, NULL) ELSE 0 END
-    FROM groups g WHERE g.id = p_group
+  DECLARE
+    v_ws uuid;
+  BEGIN
+    SELECT workspace_id INTO v_ws FROM groups WHERE id = p_group;
+    IF app_user_id() IS NULL OR v_ws IS NULL OR app_access('workspace', v_ws) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    -- 모든 그룹 변경이 공간을 먼저 잠가 새 그룹 멤버가 집계 뒤 끼어들지 못한다(D-88·D-114).
+    PERFORM app_lock_live_workspace(v_ws);
+    PERFORM 1 FROM workspace_members m JOIN group_members gm ON gm.user_id = m.user_id
+    WHERE m.workspace_id = v_ws AND gm.group_id = p_group
+    ORDER BY m.user_id FOR UPDATE OF m;
+    IF app_access('workspace', v_ws) <> 'owner'
+       OR NOT EXISTS (SELECT 1 FROM groups WHERE id = p_group AND workspace_id = v_ws) THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, v_ws, NULL);
+  END
   $$;
 
 
@@ -2652,11 +2712,15 @@ CREATE FUNCTION fvoci.app_set_group_member(p_group uuid, p_member uuid, p_presen
       RAISE EXCEPTION 'group not found' USING ERRCODE = 'P0002';
     END IF;
     PERFORM app_require_admin(v_ws);
+    PERFORM app_lock_live_workspace(v_ws);
     -- 호출한 사람과 대상의 멤버 행을 id 순서로 잠근 뒤 관리자인지 다시 보고 대상을 확인한다(동시에 내보내기·강등이
     -- 먼저 끝났으면 끝난 뒤의 상태로 본다).
     PERFORM 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id IN (app_user_id(), p_member)
     ORDER BY user_id FOR UPDATE;
     PERFORM app_require_admin(v_ws);
+    IF NOT EXISTS (SELECT 1 FROM groups WHERE id = p_group AND workspace_id = v_ws) THEN
+      RAISE EXCEPTION 'group not found' USING ERRCODE = 'P0002';
+    END IF;
     IF p_present THEN
       IF NOT EXISTS (SELECT 1 FROM workspace_members WHERE workspace_id = v_ws AND user_id = p_member) THEN
         RAISE EXCEPTION 'only workspace members can join a group' USING ERRCODE = '22023';
@@ -2677,13 +2741,30 @@ CREATE FUNCTION fvoci.app_set_group_member(p_group uuid, p_member uuid, p_presen
 ALTER FUNCTION fvoci.app_set_group_member(p_group uuid, p_member uuid, p_present boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_set_group_member_ids(p_group uuid, p_member uuid, p_present boolean) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_access('workspace', g.workspace_id) <> 'owner' THEN 0
-                WHEN p_present THEN 1
-                ELSE 1 + 2 * app_unseen_assignees_bound(NULL, g.workspace_id, p_member) END
-    FROM groups g WHERE g.id = p_group
+  DECLARE
+    v_ws uuid;
+  BEGIN
+    SELECT workspace_id INTO v_ws FROM groups WHERE id = p_group;
+    IF app_user_id() IS NULL OR v_ws IS NULL OR app_access('workspace', v_ws) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    -- 모든 그룹 변경이 공간을 먼저 잠가 새 그룹 멤버가 집계 뒤 끼어들지 못한다(D-88·D-114).
+    PERFORM app_lock_live_workspace(v_ws);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = v_ws AND user_id IN (app_user_id(), p_member)
+    ORDER BY user_id FOR UPDATE;
+    IF app_access('workspace', v_ws) <> 'owner'
+       OR NOT EXISTS (SELECT 1 FROM groups WHERE id = p_group AND workspace_id = v_ws) THEN
+      RETURN 0;
+    END IF;
+    IF p_present THEN
+      RETURN 1;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, v_ws, p_member);
+  END
   $$;
 
 
@@ -2893,11 +2974,23 @@ CREATE FUNCTION fvoci.app_set_member_role(p_workspace uuid, p_member uuid, p_rol
 ALTER FUNCTION fvoci.app_set_member_role(p_workspace uuid, p_member uuid, p_role text, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_set_member_role_ids(p_workspace uuid, p_member uuid) RETURNS integer
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT CASE WHEN app_access('workspace', p_workspace) = 'owner'
-                THEN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member) ELSE 0 END
+  BEGIN
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    -- 공간 → 멤버 순서로 공유·그룹 변경·담당 추가를 막고 커밋된 뒤의 상한을 센다(D-88).
+    PERFORM app_lock_live_workspace(p_workspace);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = p_workspace AND user_id IN (app_user_id(), p_member)
+    ORDER BY user_id FOR UPDATE;
+    IF app_user_id() IS NULL OR app_access('workspace', p_workspace) <> 'owner' THEN
+      RETURN 0;
+    END IF;
+    RETURN 1 + 2 * app_unseen_assignees_bound(NULL, p_workspace, p_member);
+  END
   $$;
 
 

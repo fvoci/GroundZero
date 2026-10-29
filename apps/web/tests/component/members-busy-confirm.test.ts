@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
+import { organizationsApi } from '$lib/features/organizations/api';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import ReceivedInvitations from '$lib/features/members/ReceivedInvitations.svelte';
@@ -91,7 +92,7 @@ describe('members screen', () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
-    const invite = vi.spyOn(api, 'invite').mockReturnValue(pending());
+    const invite = vi.spyOn(organizationsApi, 'invite').mockReturnValue(pending());
     render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
 
     const input = await screen.findByLabelText('이메일');
@@ -109,7 +110,7 @@ describe('members screen', () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
-    vi.spyOn(api, 'invite').mockResolvedValue({
+    vi.spyOn(organizationsApi, 'invite').mockResolvedValue({
       id: 'inv-1',
       email: 'kim@lab.example',
       role: 'member',
