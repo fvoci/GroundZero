@@ -212,7 +212,7 @@ async fn backlinks_follow_access_to_the_source_document() {
         Method::PATCH,
         &format!("/api/documents/{}/settings", source["id"].as_str().unwrap()),
         Some(&admin),
-        Some(json!({ "visibility": "private", "allow_copy": false })),
+        Some(json!({ "visibility": "private", "previous_visibility": "workspace" })),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
@@ -323,7 +323,7 @@ async fn mentions_notify_once_only_people_who_can_read_and_never_grant_access() 
         Method::PATCH,
         &format!("{doc_uri}/settings"),
         Some(&admin),
-        Some(json!({ "visibility": "private", "allow_copy": false })),
+        Some(json!({ "visibility": "private", "previous_visibility": "workspace" })),
     )
     .await;
     assert_eq!(

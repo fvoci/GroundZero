@@ -104,8 +104,8 @@ pub struct SetParent {
     pub before_id: Option<DocumentId>,
 }
 
-/// 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
-/// 비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
+/// 문서 설정 변경 요청. 바꾸는 칸과 화면이 본 이전 값을 함께 보낸다(D-27, #231).
+/// 없거나 null인 칸은 지금 값 그대로다. 이전 값이 잠금 뒤 현재 값과 다르면 아무것도 바꾸지 않고 409다.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct DocumentSettings {
     /// `workspace` 또는 `private`.
@@ -113,6 +113,20 @@ pub struct DocumentSettings {
     pub visibility: Option<String>,
     #[serde(default)]
     pub allow_copy: Option<bool>,
+    /// visibility를 보낼 때 필수. 화면이 본 `workspace` 또는 `private`.
+    #[serde(default)]
+    pub previous_visibility: Option<String>,
+    /// allow_copy를 보낼 때 필수. false도 유효한 이전 값이다.
+    #[serde(default)]
+    pub previous_allow_copy: Option<bool>,
+}
+
+/// 설정 충돌은 현재 문서와 비교할 칸을 돌려준다. 기대 사용자 불일치는 ErrorBody다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum DocumentSettingsConflict {
+    Stale(Box<fvoci_http::conflict::StaleWrite<Document>>),
+    State(ErrorBody),
 }
 
 /// 저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다.

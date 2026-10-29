@@ -627,7 +627,7 @@ CREATE FUNCTION fvoci.app_document_can_export(p_doc uuid) RETURNS boolean
 
 ALTER FUNCTION fvoci.app_document_can_export(p_doc uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) RETURNS void
+CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_previous_visibility text, p_previous_allow_copy boolean, p_ids uuid[]) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
@@ -639,6 +639,11 @@ CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p
     -- 행을 먼저 잠그고 권한을 본다. 동시에 이동된 문서에 이전 소유 권한으로 설정을 바꾸지 못하게 한다.
     SELECT * INTO v_doc FROM documents WHERE id = p_doc FOR UPDATE;
     PERFORM app_require_document_manager(p_doc);
+    IF (p_visibility IS NULL) <> (p_previous_visibility IS NULL)
+       OR (p_allow_copy IS NULL) <> (p_previous_allow_copy IS NULL)
+       OR p_previous_visibility NOT IN ('workspace', 'private') THEN
+      RAISE EXCEPTION 'previous value is required for each supplied setting' USING ERRCODE = '22023';
+    END IF;
     -- 보내지 않은 칸은 잠근 뒤의 지금 값 그대로.
     v_visibility := coalesce(p_visibility, v_doc.visibility);
     v_allow_copy := coalesce(p_allow_copy, v_doc.allow_copy);
@@ -647,6 +652,11 @@ CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p
     END IF;
     IF v_doc.owner_user_id IS NOT NULL AND v_visibility <> 'private' THEN
       RAISE EXCEPTION 'personal notes are always private' USING ERRCODE = '22023';
+    END IF;
+    -- 비교·변경은 같은 행 잠금 안에서 한다. 다른 칸의 변경은 충돌하지 않는다(D-27, #231).
+    IF (p_visibility IS NOT NULL AND v_doc.visibility IS DISTINCT FROM p_previous_visibility)
+       OR (p_allow_copy IS NOT NULL AND v_doc.allow_copy IS DISTINCT FROM p_previous_allow_copy) THEN
+      RETURN false;
     END IF;
     UPDATE documents SET visibility = v_visibility, allow_copy = v_allow_copy WHERE id = p_doc;
     IF v_doc.visibility IS DISTINCT FROM v_visibility THEN
@@ -657,11 +667,12 @@ CREATE FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p
       PERFORM app_audit_document(app_id(p_ids, 2), p_doc, 'change_copy_policy',
                                  jsonb_build_object('allow_copy', v_allow_copy));
     END IF;
+    RETURN true;
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_set_document_settings(p_doc uuid, p_visibility text, p_allow_copy boolean, p_previous_visibility text, p_previous_allow_copy boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 -- 비로그인 공개 링크(D-20·D-114): 유일한 조직 밖 출구. 조직 관리자가 끄면 새 링크를 만들 수 없고 기존 링크도 응답하지 않는다.
 CREATE FUNCTION fvoci.app_create_public_link(p_doc uuid, p_token_hash bytea, p_expires_at timestamp with time zone, p_ids uuid[]) RETURNS uuid

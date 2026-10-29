@@ -3474,14 +3474,20 @@ export interface components {
          */
         DocumentId: string;
         /**
-         * @description 문서 설정 변경 요청. 바꾸는 칸만 보낸다. 없거나 null인 칸은 지금 값 그대로다(연 뒤 다른 소유 권한자가 바꾼
-         *     비공개·복제 금지를 다른 칸만 바꾼 요청이 되돌리지 않게, 감사 W6).
+         * @description 문서 설정 변경 요청. 바꾸는 칸과 화면이 본 이전 값을 함께 보낸다(D-27, #231).
+         *     없거나 null인 칸은 지금 값 그대로다. 이전 값이 잠금 뒤 현재 값과 다르면 아무것도 바꾸지 않고 409다.
          */
         DocumentSettings: {
             allow_copy?: boolean | null;
+            /** @description allow_copy를 보낼 때 필수. false도 유효한 이전 값이다. */
+            previous_allow_copy?: boolean | null;
+            /** @description visibility를 보낼 때 필수. 화면이 본 `workspace` 또는 `private`. */
+            previous_visibility?: string | null;
             /** @description `workspace` 또는 `private`. */
             visibility?: string | null;
         };
+        /** @description 설정 충돌은 현재 문서와 비교할 칸을 돌려준다. 기대 사용자 불일치는 ErrorBody다. */
+        DocumentSettingsConflict: components["schemas"]["StaleWrite_Document"] | components["schemas"]["ErrorBody"];
         /** @description 문서 목록 항목. */
         DocumentSummary: {
             id: components["schemas"]["DocumentId"];
@@ -7391,7 +7397,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["DocumentSettingsConflict"];
                 };
             };
         };

@@ -53,7 +53,7 @@ async fn every_document_command_checks_a_sent_expected_user_before_any_write() {
         (
             Method::PATCH,
             format!("/api/documents/{doc}/settings"),
-            json!({"allow_copy":false}),
+            json!({"allow_copy":false,"previous_allow_copy":false}),
         ),
         (
             Method::POST,

@@ -266,7 +266,8 @@ async fn chunked_upload_resumes_checks_integrity_and_keeps_versions() {
         Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": true })),
+        Some(json!({ "visibility": "workspace", "allow_copy": true,
+            "previous_visibility": "workspace", "previous_allow_copy": false })),
     )
     .await;
     assert_eq!(allowed.status, StatusCode::OK, "{:?}", allowed.json);
