@@ -1,6 +1,7 @@
 import type { Me } from '@fvoci/api-client';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
 
 import { api, ApiError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
@@ -41,6 +42,19 @@ const sessionKey = 'fvoci:auth-session';
 
 function signalSession(userId: string | null): void {
   localStorage.setItem(sessionKey, JSON.stringify({ userId, sequence: crypto.randomUUID() }));
+}
+
+function signalLogout(startedAt = Date.now()): string | null {
+  localStorage.setItem(
+    sessionKey,
+    JSON.stringify({
+      state: 'logout-pending',
+      userId: me.id,
+      startedAt,
+      sequence: crypto.randomUUID(),
+    }),
+  );
+  return localStorage.getItem(sessionKey);
 }
 
 function deferred<T>() {
@@ -91,6 +105,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   hideSession('account');
   accountSafety.switching = false;
   router.guard = undefined;
@@ -114,21 +129,146 @@ async function logout(): Promise<void> {
 }
 
 // SR-221-1 / D-96 / #88: 불일치 표식은 네트워크 응답보다 먼저 가린다. 순번은 비교하지 않는다.
-it('publishes the shell identity and a fresh signed-out marker before each logout attempt', async () => {
+it('publishes a fresh pending logout before each attempt and the original user after failure', async () => {
+  const attempts: unknown[] = [];
   const send = vi.spyOn(api, 'logout').mockImplementation(() => {
-    expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
+    const marker: unknown = JSON.parse(localStorage.getItem(sessionKey) ?? '{}');
+    expect(marker).toMatchObject({
+      state: 'logout-pending',
+      userId: me.id,
+    });
+    expect(marker).toHaveProperty('startedAt', expect.any(Number));
+    attempts.push(marker);
     return Promise.reject(new Error('offline'));
   });
   await signedIn();
   expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: me.id });
   await logout();
   await screen.findByRole('alert');
-  const first = localStorage.getItem(sessionKey);
+  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({
+    state: 'settled',
+    userId: me.id,
+  });
   await fireEvent.click(screen.getByRole('button', { name: '로그아웃 다시 하기' }));
   await waitFor(() => {
     expect(send).toHaveBeenCalledTimes(2);
   });
-  expect(localStorage.getItem(sessionKey)).not.toBe(first);
+  expect(attempts[0]).not.toEqual(attempts[1]);
+  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({
+    state: 'settled',
+    userId: me.id,
+  });
+});
+
+// SR-221-4: 서버가 로그아웃되기 전 A를 돌려주는 순서를 고정한다.
+it.each(['live', 'persisted'])(
+  'keeps the %s screen hidden when the old user responds during logout and verifies final anonymity',
+  async (kind) => {
+    await signedIn();
+    const previous = screen.getByText('이전 비밀 목록');
+    const check = deferred<Me | undefined>();
+    vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
+    const pending = signalLogout();
+    if (kind === 'persisted') pageshow();
+    else window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    expect(previous).not.toBeVisible();
+    check.resolve(me);
+    await check.promise;
+    await tick();
+    expect(previous).not.toBeVisible();
+    expect(localStorage.getItem(sessionKey)).toBe(pending);
+    expect(api.workspaces).toHaveBeenCalledTimes(1);
+    vi.spyOn(api, 'me').mockResolvedValue(undefined);
+    signalSession(null);
+    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    if (kind === 'persisted')
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalled();
+      });
+    else await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    expect(previous).not.toBeVisible();
+  },
+);
+
+it('resumes the same mounted input only after the failed logout final marker is verified', async () => {
+  const input = await liveInput();
+  const pending = signalLogout();
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  await tick();
+  expect(input).not.toBeVisible();
+  expect(localStorage.getItem(sessionKey)).toBe(pending);
+  const finalCheck = deferred<Me | undefined>();
+  vi.spyOn(api, 'me').mockReturnValueOnce(finalCheck.promise);
+  signalSession(me.id);
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  expect(input).not.toBeVisible();
+  finalCheck.resolve(me);
+  await waitFor(() => expect(input).toBeVisible());
+  expect(screen.getByLabelText('새 노트 제목')).toBe(input);
+  expect(input).toHaveValue('메모리에만 남긴 입력');
+  expect(api.myNotes).toHaveBeenCalledTimes(1);
+});
+
+it('rechecks an abandoned logout at 30 seconds without another browser event', async () => {
+  const input = await liveInput();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  signalLogout();
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  await vi.advanceTimersByTimeAsync(29_999);
+  expect(input).not.toBeVisible();
+  const read = vi.spyOn(api, 'me');
+  const reads = read.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(1);
+  await tick();
+  expect(read).toHaveBeenCalledTimes(reads + 1);
+  expect(input).toBeVisible();
+  expect(input).toHaveValue('메모리에만 남긴 입력');
+  expect(api.myNotes).toHaveBeenCalledTimes(1);
+});
+
+it.each([true, false])(
+  'discards an old-user verification after final anonymity (storage delivered: %s)',
+  async (delivered) => {
+    const input = await liveInput();
+    const oldCheck = deferred<Me | undefined>();
+    vi.spyOn(api, 'me').mockReturnValueOnce(oldCheck.promise).mockResolvedValue(undefined);
+    signalLogout();
+    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    signalSession(null);
+    if (delivered) {
+      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+      await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    }
+    oldCheck.resolve(me);
+    await oldCheck.promise;
+    await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    expect(input).not.toBeVisible();
+    expect(input).toHaveValue('메모리에만 남긴 입력');
+    expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
+  },
+);
+
+it('does not let a newly opened shell overwrite a pending logout with its old user', async () => {
+  const pending = signalLogout();
+  render(App, { replace, reload });
+  const previous = await screen.findByText('이전 비밀 목록');
+  await tick();
+  expect(previous).not.toBeVisible();
+  expect(localStorage.getItem(sessionKey)).toBe(pending);
+});
+
+it('cancels abandoned-logout verification when the shell unmounts', async () => {
+  const view = render(App, { replace, reload });
+  await screen.findByText('이전 비밀 목록');
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  signalLogout();
+  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  await tick();
+  view.unmount();
+  const read = vi.spyOn(api, 'me');
+  const reads = read.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(read).toHaveBeenCalledTimes(reads);
 });
 
 it('publishes an anonymous shell result without making public views publish a marker', async () => {
@@ -245,6 +385,10 @@ it('keeps authentication usable when session marker reads and writes are denied'
 // #212 1~3, 부조종사 2026-10-29 00:25: 응답·이동보다 먼저 이전 화면을 가린다.
 it('clears session and organization before sending logout, and replaces history', async () => {
   const pending = deferred<string>();
+  const markersAtReplace: unknown[] = [];
+  replace.mockImplementationOnce(() => {
+    markersAtReplace.push(JSON.parse(localStorage.getItem(sessionKey) ?? '{}'));
+  });
   const send = vi.spyOn(api, 'logout').mockImplementation(() => {
     expect(accountSafety.switching).toBe(true);
     expect(currentUser.userId).toBe('');
@@ -260,6 +404,7 @@ it('clears session and organization before sending logout, and replaces history'
   await waitFor(() => {
     expect(replace).toHaveBeenCalledWith('/signed-out');
   });
+  expect(markersAtReplace).toEqual([expect.objectContaining({ state: 'settled', userId: null })]);
 });
 
 it('keeps old data hidden and explains a failed logout', async () => {

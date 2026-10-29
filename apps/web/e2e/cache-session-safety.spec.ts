@@ -3,6 +3,71 @@ import { expect, str, test, unique } from './fixtures';
 // 실제 BFCache 복원은 이 실행기의 BackForwardCacheDisabledForDelegate로 재현되지 않았다.
 // 코디네이터 승인: 여기서는 일반 기록 이동, persisted=true 복원은 컴포넌트 시험이 검증한다.
 
+test('another tab stays hidden when its old-user response precedes logout completion', async ({
+  signIn,
+}) => {
+  const owner = await signIn('test-user');
+  const observer = await owner.context.newPage();
+  await observer.goto('/notes');
+  const input = observer.getByLabel('새 노트 제목');
+  await input.fill('로그아웃 중 보존할 입력');
+  await owner.page.goto('/notes');
+  await expect(owner.page.getByTestId('user-menu')).toBeVisible();
+  const userId = str(await owner.api.get('/api/me'), 'id');
+  await owner.endTrace();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let sawLogout!: () => void;
+  const started = new Promise<void>((resolve) => {
+    sawLogout = resolve;
+  });
+  await owner.page.route('**/auth/logout', async (route) => {
+    sawLogout();
+    await held;
+    await route.continue();
+  });
+  const oldResponse = observer.waitForResponse(
+    (response) => response.url().endsWith('/api/me') && response.status() === 200,
+  );
+  try {
+    await owner.page.getByTestId('user-menu').click();
+    await owner.page.getByRole('menuitem', { name: '로그아웃' }).click();
+    await started;
+    const response = await oldResponse;
+    expect(str(await response.json(), 'id')).toBe(userId);
+    // 실제 응답을 읽고 브라우저가 그린 뒤 검사한다. 로그아웃 요청은 계속 서버 도달 전이다.
+    await observer.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        }),
+    );
+    await expect(observer.getByTestId('account-safe-state')).toBeVisible();
+    await expect(input).toBeHidden();
+    await expect(input).toHaveValue('로그아웃 중 보존할 입력');
+    const marker: unknown = await observer.evaluate((): unknown =>
+      JSON.parse(localStorage.getItem('fvoci:auth-session') ?? '{}'),
+    );
+    expect(marker).toMatchObject({
+      state: 'logout-pending',
+      userId,
+      startedAt: expect.any(Number),
+    });
+  } finally {
+    release();
+  }
+  await expect(owner.page.getByRole('link', { name: '로그인', exact: true })).toBeVisible();
+  await expect(observer.getByRole('link', { name: '새 탭에서 로그인' })).toBeVisible();
+  await expect(input).toBeHidden();
+  await expect(input).toHaveValue('로그아웃 중 보존할 입력');
+});
+
 test('another tab hides without focus while its session verification is held', async ({
   signIn,
 }) => {

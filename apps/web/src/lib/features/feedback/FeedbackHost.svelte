@@ -99,6 +99,8 @@
         .then((now) => {
           if (!active || generation !== accountSafety.generation || currentUser.userId !== signedIn)
             return;
+          // storage 이벤트 배달 전에 응답이 와도 진행 중인 로그아웃을 먼저 가린다.
+          if (syncSessionSignal?.()) return;
           publishSessionUser(now?.id ?? null);
           if (now === undefined) {
             reportSessionExpired();

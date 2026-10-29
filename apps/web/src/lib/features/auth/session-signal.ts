@@ -1,26 +1,73 @@
 // D-96 / SR-221-1: 탭 사이의 변경 알림일 뿐이다. 실제 사용자는 항상 /api/me로 확인한다.
 const KEY = 'fvoci:auth-session';
+// 끝을 알리지 못하고 닫힌 탭이 다른 탭을 영구히 가리지 않게 한다(SR-221-4).
+const LOGOUT_PENDING_MS = 30_000;
 
-/** 같은 사용자·로그아웃을 연달아 알려도 storage 이벤트가 나도록 매번 순번을 바꾼다. */
-export function publishSessionUser(userId: string | null): void {
+type SessionSignal =
+  | { state: 'settled'; userId: string | null }
+  | { state: 'logout-pending'; userId: string; startedAt: number };
+
+function publish(signal: SessionSignal): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ userId, sequence: crypto.randomUUID() }));
+    localStorage.setItem(KEY, JSON.stringify({ ...signal, sequence: crypto.randomUUID() }));
   } catch {
     // 저장소를 막은 브라우저에서도 기존 네트워크 재확인은 계속 쓴다.
   }
 }
 
+/** 같은 사용자·로그아웃을 연달아 알려도 storage 이벤트가 나도록 매번 순번을 바꾼다. */
+export function publishSessionUser(userId: string | null): void {
+  // 로그아웃 전의 /api/me는 최종 상태가 아니다. 셸 시작·창 복귀·복원 모두 같은 경계를 쓴다.
+  if (readLogoutPendingUntil() !== undefined) return;
+  publish({ state: 'settled', userId });
+}
+
+export function publishLogoutPending(userId: string): void {
+  publish({ state: 'logout-pending', userId, startedAt: Date.now() });
+}
+
+/** 요청을 끝낸 탭만 진행 표식을 최종 상태로 바꾼다. */
+export function publishLogoutResult(userId: string | null): void {
+  publish({ state: 'settled', userId });
+}
+
 /** 순번은 비교하지 않는다. 없는 표식·손상된 표식·접근 실패는 인증 정보로 쓰지 않는다. */
-export function readSessionUser(): string | null | undefined {
+function readSignal(): SessionSignal | undefined {
   try {
     const raw = localStorage.getItem(KEY);
     const value: unknown = raw === null ? undefined : JSON.parse(raw);
     if (typeof value !== 'object' || value === null || !('userId' in value)) return undefined;
     const userId = value.userId;
-    return userId === null || (typeof userId === 'string' && userId !== '') ? userId : undefined;
+    if (userId !== null && (typeof userId !== 'string' || userId === '')) return undefined;
+    if ('state' in value && value.state === 'logout-pending') {
+      if (
+        userId === null ||
+        !('startedAt' in value) ||
+        typeof value.startedAt !== 'number' ||
+        !Number.isFinite(value.startedAt)
+      )
+        return undefined;
+      return { state: 'logout-pending', userId, startedAt: value.startedAt };
+    }
+    return { state: 'settled', userId };
   } catch {
     return undefined;
   }
+}
+
+/** 진행 표식은 사용자 일치로 무시하지 않는다. 만료 뒤에도 익명 신호로 일반 확인을 유도한다. */
+export function readSessionUser(): string | null | undefined {
+  const signal = readSignal();
+  return signal?.state === 'logout-pending' ? null : signal?.userId;
+}
+
+export function readLogoutPendingUntil(): number | undefined {
+  const signal = readSignal();
+  if (signal?.state !== 'logout-pending') return undefined;
+  const now = Date.now();
+  const until = signal.startedAt + LOGOUT_PENDING_MS;
+  // 시계가 뒤로 이동한 경우에도 수명이 30초보다 길어지지 않는다.
+  return until > now && until <= now + LOGOUT_PENDING_MS ? until : undefined;
 }
 
 export function isSessionSignal(event: StorageEvent): boolean {

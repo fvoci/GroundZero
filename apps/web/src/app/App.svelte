@@ -8,7 +8,10 @@
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
   import {
     isSessionSignal,
+    publishLogoutPending,
+    publishLogoutResult,
     publishSessionUser,
+    readLogoutPendingUntil,
     readSessionUser,
   } from '$lib/features/auth/session-signal';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
@@ -87,10 +90,14 @@
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
   let signaledUser: string | null | undefined;
+  let signaledLogout = false;
   let checkingSignal = false;
+  let waitingLogout = false;
+  let logoutWait: ReturnType<typeof setTimeout> | undefined;
   onDestroy(() => {
     sessionSequence += 1;
     restoreSequence += 1;
+    clearTimeout(logoutWait);
   });
 
   async function load(verified?: Me): Promise<boolean> {
@@ -129,6 +136,7 @@
       if (mine !== sessionSequence) return false;
       org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };
+      syncSessionSignal();
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence) return false;
@@ -295,19 +303,24 @@
   }
 
   let loggingOut = false;
+  let logoutUserId: string | undefined;
   async function logout(): Promise<void> {
     if (loggingOut) return;
     loggingOut = true;
-    publishSessionUser(null);
+    // 실패 후 다시 시도할 때도 clearSession 전의 사용자를 최종 표식으로 쓴다.
+    logoutUserId ??= currentUser.userId;
+    publishLogoutPending(logoutUserId);
     restoreSequence += 1;
     restoringUserId = undefined;
     hideSession('logout');
     flushSync(clearSession);
     try {
       const redirect = await api.logout();
+      publishLogoutResult(null);
       replace(redirect);
     } catch (error: unknown) {
       // 서버 세션이 남았을 수 있다. 비운 화면을 되살리지 않고 같은 안전 상태에서 다시 로그아웃한다(#212 1행).
+      publishLogoutResult(logoutUserId);
       accountSafety.error = errorText(error, m.feedback_logout_failed());
     } finally {
       loggingOut = false;
@@ -328,9 +341,17 @@
     checkingSignal = false;
     restoringUserId ??= currentUser.userId;
     hideSession('restore');
+    const pendingAtStart = readLogoutPendingUntil() !== undefined;
+    const signalAtStart = readSessionUser();
     try {
       const now = await api.me();
       if (mine !== restoreSequence || !restoring()) return;
+      if (waitForLogout()) return;
+      if (pendingAtStart || signalAtStart !== readSessionUser()) {
+        signaledUser = undefined;
+        syncSessionSignal();
+        return;
+      }
       publishSessionUser(now?.id ?? null);
       signaledUser = undefined;
       if (now === undefined) {
@@ -380,9 +401,17 @@
     const mine = ++restoreSequence;
     checkingSignal = true;
     hideSession('reauth');
+    const pendingAtStart = readLogoutPendingUntil() !== undefined;
+    const signalAtStart = readSessionUser();
     try {
       const now = await api.me();
       if (mine !== restoreSequence || accountSafety.reason !== 'reauth') return;
+      if (waitForLogout()) return;
+      if (pendingAtStart || signalAtStart !== readSessionUser()) {
+        signaledUser = undefined;
+        syncSessionSignal();
+        return;
+      }
       signaledUser = now?.id ?? null;
       publishSessionUser(signaledUser);
       if (now === undefined) {
@@ -403,6 +432,21 @@
     }
   }
 
+  /** 진행 중에는 옛 사용자 응답을 수락하지 않는다. 끝이 안 오면 만료 시 새 응답으로 확인한다. */
+  function waitForLogout(): boolean {
+    clearTimeout(logoutWait);
+    logoutWait = undefined;
+    const until = readLogoutPendingUntil();
+    waitingLogout = until !== undefined;
+    if (until === undefined) return false;
+    logoutWait = setTimeout(() => {
+      logoutWait = undefined;
+      signaledUser = undefined;
+      syncSessionSignal();
+    }, until - Date.now());
+    return true;
+  }
+
   /** 돌아올 때도 storage 배달 전에 읽는다. 사용자 불일치만 가리고 같은 사용자의 입력은 남긴다(D-96/#88). */
   function syncSessionSignal(): boolean {
     if (router.route.name === 'public') return false;
@@ -413,10 +457,19 @@
     )
       return false;
     const userId = readSessionUser();
+    const wasWaiting = waitingLogout;
+    const pendingLogout = waitForLogout();
     const reauthenticating = sessionHidden && accountSafety.reason === 'reauth';
-    if (userId === undefined || (userId === expected && !reauthenticating)) return false;
-    if ((restoring() || checkingSignal) && signaledUser === userId) return true;
+    if (userId === undefined || (userId === expected && !reauthenticating && !wasWaiting))
+      return false;
+    if (
+      (restoring() || checkingSignal) &&
+      signaledUser === userId &&
+      signaledLogout === pendingLogout
+    )
+      return true;
     signaledUser = userId;
+    signaledLogout = pendingLogout;
     if (restoring()) void restoreSession();
     else void verifySessionSignal();
     return true;
@@ -425,7 +478,12 @@
   function sessionSignal(event: StorageEvent): void {
     if (!isSessionSignal(event)) return;
     // 익명 확인을 여러 탭이 다시 알리더라도 같은 사용자 표식끼리 확인 요청을 되풀이하지 않는다.
-    if (accountSafety.reason === 'reauth' && signaledUser === readSessionUser()) return;
+    if (
+      accountSafety.reason === 'reauth' &&
+      signaledUser === readSessionUser() &&
+      signaledLogout === (readLogoutPendingUntil() !== undefined)
+    )
+      return;
     syncSessionSignal();
   }
 
