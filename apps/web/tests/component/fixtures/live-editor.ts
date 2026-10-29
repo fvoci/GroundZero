@@ -19,7 +19,9 @@ vi.mock('$lib/features/documents/live', async (original) => ({
       persisted: { on: () => undefined, off: () => undefined },
     };
     sessions.push(session);
-    queueMicrotask(() => session.provider.emit('sync', [true]));
+    queueMicrotask(() => {
+      session.provider.emit('sync', [true]);
+    });
     return session;
   },
 }));

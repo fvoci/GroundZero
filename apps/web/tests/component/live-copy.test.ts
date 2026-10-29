@@ -51,7 +51,7 @@ it('waits for synchronization and an acknowledgement that contains the copied bo
   const close = vi.spyOn(session.provider, 'destroy');
   expect(session.document.getXmlFragment('default').length).toBe(0);
   session.provider.emit('sync', [true]);
-  expect(session.document.getXmlFragment('default').toString()).toContain('보존할 초안');
+  expect(session.document.getXmlFragment('default').toJSON()).toContain('보존할 초안');
   const empty = new Y.Doc();
   for (const listener of listeners) listener(Y.snapshot(empty));
   empty.destroy();

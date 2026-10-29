@@ -91,38 +91,6 @@ pub use state::{DocumentLimits, DocumentsState};
 )]
 pub struct DocumentsApi;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pr4c_contract_uses_collab_for_bodies_and_revisions_for_title_conflicts() {
-        let doc = serde_json::to_value(DocumentsApi::openapi()).unwrap_or_default();
-        let resource = &doc["paths"]["/api/documents/{document_id}"];
-        assert!(resource.get("put").is_none());
-        assert!(resource["patch"]["responses"].get("412").is_none());
-        assert!(
-            resource["patch"]["responses"]["200"]
-                .get("headers")
-                .is_none()
-        );
-        assert!(
-            resource["patch"]["parameters"]
-                .as_array()
-                .is_some_and(|parameters| { parameters.iter().all(|p| p["name"] != "If-Match") })
-        );
-        let schemas = &doc["components"]["schemas"];
-        assert!(schemas["Document"]["properties"].get("realtime").is_none());
-        assert!(schemas["StaleWrite_Document"]["properties"].is_object());
-        assert!(schemas["StaleWrite_Document"]["properties"].get("etag").is_none());
-        for removed in ["SaveDocument", "SaveConflict", "ConflictBody"] {
-            assert!(schemas.get(removed).is_none(), "{removed}");
-        }
-        assert!(resource["get"]["responses"]["200"]["headers"]["ETag"].is_object());
-        assert!(resource["get"]["responses"]["304"].is_object());
-    }
-}
-
 pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -211,4 +179,40 @@ where
         .route_layer(from_extractor_with_state::<ExpectedUserIfSent, S>(
             state.clone(),
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pr4c_contract_uses_collab_for_bodies_and_revisions_for_title_conflicts() {
+        let doc = serde_json::to_value(DocumentsApi::openapi()).unwrap_or_default();
+        let resource = &doc["paths"]["/api/documents/{document_id}"];
+        assert!(resource.get("put").is_none());
+        assert!(resource["patch"]["responses"].get("412").is_none());
+        assert!(
+            resource["patch"]["responses"]["200"]
+                .get("headers")
+                .is_none()
+        );
+        assert!(
+            resource["patch"]["parameters"]
+                .as_array()
+                .is_some_and(|parameters| { parameters.iter().all(|p| p["name"] != "If-Match") })
+        );
+        let schemas = &doc["components"]["schemas"];
+        assert!(schemas["Document"]["properties"].get("realtime").is_none());
+        assert!(schemas["StaleWrite_Document"]["properties"].is_object());
+        assert!(
+            schemas["StaleWrite_Document"]["properties"]
+                .get("etag")
+                .is_none()
+        );
+        for removed in ["SaveDocument", "SaveConflict", "ConflictBody"] {
+            assert!(schemas.get(removed).is_none(), "{removed}");
+        }
+        assert!(resource["get"]["responses"]["200"]["headers"]["ETag"].is_object());
+        assert!(resource["get"]["responses"]["304"].is_object());
+    }
 }

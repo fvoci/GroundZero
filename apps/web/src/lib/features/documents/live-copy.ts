@@ -14,7 +14,9 @@ export async function saveLiveCopy(id: string, body: DocNode, expectedUser: stri
   try {
     await new Promise<void>((resolve, reject) => {
       let applied = false;
-      const timer = setTimeout(() => reject(new Error('live copy was not confirmed')), 20_000);
+      const timer = setTimeout(() => {
+        reject(new Error('live copy was not confirmed'));
+      }, 20_000);
       const synced = (ready: boolean): void => {
         if (!ready || applied) return;
         try {
@@ -25,7 +27,7 @@ export async function saveLiveCopy(id: string, body: DocNode, expectedUser: stri
           );
           applied = true;
         } catch (error: unknown) {
-          reject(error);
+          reject(error instanceof Error ? error : new Error('invalid draft content'));
         }
       };
       const persisted = (snapshot: Y.Snapshot): void => {
