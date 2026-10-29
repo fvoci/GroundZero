@@ -40,7 +40,7 @@ function episode(over: Partial<EpisodeView> = {}): EpisodeView {
 }
 
 const course = (e: EpisodeView, canWrite = true): CourseView => ({
-  can_write: canWrite,
+  access: canWrite ? 'write' : 'archived',
   details: {
     subject: '',
     instructor: '',

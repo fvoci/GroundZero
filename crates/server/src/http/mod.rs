@@ -21,10 +21,7 @@ use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
-use crate::features::{
-    accounts, courses, item_profile, members, modules, organizations, records, study, workspaces,
-    zotero,
-};
+use crate::features::{accounts, item_profile, members, modules, organizations, workspaces};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -153,6 +150,15 @@ impl FromRef<AppState> for fvoci_work::WorkState {
         Self {
             db: state.db.clone(),
             max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_records::RecordsState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            zotero_api_url: state.config.zotero_api_url.clone(),
         }
     }
 }
@@ -345,33 +351,12 @@ async fn api_not_found() -> AppError {
         organizations::create,
         organizations::server_admins,
         // personal scope (2단계 B)
-        study::get,
-        study::add_units,
-        study::update_unit,
-        study::delete_unit,
-        study::set_progress,
-        study::plan,
-        study::participants,
-        zotero::list_collections,
-        zotero::import,
-        records::kinds,
-        records::list,
-        records::create,
-        records::update,
-        records::delete,
         item_profile::get,
         item_profile::set,
         item_profile::set_members,
         item_profile::set_module_icon,
         item_profile::copy,
         item_profile::set_template,
-        courses::get,
-        courses::set_details,
-        courses::add_episodes,
-        courses::update_episode,
-        courses::delete_episode,
-        courses::set_progress,
-        courses::participants,
         modules::list_modules,
         modules::get_module,
         modules::create_module,
@@ -445,32 +430,6 @@ async fn api_not_found() -> AppError {
         organizations::CreateOrganization,
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
-        study::MyUnitProgress,
-        study::StudyUnit,
-        study::StudyPlan,
-        study::NewStudyUnit,
-        study::AddStudyUnits,
-        study::UnitsAdded,
-        study::UpdateStudyUnit,
-        study::SetUnitProgress,
-        study::PlanEntry,
-        study::PlanUnits,
-        study::UnitsPlanned,
-        study::StudyParticipant,
-        zotero::ZoteroLibrary,
-        zotero::ZoteroCollection,
-        zotero::ZoteroImport,
-        zotero::ZoteroImported,
-        records::FieldType,
-        records::ChoiceDef,
-        records::FieldDef,
-        records::RecordKindDef,
-        records::Record,
-        records::RecordFile,
-        records::RecordFileInput,
-        records::NewRecord,
-        records::EditRecord,
-        records::RecordVersion,
         item_profile::ItemDetails,
         item_profile::ItemProfile,
         item_profile::PersonRef,
@@ -483,16 +442,6 @@ async fn api_not_found() -> AppError {
         item_profile::CopyItem,
         item_profile::CopiedItem,
         item_profile::SetTemplate,
-        courses::CourseDetails,
-        courses::MyProgress,
-        courses::Episode,
-        courses::Course,
-        courses::NewEpisode,
-        courses::AddEpisodes,
-        courses::EpisodesAdded,
-        courses::UpdateEpisode,
-        courses::SetProgress,
-        courses::Participant,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -536,6 +485,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_records::RecordsApi::openapi());
         openapi.merge(fvoci_home::HomeApi::openapi());
         openapi.merge(fvoci_search::SearchApi::openapi());
         openapi.merge(fvoci_references::ReferencesApi::openapi());
@@ -592,6 +542,7 @@ pub fn router(state: AppState) -> Router {
 
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_records::router(&state))
         .merge(fvoci_home::router(&state))
         .merge(fvoci_search::router(&state))
         .merge(fvoci_references::router(&state))
@@ -658,29 +609,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/workspaces/{workspace_id}", delete(workspaces::delete))
         .route("/me/deleted-workspaces", get(workspaces::deleted))
-        .route("/record-kinds", get(records::kinds))
-        .route("/zotero/collections", post(zotero::list_collections))
-        .route("/items/{item_id}/zotero/import", post(zotero::import))
-        .route("/items/{item_id}/study", get(study::get))
-        .route("/items/{item_id}/study/units", post(study::add_units))
-        .route("/items/{item_id}/study/plan", put(study::plan))
-        .route(
-            "/items/{item_id}/study/participants",
-            get(study::participants),
-        )
-        .route(
-            "/study-units/{unit_id}",
-            put(study::update_unit).delete(study::delete_unit),
-        )
-        .route("/study-units/{unit_id}/progress", put(study::set_progress))
-        .route(
-            "/items/{item_id}/records",
-            get(records::list).post(records::create),
-        )
-        .route(
-            "/records/{record_id}",
-            put(records::update).delete(records::delete),
-        )
         .route(
             "/items/{item_id}/profile",
             get(item_profile::get).put(item_profile::set),
@@ -695,23 +623,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/modules/{module_id}/description",
             put(modules::set_description),
-        )
-        .route(
-            "/items/{item_id}/course",
-            get(courses::get).put(courses::set_details),
-        )
-        .route(
-            "/items/{item_id}/course/participants",
-            get(courses::participants),
-        )
-        .route("/items/{item_id}/episodes", post(courses::add_episodes))
-        .route(
-            "/episodes/{episode_id}",
-            put(courses::update_episode).delete(courses::delete_episode),
-        )
-        .route(
-            "/episodes/{episode_id}/progress",
-            put(courses::set_progress),
         )
         .route(
             "/me/deleted-workspaces/{workspace_id}",

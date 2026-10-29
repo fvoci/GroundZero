@@ -146,13 +146,13 @@ async fn course_csv_title_limit_is_fixed_at_300_independent_of_config() {
         let saved = send(
             &app,
             Method::GET,
-            &format!("/api/items/{item}/course"),
+            &format!("/api/items/{item}/episodes"),
             Some(&user),
             None,
         )
         .await;
         assert_eq!(saved.status, StatusCode::OK, "{}", saved.json);
-        assert_eq!(saved.json["episodes"].as_array().unwrap().len(), 1);
-        assert_eq!(saved.json["episodes"][0]["title"], "가".repeat(300));
+        assert_eq!(saved.json.as_array().unwrap().len(), 1);
+        assert_eq!(saved.json[0]["title"], "가".repeat(300));
     }
 }
