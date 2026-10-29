@@ -1356,6 +1356,9 @@ REVOKE ALL ON FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p
 GRANT EXECUTE ON FUNCTION fvoci.app_search_titles(p_pattern text, p_kinds text[], p_workspace uuid, p_module uuid, p_status_category text, p_assignee uuid, p_from date, p_to date, p_start timestamp with time zone, p_end timestamp with time zone, p_author uuid, p_organization uuid) TO fvoci_app;
 
 -- 달력 집계(D-80): 기존 권한 덩어리와 분리해 추가한다.
+REVOKE ALL ON FUNCTION fvoci.app_iso_date(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_iso_date(text) TO fvoci_app;
+
 REVOKE ALL ON FUNCTION fvoci.app_calendar(uuid, date, date, text, uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fvoci.app_calendar(uuid, date, date, text, uuid, uuid) TO fvoci_app;
 
