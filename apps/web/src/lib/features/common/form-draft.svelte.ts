@@ -22,8 +22,6 @@ interface DraftOptions<T> {
   snapshot: () => T;
   /** 저장할 칸만 고른다. 요청 완료 여부는 전체 snapshot으로 비교한다(D-27). */
   storedSnapshot?: () => T;
-  /** Observe successful writes to this session's key, including its exact savedAt and projection. */
-  onPersist?: (key: string, value: Saved<T> | undefined) => void;
   parse: (value: unknown) => T | undefined;
   restore: (value: T) => void;
   /** Clear visible input when its owner or target changes. */
@@ -55,7 +53,7 @@ export interface FormDraftAttempt {
 export function createFormDraft<T>(options: DraftOptions<T>) {
   let session = $state<{ userId: string; name: string; key: string | undefined }>();
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
-  let restoredKey: string | undefined;
+  let restoredSource: { key: string; raw: string } | undefined;
   let kept = $state(false);
   let disposed = false;
 
@@ -71,10 +69,13 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return offers.some((entry) => entry.key === session?.key);
   }
 
-  function writeCurrent(key: string | undefined, value: Saved<T> | undefined): boolean {
-    const written = writeFormDraftAt(key, value);
-    if (written && key !== undefined) options.onPersist?.(key, value);
-    return written;
+  function removeRestoredSource(source: typeof restoredSource): void {
+    if (source === undefined) return;
+    try {
+      if (window.localStorage.getItem(source.key) === source.raw) removeFormDraftAt(source.key);
+    } catch {
+      // An unreadable or changed source stays for another proposal, never an inferred deletion.
+    }
   }
 
   function persist(): void {
@@ -89,7 +90,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       return;
     }
     const dirty = options.dirty();
-    const written = writeCurrent(
+    const written = writeFormDraftAt(
       session.key,
       dirty
         ? {
@@ -123,7 +124,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       if (session?.userId === userId && session.name === name) return;
       leave.keep();
       if (session !== undefined) options.reset();
-      restoredKey = undefined;
+      restoredSource = undefined;
       session =
         name === undefined || userId === ''
           ? undefined
@@ -205,15 +206,25 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       }
     }
     // Keep the offered copy if storage fails; never destroy the only durable copy.
+    let source: typeof restoredSource;
+    try {
+      const raw = window.localStorage.getItem(entry.key);
+      // Only capture the raw source that still represents the selected proposal. A parser may have
+      // transformed it, or another tab may have replaced it: in either case retaining it is safer.
+      if (raw !== null && JSON.stringify(JSON.parse(raw)) === JSON.stringify(entry.value))
+        source = { key: entry.key, raw };
+    } catch {
+      // Restoring the in-memory proposal does not authorize deleting an unreadable source.
+    }
     options.restore(entry.value.input);
     const value =
       options.storedSnapshot === undefined
         ? entry.value
         : { ...entry.value, input: options.storedSnapshot() };
-    const stored = session !== undefined && writeCurrent(session.key, value);
-    restoredKey = stored ? undefined : entry.key;
+    const stored = session !== undefined && writeFormDraftAt(session.key, value);
+    restoredSource = stored ? undefined : source;
     offers = offers.filter((candidate) => candidate.key !== entry.key);
-    if (stored && entry.key !== session?.key) removeFormDraftAt(entry.key);
+    if (stored && entry.key !== session?.key) removeRestoredSource(source);
     persist();
   }
 
@@ -234,18 +245,18 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   function complete(attempt: FormDraftAttempt): boolean {
     if (!isCurrent(attempt)) return false;
     if (!offers.some((entry) => entry.key === session?.key)) {
-      writeCurrent(session?.key, undefined);
+      writeFormDraftAt(session?.key, undefined);
     }
-    if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
-    restoredKey = undefined;
+    removeRestoredSource(restoredSource);
+    restoredSource = undefined;
     options.reset();
     return true;
   }
 
   function discardAndLeave(): void {
     if (!leave.open || !current() || options.busy?.() === true) return;
-    if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
-    restoredKey = undefined;
+    removeRestoredSource(restoredSource);
+    restoredSource = undefined;
     options.reset();
     persist();
     leave.discard();

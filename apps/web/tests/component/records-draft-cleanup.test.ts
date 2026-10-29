@@ -3,13 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
 import { emptyForm } from '$lib/features/records/records';
-import {
-  clearLegacyRecordDrafts,
-  handleRecordDraftStorageEvent,
-  handleRecordDraftActionEvent,
-  recordDraftInputAt,
-} from '$lib/features/records/legacy-drafts';
-import { runRecordDraftAction } from '$lib/features/records/draft-actions';
+import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
@@ -281,17 +275,23 @@ it('keeps unsent body for a known kind with no long_text fields while removing p
   });
 });
 
-it('clears a legacy full form if its sanitized replacement cannot be stored', async () => {
+it('keeps valid writing and returns retry if its sanitized replacement cannot be stored', async () => {
   const old = draft(null);
   old.input.form.title = 'SHORT_UNWRITABLE_TITLE';
-  localStorage.setItem(recordKey, JSON.stringify(old));
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+  const raw = JSON.stringify(old);
+  localStorage.setItem(recordKey, raw);
+  const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new DOMException('storage unavailable', 'QuotaExceededError');
   });
 
   await startWithoutOpeningRecords();
 
-  expect(localStorage.getItem(recordKey)).toBeNull();
+  expect(clearLegacyRecordDrafts()).toBe('retry');
+  expect(localStorage.getItem(recordKey)).toBe(raw);
+  writer.mockRestore();
+  expect(clearLegacyRecordDrafts()).toBe('ready');
+  expect(localStorage.getItem(recordKey)).toContain(old.input.form.body);
+  expect(localStorage.getItem(recordKey)).not.toContain('SHORT_UNWRITABLE_TITLE');
 });
 
 it('normalizes an old full-form record draft written by another tab after app startup', async () => {
@@ -374,189 +374,6 @@ it.each(['rewrite', 'remove'])(
     expect(localStorage.getItem(recordKey)).toBe(newer);
   },
 );
-
-it.each(['rewrite', 'remove', 'remove then write'])(
-  'recovers newer writing from its delayed event after cleanup overwrites the comparison race (%s)',
-  async (operation) => {
-    const old = draft(operation !== 'rewrite' ? { requestId, signature: legacySignature } : null);
-    old.input.form.title = 'SHORT_RACING_OLD';
-    const raw = JSON.stringify(old);
-    const next = draft(null);
-    next.savedAt = '2026-10-28T12:00:01Z';
-    next.input.form.title = 'SHORT_RACING_NEW';
-    next.input.form.body = 'Newest writing in the comparison gap';
-    next.input.form.values.mitigation = 'Newest mitigation in the comparison gap';
-    const newer = JSON.stringify(next);
-    localStorage.setItem(recordKey, raw);
-    const readLocal = localStorage.getItem.bind(localStorage);
-    const readSession = sessionStorage.getItem.bind(sessionStorage);
-    let reads = 0;
-    const reader = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
-      this: Storage,
-      key: string,
-    ) {
-      const value = this === localStorage ? readLocal(key) : readSession(key);
-      if (this === localStorage && key === recordKey && ++reads === 2) {
-        if (operation === 'remove then write') localStorage.removeItem(key);
-        localStorage.setItem(key, newer);
-      }
-      return value;
-    });
-
-    await startWithoutOpeningRecords();
-
-    // The competing write happened after the final comparison, then cleanup overwrote it.
-    expect(readLocal(recordKey) ?? '').not.toContain('Newest writing in the comparison gap');
-    reader.mockRestore();
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key: recordKey,
-        oldValue: operation === 'remove then write' ? null : raw,
-        newValue: newer,
-        storageArea: localStorage,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(localStorage.getItem(recordKey) ?? '').toContain(
-        'Newest writing in the comparison gap',
-      );
-    });
-    expect(localStorage.getItem(recordKey)).toContain('Newest mitigation in the comparison gap');
-    expect(localStorage.getItem(recordKey)).not.toContain('SHORT_RACING_NEW');
-    expect(localStorage.getItem(recordKey)).not.toContain('SHORT_RACING_OLD');
-  },
-);
-
-it('does not recover a lost snapshot after a normal discard acknowledges that writing', async () => {
-  const raw = saved({ requestId, signature: legacySignature });
-  const newer = saved(null);
-  localStorage.setItem(recordKey, raw);
-  const read = localStorage.getItem.bind(localStorage);
-  const readSession = sessionStorage.getItem.bind(sessionStorage);
-  let reads = 0;
-  const reader = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-  ) {
-    const value = this === localStorage ? read(key) : readSession(key);
-    if (this === localStorage && key === recordKey && ++reads === 2)
-      localStorage.setItem(key, newer);
-    return value;
-  });
-  await startWithoutOpeningRecords();
-  expect(read(recordKey)).toBeNull();
-  reader.mockRestore();
-  const input = recordDraftInputAt(recordKey, newer);
-  if (input === undefined) throw new Error('missing lost writing');
-  await runRecordDraftAction(
-    [{ key: recordKey, input }],
-    'discard',
-    () => true,
-    () => true,
-  );
-  await runRecordDraftAction(
-    [
-      {
-        key: recordKey,
-        input: { ...input, form: { ...input.form, body: 'Another handled snapshot' } },
-      },
-    ],
-    'discard',
-    () => true,
-    () => true,
-  );
-  window.dispatchEvent(
-    new StorageEvent('storage', {
-      key: recordKey,
-      oldValue: raw,
-      newValue: newer,
-      storageArea: localStorage,
-    }),
-  );
-  // Wait for hashing in the actual event handler, rather than asserting before it can restore.
-  expect(
-    await handleRecordDraftStorageEvent(
-      new StorageEvent('storage', {
-        key: recordKey,
-        oldValue: raw,
-        newValue: newer,
-        storageArea: localStorage,
-      }),
-    ),
-  ).toBe('ready');
-  expect(localStorage.getItem(recordKey)).toBeNull();
-  // A completed action also removes a recovery that was written just before its acknowledgement.
-  localStorage.setItem(recordKey, newer);
-  const marker = Object.keys(localStorage).find((key) => key.includes(':record-draft-action:'));
-  if (marker === undefined) throw new Error('missing normal action marker');
-  const acknowledged = new StorageEvent('storage', {
-    key: marker,
-    newValue: localStorage.getItem(marker),
-    storageArea: localStorage,
-  });
-  window.dispatchEvent(acknowledged);
-  expect(await handleRecordDraftActionEvent(acknowledged)).toBe('ready');
-  expect(localStorage.getItem(recordKey)).toBeNull();
-});
-
-it('keeps the draft if its normal-removal intent cannot be stored', async () => {
-  const raw = saved(null);
-  localStorage.setItem(recordKey, raw);
-  const input = recordDraftInputAt(recordKey, raw);
-  if (input === undefined) throw new Error('missing input');
-  const writeLocal = localStorage.setItem.bind(localStorage);
-  const writeSession = sessionStorage.setItem.bind(sessionStorage);
-  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
-    this: Storage,
-    key: string,
-    value: string,
-  ) {
-    if (this === localStorage && key.includes(':record-draft-action:'))
-      throw new DOMException('intent quota', 'QuotaExceededError');
-    if (this === localStorage) writeLocal(key, value);
-    else writeSession(key, value);
-  });
-  const remove = vi.fn(() => {
-    localStorage.removeItem(recordKey);
-    return true;
-  });
-  await expect(
-    runRecordDraftAction([{ key: recordKey, input }], 'discard', () => true, remove),
-  ).rejects.toThrow('record draft action unavailable');
-  expect(remove).not.toHaveBeenCalled();
-  expect(localStorage.getItem(recordKey)).toBe(raw);
-});
-
-it('does not remove another editing session after intent hashing yields', async () => {
-  const raw = saved(null);
-  localStorage.setItem(recordKey, raw);
-  const input = recordDraftInputAt(recordKey, raw);
-  if (input === undefined) throw new Error('missing input');
-  let finish: ((value: ArrayBuffer) => void) | undefined;
-  vi.spyOn(crypto.subtle, 'digest').mockReturnValueOnce(
-    new Promise<ArrayBuffer>((resolve) => {
-      finish = resolve;
-    }),
-  );
-  let current = true;
-  const remove = vi.fn(() => {
-    localStorage.removeItem(recordKey);
-    return true;
-  });
-  const pending = runRecordDraftAction(
-    [{ key: recordKey, input }],
-    'discard',
-    () => current,
-    remove,
-  );
-  current = false;
-  if (finish === undefined) throw new Error('hash did not start');
-  finish(new ArrayBuffer(32));
-  expect(await pending).toBe(false);
-  expect(remove).not.toHaveBeenCalled();
-  expect(localStorage.getItem(recordKey)).toBe(raw);
-});
 
 it.each(['comparison', 'failed rewrite'])(
   'rechecks the replacement snapshot during a full cleanup after %s',

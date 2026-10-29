@@ -20,41 +20,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('reports the exact stored value only after a successful write and stays silent on write failure', async () => {
-  const onPersist =
-    vi.fn<
-      (
-        key: string | undefined,
-        value: { savedAt: string; input: { long: string; short: string } } | undefined,
-      ) => void
-    >();
-  render(FormDraftSnapshot, { props: { filtered: true, onPersist } });
-  await input('Long', 'first durable writing');
-  await waitFor(() => {
-    expect(onPersist).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ input: { long: 'first durable writing', short: '' } }),
-    );
-  });
-  const [key, value] = onPersist.mock.lastCall ?? [];
-  if (typeof key !== 'string') throw new Error('missing persisted key');
-  expect(localStorage.getItem(key)).toBe(JSON.stringify(value));
-  onPersist.mockClear();
+it('keeps newer source writing when a restored copy completes after a failed write', async () => {
+  const key = 'fvoci:snapshot-user:-:form-draft:snapshot-test:tab:other-tab';
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      savedAt: '2026-10-29T02:00:00Z',
+      input: { long: 'Selected source writing', short: '' },
+    }),
+  );
+  render(FormDraftSnapshot);
   const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-    throw new DOMException('draft quota', 'QuotaExceededError');
+    throw new DOMException('copy failed', 'QuotaExceededError');
   });
-  await input('Long', 'writing while storage is unavailable');
-  expect(onPersist).not.toHaveBeenCalled();
-  expect(localStorage.getItem(key)).toBe(JSON.stringify(value));
-  expect(screen.getByLabelText('Long')).toHaveValue('writing while storage is unavailable');
+  await fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+  expect(screen.getByLabelText('Long')).toHaveValue('Selected source writing');
   writer.mockRestore();
-  await input('Long', 'writing after storage recovers');
-  await waitFor(() => {
-    expect(onPersist).toHaveBeenCalledWith(
-      key,
-      expect.objectContaining({ input: { long: 'writing after storage recovers', short: '' } }),
-    );
+  const newer = JSON.stringify({
+    savedAt: '2026-10-29T02:00:01Z',
+    input: { long: 'New writing in the original tab', short: '' },
   });
+  localStorage.setItem(key, newer);
+  await fireEvent.click(screen.getByRole('button', { name: 'Capture' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Complete' }));
+  expect(screen.getByLabelText('Completed')).toHaveTextContent('true');
+  expect(localStorage.getItem(key)).toBe(newer);
 });
 
 it('keeps the existing full snapshot behavior when no storedSnapshot option is supplied', async () => {

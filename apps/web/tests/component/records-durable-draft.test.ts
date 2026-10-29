@@ -1,12 +1,10 @@
 import './fixtures/authenticated';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { SvelteDate } from 'svelte/reactivity';
 import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
 import { formDraftTabKey } from '$lib/features/common/form-draft';
-import { clearLegacyRecordDrafts, recordDraftInputAt } from '$lib/features/records/legacy-drafts';
-import { runRecordDraftAction } from '$lib/features/records/draft-actions';
+import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
 import { emptyForm } from '$lib/features/records/records';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
@@ -111,320 +109,121 @@ function failDraftRead(key: string) {
   });
 }
 
-it.each(['save', 'restore', 'discard'] as const)(
-  'does not resurrect a normally handled owner draft and protects the next edit (%s)',
-  async (action) => {
-    render(RecordsPanel, { item, kind: 'project', canWrite: true });
-    await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
-    await fireEvent.input(input('body'), { target: { value: 'Handled live writing' } });
-    const key = formDraftTabKey('record:draft-item:risk:new');
-    if (key === undefined) throw new Error('missing owner key');
-    const raw = localStorage.getItem(key);
-    const value = recordDraftInputAt(key, raw);
-    if (value === undefined) throw new Error('missing owner writing');
-    // Another current-version tab publishes the same intent before its normal removal.
-    expect(
-      await runRecordDraftAction(
-        [{ key, input: value }],
-        action,
-        () => true,
-        () => {
-          localStorage.removeItem(key);
-          return true;
+it.each(['held:server-copy', 'tab:other-tab'])(
+  'does not offer edit writing already equal to the current server record (%s)',
+  async (suffix) => {
+    const saved = {
+      ...record,
+      body: 'Writing already saved on the server',
+      fields: { mitigation: 'Saved mitigation' },
+      version: 9,
+    };
+    vi.mocked(api.itemRecords).mockResolvedValue([saved]);
+    const key = `fvoci:user-a:-:form-draft:record:${item.id}:risk:${record.id}:${suffix}`;
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: '2026-10-29T02:00:00Z',
+        input: {
+          form: { ...emptyForm(), body: saved.body, values: { mitigation: 'Saved mitigation' } },
+          baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+          version: 3,
+          pending: null,
         },
-      ),
-    ).toBe(true);
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key,
-        oldValue: raw,
-        newValue: null,
-        storageArea: localStorage,
       }),
     );
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled());
-    expect(localStorage.getItem(key)).toBeNull();
-    expect(input('body')).toHaveValue('Handled live writing');
-    expect(Object.values(localStorage).join('')).not.toContain('Handled live writing');
-    await fireEvent.input(input('body'), {
-      target: { value: 'New writing after normal handling' },
-    });
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await waitFor(() => {
-      expect(localStorage.getItem(key)).toContain('New writing after normal handling');
+      expect(localStorage.getItem(key)).toBeNull();
+      expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
     });
-    localStorage.removeItem(key);
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key,
-        oldValue: raw,
-        newValue: null,
-        storageArea: localStorage,
-      }),
-    );
-    await waitFor(() => {
-      expect(localStorage.getItem(key)).toContain('New writing after normal handling');
-    });
+    expect(input('body')).toHaveValue(saved.body);
+    expect(input('mitigation')).toHaveValue('Saved mitigation');
   },
 );
 
-it('retries an unknown owner removal without resurrecting normally discarded writing', async () => {
+it('keeps a new-record draft even when unrelated server writing is identical', async () => {
+  vi.mocked(api.itemRecords).mockResolvedValue([
+    { ...record, body: 'Same text, different record' },
+  ]);
+  const key = `fvoci:user-a:-:form-draft:record:${item.id}:risk:new:held:unrelated`;
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      savedAt: '2026-10-29T02:00:00Z',
+      input: {
+        form: { ...emptyForm(), body: 'Same text, different record', values: { mitigation: '' } },
+        baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+        version: 0,
+        pending: null,
+      },
+    }),
+  );
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
-  await fireEvent.input(input('body'), { target: { value: 'Normally discarded writing' } });
-  const key = formDraftTabKey('record:draft-item:risk:new');
-  if (key === undefined) throw new Error('missing owner key');
-  const raw = localStorage.getItem(key);
-  const value = recordDraftInputAt(key, raw);
-  if (value === undefined) throw new Error('missing owner input');
-  await runRecordDraftAction(
-    [{ key, input: value }],
-    'discard',
-    () => true,
-    () => {
-      localStorage.removeItem(key);
-      return true;
-    },
-  );
-  const readLocal = localStorage.getItem.bind(localStorage);
-  const readSession = sessionStorage.getItem.bind(sessionStorage);
-  const unavailable = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
-    this: Storage,
-    name: string,
-  ) {
-    if (this === localStorage && name.includes(':record-draft-action:'))
-      throw new DOMException('intent unavailable', 'SecurityError');
-    return this === localStorage ? readLocal(name) : readSession(name);
-  });
-  window.dispatchEvent(
-    new StorageEvent('storage', { key, oldValue: raw, newValue: null, storageArea: localStorage }),
-  );
-  await waitFor(() => {
-    expect(screen.getByRole('status')).toHaveTextContent(m.records_draft_cleanup_failed());
-  });
-  expect(localStorage.getItem(key)).toBeNull();
-  expect(input('body')).toHaveValue('Normally discarded writing');
-  unavailable.mockRestore();
-  await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-  });
-  expect(localStorage.getItem(key)).toBeNull();
-  expect(input('body')).toHaveValue('Normally discarded writing');
+  expect(await screen.findByTestId('form-draft-offer')).toBeInTheDocument();
+  expect(localStorage.getItem(key)).toContain('Same text, different record');
 });
 
-it('acknowledges handled writing without deleting a later writer at the same key', async () => {
-  render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
-  await fireEvent.input(input('body'), { target: { value: 'Already handled writing' } });
-  const key = formDraftTabKey('record:draft-item:risk:new');
-  if (key === undefined) throw new Error('missing owner key');
-  const raw = localStorage.getItem(key);
-  const value = recordDraftInputAt(key, raw);
-  if (value === undefined) throw new Error('missing owner input');
-  await runRecordDraftAction(
-    [{ key, input: value }],
-    'save',
-    () => true,
-    () => {
-      localStorage.removeItem(key);
-      return true;
-    },
-  );
-  const later = JSON.stringify({
-    savedAt: 'later',
-    input: { ...value, form: { ...value.form, body: 'Later independent writing' } },
-  });
-  localStorage.setItem(key, later);
-  window.dispatchEvent(
-    new StorageEvent('storage', { key, oldValue: raw, newValue: null, storageArea: localStorage }),
-  );
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-  });
-  expect(localStorage.getItem(key)).toBe(later);
-  expect(input('body')).toHaveValue('Already handled writing');
-});
-
-it('keeps a later discard choice when an earlier restore hash finishes first', async () => {
-  const key = lateDraftKey.replace('unopened', item.id);
-  localStorage.setItem(key, lateLegacyDraft());
-  render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  const restore = await screen.findByRole('button', { name: m.common_draft_restore() });
-  const finishes: ((value: ArrayBuffer) => void)[] = [];
-  const hashes: Promise<ArrayBuffer>[] = [];
-  vi.spyOn(crypto.subtle, 'digest').mockImplementation(() => {
-    const hash = new Promise<ArrayBuffer>((resolve) => {
-      finishes.push(resolve);
+it.each(['unavailable', 'changed source'])(
+  'keeps an offered draft when the server comparison is inconclusive (%s)',
+  async (reason) => {
+    let finish: ((value: RecordView[]) => void) | undefined;
+    let fail: ((reason: Error) => void) | undefined;
+    const response = new Promise<RecordView[]>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
     });
-    hashes.push(hash);
-    return hash;
-  });
-  await fireEvent.click(restore);
-  await fireEvent.click(screen.getByRole('button', { name: m.common_draft_discard() }));
-  const [first, second] = finishes;
-  if (first === undefined || second === undefined) throw new Error('missing pending action hash');
-  first(new ArrayBuffer(32));
-  await hashes[0];
-  await fireEvent.focus(window);
-  expect(document.getElementById('record-risk-body')).toBeNull();
-  second(new ArrayBuffer(32));
-  await hashes[1];
-  await waitFor(() => {
-    expect(localStorage.getItem(key)).toBeNull();
-  });
-  expect(document.getElementById('record-risk-body')).toBeNull();
-});
-
-it('a late normal acknowledgement cancels automatic repair but keeps a new authored generation', async () => {
-  const clock = vi
-    .spyOn(SvelteDate.prototype, 'toISOString')
-    .mockReturnValue('2026-10-29T00:00:00.000Z');
-  render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
-  await fireEvent.input(input('body'), { target: { value: 'Acknowledged owner writing' } });
-  const key = formDraftTabKey('record:draft-item:risk:new');
-  if (key === undefined) throw new Error('missing owner key');
-  const authored = localStorage.getItem(key);
-  const value = recordDraftInputAt(key, authored);
-  if (value === undefined) throw new Error('missing authored writing');
-  clock.mockReturnValue('2026-10-29T00:00:01.000Z');
-  const old = lateLegacyDraft();
-  localStorage.setItem(key, old);
-  window.dispatchEvent(
-    new StorageEvent('storage', {
-      key,
-      oldValue: authored,
-      newValue: old,
-      storageArea: localStorage,
-    }),
-  );
-  await waitFor(() => {
-    expect(localStorage.getItem(key)).toContain('Acknowledged owner writing');
-  });
-  const repaired = localStorage.getItem(key);
-  expect(repaired).not.toBe(authored);
-  await runRecordDraftAction(
-    [{ key, input: value, savedAt: '2026-10-29T00:00:00.000Z' }],
-    'discard',
-    () => true,
-    () => {
-      localStorage.removeItem(key);
-      return true;
-    },
-  );
-  clock.mockReturnValue('2026-10-29T00:00:02.000Z');
-  window.dispatchEvent(
-    new StorageEvent('storage', {
-      key,
-      oldValue: repaired,
-      newValue: null,
-      storageArea: localStorage,
-    }),
-  );
-  await waitFor(() => {
-    expect(localStorage.getItem(key)).toContain('Acknowledged owner writing');
-  });
-  const marker = Object.keys(localStorage).find((name) => name.includes(':record-draft-action:'));
-  if (marker === undefined) throw new Error('missing acknowledgement');
-  const acknowledgement = new StorageEvent('storage', {
-    key: marker,
-    newValue: localStorage.getItem(marker),
-    storageArea: localStorage,
-  });
-  window.dispatchEvent(acknowledgement);
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-    expect(localStorage.getItem(key)).toBeNull();
-  });
-  expect(input('body')).toHaveValue('Acknowledged owner writing');
-  clock.mockReturnValue('2026-10-29T00:00:03.000Z');
-  await fireEvent.input(input('body'), { target: { value: 'New authored writing' } });
-  await fireEvent.input(input('body'), { target: { value: 'Acknowledged owner writing' } });
-  const fresh = localStorage.getItem(key);
-  window.dispatchEvent(acknowledgement);
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-  });
-  expect(localStorage.getItem(key)).toBe(fresh);
-  expect(fresh).toContain('Acknowledged owner writing');
-  // A delayed deletion of the old generation must not disarm the newly authored copy.
-  window.dispatchEvent(
-    new StorageEvent('storage', {
-      key,
-      oldValue: authored,
-      newValue: null,
-      storageArea: localStorage,
-    }),
-  );
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-  });
-  clock.mockReturnValue('2026-10-29T00:00:04.000Z');
-  localStorage.removeItem(key);
-  window.dispatchEvent(
-    new StorageEvent('storage', {
-      key,
-      oldValue: fresh,
-      newValue: null,
-      storageArea: localStorage,
-    }),
-  );
-  await waitFor(() => {
-    expect(localStorage.getItem(key)).toContain('Acknowledged owner writing');
-  });
-});
-
-it('acknowledges a generation whose first successful persistence was an owner repair', async () => {
-  const clock = vi
-    .spyOn(SvelteDate.prototype, 'toISOString')
-    .mockReturnValue('2026-10-29T01:00:00.000Z');
-  render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
-  const key = formDraftTabKey('record:draft-item:risk:new');
-  if (key === undefined) throw new Error('missing owner key');
-  const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-    throw new DOMException('quota', 'QuotaExceededError');
-  });
-  await fireEvent.input(input('body'), { target: { value: 'Initially memory-only writing' } });
-  expect(localStorage.getItem(key)).toBeNull();
-  writer.mockRestore();
-  clock.mockReturnValue('2026-10-29T01:00:01.000Z');
-  const old = lateLegacyDraft();
-  localStorage.setItem(key, old);
-  window.dispatchEvent(
-    new StorageEvent('storage', { key, oldValue: null, newValue: old, storageArea: localStorage }),
-  );
-  await waitFor(() => {
-    expect(localStorage.getItem(key)).toContain('Initially memory-only writing');
-  });
-  const repaired = localStorage.getItem(key);
-  const value = recordDraftInputAt(key, repaired);
-  if (value === undefined) throw new Error('missing recovered input');
-  await runRecordDraftAction(
-    [{ key, input: value, savedAt: '2026-10-29T01:00:01.000Z' }],
-    'discard',
-    () => true,
-    () => {
-      localStorage.removeItem(key);
-      return true;
-    },
-  );
-  clock.mockReturnValue('2026-10-29T01:00:02.000Z');
-  window.dispatchEvent(
-    new StorageEvent('storage', {
-      key,
-      oldValue: repaired,
-      newValue: null,
-      storageArea: localStorage,
-    }),
-  );
-  await waitFor(() => {
-    expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
-    expect(localStorage.getItem(key)).toBeNull();
-  });
-  expect(input('body')).toHaveValue('Initially memory-only writing');
-});
+    vi.mocked(api.itemRecords).mockResolvedValueOnce([record]).mockReturnValueOnce(response);
+    const key = `fvoci:user-a:-:form-draft:record:${item.id}:risk:${record.id}:held:compare`;
+    const copy = {
+      savedAt: '2026-10-29T02:00:00Z',
+      input: {
+        form: { ...emptyForm(), body: 'Candidate writing', values: { mitigation: '' } },
+        baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+        version: 3,
+        pending: null,
+      },
+    };
+    localStorage.setItem(key, JSON.stringify(copy));
+    render(RecordsPanel, { item, kind: 'project', canWrite: true });
+    await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
+    await waitFor(() => {
+      expect(api.itemRecords).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+    if (reason === 'unavailable') {
+      if (fail === undefined) throw new Error('missing server rejection');
+      fail(new Error('server read unavailable'));
+    } else {
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...copy,
+          savedAt: '2026-10-29T02:00:01Z',
+          input: {
+            ...copy.input,
+            form: { ...copy.input.form, body: 'Newer writing in the source' },
+          },
+        }),
+      );
+      if (finish === undefined) throw new Error('missing server response');
+      finish([{ ...record, body: 'Candidate writing' }]);
+    }
+    expect(await screen.findByTestId('form-draft-offer')).toBeInTheDocument();
+    expect(localStorage.getItem(key)).toContain(
+      reason === 'unavailable' ? 'Candidate writing' : 'Newer writing in the source',
+    );
+    if (reason === 'changed source') {
+      await fireEvent.click(screen.getByRole('button', { name: m.common_draft_restore() }));
+      expect(input('body')).toHaveValue(record.body);
+      expect(localStorage.getItem(key)).toContain('Newer writing in the source');
+      // The refreshed proposal needs another explicit choice.
+      await fireEvent.click(screen.getByRole('button', { name: m.common_draft_restore() }));
+      expect(input('body')).toHaveValue('Newer writing in the source');
+    }
+  },
+);
 
 it.each(['rewrite', 'remove'])(
   'the owner repairs its live writing after cleanup overwrites the comparison gap (%s)',
@@ -482,6 +281,49 @@ it.each(['rewrite', 'remove'])(
     expect(input('title')).toHaveValue('OWNER_SHORT_TITLE');
   },
 );
+
+it('saving a restored draft after a failed copy does not delete later writing in its source', async () => {
+  const key = `fvoci:user-a:-:form-draft:record:${item.id}:risk:new:tab:other-tab`;
+  const copy = {
+    savedAt: '2026-10-29T02:00:00Z',
+    input: {
+      form: { ...emptyForm(), body: 'Selected writing', values: { mitigation: '' } },
+      baseline: JSON.stringify({ ...emptyForm(), values: { mitigation: '' } }),
+      version: 0,
+      pending: null,
+    },
+  };
+  localStorage.setItem(key, JSON.stringify(copy));
+  vi.spyOn(api, 'createRecord').mockResolvedValue('saved-record');
+  const done = vi.spyOn(feedback, 'notifyDone');
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+  const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new DOMException('copy unavailable', 'QuotaExceededError');
+  });
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(input('body')).toHaveValue('Selected writing');
+  writer.mockRestore();
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      ...copy,
+      savedAt: '2026-10-29T02:00:01Z',
+      input: {
+        ...copy.input,
+        form: { ...copy.input.form, body: 'Later writing in the other source' },
+      },
+    }),
+  );
+  await fireEvent.input(input('title'), { target: { value: 'Save selected writing' } });
+  await fireEvent.click(screen.getByRole('button', { name: '위험 더하기' }));
+  await waitFor(() => {
+    expect(done).toHaveBeenCalledWith(m.records_added({ label: '위험' }));
+  });
+  const remaining = localStorage.getItem(key);
+  expect(remaining).not.toBeNull();
+  expect(remaining ?? '').toContain('Later writing in the other source');
+});
 
 it.each(['after render', 'before render'])(
   'blocks offered writing from entering an editor during failed cleanup (%s)',

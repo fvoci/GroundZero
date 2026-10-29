@@ -153,7 +153,7 @@ describe('records panel while a record is saved', () => {
 
   function otherTabRecord(editing: string): void {
     otherTabDraft(`record:${item.id}:risk:${editing}`, {
-      form: { ...emptyForm(), title: '다른 탭 기록' },
+      form: { ...emptyForm(), title: '다른 탭 기록', body: '다른 탭의 미저장 본문' },
       baseline: JSON.stringify(emptyForm()),
       version: 3,
       pending: null,
