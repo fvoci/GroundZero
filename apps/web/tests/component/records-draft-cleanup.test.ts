@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
 
 import { api } from '$lib/api/client';
+import { formDraftTabKey } from '$lib/features/common/form-draft';
 import { emptyForm } from '$lib/features/records/records';
 import { clearLegacyRecordDrafts, normalizeRecordDraft } from '$lib/features/records/legacy-drafts';
 import { me } from '$lib/me.svelte';
@@ -104,15 +106,27 @@ it.each(['f'.repeat(63), 'f'.repeat(65), 'not-a-digest'])(
   },
 );
 
-it.each([null, { requestId, signature: 'a'.repeat(64) }])(
-  'keeps current long-writing drafts byte-for-byte (pending: %j)',
-  async (pending) => {
+it.each(
+  [null, { requestId, signature: 'a'.repeat(64) }].flatMap((pending) =>
+    ['legacy key', 'page key'].map((format) => ({ pending, format })),
+  ),
+)(
+  'keeps current long-writing drafts byte-for-byte without a cleanup notice ($format, pending: $pending)',
+  async ({ pending, format }) => {
     const value = saved(pending);
-    localStorage.setItem(recordKey, value);
+    const key =
+      format === 'legacy key'
+        ? recordKey
+        : formDraftTabKey('record:never-opened-item:risk:new', 'user-a', '-');
+    if (key === undefined) throw new Error('missing record key');
+    localStorage.setItem(key, value);
 
     await startWithoutOpeningRecords();
+    me.userId = 'user-a';
+    await tick();
 
-    expect(localStorage.getItem(recordKey)).toBe(value);
+    expect(localStorage.getItem(key)).toBe(value);
+    expect(screen.queryByTestId('record-draft-unrecoverable')).not.toBeInTheDocument();
   },
 );
 

@@ -2,7 +2,8 @@
   import { onMount, untrack } from 'svelte';
   import { createFormDraft, type FormDraftAttempt } from '$lib/features/common/form-draft.svelte';
 
-  const { filtered = false }: { filtered?: boolean } = $props();
+  const { filtered = false, retainSource = false }: { filtered?: boolean; retainSource?: boolean } =
+    $props();
   let long = $state('');
   let short = $state('');
   let attempt = $state<FormDraftAttempt>();
@@ -12,6 +13,7 @@
     short: string;
   }
   const options = {
+    retainSource: untrack(() => retainSource),
     name: () => 'snapshot-test',
     snapshot: (): Input => ({ long, short }),
     ...(untrack(() => filtered) ? { storedSnapshot: (): Input => ({ long, short: '' }) } : {}),

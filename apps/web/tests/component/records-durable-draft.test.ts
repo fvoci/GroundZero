@@ -846,11 +846,7 @@ it('copies only writing to a fresh own key when recovering an original at this t
   const restore = await screen.findByRole('button', { name: m.common_draft_restore() });
   expect(localStorage.getItem(key)).toBe(original);
   await fireEvent.click(restore);
-  const recoveredKey = Object.keys(localStorage).find(
-    (value) =>
-      value !== key &&
-      value.startsWith('fvoci:user-a:-:form-draft:record:draft-item:risk:new:tab:'),
-  );
+  const recoveredKey = Object.keys(localStorage).find((value) => value.startsWith(`${key}-`));
   expect(recoveredKey).toBeDefined();
   const held = localStorage.getItem(recoveredKey ?? '');
   expect(held).not.toContain('SHORT_');

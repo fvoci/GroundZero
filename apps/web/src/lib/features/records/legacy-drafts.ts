@@ -5,7 +5,7 @@ import { parseRecordForm, recordWriting, type RecordForm } from './records';
 
 const RECORD_DRAFT_KEY = /^fvoci:[^:]+:[^:]+:form-draft:record:/;
 const RECORD_KIND_KEY =
-  /^fvoci:[^:]+:[^:]+:form-draft:record:[^:]+:([^:]+):[^:]+:(?:tab|held):[^:]+$/;
+  /^fvoci:[^:]+:[^:]+:form-draft:record:[^:]+:([^:]+):[^:]+:(?:page:[^:]+:)?(?:tab|held):[^:]+$/;
 const LONG_TEXT_KEYS: Readonly<Record<string, readonly string[]>> = longTextKeys;
 // Bound synchronous cleanup per key while allowing a transient competing writer to settle.
 const RECORD_DRAFT_CLEANUP_ATTEMPTS = 3;

@@ -113,3 +113,76 @@ it('stores the selected snapshot while checking completion against the whole liv
   expect(screen.getByLabelText('Long')).toHaveValue('long writing');
   expect(screen.getByLabelText('Short')).toHaveValue('');
 });
+
+it.each(['quota', 'mismatched write'])(
+  'keeps the latest screen writing and source keys when recovery cannot preserve it (%s)',
+  async (failure) => {
+    const sourceKey = 'fvoci:snapshot-user:-:form-draft:snapshot-test:tab:other-tab';
+    const source = JSON.stringify({
+      savedAt: '2026-10-29T02:00:00Z',
+      input: { long: 'Selected source writing', short: '' },
+    });
+    localStorage.setItem(sourceKey, source);
+    render(FormDraftSnapshot, { props: { filtered: true, retainSource: true } });
+    const restore = await screen.findByRole('button', { name: 'Restore' });
+    await input('Long', 'Previously stored writing');
+    const ownKey = formDraftTabKey('snapshot-test');
+    if (ownKey === undefined) throw new Error('missing current key');
+    const previous = localStorage.getItem(ownKey);
+    expect(previous).toContain('Previously stored writing');
+    const keys = Object.keys(localStorage).sort();
+    const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      if (failure === 'quota') throw new DOMException('storage full', 'QuotaExceededError');
+    });
+    await input('Long', 'Latest unsaved writing');
+    await fireEvent.click(restore);
+
+    expect(screen.getByLabelText('Long')).toHaveValue('Latest unsaved writing');
+    expect(localStorage.getItem(ownKey)).toBe(previous);
+    expect(localStorage.getItem(sourceKey)).toBe(source);
+    expect(Object.keys(localStorage).sort()).toEqual(keys);
+    expect(screen.getAllByRole('button', { name: 'Restore' })).toHaveLength(1);
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    writer.mockRestore();
+    await fireEvent.click(restore);
+    expect(screen.getByLabelText('Long')).toHaveValue('Selected source writing');
+    expect(localStorage.getItem(ownKey)).toContain('Latest unsaved writing');
+    expect(localStorage.getItem(sourceKey)).toBe(source);
+    expect(stored()).toContain('Selected source writing');
+  },
+);
+
+it('isolates cloned pages with identical sessionStorage before either page first writes', async () => {
+  const previousTab = sessionStorage.getItem('fvoci:tab');
+  sessionStorage.setItem('fvoci:tab', 'cloned-session-tab');
+  try {
+    vi.resetModules();
+    const pageA = await import('$lib/features/common/form-draft');
+    const ownerA = await import('$lib/me.svelte');
+    ownerA.me.userId = 'snapshot-user';
+    const keyA = pageA.formDraftTabKey('cloned-form', 'snapshot-user', '-');
+    vi.resetModules();
+    const pageB = await import('$lib/features/common/form-draft');
+    const ownerB = await import('$lib/me.svelte');
+    ownerB.me.userId = 'snapshot-user';
+    const keyB = pageB.formDraftTabKey('cloned-form', 'snapshot-user', '-');
+    expect(keyA).toBeDefined();
+    expect(keyB).toBeDefined();
+    expect(keyB).not.toBe(keyA);
+    expect(pageA.formDraftTabKey('cloned-form', 'snapshot-user', '-')).toBe(keyA);
+    expect(sessionStorage.getItem('fvoci:tab')).toBe('cloned-session-tab');
+    pageA.storeFormDraft('cloned-form', { savedAt: '2026-10-29', writing: 'Page A writing' }, '-');
+    pageB.storeFormDraft('cloned-form', { savedAt: '2026-10-29', writing: 'Page B writing' }, '-');
+    expect(localStorage.getItem(keyA ?? '')).toContain('Page A writing');
+    expect(localStorage.getItem(keyB ?? '')).toContain('Page B writing');
+    pageB.clearFormDraft('cloned-form', '-');
+    expect(localStorage.getItem(keyB ?? '')).toBeNull();
+    expect(localStorage.getItem(keyA ?? '')).toContain('Page A writing');
+  } finally {
+    if (previousTab === null) sessionStorage.removeItem('fvoci:tab');
+    else sessionStorage.setItem('fvoci:tab', previousTab);
+  }
+});

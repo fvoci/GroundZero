@@ -82,29 +82,28 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return `${key}-${crypto.randomUUID()}`;
   }
 
-  function persist(): void {
-    if (!owned() || session === undefined) return;
+  function storedSnapshot(): T {
+    return options.storedSnapshot === undefined ? options.snapshot() : options.storedSnapshot();
+  }
+
+  function persist(): boolean {
+    if (!owned() || session === undefined) return false;
     if (options.preserve === false) {
       kept = !options.dirty();
-      return;
+      return kept;
     }
     // A failed move to a held key must never overwrite the offered input.
     if (offers.some((entry) => entry.key === session?.key)) {
       kept = !options.dirty();
-      return;
+      return false;
     }
     const dirty = options.dirty();
     const written = writeFormDraftAt(
       session.key,
-      dirty
-        ? {
-            savedAt: new SvelteDate().toISOString(),
-            input:
-              options.storedSnapshot === undefined ? options.snapshot() : options.storedSnapshot(),
-          }
-        : undefined,
+      dirty ? { savedAt: new SvelteDate().toISOString(), input: storedSnapshot() } : undefined,
     );
     kept = !dirty || written;
+    return written;
   }
 
   onDestroy(() => {
@@ -185,7 +184,8 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     if (!current() || !offers.includes(entry)) return;
     // Restoring an older offer must also preserve newly typed input.
     if (options.dirty() && session !== undefined && entry.key !== session.key) {
-      persist();
+      const expected = JSON.stringify(storedSnapshot());
+      if (!persist()) return;
       const typed = listFormDrafts(
         session.name,
         (raw): Saved<T> | undefined => {
@@ -197,6 +197,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
             !('input' in raw)
           )
             return undefined;
+          if (JSON.stringify(raw.input) !== expected) return undefined;
           const input = options.parse(raw.input);
           return input === undefined ? undefined : { savedAt: raw.savedAt, input };
         },
@@ -214,6 +215,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
         offers = [...offers, held];
       } else {
         // No durable copy was possible: retain the live input until it is discarded.
+        kept = false;
         return;
       }
     }
