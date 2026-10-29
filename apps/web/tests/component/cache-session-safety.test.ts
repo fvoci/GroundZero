@@ -38,51 +38,6 @@ const me: Me = {
 };
 const replace = vi.fn();
 const reload = vi.fn();
-const sessionKey = 'fvoci:auth-session';
-let originalLocks: PropertyDescriptor | undefined;
-
-function isMarker(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function sessionMarker(): Record<string, unknown> {
-  const value: unknown = JSON.parse(localStorage.getItem(sessionKey) ?? '{}');
-  if (!isMarker(value)) throw new Error('invalid marker');
-  return value;
-}
-
-function nextMarkerGeneration(): number {
-  const generation = sessionMarker().generation;
-  return (typeof generation === 'number' ? generation : 0) + 1;
-}
-
-function signalSession(userId: string | null): void {
-  localStorage.setItem(
-    sessionKey,
-    JSON.stringify({
-      state: 'settled',
-      userId,
-      generation: nextMarkerGeneration(),
-      sequence: crypto.randomUUID(),
-    }),
-  );
-}
-
-function signalLogout(startedAt = Date.now()): string | null {
-  localStorage.setItem(
-    sessionKey,
-    JSON.stringify({
-      state: 'logout-pending',
-      userId: me.id,
-      startedAt,
-      attemptId: crypto.randomUUID(),
-      generation: nextMarkerGeneration(),
-      sequence: crypto.randomUUID(),
-    }),
-  );
-  return localStorage.getItem(sessionKey);
-}
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
@@ -97,15 +52,15 @@ function pageshow(persisted = true): void {
   window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted }));
 }
 
+function returnEvent(event: string): void {
+  if (event === 'visibilitychange') {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event(event));
+  } else if (event === 'pageshow') pageshow(false);
+  else window.dispatchEvent(new Event(event));
+}
+
 beforeEach(async () => {
-  originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
-  Object.defineProperty(navigator, 'locks', {
-    configurable: true,
-    value: {
-      request: (_name: string, update: () => unknown) => Promise.resolve(update()),
-    },
-  });
-  localStorage.removeItem(sessionKey);
   auth.expired = false;
   await setLocale('ko', { reload: false });
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -138,8 +93,6 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
-  if (originalLocks === undefined) Reflect.deleteProperty(navigator, 'locks');
-  else Object.defineProperty(navigator, 'locks', originalLocks);
   vi.useRealTimers();
   hideSession('account');
   accountSafety.switching = false;
@@ -148,7 +101,6 @@ afterEach(() => {
   currentUser.userId = '';
   connection.lost = false;
   auth.expired = false;
-  localStorage.removeItem(sessionKey);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -163,6 +115,77 @@ async function logout(): Promise<void> {
   await fireEvent.click(await screen.findByRole('menuitem', { name: '로그아웃' }));
 }
 
+// SR-221-10: A 응답 생성 → 서버 세션 변경 → 복귀 이벤트 → 늦은 A 수신 → 후속 자기 응답.
+it.each(
+  (['initial', 'live', 'persisted'] as const).flatMap((phase) =>
+    (['focus', 'visibilitychange', 'pageshow', 'persisted-pageshow', 'mixed'] as const).flatMap(
+      (event) => (['anonymous', 'other'] as const).map((identity) => ({ phase, event, identity })),
+    ),
+  ),
+)(
+  'SR-221-10 queues one follow-up for $event during $phase and accepts its own $identity result',
+  async ({ phase, event, identity }) => {
+    if (phase !== 'initial') await signedIn();
+    const first = deferred<Me | undefined>();
+    const next = deferred<Me | undefined>();
+    const read = vi
+      .spyOn(api, 'me')
+      .mockReset()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(next.promise);
+    if (phase === 'initial') render(App, { replace, reload });
+    else if (phase === 'persisted') pageshow();
+    else window.dispatchEvent(new Event('focus'));
+    expect(read).toHaveBeenCalledOnce();
+    for (let count = 0; count < 3; count += 1) {
+      if (event === 'visibilitychange') {
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          value: 'visible',
+        });
+        document.dispatchEvent(new Event(event));
+      } else if (event === 'persisted-pageshow') pageshow();
+      else if (event === 'mixed') {
+        returnEvent('focus');
+        returnEvent('visibilitychange');
+        pageshow(false);
+      } else if (event === 'pageshow') pageshow(false);
+      else window.dispatchEvent(new Event(event));
+    }
+    expect(read).toHaveBeenCalledOnce();
+    first.resolve(me);
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+    if (event === 'persisted-pageshow') {
+      const previous = screen.queryByTestId('user-menu');
+      if (previous !== null) expect(previous).not.toBeVisible();
+    } else
+      await waitFor(() => {
+        expect(screen.getByTestId('user-menu')).toBeVisible();
+      });
+    next.resolve(identity === 'anonymous' ? undefined : { ...me, id: 'user-b' });
+    if (event === 'persisted-pageshow')
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalled();
+      });
+    else if (identity === 'anonymous')
+      await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    else
+      await waitFor(() => {
+        expect(reload).toHaveBeenCalledOnce();
+      });
+    if (event === 'persisted-pageshow' && identity === 'anonymous')
+      expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+    else {
+      const previous = screen.queryByText('이전 비밀 목록');
+      if (previous !== null) expect(previous).not.toBeVisible();
+    }
+    await tick();
+    expect(read).toHaveBeenCalledTimes(2);
+  },
+);
+
 it.each([
   ['return', 'other'],
   ['live', 'other'],
@@ -170,39 +193,33 @@ it.each([
   ['return', 'anonymous'],
   ['live', 'anonymous'],
   ['persisted', 'anonymous'],
-] as const)(
-  'uses its own identity during %s verification (%s) even when publication loses to a same-user marker',
-  async (mode, identity) => {
-    const input = await liveInput();
-    const own = deferred<Me | undefined>();
-    const ignored = deferred<Me | undefined>();
-    const read = vi
-      .spyOn(api, 'me')
-      .mockReturnValueOnce(own.promise)
-      .mockReturnValue(ignored.promise);
-    const before = read.mock.calls.length;
-    if (mode === 'return') window.dispatchEvent(new Event('focus'));
-    else if (mode === 'persisted') pageshow();
-    else {
-      signalSession(null);
-      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    }
-    signalSession(me.id);
-    own.resolve(identity === 'anonymous' ? undefined : { ...me, id: 'user-b' });
-    if (mode === 'persisted')
-      await waitFor(() => {
-        expect(replace).toHaveBeenCalled();
-      });
-    else if (identity === 'other')
-      await waitFor(() => {
-        expect(reload).toHaveBeenCalledOnce();
-      });
-    else await screen.findByRole('link', { name: '새 탭에서 로그인' });
-    expect(read).toHaveBeenCalledTimes(before + 1);
-    expect(input).not.toBeVisible();
-    ignored.resolve(undefined);
-  },
-);
+] as const)('uses its own identity during %s verification (%s)', async (mode, identity) => {
+  const input = await liveInput();
+  const own = deferred<Me | undefined>();
+  const ignored = deferred<Me | undefined>();
+  const read = vi
+    .spyOn(api, 'me')
+    .mockReturnValueOnce(own.promise)
+    .mockReturnValue(ignored.promise);
+  const before = read.mock.calls.length;
+  if (mode === 'return') returnEvent('visibilitychange');
+  else if (mode === 'persisted') pageshow();
+  else window.dispatchEvent(new Event('focus'));
+
+  own.resolve(identity === 'anonymous' ? undefined : { ...me, id: 'user-b' });
+  if (mode === 'persisted')
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalled();
+    });
+  else if (identity === 'other')
+    await waitFor(() => {
+      expect(reload).toHaveBeenCalledOnce();
+    });
+  else await screen.findByRole('link', { name: '새 탭에서 로그인' });
+  expect(read).toHaveBeenCalledTimes(before + 1);
+  expect(input).not.toBeVisible();
+  ignored.resolve(undefined);
+});
 
 it.each(['live', 'persisted'])(
   'bounds automatic safety-generation verification to three requests during %s and preserves input on failure',
@@ -215,8 +232,7 @@ it.each(['live', 'persisted'])(
     const before = read.mock.calls.length;
     if (mode === 'persisted') pageshow();
     else {
-      signalSession(null);
-      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+      window.dispatchEvent(new Event('focus'));
     }
     await screen.findByRole('alert');
     expect(read).toHaveBeenCalledTimes(before + 3);
@@ -232,122 +248,15 @@ it.each(['live', 'persisted'])(
   },
 );
 
-it.each(['missing', 'rejected'])(
-  'keeps startup, live input and persisted restoration usable when locks are %s without repeating denied publication',
-  async (mode) => {
-    if (mode === 'missing') Reflect.deleteProperty(navigator, 'locks');
-    else
-      Object.defineProperty(navigator, 'locks', {
-        configurable: true,
-        value: { request: () => Promise.reject(new Error('denied')) },
-      });
-    const input = await liveInput();
-    const read = vi.spyOn(api, 'me');
-    expect(read).toHaveBeenCalledOnce();
-    expect(localStorage.getItem(sessionKey)).toBeNull();
-    signalSession(null);
-    const marker = localStorage.getItem(sessionKey);
-    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    await waitFor(() => {
-      expect(input).toBeVisible();
-    });
-    expect(input).toHaveValue('메모리에만 남긴 입력');
-    expect(read).toHaveBeenCalledTimes(2);
-    expect(localStorage.getItem(sessionKey)).toBe(marker);
-    pageshow();
-    await waitFor(() => {
-      expect(screen.getByLabelText('새 노트 제목')).toBeVisible();
-    });
-    expect(read).toHaveBeenCalledTimes(3);
-    expect(localStorage.getItem(sessionKey)).toBe(marker);
-  },
-);
-
-// 세대는 옛 응답의 게시만 막는다. 새 알림은 후속 확인을 요청한다.
-it.each(['initial', 'return', 'live', 'persisted'])(
-  'does not publish an old-user response over a newer final generation during %s verification',
-  async (kind) => {
-    if (kind !== 'initial') await signedIn();
-    const oldCheck = deferred<Me | undefined>();
-    const freshCheck = deferred<Me | undefined>();
-    vi.spyOn(api, 'me').mockReturnValueOnce(oldCheck.promise).mockReturnValue(freshCheck.promise);
-    if (kind === 'initial') render(App, { replace, reload });
-    else if (kind === 'return') window.dispatchEvent(new Event('focus'));
-    else if (kind === 'persisted') pageshow();
-    else {
-      signalSession(null);
-      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    }
-    signalSession(null);
-    const finalMarker = localStorage.getItem(sessionKey);
-    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    oldCheck.resolve(me);
-    await oldCheck.promise;
-    await tick();
-    expect(localStorage.getItem(sessionKey)).toBe(finalMarker);
-    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeVisible());
-    freshCheck.resolve(undefined);
-    await screen.findByRole('link', { name: '새 탭에서 로그인' });
-  },
-);
-
-// SR-221-6: 시도 A 시작 → 다른 탭 B의 진행/성공 → A 실패.
-it.each(['pending', 'success'])(
-  "does not let a failed logout replace another attempt's %s marker",
-  async (other) => {
-    const attempt = deferred<string>();
-    vi.spyOn(api, 'logout').mockReturnValueOnce(attempt.promise);
-    await signedIn();
-    await logout();
-    if (other === 'pending') signalLogout();
-    else signalSession(null);
-    const latest = localStorage.getItem(sessionKey);
-    attempt.reject(new Error('old attempt failed'));
-    await screen.findByRole('alert');
-    expect(localStorage.getItem(sessionKey)).toBe(latest);
-    expect(screen.queryByText('이전 비밀 목록')).toBeNull();
-    expect(replace).not.toHaveBeenCalled();
-  },
-);
-
-it('always publishes final anonymity when its logout succeeds after a newer attempt starts', async () => {
-  const attempt = deferred<string>();
-  vi.spyOn(api, 'logout').mockReturnValueOnce(attempt.promise);
-  await signedIn();
-  await logout();
-  signalLogout();
-  attempt.resolve('/signed-out');
-  await waitFor(() => {
-    expect(replace).toHaveBeenCalledWith('/signed-out');
-  });
-  expect(sessionMarker()).toMatchObject({ state: 'settled', userId: null });
-});
-
-// 표식의 소실·판독 실패·만료와 무관하게 자기 확인 실패 후 입력과 재시도를 보존한다.
-it.each(['removed', 'denied', 'expired'])(
-  'preserves input and retry after its own check fails with a %s pending marker',
+// 자기 확인 실패 뒤 입력과 직접 재시도를 보존한다.
+it.each(['focus', 'visibilitychange', 'pageshow'])(
+  'preserves input and retry after its own check fails on %s',
   async (kind) => {
     const input = await liveInput();
-    signalLogout();
     const check = deferred<Me | undefined>();
     const read = vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
     const reads = read.mock.calls.length;
-    if (kind === 'removed') localStorage.removeItem(sessionKey);
-    else if (kind === 'denied') {
-      const original: unknown = Object.getOwnPropertyDescriptor(
-        Storage.prototype,
-        'getItem',
-      )?.value;
-      if (typeof original !== 'function') throw new Error('getItem missing');
-      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key) {
-        if (key === sessionKey) throw new Error('denied');
-        const result: unknown = Reflect.apply(original, this, [key]);
-        if (result === null || typeof result === 'string') return result;
-        throw new Error('invalid storage value');
-      });
-    }
-    if (kind === 'expired') signalLogout(Date.now() - 30_000);
-    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+    returnEvent(kind);
     expect(read).toHaveBeenCalledTimes(reads + 1);
     expect(input).toBeVisible();
     check.reject(new Error('verification failed'));
@@ -364,32 +273,12 @@ it.each(['removed', 'denied', 'expired'])(
   },
 );
 
-it('checks immediately when storage is cleared after a pending logout', async () => {
+it('keeps restored input mounted when verification fails', async () => {
   const input = await liveInput();
-  signalLogout();
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  await tick();
-  await waitFor(() => expect(input).toBeVisible());
-  const check = deferred<Me | undefined>();
-  const read = vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
-  const reads = read.mock.calls.length;
-  localStorage.removeItem(sessionKey);
-  window.dispatchEvent(new StorageEvent('storage', { key: null }));
-  expect(read).toHaveBeenCalledTimes(reads + 1);
-  expect(input).toBeVisible();
-  check.resolve(me);
-  await waitFor(() => {
-    expect(input).toBeVisible();
-  });
-});
 
-it('keeps restored input mounted when a pending marker disappears and verification fails', async () => {
-  const input = await liveInput();
-  signalLogout();
   const check = deferred<Me | undefined>();
   vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
   pageshow();
-  localStorage.removeItem(sessionKey);
   check.reject(new Error('offline'));
   await screen.findByRole('alert');
   expect(input.isConnected).toBe(true);
@@ -398,211 +287,16 @@ it('keeps restored input mounted when a pending marker disappears and verificati
   expect(screen.getByRole('button', { name: '다시 시도' })).toBeVisible();
 });
 
-// 자기 로그아웃의 알림은 서버 요청보다 먼저 보내되 결과 처리를 기다리게 하지 않는다.
-it('publishes a fresh pending logout before each attempt and the original user after failure', async () => {
-  const attempts: unknown[] = [];
-  const send = vi.spyOn(api, 'logout').mockImplementation(() => {
-    const marker: unknown = JSON.parse(localStorage.getItem(sessionKey) ?? '{}');
-    expect(marker).toMatchObject({
-      state: 'logout-pending',
-      userId: me.id,
-    });
-    expect(marker).toHaveProperty('startedAt', expect.any(Number));
-    attempts.push(marker);
-    return Promise.reject(new Error('offline'));
-  });
-  await signedIn();
-  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: me.id });
-  await logout();
-  await screen.findByRole('alert');
-  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({
-    state: 'settled',
-    userId: me.id,
-  });
-  await fireEvent.click(screen.getByRole('button', { name: '로그아웃 다시 하기' }));
-  await waitFor(() => {
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-  expect(attempts[0]).not.toEqual(attempts[1]);
-  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({
-    state: 'settled',
-    userId: me.id,
-  });
-});
-
-// SR-221-4: 서버가 로그아웃되기 전 A를 돌려주는 순서를 고정한다.
-it.each(['live', 'persisted'])(
-  'accepts its own %s response during logout then verifies final anonymity',
-  async (kind) => {
-    await signedIn();
-    const previous = screen.getByText('이전 비밀 목록');
-    const check = deferred<Me | undefined>();
-    vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
-    const pending = signalLogout();
-    if (kind === 'persisted') pageshow();
-    else window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    if (kind === 'persisted') expect(previous).not.toBeVisible();
-    else expect(previous).toBeVisible();
-    check.resolve(me);
-    await check.promise;
-    await tick();
-    await waitFor(() => expect(screen.getByText('이전 비밀 목록')).toBeVisible());
-    expect(localStorage.getItem(sessionKey)).toBe(pending);
-    expect(api.workspaces).toHaveBeenCalledTimes(kind === 'persisted' ? 2 : 1);
-    vi.spyOn(api, 'me').mockResolvedValue(undefined);
-    signalSession(null);
-    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    await screen.findByRole('link', { name: '새 탭에서 로그인' });
-    expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
-  },
-);
-
-it('retains the same mounted input while independently verifying a failed logout notification', async () => {
-  const input = await liveInput();
-  const pending = signalLogout();
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  await tick();
-  expect(input).toBeVisible();
-  expect(localStorage.getItem(sessionKey)).toBe(pending);
-  const finalCheck = deferred<Me | undefined>();
-  vi.spyOn(api, 'me').mockReturnValueOnce(finalCheck.promise);
-  signalSession(me.id);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  expect(input).toBeVisible();
-  finalCheck.resolve(me);
-  await waitFor(() => expect(input).toBeVisible());
-  expect(screen.getByLabelText('새 노트 제목')).toBe(input);
-  expect(input).toHaveValue('메모리에만 남긴 입력');
-  expect(api.myNotes).toHaveBeenCalledTimes(1);
-});
-
-it('never holds an abandoned logout screen or starts a marker-expiry timer', async () => {
-  const input = await liveInput();
-  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-  signalLogout();
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  await vi.advanceTimersByTimeAsync(29_999);
-  expect(input).toBeVisible();
-  const read = vi.spyOn(api, 'me');
-  const reads = read.mock.calls.length;
-  await vi.advanceTimersByTimeAsync(1);
-  await tick();
-  expect(read).toHaveBeenCalledTimes(reads);
-  expect(input).toBeVisible();
-  expect(input).toHaveValue('메모리에만 남긴 입력');
-  expect(api.myNotes).toHaveBeenCalledTimes(1);
-});
-
-it('queues final anonymity after an expired pending notification without rejecting its own response', async () => {
-  const input = await liveInput();
-  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-  const oldCheck = deferred<Me | undefined>();
-  const freshCheck = deferred<Me | undefined>();
-  const read = vi
-    .spyOn(api, 'me')
-    .mockReturnValueOnce(oldCheck.promise)
-    .mockReturnValueOnce(freshCheck.promise);
-  signalLogout(Date.now() - 30_000);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  expect(input).toBeVisible();
-  const expiredReads = read.mock.calls.length;
-  signalSession(null);
-  const final = localStorage.getItem(sessionKey);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  // 도착한 알림은 진행 중 응답을 버리지 않고 후속 확인 하나로 합친다.
-  expect(read).toHaveBeenCalledTimes(expiredReads);
-  oldCheck.resolve(me);
-  await vi.advanceTimersByTimeAsync(0);
-  expect(read).toHaveBeenCalledTimes(expiredReads + 1);
-  expect(input).toBeVisible();
-  expect(localStorage.getItem(sessionKey)).toBe(final);
-  freshCheck.resolve(undefined);
-  await vi.advanceTimersByTimeAsync(0);
-  vi.useRealTimers();
-  await screen.findByRole('link', { name: '새 탭에서 로그인' });
-  expect(input).not.toBeVisible();
-  expect(input).toHaveValue('메모리에만 남긴 입력');
-  expect(sessionMarker()).toMatchObject({ state: 'settled', userId: null });
-});
-
-it.each([true, false])(
-  'uses its own response and rechecks on final anonymity delivery: %s',
-  async (delivered) => {
-    const input = await liveInput();
-    const oldCheck = deferred<Me | undefined>();
-    vi.spyOn(api, 'me').mockReturnValueOnce(oldCheck.promise).mockResolvedValue(undefined);
-    signalLogout();
-    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    signalSession(null);
-    if (delivered) {
-      window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    }
-    oldCheck.resolve(me);
-    await oldCheck.promise;
-    await tick();
-    if (!delivered) {
-      expect(input).toBeVisible();
-      // 저장소 내용만으로는 화면을 바꾸지 않는다. 다음 복귀에서 직접 확인한다.
-      window.dispatchEvent(new Event('focus'));
-    }
-    await screen.findByRole('link', { name: '새 탭에서 로그인' });
-    expect(input).not.toBeVisible();
-    expect(input).toHaveValue('메모리에만 남긴 입력');
-    expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
-  },
-);
-
-it('does not let a newly opened shell overwrite a pending logout with its old user', async () => {
-  const pending = signalLogout();
-  render(App, { replace, reload });
-  const previous = await screen.findByText('이전 비밀 목록');
-  await tick();
-  expect(previous).toBeVisible();
-  expect(localStorage.getItem(sessionKey)).toBe(pending);
-});
-
-it('cancels abandoned-logout verification when the shell unmounts', async () => {
-  const view = render(App, { replace, reload });
-  await screen.findByText('이전 비밀 목록');
-  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
-  signalLogout();
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  await tick();
-  view.unmount();
-  const read = vi.spyOn(api, 'me');
-  const reads = read.mock.calls.length;
-  await vi.advanceTimersByTimeAsync(30_000);
-  expect(read).toHaveBeenCalledTimes(reads);
-});
-
-it('publishes an anonymous shell result without making public views publish a marker', async () => {
-  vi.spyOn(api, 'me').mockResolvedValue(undefined);
-  const view = render(App, { replace, reload });
-  await screen.findByRole('link', { name: '로그인' });
-  expect(JSON.parse(localStorage.getItem(sessionKey) ?? '{}')).toMatchObject({ userId: null });
-  view.unmount();
-  localStorage.removeItem(sessionKey);
-  router.navigate('/p/public-token-1234');
-  vi.spyOn(api, 'publicDocument').mockResolvedValue(publicDoc);
-  const reads = vi.spyOn(Storage.prototype, 'getItem');
-  render(App, { replace, reload });
-  await screen.findByText(publicDoc.title);
-  expect(reads.mock.calls.filter(([key]) => key === sessionKey)).toHaveLength(0);
-  expect(localStorage.getItem(sessionKey)).toBeNull();
-});
-
-it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
-  'requests its own identity at %s without masking from a mismatched marker',
+it.each(['focus', 'visibilitychange', 'pageshow'])(
+  'requests its own identity at %s and preserves the last verified screen',
   async (event) => {
     await signedIn();
     const check = deferred<Me | undefined>();
     vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
-    signalSession('user-b');
+
     if (event === 'visibilitychange') {
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
       document.dispatchEvent(new Event(event));
-    } else if (event === 'storage') {
-      window.dispatchEvent(new StorageEvent(event, { key: sessionKey }));
     } else if (event === 'pageshow') pageshow(false);
     else window.dispatchEvent(new Event(event));
     expect(screen.getByText('이전 비밀 목록')).toBeVisible();
@@ -616,11 +310,11 @@ it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
   },
 );
 
-it('offers retry after its own verification fails regardless of a signed-out marker', async () => {
+it('offers retry after its own return verification fails', async () => {
   await signedIn();
-  signalSession(null);
+
   vi.spyOn(api, 'me').mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  window.dispatchEvent(new Event('focus'));
   expect(screen.getByText('이전 비밀 목록')).toBeVisible();
   await screen.findByRole('alert');
   expect(replace).not.toHaveBeenCalled();
@@ -631,15 +325,13 @@ it('offers retry after its own verification fails regardless of a signed-out mar
   expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
 });
 
-it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
+it.each(['focus', 'visibilitychange', 'pageshow'])(
   'preserves the same user screen and inputs at %s even when the network fails',
   async (event) => {
     await signedIn();
-    signalSession(me.id);
+
     vi.spyOn(api, 'me').mockRejectedValue(new Error('offline'));
     if (event === 'visibilitychange') document.dispatchEvent(new Event(event));
-    else if (event === 'storage')
-      window.dispatchEvent(new StorageEvent(event, { key: sessionKey }));
     else if (event === 'pageshow') pageshow(false);
     else window.dispatchEvent(new Event(event));
     expect(screen.getByText('이전 비밀 목록')).toBeVisible();
@@ -648,20 +340,19 @@ it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
   },
 );
 
-it('deduplicates return signals during verification and unsubscribes on unmount', async () => {
+it('queues return events during verification and unsubscribes on unmount', async () => {
   const view = render(App, { replace, reload });
   await screen.findByText('이전 비밀 목록');
   const check = deferred<Me | undefined>();
   const read = vi.spyOn(api, 'me').mockReturnValue(check.promise);
-  signalSession('user-b');
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+
   window.dispatchEvent(new Event('focus'));
   document.dispatchEvent(new Event('visibilitychange'));
   pageshow(false);
   expect(read).toHaveBeenCalledTimes(2);
   view.unmount();
-  signalSession(null);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+
+  window.dispatchEvent(new Event('focus'));
   window.dispatchEvent(new Event('focus'));
   document.dispatchEvent(new Event('visibilitychange'));
   pageshow(false);
@@ -671,7 +362,7 @@ it('deduplicates return signals during verification and unsubscribes on unmount'
   expect(replace).not.toHaveBeenCalled();
 });
 
-it('keeps authentication usable when session marker reads and writes are denied', async () => {
+it('keeps authentication usable when browser storage is denied', async () => {
   vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
     throw new Error('denied');
   });
@@ -691,10 +382,6 @@ it('keeps authentication usable when session marker reads and writes are denied'
 // #212 1~3, 부조종사 2026-10-29 00:25: 응답·이동보다 먼저 이전 화면을 가린다.
 it('clears session and organization before sending logout, and replaces history', async () => {
   const pending = deferred<string>();
-  const markersAtReplace: unknown[] = [];
-  replace.mockImplementationOnce(() => {
-    markersAtReplace.push(JSON.parse(localStorage.getItem(sessionKey) ?? '{}'));
-  });
   const send = vi.spyOn(api, 'logout').mockImplementation(() => {
     expect(accountSafety.switching).toBe(true);
     expect(currentUser.userId).toBe('');
@@ -710,7 +397,6 @@ it('clears session and organization before sending logout, and replaces history'
   await waitFor(() => {
     expect(replace).toHaveBeenCalledWith('/signed-out');
   });
-  expect(markersAtReplace).toEqual([expect.objectContaining({ state: 'settled', userId: null })]);
 });
 
 it('keeps old data hidden and explains a failed logout', async () => {
@@ -838,10 +524,10 @@ async function liveInput(): Promise<HTMLElement> {
 
 it('keeps the same live user mounted while verifying when draft storage fails', async () => {
   const input = await liveInput();
-  signalSession(null);
+
   const check = deferred<Me | undefined>();
   vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  window.dispatchEvent(new Event('focus'));
   expect(input).toBeVisible();
   check.resolve(me);
   await waitFor(() => {
@@ -859,11 +545,11 @@ it('keeps the same live user mounted while verifying when draft storage fails', 
 
 it('keeps input mounted through anonymous reauthentication and switches only after a different user', async () => {
   const input = await liveInput();
-  signalSession(null);
+
   vi.spyOn(api, 'me')
     .mockResolvedValueOnce(undefined)
     .mockResolvedValue({ ...me, id: 'user-b' });
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  window.dispatchEvent(new Event('focus'));
   const signIn = await screen.findByRole('link', { name: '새 탭에서 로그인' });
   expect(signIn).toHaveAttribute('target', '_blank');
   expect(input).toHaveValue('메모리에만 남긴 입력');
@@ -874,8 +560,8 @@ it('keeps input mounted through anonymous reauthentication and switches only aft
     expect(input.isConnected).toBe(true);
     expect(input).not.toBeVisible();
   });
-  signalSession('user-b');
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+
+  window.dispatchEvent(new Event('focus'));
   await waitFor(() => {
     expect(reload).toHaveBeenCalledOnce();
   });
@@ -884,12 +570,12 @@ it('keeps input mounted through anonymous reauthentication and switches only aft
 
 it('resumes the mounted input after anonymous reauthentication as the same user', async () => {
   const input = await liveInput();
-  signalSession(null);
+
   vi.spyOn(api, 'me').mockResolvedValueOnce(undefined).mockResolvedValue(me);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+  window.dispatchEvent(new Event('focus'));
   await screen.findByRole('link', { name: '새 탭에서 로그인' });
-  signalSession(me.id);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
+
+  window.dispatchEvent(new Event('focus'));
   await waitFor(() => {
     expect(input).toBeVisible();
   });

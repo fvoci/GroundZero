@@ -52,15 +52,13 @@ describe('account change detection events', () => {
     currentUser.userId = '';
     accountSafety.switching = false;
     auth.expired = false;
-    localStorage.removeItem('fvoci:auth-session');
     visibility('visible');
   });
 
-  it.each(['anonymous', 'other-user'])(
-    'uses its own %s response when a newer same-user marker rejects publication',
+  // session-notification-authority의 단독 응답 시험은 표식·잠금 없이 유지한다.
+  it.each(['same', 'anonymous', 'other-user'])(
+    'standalone feedback uses its own %s response during reauthentication',
     async (kind) => {
-      const key = 'fvoci:auth-session';
-      localStorage.setItem(key, JSON.stringify({ state: 'settled', userId: 'u1', generation: 10 }));
       let finish!: (value: Me | undefined) => void;
       const read = vi.spyOn(api, 'me').mockReturnValue(
         new Promise<Me | undefined>((resolve) => {
@@ -68,19 +66,21 @@ describe('account change detection events', () => {
         }),
       );
       const reload = vi.fn<() => void>();
-      render(FeedbackHost, { reload, syncSessionSignal: () => false });
+      hideSession('reauth');
+      render(FeedbackHost, { reload });
       window.dispatchEvent(new Event('focus'));
-      const marker = JSON.stringify({ state: 'settled', userId: 'u1', generation: 11 });
-      localStorage.setItem(key, marker);
-      finish(kind === 'anonymous' ? undefined : other);
-      if (kind === 'anonymous') await screen.findByRole('link', { name: '새 탭에서 로그인' });
+      finish(kind === 'anonymous' ? undefined : kind === 'same' ? { ...other, id: 'u1' } : other);
+      if (kind === 'same')
+        await waitFor(() => {
+          expect(accountSafety.switching || accountSafety.restoring).toBe(false);
+        });
+      else if (kind === 'anonymous') await screen.findByRole('link', { name: '새 탭에서 로그인' });
       else
         await waitFor(() => {
           expect(reload).toHaveBeenCalledOnce();
         });
-      expect(accountSafety.switching).toBe(true);
+      expect(accountSafety.switching).toBe(kind !== 'same');
       expect(read).toHaveBeenCalledOnce();
-      expect(localStorage.getItem(key)).toBe(marker);
     },
   );
 
@@ -106,6 +106,51 @@ describe('account change detection events', () => {
     expect(read).toHaveBeenCalledTimes(2);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it.each(
+    ['focus', 'visibilitychange', 'pageshow'].flatMap((event) =>
+      ['anonymous', 'other'].map((identity) => ({ event, identity })),
+    ),
+  )(
+    'SR-221-10 standalone queues $event and hides on its own $identity follow-up',
+    async ({ event, identity }) => {
+      let finish!: (value: Me | undefined) => void;
+      let followUp!: (value: Me | undefined) => void;
+      const read = vi
+        .spyOn(api, 'me')
+        .mockReturnValueOnce(
+          new Promise<Me | undefined>((resolve) => {
+            finish = resolve;
+          }),
+        )
+        .mockReturnValueOnce(
+          new Promise<Me | undefined>((resolve) => {
+            followUp = resolve;
+          }),
+        );
+      const reload = vi.fn();
+      render(FeedbackHost, { reload });
+      window.dispatchEvent(new Event('focus'));
+      for (let count = 0; count < 3; count += 1) {
+        if (event === 'visibilitychange') document.dispatchEvent(new Event(event));
+        else window.dispatchEvent(new Event(event));
+      }
+      expect(read).toHaveBeenCalledOnce();
+      finish({ ...other, id: 'u1' });
+      await waitFor(() => {
+        expect(read).toHaveBeenCalledTimes(2);
+      });
+      expect(accountSafety.switching).toBe(false);
+      followUp(identity === 'anonymous' ? undefined : other);
+      if (identity === 'anonymous') await screen.findByRole('link', { name: '새 탭에서 로그인' });
+      else
+        await waitFor(() => {
+          expect(reload).toHaveBeenCalledOnce();
+        });
+      expect(accountSafety.switching).toBe(true);
+      expect(read).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('stops automatic safety-generation rechecks after three requests and stays hidden', async () => {
     const read = vi.spyOn(api, 'me').mockImplementation(() => {

@@ -134,7 +134,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
   const other = await page.context().newPage();
   await test.step('B로 바뀐 뒤 창 복귀: 다시 읽기가 끝나지 않는 동안 이전 화면은 안전 상태로 가려지고 API를 부르지 않는다', async () => {
     await first.endTrace();
-    // SR-221-1: storage 전환은 switchTo 도중 일어나므로 관찰·보류를 먼저 설치한다(단언·대기 동일).
+    // 계정 전환 뒤 복귀 확인을 관찰하도록 보류·기록기를 먼저 설치한다.
     // 다시 읽기의 문서 응답을 2.5초 붙잡아 둔다(느린 다시 읽기). 그동안 이전 문서가 살아 있다. 이동이 걸려 있는 동안은 Playwright
     // 조작이 막히므로, 이전 문서 안의 기록기가 안전 상태를 0.1초마다 표본으로 남기고(세션 저장소, 같은 탭의 다시 읽기 뒤에도
     // 남는다) 복귀 이벤트를 계속 내서 이전 화면이 요청을 보내는지 네트워크에서 본다.
@@ -156,30 +156,14 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       window.sessionStorage.removeItem(acceptedKey);
       // 새 문서는 이 표지가 없으므로, 새 셸의 최초 me 결과가 이전 문서의 수락 수를 덮지 않는다.
       document.documentElement.setAttribute('data-e2e-auth-observer', '');
-      // 같은 관찰기에서 메서드·쿼리·사용자 표식을 함께 적어 제어 확인과 이전 화면 요청을 구분한다.
+      // 메서드·쿼리와 자기 응답 수락 시점을 함께 적어 제어 확인과 이전 화면 요청을 구분한다.
       const fetches: {
         t: number;
         path: string;
         method: string;
-        markerUser: string | null;
         switching: boolean;
         afterAcceptance: boolean;
       }[] = [];
-      const markerUser = (): string | null => {
-        try {
-          const value: unknown = JSON.parse(
-            window.localStorage.getItem('fvoci:auth-session') ?? 'null',
-          );
-          return typeof value === 'object' &&
-            value !== null &&
-            'userId' in value &&
-            typeof value.userId === 'string'
-            ? value.userId
-            : null;
-        } catch {
-          return null;
-        }
-      };
       const original = window.fetch.bind(window);
       window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const url =
@@ -189,7 +173,6 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
           t: Date.now(),
           path: target.pathname + target.search,
           method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
-          markerUser: markerUser(),
           switching: document.documentElement.hasAttribute('data-account-switching'),
           afterAcceptance: window.sessionStorage.getItem(acceptedKey) !== null,
         });
@@ -202,6 +185,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         switching: boolean;
         safeVisible: boolean;
         descriptionVisible: boolean;
+        returnEvents: number;
       }[] = [];
       const visible = (el: Element | null): boolean =>
         el !== null &&
@@ -210,18 +194,21 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       window.setInterval(() => {
         const safe = document.querySelector('[data-testid="account-safe-state"]');
         const box = document.querySelector('[role="dialog"] textarea');
-        samples.push({
+        const sample = {
           t: Date.now() - start,
           switching: document.documentElement.hasAttribute('data-account-switching'),
           safeVisible: visible(safe),
           descriptionVisible: visible(box),
-        });
-        window.sessionStorage.setItem('fvoci-e2e-probe', JSON.stringify(samples.slice(-60)));
-        // 가림 중 복귀 이벤트를 계속 낸다. #88/D-96의 익명 재로그인 대기에는 정확한 GET /api/me만 허용한다.
+          returnEvents: 0,
+        };
+        samples.push(sample);
+        // B를 수락해 가린 뒤 복귀 이벤트가 와도 이전 문서는 더 요청하지 않는다(#88/D-96).
         if (document.documentElement.hasAttribute('data-account-switching')) {
           window.dispatchEvent(new Event('focus'));
           document.dispatchEvent(new Event('visibilitychange'));
+          sample.returnEvents = 2;
         }
+        window.sessionStorage.setItem('fvoci-e2e-probe', JSON.stringify(samples.slice(-60)));
       }, 100);
     }, ACCEPTED_KEY);
     expect(await switchTo(other, 'test-user-2')).toBe(b);
@@ -248,7 +235,9 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         'safeVisible' in s &&
         s.safeVisible === true &&
         'descriptionVisible' in s &&
-        s.descriptionVisible === false,
+        s.descriptionVisible === false &&
+        'returnEvents' in s &&
+        s.returnEvents === 2,
     );
     expect(covered.length, 'samples with the previous screen covered').toBeGreaterThanOrEqual(10);
     const reloadDocument = traffic.find((r) => r.kind === 'document');
@@ -272,8 +261,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     await page.evaluate((key) => {
       window.sessionStorage.removeItem(key);
     }, ACCEPTED_KEY);
-    // #88/D-96: null 표식에서 시작한 확인도 B를 받을 수 있다. 이 탭의 실제 B 본문 판독으로 센다.
-    // 요청 시작 표식·게시 성공으로 세지 않고, 감지 1회·수락 뒤 중복 확인 0을 유지한다.
+    // #88/D-96: 이 탭의 실제 B 본문 판독으로 감지 1회·수락 뒤 중복 확인 0을 센다.
     writeFileSync(
       testInfo.outputPath('session-switch-requests.json'),
       JSON.stringify({ traffic, fetches, reloadDocument, accepted }, null, 2),
@@ -293,7 +281,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     const hidden = list(fetches).filter(
       (f) => typeof f === 'object' && f !== null && 'switching' in f && f.switching === true,
     );
-    expect(hidden.length, 'requests observed while hidden').toBeGreaterThan(0);
+    expect(hidden, 'no requests while hidden despite repeated return events').toEqual([]);
     expect(hidden.every(identityCheck), 'only exact GET /api/me without a query while hidden').toBe(
       true,
     );

@@ -4,11 +4,7 @@
   // 낭독기에 알린다.
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import {
-    publishSessionUser,
-    readSessionGeneration,
-    SESSION_CHECK_MAX_ATTEMPTS,
-  } from '$lib/features/auth/session-signal';
+  import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -35,13 +31,14 @@
     reload?: () => void;
     retryLogout?: () => void;
     retryRestore?: () => void;
-    syncSessionSignal?: () => boolean;
+    /** 셸이 시작·복귀·복원의 확인을 한 대기열로 관리한다. */
+    sessionManaged?: boolean;
   }
 
   const {
     retryLogout,
     retryRestore,
-    syncSessionSignal,
+    sessionManaged = false,
     reload = () => {
       window.location.reload();
     },
@@ -88,15 +85,20 @@
   //
   // 감지 시점(#88): 창 `focus`와 문서가 다시 보이는 `visibilitychange` 둘 다 쓴다. 키보드·OS로 탭을 바꾸면 창 focus 없이
   // 탭만 보이게 될 수 있고, 헤드리스 Chromium의 탭 전환은 focus를 내지 않았다(e2e account-switch의 focus-path 기록).
-  // 두 이벤트가 잇달아 와도 확인 요청은 한 번에 하나만 보내고(`checking`), 전환은 `switchAccount()`가 한 번만 시작한다.
+  // 확인 중 복귀 이벤트는 후속 확인 하나로 합치고(SR-221-10), 전환은 `switchAccount()`가 한 번만 시작한다.
   $effect(() => {
+    if (sessionManaged) return;
     let checking = false;
+    let pending = false;
     let active = true;
     const recheck = (): void => {
-      if (syncSessionSignal?.()) return;
       const signedIn = currentUser.userId;
-      if (signedIn === '' || (sessionHidden && accountSafety.reason !== 'reauth') || checking)
+      if (!active || signedIn === '' || (sessionHidden && accountSafety.reason !== 'reauth'))
         return;
+      if (checking) {
+        pending = true;
+        return;
+      }
       const canCheck = (): boolean =>
         active &&
         currentUser.userId === signedIn &&
@@ -113,7 +115,6 @@
         for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
           if (!canCheck()) return;
           const generation = accountSafety.generation;
-          const sessionGeneration = readSessionGeneration();
           try {
             const now = await api.me();
             if (!canCheck()) return;
@@ -121,8 +122,6 @@
               if (refresh()) continue;
               return;
             }
-            // 알림 게시와 무관하게 이 탭의 응답만 화면을 결정한다.
-            void publishSessionUser(now?.id ?? null, sessionGeneration);
             if (now === undefined) {
               reportSessionExpired();
               hideSession('reauth');
@@ -155,6 +154,10 @@
       };
       void verify().finally(() => {
         checking = false;
+        if (pending) {
+          pending = false;
+          recheck();
+        }
       });
     };
     const onVisible = (): void => {
@@ -162,10 +165,13 @@
     };
     window.addEventListener('focus', recheck);
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', recheck);
     return () => {
       active = false;
+      pending = false;
       window.removeEventListener('focus', recheck);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', recheck);
     };
   });
 
