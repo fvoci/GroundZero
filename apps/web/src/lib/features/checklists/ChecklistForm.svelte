@@ -47,7 +47,7 @@
     onremove,
     onunsaved,
     ondraftkept,
-    preserveDraft = true,
+    preserveDraft = false,
   }: Props = $props();
 
   /** 문구를 고치는 항목과 입력. */

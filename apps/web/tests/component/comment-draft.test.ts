@@ -66,7 +66,9 @@ describe('comment drafts', () => {
     view.unmount();
     cleanup();
     render(CommentsPanel, { props });
-    expect(screen.queryByTestId('comment-draft-offer')).toBeNull();
+    expect(await screen.findByTestId('comment-draft-offer')).toHaveTextContent('남길 댓글');
+    expect(screen.getByLabelText(/새 댓글/)).toHaveValue('');
+    expect(add).toHaveBeenCalledTimes(2);
   });
 
   it('hides the original account input on a live switch and offers it only to that account', async () => {

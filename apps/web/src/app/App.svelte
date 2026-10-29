@@ -11,6 +11,13 @@
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
   import PublicView from '$lib/features/public/PublicView.svelte';
+  import {
+    attachRecordDraftCleanup,
+    clearLegacyRecordDrafts,
+    discardLegacyRecordDraft,
+    legacyRecordDrafts,
+    type LegacyRecordDraft,
+  } from '$lib/features/records/legacy-drafts';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
   import TrashScreen from '$lib/features/trash/TrashScreen.svelte';
   import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
@@ -49,10 +56,20 @@
   import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
-  import { flushSync, onDestroy } from 'svelte';
+  import { flushSync, onDestroy, onMount } from 'svelte';
   import { timer } from '$lib/features/time/timer.svelte';
 
   import BackLink from './BackLink.svelte';
+
+  clearLegacyRecordDrafts();
+  let recordDiscards = $state<LegacyRecordDraft[]>([]);
+  function refreshRecordDiscards(): void {
+    recordDiscards = legacyRecordDrafts(currentUser.userId);
+  }
+  $effect(() => {
+    refreshRecordDiscards();
+  });
+  onMount(() => attachRecordDraftCleanup(refreshRecordDiscards));
 
   interface Props {
     /** 브라우저 이동 경계. 시험에서도 창 자체와 이벤트 수명은 바꾸지 않는다. */
@@ -561,6 +578,21 @@
 
 <!-- 계정 전환 안전 상태. 입력 보존을 위해 조건부 제거하지 않는다. -->
 <div style:display={sessionHidden ? 'none' : 'contents'} inert={sessionHidden}>
+  {#if route.name !== 'public' && currentUser.userId !== ''}
+    {#each recordDiscards as entry (entry.key)}
+      <div class="m-3 rounded border p-3" data-testid="record-draft-unrecoverable">
+        <p>{m.records_draft_unrecoverable()}</p>
+        <Button
+          variant="outline"
+          onclick={() => {
+            if (sessionHidden) return;
+            discardLegacyRecordDraft(entry, currentUser.userId);
+            refreshRecordDiscards();
+          }}>{m.common_draft_discard()}</Button
+        >
+      </div>
+    {/each}
+  {/if}
   {#if route.name === 'public'}
     <PublicView token={route.token} />
   {:else if session.state === 'loading'}

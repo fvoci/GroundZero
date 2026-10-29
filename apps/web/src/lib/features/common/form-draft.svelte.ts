@@ -17,9 +17,13 @@ import { createLeaveGuard, leavingWithDrafts } from './leave-guard.svelte';
 interface DraftOptions<T> {
   /** 짧은 설정 칸은 화면에만 두고 이탈을 경고한다(D-27·D-97). */
   preserve?: boolean;
+  /** Record recovery leaves every source key intact until a person discards it (C/B, #227). */
+  retainSource?: boolean;
   /** Stable form kind and container/parent ID; undefined disables preservation. */
   name: () => string | undefined;
   snapshot: () => T;
+  /** 저장할 칸만 고른다. 요청 완료 여부는 전체 snapshot으로 비교한다(D-27). */
+  storedSnapshot?: () => T;
   parse: (value: unknown) => T | undefined;
   restore: (value: T) => void;
   /** Clear visible input when its owner or target changes. */
@@ -51,7 +55,7 @@ export interface FormDraftAttempt {
 export function createFormDraft<T>(options: DraftOptions<T>) {
   let session = $state<{ userId: string; name: string; key: string | undefined }>();
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
-  let restoredKey: string | undefined;
+  let hiddenOffers = $state<StoredFormDraft<Saved<T>>[]>([]);
   let kept = $state(false);
   let disposed = false;
 
@@ -64,7 +68,18 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   }
 
   function blocked(): boolean {
-    return offers.some((entry) => entry.key === session?.key);
+    return offers.some((entry) => entry.key === session?.key && !hiddenOffers.includes(entry));
+  }
+
+  function writableKey(name: string, userId: string): string | undefined {
+    const key = formDraftTabKey(name, userId);
+    if (key === undefined || options.retainSource !== true) return key;
+    try {
+      if (localStorage.getItem(key) === null) return key;
+    } catch {
+      // Unknown storage may still contain an original; reserve a fresh key instead of overwriting it.
+    }
+    return `${key}-${crypto.randomUUID()}`;
   }
 
   function persist(): void {
@@ -74,14 +89,20 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       return;
     }
     // A failed move to a held key must never overwrite the offered input.
-    if (blocked()) {
-      kept = false;
+    if (offers.some((entry) => entry.key === session?.key)) {
+      kept = !options.dirty();
       return;
     }
     const dirty = options.dirty();
     const written = writeFormDraftAt(
       session.key,
-      dirty ? { savedAt: new SvelteDate().toISOString(), input: options.snapshot() } : undefined,
+      dirty
+        ? {
+            savedAt: new SvelteDate().toISOString(),
+            input:
+              options.storedSnapshot === undefined ? options.snapshot() : options.storedSnapshot(),
+          }
+        : undefined,
     );
     kept = !dirty || written;
   }
@@ -107,14 +128,14 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       if (session?.userId === userId && session.name === name) return;
       leave.keep();
       if (session !== undefined) options.reset();
-      restoredKey = undefined;
+      hiddenOffers = [];
       session =
         name === undefined || userId === ''
           ? undefined
           : {
               userId,
               name,
-              key: formDraftTabKey(name, userId),
+              key: writableKey(name, userId),
             };
       offers =
         session === undefined || options.preserve === false
@@ -134,7 +155,9 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
                 return input === undefined ? undefined : { savedAt: raw.savedAt, input };
               },
               userId,
-            ).map((entry) => holdFormDraft(name ?? '', entry, userId));
+            ).map((entry) =>
+              options.retainSource === true ? entry : holdFormDraft(name ?? '', entry, userId),
+            );
     });
   });
 
@@ -180,7 +203,13 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
         session.userId,
       ).find((candidate) => candidate.key === session?.key);
       if (typed !== undefined) {
-        const held = holdFormDraft(session.name, typed, session.userId);
+        const held =
+          options.retainSource === true
+            ? typed
+            : holdFormDraft(session.name, typed, session.userId);
+        if (options.retainSource === true) {
+          session.key = `${session.key ?? ''}-${crypto.randomUUID()}`;
+        }
         if (held.key === session.key) return;
         offers = [...offers, held];
       } else {
@@ -188,12 +217,14 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
         return;
       }
     }
-    // Keep the offered copy if storage fails; never destroy the only durable copy.
+    // B: keep the offered source for another proposal, even after a successful copy or completion.
     options.restore(entry.value.input);
-    const stored = session !== undefined && writeFormDraftAt(session.key, entry.value);
-    restoredKey = stored ? undefined : entry.key;
+    const value =
+      options.storedSnapshot === undefined
+        ? entry.value
+        : { ...entry.value, input: options.storedSnapshot() };
+    if (session !== undefined) writeFormDraftAt(session.key, value);
     offers = offers.filter((candidate) => candidate.key !== entry.key);
-    if (stored && entry.key !== session?.key) removeFormDraftAt(entry.key);
     persist();
   }
 
@@ -216,16 +247,12 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     if (!offers.some((entry) => entry.key === session?.key)) {
       writeFormDraftAt(session?.key, undefined);
     }
-    if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
-    restoredKey = undefined;
     options.reset();
     return true;
   }
 
   function discardAndLeave(): void {
     if (!leave.open || !current() || options.busy?.() === true) return;
-    if (restoredKey !== undefined) removeFormDraftAt(restoredKey);
-    restoredKey = undefined;
     options.reset();
     persist();
     leave.discard();
@@ -245,8 +272,17 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
   }
 
   return {
+    get key() {
+      return session?.key;
+    },
     get offers() {
-      return offers;
+      return offers.filter((entry) => !hiddenOffers.includes(entry));
+    },
+    /** Confirmed server copies stay protected in storage even if holding their own key failed. */
+    hide(entry: StoredFormDraft<Saved<T>>) {
+      if (current() && offers.includes(entry) && !hiddenOffers.includes(entry)) {
+        hiddenOffers = [...hiddenOffers, entry];
+      }
     },
     get active() {
       return current();

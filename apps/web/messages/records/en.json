@@ -1,9 +1,11 @@
 {
+  "records_draft_unrecoverable": "An old record draft remains in this browser. Recoverable writing can be restored in its record form. Choose Discard to delete this original.",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "records_number_invalid": "Enter a number of 0 or more for {label}.",
   "records_unknown_person": "Unknown person",
   "records_hidden_course": "Course you can't see",
   "records_load_failed": "Couldn't load records.",
+  "records_draft_cleanup_failed": "Couldn't check saved record drafts. Try again.",
   "records_title_required": "Enter a title.",
   "records_added": "Added a record to {label}.",
   "records_updated": "Updated a record in {label}.",
