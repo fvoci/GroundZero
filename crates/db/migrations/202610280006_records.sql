@@ -155,6 +155,8 @@ CREATE TABLE fvoci.unit_progress (
 
 ALTER TABLE fvoci.unit_progress OWNER TO fvoci_migrator;
 
+-- D-112 SR1-14·D-113: 쓰기는 공간 → 현재 멤버 → 모듈 → 항목 → 기록 순서로 잠근 뒤 접근 등급을 다시 본다.
+-- app_record_write_check는 항목 설정에서도 쓰므로 잠금 없는 등급 검사로 유지한다.
 CREATE FUNCTION fvoci.app_add_episodes(p_item uuid, p_rows jsonb, p_ids uuid[]) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
@@ -166,8 +168,10 @@ CREATE FUNCTION fvoci.app_add_episodes(p_item uuid, p_rows jsonb, p_ids uuid[]) 
     v_added integer := 0;
     v_at    integer := 0;
   BEGIN
-    PERFORM app_require_course_write(p_item);
-    -- 항목을 잠근 뒤 다시 본다(기다리는 사이 공개 범위·보관이 바뀌었을 수 있다).
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = p_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = p_item AND m.user_id = app_user_id() FOR SHARE OF m;
     PERFORM app_lock_item(p_item);
     PERFORM app_require_course_write(p_item);
     IF jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) NOT BETWEEN 1 AND 1000 THEN
@@ -218,8 +222,10 @@ CREATE FUNCTION fvoci.app_add_study_units(p_item uuid, p_rows jsonb, p_ids uuid[
     v_added integer := 0;
     v_at    integer := 0;
   BEGIN
-    PERFORM app_require_study_write(p_item);
-    -- 항목을 잠근 뒤 다시 본다(기다리는 사이 공개 범위·보관이 바뀌었을 수 있다).
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = p_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = p_item AND m.user_id = app_user_id() FOR SHARE OF m;
     PERFORM app_lock_item(p_item);
     PERFORM app_require_study_write(p_item);
     IF jsonb_typeof(p_rows) <> 'array' OR jsonb_array_length(p_rows) NOT BETWEEN 1 AND 1000 THEN
@@ -313,13 +319,18 @@ CREATE FUNCTION fvoci.app_create_record(p_request uuid, p_item uuid, p_kind text
     v_id uuid;
     v_ws uuid;
   BEGIN
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = p_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = p_item AND m.user_id = app_user_id() FOR SHARE OF m;
+    PERFORM app_lock_item(p_item);
+    PERFORM app_record_write_check(p_item);
     SELECT id INTO v_id FROM item_records
     WHERE item_id = p_item AND created_by = app_user_id() AND request_id = p_request;
     IF v_id IS NOT NULL THEN
       RETURN v_id;
     END IF;
-    SELECT workspace_id INTO v_ws FROM items WHERE id = p_item FOR KEY SHARE;
-    PERFORM app_record_write_check(p_item);
+    SELECT workspace_id INTO v_ws FROM items WHERE id = p_item;
     INSERT INTO item_records (id, item_id, workspace_id, kind, title, occurred_on, body, fields, created_by, request_id)
     VALUES (app_id(p_ids, 1), p_item, v_ws, p_kind, btrim(p_title), p_occurred, coalesce(p_body, ''),
             coalesce(p_fields, '{}'), app_user_id(), p_request)
@@ -348,7 +359,15 @@ CREATE FUNCTION fvoci.app_delete_episode(p_episode uuid, p_ids uuid[]) RETURNS v
     IF v_ep.id IS NULL OR app_access('item', v_ep.item_id) = 'none' THEN
       RAISE EXCEPTION 'episode not found' USING ERRCODE = 'P0002';
     END IF;
+    PERFORM 1 FROM workspaces WHERE id = v_ep.workspace_id FOR SHARE;
+    PERFORM 1 FROM workspace_members
+      WHERE workspace_id = v_ep.workspace_id AND user_id = app_user_id() FOR SHARE;
+    PERFORM app_lock_item(v_ep.item_id);
     PERFORM app_require_course_write(v_ep.item_id);
+    SELECT * INTO v_ep FROM course_episodes WHERE id = p_episode FOR UPDATE;
+    IF v_ep.id IS NULL THEN
+      RAISE EXCEPTION 'episode not found' USING ERRCODE = 'P0002';
+    END IF;
     DELETE FROM course_episodes WHERE id = p_episode;
     PERFORM app_audit(app_id(p_ids, 1), v_ep.workspace_id, 'delete_episode', 'item', v_ep.item_id,
                       jsonb_build_object('number', v_ep.number, 'title', v_ep.title));
@@ -366,6 +385,11 @@ CREATE FUNCTION fvoci.app_delete_record(p_record uuid, p_ids uuid[]) RETURNS voi
     v_rec    item_records%ROWTYPE;
     v_access text;
   BEGIN
+    SELECT * INTO v_rec FROM item_records WHERE id = p_record;
+    PERFORM 1 FROM workspaces WHERE id = v_rec.workspace_id FOR SHARE;
+    PERFORM 1 FROM workspace_members
+      WHERE workspace_id = v_rec.workspace_id AND user_id = app_user_id() FOR SHARE;
+    PERFORM app_lock_item(v_rec.item_id);
     SELECT * INTO v_rec FROM item_records WHERE id = p_record FOR UPDATE;
     v_access := app_access('item', v_rec.item_id);
     IF v_rec.id IS NULL OR v_access = 'none' THEN
@@ -395,7 +419,15 @@ CREATE FUNCTION fvoci.app_delete_study_unit(p_unit uuid, p_ids uuid[]) RETURNS v
     IF v_unit.id IS NULL OR app_access('item', v_unit.item_id) = 'none' THEN
       RAISE EXCEPTION 'unit not found' USING ERRCODE = 'P0002';
     END IF;
+    PERFORM 1 FROM workspaces WHERE id = v_unit.workspace_id FOR SHARE;
+    PERFORM 1 FROM workspace_members
+      WHERE workspace_id = v_unit.workspace_id AND user_id = app_user_id() FOR SHARE;
+    PERFORM app_lock_item(v_unit.item_id);
     PERFORM app_require_study_write(v_unit.item_id);
+    SELECT * INTO v_unit FROM study_units WHERE id = p_unit FOR UPDATE;
+    IF v_unit.id IS NULL THEN
+      RAISE EXCEPTION 'unit not found' USING ERRCODE = 'P0002';
+    END IF;
     DELETE FROM study_units WHERE id = p_unit;
     PERFORM app_audit(app_id(p_ids, 1), v_unit.workspace_id, 'delete_study_unit', 'item', v_unit.item_id,
                       jsonb_build_object('number', v_unit.number, 'title', v_unit.title));
@@ -413,10 +445,13 @@ CREATE FUNCTION fvoci.app_plan_units(p_item uuid, p_entries jsonb) RETURNS integ
     v_row   jsonb;
     v_count integer := 0;
   BEGIN
-    PERFORM app_study_access(p_item);
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = p_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = p_item AND m.user_id = app_user_id() FOR SHARE OF m;
     -- D-113 개정 SR1-11: 읽기 전용도 본인 계획을 남긴다. 공유 단위의 날짜는 바꾸지 않는다.
-    -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
     PERFORM app_lock_item(p_item);
+    PERFORM app_study_access(p_item);
     IF app_item_archived(p_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
@@ -469,6 +504,11 @@ CREATE FUNCTION fvoci.app_set_course_details(p_item uuid, p_subject text, p_inst
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   BEGIN
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = p_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = p_item AND m.user_id = app_user_id() FOR SHARE OF m;
+    PERFORM app_lock_item(p_item);
     PERFORM app_require_course_write(p_item);
     IF length(coalesce(p_url, '')) > 2000 OR length(coalesce(p_subject, '') || coalesce(p_instructor, '')
        || coalesce(p_platform, '') || coalesce(p_textbook, '')) > 2000 THEN
@@ -504,12 +544,16 @@ CREATE FUNCTION fvoci.app_set_episode_progress(p_episode uuid, p_status text, p_
     v_item  uuid := (SELECT item_id FROM course_episodes WHERE id = p_episode);
     v_today date := coalesce(p_today, current_date);
   BEGIN
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = v_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = v_item AND m.user_id = app_user_id() FOR SHARE OF m;
+    PERFORM app_lock_item(v_item);
+    SELECT item_id INTO v_item FROM course_episodes WHERE id = p_episode FOR SHARE;
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'episode not found' USING ERRCODE = 'P0002';
     END IF;
     -- D-113 개정 SR1-11: 읽기 전용도 본인 진도·메모를 남긴다.
-    -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
-    PERFORM app_lock_item(v_item);
     IF app_item_archived(v_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
@@ -618,12 +662,16 @@ CREATE FUNCTION fvoci.app_set_unit_progress(p_unit uuid, p_status text, p_done i
     v_item  uuid := (SELECT item_id FROM study_units WHERE id = p_unit);
     v_today date := coalesce(p_today, current_date);
   BEGIN
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = v_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = v_item AND m.user_id = app_user_id() FOR SHARE OF m;
+    PERFORM app_lock_item(v_item);
+    SELECT item_id INTO v_item FROM study_units WHERE id = p_unit FOR SHARE;
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'unit not found' USING ERRCODE = 'P0002';
     END IF;
     -- D-113 개정 SR1-11: 읽기 전용도 본인 진도·메모를 남긴다.
-    -- D-113(개정 ⑯)·D-20(⑧): 본인 진도도 쓰기라 보관된 항목·모듈 아래에서는 남기지 못한다. 보관과 줄 세우려 잠근 뒤 본다.
-    PERFORM app_lock_item(v_item);
     IF app_item_archived(v_item) THEN
       RAISE EXCEPTION 'the item is archived' USING ERRCODE = '55000';
     END IF;
@@ -710,6 +758,11 @@ CREATE FUNCTION fvoci.app_update_episode(p_episode uuid, p_version integer, p_nu
     v_item uuid := (SELECT item_id FROM course_episodes WHERE id = p_episode);
     v_version integer;
   BEGIN
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = v_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = v_item AND m.user_id = app_user_id() FOR SHARE OF m;
+    PERFORM app_lock_item(v_item);
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'episode not found' USING ERRCODE = 'P0002';
     END IF;
@@ -739,6 +792,11 @@ CREATE FUNCTION fvoci.app_update_record(p_record uuid, p_version integer, p_titl
   DECLARE
     v_rec item_records%ROWTYPE;
   BEGIN
+    SELECT * INTO v_rec FROM item_records WHERE id = p_record;
+    PERFORM 1 FROM workspaces WHERE id = v_rec.workspace_id FOR SHARE;
+    PERFORM 1 FROM workspace_members
+      WHERE workspace_id = v_rec.workspace_id AND user_id = app_user_id() FOR SHARE;
+    PERFORM app_lock_item(v_rec.item_id);
     SELECT * INTO v_rec FROM item_records WHERE id = p_record FOR UPDATE;
     IF v_rec.id IS NULL OR app_access('item', v_rec.item_id) = 'none' THEN
       RAISE EXCEPTION 'record not found' USING ERRCODE = 'P0002';
@@ -770,6 +828,11 @@ CREATE FUNCTION fvoci.app_update_study_unit(p_unit uuid, p_version integer, p_nu
     v_item uuid := (SELECT item_id FROM study_units WHERE id = p_unit);
     v_version integer;
   BEGIN
+    PERFORM 1 FROM workspaces w JOIN items i ON i.workspace_id = w.id
+      WHERE i.id = v_item FOR SHARE OF w;
+    PERFORM 1 FROM workspace_members m JOIN items i ON i.workspace_id = m.workspace_id
+      WHERE i.id = v_item AND m.user_id = app_user_id() FOR SHARE OF m;
+    PERFORM app_lock_item(v_item);
     IF v_item IS NULL OR app_access('item', v_item) = 'none' THEN
       RAISE EXCEPTION 'unit not found' USING ERRCODE = 'P0002';
     END IF;

@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 import { me } from '$lib/me.svelte';
-import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 
 function handlers() {
@@ -37,7 +36,7 @@ describe('checklist drafts', () => {
     me.userId = '';
   });
 
-  it('offers new item input after remount and reuses the failed request id', async () => {
+  it('reuses a failed request ID on screen without preserving the entry after remount', async () => {
     const onadd = vi.fn().mockRejectedValue(new Error('offline'));
     const props = {
       idPrefix: 'task-t1',
@@ -52,13 +51,7 @@ describe('checklist drafts', () => {
     await fireEvent.input(screen.getByLabelText('새 항목'), { target: { value: '자료 수집' } });
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
     await screen.findByRole('alert');
-    view.unmount();
-    render(ChecklistForm, props);
-    expect(screen.getByLabelText('새 항목')).toHaveValue('');
-    expect(await screen.findByTestId('checklist-new-item-draft-offer')).toHaveTextContent(
-      '자료 수집',
-    );
-    await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
+    expect(screen.getByLabelText('새 항목')).toHaveValue('자료 수집');
     expect(onadd).toHaveBeenCalledTimes(1);
     onadd.mockResolvedValueOnce(undefined);
     await fireEvent.click(screen.getByRole('button', { name: '추가' }));
@@ -67,13 +60,18 @@ describe('checklist drafts', () => {
     });
     expect(onadd.mock.calls[1]?.[0]).toEqual(onadd.mock.calls[0]?.[0]);
     expect(onadd.mock.calls[1]?.[1]).toBe('user-a');
+    view.unmount();
+    render(ChecklistForm, props);
+    expect(screen.getByLabelText('새 항목')).toHaveValue('');
+    expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
+    expect(Object.values(localStorage).join('')).not.toContain('자료 수집');
   });
 
-  it('preserves rename, paste source, edited preview, completion and retry ids together', async () => {
+  it('keeps rename, paste, edited preview and retry IDs on screen while reporting unsaved input', async () => {
     const h = handlers();
     h.onadd.mockRejectedValueOnce(new Error('offline'));
     const onunsaved = vi.fn();
-    const view = render(ChecklistForm, { ...base, ...h, onunsaved });
+    render(ChecklistForm, { ...base, ...h, onunsaved });
     await fireEvent.click(screen.getByRole('button', { name: '원래 문구 고치기' }));
     await fireEvent.input(screen.getByLabelText('원래 문구의 새 문구'), {
       target: { value: '고치는 중' },
@@ -92,11 +90,7 @@ describe('checklist drafts', () => {
     await fireEvent.click(screen.getByRole('button', { name: '2개 덧붙이기' }));
     await screen.findByRole('alert');
     expect(onunsaved).toHaveBeenLastCalledWith(true);
-    view.unmount();
-    render(ChecklistForm, { ...base, ...h, onunsaved });
-    await screen.findByTestId('checklist-new-item-draft-offer');
-    expect(screen.queryByLabelText('원래 문구의 새 문구')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
+    expect(Object.values(localStorage).join('')).not.toContain('미리보기에서 고친 내용');
     expect(screen.getByLabelText('원래 문구의 새 문구')).toHaveValue('고치는 중');
     expect(screen.getByLabelText(/붙여넣을 체크리스트/)).toHaveValue('- [ ] 원문\n- [x] 둘');
     expect(screen.getByLabelText('항목 1 내용')).toHaveValue('미리보기에서 고친 내용');
@@ -123,7 +117,7 @@ describe('checklist drafts', () => {
     ).toEqual([]);
   });
 
-  it('keeps the original account input and ignores its late success after switching accounts', async () => {
+  it('clears screen input on account changes and ignores the previous account late success', async () => {
     const h = handlers();
     let resolve: () => void = () => undefined;
     h.onadd.mockImplementationOnce(
@@ -147,13 +141,13 @@ describe('checklist drafts', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.getByLabelText('새 항목')).toHaveValue('B 입력');
     me.userId = 'user-a';
-    expect(await screen.findByTestId('checklist-new-item-draft-offer')).toHaveTextContent('A 입력');
-    await fireEvent.click(screen.getByRole('button', { name: '입력 되살리기' }));
-    expect(screen.getByLabelText('새 항목')).toHaveValue('A 입력');
+    await waitFor(() => expect(screen.getByLabelText('새 항목')).toHaveValue(''));
+    expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
+    expect(Object.values(localStorage).join('')).not.toContain('A 입력');
     expect(h.onadd).toHaveBeenCalledTimes(1);
   });
 
-  it('retains input through permission withdrawal and lets the user discard the saved offer', async () => {
+  it('retains hidden screen input through permission withdrawal without a durable offer', async () => {
     const h = handlers();
     const onunsaved = vi.fn();
     const view = render(ChecklistForm, { ...base, ...h, onunsaved });
@@ -163,20 +157,10 @@ describe('checklist drafts', () => {
     await view.rerender({ ...base, ...h, onunsaved, canEdit: false });
     expect(screen.queryByLabelText('새 항목')).toBeNull();
     expect(onunsaved).toHaveBeenLastCalledWith(true);
+    await view.rerender({ ...base, ...h, onunsaved });
+    expect(screen.getByLabelText('새 항목')).toHaveValue('권한 철회 전 입력');
     view.unmount();
-    const next = render(ChecklistForm, { ...base, ...h, canEdit: false });
-    // R5 F-11: 고칠 수 없는 동안은 되살리기 대신 읽기 전용 안내와 버리기만 보인다.
-    const offer = await screen.findByTestId('checklist-new-item-draft-offer');
-    expect(offer).toHaveTextContent('권한 철회 전 입력');
-    expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
-    expect(offer).toHaveTextContent(m.common_draft_read_only());
-    await next.rerender({ ...base, ...h });
-    expect(
-      within(screen.getByTestId('checklist-new-item-draft-offer')).getByRole('button', {
-        name: m.common_draft_restore(),
-      }),
-    ).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole('button', { name: '남긴 입력 버리기' }));
+    render(ChecklistForm, { ...base, ...h });
     expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
     expect(h.onadd).not.toHaveBeenCalled();
     expect(screen.getByLabelText('새 항목')).toHaveValue('');
@@ -212,16 +196,13 @@ describe('checklist drafts', () => {
     // 같은 문서에 두 탭을 흉내 내므로 id/label은 중복된다. 각 컨테이너의 입력을 직접 고른다.
     await fireEvent.input(a.getByRole('textbox'), { target: { value: '첫 탭 항목' } });
     await fireEvent.input(b.getByRole('textbox'), { target: { value: '둘째 탭 항목' } });
-    const key = Object.keys(localStorage).find((candidate) =>
-      candidate.endsWith(':tab:checklist-second'),
-    );
-    if (key === undefined) throw new Error('second tab draft');
-    const saved = localStorage.getItem(key);
+    const saved = Object.values(localStorage).join('');
+    expect(saved).not.toContain('둘째 탭 항목');
     await fireEvent.click(a.getByRole('button', { name: '추가' }));
     await waitFor(() => {
       expect(a.getByRole('textbox')).toHaveValue('');
     });
     expect(b.getByRole('textbox')).toHaveValue('둘째 탭 항목');
-    expect(localStorage.getItem(key)).toBe(saved);
+    expect(Object.values(localStorage).join('')).toBe(saved);
   });
 });

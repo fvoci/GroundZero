@@ -260,7 +260,8 @@ function value(id: string): string {
   return field.value;
 }
 async function restore(): Promise<void> {
-  const offer = await screen.findByTestId('form-draft-offer');
+  const offer = (await screen.findAllByTestId('form-draft-offer'))[0];
+  if (offer === undefined) throw new Error('Missing draft offer');
   await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_restore() }));
 }
 async function firstButton(name: string): Promise<void> {
@@ -269,38 +270,42 @@ async function firstButton(name: string): Promise<void> {
   await fireEvent.click(button);
 }
 
-// FC-2(R5 P1 F-11): 쓸 수 없게 된 강좌에는 남긴 강좌 정보 입력의 되살리기 대신 읽기 전용 안내와 버리기만 보인다.
+// D-27: 강좌 정보는 짧은 설정이다. 다시 열 때 영구 초안을 제안하지 않는다.
 describe('course details draft after write access is withdrawn', () => {
-  it('offers only a read-only notice and discard for the kept input', async () => {
+  it('does not retain short course settings after write access is withdrawn', async () => {
     const save = vi.spyOn(api, 'setCourseDetails');
     const view = render(CoursePanel, { itemId: 'i1' });
     await firstButton(m.courses_edit());
     await input('course-instructor', 'Kept instructor');
     view.unmount();
 
-    vi.mocked(api.course).mockResolvedValue({ ...course, access: 'archived' as const });
+    vi.mocked(api.course).mockResolvedValue({ ...course, access: 'archived' });
     render(CoursePanel, { itemId: 'i1' });
-    const offer = await screen.findByTestId('form-draft-offer');
-    expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
-    expect(offer).toHaveTextContent(m.common_draft_read_only());
-    await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_discard() }));
+    await screen.findByText('Episode 1');
     expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(Object.values(localStorage).join('')).not.toContain('Kept instructor');
     expect(save).not.toHaveBeenCalled();
   });
 });
 
 describe('durable learning input', () => {
-  it('offers a new episode verbatim after remount without sending it', async () => {
+  it('keeps new episode numeric text on screen with a warning and discards it on remount', async () => {
     const add = vi.spyOn(api, 'addEpisodes').mockResolvedValue(1);
     const view = render(CoursePanel, { itemId: 'i1' });
     await screen.findByText('Episode 1');
     await input('episode-title', '새 강의 日本語');
     await input('episode-duration', '12:xx');
+    expect(value('episode-duration')).toBe('12:xx');
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    expect(Object.values(localStorage).join('')).not.toContain('새 강의 日本語');
     view.unmount();
     render(CoursePanel, { itemId: 'i1' });
-    await restore();
-    expect(value('episode-title')).toBe('새 강의 日本語');
-    expect(value('episode-duration')).toBe('12:xx');
+    await screen.findByText('Episode 1');
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(value('episode-title')).toBe('');
+    expect(value('episode-duration')).toBe('');
     expect(add).not.toHaveBeenCalled();
   });
 
@@ -331,24 +336,32 @@ describe('durable learning input', () => {
     );
     await restore();
     expect(value('mine-note-e1')).toBe('private A');
-    expect(value('mine-position-e1')).toBe('bad:position');
+    expect(value('mine-position-e1')).toBe('');
+    expect(Object.values(localStorage).join('')).not.toContain('bad:position');
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('restores a study creation with invalid numeric text', async () => {
+  it('rejects invalid study creation numeric text on screen without storing it', async () => {
+    const add = vi.spyOn(api, 'addStudyUnits');
     const view = render(StudyPanel, { itemId: 'i1' });
     await screen.findByText('Unit 1');
     await input('study-unit-title', '계속 읽기');
     await input('study-unit-amount', '12oops');
+    await fireEvent.click(screen.getByRole('button', { name: m.study_add_unit() }));
+    await screen.findByRole('alert');
+    expect(value('study-unit-amount')).toBe('12oops');
+    expect(add).not.toHaveBeenCalled();
+    expect(Object.values(localStorage).join('')).not.toContain('12oops');
     view.unmount();
     render(StudyPanel, { itemId: 'i1' });
-    await restore();
-    expect(value('study-unit-title')).toBe('계속 읽기');
-    expect(value('study-unit-amount')).toBe('12oops');
+    await screen.findByText('Unit 1');
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(value('study-unit-title')).toBe('');
+    expect(value('study-unit-amount')).toBe('');
   });
 
-  // R5 P2 C-2(⑱): 재배치 시작일과 하루 단위 수도 작업 설정 입력이다. 잘못된 숫자 원문까지 남기고 떠날 때 경고한다.
-  it('keeps reschedule settings with invalid per-day text and clears them after rescheduling', async () => {
+  // D-27: 재배치 설정은 화면 안에서 원문을 유지하고 이탈을 경고한다.
+  it('validates and warns about reschedule settings without storing them', async () => {
     vi.mocked(api.studyPlan).mockResolvedValue({
       ...plan,
       units: plan.units.map((u) => ({ ...u, planned_on: '2026-01-02' })),
@@ -361,11 +374,7 @@ describe('durable learning input', () => {
     const unload = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
-    view.unmount();
-    const next = render(StudyPanel, { itemId: 'i1' });
-    await screen.findByRole('form', { name: m.study_replan_form() });
-    expect(value('study-replan-per')).toBe('1');
-    await restore();
+    expect(Object.values(localStorage).join('')).not.toContain('2026-12-01');
     expect(value('study-replan-start')).toBe('2026-12-01');
     expect(value('study-replan-per')).toBe('2x');
     await fireEvent.submit(screen.getByRole('form', { name: m.study_replan_form() }));
@@ -377,13 +386,14 @@ describe('durable learning input', () => {
       expect(send).toHaveBeenCalledOnce();
     });
     expect(send.mock.calls[0]?.[1][0]?.planned_on).toBe('2026-12-01');
-    next.unmount();
+    view.unmount();
     render(StudyPanel, { itemId: 'i1' });
     await screen.findByRole('form', { name: m.study_replan_form() });
     expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(value('study-replan-per')).toBe('1');
   });
 
-  it('restores private study progress without sending it', async () => {
+  it('restores private study notes without restoring short progress settings or sending them', async () => {
     const save = vi.spyOn(api, 'setUnitProgress').mockResolvedValue(undefined);
     const view = render(StudyPanel, { itemId: 'i1' });
     await firstButton(m.study_mine());
@@ -394,13 +404,14 @@ describe('durable learning input', () => {
     await firstButton(m.study_mine());
     await restore();
     expect(value('unit-note-u1')).toBe('private study');
-    expect(value('unit-done-u1')).toBe('wrong');
+    expect(value('unit-done-u1')).toBe('0');
+    expect(Object.values(localStorage).join('')).not.toContain('wrong');
     await waitFor(() => {
       expect(save).not.toHaveBeenCalled();
     });
   });
 
-  it('preserves course details across a forbidden save and asks before cancelling', async () => {
+  it('retains course details on screen across a forbidden save and asks before cancelling', async () => {
     const save = vi
       .spyOn(api, 'setCourseDetails')
       .mockRejectedValue(new ApiError(403, 'forbidden', 'denied'));
@@ -413,15 +424,17 @@ describe('durable learning input', () => {
     await fireEvent.click(screen.getByRole('button', { name: m.common_cancel() }));
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: m.common_discard_keep() }));
-    view.unmount();
-    render(CoursePanel, { itemId: 'i1' });
-    await restore();
     expect(value('course-instructor')).toBe('교수 / 日本語');
     expect(value('course-target_on')).toBe('2027-01-10');
+    expect(Object.values(localStorage).join('')).not.toContain('교수 / 日本語');
+    view.unmount();
+    render(CoursePanel, { itemId: 'i1' });
+    await screen.findByText('Episode 1');
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
     expect(save).toHaveBeenCalledTimes(1);
   });
 
-  it('restores shared episode fields and its conflict base version', async () => {
+  it('restores shared episode materials and its conflict base version without restoring settings', async () => {
     const update = vi
       .spyOn(api, 'updateEpisode')
       .mockRejectedValueOnce(new ApiError(409, 'invalid_state', 'changed'))
@@ -447,6 +460,7 @@ describe('durable learning input', () => {
     );
     await restore();
     expect(value('ep-materials-e1')).toBe('資料\nhttps://example.org');
+    expect(value('ep-title-e1')).toBe('Episode 1');
     expect(update).toHaveBeenCalledTimes(1);
     await fireEvent.submit(
       screen.getByRole('form', { name: m.courses_episode_form({ number: 1 }) }),
@@ -482,7 +496,7 @@ describe('durable learning input', () => {
     });
   });
 
-  it('restores shared study edits and refuses invalid numeric text', async () => {
+  it('refuses invalid shared study numeric text without storing short edits', async () => {
     const update = vi.spyOn(api, 'updateStudyUnit').mockResolvedValue(undefined);
     const view = render(StudyPanel, { itemId: 'i1' });
     await fireEvent.click(
@@ -490,12 +504,6 @@ describe('durable learning input', () => {
     );
     await input('unit-title-u1', '한국어 unit');
     await input('unit-amount-u1', 'invalid');
-    view.unmount();
-    render(StudyPanel, { itemId: 'i1' });
-    await fireEvent.click(
-      await screen.findByRole('button', { name: m.study_edit_aria({ title: 'Unit 1' }) }),
-    );
-    await restore();
     expect(value('unit-title-u1')).toBe('한국어 unit');
     expect(value('unit-amount-u1')).toBe('invalid');
     await fireEvent.submit(
@@ -503,20 +511,24 @@ describe('durable learning input', () => {
     );
     await screen.findByRole('alert');
     expect(update).not.toHaveBeenCalled();
+    expect(Object.values(localStorage).join('')).not.toContain('한국어 unit');
+    view.unmount();
+    render(StudyPanel, { itemId: 'i1' });
+    await firstButton(m.study_edit_aria({ title: 'Unit 1' }));
+    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expect(value('unit-title-u1')).toBe('Unit 1');
+    expect(value('unit-amount-u1')).toBe('10');
   });
 
-  it('keeps study creation request identity through remount and ignores late success after further typing', async () => {
+  it('keeps study creation retry identity on screen and ignores late success after further typing', async () => {
     const add = vi.spyOn(api, 'addStudyUnits').mockRejectedValueOnce(new Error('offline'));
     const done = vi.spyOn(feedback, 'notifyDone');
-    const view = render(StudyPanel, { itemId: 'i1' });
+    render(StudyPanel, { itemId: 'i1' });
     await screen.findByText('Unit 1');
     await input('study-unit-title', 'Draft one');
     await fireEvent.click(screen.getByRole('button', { name: m.study_add_unit() }));
     await screen.findByRole('alert');
     const id = add.mock.calls[0]?.[1][0]?.request_id;
-    view.unmount();
-    render(StudyPanel, { itemId: 'i1' });
-    await restore();
     let finish: (count: number) => void = () => undefined;
     add.mockImplementation(
       () =>
@@ -630,7 +642,7 @@ describe('durable learning input', () => {
     expect(value('unit-note-u1')).toBe('Keep my note');
     view.unmount();
     // 보관 상태에서는 개인 진도를 읽기만 한다. 읽기 전용 사용자는 개인 진도를 남길 수 있다(D-113 SR1-11).
-    vi.mocked(api.studyPlan).mockResolvedValue({ ...plan, access: 'archived' as const });
+    vi.mocked(api.studyPlan).mockResolvedValue({ ...plan, access: 'archived' });
     const readOnly = render(StudyPanel, { itemId: 'i1' });
     await firstButton(m.study_mine());
     expect(document.getElementById('unit-note-u1')).toHaveAttribute('readonly');
@@ -645,27 +657,34 @@ describe('durable learning input', () => {
     expect(value('unit-note-u1')).toBe('Keep my note');
   });
 
-  it('keeps a remounted study draft when an old instance finishes saving', async () => {
-    let finish: (count: number) => void = () => undefined;
-    vi.spyOn(api, 'addStudyUnits').mockImplementation(
+  it('keeps a remounted private study note when an old instance finishes saving', async () => {
+    let finish: () => void = () => undefined;
+    const save = vi.spyOn(api, 'setUnitProgress').mockImplementation(
       () =>
         new Promise((resolve) => {
           finish = resolve;
         }),
     );
     const old = render(StudyPanel, { itemId: 'i1' });
-    await screen.findByText('Unit 1');
-    await input('study-unit-title', 'First attempt');
-    await fireEvent.click(screen.getByRole('button', { name: m.study_add_unit() }));
+    await firstButton(m.study_mine());
+    await input('unit-note-u1', 'First attempt');
+    const form = document.getElementById('unit-note-u1')?.closest('form');
+    if (form == null) throw new Error('Missing form');
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledOnce();
+    });
     old.unmount();
     const current = render(StudyPanel, { itemId: 'i1' });
+    await firstButton(m.study_mine());
     await restore();
-    await input('study-unit-title', 'New instance input');
-    finish(1);
+    await input('unit-note-u1', 'New instance input');
+    finish();
     await new Promise((resolve) => setTimeout(resolve, 0));
     current.unmount();
     render(StudyPanel, { itemId: 'i1' });
+    await firstButton(m.study_mine());
     await restore();
-    expect(value('study-unit-title')).toBe('New instance input');
+    expect(value('unit-note-u1')).toBe('New instance input');
   });
 });

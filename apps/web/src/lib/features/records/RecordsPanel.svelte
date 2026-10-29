@@ -6,7 +6,6 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { object, retry } from '../modules/draft-values';
 
   import type { FileView, ItemView, RecordKindView, RecordView } from '$lib/api/client';
   import { api, ApiError, fileContentUrl, newRequestId } from '$lib/api/client';
@@ -18,9 +17,15 @@
   import { Button } from '$lib/ui/button';
 
   import { recordDateLabel, recordFieldLabel, recordKindLabel, recordRoleLabel } from './labels';
+  import {
+    clearLegacyRecordDrafts,
+    isRecordDraftStorageEvent,
+    normalizeRecordDraft,
+  } from './legacy-drafts';
   import RecordEditor from './RecordEditor.svelte';
   import type { RecordForm } from './records';
-  import { emptyForm, formOf, parseRecordForm, summary, toInput } from './records';
+  import { emptyForm, formOf, parseRecordForm, recordWriting, summary, toInput } from './records';
+  import { recordRequestSignature } from './request-signature';
   import ZoteroImport from './ZoteroImport.svelte';
 
   interface Props {
@@ -65,26 +70,77 @@
   let pending = $state<{ requestId: string; signature: string } | null>(null);
   let baseline = $state(JSON.stringify(emptyForm()));
   let busy = $state(false);
+  const initialDraftReadiness = clearLegacyRecordDrafts();
+  let draftReadiness = $state<'ready' | 'retry' | 'reading'>(initialDraftReadiness);
+  // Once enabled, keep the live draft session even if a later cleanup blocks new entry.
+  let draftEnabled = $state(initialDraftReadiness === 'ready');
+  let draftCleanupNotice = $state('');
+  let mounted = false;
+  let cleanupAttempt = 0;
+  let detachDraft: (() => void) | undefined;
+  function baseForm(): RecordForm {
+    try {
+      return parseRecordForm(JSON.parse(baseline)) ?? emptyForm();
+    } catch {
+      return emptyForm();
+    }
+  }
+  function writing(value: RecordForm): RecordForm {
+    const keys = (defs.find((def) => def.kind === selected)?.fields ?? [])
+      .filter((field) => field.type === 'long_text')
+      .map((field) => field.key);
+    return recordWriting(value, keys);
+  }
+  function settings(value: RecordForm): RecordForm {
+    const longKeys = new Set(Object.keys(writing(value).values));
+    return {
+      ...value,
+      body: '',
+      values: Object.fromEntries(
+        Object.entries(value.values).filter(([key]) => !longKeys.has(key)),
+      ),
+    };
+  }
+  function restoreWriting(live: RecordForm, saved: RecordForm): RecordForm {
+    const restored = writing(saved);
+    return { ...live, body: restored.body, values: { ...live.values, ...restored.values } };
+  }
+  function draftKey(): string | undefined {
+    return draft.key;
+  }
+  function storedInput() {
+    return {
+      form: writing(form),
+      baseline: JSON.stringify(writing(baseForm())),
+      version: editingVersion,
+      pending,
+    };
+  }
+  function writingDirty(): boolean {
+    return (
+      (creating || editingId !== undefined) &&
+      JSON.stringify(writing(form)) !== JSON.stringify(writing(baseForm()))
+    );
+  }
   const draft = createFormDraft({
+    retainSource: true,
     name: () =>
-      selected === undefined ? undefined : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
-    snapshot: () => ({ form, baseline, version: editingVersion, pending }),
-    parse: (raw) => {
-      if (
-        !object(raw) ||
-        typeof raw.baseline !== 'string' ||
-        typeof raw.version !== 'number' ||
-        !retry(raw.pending)
-      )
-        return undefined;
-      const parsed = parseRecordForm(raw.form);
-      return parsed === undefined
+      !draftEnabled || selected === undefined
         ? undefined
-        : { form: parsed, baseline: raw.baseline, version: raw.version, pending: raw.pending };
-    },
+        : `record:${item.id}:${selected}:${editingId ?? 'new'}`,
+    snapshot: () => ({ form, baseline, version: editingVersion, pending }),
+    storedSnapshot: storedInput,
+    parse: (raw) => normalizeRecordDraft(selected, raw),
     restore: (value) => {
-      form = value.form;
-      baseline = value.baseline;
+      const currentBase = baseForm();
+      let savedBase = emptyForm();
+      try {
+        savedBase = parseRecordForm(JSON.parse(value.baseline)) ?? emptyForm();
+      } catch {
+        // An invalid baseline cannot supply any restored values.
+      }
+      form = restoreWriting(form, value.form);
+      baseline = JSON.stringify(restoreWriting(currentBase, savedBase));
       editingVersion = value.version;
       pending = value.pending;
       creating = editingId === undefined;
@@ -96,10 +152,161 @@
       busy = false;
       conflict = undefined;
     },
-    dirty: () => (creating || editingId !== undefined) && JSON.stringify(form) !== baseline,
+    dirty: writingDirty,
+    screenOnly: () =>
+      (creating || editingId !== undefined) &&
+      JSON.stringify(settings(form)) !== JSON.stringify(settings(baseForm())),
     busy: () => busy,
   });
-  onMount(draft.attach);
+  // A storage event is evidence to re-persist live writing, never authority to delete another draft.
+  function repairOwnedWriting(event: StorageEvent): void {
+    if (!draft.active || draft.blocked || event.key !== draftKey() || !writingDirty()) return;
+    try {
+      const raw: unknown = JSON.parse(event.newValue ?? 'null');
+      if (typeof raw === 'object' && raw !== null && 'input' in raw) {
+        const input = normalizeRecordDraft(selected, raw.input);
+        if (input !== undefined && JSON.stringify(input) === JSON.stringify(storedInput())) return;
+      }
+    } catch {
+      // An invalid replacement must not destroy the editor's valid writing.
+    }
+    // writingDirty is true: persist only writes this session's key on this path.
+    draft.persist();
+  }
+
+  type DraftOffer = (typeof draft.offers)[number];
+  let visibleOffers = $state<DraftOffer[]>([]);
+  function storedOffer(entry: DraftOffer): DraftOffer['value'] | null | undefined {
+    try {
+      const text = localStorage.getItem(entry.key);
+      if (text === null) return null;
+      const raw: unknown = JSON.parse(text);
+      if (
+        typeof raw !== 'object' ||
+        raw === null ||
+        !('savedAt' in raw) ||
+        typeof raw.savedAt !== 'string' ||
+        !('input' in raw)
+      )
+        return undefined;
+      const input = normalizeRecordDraft(selected, raw.input);
+      return input === undefined ? undefined : { savedAt: raw.savedAt, input };
+    } catch {
+      return undefined;
+    }
+  }
+  function offerStillStored(entry: DraftOffer): boolean {
+    return JSON.stringify(storedOffer(entry)) === JSON.stringify(entry.value);
+  }
+  function chooseOffer(entry: DraftOffer, action: 'restore' | 'discard'): void {
+    if (!draft.active || busy || (action === 'restore' && draftReadiness !== 'ready')) return;
+    const stored = storedOffer(entry);
+    if (stored === undefined) {
+      draftCleanupNotice = m.records_draft_cleanup_failed();
+      return;
+    }
+    if (stored !== null && JSON.stringify(stored) !== JSON.stringify(entry.value)) {
+      // The original proposal cannot authorize removing a later snapshot. Ask once more.
+      entry.value = stored;
+      draftCleanupNotice = m.records_draft_cleanup_failed();
+      return;
+    }
+    if (action === 'restore') draft.restore(entry);
+    else draft.discard(entry);
+  }
+  $effect(() => {
+    const entries = draft.offers;
+    const id = editingId;
+    const key = draftKey();
+    const def = defs.find((candidate) => candidate.kind === selected);
+    visibleOffers = [];
+    if (entries.length === 0 || !draft.active) return;
+    // New records have no confirmed server identity; identical text in another record is not proof.
+    if (id === undefined || def === undefined) {
+      visibleOffers = entries;
+      return;
+    }
+    let cancelled = false;
+    api.itemRecords(item.id).then(
+      (list) => {
+        if (cancelled || !draft.active || draftKey() !== key) return;
+        const saved = list.find((record) => record.id === id && record.kind === def.kind);
+        const remaining: DraftOffer[] = [];
+        for (const entry of entries) {
+          if (!draft.offers.includes(entry)) continue;
+          if (
+            saved !== undefined &&
+            JSON.stringify(writing(entry.value.input.form)) ===
+              JSON.stringify(writing(formOf(def, saved))) &&
+            offerStillStored(entry)
+          ) {
+            draft.hide(entry);
+            continue;
+          }
+          remaining.push(entry);
+        }
+        visibleOffers = remaining;
+      },
+      () => {
+        // A failed server read is not proof of completion: keep the writing and offer it.
+        if (!cancelled && draft.active && draftKey() === key) visibleOffers = entries;
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  });
+  async function retryDraftCleanup(): Promise<void> {
+    const attempt = ++cleanupAttempt;
+    const cleanup = clearLegacyRecordDrafts();
+    if (writingDirty() && !draft.kept) draft.persist();
+    if (cleanup === 'retry' || (writingDirty() && !draft.kept)) {
+      draftReadiness = 'retry';
+      draftCleanupNotice = m.records_draft_cleanup_failed();
+      return;
+    }
+    if (detachDraft !== undefined) {
+      draftCleanupNotice = '';
+      draftReadiness = 'ready';
+      return;
+    }
+    draftEnabled = true;
+    draftReadiness = 'reading';
+    // Let the offers read their unchanged source keys before enabling entry.
+    await tick();
+    if (!mounted || attempt !== cleanupAttempt) return;
+    detachDraft = draft.attach();
+    draftCleanupNotice = '';
+    draftReadiness = 'ready';
+  }
+  onMount(() => {
+    mounted = true;
+    if (draftReadiness === 'ready') detachDraft = draft.attach();
+    else draftCleanupNotice = m.records_draft_cleanup_failed();
+    const onReturn = (): void => {
+      void retryDraftCleanup();
+    };
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') onReturn();
+    };
+    const onStorage = (event: StorageEvent): void => {
+      // Recheck every key so one successful event cannot hide another failed cleanup.
+      if (isRecordDraftStorageEvent(event)) {
+        repairOwnedWriting(event);
+        onReturn();
+      }
+    };
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      mounted = false;
+      detachDraft?.();
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('storage', onStorage);
+    };
+  });
   let reloadKey = $state(0);
 
   const current = $derived(defs.find((d) => d.kind === selected));
@@ -193,6 +400,7 @@
   });
 
   async function startNew(): Promise<void> {
+    if (draftReadiness !== 'ready') return;
     editingId = undefined;
     await tick();
     form = emptyForm();
@@ -203,6 +411,7 @@
   }
 
   async function startEdit(def: RecordKindView, r: RecordView): Promise<void> {
+    if (draftReadiness !== 'ready') return;
     creating = false;
     editingId = r.id;
     await tick();
@@ -261,14 +470,19 @@
     error = undefined;
     const base =
       !creating && editingId !== undefined ? { id: editingId, version: baseVersion } : undefined;
-    if (creating) {
-      const signature = JSON.stringify({ item: item.id, kind: def.kind, input: built.input });
-      if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
-    }
-    const attempt = draft.capture();
-    if (attempt === undefined) return;
+    const captured = draft.capture();
+    if (captured === undefined) return;
+    let attempt = captured;
     busy = true;
     try {
+      if (creating) {
+        const signature = await recordRequestSignature(item.id, def.kind, built.input);
+        if (!draft.isCurrent(attempt)) return;
+        if (pending?.signature !== signature) pending = { requestId: newRequestId(), signature };
+        const submitted = draft.capture();
+        if (submitted === undefined) return;
+        attempt = submitted;
+      }
       let savedStatus: string;
       if (creating && pending !== null) {
         const requestId = pending.requestId;
@@ -319,14 +533,24 @@
 
 <!-- 저장하는 동안 되살리기도 잠근다. 그사이 바뀐 입력은 성공한 저장을 버리게 하고, 만들기는 다시 내면 새 요청 id로
      두 번째 기록을, 고치기는 옮기지 못한 기준 판으로 자기 저장과 409를 낸다. -->
-{#each draft.offers as entry (entry.key)}
+<p role="status" aria-live="polite" class="text-sm text-destructive empty:hidden">
+  {draftCleanupNotice}
+</p>
+{#if draftReadiness === 'retry'}
+  <Button size="sm" variant="outline" onclick={() => void retryDraftCleanup()}
+    >{m.common_retry()}</Button
+  >
+{/if}
+{#each visibleOffers as entry (entry.key)}
   <fieldset class="contents" disabled={busy}>
     <FormDraftOffer
+      restoreDisabled={draftReadiness !== 'ready'}
       onrestore={() => {
-        draft.restore(entry);
+        if (draftReadiness !== 'ready') return;
+        chooseOffer(entry, 'restore');
       }}
       ondiscard={() => {
-        draft.discard(entry);
+        chooseOffer(entry, 'discard');
       }}
     />
   </fieldset>
@@ -418,6 +642,7 @@
           <Button
             size="sm"
             variant="outline"
+            disabled={draftReadiness !== 'ready'}
             onclick={() => {
               draft.leave.request(() => void startNew());
             }}>{m.records_new_kind({ label: kindLabel })}</Button
@@ -599,7 +824,8 @@
                     variant="ghost"
                     onclick={() => {
                       draft.leave.request(() => void startEdit(def, r));
-                    }}>{m.records_edit()}</Button
+                    }}
+                    disabled={draftReadiness !== 'ready'}>{m.records_edit()}</Button
                   >
                 {/if}
                 {#if r.can_delete && confirming !== r.id}

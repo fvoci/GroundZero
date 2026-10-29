@@ -3,6 +3,7 @@
 mod contracts;
 mod courses;
 mod http;
+mod member_lock;
 mod private_progress;
 mod study;
 mod support;
