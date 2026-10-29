@@ -633,7 +633,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     .await
     .unwrap();
 
-    // 워크스페이스 밖 사람이 개인 노트에 이 파일 v1 주소를 적는다. 표준형이 아니면 400.
+    // 워크스페이스 밖 사람이 개인 노트에 이 파일 v1 주소를 적는다. 표준형 검증은 CRDT도 쓰는 공통 경계에서 확인한다.
     let note = send(
         &app,
         Method::POST,
@@ -654,17 +654,16 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
         }
     };
     let upper = foreign.to_string().to_uppercase();
-    assert_eq!(
-        save(format!("/api/files/{upper}/content?version=1")).await,
-        StatusCode::BAD_REQUEST
-    );
-    assert_eq!(
-        save(format!(
-            "/api/files/{foreign}/content?inline=true&version=1"
-        ))
-        .await,
-        StatusCode::BAD_REQUEST
-    );
+    for src in [
+        format!("/api/files/{upper}/content?version=1"),
+        format!("/api/files/{foreign}/content?inline=true&version=1"),
+    ] {
+        let body =
+            json!({ "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] });
+        assert!(
+            fvoci_server::features::documents::validate_body(&body, &state.config.limits).is_err()
+        );
+    }
     assert_eq!(
         save(format!("/api/files/{foreign}/content?version=1")).await,
         StatusCode::OK
