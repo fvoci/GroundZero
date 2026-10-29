@@ -4411,12 +4411,6 @@ export interface components {
             max_file_bytes?: number | null;
             /** Format: int64 */
             max_storage_bytes?: number | null;
-            /**
-             * Format: int32
-             * @description 이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.
-             *     현재 외부 채널은 구현되어 있지 않다.
-             */
-            notification_rate_per_hour?: number | null;
         };
         /** @description 조직 멤버. 이메일은 SQL이 조직 관리자에게만 돌려준다. */
         OrganizationMember: {

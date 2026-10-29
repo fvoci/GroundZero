@@ -24,10 +24,6 @@ pub struct OrganizationLimits {
     pub max_storage_bytes: Option<i64>,
     #[schema(minimum = 1)]
     pub max_concurrent_uploads: Option<i32>,
-    /// 이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.
-    /// 현재 외부 채널은 구현되어 있지 않다.
-    #[schema(minimum = 1)]
-    pub notification_rate_per_hour: Option<i32>,
     #[schema(minimum = 1, maximum = 3650)]
     pub activity_retention_days: Option<i32>,
     #[schema(minimum = 1, maximum = 3650)]
@@ -52,12 +48,6 @@ fn validate_limits(limits: &OrganizationLimits) -> Result<(), AppError> {
         (
             "max_concurrent_uploads",
             limits.max_concurrent_uploads.map(i64::from),
-            1,
-            None,
-        ),
-        (
-            "notification_rate_per_hour",
-            limits.notification_rate_per_hour.map(i64::from),
             1,
             None,
         ),
@@ -157,10 +147,7 @@ fn validate_patch(patch: &Value, scope: SettingsScope) -> Result<(), AppError> {
                 }
             }
             "max_file_bytes" | "max_storage_bytes" => integer(field, value, i64::MIN, i64::MAX)?,
-            "max_concurrent_uploads"
-            | "notification_rate_per_hour"
-            | "activity_retention_days"
-            | "audit_retention_days" => {
+            "max_concurrent_uploads" | "activity_retention_days" | "audit_retention_days" => {
                 integer(field, value, i64::from(i32::MIN), i64::from(i32::MAX))?;
             }
             _ => return Err(invalid_format(field)),
@@ -214,9 +201,14 @@ async fn read_workspace_limits(
     ws: WorkspaceId,
 ) -> Result<OrganizationLimits, AppError> {
     access::require_owner(tx, Kind::Workspace, ws).await?;
-    sqlx::query_as("SELECT max_file_bytes, max_storage_bytes, max_concurrent_uploads,
-        notification_rate_per_hour, activity_retention_days, audit_retention_days FROM workspaces WHERE id = $1")
-        .bind(ws).fetch_optional(tx.conn()).await?.ok_or(AppError::NotFound)
+    sqlx::query_as(
+        "SELECT max_file_bytes, max_storage_bytes, max_concurrent_uploads,
+        activity_retention_days, audit_retention_days FROM workspaces WHERE id = $1",
+    )
+    .bind(ws)
+    .fetch_optional(tx.conn())
+    .await?
+    .ok_or(AppError::NotFound)
 }
 
 /// 관리자가 편집하는 설정값만 반환한다(실효 한도는 계산하지 않는다).

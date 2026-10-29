@@ -202,7 +202,6 @@ export function parseOrganizationLimits(value: Json): OrganizationLimits {
     max_file_bytes: optInt(o, 'max_file_bytes'),
     max_storage_bytes: optInt(o, 'max_storage_bytes'),
     max_concurrent_uploads: optInt(o, 'max_concurrent_uploads'),
-    notification_rate_per_hour: optInt(o, 'notification_rate_per_hour'),
     activity_retention_days: optInt(o, 'activity_retention_days'),
     audit_retention_days: optInt(o, 'audit_retention_days'),
   };

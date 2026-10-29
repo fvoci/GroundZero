@@ -19831,15 +19831,6 @@
             ],
             "format": "int64",
             "minimum": 0
-          },
-          "notification_rate_per_hour": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32",
-            "description": "이메일 등 외부 채널만 적용하는 1시간 창의 발송 한도. 초과분은 다음 시간대로 지연하고 인앱 알림은 항상 만든다.\n현재 외부 채널은 구현되어 있지 않다.",
-            "minimum": 1
           }
         }
       },

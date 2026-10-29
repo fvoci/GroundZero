@@ -119,7 +119,6 @@ type OrganizationRow = (
     Option<i32>,
     Option<i32>,
     Option<i32>,
-    Option<i32>,
     OffsetDateTime,
 );
 
@@ -146,7 +145,7 @@ async fn read_organization(
     let grade = access::require_visible(tx, Kind::Organization, organization).await?;
     let row: OrganizationRow = sqlx::query_as(
         "SELECT id, name, public_links_enabled, max_file_bytes, max_storage_bytes, max_concurrent_uploads,
-                notification_rate_per_hour, activity_retention_days, audit_retention_days, created_at
+                activity_retention_days, audit_retention_days, created_at
          FROM organizations WHERE id = $1",
     )
     .bind(organization)
@@ -160,7 +159,6 @@ async fn read_organization(
         max_file_bytes,
         max_storage_bytes,
         max_concurrent_uploads,
-        notification_rate_per_hour,
         activity_retention_days,
         audit_retention_days,
         created_at,
@@ -179,7 +177,6 @@ async fn read_organization(
             max_file_bytes,
             max_storage_bytes,
             max_concurrent_uploads,
-            notification_rate_per_hour,
             activity_retention_days,
             audit_retention_days,
         },
