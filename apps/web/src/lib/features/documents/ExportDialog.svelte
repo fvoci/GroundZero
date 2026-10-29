@@ -2,7 +2,7 @@
   // 문서 한 건 내보내기(D-75). 저장된 리비전을 골라 Markdown·ZIP(Markdown과 그림·첨부)·PDF(브라우저 인쇄)로 내보낸다.
   // 권한은 서버가 확인하고(내려받기와 같은 규칙) 화면은 `can_export`일 때만 보인다. 저장하지 않은 편집이 있으면
   // 먼저 저장하거나 저장된 리비전을 내보낼지 알린다. 변환 결과와 제한(옮기지 못한 블록, 넣지 못한 첨부)을 보여 준다.
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
 
   import { formatInstant } from '$lib/display';
   import type { DocumentView, RevisionSummaryView } from '$lib/api/client';
@@ -10,7 +10,12 @@
   import { errorText } from '$lib/api/errors';
   import type { ReferenceContext } from '$lib/features/references/context';
   import { m } from '$lib/paraglide/messages.js';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    accountSwitching,
+    notifyDone,
+  } from '$lib/features/feedback/feedback.svelte';
+  import { me as currentUser } from '$lib/me.svelte';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Label } from '$lib/ui/label';
@@ -40,6 +45,28 @@
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let notes = $state<string[] | undefined>(undefined);
+  let mounted = true;
+  let operation = $state.raw<{
+    generation: number;
+    userId: string;
+    controller: AbortController;
+  }>();
+  onDestroy(() => {
+    mounted = false;
+    operation?.controller.abort();
+  });
+  // SR-221-2: portal이 남아 있어도 안전 상태·닫기·사용자 변경에서 첨부와 인쇄 대기를 끊는다.
+  $effect.pre(() => {
+    const generation = accountSafety.generation;
+    const userId = currentUser.userId;
+    const hidden = accountSwitching();
+    if (
+      operation &&
+      (!open || hidden || operation.generation !== generation || operation.userId !== userId)
+    ) {
+      operation.controller.abort();
+    }
+  });
 
   // 화면 문구만 번역한다. 내보낸 파일 내용(알림 주석, 자리표시 글자)은 export.ts가 언어와 상관없이 만든다.
   const FORMATS = $derived<{ value: ExportFormat; label: string; hint: string }[]>([
@@ -97,19 +124,38 @@
   }
 
   async function run(): Promise<void> {
-    if (!doc.can_export) return;
+    if (busy || !mounted || !open || accountSwitching() || !doc.can_export) return;
+    const started = {
+      generation: accountSafety.generation,
+      userId: currentUser.userId,
+      controller: new AbortController(),
+    };
+    operation = started;
+    const current = (): boolean =>
+      mounted &&
+      open &&
+      !started.controller.signal.aborted &&
+      !accountSwitching() &&
+      started.generation === accountSafety.generation &&
+      started.userId === currentUser.userId;
     busy = true;
     error = undefined;
     notes = undefined;
     try {
-      const rev = await api.exportRevision(doc.id, selected, format);
+      const rev = await api.exportRevision(doc.id, selected, format, started.controller.signal);
+      if (!current()) return;
       const prepared = await prepareExport(rev.title, rev.revision, rev.body, {
         format,
         hrefFor: references.hrefFor,
         origin: window.location.origin,
+        signal: started.controller.signal,
       });
+      if (!current()) return;
       if (format === 'pdf') {
-        await printToPdf(await printDocumentHtml(prepared, when(rev.created_at)));
+        const html = await printDocumentHtml(prepared, when(rev.created_at));
+        if (!current()) return;
+        await printToPdf(html, started.controller.signal);
+        if (!current()) return;
         notes = prepared.notes;
       } else {
         const { markdown, lossy } = toMarkdown(prepared);
@@ -117,6 +163,7 @@
           format === 'zip'
             ? await toZip(prepared, markdown)
             : new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+        if (!current()) return;
         saveBlob(blob, exportFileName(rev.title, format));
         notes = [
           ...prepared.notes,
@@ -125,12 +172,14 @@
       }
       notifyDone(format === 'pdf' ? m.documents_export_print_opened() : m.documents_exported());
     } catch (e: unknown) {
+      if (!current()) return;
       error =
         e instanceof ApiError && e.status === 403
           ? m.documents_export_forbidden()
           : errorText(e, m.documents_export_failed());
     } finally {
       busy = false;
+      operation = undefined;
     }
   }
 </script>

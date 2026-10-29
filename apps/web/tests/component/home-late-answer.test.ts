@@ -1,9 +1,10 @@
+import type { HomeView, MyTasksView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Activity, Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { HomeView, MyTasksView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import ActivityList from '$lib/features/activity/ActivityList.svelte';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
@@ -34,6 +35,7 @@ const workspace: Workspace = {
 };
 
 const home: HomeView = {
+  my_tasks: { counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 }, workspaces: [] },
   today: '2026-10-20',
   up_next: [],
   up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
@@ -48,7 +50,7 @@ describe('home answer after unmount', () => {
   it('drops a home answer that arrives after the dashboard is gone', async () => {
     await setLocale('ko', { reload: false });
     let finish: (value: HomeView) => void = () => undefined;
-    vi.spyOn(api, 'home').mockImplementation(
+    vi.spyOn(homeApi, 'home').mockImplementation(
       () =>
         new Promise<HomeView>((resolve) => {
           finish = resolve;
@@ -96,7 +98,7 @@ describe('an earlier organization answer that arrives after switching', () => {
       return { ...view, active_items: [{ ...first, title }, ...rest] };
     };
     const first = held<HomeView>();
-    vi.spyOn(api, 'home').mockImplementation((organizationId) =>
+    vi.spyOn(homeApi, 'home').mockImplementation((organizationId) =>
       organizationId === TEST_ORGANIZATION.id
         ? first.promise
         : Promise.resolve(titled('다른 조직 항목')),
@@ -120,7 +122,7 @@ describe('an earlier organization answer that arrives after switching', () => {
       return { ...view, workspaces: [{ ...ws, tasks: [{ ...task, title }, ...tasks] }, ...others] };
     };
     const first = held<MyTasksView>();
-    vi.spyOn(api, 'myTasks').mockImplementation((organizationId) =>
+    vi.spyOn(homeApi, 'myTasks').mockImplementation((organizationId) =>
       organizationId === TEST_ORGANIZATION.id
         ? first.promise
         : Promise.resolve(titled('다른 조직 업무')),

@@ -22,8 +22,8 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, courses, home, item_profile, members, modules, organizations, records, search_api,
-    study, workspaces, zotero,
+    accounts, courses, item_profile, members, modules, organizations, records, study, workspaces,
+    zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -124,6 +124,14 @@ impl FromRef<AppState> for fvoci_calendar::CalendarState {
     }
 }
 
+impl FromRef<AppState> for fvoci_home::HomeState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_activity::ActivityState {
     fn from_ref(state: &AppState) -> Self {
         Self {
@@ -145,6 +153,15 @@ impl FromRef<AppState> for fvoci_work::WorkState {
         Self {
             db: state.db.clone(),
             max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_search::SearchState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            search: state.search.clone(),
         }
     }
 }
@@ -328,9 +345,6 @@ async fn api_not_found() -> AppError {
         organizations::create,
         organizations::server_admins,
         // personal scope (2단계 B)
-        home::home,
-        home::my_tasks,
-        search_api::search,
         study::get,
         study::add_units,
         study::update_unit,
@@ -415,12 +429,6 @@ async fn api_not_found() -> AppError {
         workspaces::SetRealtime,
         workspaces::WorkspaceDeleted,
         workspaces::DeletedWorkspace,
-        home::DueBucket,
-        home::HomeTask,
-        home::HomeDocument,
-        home::HomeItem,
-        home::MarkedTarget,
-        home::Home,
         organizations::OrgRole,
         organizations::OrganizationSummary,
         organizations::OrganizationLimits,
@@ -437,8 +445,6 @@ async fn api_not_found() -> AppError {
         organizations::CreateOrganization,
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
-        home::UpNextCounts,
-        search_api::SearchResult,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -498,11 +504,6 @@ async fn api_not_found() -> AppError {
         modules::UpdateItem,
         modules::ItemConflict,
         modules::ItemSaveConflict,
-        // personal scope (2단계 B)
-        home::MyTask,
-        home::MyTaskCounts,
-        home::WorkspaceTasks,
-        home::MyTasks,
         fvoci_core::ids::Role,
     )),
     tags(
@@ -535,6 +536,8 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_home::HomeApi::openapi());
+        openapi.merge(fvoci_search::SearchApi::openapi());
         openapi.merge(fvoci_references::ReferencesApi::openapi());
         openapi.merge(fvoci_documents::DocumentsApi::openapi());
         openapi.merge(fvoci_system::SystemApi::openapi());
@@ -589,6 +592,8 @@ pub fn router(state: AppState) -> Router {
 
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_home::router(&state))
+        .merge(fvoci_search::router(&state))
         .merge(fvoci_references::router(&state))
         .merge(fvoci_documents::router(&state))
         .merge(fvoci_system::router(&state))
@@ -717,9 +722,6 @@ pub fn router(state: AppState) -> Router {
             post(workspaces::restore),
         )
         // personal scope (2단계 B)
-        .route("/me/home", get(home::home))
-        .route("/me/tasks", get(home::my_tasks))
-        .route("/search", get(search_api::search))
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),

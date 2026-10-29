@@ -1,3 +1,4 @@
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -210,7 +211,7 @@ describe('app: watchNewVersion keeps drafts before reloading', () => {
     const item = home.active_items.find((value) => value.can_write);
     if (item === undefined) throw new Error('missing writable item');
     localStorage.setItem(org.key('quick-add-item'), item.id);
-    vi.spyOn(api, 'home').mockResolvedValue(home);
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
     vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { workspaces: [] });
     await fireEvent.click(await screen.findByRole('button', { name: m.home_quick_add() }));

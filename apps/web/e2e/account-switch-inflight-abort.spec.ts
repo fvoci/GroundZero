@@ -30,11 +30,10 @@ test('a request still in flight when the account switch is detected never comple
 
   let held: Parameters<Parameters<typeof page.route>[1]>[0] | undefined;
   await test.step('A: 업무 읽기 요청 하나를 보낸 채 붙잡아 둔다', async () => {
-    await page.goto(`/w/${ws}/i/${item}/tasks/board`);
-    await expect(page.getByTestId('task-board')).toBeVisible();
     // 진행 중인 /api/ 요청을 적고, 이 문서가 내려갈 때(pagehide) 아직 끝나지 않은 것을 세션 저장소(다시 읽은 뒤에도 남는다)에
     // 남긴다. 요청을 바꾸지 않는 관찰용 기록기다.
-    await page.evaluate((key) => {
+    // Chromium의 Window 대상 이벤트는 capture도 등록 순서를 따른다. 앱보다 먼저 등록해야 진입 순간을 잰다.
+    await page.addInitScript((key) => {
       const pending = new Map<symbol, string>();
       const original = window.fetch.bind(window);
       window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -46,10 +45,18 @@ test('a request still in flight when the account switch is detected never comple
         void request.finally(() => pending.delete(id)).catch(() => undefined);
         return request;
       };
-      window.addEventListener('pagehide', () => {
-        window.sessionStorage.setItem(key, JSON.stringify([...pending.values()]));
-      });
+      // #212 2행·00:25: 앱의 pagehide 가림이 bubble 전에 진행 중 요청을 거부하므로,
+      // 앱 콜백 전 이벤트 진입 순간을 capture 단일 리스너로 잰다. 관찰 시점 변경, 단언 동일(코디네이터 승인).
+      window.addEventListener(
+        'pagehide',
+        () => {
+          window.sessionStorage.setItem(key, JSON.stringify([...pending.values()]));
+        },
+        { capture: true },
+      );
     }, PENDING_KEY);
+    await page.goto(`/w/${ws}/i/${item}/tasks/board`);
+    await expect(page.getByTestId('task-board')).toBeVisible();
     await page.route(`**${taskPath}`, (route) => {
       // 보내지도 이어 주지도 않는다: 요청은 브라우저 안에서 진행 중으로 남는다.
       held = route;

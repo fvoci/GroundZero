@@ -6,6 +6,7 @@
   import { api, ApiError, NetworkError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
+  import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
@@ -23,9 +24,15 @@
   import { setLocale } from '$lib/paraglide/runtime.js';
   import DisplaySettingsDialog from '$lib/features/settings/DisplaySettingsDialog.svelte';
   import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
-  // 계정 전환 뒤 다시 읽기 전까지 기존 화면·입력을 숨기되 메모리는 보존한다(D-96).
-  import { accountSafety } from '$lib/features/feedback/feedback.svelte';
-  import { connection } from '$lib/features/feedback/feedback.svelte';
+  // 계정 전환은 입력을 보존하고(D-96), 로그아웃은 비운다. 둘 다 다시 읽기 전까지 기존 화면을 가린다.
+  import {
+    accountSafety,
+    auth,
+    connection,
+    hideSession,
+    reportSessionExpired,
+    switchAccount,
+  } from '$lib/features/feedback/feedback.svelte';
   import NotificationsScreen from '$lib/features/references/NotificationsScreen.svelte';
   // 홈에서 초대를 처리한 경우도 서버 미독 수를 즉시 다시 읽는다(D-118).
   import { invitationChanges } from '$lib/features/home/invitations.svelte';
@@ -42,8 +49,24 @@
   import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
+  import { flushSync, onDestroy } from 'svelte';
+  import { timer } from '$lib/features/time/timer.svelte';
 
   import BackLink from './BackLink.svelte';
+
+  interface Props {
+    /** 브라우저 이동 경계. 시험에서도 창 자체와 이벤트 수명은 바꾸지 않는다. */
+    replace?: (url: string) => void;
+    reload?: () => void;
+  }
+  const {
+    replace = (url) => {
+      window.location.replace(url);
+    },
+    reload = () => {
+      window.location.reload();
+    },
+  }: Props = $props();
 
   type Session =
     | { state: 'loading' }
@@ -55,14 +78,41 @@
   let session = $state<Session>({ state: 'loading' });
   let searchOpen = $state(false);
   let displayOpen = $state(false);
+  const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
+  let sessionSequence = 0;
+  let restoreSequence = 0;
+  let restoringUserId: string | undefined;
+  let checkingSession = false;
+  let loadingSession = false;
+  let restoringSession = false;
+  let sessionCheckPending = false;
+  let cacheRestorePending = false;
+  onDestroy(() => {
+    sessionSequence += 1;
+    restoreSequence += 1;
+    sessionCheckPending = false;
+    cacheRestorePending = false;
+  });
 
-  async function load(): Promise<void> {
+  async function load(verified?: Me, attempt = 0): Promise<boolean> {
+    const mine = ++sessionSequence;
+    loadingSession = true;
+    const safetyGeneration = accountSafety.generation;
+    const retryLoad = async (): Promise<boolean> => {
+      if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
+      return load(undefined, attempt + 1);
+    };
     try {
-      const me = await api.me();
+      const me = verified ?? (await api.me());
+      if (mine !== sessionSequence || cacheRestorePending) return false;
+      if (verified === undefined && router.route.name !== 'public') {
+        if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+      }
       if (me === undefined) {
         const info = await api.authInfo();
+        if (mine !== sessionSequence) return false;
         session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
-        return;
+        return true;
       }
       currentUser.userId = me.id;
       currentUser.timeZone = me.time_zone;
@@ -77,15 +127,26 @@
       currentUser.displayName = me.display_name;
       // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
       await setLocale(displaySettings().locale, { reload: false });
+      if (mine !== sessionSequence) return false;
       document.documentElement.lang = displaySettings().locale;
       // 조직 목록(D-111)은 전환기와 개인 화면의 범위다. 서버는 기본 조직을 정하지 않으므로 선택은 org 문맥이 든다.
       const [workspaces, organizations] = await Promise.all([
         api.workspaces(),
         api.myOrganizations(),
       ]);
+      if (mine !== sessionSequence) return false;
       org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };
+      return true;
     } catch (e: unknown) {
+      if (mine !== sessionSequence || cacheRestorePending) return false;
+      if (verified === undefined && safetyGeneration !== accountSafety.generation) {
+        try {
+          return await retryLoad();
+        } catch {
+          /* 아래 안전한 시작 실패 화면을 쓴다. */
+        }
+      }
       // 브라우저·서버의 원문 대신 번역된 문구(D-81). 서버에 닿지 않은 경우는 다시 시도하면 된다고 알린다.
       const network =
         e instanceof NetworkError || (e instanceof ApiError && e.code === 'unreachable');
@@ -94,12 +155,22 @@
         message: network ? m.app_server_unreachable() : errorText(e, m.app_start_failed()),
         network,
       };
+      return false;
+    } finally {
+      if (mine === sessionSequence) {
+        loadingSession = false;
+        drainSessionCheck();
+      }
     }
   }
 
   void load();
 
   async function retry(): Promise<void> {
+    if (accountSafety.switching && accountSafety.reason === 'restore') {
+      await restoreSession();
+      return;
+    }
     session = { state: 'loading' };
     await load();
   }
@@ -164,11 +235,17 @@
   });
   $effect(() => {
     const onFocus = (): void => {
+      if (checkSession() || sessionHidden) return;
       void refreshUnread();
     };
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') checkSession();
+    };
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   });
 
@@ -185,6 +262,7 @@
    * 쪽도 그 뒤에 돌아간다(초대 수락 뒤 `org.select`가 새 조직이 든 목록을 봐야 한다).
    */
   async function reloadWorkspaces(): Promise<void> {
+    const sessionAtStart = sessionSequence;
     workspacesPending = true;
     await workspacesReload.run(async (isCurrent) => {
       try {
@@ -192,7 +270,7 @@
           api.workspaces(),
           api.myOrganizations(),
         ]);
-        if (isCurrent() && session.state === 'signed-in') {
+        if (isCurrent() && sessionAtStart === sessionSequence && session.state === 'signed-in') {
           session.workspaces = workspaces;
           org.load(session.me.id, organizations);
         }
@@ -215,10 +293,218 @@
     if (workspacesPending) reloadWorkspaces().catch(() => undefined);
   }
 
-  async function logout(): Promise<void> {
-    const redirect = await api.logout();
+  function clearSession(): void {
+    sessionSequence += 1;
+    session = { state: 'loading' };
     org.reset();
-    window.location.assign(redirect);
+    Object.assign(currentUser, {
+      userId: '',
+      timeZone: '',
+      displayName: '',
+      locale: '',
+      weekStart: '',
+      hourCycle: '',
+      theme: 'system',
+      maxTitleChars: 200,
+    });
+    searchOpen = false;
+    displayOpen = false;
+    unreadSeq += 1;
+    unreadCount = 0;
+    unreadAt = 0;
+    unreadOrganization = undefined;
+    workspacesPending = false;
+    timer.chooseRestart(undefined);
+    timer.entry = null;
+    timer.error = undefined;
+  }
+
+  let loggingOut = false;
+  async function logout(): Promise<void> {
+    if (loggingOut) return;
+    loggingOut = true;
+    restoreSequence += 1;
+    restoringUserId = undefined;
+    hideSession('logout');
+    flushSync(clearSession);
+    try {
+      const redirect = await api.logout();
+      replace(redirect);
+    } catch (error: unknown) {
+      // 서버 세션이 남았을 수 있다. 비운 화면을 되살리지 않고 같은 안전 상태에서 다시 로그아웃한다(#212 1행).
+      accountSafety.error = errorText(error, m.feedback_logout_failed());
+    } finally {
+      loggingOut = false;
+    }
+  }
+
+  function hideForCache(event: PageTransitionEvent): void {
+    if (!event.persisted || route.name === 'public' || sessionHidden) return;
+    restoringUserId = currentUser.userId;
+    // 복원 첫 그림에 이전 DOM이 쓰이지 않도록 BFCache에 들어갈 때도 가린다.
+    hideSession('restore');
+  }
+
+  async function restoreSession(attempt = 0): Promise<void> {
+    if (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
+      return;
+    const mine = ++restoreSequence;
+    checkingSession = false;
+    restoringSession = true;
+    restoringUserId ??= currentUser.userId;
+    hideSession('restore');
+    const safetyGeneration = accountSafety.generation;
+    const active = (): boolean =>
+      mine === restoreSequence &&
+      !cacheRestorePending &&
+      sessionHidden &&
+      (accountSafety.reason === 'restore' || accountSafety.reason === 'reauth');
+    const recheck = (): void => {
+      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void restoreSession(attempt + 1);
+      else {
+        accountSafety.switching = true;
+        accountSafety.error = m.feedback_restore_failed();
+      }
+    };
+    try {
+      const now = await api.me();
+      if (!active()) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      if (now === undefined) {
+        flushSync(clearSession);
+        hideSession('signed-out');
+        replace(router.path + router.hash);
+      } else if (now.id !== restoringUserId) {
+        hideSession('account');
+        replace(router.path + router.hash);
+      } else {
+        // 하위 화면도 새로 마운트해 목록·문서·개인 데이터를 다시 읽는다.
+        flushSync(clearSession);
+        // 사용자 ID가 맞았다. 시각적 가림은 유지하고 새 읽기만 연다(공통 request가 쓰기는 계속 막는다).
+        accountSafety.switching = false;
+        const loaded = await load(now);
+        if (mine !== restoreSequence || cacheRestorePending || !restoring()) return;
+        if (loaded) {
+          restoringUserId = undefined;
+          accountSafety.restoring = false;
+        } else {
+          accountSafety.switching = true;
+          accountSafety.error = m.feedback_restore_failed();
+        }
+      }
+    } catch (error: unknown) {
+      if (!active()) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      // 확인 실패는 기존 DOM·입력을 보존하고 직접 다시 시도하게 한다.
+      accountSafety.switching = true;
+      accountSafety.error = errorText(error, m.feedback_restore_failed());
+    } finally {
+      if (mine === restoreSequence) {
+        restoringSession = false;
+        drainSessionCheck();
+      }
+    }
+  }
+
+  function restoring(): boolean {
+    return sessionHidden && accountSafety.reason === 'restore';
+  }
+
+  function restorePage(event: PageTransitionEvent): void {
+    if (event.persisted && route.name !== 'public') {
+      cacheRestorePending = true;
+      hideForCache(event);
+    }
+    checkSession();
+  }
+
+  /** 살아 있던 화면의 짧은 값·저장 실패 입력은 재마운트하지 않는다(D-27/D-96/#88, 코디네이터 SR 정정). */
+  function verifyingSession(mine: number): boolean {
+    return (
+      mine === restoreSequence &&
+      !cacheRestorePending &&
+      (!sessionHidden || accountSafety.reason === 'reauth' || accountSafety.reason === 'restore')
+    );
+  }
+
+  async function verifySession(attempt = 0): Promise<void> {
+    if (sessionHidden && accountSafety.reason !== 'reauth' && accountSafety.reason !== 'restore')
+      return;
+    const expected = currentUser.userId;
+    const mine = ++restoreSequence;
+    checkingSession = true;
+    const safetyGeneration = accountSafety.generation;
+    const recheck = (): void => {
+      hideSession('reauth');
+      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void verifySession(attempt + 1);
+      else accountSafety.error = m.feedback_restore_failed();
+    };
+    try {
+      const now = await api.me();
+      if (!verifyingSession(mine)) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      if (now === undefined) {
+        hideSession('reauth');
+        reportSessionExpired();
+      } else if (now.id !== expected) {
+        switchAccount();
+      } else {
+        auth.expired = false;
+        accountSafety.switching = false;
+        accountSafety.restoring = false;
+        void refreshUnread();
+      }
+    } catch (error: unknown) {
+      if (verifyingSession(mine)) {
+        if (safetyGeneration !== accountSafety.generation) {
+          recheck();
+          return;
+        }
+        hideSession('reauth');
+        accountSafety.error = errorText(error, m.feedback_restore_failed());
+      }
+    } finally {
+      if (mine === restoreSequence) {
+        checkingSession = false;
+        drainSessionCheck();
+      }
+    }
+  }
+
+  function drainSessionCheck(): void {
+    if (!sessionCheckPending || loadingSession || restoringSession || checkingSession) return;
+    sessionCheckPending = false;
+    checkSession();
+  }
+
+  /** 확인 중 받은 복귀 이벤트는 버리지 않고 후속 확인 하나로 합친다(SR-221-10). */
+  function checkSession(): boolean {
+    if (router.route.name === 'public') return false;
+    if (loadingSession || restoringSession || checkingSession) {
+      sessionCheckPending = true;
+      return true;
+    }
+    if (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
+      return false;
+    if (cacheRestorePending) {
+      cacheRestorePending = false;
+      void restoreSession();
+      return true;
+    }
+    const expected = restoringUserId ?? currentUser.userId;
+    if (expected === '') return false;
+    if (restoring()) void restoreSession();
+    else void verifySession();
+    return true;
   }
 
   const route = $derived(router.route);
@@ -279,13 +565,23 @@
   });
 </script>
 
-{#if session.state !== 'loading'}
+<svelte:window onpageshow={restorePage} onpagehide={hideForCache} />
+
+{#if route.name !== 'public' && (session.state !== 'loading' || sessionHidden)}
   <!-- 표시 언어(D-81)를 정한 뒤에 그린다(토스트 영역 라벨도 그 언어로). -->
-  <FeedbackHost />
+  <FeedbackHost
+    {reload}
+    sessionManaged
+    retryLogout={() => void logout()}
+    retryRestore={() => {
+      if (accountSafety.reason === 'reauth') void verifySession();
+      else void restoreSession();
+    }}
+  />
 {/if}
 
 <!-- 계정 전환 안전 상태. 입력 보존을 위해 조건부 제거하지 않는다. -->
-<div style:display={accountSafety.switching ? 'none' : 'contents'} inert={accountSafety.switching}>
+<div style:display={sessionHidden ? 'none' : 'contents'} inert={sessionHidden}>
   {#if route.name === 'public'}
     <PublicView token={route.token} />
   {:else if session.state === 'loading'}
