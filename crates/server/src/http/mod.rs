@@ -345,7 +345,6 @@ pub fn router(state: AppState) -> Router {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use utoipa::OpenApi;
 
     use utoipa::OpenApi;
 

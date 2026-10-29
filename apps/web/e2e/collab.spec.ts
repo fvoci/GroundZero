@@ -4,7 +4,7 @@
 import type { Page } from '@playwright/test';
 import type { Editor } from '@tiptap/core';
 
-import { expect, test, unique } from './fixtures';
+import { expect, str, test, unique } from './fixtures';
 
 const editor = (page: Page) => page.getByRole('textbox', { name: '본문' });
 
@@ -74,4 +74,52 @@ test('two users edit a live document together and the result persists', async ({
   await reopened.page.goto(url);
   await expect(editor(reopened.page)).toContainText(first);
   await expect(editor(reopened.page)).toContainText(second);
+});
+
+test('a stored body draft is copied to a private note through a realtime room', async ({
+  signIn,
+}) => {
+  const owner = await signIn('test-user');
+  const tag = unique();
+  const ws = await owner.api.createWorkspace(`초안 보존 ${tag}`);
+  const doc = await owner.api.createWikiDocument(ws, `원본 ${tag}`);
+  const originalUrl = `/w/${ws}/wiki/${doc}`;
+  await owner.page.goto(originalUrl);
+  await expect(owner.page.getByRole('status').filter({ hasText: '실시간 연결됨' })).toBeVisible();
+  const userId = str(await owner.api.get('/api/me'), 'id');
+  const text = `이 브라우저에 보관한 초안 ${tag}`;
+  await owner.page.evaluate(
+    ({ userId, doc, text }) => {
+      localStorage.setItem(
+        `fvoci:${userId}:-:draft:${doc}:offer:000000000000001.test`,
+        JSON.stringify({
+          baseRevision: 1,
+          title: '보관한 초안',
+          savedAt: new Date().toISOString(),
+          body: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+          },
+        }),
+      );
+    },
+    { userId, doc, text },
+  );
+  await owner.page.reload();
+  const offer = owner.page.getByRole('region', { name: '보관된 초안' });
+  await expect(offer).toBeVisible();
+  await offer.getByRole('button', { name: '내 초안을 내 노트로 보존', exact: true }).click();
+  await expect(owner.page).toHaveURL(/\/d\/[^/]+$/);
+  const noteId = new URL(owner.page.url()).pathname.split('/').at(-1);
+  if (noteId === undefined) throw new Error('missing copied note id');
+  expect(noteId).not.toBe(doc);
+  await expect
+    .poll(async () => JSON.stringify(await owner.api.get(`/api/documents/${noteId}`)))
+    .toContain(text);
+  await owner.page.reload();
+  await expect(editor(owner.page)).toContainText(text);
+  expect(JSON.stringify(await owner.api.get(`/api/documents/${doc}`))).not.toContain(text);
+  await owner.page.goto(originalUrl);
+  await expect(owner.page.getByRole('status').filter({ hasText: '실시간 연결됨' })).toBeVisible();
+  await expect(owner.page.getByRole('region', { name: '보관된 초안' })).toHaveCount(0);
 });

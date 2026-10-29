@@ -66,7 +66,7 @@ pub async fn save(app: &Router, user: &TestUser, uri: &str, input: &Value) -> Re
         loop {
             let frame = ws.next().await.unwrap().unwrap();
             let Frame::Binary(bytes) = frame else {
-                panic!("sync refused: {frame:?}");
+                return Err(format!("sync refused: {frame:?}"));
             };
             let mut decoder = DecoderV1::from(bytes.as_ref());
             let messages = MessageReader::new(&mut decoder)
@@ -88,7 +88,7 @@ pub async fn save(app: &Router, user: &TestUser, uri: &str, input: &Value) -> Re
                         doc.transact_mut()
                             .apply_update(Update::decode_v1(&update).unwrap())
                             .unwrap();
-                        return;
+                        return Ok(());
                     }
                     _ => {}
                 }
@@ -96,7 +96,8 @@ pub async fn save(app: &Router, user: &TestUser, uri: &str, input: &Value) -> Re
         }
     })
     .await
-    .expect("live fixture sync deadline");
+    .expect("live fixture sync deadline")
+    .expect("live fixture sync must succeed");
     let fragment = doc.get_or_insert_xml_fragment(FRAGMENT);
     let before = doc.transact().state_vector();
     {
@@ -118,15 +119,16 @@ pub async fn save(app: &Router, user: &TestUser, uri: &str, input: &Value) -> Re
     tokio::time::timeout(Duration::from_secs(10), async {
         while let Some(frame) = ws.next().await {
             match frame.unwrap() {
-                Frame::Pong(_) => return,
-                Frame::Close(reason) => panic!("live fixture rejected: {reason:?}"),
+                Frame::Pong(_) => return Ok(()),
+                Frame::Close(reason) => return Err(format!("live fixture rejected: {reason:?}")),
                 _ => {}
             }
         }
-        panic!("live fixture closed before ping reply");
+        Err("live fixture closed before ping reply".to_owned())
     })
     .await
-    .expect("live fixture ping deadline");
+    .expect("live fixture ping deadline")
+    .expect("live fixture edit must be accepted");
     ws.close(None).await.unwrap();
     drop(ws);
     let result = tokio::time::timeout(Duration::from_secs(10), async {

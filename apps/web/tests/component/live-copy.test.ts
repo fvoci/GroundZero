@@ -69,7 +69,10 @@ it('rejects an account refusal and closes the copy session without confirming th
   const current = opened.at(-1);
   if (current === undefined) throw new Error('missing session');
   const close = vi.spyOn(current.session.provider, 'destroy');
-  current.session.provider.emit('connection-close', [new CloseEvent('close', { code: 4412 })]);
+  current.session.provider.emit('connection-close', [
+    new CloseEvent('close', { code: 4412 }),
+    current.session.provider,
+  ]);
   await expect(copy).rejects.toThrow('refused');
   expect(close).toHaveBeenCalledOnce();
   expect(current.listeners.size).toBe(0);
