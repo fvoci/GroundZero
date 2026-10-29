@@ -801,15 +801,12 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     }
     // 공유받은 사람·공개 링크도 막힌다(읽기·고치기·공유 목록).
     assert_eq!(get(&carol, shared_uri.clone()).await, StatusCode::NOT_FOUND);
-    let r = send(
+    let r = common::live::save(
         &app,
-        Method::PUT,
+        &carol,
         &shared_uri,
-        Some(&carol),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "모듈 문서",
+        &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "모듈 문서",
                      "body": common::doc_body("휴지통 안에서 고침") }),
-        ),
     )
     .await;
     assert_eq!(r.status, StatusCode::NOT_FOUND, "{:?}", r.json);

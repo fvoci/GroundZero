@@ -100,7 +100,6 @@ describe('backlinks point at the reference', () => {
         organization_id: 'org-1',
         role: 'member',
         is_owner: false,
-        realtime_enabled: false,
       },
     ];
     vi.spyOn(api, 'itemBacklinks').mockResolvedValue([

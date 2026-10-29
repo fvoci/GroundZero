@@ -506,8 +506,7 @@ async fn tasks_are_reference_targets_and_concurrent_parent_swaps_do_not_cycle() 
     .json;
     let body = json!({ "type": "doc", "content": [{ "type": "paragraph", "content": [
         { "type": "reference", "attrs": { "kind": "task", "id": t["id"] } } ] }] });
-    let saved = send(&app, Method::PUT, &format!("/api/documents/{}", doc["id"].as_str().unwrap()), Some(&admin),
-                     Some(json!({ "request_id": new_request_id(), "base_revision": doc["revision"], "title": "회의", "body": body }))).await;
+    let saved = common::live::save(&app, &admin, &format!("/api/documents/{}", doc["id"].as_str().unwrap()), &json!({ "request_id": new_request_id(), "base_revision": doc["revision"], "title": "회의", "body": body })).await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
     let (_, links) = get(
         &app,

@@ -6,17 +6,11 @@
 //! 문서 ETag·조건부 저장·캐시 접근 순서(D-77).
 
 use crate::cache::{NO_STORE, call, header};
-use crate::common::{
-    self, add_member, create_doc, create_workspace, doc_body, login, new_request_id,
-};
+use crate::common::{self, add_member, create_doc, create_workspace, login, new_request_id};
 use axum::http::{Method, StatusCode};
-use serde_json::{Value, json};
+use serde_json::json;
 
 const REVALIDATE: &str = "private, no-cache, no-transform";
-
-fn save_body(request_id: &str, base: i64, text: &str) -> Value {
-    json!({ "request_id": request_id, "base_revision": base, "title": "문서", "body": doc_body(text) })
-}
 
 /// 같은 조회는 304, 바뀐 조회는 200. 권한 철회·로그아웃·사용자 전환 뒤에는 이전 ETag로 304를 받지 못한다.
 /// 압축을 요청해도 API는 압축하지 않아 ETag가 같고 강하다.
@@ -92,19 +86,18 @@ async fn document_reads_revalidate_only_after_checking_access() {
     assert_ne!(bob_tag, e1);
     assert_eq!(as_bob.json["can_edit"], false);
 
-    // 변경 뒤 조회 → 200과 새 ETag. 저장 응답의 ETag는 곧바로 조회한 ETag와 같다.
+    // 변경 뒤 조회 → 200과 새 ETag. 쓰기 응답에는 ETag가 없다.
     let saved = call(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &uri,
         Some(&alice),
-        &[("if-match", &e1)],
-        Some(save_body(&new_request_id(), 1, "고침")),
+        &[],
+        Some(json!({"request_id":new_request_id(),"base_revision":1,"title":"고침"})),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
-    let e2 = header(&saved.headers, "etag").unwrap();
-    assert_ne!(e2, e1);
+    assert!(header(&saved.headers, "etag").is_none());
     assert_eq!(
         header(&saved.headers, "cache-control").as_deref(),
         Some(NO_STORE)
@@ -119,10 +112,8 @@ async fn document_reads_revalidate_only_after_checking_access() {
     )
     .await;
     assert_eq!(changed.status, StatusCode::OK);
-    assert_eq!(
-        header(&changed.headers, "etag").as_deref(),
-        Some(e2.as_str())
-    );
+    let e2 = header(&changed.headers, "etag").unwrap();
+    assert_ne!(e2, e1);
     assert_eq!(changed.json["revision"], 2);
 
     // 권한 철회 → 이전 ETag로도 404.
@@ -174,117 +165,5 @@ async fn document_reads_revalidate_only_after_checking_access() {
     assert_eq!(
         header(&after.headers, "cache-control").as_deref(),
         Some(NO_STORE)
-    );
-}
-
-/// `If-Match`는 잠근 행 기준의 강한 비교. 동시에 같은 ETag로 저장하면 하나만 성공하고 다른 쪽은 412와 서버 최신본을
-/// 받는다(진 쪽 내용은 저장되지 않음). 같은 요청의 재시도는 멱등, 약한 ETag는 맞지 않음, `If-Match`가 없으면 기존 409.
-#[tokio::test]
-async fn saves_with_if_match_are_atomic_and_idempotent() {
-    let state = common::state();
-    let app = common::app(&state);
-    let alice = login(&state, "alice").await;
-    let ws = create_workspace(&app, &alice, "저장").await;
-    let doc = create_doc(&app, &alice, &ws, "문서").await;
-    let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
-    let e1 = header(
-        &call(&app, Method::GET, &uri, Some(&alice), &[], None)
-            .await
-            .headers,
-        "etag",
-    )
-    .unwrap();
-
-    let (r1, r2) = (new_request_id(), new_request_id());
-    let cond = [("if-match", e1.as_str())];
-    let (a, b) = tokio::join!(
-        call(
-            &app,
-            Method::PUT,
-            &uri,
-            Some(&alice),
-            &cond,
-            Some(save_body(&r1, 1, "탭 1"))
-        ),
-        call(
-            &app,
-            Method::PUT,
-            &uri,
-            Some(&alice),
-            &cond,
-            Some(save_body(&r2, 1, "탭 2"))
-        ),
-    );
-    let mut statuses = [a.status, b.status];
-    statuses.sort();
-    assert_eq!(statuses, [StatusCode::OK, StatusCode::PRECONDITION_FAILED]);
-    let (won, lost, won_rid, won_text) = if a.status == StatusCode::OK {
-        (a, b, r1, "탭 1")
-    } else {
-        (b, a, r2, "탭 2")
-    };
-    assert_eq!(lost.json["error"], "precondition_failed");
-    assert_eq!(lost.json["current"]["revision"], 2);
-    assert_eq!(lost.json["current"]["body"], doc_body(won_text));
-    let e2 = header(&won.headers, "etag").unwrap();
-    // 412에 실린 ETag로 다음 저장을 이어 갈 수 있다(조회한 값과 같음).
-    assert_eq!(lost.json["etag"], e2.as_str());
-    let now = call(&app, Method::GET, &uri, Some(&alice), &[], None).await;
-    assert_eq!(now.json["body"], doc_body(won_text));
-    assert_eq!(header(&now.headers, "etag").as_deref(), Some(e2.as_str()));
-
-    // 이긴 요청의 재시도(같은 request_id, 이제는 낡은 If-Match) → 멱등 200.
-    let replay = call(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&alice),
-        &[("if-match", &e1)],
-        Some(save_body(&won_rid, 1, won_text)),
-    )
-    .await;
-    assert_eq!(replay.status, StatusCode::OK, "{:?}", replay.json);
-    assert_eq!(replay.json["revision"], 2);
-
-    // 약한 ETag는 If-Match에서 맞지 않는다.
-    let weak = format!("W/{e2}");
-    let r = call(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&alice),
-        &[("if-match", &weak)],
-        Some(save_body(&new_request_id(), 2, "약함")),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::PRECONDITION_FAILED);
-    // `*`는 문서가 있으면 통과하고 리비전 비교가 이어진다.
-    let r = call(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&alice),
-        &[("if-match", "*")],
-        Some(save_body(&new_request_id(), 2, "별")),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK);
-    // If-Match 없이 낡은 base_revision → 기존 409(서버 최신본과 ETag).
-    let r = call(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&alice),
-        &[],
-        Some(save_body(&new_request_id(), 2, "낡음")),
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::CONFLICT);
-    assert_eq!(r.json["error"], "conflict");
-    assert_eq!(r.json["current"]["revision"], 3);
-    let latest = call(&app, Method::GET, &uri, Some(&alice), &[], None).await;
-    assert_eq!(
-        r.json["etag"],
-        header(&latest.headers, "etag").unwrap().as_str()
     );
 }

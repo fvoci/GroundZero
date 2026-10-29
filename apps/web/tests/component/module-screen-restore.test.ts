@@ -15,7 +15,6 @@ const workspace: Workspace = {
   access: 'owner',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 function module(id: string): Module {

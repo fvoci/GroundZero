@@ -915,9 +915,6 @@ CREATE FUNCTION fvoci.app_collab_access(p_doc uuid) RETURNS text
     IF app_user_id() IS NULL OR v_access = 'none' THEN
       RAISE EXCEPTION 'document not found' USING ERRCODE = 'P0002';
     END IF;
-    IF NOT app_document_realtime(p_doc) THEN
-      RAISE EXCEPTION 'realtime editing is off for this document' USING ERRCODE = '55000';
-    END IF;
     RETURN v_access;
   END
   $$;
@@ -950,31 +947,6 @@ CREATE FUNCTION fvoci.app_collab_load(p_doc uuid) RETURNS TABLE(doc_revision int
 
 
 ALTER FUNCTION fvoci.app_collab_load(p_doc uuid) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_collab_pending(p_workspace uuid) RETURNS SETOF uuid
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  BEGIN
-    IF app_access('workspace', p_workspace) <> 'owner' THEN
-      RAISE EXCEPTION 'only an admin can change realtime editing' USING ERRCODE = '42501';
-    END IF;
-    RETURN QUERY
-      SELECT s.document_id
-      FROM document_collab_states s
-      JOIN documents d ON d.id = s.document_id
-      WHERE s.pending AND d.workspace_id = p_workspace AND d.deleted_at IS NULL
-        AND NOT EXISTS (SELECT 1 FROM document_revisions r
-                        WHERE r.document_id = s.document_id AND r.revision > s.revision
-                          AND r.body IS DISTINCT FROM (SELECT b.body FROM document_revisions b
-                                                       WHERE b.document_id = s.document_id
-                                                         AND b.revision = s.revision))
-      ORDER BY s.document_id;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_collab_pending(p_workspace uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_collab_state_current(p_doc uuid, p_revision integer) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
@@ -1174,37 +1146,30 @@ CREATE FUNCTION fvoci.app_document_height(p_doc uuid) RETURNS integer
 
 ALTER FUNCTION fvoci.app_document_height(p_doc uuid) OWNER TO fvoci_migrator;
 
-CREATE FUNCTION fvoci.app_document_realtime(p_doc uuid) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-    SELECT coalesce((SELECT w.realtime_enabled FROM documents d JOIN workspaces w ON w.id = d.workspace_id
-                     WHERE d.id = p_doc), false)
-  $$;
-
-
-ALTER FUNCTION fvoci.app_document_realtime(p_doc uuid) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_document_realtime_locked(p_doc uuid) RETURNS boolean
+-- 제목·실시간 본문 명령은 공간 → 공간 멤버 → 모듈 → 항목 → 문서 순서로 잠근다(PR4a, #186).
+-- 문서 공유자는 공간 행을 직접 읽지 못해도 같은 잠금 순서를 따른다.
+CREATE FUNCTION fvoci.app_lock_document_workspace(p_doc uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_enabled boolean;
+    v_workspace uuid;
   BEGIN
     IF app_access('document', p_doc) = 'none' THEN
-      RETURN false;
+      RETURN;
     END IF;
-    SELECT w.realtime_enabled INTO v_enabled
+    SELECT w.id INTO v_workspace
     FROM documents d JOIN workspaces w ON w.id = d.workspace_id
     WHERE d.id = p_doc
     FOR SHARE OF w;
-    RETURN coalesce(v_enabled, false);
+    PERFORM 1 FROM workspace_members
+    WHERE workspace_id = v_workspace AND user_id = app_user_id()
+    FOR SHARE;
   END
   $$;
 
 
-ALTER FUNCTION fvoci.app_document_realtime_locked(p_doc uuid) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_lock_document_workspace(p_doc uuid) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_document_reference(p_doc uuid) RETURNS text
     LANGUAGE sql STABLE

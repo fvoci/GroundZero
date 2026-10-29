@@ -51,7 +51,6 @@ describe('status regions stay in place and only their text changes', () => {
       can_manage: true,
       can_delete: true,
       is_template: false,
-      realtime: false,
       can_export: true,
     };
     const references = {
@@ -64,7 +63,10 @@ describe('status regions stay in place and only their text changes', () => {
     const dialog = await screen.findByRole('dialog');
     const before = within(dialog).getAllByRole('status');
     expect(before.length).toBeGreaterThan(0);
-    for (const region of before) expect(region).toBeEmptyDOMElement();
+    expect(before.some((region) => region.textContent.includes('실시간 편집 중인 문서'))).toBe(
+      true,
+    );
+    expect(before.every((region) => !region.textContent.includes('리비전 3'))).toBe(true);
 
     await view.rerender({ doc, unsaved: true, references, open: true });
     const after = within(dialog).getAllByRole('status');

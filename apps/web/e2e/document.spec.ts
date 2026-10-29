@@ -18,19 +18,25 @@ test('creates a wiki document, saves Korean text and keeps it after reload and r
   await page.waitForURL(new RegExp(`/w/${ws}/wiki/[0-9a-f-]{36}$`));
   const doc = page.url().split('/').at(-1) ?? '';
 
+  await expect(page.getByRole('status').filter({ hasText: '실시간 연결됨' })).toBeVisible();
   await page.getByRole('textbox', { name: '제목', exact: true }).fill(renamed);
+  await page.getByRole('button', { name: '제목 저장', exact: true }).click();
+  await expect.poll(async () => str(await api.get(`/api/documents/${doc}`), 'title')).toBe(renamed);
   await page.getByRole('textbox', { name: '본문' }).click();
   await page.keyboard.type(text);
-  await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByTestId('save-status')).toHaveText('저장됨');
+  page.once('dialog', async (dialog) => {
+    await dialog.accept();
+  });
+  await page.goto(`/w/${ws}`);
 
-  // 서버에 저장된 값(자동 저장과 겹쳐도 마지막 내용이 서버에 있어야 한다).
+  // 마지막 연결을 닫으면 실시간 방이 본문을 리비전으로 남긴다.
   await expect
     .poll(async () => JSON.stringify(await api.get(`/api/documents/${doc}`)))
     .toContain(text);
   expect(str(await api.get(`/api/documents/${doc}`), 'title')).toBe(renamed);
 
   // 새로고침.
+  await page.goto(`/w/${ws}/wiki/${doc}`);
   await page.reload();
   await expect(page.getByRole('textbox', { name: '제목', exact: true })).toHaveValue(renamed);
   await expect(page.getByRole('textbox', { name: '본문' })).toContainText(text);
@@ -40,5 +46,5 @@ test('creates a wiki document, saves Korean text and keeps it after reload and r
   await page.getByRole('main').getByRole('link', { name: renamed }).click();
   await expect(page).toHaveURL(new RegExp(`/wiki/${doc}$`));
   await expect(page.getByRole('textbox', { name: '본문' })).toContainText(text);
-  await expect(page.getByTestId('save-status')).toHaveText('저장됨');
+  await expect(page.getByRole('status').filter({ hasText: '실시간 연결됨' })).toBeVisible();
 });

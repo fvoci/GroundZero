@@ -5,7 +5,7 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 - 웹은 GET·HEAD가 아닌 모든 요청에 `x-fvoci-expected-user`를 붙인다(`apps/web/src/lib/shared/api/index.ts`의 `EXPECTED_USER`).
 - 서버는 처리기 인자에 `ExpectedUser`(`crates/http/src/session.rs`)가 있으면 머리를 꼭 받아 비교한다(없으면 400).
 - 업무·일정·보기·소통활동 라우터(`crates/domains/work/src/lib.rs`·`crates/domains/activity/src/lib.rs`의 `router`)는 공통 처리 `ExpectedUserIfSent`(같은 파일 `session.rs`)를 건다. GET·HEAD가 아닌 모든 업무·일정·보기·소통활동 요청에서 머리가 있으면 늘 비교하고(D-96 2026-10-28 개정 (가)), 없으면 아무것도 하지 않는다. 노르웨이숲 태비의 뒤 조각은 자기 도메인 라우터에 같은 처리를 건다.
-- 문서 도메인과 참조 집계 라우터(`crates/domains/documents/src/lib.rs`·`crates/aggregates/references/src/lib.rs`)도 `ExpectedUserIfSent`를 건다. 문서는 개인 노트 생성·본문 PUT만 필수이고 제목 PATCH 등 다른 명령은 선택이다. 참조 `resolve`도 보내면 비교한다.
+- 문서 도메인과 참조 집계 라우터(`crates/domains/documents/src/lib.rs`·`crates/aggregates/references/src/lib.rs`)도 `ExpectedUserIfSent`를 건다. 문서는 개인 노트 생성만 필수이고 제목 PATCH 등 다른 명령은 선택이다. 참조 `resolve`도 보내면 비교한다.
 - 시간 라우터(`crates/domains/time/src/lib.rs`)도 `ExpectedUserIfSent`를 건다. 타이머 시작·동작과 기록 추가·수정·삭제는 머리가 있으면 비교하고, 없으면 허용한다. 필수화하지 않았다. 시험은 `it/time/contracts.rs`다.
 - 파일 라우터(`crates/domains/files/src/router.rs`)도 모든 명령에 `ExpectedUserIfSent`를 건다. 업로드 시작은 계속 필수이고, 조각 전송·완료·중단·이름 변경·휴지통·버전 삭제는 머리가 있으면 비교한다. 웹 `features/files/api.ts`는 날것 조각 전송에도 원래 업로더의 머리를 보내고 완료·중단까지 이어 준다.
 - 기록·학습 라우터(`crates/domains/records/src/lib.rs`의 `router`)도 `ExpectedUserIfSent`를 건다. 기록·강좌·스터디·Zotero의 모든 명령과 읽기 POST `list_collections`는 머리가 있으면 비교하며, 머리를 필수로 요구하지 않는다.
@@ -39,7 +39,6 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | 파일                                                         | 처리기(줄)                                                                                                                   |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `crates/domains/documents/src/documents/create.rs`           | 필수: `create_note`(167)                                                                                                     |
-| `crates/domains/documents/src/documents/save.rs`             | 필수: `save`(37)                                                                                                             |
 | `crates/domains/documents/src/lib.rs`                        | 머리는 선택. 문서 생성·제목·설정·공유·복제·이동·부모·템플릿·항목 문서·복원·내보내기·공개 링크 명령 모두 공통 처리가 비교한다 |
 | `crates/aggregates/references/src/lib.rs`                    | 머리는 선택. `resolve`도 보내면 공통 처리가 비교한다                                                                         |
 | `crates/domains/system/src/lib.rs`                           | 머리는 선택. 문서·항목·모듈 삭제와 휴지통·보존 설정 명령에서 보내면 비교한다                                                 |
@@ -76,7 +75,6 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `item_profile.rs` | `set`(318, 귀속), `set_members`(374, 권한), `set_module_icon`(404, 설정), `copy`(486, 귀속), `set_template`(535, 설정)                                                                                                              |
 | `modules.rs`      | `create_module`(378, 귀속), `update_module`(417, 설정), `archive_module`(452, 파괴), `set_description`(483, 귀속), `create_item`(535, 귀속), `update_item`(607, 귀속), `archive_item`(652, 파괴), `create_item_document`(697, 귀속) |
-| `workspaces.rs`   | `set_realtime`(29, 설정)                                                                                                                                                                                                            |
 
 ## 쓰기가 아닌 POST (표 밖)
 

@@ -17,7 +17,6 @@ const workspace: Workspace = {
   name: '연구실',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 const initial: TrashView = { retention_days: 30, version_retention_days: 90, entries: [] };
 const fields = ['trash-retention', 'version-retention'] as const;

@@ -140,7 +140,6 @@ async fn run(
             Ok(m) => m,
             Err(err) => {
                 let reason = match err {
-                    AppError::Conflict(_) => CloseReason::RealtimeOff,
                     AppError::NotFound | AppError::Forbidden | AppError::Unauthorized => {
                         CloseReason::AccessLost
                     }

@@ -1,5 +1,5 @@
 {
-  "description": "fvoci compression rules (D-77). PUT to /zones/{zone_id}/rulesets/phases/http_response_compression/entrypoint. The app already sends Cache-Control: no-transform on these paths, which stops Cloudflare compression; this rule says the same thing in the zone so a later setting cannot weaken the strong ETag used by If-Match. Static paths keep the default (Auto).",
+  "description": "fvoci compression rules (D-77). PUT to /zones/{zone_id}/rulesets/phases/http_response_compression/entrypoint. The app already sends Cache-Control: no-transform on these paths, which stops Cloudflare compression; this rule says the same thing in the zone so a later setting cannot weaken the strong ETag used by single-document GET If-None-Match/304 (#228; writes use base_revision/409). Static paths keep the default (Auto).",
   "rules": [
     {
       "ref": "fvoci_api_identity",

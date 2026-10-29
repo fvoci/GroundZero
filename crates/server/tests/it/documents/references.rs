@@ -28,15 +28,12 @@ fn body_with(nodes: Vec<Value>) -> Value {
 
 /// 본문을 저장하고 새 문서 JSON을 돌려준다.
 async fn save_body(app: &Router, user: &TestUser, doc: &Value, body: Value) -> (StatusCode, Value) {
-    let r = send(
+    let r = common::live::save(
         app,
-        Method::PUT,
+        user,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(user),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
+        &json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
                      "title": doc["title"], "body": body }),
-        ),
     )
     .await;
     (r.status, r.json)
@@ -136,20 +133,29 @@ async fn hidden_targets_look_exactly_like_missing_ones() {
     // 본문에 제목·라벨을 넣을 수 없다(대상이 나중에 비공개가 되어도 드러나지 않게).
     let doc = create_doc(&app, &admin, &ws, "문서").await;
     let labelled = json!({ "type": "reference", "attrs": { "kind": "item", "id": secret["id"], "label": "비밀 실험" } });
-    assert_eq!(
-        save_body(&app, &admin, &doc, body_with(vec![labelled]))
-            .await
-            .0,
-        StatusCode::BAD_REQUEST
+    assert!(
+        fvoci_server::features::documents::validate_body(
+            &body_with(vec![labelled]),
+            &state.config.limits
+        )
+        .is_err()
     );
     let bad_kind =
         json!({ "type": "reference", "attrs": { "kind": "workspace", "id": secret["id"] } });
-    assert_eq!(
-        save_body(&app, &admin, &doc, body_with(vec![bad_kind]))
-            .await
-            .0,
-        StatusCode::BAD_REQUEST
+    assert!(
+        fvoci_server::features::documents::validate_body(
+            &body_with(vec![bad_kind]),
+            &state.config.limits
+        )
+        .is_err()
     );
+    let (_, unchanged) = get(
+        &app,
+        &admin,
+        &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(unchanged, doc);
 }
 
 #[tokio::test]

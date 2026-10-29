@@ -367,9 +367,6 @@ GRANT ALL ON FUNCTION fvoci.app_collab_access(p_doc uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_collab_load(p_doc uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_collab_load(p_doc uuid) TO fvoci_app;
 
-REVOKE ALL ON FUNCTION fvoci.app_collab_pending(p_workspace uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_collab_pending(p_workspace uuid) TO fvoci_app;
-
 REVOKE ALL ON FUNCTION fvoci.app_collab_state_current(p_doc uuid, p_revision integer) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_comment_target_access(p_document uuid, p_task uuid) FROM PUBLIC;
@@ -493,11 +490,8 @@ REVOKE ALL ON FUNCTION fvoci.app_document_depth(p_doc uuid) FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION fvoci.app_document_height(p_doc uuid) FROM PUBLIC;
 
-REVOKE ALL ON FUNCTION fvoci.app_document_realtime(p_doc uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_document_realtime(p_doc uuid) TO fvoci_app;
-
-REVOKE ALL ON FUNCTION fvoci.app_document_realtime_locked(p_doc uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_document_realtime_locked(p_doc uuid) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_lock_document_workspace(p_doc uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION fvoci.app_lock_document_workspace(p_doc uuid) TO fvoci_app;
 
 REVOKE ALL ON FUNCTION fvoci.app_document_reference(p_doc uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_document_reference(p_doc uuid) TO fvoci_app;
@@ -816,9 +810,6 @@ GRANT ALL ON FUNCTION fvoci.app_set_unit_progress(p_unit uuid, p_status text, p_
 
 REVOKE ALL ON FUNCTION fvoci.app_set_version_retention(p_workspace uuid, p_days integer, p_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_set_version_retention(p_workspace uuid, p_days integer, p_ids uuid[]) TO fvoci_app;
-
-REVOKE ALL ON FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) TO fvoci_app;
 
 
 REVOKE ALL ON FUNCTION fvoci.app_shared_with_me(p_organization uuid) FROM PUBLIC;

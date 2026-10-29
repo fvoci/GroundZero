@@ -157,21 +157,13 @@ export interface paths {
          *     404, 로그아웃이면 401이라 이전 ETag로 304를 받지 못한다. 브라우저만 저장하고 매번 재검증한다.
          */
         get: operations["get"];
-        /**
-         * 문서 저장. 충돌 시 409(또는 `If-Match`가 맞지 않으면 412) + 서버 최신본.
-         * @description 순서: 권한 확인 → 행 잠금 → 재시도 판단 → `If-Match`(있으면) → 리비전 비교 → 내용 동일 판단 → 갱신·리비전 기록.
-         *     행을 잠근 뒤 판단하므로 동시에 들어온 저장도 최신 행 기준으로 결정된다. `If-Match`는 잠근 행으로 만든 지금
-         *     표현의 ETag와 강하게 비교한다(D-77). 같은 요청의 재시도는 `If-Match`보다 먼저 판단해 멱등 응답을 지킨다.
-         *
-         *     권한 확인보다 먼저 기대 사용자를 비교한다(`ExpectedUser`): 다르면 문서를 읽거나 잠그지 않고 409 `account_changed`.
-         */
-        put: operations["save"];
+        put?: never;
         post?: never;
         /** 문서 지우기(하위 문서까지). 문서 소유 권한이나, 쓰기 권한이 있고 내가 만든 문서. */
         delete: operations["trash_document"];
         options?: never;
         head?: never;
-        /** 권한·잠금 → 멱등 재시도 → If-Match → 기준 판 → 같은 제목 확인 → 리비전 저장 순서다. */
+        /** 권한·잠금 → 멱등 재시도 → 기준 판 → 같은 제목 확인 → 리비전 저장 순서다. */
         patch: operations["patch_document_title"];
         trace?: never;
     };
@@ -2834,26 +2826,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/realtime": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * 워크스페이스 문서의 실시간 공동 편집을 켜거나 끈다(관리자). 끄면 열려 있는 편집 방은 리비전을 남기고 닫힌다.
-         *     리비전을 남기지 못한 방이 있으면 끄지 않고 409.
-         */
-        put: operations["set_realtime"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/workspaces/{workspace_id}/retention": {
         parameters: {
             query?: never;
@@ -3245,14 +3217,6 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
-        /** @description 저장 충돌 응답. `current`가 서버 최신본이다. */
-        ConflictBody: {
-            current: components["schemas"]["Document"];
-            /** @description `conflict`(409, `base_revision`이 지남) 또는 `precondition_failed`(412, `If-Match`가 맞지 않음). */
-            error: string;
-            /** @description `current`를 이 사람이 단건 조회했을 때의 ETag(D-77). 서버 최신본을 받아들인 뒤 `If-Match`로 쓴다. */
-            etag: string;
-        };
         /** @description 복제 결과. */
         CopiedItem: {
             item_id: components["schemas"]["ItemId"];
@@ -3492,8 +3456,6 @@ export interface components {
             parent_id?: null | components["schemas"]["DocumentId"];
             /** @description `wiki`, `module` 또는 `personal`. */
             placement: string;
-            /** @description 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
-            realtime: boolean;
             reference?: string | null;
             /** Format: int32 */
             revision: number;
@@ -4834,25 +4796,6 @@ export interface components {
         Role: "admin" | "member" | "readonly";
         /** @description 반복 설정의 409. 반복이 없으면 현재 자원은 null이다. */
         RuleWriteConflict: components["schemas"]["StaleWrite_Option_TaskSeries"] | components["schemas"]["ErrorBody"];
-        /**
-         * @description 문서 저장의 409 본문(계약 문서용). 응답은 두 모양 가운데 하나를 그대로 보낸다(이 타입으로 감싸지 않는다).
-         *     - `ConflictBody`(`error: "conflict"`, `current`): `base_revision`이 지남.
-         *     - `ErrorBody`(`current` 없음): `account_changed`(기대 사용자가 세션의 사용자와 다름), `invalid_state`(실시간 편집
-         *       중 본문 변경, 동시 변경 재시도 등).
-         */
-        SaveConflict: components["schemas"]["ConflictBody"] | components["schemas"]["ErrorBody"];
-        /** @description 문서 저장 요청. */
-        SaveDocument: {
-            /**
-             * Format: int32
-             * @description 편집을 시작한 리비전.
-             */
-            base_revision: number;
-            body: Record<string, never>;
-            /** Format: uuid */
-            request_id: string;
-            title: string;
-        };
         /** @description 저장한 보기. */
         SavedView: {
             config: Record<string, never>;
@@ -5002,10 +4945,6 @@ export interface components {
              * @description 사용자 시간대의 오늘(완료한 날). 없으면 서버 날짜.
              */
             today?: string | null;
-        };
-        /** @description 실시간 공동 편집 켜고 끄기 요청(D-27, D-70). */
-        SetRealtime: {
-            enabled: boolean;
         };
         /** @description 휴지통 보존 기간. */
         SetRetention: {
@@ -5161,8 +5100,6 @@ export interface components {
                 parent_id?: null | components["schemas"]["DocumentId"];
                 /** @description `wiki`, `module` 또는 `personal`. */
                 placement: string;
-                /** @description 실시간 공동 편집 중인 문서(워크스페이스가 켬, D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
-                realtime: boolean;
                 reference?: string | null;
                 /** Format: int32 */
                 revision: number;
@@ -6049,8 +5986,6 @@ export interface components {
             is_owner: boolean;
             name: string;
             organization_id: components["schemas"]["OrganizationId"];
-            /** @description 워크스페이스 문서를 실시간 공동 편집으로 연다(D-27, D-70). 관리자가 켜고 끈다. */
-            realtime_enabled: boolean;
             /** @description 현재 사용자의 역할. */
             role: components["schemas"]["Role"];
         };
@@ -6628,79 +6563,6 @@ export interface operations {
             };
         };
     };
-    save: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description 단건 조회의 강한 ETag. 다르면 412 */
-                "If-Match"?: string | null;
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
-                "x-fvoci-expected-user": string;
-            };
-            path: {
-                document_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveDocument"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    /** @description 저장 뒤 표현의 ETag */
-                    ETag?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Document"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description `conflict`면 ConflictBody(서버 최신본 포함). `account_changed`(기대 사용자가 세션의 사용자와 다름)·`invalid_state`(실시간 편집 중 본문 변경 등)면 ErrorBody. 어느 쪽도 아무것도 바꾸지 않았다 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SaveConflict"];
-                };
-            };
-            412: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConflictBody"];
-                };
-            };
-        };
-    };
     trash_document: {
         parameters: {
             query?: never;
@@ -6761,8 +6623,6 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description 현재 문서의 강한 ETag. 다르면 412 */
-                "If-Match"?: string | null;
                 /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
                 "x-fvoci-expected-user"?: string | null;
             };
@@ -6779,7 +6639,6 @@ export interface operations {
         responses: {
             200: {
                 headers: {
-                    ETag?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6816,14 +6675,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentTitleConflict"];
-                };
-            };
-            412: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StaleWrite_Document"];
                 };
             };
         };
@@ -11057,7 +10908,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 문서 저장(`PUT /api/documents/{document_id}`), 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
+                /** @description 이 편집·초안을 시작한 사용자 id(필수). 서버는 세션의 사용자와 비교만 한다: 다르면 아무것도 바꾸지 않고 409 `account_changed`, 없거나 형식이 틀리면 400. 신원·권한은 세션 쿠키로만 정하며 이 값으로 아무것도 허용하지 않는다. 노트 만들기(`POST /api/me/notes`), 업로드 시작(`POST /api/uploads`, 만료된 업로드를 스스로 다시 시작함), 업무 쓰기, 조직 설정·워크스페이스 한도 변경에서 검사한다. 실시간 편집 연결은 같은 값을 질의 `expected_user`로 받고, 다르면 닫기 코드 4412로 닫는다 */
                 "x-fvoci-expected-user": string;
             };
             path?: never;
@@ -15723,53 +15574,6 @@ export interface operations {
                 content?: never;
             };
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    set_realtime: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetRealtime"];
-            };
-        };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };

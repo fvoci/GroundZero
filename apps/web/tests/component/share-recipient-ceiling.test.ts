@@ -19,7 +19,6 @@ const workspace: Workspace = {
   access: 'owner',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 const recipient = {
   user_id: 'outside-1',

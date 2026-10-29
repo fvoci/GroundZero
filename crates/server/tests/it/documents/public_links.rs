@@ -24,13 +24,7 @@ async fn owner_creates_expires_and_revokes_public_links() {
     let ws = create_workspace(&app, &admin, "공개").await;
     let doc = create_doc(&app, &admin, &ws, "공개 문서").await;
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
-    send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&admin),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "공개 문서", "body": doc_body("모두에게") })),
-    )
+    common::live::save(&app, &admin, &uri, &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "공개 문서", "body": doc_body("모두에게") }))
     .await;
 
     let created = send(

@@ -4,7 +4,6 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import type { DocNode, DocumentView } from '$lib/api/client';
-import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
 import { loadDraft, storeDraft } from '$lib/features/documents/drafts';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
@@ -74,7 +73,6 @@ const doc: DocumentView = {
   can_manage: false,
   can_delete: false,
   is_template: false,
-  realtime: true,
   can_export: true,
 };
 
@@ -169,17 +167,6 @@ async function lostAfterDenied(reload: () => void): Promise<void> {
 }
 
 describe('handing the draft over to the parent', () => {
-  it('locks the editor while the parent reopens with a body draft (4410)', async () => {
-    const off = vi.fn();
-    render(LiveDocumentEditor, { props: { initial: doc, onrealtimeoff: off } });
-    await editBody();
-    closeWith(4410);
-    await screen.findByText(/서버에 저장되지 않은 편집이 있어/);
-    expect(off).toHaveBeenCalledOnce();
-    expectLocked();
-    expect(loadDraft('d1')).toMatchObject({ title: doc.title, body: EDITED_BODY });
-  });
-
   // 부모가 다시 읽지 못하면 이 편집기를 오류 화면으로 바꾼다(`DocumentScreen`의 reopen). 맡긴 초안은 남아 다음에 열 때 고른다.
   it('leaves the handed-over draft to be offered when the parent fails and replaces the editor (4403)', async () => {
     const reload = vi.fn();
@@ -195,7 +182,8 @@ describe('handing the draft over to the parent', () => {
 
     live.unmount();
     expect(loadDraft('d1')).toMatchObject({ title: doc.title, body: EDITED_BODY });
-    render(DocumentEditor, { props: { initial: { ...doc, realtime: false } } });
+    render(LiveDocumentEditor, { props: { initial: doc } });
+    opened.at(-1)?.provider.emit('sync', [true]);
     expect(await screen.findByRole('region', { name: m.documents_draft_region() })).toBeTruthy();
   });
 });

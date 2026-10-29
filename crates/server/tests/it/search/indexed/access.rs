@@ -13,14 +13,13 @@ async fn search_returns_only_what_each_person_can_see() {
     let other_ws = create_workspace(&app, &outsider, "남의 공간").await;
 
     let doc = create_doc(&app, &admin, &ws, &format!("회의록 {tok}")).await;
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(&admin),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
+        &json!({ "request_id": new_request_id(), "base_revision": 1,
                      "title": format!("회의록 {tok}"),
-                     "body": doc_body(&format!("안건 정리와 {tok}body 결정")) })),
+                     "body": doc_body(&format!("안건 정리와 {tok}body 결정")) }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);

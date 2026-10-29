@@ -34,12 +34,6 @@ fn cache_headers(method: &Method, template: &str, status: StatusCode, headers: &
     let document_read = method == Method::GET
         && template == "/api/documents/{document_id}"
         && matches!(status, StatusCode::OK | StatusCode::NOT_MODIFIED);
-    // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
-    let write_etag = status == StatusCode::OK
-        && ((matches!(*method, Method::PUT | Method::PATCH)
-            && template == "/api/documents/{document_id}")
-            || (method == Method::POST
-                && template == "/api/documents/{document_id}/revisions/{revision}/restore"));
     assert_eq!(
         header(headers, "cache-control").as_deref(),
         Some(if document_read { REVALIDATE } else { NO_STORE }),
@@ -50,7 +44,7 @@ fn cache_headers(method: &Method, template: &str, status: StatusCode, headers: &
             headers.contains_key("etag"),
             "{method} {template}: {status}"
         );
-    } else if !write_etag {
+    } else {
         assert!(
             !headers.contains_key("etag"),
             "{method} {template}: {status} has ETag"
@@ -153,10 +147,10 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
             StatusCode::UNAUTHORIZED,
         ),
         (
-            Method::PUT,
-            format!("/api/workspaces/{ws}/realtime"),
+            Method::PATCH,
+            uri.clone(),
             Some(&reader),
-            Some(json!({"enabled": true})),
+            Some(json!({"request_id":new_request_id(),"base_revision":1,"title":"denied"})),
             StatusCode::FORBIDDEN,
         ),
         (
@@ -167,7 +161,7 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
             StatusCode::NOT_FOUND,
         ),
         (
-            Method::PUT,
+            Method::PATCH,
             uri.clone(),
             Some(&owner),
             Some(save_body(&new_request_id(), 0, "stale")),
@@ -200,22 +194,11 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
             assert!(got.raw.starts_with(b"PK"));
         }
     }
-    let got = call(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&owner),
-        &[("if-match", "\"stale\"")],
-        Some(save_body(&new_request_id(), 1, "stale")),
-    )
-    .await;
-    assert_eq!(got.status, StatusCode::PRECONDITION_FAILED);
-    no_store(got.status, &got.headers, "412");
 
-    // 성공 쓰기 예외도 실제 처리기를 거쳐 검사한다. 둘 다 공유 캐시 금지는 그대로다.
+    // 성공 쓰기도 실제 처리기를 거쳐 검사한다. 둘 다 공유 캐시 금지는 그대로다.
     let saved = call(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &uri,
         Some(&owner),
         &[],
@@ -224,7 +207,7 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
     .await;
     assert_eq!(saved.status, StatusCode::OK);
     cache_headers(
-        &Method::PUT,
+        &Method::PATCH,
         "/api/documents/{document_id}",
         saved.status,
         &saved.headers,
@@ -352,15 +335,6 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
         assert_eq!(got.raw, bytes);
     }
 
-    let enabled = common::send(
-        &app,
-        Method::PUT,
-        &format!("/api/workspaces/{ws}/realtime"),
-        Some(&owner),
-        Some(json!({"enabled": true})),
-    )
-    .await;
-    assert_eq!(enabled.status, StatusCode::NO_CONTENT);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });

@@ -165,30 +165,15 @@ impl Room {
             self.close(id, CloseReason::Busy);
         }
     }
-    /// 독립적인 연결 감시가 실시간 해제를 확인했으면 리비전을 남긴다. 연결 종료는 저장을 기다리지 않는다.
+    /// 독립 감시가 닫은 연결을 정리한다. 남은 편집은 기존 방 종료 경로에서 보존한다.
     pub(super) async fn recheck(&mut self) {
-        if self.recheck_peers().await {
-            self.stop_realtime().await;
-        }
-    }
-
-    pub(super) async fn stop_realtime(&mut self) {
-        self.flush().await;
-        // 리비전을 남기지 못한 편집은 확인하지 않는다. 연결을 닫은 뒤 상태만 저장한다(#71).
-        self.snapshot().await;
-        for (_, c) in self.conns.drain() {
-            let _ignored = c
-                .peer
-                .out
-                .try_send(Outbound::Close(CloseReason::RealtimeOff));
-        }
-        self.persist().await;
+        self.recheck_peers().await;
     }
 
     /// 이동 직전 등 명시적인 재확인도 유지한다. peer별로 병렬 확인하며 기존 기한보다 오래 기다리지 않는다.
-    pub(super) async fn recheck_peers(&mut self) -> bool {
+    pub(super) async fn recheck_peers(&mut self) {
         self.refresh_peers().await;
-        self.remove_closed_peers()
+        self.remove_closed_peers();
     }
 
     pub(super) async fn refresh_peers(&self) {
@@ -211,20 +196,17 @@ impl Room {
     }
 
     /// 주기 처리는 독립 감시의 결과만 소비하고 DB 검사를 중복해서 시작하지 않는다.
-    pub(super) fn remove_closed_peers(&mut self) -> bool {
+    pub(super) fn remove_closed_peers(&mut self) {
         let peers: Vec<(u64, Peer)> = self
             .conns
             .iter()
             .map(|(id, c)| (*id, c.peer.clone()))
             .collect();
-        let mut off = false;
         for (conn, peer) in peers {
             if let Some(reason) = peer.access.reason() {
-                off |= reason == CloseReason::RealtimeOff;
                 self.close(conn, reason);
             }
         }
-        off
     }
 }
 
@@ -311,7 +293,6 @@ pub(in crate::collab) async fn observe_access(
             can_write: matches!(a.as_str(), "owner" | "write"),
         },
         Err(AppError::NotFound | AppError::Forbidden) => PeerAccess::Denied,
-        Err(AppError::Conflict(_)) => PeerAccess::RealtimeOff,
         Err(err) => {
             tracing::warn!(
                 event = "collab.access_check_failed",

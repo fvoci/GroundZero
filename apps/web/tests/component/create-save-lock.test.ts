@@ -95,7 +95,6 @@ const workspace: Workspace = {
   access: 'owner',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 describe('create forms while the request is in flight', () => {

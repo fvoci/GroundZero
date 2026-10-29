@@ -102,15 +102,12 @@ async fn get(app: &Router, user: &TestUser, uri: &str) -> (StatusCode, Value) {
 }
 
 async fn save(app: &Router, user: &TestUser, doc: &Value, text: &str) -> StatusCode {
-    send(
+    common::live::save(
         app,
-        Method::PUT,
+        user,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(user),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
+        &json!({ "request_id": new_request_id(), "base_revision": doc["revision"],
                      "title": doc["title"], "body": doc_body(text) }),
-        ),
     )
     .await
     .status

@@ -31,7 +31,6 @@ function workspace(id: string): Workspace {
     organization_id: 'org-1',
     role: 'member',
     is_owner: false,
-    realtime_enabled: false,
   };
 }
 

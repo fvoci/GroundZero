@@ -210,15 +210,12 @@ async fn pending_index_tasks_are_tracked_until_they_succeed() {
     assert_eq!(posts(), sent, "a pending task was submitted again");
     assert_eq!(row(id.clone()).await.unwrap(), attempts);
     // 3. 그 사이 제목을 바꾼다(더 새 세대).
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin_user,
         &format!("/api/documents/{id}"),
-        Some(&admin_user),
-        Some(
-            json!({ "request_id": common::new_request_id(), "base_revision": doc["revision"],
+        &json!({ "request_id": common::new_request_id(), "base_revision": doc["revision"],
                      "title": "바뀐 제목", "body": doc["body"] }),
-        ),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);

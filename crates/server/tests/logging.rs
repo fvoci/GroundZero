@@ -264,17 +264,16 @@ async fn fake_secrets_never_reach_the_log_even_at_trace() {
     let ws = common::create_workspace(&app, &user, "로그").await;
     // 본문(문서 제목·내용), 쿠키, Authorization, OIDC 코드·state, 공개 링크 토큰, 쿼리, 망가진 JSON 본문.
     let doc = common::create_doc(&app, &user, &ws, "FAKE-BODY-7f3a").await;
-    let r = common::send(
+    let r = common::live::save(
         &app,
-        Method::PUT,
+        &user,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(&user),
-        Some(json!({
+        &json!({
             "request_id": common::new_request_id(),
             "base_revision": doc["revision"],
             "title": doc["title"],
             "body": common::doc_body("FAKE-DOCTEXT-7f3a"),
-        })),
+        }),
     )
     .await;
     assert!(r.status.is_success(), "{:?}", r.json);

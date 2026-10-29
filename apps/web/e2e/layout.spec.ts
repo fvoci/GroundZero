@@ -15,13 +15,13 @@ test('login screen keeps Korean words whole', async ({ anonymous }, testInfo) =>
   );
 });
 
-test('wiki settings description keeps Korean words whole', async ({ signIn }, testInfo) => {
+test('wiki access description keeps Korean words whole', async ({ signIn }, testInfo) => {
   const { page, api } = await signIn('test-user');
   const ws = await api.createWorkspace(`줄바꿈 시험 ${unique()}`);
   await page.goto(`/w/${ws}`);
   await expectViewport(page, narrow(testInfo.project.name));
   await expectKoreanWrap(
-    page.getByText('켜면 이 워크스페이스 문서의 본문을 바로 함께 고치고'),
+    page.getByText('이 워크스페이스의 관리자는 비공개 문서를 포함해'),
     narrow(testInfo.project.name) ? 3 : 1,
   );
 });

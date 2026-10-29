@@ -73,15 +73,12 @@ async fn workspace_and_personal_exports_contain_only_what_the_person_can_see() {
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let outsider = login(&state, "outsider").await;
     let doc = create_doc(&app, &writer, &ws, "회의록").await;
-    send(
+    common::live::save(
         &app,
-        Method::PUT,
+        &writer,
         &format!("/api/documents/{}", doc["id"].as_str().unwrap()),
-        Some(&writer),
-        Some(
-            json!({ "request_id": new_request_id(), "base_revision": 1, "title": "회의록",
+        &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "회의록",
                      "body": doc_body("반출될 안건") }),
-        ),
     )
     .await;
     upload(&app, &writer, &doc, "첨부.txt", b"attached").await;

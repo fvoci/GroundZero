@@ -105,33 +105,16 @@ export interface DocumentView {
   can_delete: boolean;
   /** 템플릿으로 표시됨(D-27). */
   is_template: boolean;
-  /** 실시간 공동 편집 중(D-70). 본문은 실시간 연결로 고치고 저장 API는 제목만 바꾼다. */
-  realtime: boolean;
   /** 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙. */
   can_export: boolean;
   /**
-   * 단건 조회·저장·복원·충돌 응답이 준 ETag(D-77). 저장 때 `If-Match`로 보낸다. 다른 경로(목록·설정 변경)에서 받은
-   * 문서에는 없다.
+   * 단건 GET 응답의 강한 ETag(D-77). If-None-Match 재검증에만 쓴다.
    */
   etag?: string;
 }
 
-/** 강한 ETag인지. CDN 등이 압축하며 약하게(`W/`) 바꾼 값은 `If-Match`에 쓰지 않는다(약한 값은 맞지 않음, D-77). */
-export function isStrongEtag(etag: string | undefined): etag is string {
-  return etag !== undefined && etag.startsWith('"') && etag.endsWith('"') && etag.length >= 2;
-}
-
 function withEtag(doc: DocumentView, etag: string | null | undefined): DocumentView {
   return typeof etag === 'string' && etag !== '' ? { ...doc, etag } : doc;
-}
-
-/** 409(기준 리비전이 지남)·412(`If-Match`가 맞지 않음)의 서버 최신본. 둘 다 초안은 클라이언트가 보존한다. */
-function conflictCurrent(status: number, json: Json): DocumentView | undefined {
-  if ((status !== 409 && status !== 412) || !isRecord(json) || json.current === undefined) {
-    return undefined;
-  }
-  const body = rec(json, 'conflict');
-  return withEtag(parseDocument(body.current), typeof body.etag === 'string' ? body.etag : null);
 }
 
 function role(value: string): Role {
@@ -191,7 +174,6 @@ export function parseWorkspace(value: Json): Workspace {
     name: str(o, 'name'),
     role: role(str(o, 'role')),
     is_owner: bool(o, 'is_owner'),
-    realtime_enabled: bool(o, 'realtime_enabled'),
     access: access(str(o, 'access')),
   };
 }
@@ -289,7 +271,6 @@ export function parseDocument(value: Json): DocumentView {
     can_manage: bool(o, 'can_manage'),
     can_delete: bool(o, 'can_delete'),
     is_template: bool(o, 'is_template'),
-    realtime: bool(o, 'realtime'),
     can_export: bool(o, 'can_export'),
   };
 }
@@ -1316,10 +1297,6 @@ export const api = {
   purgeTrash: systemApi.purgeTrash,
   purgeExpiredTrash: systemApi.purgeExpiredTrash,
   setVersionRetention: systemApi.setVersionRetention,
-  setWorkspaceRealtime: (workspaceId: string, enabled: boolean) =>
-    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/realtime`, none, {
-      enabled,
-    }),
   setTrashRetention: systemApi.setTrashRetention,
   /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
   calendar: (
@@ -1493,43 +1470,6 @@ export const api = {
     expectOk('DELETE', `/api/public-links/${encodeURIComponent(linkId)}`, none),
   publicDocument: (token: string) =>
     expectOk('GET', `/api/public/${encodeURIComponent(token)}`, parsePublicDocument),
-  /**
-   * 저장. 충돌(409 기준 리비전이 지남, 412 `If-Match`가 맞지 않음)이면 `{ kind: 'conflict', current }`.
-   * `etag`가 강한 값일 때만 `If-Match`로 보낸다(D-77). 없거나 약하면 `base_revision`만으로 판단한다.
-   * `expectedUser`는 이 편집을 시작한 사용자 id다(편집기를 열 때 고정한 값, 보내기 직전에 다시 채우지 않는다).
-   * 서버가 세션의 사용자와 다르면 아무것도 바꾸지 않고 409 `account_changed`(`ApiError`)를 돌려준다.
-   */
-  async saveDocument(
-    id: string,
-    input: {
-      expectedUser: string;
-      requestId: string;
-      baseRevision: number;
-      title: string;
-      body: DocNode;
-      etag?: string | undefined;
-    },
-  ): Promise<
-    { kind: 'saved'; document: DocumentView } | { kind: 'conflict'; current: DocumentView }
-  > {
-    const { status, json, etag } = await request(
-      'PUT',
-      `/api/documents/${encodeURIComponent(id)}`,
-      {
-        request_id: input.requestId,
-        base_revision: input.baseRevision,
-        title: input.title,
-        body: input.body,
-      },
-      isStrongEtag(input.etag)
-        ? { [EXPECTED_USER]: input.expectedUser, 'If-Match': input.etag }
-        : { [EXPECTED_USER]: input.expectedUser },
-    );
-    const current = conflictCurrent(status, json);
-    if (current !== undefined) return { kind: 'conflict', current };
-    if (status !== 200) fail(status, json);
-    return { kind: 'saved', document: withEtag(parseDocument(json), etag) };
-  },
 };
 
 /** 요청 ID. 재시도 때 같은 값을 다시 보내면 서버가 중복을 막는다. */

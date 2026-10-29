@@ -20,7 +20,6 @@ const workspace: Workspace = {
   name: '공간',
   role: 'member',
   is_owner: false,
-  realtime_enabled: false,
 };
 const empty: CalendarView = {
   tasks: [],

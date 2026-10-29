@@ -59,7 +59,6 @@ BEGIN
     PERFORM app_respond_invitation(v_inv, true, pg_temp.take(1));
     PERFORM set_config('app.user_id', v_admin::text, true);
   END IF;
-  PERFORM app_set_workspace_realtime(v_ws, true, pg_temp.take(1));
   v_inv := app_invite(v_ws, 'test-user-2@example.test', 'member', 7 * 24 * 3600, pg_temp.take(3));
   v_doc := app_create_wiki_document(v_ws, pg_temp.take1(), '공동 편집 연습', 1, jsonb_build_object(
     'type', 'doc',

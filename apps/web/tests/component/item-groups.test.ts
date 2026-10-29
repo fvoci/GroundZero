@@ -45,7 +45,6 @@ const workspace: Workspace = {
   name: '공간',
   role: 'admin',
   is_owner: true,
-  realtime_enabled: false,
 };
 
 function moduleOf(kind: ModuleKind): Module {

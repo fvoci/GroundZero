@@ -69,9 +69,7 @@ impl Room {
                     if self.dirty_since_snapshot && self.last_change.elapsed() >= SNAPSHOT_IDLE {
                         self.snapshot().await;
                     }
-                    if self.remove_closed_peers() {
-                        self.stop_realtime().await;
-                    }
+                    self.remove_closed_peers();
                 }
             }
             if self.doc.is_some() && self.conns.is_empty() {
@@ -211,15 +209,6 @@ impl Room {
         } else {
             true
         };
-        // 실시간을 끄려는데 리비전을 남기지 못했으면 방을 닫지 않는다. 끄기는 거절되고(켜진 채), 편집은 방에
-        // 그대로 남아 다음 시도에서 다시 리비전으로 남긴다(방이 계속 지니므로 평소처럼 저장·확인한다).
-        if !kept && reason == CloseReason::RealtimeOff {
-            self.persist().await;
-            if let Some(saved) = saved {
-                let _ignored = saved.send(false);
-            }
-            return true;
-        }
         for (_, c) in self.conns.drain() {
             let _ignored = c.peer.out.try_send(Outbound::Close(reason));
         }

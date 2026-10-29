@@ -7,6 +7,5 @@ pub use fvoci_organizations::members;
 pub mod modules;
 pub use fvoci_organizations::organizations;
 pub mod search_text;
-pub mod workspaces;
 
 pub use fvoci_documents::{documents, public_links, references, revisions};

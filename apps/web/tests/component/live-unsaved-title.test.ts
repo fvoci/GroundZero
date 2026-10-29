@@ -4,7 +4,7 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import type { DocumentView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { documentsApi } from '$lib/features/documents/api';
 import { loadDraft, loadOffers } from '$lib/features/documents/drafts';
 import type { LiveSession } from '$lib/features/documents/live';
@@ -70,7 +70,6 @@ const doc: DocumentView = {
   can_manage: false,
   can_delete: false,
   is_template: false,
-  realtime: true,
   can_export: true,
 };
 
@@ -106,7 +105,7 @@ describe('a screen-only title when live editing ends (D-27)', () => {
           throw new DOMException('full', 'QuotaExceededError');
         });
       }
-      closeWith(4410);
+      closeWith(4403);
       await screen.findByText(m.documents_live_title_pending());
       expect(
         screen.getByRole('button', { name: m.documents_live_discard_reconnect() }),
@@ -133,11 +132,11 @@ describe('a screen-only title when live editing ends (D-27)', () => {
     });
   }
 
-  for (const code of [4410, 4403, 4409]) {
+  for (const code of [4403, 4409]) {
     it(`keeps the title on screen and blocks reopening until it is saved or discarded (${String(code)})`, async () => {
       const reopen = vi.fn();
       render(LiveDocumentEditor, {
-        props: { initial: doc, onrealtimeoff: reopen, onreload: reopen },
+        props: { initial: doc, onreload: reopen },
       });
       await editTitleOnly();
       closeWith(code);
@@ -155,10 +154,10 @@ describe('a screen-only title when live editing ends (D-27)', () => {
     });
   }
 
-  it('keeps the title on screen when a refused reconnect finds realtime off', async () => {
-    vi.spyOn(api, 'document').mockResolvedValue({ ...doc, realtime: false });
+  it('keeps the title on screen when a refused reconnect loses access', async () => {
+    vi.spyOn(api, 'document').mockRejectedValue(new ApiError(404, 'not_found', 'not found'));
     const off = vi.fn();
-    render(LiveDocumentEditor, { props: { initial: doc, onrealtimeoff: off } });
+    render(LiveDocumentEditor, { props: { initial: doc, onreload: off } });
     await editTitleOnly();
     closeWith(1006);
     await screen.findByText(m.documents_live_title_pending());

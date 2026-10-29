@@ -6,7 +6,6 @@
   import { errorText } from '$lib/api/errors';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import type { TreeMove } from '$lib/features/documents/tree';
   import { moveThenReload } from '$lib/features/documents/tree';
   import { m } from '$lib/paraglide/messages.js';
@@ -21,11 +20,9 @@
 
   interface Props {
     workspace: Workspace;
-    /** 실시간 공동 편집을 켜거나 껐다. 앱이 워크스페이스 목록을 고쳐 다시 들어와도 그 값을 보이게 한다. */
-    onrealtimechanged?: (workspaceId: string, enabled: boolean) => void;
   }
 
-  const { workspace, onrealtimechanged }: Props = $props();
+  const { workspace }: Props = $props();
 
   // 위키 문서 목록은 사이드바와 같이 쓴다(한 번만 받는다).
   $effect(() => {
@@ -56,45 +53,6 @@
 
   // 쓰기·관리 여부는 역할이 아니라 서버의 접근 등급(app_access)에서 온다(D-113).
   const canWrite = $derived(workspace.access !== 'read');
-
-  // 실시간 공동 편집(D-27, D-70). 관리자만 켜고 끈다. 끄면 열린 편집은 리비전을 남기고 닫힌다.
-  let realtime = $state(false);
-  // 바꾸기 실패 안내(성공은 토스트).
-  let realtimeMessage = $state('');
-  // 안내가 어느 워크스페이스의 것인지. 같은 워크스페이스의 새 값(바꾼 뒤 앱이 목록을 고침)으로는 안내를 지우지 않는다.
-  let messageFor = '';
-  $effect(() => {
-    realtime = workspace.realtime_enabled;
-    if (workspace.id !== messageFor) realtimeMessage = '';
-  });
-  // 바꾸는 요청이 진행 중인지. 겹쳐 보내면 늦게 온 앞 요청의 응답이 마지막 선택과 다른 값을 앱의 목록과 안내에 남긴다.
-  let realtimeBusy = $state(false);
-  async function setRealtime(on: boolean): Promise<void> {
-    if (realtimeBusy) return;
-    realtimeBusy = true;
-    const id = workspace.id;
-    const before = realtime;
-    // 칸은 누른 대로 바뀌어 있다. 실패하면 이전 값으로 되돌려야 칸도 다시 그려진다.
-    realtime = on;
-    try {
-      await api.setWorkspaceRealtime(id, on);
-      onrealtimechanged?.(id, on);
-      if (workspace.id !== id) return;
-      // 일반 완료는 토스트다(D-82). 화면 안 영역에는 앞선 실패만 남아 있었으므로 비운다.
-      realtimeMessage = '';
-      notifyDone(
-        on ? m.workspaces_realtime_on() : m.workspaces_realtime_off(),
-        'workspace-realtime',
-      );
-    } catch (e: unknown) {
-      if (workspace.id !== id) return;
-      realtime = before;
-      messageFor = id;
-      realtimeMessage = errorText(e, m.workspaces_realtime_failed());
-    } finally {
-      realtimeBusy = false;
-    }
-  }
 </script>
 
 <section class="flex flex-col gap-6" aria-labelledby="ws-heading">
@@ -104,26 +62,6 @@
   <p class="text-sm text-muted-foreground">
     {m.workspaces_admin_notice()}
   </p>
-  {#if workspace.access === 'owner'}
-    <div class="flex flex-col gap-1 text-sm">
-      <label class="flex items-center gap-2">
-        <input
-          type="checkbox"
-          disabled={realtimeBusy}
-          checked={realtime}
-          onchange={(e: Event) => {
-            if (e.currentTarget instanceof HTMLInputElement)
-              void setRealtime(e.currentTarget.checked);
-          }}
-        />
-        {m.workspaces_realtime_label()}
-      </label>
-      <p class="text-muted-foreground">
-        {m.workspaces_realtime_hint()}
-      </p>
-      <p aria-live="polite">{realtimeMessage}</p>
-    </div>
-  {/if}
   {#if error !== undefined}
     <p role="alert" class="text-destructive">{error}</p>
   {:else if docs === undefined}

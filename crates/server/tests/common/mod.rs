@@ -15,6 +15,8 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+pub mod live;
+
 /// 테스트 서버의 공개 원점. Origin 헤더 검사에 쓴다.
 pub const PUBLIC_URL: &str = "http://127.0.0.1:8080";
 
@@ -158,14 +160,14 @@ pub async fn send_with_origin(
     Reply { status, json }
 }
 
-/// 기대 사용자 머리가 필요한 문서 저장·내 노트 만들기·업로드 시작·업무 쓰기의 정확한 경로.
+/// 기대 사용자 머리가 필수인 내 노트 만들기·업로드 시작·업무 쓰기의 정확한 경로.
 fn expects_user(method: &Method, uri: &str) -> bool {
     let path = uri.split('?').next().unwrap_or_default();
     let segments: Vec<_> = path.split('/').collect();
     match *method {
         Method::PUT => matches!(
             segments.as_slice(),
-            ["", "api", "documents" | "checklist-items", id]
+            ["", "api", "checklist-items", id]
                 | ["", "api", "tasks", id, "position" | "parent" | "recurrence"]
                 | ["", "api", "tasks", id, "predecessors", _]
                 | ["", "api", "items", id, "statuses", _]

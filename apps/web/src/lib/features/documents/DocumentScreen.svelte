@@ -26,7 +26,6 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import DocumentActions from './DocumentActions.svelte';
-  import DocumentEditor from './DocumentEditor.svelte';
   import DocumentOutline from './DocumentOutline.svelte';
   import ExportDialog from './ExportDialog.svelte';
   import LiveDocumentEditor from './LiveDocumentEditor.svelte';
@@ -102,7 +101,7 @@
       cancelled = true;
     };
   });
-  /** 실시간이 꺼졌거나 권한이 바뀌었다. 문서를 다시 읽어 지금 상태(일반 편집·읽기 전용)로 다시 연다. */
+  /** 권한이 바뀌었다. 문서를 다시 읽어 지금 권한로 다시 연다. */
   function reopen(): void {
     const id = documentId;
     api
@@ -222,51 +221,37 @@
     </div>
   </div>
   <!-- 본문 편집기와 같은 키: 복원·다시 열기로 본문을 새로 그리면 참조 자리도 다시 찾는다. -->
-  {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
+  {#key `${doc.id}:${String(epoch)}`}
     <ReferenceFocus root={bodyArea} target={parseReferenceHash(router.hash)} />
   {/key}
   <!-- 본문 영역이 넓으면 본문 옆에 목차(Outline처럼 읽기 위치를 잡기 쉽게). 좁거나 글꼴을 키웠으면 본문만. -->
   <div class="@2xl:grid @2xl:grid-cols-[minmax(0,1fr)_14rem] @2xl:gap-6">
     <div bind:this={bodyArea} class="min-w-0">
-      {#key `${doc.id}:${String(epoch)}:${String(doc.realtime)}`}
-        {#if doc.realtime}
-          <LiveDocumentEditor
-            initial={doc}
-            references={referencesFor(doc)}
-            onsaved={(saved: DocumentView) => {
-              if (!isShown(saved)) {
-                // 이전 문서의 제목 저장이 늦게 끝났다(제목 칸을 떠나며 다른 문서로 옮김). 화면은 그대로 두고 목록만
-                // 새 제목으로 다시 읽는다.
-                workspaceNav.refreshDocs();
-                return;
-              }
-              // 같은 문서를 다시 연 뒤 앞 편집기의 제목 저장이 늦게 끝났으면(A → B → A) 다시 읽은 더 새 리비전을 옛 결과로
-              // 덮지 않는다(기록·복원의 기준이 옛 리비전으로 돌아감). 목록만 새 제목으로 다시 읽는다.
-              if (doc !== undefined && saved.revision < doc.revision) {
-                workspaceNav.refreshDocs();
-                return;
-              }
-              if (saved.title !== doc?.title) workspaceNav.refreshDocs();
-              doc = saved;
-            }}
-            onrealtimeoff={reopen}
-            onreload={reopen}
-          />
-        {:else}
-          <DocumentEditor
-            initial={doc}
-            references={referencesFor(doc)}
-            onsaved={(saved: DocumentView) => {
-              // 기록 비교(지금과 비교)와 복원의 기준 리비전이 최신이 되도록 저장 결과를 따라간다.
-              if (!isShown(saved)) return;
-              if (saved.title !== doc?.title) workspaceNav.refreshDocs();
-              doc = saved;
-            }}
-            onunsaved={(value: boolean) => {
-              unsaved = value;
-            }}
-          />
-        {/if}
+      {#key `${doc.id}:${String(epoch)}`}
+        <LiveDocumentEditor
+          initial={doc}
+          references={referencesFor(doc)}
+          onsaved={(saved: DocumentView) => {
+            if (!isShown(saved)) {
+              // 이전 문서의 제목 저장이 늦게 끝났다(제목 칸을 떠나며 다른 문서로 옮김). 화면은 그대로 두고 목록만
+              // 새 제목으로 다시 읽는다.
+              workspaceNav.refreshDocs();
+              return;
+            }
+            // 같은 문서를 다시 연 뒤 앞 편집기의 제목 저장이 늦게 끝났으면(A → B → A) 다시 읽은 더 새 리비전을 옛 결과로
+            // 덮지 않는다(기록·복원의 기준이 옛 리비전으로 돌아감). 목록만 새 제목으로 다시 읽는다.
+            if (doc !== undefined && saved.revision < doc.revision) {
+              workspaceNav.refreshDocs();
+              return;
+            }
+            if (saved.title !== doc?.title) workspaceNav.refreshDocs();
+            doc = saved;
+          }}
+          onreload={reopen}
+          onunsaved={(value: boolean) => {
+            unsaved = value;
+          }}
+        />
       {/key}
     </div>
     <aside class="hidden @2xl:block">

@@ -1,6 +1,10 @@
 //! 라우팅과 HTTP 공통 경계: 상태, Origin 검사, 본문 크기 제한, 정적 웹 서빙, OpenAPI 계약.
 
+mod api;
 pub mod cache;
+mod routes;
+
+pub use api::ApiDoc;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -9,19 +13,18 @@ use axum::extract::{DefaultBodyLimit, FromRef, MatchedPath, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 use tower_http::services::{ServeDir, ServeFile};
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::build_info::{self, BuildInfo};
 use crate::config::Config;
+use crate::features::accounts;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
-// personal scope (2단계 B)
-use crate::features::{accounts, item_profile, modules, workspaces};
 
 /// 핸들러가 공유하는 상태.
 #[derive(Debug, Clone)]
@@ -334,147 +337,6 @@ async fn api_not_found() -> AppError {
     AppError::NotFound
 }
 
-/// 공개 API 계약. `contracts/openapi.json`은 여기서 생성한다.
-#[derive(Debug, OpenApi)]
-#[openapi(
-    info(title = "fvoci API", version = "0.1.0"),
-    modifiers(&SessionSecurity, &DomainApis),
-    security(("session_https" = []), ("session_http" = [])),
-    paths(
-        healthz,
-        accounts::login,
-        accounts::callback,
-        accounts::logout,
-        accounts::auth_info,
-        workspaces::set_realtime,
-        // personal scope (2단계 B)
-        item_profile::get,
-        item_profile::set,
-        item_profile::set_members,
-        item_profile::set_module_icon,
-        item_profile::copy,
-        item_profile::set_template,
-        modules::list_modules,
-        modules::get_module,
-        modules::create_module,
-        modules::update_module,
-        modules::archive_module,
-        modules::set_description,
-        modules::list_items,
-        modules::create_item,
-        modules::get_item,
-        modules::update_item,
-        modules::archive_item,
-    ),
-    components(schemas(
-        Health,
-        BuildInfo,
-        ErrorBody,
-        accounts::AuthInfo,
-        accounts::LogoutResponse,
-        workspaces::SetRealtime,
-        item_profile::ItemDetails,
-        item_profile::ItemProfile,
-        item_profile::PersonRef,
-        item_profile::GroupRef,
-        item_profile::SetItemProfile,
-        item_profile::ItemProfileConflict,
-        item_profile::ItemProfileSaveConflict,
-        item_profile::SetItemMembers,
-        item_profile::SetModuleIcon,
-        item_profile::CopyItem,
-        item_profile::CopiedItem,
-        item_profile::SetTemplate,
-        modules::ModuleKind,
-        modules::Module,
-        modules::CreateModule,
-        modules::UpdateModule,
-        modules::SetModuleDescription,
-        modules::SetArchived,
-        modules::Item,
-        modules::CreateItem,
-        modules::UpdateItem,
-        modules::ItemConflict,
-        modules::ItemSaveConflict,
-        fvoci_core::ids::Role,
-    )),
-    tags(
-        (name = "system", description = "서비스 상태"),
-        (name = "auth", description = "OIDC 로그인과 세션"),
-        (name = "workspaces", description = "워크스페이스"),
-        (name = "documents", description = "위키 문서"),
-        (name = "members", description = "멤버·초대·역할·그룹·소유권"),
-        (name = "modules", description = "모듈 인스턴스·키·항목"),
-        (name = "references", description = "@ 링크·언급·역방향 링크·알림"),
-        (name = "tasks", description = "업무·하위 업무·담당자·체크리스트"),
-        (name = "events", description = "회의·발표·행사 일정과 달력"),
-        (name = "time", description = "스톱워치·개인 시간 기록·집계"),
-        (name = "home", description = "홈·고정·즐겨찾기"),
-        (name = "trash", description = "휴지통·복원·영구 삭제"),
-        (name = "search", description = "통합 검색"),
-        (name = "files", description = "파일 첨부·버전·업로드"),
-        (name = "export", description = "데이터 반출"),
-        (name = "audit", description = "감사 기록"),
-        (name = "courses", description = "강의: 강좌·회차·개인별 진도"),
-        (name = "comments", description = "댓글"),
-    )
-)]
-pub struct ApiDoc;
-
-/// 도메인 crate가 낸 OpenAPI 조각을 합친다(노르웨이숲 태비 초안 3: 도메인은 라우터와 계약 조각을 내고 조립 crate가 합친다).
-#[derive(Debug)]
-struct DomainApis;
-
-impl utoipa::Modify for DomainApis {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.merge(fvoci_organizations::OrganizationsApi::openapi());
-        openapi.merge(fvoci_work::WorkApi::openapi());
-        openapi.merge(fvoci_records::RecordsApi::openapi());
-        openapi.merge(fvoci_home::HomeApi::openapi());
-        openapi.merge(fvoci_search::SearchApi::openapi());
-        openapi.merge(fvoci_references::ReferencesApi::openapi());
-        openapi.merge(fvoci_documents::DocumentsApi::openapi());
-        openapi.merge(fvoci_system::SystemApi::openapi());
-        openapi.merge(fvoci_files::FilesApi::openapi());
-        openapi.merge(fvoci_calendar::CalendarApi::openapi());
-        openapi.merge(fvoci_time::TimeApi::openapi());
-        openapi.merge(fvoci_activity::ActivityApi::openapi());
-    }
-}
-
-/// Describe the existing session cookies; the configured public URL selects
-/// exactly one cookie name at runtime (see `accounts::session_cookie_name`).
-#[derive(Debug)]
-struct SessionSecurity;
-
-impl utoipa::Modify for SessionSecurity {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
-
-        let components = openapi.components.get_or_insert_with(Default::default);
-        for (scheme, cookie, description) in [
-            (
-                "session_https",
-                accounts::SECURE_SESSION_COOKIE,
-                "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTPS일 때 이 쿠키만 받는다. HttpOnly·Secure·SameSite=Lax이며 Path=/이다.",
-            ),
-            (
-                "session_http",
-                accounts::SESSION_COOKIE,
-                "OIDC 로그인으로 발급된 앱 세션. 공개 원점이 HTTP일 때 이 쿠키만 받는다. HttpOnly·SameSite=Lax이며 Path=/이다. HTTPS 배포에서는 이 이름을 받지 않는다.",
-            ),
-        ] {
-            components.add_security_scheme(
-                scheme,
-                SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
-                    cookie,
-                    description,
-                ))),
-            );
-        }
-    }
-}
-
 pub fn router(state: AppState) -> Router {
     // JSON 직렬화 여유를 두고 문서 상한보다 조금 크게 받는다. 정확한 상한 검사는 핸들러가 한다.
     let body_limit = state
@@ -484,67 +346,7 @@ pub fn router(state: AppState) -> Router {
         .saturating_mul(2)
         .saturating_add(64 * 1024);
 
-    let api = Router::new()
-        .merge(fvoci_organizations::router(&state))
-        .merge(fvoci_work::router(&state))
-        .merge(fvoci_records::router(&state))
-        .merge(fvoci_home::router(&state))
-        .merge(fvoci_search::router(&state))
-        .merge(fvoci_references::router(&state))
-        .merge(fvoci_documents::router(&state))
-        .merge(fvoci_system::router(&state))
-        .merge(fvoci_files::router(&state))
-        .merge(fvoci_calendar::router())
-        .merge(fvoci_time::router(&state))
-        .merge(fvoci_activity::router(&state))
-        .route("/auth-info", get(accounts::auth_info))
-        .route(
-            "/items/{item_id}/profile",
-            get(item_profile::get).put(item_profile::set),
-        )
-        .route("/items/{item_id}/members", put(item_profile::set_members))
-        .route("/items/{item_id}/copy", post(item_profile::copy))
-        .route("/items/{item_id}/template", put(item_profile::set_template))
-        .route(
-            "/modules/{module_id}/icon",
-            put(item_profile::set_module_icon),
-        )
-        .route(
-            "/modules/{module_id}/description",
-            put(modules::set_description),
-        )
-        // personal scope (2단계 B)
-        .route(
-            "/workspaces/{workspace_id}/modules",
-            get(modules::list_modules).post(modules::create_module),
-        )
-        .route(
-            "/modules/{module_id}",
-            get(modules::get_module).put(modules::update_module),
-        )
-        .route(
-            "/modules/{module_id}/archived",
-            put(modules::archive_module),
-        )
-        .route(
-            "/modules/{module_id}/items",
-            get(modules::list_items).post(modules::create_item),
-        )
-        .route(
-            "/items/{item_id}",
-            get(modules::get_item).put(modules::update_item),
-        )
-        .route("/items/{item_id}/archived", put(modules::archive_item))
-        .route(
-            "/documents/{document_id}/collab",
-            get(crate::collab::ws::connect),
-        )
-        .route(
-            "/workspaces/{workspace_id}/realtime",
-            put(workspaces::set_realtime),
-        )
-        .fallback(api_not_found)
-        .layer(middleware::from_fn(json_rejections));
+    let api = routes::api(&state);
 
     let auth = Router::new()
         .route("/login", get(accounts::login))
@@ -714,29 +516,11 @@ mod tests {
         );
     }
 
-    /// 문서 저장의 409는 두 모양이다(#60): 리비전 충돌이면 `ConflictBody`, `account_changed`·`invalid_state`면
-    /// `ErrorBody`. 기대 사용자 머리는 적용 경로(문서 저장·내 노트 만들기)에서 필수다.
+    /// 남은 필수 기대 사용자 명령은 계약에서도 필수 머리를 표시한다(D-96).
     #[test]
-    fn the_save_conflict_and_the_expected_user_header_are_in_the_contract() {
+    fn required_expected_user_headers_are_in_the_contract() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
-        let save = &doc["paths"]["/api/documents/{document_id}"]["put"];
-        assert_eq!(
-            save["responses"]["409"]["content"]["application/json"]["schema"],
-            serde_json::json!({ "$ref": "#/components/schemas/SaveConflict" })
-        );
-        let one_of: Vec<&str> = doc["components"]["schemas"]["SaveConflict"]["oneOf"]
-            .as_array()
-            .map(|v| v.iter().filter_map(|s| s["$ref"].as_str()).collect())
-            .unwrap_or_default();
-        assert_eq!(
-            one_of,
-            [
-                "#/components/schemas/ConflictBody",
-                "#/components/schemas/ErrorBody"
-            ]
-        );
         for operation in [
-            save,
             &doc["paths"]["/api/me/notes"]["post"],
             &doc["paths"]["/api/uploads"]["post"],
         ] {

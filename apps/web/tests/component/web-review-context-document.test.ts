@@ -1,8 +1,9 @@
+import { editUnconfirmedBody } from './fixtures/live-editor';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import type { DocumentView } from '$lib/api/client';
-import DocumentEditor from '$lib/features/documents/DocumentEditor.svelte';
+import DocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
 import { loadDraft, loadOffers, storeDraft } from '$lib/features/documents/drafts';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
@@ -27,7 +28,6 @@ const documentView: DocumentView = {
   can_manage: false,
   can_delete: false,
   is_template: false,
-  realtime: false,
   can_export: true,
 };
 
@@ -64,17 +64,16 @@ it.each([true, false])(
       });
     }
     render(DocumentEditor, { initial: documentView });
+    await vi.advanceTimersByTimeAsync(0);
     expect(screen.getByRole('region', { name: '보관된 초안' })).toBeInTheDocument();
-    const title = document.getElementById('doc-title');
-    if (title === null) throw new Error('missing title');
-    await fireEvent.input(title, { target: { value: '지금 편집' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
+    editUnconfirmedBody();
     accountSafety.switching = true;
     const leaving = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leaving);
 
     expect([loadDraft(documentView.id), ...loadOffers(documentView.id)]).toContainEqual(oldDraft);
     expect(leaving.defaultPrevented).toBe(reserved);
-    expect(title).toHaveValue('지금 편집');
-    if (!reserved) expect(loadDraft(documentView.id)?.title).toBe('지금 편집');
+    if (!reserved) expect(loadDraft(documentView.id)?.title).toBe(documentView.title);
   },
 );

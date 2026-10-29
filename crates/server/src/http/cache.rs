@@ -11,7 +11,7 @@ use axum::extract::Request;
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
-pub use fvoci_http::cache::{if_match, none_match, strong_etag};
+pub use fvoci_http::cache::{none_match, strong_etag};
 
 /// 재검증을 허용하는 개인 응답. 브라우저만 저장하고 쓰기 전에 매번 서버에 확인한다.
 pub const PRIVATE_REVALIDATE: &str = "private, no-cache, no-transform";
@@ -30,7 +30,6 @@ enum Scope {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DocumentCache {
     Read,
-    LegacyWrite,
     None,
 }
 
@@ -44,23 +43,10 @@ fn document_cache(method: &Method, path: &str) -> DocumentCache {
     if !rest.contains('/') {
         return match *method {
             Method::GET | Method::HEAD => DocumentCache::Read,
-            Method::PUT | Method::PATCH => DocumentCache::LegacyWrite,
             _ => DocumentCache::None,
         };
     }
-    if *method == Method::POST
-        && let Some((id, tail)) = rest.split_once('/')
-        && !id.is_empty()
-        && let Some(revision) = tail
-            .strip_prefix("revisions/")
-            .and_then(|tail| tail.strip_suffix("/restore"))
-        && !revision.is_empty()
-        && !revision.contains('/')
-    {
-        DocumentCache::LegacyWrite
-    } else {
-        DocumentCache::None
-    }
+    DocumentCache::None
 }
 
 fn under(path: &str, prefix: &str) -> bool {
@@ -97,10 +83,7 @@ pub async fn policy(request: Request, next: Next) -> Response {
     let value = match scope {
         Scope::Api => {
             let revalidate = document == DocumentCache::Read && ok;
-            // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
-            // 정확한 PUT·PATCH 단건·POST 리비전 복원 200만 다음 If-Match용 ETag를 남긴다.
-            let legacy_etag = document == DocumentCache::LegacyWrite && status == StatusCode::OK;
-            if !revalidate && !legacy_etag {
+            if !revalidate {
                 headers.remove(header::ETAG);
             }
             if revalidate {
@@ -185,7 +168,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn policy_preserves_only_single_document_reads_and_three_legacy_write_etags() {
+    async fn policy_preserves_etags_only_for_single_document_reads() {
         for method in [Method::GET, Method::HEAD] {
             for status in [StatusCode::OK, StatusCode::NOT_MODIFIED] {
                 let response =
@@ -197,7 +180,6 @@ mod tests {
                 assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
             }
         }
-        // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
         for (method, path) in [
             (Method::PUT, "/api/documents/x"),
             (Method::PATCH, "/api/documents/x"),
@@ -205,7 +187,7 @@ mod tests {
         ] {
             let response = downstream(method, path, StatusCode::OK).await;
             assert_eq!(response.headers()[header::CACHE_CONTROL], NO_STORE);
-            assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
+            assert!(response.headers().get(header::ETAG).is_none());
         }
     }
 

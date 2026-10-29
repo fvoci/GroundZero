@@ -19,7 +19,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'member',
     is_owner: false,
-    realtime_enabled: false,
   },
 ];
 
@@ -43,7 +42,6 @@ function documentView(over: Partial<DocumentView>): DocumentView {
     can_manage: true,
     can_delete: true,
     is_template: false,
-    realtime: false,
     can_export: true,
     ...over,
   };

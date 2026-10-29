@@ -281,7 +281,6 @@ CREATE TABLE fvoci.workspaces (
     deleted_at timestamp with time zone,
     deleted_by uuid,
     version_retention_days integer,
-    realtime_enabled boolean DEFAULT false NOT NULL,
     max_file_bytes bigint,
     max_storage_bytes bigint,
     max_concurrent_uploads integer,
@@ -3090,31 +3089,6 @@ CREATE FUNCTION fvoci.app_set_version_retention(p_workspace uuid, p_days integer
 
 
 ALTER FUNCTION fvoci.app_set_version_retention(p_workspace uuid, p_days integer, p_ids uuid[]) OWNER TO fvoci_migrator;
-
-CREATE FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'fvoci', 'pg_temp'
-    AS $$
-  DECLARE
-    v_old boolean;
-  BEGIN
-    IF app_access('workspace', p_workspace) = 'none' THEN
-      RAISE EXCEPTION 'workspace not found' USING ERRCODE = 'P0002';
-    END IF;
-    IF app_access('workspace', p_workspace) <> 'owner' THEN
-      RAISE EXCEPTION 'only an admin can change realtime editing' USING ERRCODE = '42501';
-    END IF;
-    SELECT realtime_enabled INTO v_old FROM workspaces WHERE id = p_workspace FOR UPDATE;
-    UPDATE workspaces SET realtime_enabled = p_enabled WHERE id = p_workspace;
-    IF v_old IS DISTINCT FROM p_enabled THEN
-      PERFORM app_audit(app_id(p_ids, 1), p_workspace, 'set_realtime', 'workspace', p_workspace,
-                        jsonb_build_object('enabled', p_enabled));
-    END IF;
-  END
-  $$;
-
-
-ALTER FUNCTION fvoci.app_set_workspace_realtime(p_workspace uuid, p_enabled boolean, p_ids uuid[]) OWNER TO fvoci_migrator;
 
 CREATE FUNCTION fvoci.app_update_item(p_item uuid, p_base_version integer, p_title text, p_description text, p_visibility text, p_ids uuid[]) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER

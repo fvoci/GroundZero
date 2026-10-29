@@ -1,9 +1,10 @@
 <script lang="ts">
   import DocumentConflictNotice from './DocumentConflictNotice.svelte';
   import { documentsApi } from './api';
-  // 실시간 공동 편집 화면(D-27 워크스페이스별 ON, D-70). 본문은 Yjs로 바로 함께 고치고(저장 단추 없음),
+  import { saveLiveCopy } from './live-copy';
+  // 실시간 공동 편집 화면(D-27 본문은 늘 CRDT, D-70). 본문은 Yjs로 바로 함께 고치고(저장 단추 없음),
   // 서버가 조용할 때·마지막 사람이 나갈 때 리비전을 남긴다. 제목은 저장 API로 따로 바꾼다.
-  // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나
+  // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 권한이 바뀌거나
   // 새로고침해도 사라지지 않게 한다. 다시 열 때 서버 내용과 다르면 내 노트로 보존할지 묻는다(실시간 문서에 섞지 않음).
   import { formatInstant } from '$lib/display';
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -46,13 +47,12 @@
     initial: DocumentView;
     references?: ReferenceContext;
     onsaved?: (doc: DocumentView) => void;
-    /** 실시간이 꺼졌다. 부모가 문서를 다시 읽어 일반 편집으로 돌아간다. */
-    onrealtimeoff?: () => void;
+    onunsaved?: (unsaved: boolean) => void;
     /** 권한이 바뀌어 닫혔다가 다시 연결한다. 부모가 지금 권한으로 문서를 다시 연다(읽기면 읽기 전용). */
     onreload?: () => void;
   }
 
-  const { initial, references, onsaved, onrealtimeoff, onreload }: Props = $props();
+  const { initial, references, onsaved, onunsaved, onreload }: Props = $props();
   const start = untrack(() => initial);
   // 이 화면을 연 사용자. 제목 저장·초안 보존(저장 API)과 실시간 연결(다시 붙을 때도)에 그대로 보내 서버가 세션의
   // 사용자와 비교한다(#60, D-96 docs/decisions/documents.md#d-96).
@@ -60,6 +60,10 @@
   const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
   let session = $state<LiveSession | undefined>(undefined);
+  let bodyPending = $state(false);
+  $effect(() => {
+    onunsaved?.(bodyPending || (start.can_edit && title.trim() !== savedTitle));
+  });
   let epoch = $state(0);
   let status = $state<LiveStatus>('connecting');
   let stopped = $state<LiveStop | undefined>(undefined);
@@ -87,7 +91,7 @@
   let foundIsReserved = false;
   let foundMessage = $state<string | undefined>(undefined);
   let keepingFound = $state(false);
-  let foundRequest: { note: string; save: string } | undefined;
+  let foundRequest: string | undefined;
   let keepTimer: ReturnType<typeof setTimeout> | undefined;
   // 다른 계정으로 바뀌어 연결이 거절됐는데(4412) 확인받지 못한 편집을 이 브라우저에 남기지 못했다. 다시 읽지 않고 알린다.
   let accountUnsavedLost = $state(false);
@@ -198,10 +202,15 @@
       editingUser,
     );
     watch?.stop();
+    bodyPending = false;
     watch = watchUnsynced(next.document, next.provider, next.persisted, {
       // 편집기가 본문을 넘긴 뒤에 남긴다.
-      onDirty: keepDraftSoon,
+      onDirty: () => {
+        bodyPending = true;
+        keepDraftSoon();
+      },
       onSynced: () => {
+        bodyPending = false;
         if (keepTimer !== undefined) clearTimeout(keepTimer);
         keepTimer = undefined;
         if (reserved === undefined) clearDraft(start.id);
@@ -241,8 +250,6 @@
         // 멈춘 채로 둔다(다시 연결·버리기 단추가 보이게).
         stopped = stop;
         restart();
-      } else if (stop === 'off') {
-        if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
       } else {
         stopped = stop;
       }
@@ -250,7 +257,7 @@
     session = next;
   }
 
-  // 다시 붙기를 서버가 연결 전에 거절하면(권한·세션이 끝남, 실시간이 꺼짐) 브라우저는 이유 없이 1006만 받고
+  // 다시 붙기를 서버가 연결 전에 거절하면(권한·세션이 끝남) 브라우저는 이유 없이 1006만 받고
   // y-websocket은 끝없이 다시 붙는다(그동안 고친 내용은 어디에도 남지 않는다). 그때 문서를 다시 읽어 이유를 찾는다.
   // 네트워크 오류면 그대로 다시 붙기를 기다린다. 같은 연결인지는 provider로 본다(`session`은 $state라 프록시다).
   let checking = false;
@@ -258,12 +265,7 @@
     if (checking) return;
     checking = true;
     try {
-      const doc = await api.document(start.id);
-      if (session?.provider !== current.provider || doc.realtime) return;
-      const kept = keepUnsaved();
-      current.provider.disconnect();
-      if (!kept) stopped = 'off';
-      else if (onrealtimeoff !== undefined) handOff(onrealtimeoff);
+      await api.document(start.id);
     } catch (e: unknown) {
       if (session?.provider !== current.provider || !(e instanceof ApiError)) return;
       if (e.status === 401 || e.status === 403 || e.status === 404) {
@@ -306,10 +308,6 @@
   function reopen(): void {
     if (stopped === 'denied' && onreload !== undefined) {
       handOff(onreload);
-      return;
-    }
-    if (stopped === 'off' && onrealtimeoff !== undefined) {
-      handOff(onrealtimeoff);
       return;
     }
     // 남기지 못한다고 알린 뒤 사람이 그 편집을 되돌려 반영할 것이 없어졌다.
@@ -359,6 +357,7 @@
     });
   });
   onDestroy(() => {
+    onunsaved?.(false);
     if (!handedOff) keepIfDirty();
     watch?.stop();
     if (session !== undefined) closeLive(session);
@@ -370,20 +369,14 @@
     if (draft === undefined) return;
     keepingFound = true;
     foundMessage = undefined;
-    foundRequest ??= { note: newRequestId(), save: newRequestId() };
+    foundRequest ??= newRequestId();
     const copyTitle = m.documents_draft_copy_title({
       title: draft.title.trim() === '' ? start.title : draft.title.trim(),
     });
     try {
-      const created = await api.createNote(editingUser, foundRequest.note, copyTitle);
-      const saved = await api.saveDocument(created.id, {
-        expectedUser: editingUser,
-        requestId: foundRequest.save,
-        baseRevision: created.revision,
-        title: copyTitle,
-        body: draft.body,
-      });
-      if (saved.kind === 'conflict') throw new Error('copy conflicted');
+      const created = await api.createNote(editingUser, foundRequest, copyTitle);
+      await saveLiveCopy(created.id, draft.body, editingUser);
+      if (accountSwitching() || me.userId !== editingUser) return;
       resolveFound();
       router.navigate(standalonePath(created.id));
     } catch (e: unknown) {
@@ -486,8 +479,6 @@
         return m.documents_live_invalid();
       case 'reload':
         return m.documents_live_reload();
-      case 'off':
-        return m.documents_live_off();
       case 'account':
         return accountUnsavedLost
           ? m.documents_live_account_stopped()

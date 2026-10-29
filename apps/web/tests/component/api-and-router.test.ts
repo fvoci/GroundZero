@@ -80,7 +80,6 @@ describe('response validation', () => {
     can_manage: false,
     can_delete: false,
     is_template: false,
-    realtime: false,
     can_export: true,
   };
 

@@ -9,6 +9,7 @@ import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 
 // 저장하지 않은 문서에서 다른 화면으로 가려 하면 브라우저 기본 확인창(window.confirm)이 떴다(UI 감사). 업무·일정
 // 대화상자와 같은 확인(DiscardChangesConfirm)을 쓰고, 계속 편집하면 입력을 그대로 두며, 떠나기로 하면 같은 이동을 한다.
@@ -20,7 +21,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'member',
     is_owner: false,
-    realtime_enabled: false,
   },
 ];
 
@@ -43,7 +43,6 @@ const doc: DocumentView = {
   can_manage: false,
   can_delete: false,
   is_template: false,
-  realtime: false,
   can_export: false,
 };
 
@@ -101,9 +100,7 @@ describe('leaving a document with unsaved changes', () => {
     router.navigate('/notes');
     const ask = await screen.findByRole('alertdialog');
     expect(router.path).toBe('/w/ws-1/wiki/doc-1');
-    expect(
-      within(ask).getByText(/저장하지 않은 변경이 있습니다\. 이동할까요\?/),
-    ).toBeInTheDocument();
+    expect(within(ask).getByText(m.documents_live_title_pending())).toBeInTheDocument();
 
     await fireEvent.click(within(ask).getByRole('button', { name: '계속 편집' }));
     await waitFor(() => {
@@ -114,7 +111,7 @@ describe('leaving a document with unsaved changes', () => {
 
     router.navigate('/notes');
     const again = await screen.findByRole('alertdialog');
-    await fireEvent.click(within(again).getByRole('button', { name: '이동하기' }));
+    await fireEvent.click(within(again).getByRole('button', { name: m.documents_live_leave() }));
     expect(router.path).toBe('/notes');
   });
 });

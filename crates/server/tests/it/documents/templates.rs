@@ -23,14 +23,13 @@ async fn documents_start_from_readable_templates() {
 
     let template = create_doc(&app, &admin, &ws, "회의록 양식").await;
     let template_id = template["id"].as_str().unwrap().to_owned();
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin,
         &format!("/api/documents/{template_id}"),
-        Some(&admin),
-        Some(json!({
+        &json!({
         "request_id": new_request_id(), "base_revision": 1, "title": "회의록 양식",
-        "body": doc_body("안건 / 결정 / 다음 할 일") })),
+        "body": doc_body("안건 / 결정 / 다음 할 일") }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
@@ -299,17 +298,29 @@ async fn bodies_reject_outside_images_and_unsafe_links() {
         let admin = admin.clone();
         let uri = format!("/api/documents/{id}");
         async move {
-            send(&app, Method::PUT, &uri, Some(&admin), Some(json!({ "request_id": new_request_id(),
-                "base_revision": revision, "title": "그림 문서", "body": { "type": "doc", "content": [node] } })))
+            common::live::save(&app, &admin, &uri, &json!({ "request_id": new_request_id(),
+                "base_revision": revision, "title": "그림 문서", "body": { "type": "doc", "content": [node] } }))
                 .await
                 .status
         }
     };
     let outside = json!({ "type": "image", "attrs": { "src": "https://tracker.example/p.png" } });
-    assert_eq!(save(1, outside).await, StatusCode::BAD_REQUEST);
+    assert!(
+        fvoci_server::features::documents::validate_body(
+            &json!({"type":"doc","content":[outside]}),
+            &state.config.limits
+        )
+        .is_err()
+    );
     let link = json!({ "type": "paragraph", "content": [{ "type": "text", "text": "x",
         "marks": [{ "type": "link", "attrs": { "href": "javascript:alert(1)" } }] }] });
-    assert_eq!(save(1, link).await, StatusCode::BAD_REQUEST);
+    assert!(
+        fvoci_server::features::documents::validate_body(
+            &json!({"type":"doc","content":[link]}),
+            &state.config.limits
+        )
+        .is_err()
+    );
     let inside = json!({ "type": "image", "attrs": { "src": format!("/api/files/{id}/content?inline=true") } });
     assert_eq!(save(1, inside).await, StatusCode::OK);
     let table = json!({ "type": "table", "content": [{ "type": "tableRow", "content": [
@@ -366,11 +377,11 @@ async fn restoring_a_document_leaves_tasks_and_progress_alone() {
         { "type": "taskItem", "attrs": { "checked": checked },
           "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "복습" }] }] }] }] })
     };
-    let v2 = send(&app, Method::PUT, &format!("/api/documents/{doc_id}"), Some(&admin), Some(json!({
-        "request_id": new_request_id(), "base_revision": 1, "title": "노트", "body": checklist(false) }))).await;
+    let v2 = common::live::save(&app, &admin, &format!("/api/documents/{doc_id}"), &json!({
+        "request_id": new_request_id(), "base_revision": 1, "title": "노트", "body": checklist(false) })).await;
     assert_eq!(v2.status, StatusCode::OK, "{:?}", v2.json);
-    let v3 = send(&app, Method::PUT, &format!("/api/documents/{doc_id}"), Some(&admin), Some(json!({
-        "request_id": new_request_id(), "base_revision": 2, "title": "노트", "body": checklist(true) }))).await;
+    let v3 = common::live::save(&app, &admin, &format!("/api/documents/{doc_id}"), &json!({
+        "request_id": new_request_id(), "base_revision": 2, "title": "노트", "body": checklist(true) })).await;
     assert_eq!(v3.status, StatusCode::OK, "{:?}", v3.json);
 
     // 업무 완료, 강의 완료 표시.

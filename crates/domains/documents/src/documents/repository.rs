@@ -27,7 +27,6 @@ pub struct DocRow {
     can_manage: bool,
     can_delete: bool,
     is_template: bool,
-    pub realtime: bool,
     can_export: bool,
 }
 
@@ -40,7 +39,7 @@ const DOC_COLUMNS: &str = "id, workspace_id, \
     visibility, allow_copy, app_document_can_manage(id) AS can_manage, \
     coalesce(app_access('document', id) = 'owner' \
       OR (app_access('document', id) = 'write' AND created_by = app_user_id()), false) AS can_delete, \
-    is_template, app_document_realtime(id) AS realtime, app_document_can_export(id) AS can_export";
+    is_template, app_document_can_export(id) AS can_export";
 
 pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
     Document {
@@ -62,7 +61,6 @@ pub(crate) fn to_document(row: DocRow, access: Access) -> Document {
         can_manage: row.can_manage,
         can_delete: row.can_delete,
         is_template: row.is_template,
-        realtime: row.realtime,
         can_export: row.can_export,
     }
 }
@@ -130,7 +128,7 @@ pub(crate) fn to_summaries(rows: Vec<SummaryRow>) -> Vec<DocumentSummary> {
         .collect()
 }
 
-/// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 저장 API와 실시간 편집의
+/// 저장의 끝부분: 문서 행을 새 리비전으로 바꾸고 리비전·링크·언급을 기록한다. 제목 명령과 실시간 편집의
 /// 리비전(collab)이 같은 길을 쓴다. 호출하는 쪽이 문서 행을 잠그고 쓰기 권한을 확인한다. `edited_by`: 실시간 방이 고친
 /// 사람 대신 남기는 리비전의 실제 편집자(D-95). 작성자는 늘 이 트랜잭션의 사용자다(`document_revisions_insert`).
 pub async fn write_revision(

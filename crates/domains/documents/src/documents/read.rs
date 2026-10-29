@@ -13,7 +13,7 @@ use fvoci_http::session::CurrentUser;
 use serde_json::Value;
 use time::OffsetDateTime;
 
-use super::{ConflictBody, Document, SharedDocument, load_with_access, to_document};
+use super::{Document, SharedDocument, load_with_access, to_document};
 
 /// 나에게 공유된 문서(검증된 이메일 기준). 현재 조직 범위(D-111): 그 조직에서 받은 공유만.
 #[utoipa::path(get, path = "/api/me/shared", operation_id = "shared_with_me",
@@ -47,7 +47,7 @@ pub async fn shared_with_me(
     ))
 }
 
-/// 문서 표현(D-77): 단건 조회가 내보내는 바이트와 그 강한 ETag. 조회·저장·충돌이 같은 계산을 쓴다.
+/// 문서 표현(D-77): 단건 조회가 내보내는 바이트와 그 강한 ETag. 실제 조회 바이트로 계산한다.
 pub(crate) fn representation(user: UserId, doc: &Document) -> Result<(Vec<u8>, String), AppError> {
     let bytes = serde_json::to_vec(doc).map_err(|err| AppError::Io(err.into()))?;
     let etag = cache::strong_etag(user.0.as_bytes(), &bytes);
@@ -72,10 +72,9 @@ fn json_bytes(bytes: Vec<u8>) -> Response {
         .into_response()
 }
 
-/// 문서 한 건 응답. 본문은 단건 조회와 같은 바이트이고 `ETag`를 붙인다(저장·복원 결과).
-pub(crate) fn document_reply(user: UserId, doc: &Document) -> Result<Response, AppError> {
-    let (bytes, etag) = representation(user, doc)?;
-    Ok(with_etag(json_bytes(bytes), &etag))
+/// 쓰기 결과는 ETag 없이 문서 자원만 돌려준다(#212 A, D-77 개정 대기).
+pub(crate) fn document_reply(doc: &Document) -> Response {
+    Json(doc).into_response()
 }
 
 /// 문서 조회. 볼 수 없으면 404.
@@ -111,44 +110,12 @@ pub async fn get(
     Ok(response)
 }
 
-pub(super) fn conflict_reply(
-    status: StatusCode,
-    error: &'static str,
-    user: UserId,
-    current: Document,
-) -> Result<Response, AppError> {
-    let (_, etag) = representation(user, &current)?;
-    Ok((
-        status,
-        Json(ConflictBody {
-            error,
-            current,
-            etag,
-        }),
-    )
-        .into_response())
-}
-
-/// 409: `base_revision`이 지났다. 서버 최신본과 그 ETag를 준다.
-pub(crate) fn conflict(user: UserId, current: Document) -> Result<Response, AppError> {
-    conflict_reply(StatusCode::CONFLICT, "conflict", user, current)
-}
-
-pub(crate) fn stale_reply(
-    status: StatusCode,
-    error: &'static str,
-    user: UserId,
-    current: Document,
-    sent: &Value,
-) -> Result<Response, AppError> {
-    let (_, etag) = representation(user, &current)?;
-    let mut response = StaleWrite::new(
-        error,
+pub(crate) fn stale_reply(current: Document, sent: &Value) -> Response {
+    StaleWrite::new(
+        "conflict",
         "the document changed; reload it before retrying",
         current,
         sent,
     )
-    .into_response();
-    *response.status_mut() = status;
-    Ok(with_etag(response, &etag))
+    .into_response()
 }

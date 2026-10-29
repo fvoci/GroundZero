@@ -16,11 +16,6 @@ async fn merged_attachment(inserted_by_reader: bool, forged: bool, reopen: bool)
     let target = w.doc().await;
     let app = common::app(&w.state);
     let addr = serve(app).await;
-    fixture(
-        "UPDATE fvoci.workspaces SET realtime_enabled=true WHERE id=$1",
-        &[w.ws],
-    )
-    .await;
     let (inserter, saver) = if inserted_by_reader {
         (&w.owner, &other)
     } else {
@@ -71,7 +66,7 @@ async fn merged_attachment(inserted_by_reader: bool, forged: bool, reopen: bool)
     .fetch_one(&mut observer)
     .await
     .unwrap();
-    assert!(w.state.collab.close_workspace(w.ws, w.owner.id).await);
+    w.state.collab.shutdown().await;
     let revision = rows(&w.state, &w.owner,
         "SELECT author FROM fvoci.document_revisions WHERE document_id=$1 ORDER BY revision DESC LIMIT 1", &[target]).await;
     assert_eq!(revision[0]["author"], saver.id.0.to_string());

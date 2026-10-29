@@ -92,7 +92,7 @@ export const documentsApi = {
     revision: number,
     input: { requestId: string; baseRevision: number },
   ): Promise<{ kind: 'restored'; document: DocumentView } | DocumentConflict> {
-    const { status, json, etag } = await request(
+    const { status, json } = await request(
       'POST',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/restore`,
       { request_id: input.requestId, base_revision: input.baseRevision },
@@ -103,7 +103,7 @@ export const documentsApi = {
     const document = parseDocument(json);
     return {
       kind: 'restored',
-      document: etag === null || etag === '' ? document : { ...document, etag },
+      document,
     };
   },
 };

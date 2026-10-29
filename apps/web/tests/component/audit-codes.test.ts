@@ -51,7 +51,6 @@ describe('audit codes', () => {
       name: '연구실',
       role: 'admin',
       is_owner: true,
-      realtime_enabled: false,
     };
     const entry = (
       id: string,

@@ -67,7 +67,6 @@ const doc: DocumentView = {
   can_manage: false,
   can_delete: false,
   is_template: false,
-  realtime: true,
   can_export: true,
 };
 beforeEach(async () => {

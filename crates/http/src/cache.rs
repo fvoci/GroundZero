@@ -63,15 +63,6 @@ pub fn none_match(headers: &HeaderMap, etag: &str) -> bool {
     }
 }
 
-/// `If-Match` 판정(강한 비교). 머리글이 없으면 `None`, 있으면 맞는지. 약한 태그는 맞지 않는다(RFC 9110 13.1.1).
-pub fn if_match(headers: &HeaderMap, etag: &str) -> Option<bool> {
-    match tags(headers, header::IF_MATCH) {
-        Tags::Absent => None,
-        Tags::Any => Some(true),
-        Tags::List(list) => Some(list.iter().any(|(weak, tag)| !weak && tag == etag)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,29 +136,5 @@ mod tests {
         assert!(none_match(&with(header::IF_NONE_MATCH, "*"), tag));
         assert!(!none_match(&with(header::IF_NONE_MATCH, "\"abd\""), tag));
         assert!(!none_match(&HeaderMap::new(), tag));
-    }
-
-    #[test]
-    fn if_match_uses_strong_comparison() {
-        let tag = "\"abc\"";
-        assert_eq!(if_match(&HeaderMap::new(), tag), None);
-        assert_eq!(
-            if_match(&with(header::IF_MATCH, "\"abc\""), tag),
-            Some(true)
-        );
-        assert_eq!(
-            if_match(&with(header::IF_MATCH, "\"x\", \"abc\""), tag),
-            Some(true)
-        );
-        assert_eq!(if_match(&with(header::IF_MATCH, "*"), tag), Some(true));
-        assert_eq!(
-            if_match(&with(header::IF_MATCH, "W/\"abc\""), tag),
-            Some(false)
-        );
-        assert_eq!(
-            if_match(&with(header::IF_MATCH, "\"abd\""), tag),
-            Some(false)
-        );
-        assert_eq!(if_match(&with(header::IF_MATCH, ""), tag), Some(false));
     }
 }

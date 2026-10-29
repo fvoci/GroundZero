@@ -143,13 +143,12 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let doc_id = doc.json["id"].as_str().unwrap().to_owned();
     let image = json!({ "type": "doc", "content": [{ "type": "image",
         "attrs": { "src": format!("/api/files/{file}/content?version=3&inline=true") } }] });
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &writer,
         &format!("/api/documents/{doc_id}"),
-        Some(&writer),
-        Some(json!({
-        "request_id": new_request_id(), "base_revision": 1, "title": "그림", "body": image })),
+        &json!({
+        "request_id": new_request_id(), "base_revision": 1, "title": "그림", "body": image }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
@@ -360,7 +359,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     .await
     .unwrap();
 
-    // 워크스페이스 밖 사람이 개인 노트에 이 파일 v1 주소를 적는다. 표준형이 아니면 400.
+    // 워크스페이스 밖 사람이 개인 노트에 이 파일 v1 주소를 적는다. 표준형 검증은 CRDT도 쓰는 공통 경계에서 확인한다.
     let note = send(
         &app,
         Method::POST,
@@ -373,25 +372,24 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     let save = |src: String| {
         let (app, outsider, note_id) = (app.clone(), outsider.clone(), note_id.clone());
         async move {
-            send(&app, Method::PUT, &format!("/api/documents/{note_id}"), Some(&outsider), Some(json!({
+            common::live::save(&app, &outsider, &format!("/api/documents/{note_id}"), &json!({
                 "request_id": new_request_id(), "base_revision": 1, "title": "남의 버전",
-                "body": { "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] } })))
+                "body": { "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] } }))
             .await
             .status
         }
     };
     let upper = foreign.to_string().to_uppercase();
-    assert_eq!(
-        save(format!("/api/files/{upper}/content?version=1")).await,
-        StatusCode::BAD_REQUEST
-    );
-    assert_eq!(
-        save(format!(
-            "/api/files/{foreign}/content?inline=true&version=1"
-        ))
-        .await,
-        StatusCode::BAD_REQUEST
-    );
+    for src in [
+        format!("/api/files/{upper}/content?version=1"),
+        format!("/api/files/{foreign}/content?inline=true&version=1"),
+    ] {
+        let body =
+            json!({ "type": "doc", "content": [{ "type": "image", "attrs": { "src": src } }] });
+        assert!(
+            fvoci_server::features::documents::validate_body(&body, &state.config.limits).is_err()
+        );
+    }
     assert_eq!(
         save(format!("/api/files/{foreign}/content?version=1")).await,
         StatusCode::OK
@@ -454,13 +452,7 @@ async fn file_exists(owner: &sqlx::PgPool, file: &str) -> bool {
 async fn save_image(app: &Router, user: &TestUser, doc: &str, file: &str) -> StatusCode {
     let body = json!({ "type": "doc", "content": [{ "type": "image",
         "attrs": { "src": format!("/api/files/{file}/content?version=1") } }] });
-    send(
-        app,
-        Method::PUT,
-        &format!("/api/documents/{doc}"),
-        Some(user),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "참조", "body": body })),
-    )
+    common::live::save(app, user, &format!("/api/documents/{doc}"), &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "참조", "body": body }))
     .await
     .status
 }

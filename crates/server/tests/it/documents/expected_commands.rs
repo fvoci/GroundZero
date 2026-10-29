@@ -1,5 +1,4 @@
 use super::command_support::{HEADER, call, rename, snapshot};
-use crate::common;
 use crate::sql_support::{self, World};
 use axum::http::{Method, StatusCode};
 use serde_json::json;
@@ -45,11 +44,6 @@ async fn every_document_command_checks_a_sent_expected_user_before_any_write() {
             Method::POST,
             "/api/me/notes".to_owned(),
             json!({"request_id":Uuid::now_v7(),"title":"new note"}),
-        ),
-        (
-            Method::PUT,
-            format!("/api/documents/{doc}"),
-            json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"body save","body":common::doc_body("new")}),
         ),
         (
             Method::PATCH,
@@ -151,21 +145,14 @@ async fn every_document_command_checks_a_sent_expected_user_before_any_write() {
 }
 
 #[tokio::test]
-async fn only_note_creation_and_body_put_require_the_expected_user_header() {
+async fn only_note_creation_requires_the_expected_user_header() {
     let w = World::new().await;
     let doc = w.doc().await;
-    for (method, uri, body) in [
-        (
-            Method::POST,
-            "/api/me/notes".to_owned(),
-            json!({"request_id":Uuid::now_v7(),"title":"note"}),
-        ),
-        (
-            Method::PUT,
-            format!("/api/documents/{doc}"),
-            json!({"request_id":Uuid::now_v7(),"base_revision":1,"title":"save","body":common::doc_body("save")}),
-        ),
-    ] {
+    for (method, uri, body) in [(
+        Method::POST,
+        "/api/me/notes".to_owned(),
+        json!({"request_id":Uuid::now_v7(),"title":"note"}),
+    )] {
         let before = snapshot(&w).await;
         let reply = call(&w, &w.owner, method, &uri, &[], &body).await;
         assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.body);

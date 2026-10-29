@@ -102,7 +102,6 @@ const doc: DocumentView = {
   can_manage: true,
   can_delete: true,
   is_template: false,
-  realtime: true,
   can_export: true,
 };
 // 문서가 있는 ws-1의 위키는 대상에서 빠지므로 옮길 곳은 ws-2 위키 하나다.
@@ -114,7 +113,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'member',
     is_owner: false,
-    realtime_enabled: true,
   },
   {
     access: 'write',
@@ -123,7 +121,6 @@ const workspaces: Workspace[] = [
     organization_id: 'org-1',
     role: 'member',
     is_owner: false,
-    realtime_enabled: false,
   },
 ];
 
@@ -164,7 +161,6 @@ describe('move panel when the live room is busy', () => {
       organization_id: 'org-1',
       role: 'admin',
       is_owner: false,
-      realtime_enabled: false,
     };
     render(DocumentActions, {
       props: { doc, workspaces: [...workspaces, readOnlyAdmin], onchanged: () => undefined },

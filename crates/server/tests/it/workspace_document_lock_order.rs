@@ -7,7 +7,9 @@
 
 use crate::common;
 use crate::sql_support::*;
-use axum::http::{Method, StatusCode};
+use axum::http::StatusCode;
+use fvoci_core::{error::AppError, ids::DocumentId};
+use fvoci_documents::documents;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -46,7 +48,7 @@ async fn has_waiter(holder: i32) {
 }
 
 #[tokio::test]
-async fn saving_waits_for_workspace_removal_before_locking_the_document() {
+async fn body_checkpoint_waits_for_workspace_removal_before_locking_the_document() {
     let w = World::new().await;
     let member = w.member("member").await;
     let doc = w.doc().await;
@@ -55,19 +57,18 @@ async fn saving_waits_for_workspace_removal_before_locking_the_document() {
     let app = common::app(&w.state);
     let owner = w.owner.clone();
     let saving = tokio::spawn(async move {
-        common::send(
+        common::live::save(
             &app,
-            Method::PUT,
+            &owner,
             &format!("/api/documents/{doc}"),
-            Some(&owner),
-            Some(json!({
-                "request_id": Uuid::now_v7(), "base_revision": 1, "title": "saved during removal",
-                "body": {"type":"doc","content":[]}
-            })),
+            &json!({
+                "request_id": Uuid::now_v7(), "base_revision": 1, "title": "SQL document",
+                "body": common::doc_body("body checkpoint during removal")
+            }),
         )
         .await
     });
-    // 이전 구현은 여기서 문서 UPDATE를 쥔 채 공간 SHARE를 기다린다. 새 구현은 공간부터 기다린다.
+    // 제목 PATCH 없이 본문 체크포인트가 공간부터 기다려야 한다.
     has_waiter(holder).await;
     let removed = on(
         removal.conn(),
@@ -86,6 +87,12 @@ async fn saving_waits_for_workspace_removal_before_locking_the_document() {
         .unwrap();
     assert!(removed.is_ok(), "workspace removal failed: {removed:?}");
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);
+    assert_eq!(saved.json["title"], "SQL document");
+    assert_eq!(
+        saved.json["body"],
+        common::doc_body("body checkpoint during removal")
+    );
+    assert_eq!(saved.json["revision"], 2);
     assert!(
         rows(
             &w.state,
@@ -96,6 +103,48 @@ async fn saving_waits_for_workspace_removal_before_locking_the_document() {
         .await
         .is_empty()
     );
+}
+
+#[tokio::test]
+async fn snapshot_lock_rechecks_access_after_workspace_member_demotion() {
+    let w = World::new().await;
+    let editor = w.member("member").await;
+    let doc = w.doc().await;
+    w.share(doc, &editor, "write").await;
+    let mut demotion = w.state.db.begin_as(w.owner.id).await.unwrap();
+    on(
+        demotion.conn(),
+        "SELECT fvoci.app_set_member_role($1,$2,'readonly',@ids)",
+        &[w.ws, editor.id.0],
+    )
+    .await
+    .unwrap();
+    let holder = pid(demotion.conn()).await;
+    let mut checkpoint = w.state.db.begin_as(editor.id).await.unwrap();
+    let waiter = pid(checkpoint.conn()).await;
+    let saving =
+        tokio::spawn(
+            async move { documents::lock_for_save(&mut checkpoint, DocumentId(doc)).await },
+        );
+    blocked(holder, waiter).await;
+    demotion.commit().await.unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), saving)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(result, Err(AppError::Forbidden)),
+        "demoted writer was allowed: {result:?}"
+    );
+    let unchanged = rows(
+        &w.state,
+        &w.owner,
+        "SELECT revision, body FROM fvoci.documents WHERE id=$1",
+        &[doc],
+    )
+    .await;
+    assert_eq!(unchanged[0]["revision"], 1);
+    assert_eq!(unchanged[0]["body"], json!({"type":"doc","content":[]}));
 }
 
 #[tokio::test]

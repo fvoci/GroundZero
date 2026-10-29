@@ -189,14 +189,13 @@ async fn author_and_title_only_narrow_results_without_widening_access() {
     let ws = create_workspace(&app, &admin, "작성자 검색").await;
     let (writer, _) = add_member(&app, &state, &admin, &ws, "member", "member").await;
     let mine = create_doc(&app, &admin, &ws, &format!("{tok} 관리자 문서")).await;
-    let saved = send(
+    let saved = common::live::save(
         &app,
-        Method::PUT,
+        &admin,
         &format!("/api/documents/{}", mine["id"].as_str().unwrap()),
-        Some(&admin),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
+        &json!({ "request_id": new_request_id(), "base_revision": 1,
                      "title": format!("{tok} 관리자 문서"),
-                     "body": doc_body(&format!("본문에만 있는 {body_tok}")) })),
+                     "body": doc_body(&format!("본문에만 있는 {body_tok}")) }),
     )
     .await;
     assert_eq!(saved.status, StatusCode::OK, "{:?}", saved.json);

@@ -161,13 +161,12 @@ async fn audit_records_creation_and_rename_without_body() {
     let ws = create_workspace(&app, &alice, "감사").await;
     let doc = create_doc(&app, &alice, &ws, "이름1").await;
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
-    let r = send(
+    let r = common::live::save(
         &app,
-        Method::PUT,
+        &alice,
         &uri,
-        Some(&alice),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1,
-                     "title": "이름2", "body": doc_body("비밀 본문") })),
+        &json!({ "request_id": new_request_id(), "base_revision": 1,
+                     "title": "이름2", "body": doc_body("비밀 본문") }),
     )
     .await;
     assert_eq!(r.status, StatusCode::OK);
@@ -197,18 +196,16 @@ async fn input_validation_and_origin_and_session_failures() {
     let app = common::app(&state);
     let alice = login(&state, "alice").await;
     let ws = create_workspace(&app, &alice, "검증").await;
-    let doc = create_doc(&app, &alice, &ws, "문서").await;
-    let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
+    create_doc(&app, &alice, &ws, "문서").await;
 
-    let bad_body = send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&alice),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "t", "body": { "type": "paragraph" } })),
-    )
-    .await;
-    assert_eq!(bad_body.status, StatusCode::BAD_REQUEST);
+    // CRDT의 루트는 구조상 doc이다. JSON 검증 경계도 그대로 확인한다.
+    assert!(
+        fvoci_server::features::documents::validate_body(
+            &json!({"type":"paragraph"}),
+            &state.config.limits
+        )
+        .is_err()
+    );
     let organization = common::organization_for(&alice).await;
     let empty_title = send(
         &app,
@@ -293,13 +290,7 @@ async fn data_and_session_survive_fresh_state() {
     let ws = create_workspace(&app, &alice, "재시작").await;
     let doc = create_doc(&app, &alice, &ws, "영속").await;
     let uri = format!("/api/documents/{}", doc["id"].as_str().unwrap());
-    let r = send(
-        &app,
-        Method::PUT,
-        &uri,
-        Some(&alice),
-        Some(json!({ "request_id": new_request_id(), "base_revision": 1, "title": "영속", "body": doc_body("남아 있어야 함") })),
-    )
+    let r = common::live::save(&app, &alice, &uri, &json!({ "request_id": new_request_id(), "base_revision": 1, "title": "영속", "body": doc_body("남아 있어야 함") }))
     .await;
     assert_eq!(r.status, StatusCode::OK);
     state.db.close().await;
