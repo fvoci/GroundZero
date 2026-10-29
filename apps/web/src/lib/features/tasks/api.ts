@@ -69,18 +69,22 @@ export class WorkRuleConflict extends ApiError {
 
 export const workApi = {
   assignees: (scope: { item: string } | { task: string }) =>
-    expectOk('GET', scopePath('task-assignees', scope), (v) =>
+    expectOk('GET', `/api/task-assignees?${scopeQuery(scope)}`, (v) =>
       parseList(v, (row): TaskAssignee => ({
         ...parseAssignee(row),
         task_id: str(rec(row, 'task assignee'), 'task_id'),
       })),
     ),
   dependencies: (scope: { item: string } | { task: string }) =>
-    expectOk('GET', scopePath('task-dependencies', scope), (v) => parseList(v, parseDependency)),
+    expectOk('GET', `/api/task-dependencies?${scopeQuery(scope)}`, (v) =>
+      parseList(v, parseDependency),
+    ),
   series: (scope: { item: string } | { task: string }) =>
-    expectOk('GET', scopePath('task-series', scope), (v) => parseList(v, parseSeries)),
+    expectOk('GET', `/api/task-series?${scopeQuery(scope)}`, (v) => parseList(v, parseSeries)),
   checklist: (scope: { item: string } | { task: string }) =>
-    expectOk('GET', scopePath('checklist-items', scope), (v) => parseList(v, parseChecklist)),
+    expectOk('GET', `/api/checklist-items?${scopeQuery(scope)}`, (v) =>
+      parseList(v, parseChecklist),
+    ),
   /** 항목의 상태 정의(D-116). 칸반 열·상태 편집의 정본. */
   taskStatuses: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/statuses`, (v) =>
@@ -398,7 +402,7 @@ export const workApi = {
     ),
 };
 
-function scopePath(resource: string, scope: { item: string } | { task: string }): string {
+function scopeQuery(scope: { item: string } | { task: string }): string {
   const [name, id] = 'item' in scope ? ['item', scope.item] : ['task', scope.task];
-  return `/api/${resource}?${name}=${encodeURIComponent(id)}`;
+  return `${name}=${encodeURIComponent(id)}`;
 }

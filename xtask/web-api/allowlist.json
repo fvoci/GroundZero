@@ -1,0 +1,103 @@
+{
+  "forwarders": [
+    {
+      "file": "apps/web/src/lib/shared/api/index.ts",
+      "name": "expectOk",
+      "reason": "가6 판정 예정",
+      "detail": "공통 응답 파서. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
+    },
+    {
+      "file": "apps/web/src/lib/features/tasks/api.ts",
+      "name": "expectTask",
+      "reason": "가6 판정 예정",
+      "detail": "업무의 기대 사용자와 충돌 처리. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
+    },
+    {
+      "file": "apps/web/src/lib/features/files/api.ts",
+      "name": "withExpected",
+      "reason": "가6 판정 예정",
+      "detail": "파일의 기대 사용자 처리. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
+    }
+  ],
+  "unused": [
+    {
+      "method": "DELETE",
+      "path": "/api/organizations/{organization_id}/members/{user_id}",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    { "method": "GET", "path": "/api/files/{file_id}/content", "reason": "가6 판정 예정" },
+    { "method": "GET", "path": "/api/me/export", "reason": "가6 판정 예정" },
+    {
+      "method": "GET",
+      "path": "/api/organizations/{organization_id}/invitations",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "GET",
+      "path": "/api/organizations/{organization_id}/members",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "GET",
+      "path": "/api/organizations/{organization_id}/members/{user_id}/removal-preview",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "GET",
+      "path": "/api/organizations/{organization_id}/workspaces",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
+    { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
+    { "method": "GET", "path": "/api/workspaces/{workspace_id}/export", "reason": "가6 판정 예정" },
+    {
+      "method": "GET",
+      "path": "/api/workspaces/{workspace_id}/limits",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
+    { "method": "GET", "path": "/auth/login", "reason": "가6 판정 예정" },
+    { "method": "GET", "path": "/healthz", "reason": "가6 판정 예정" },
+    {
+      "method": "POST",
+      "path": "/api/organizations/{organization_id}/invitations",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "POST",
+      "path": "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "POST",
+      "path": "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "POST",
+      "path": "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
+    {
+      "method": "PUT",
+      "path": "/api/organizations/{organization_id}/members/{user_id}",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/organizations/{organization_id}/settings",
+      "reason": "샴 가3~가5 조립 예정"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/uploads/{upload_id}/parts/{number}",
+      "reason": "가6 판정 예정"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/workspaces/{workspace_id}/limits",
+      "reason": "샴 가3~가5 조립 예정"
+    }
+  ]
+}

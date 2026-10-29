@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "typeRoots": ["../../apps/web/node_modules/@types"],
+    "paths": {
+      "svelte/compiler": ["../../apps/web/node_modules/svelte/compiler"]
+    }
+  },
+  "include": ["*.mts"]
+}
