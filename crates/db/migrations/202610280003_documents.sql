@@ -916,6 +916,62 @@ CREATE FUNCTION fvoci.app_file_ref_in_scope(p_doc_ws uuid, p_doc_owner uuid, p_f
 
 ALTER FUNCTION fvoci.app_file_ref_in_scope(p_doc_ws uuid, p_doc_owner uuid, p_file_ws uuid, p_file_owner uuid) OWNER TO fvoci_migrator;
 
+-- 조직 명령의 보존 준비용 식별자 조회. 내용 열람·대리 저장 권한은 부여하지 않는다(#235).
+CREATE FUNCTION fvoci.app_collab_command_pending(p_action text, p_scope uuid, p_member uuid)
+RETURNS TABLE(document_id uuid, workspace_id uuid)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    -- 각 분기의 첫 작업은 해당 명령의 권한 확인이다. 보류 상태는 그 뒤에만 읽는다.
+    CASE p_action
+      WHEN 'organization_remove' THEN
+        IF p_member IS DISTINCT FROM app_user_id() THEN
+          PERFORM app_require_organization_admin(p_scope);
+        ELSIF app_user_id() IS NULL OR app_access('organization', p_scope) = 'none' THEN
+          RAISE EXCEPTION 'organization not found' USING ERRCODE = 'P0002';
+        END IF;
+      WHEN 'workspace_remove' THEN
+        PERFORM app_require_admin(p_scope);
+      WHEN 'workspace_leave' THEN
+        IF app_user_id() IS NULL OR app_access('workspace', p_scope) = 'none' THEN
+          RAISE EXCEPTION 'workspace not found' USING ERRCODE = 'P0002';
+        END IF;
+        IF p_member IS DISTINCT FROM app_user_id() THEN
+          RAISE EXCEPTION 'only the current member can leave' USING ERRCODE = '42501';
+        END IF;
+      WHEN 'workspace_delete', 'workspace_restore' THEN
+        IF NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.id = p_scope
+                       AND (w.owner_id = app_user_id() OR app_access('organization', w.organization_id) = 'owner')) THEN
+          IF p_action = 'workspace_delete' AND app_access('workspace', p_scope) <> 'none' THEN
+            RAISE EXCEPTION 'only the owner or an organization admin can delete the workspace' USING ERRCODE = '42501';
+          END IF;
+          RAISE EXCEPTION 'workspace not found' USING ERRCODE = 'P0002';
+        END IF;
+      ELSE
+        RAISE EXCEPTION 'unknown collaboration command' USING ERRCODE = '22023';
+    END CASE;
+    IF p_action IN ('workspace_remove', 'organization_remove') AND p_member IS NULL THEN
+      RAISE EXCEPTION 'member required' USING ERRCODE = '22023';
+    END IF;
+    RETURN QUERY
+      SELECT d.id, d.workspace_id
+      FROM document_collab_states s JOIN documents d ON d.id = s.document_id
+      LEFT JOIN workspaces w ON w.id = d.workspace_id
+      WHERE s.pending
+        AND (CASE WHEN p_action = 'organization_remove' THEN
+               w.organization_id = p_scope OR EXISTS (
+                 SELECT 1 FROM document_shares ds WHERE ds.document_id = d.id AND ds.organization_id = p_scope
+                   AND (ds.grantee_user_id = p_member OR d.owner_user_id = p_member))
+             ELSE d.workspace_id = p_scope END)
+        AND (p_member IS NULL OR p_member = ANY(s.editors) OR cardinality(s.editors) = 0
+             OR (p_action = 'organization_remove' AND d.owner_user_id = p_member))
+      ORDER BY d.workspace_id NULLS FIRST, d.id;
+  END
+  $$;
+
+ALTER FUNCTION fvoci.app_collab_command_pending(p_action text, p_scope uuid, p_member uuid) OWNER TO fvoci_migrator;
+
 CREATE FUNCTION fvoci.app_collab_access(p_doc uuid) RETURNS text
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'

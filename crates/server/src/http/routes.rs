@@ -7,7 +7,15 @@ use axum::{Router, middleware};
 
 pub(super) fn api(state: &AppState) -> Router<AppState> {
     Router::new()
-        .merge(fvoci_organizations::router(state))
+        .merge(fvoci_organizations::router(state).layer(axum::Extension(
+            fvoci_organizations::runtime::OrganizationRooms(std::sync::Arc::new(
+                crate::collab::organizations::OrganizationCollab {
+                    rooms: state.collab.clone(),
+                    limits: state.config.limits,
+                    prepare_timeout: state.config.collab_recheck,
+                },
+            )),
+        )))
         .merge(fvoci_work::router(state))
         .merge(fvoci_records::router(state))
         .merge(fvoci_home::router(state))

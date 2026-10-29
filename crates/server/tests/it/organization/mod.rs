@@ -8,6 +8,7 @@
 mod account_contracts;
 mod admin_recovery;
 mod admin_security;
+mod collab_lifecycle;
 mod expected_user;
 mod field_contracts;
 mod ids_races;

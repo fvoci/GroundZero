@@ -289,9 +289,13 @@ pub async fn removal_preview(
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn remove_member(
     State(state): State<OrganizationsState>,
+    axum::Extension(rooms): axum::Extension<crate::runtime::OrganizationRooms>,
     CurrentUser(user): CurrentUser,
     Path((org, member)): Path<(OrganizationId, UserId)>,
 ) -> Result<StatusCode, AppError> {
+    let _rooms = rooms
+        .prepare(&state.db, user, "organization_remove", org.0, Some(member))
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     let ids = needed_ids(
         tx.conn(),
@@ -508,9 +512,16 @@ async fn require_organization_workspace(
               (status = 409, body = ErrorBody)), tag = "organizations")]
 pub async fn restore_workspace(
     State(state): State<OrganizationsState>,
+    axum::Extension(rooms): axum::Extension<crate::runtime::OrganizationRooms>,
     CurrentUser(user): CurrentUser,
     Path((org, ws)): Path<(OrganizationId, WorkspaceId)>,
 ) -> Result<StatusCode, AppError> {
+    let mut auth = state.db.begin_as(user).await?;
+    require_organization_workspace(&mut auth, org, ws).await?;
+    auth.commit().await?;
+    let _rooms = rooms
+        .prepare(&state.db, user, "workspace_restore", ws.0, None)
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     require_organization_workspace(&mut tx, org, ws).await?;
     sqlx::query("SELECT app_restore_workspace($1, $2)")

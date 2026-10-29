@@ -215,7 +215,7 @@ impl Room {
     ) -> Option<&'static str> {
         self.snapshot_failure = None;
         let moving = matches!(change, Change::Move);
-        let stand_in = moving.then_some(user);
+        let stand_in = matches!(change, Change::Move | Change::Organization).then_some(user);
         let saved = tokio::time::timeout(CHECKPOINT_LIMIT, self.snapshot_with(stand_in)).await;
         match saved {
             Ok(true) if self.snapshot_failure != Some(SnapshotFailure::ChangedOutside) => None,

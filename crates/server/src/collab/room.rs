@@ -35,6 +35,7 @@ use fvoci_db::Db;
 
 mod actor;
 mod movement;
+mod organizations;
 mod peers;
 mod persistence;
 #[doc(hidden)]
@@ -171,6 +172,11 @@ enum Command {
         request: RestoreRequest,
         done: oneshot::Sender<Result<String, AppError>>,
     },
+    /// 이미 수락한 편집을 체크포인트한 뒤 닫는다. 실패하면 방과 편집은 유지한다.
+    PrepareOrganization {
+        user: UserId,
+        done: oneshot::Sender<Result<(), AppError>>,
+    },
     Shutdown {
         reason: CloseReason,
         snapshot: bool,
@@ -185,6 +191,7 @@ enum Command {
 struct Handle {
     generation: u64,
     workspace: Option<Uuid>,
+    organization: Option<Uuid>,
     tx: mpsc::Sender<Command>,
 }
 
@@ -193,7 +200,7 @@ struct Handle {
 pub struct Rooms {
     inner: Arc<Mutex<HashMap<DocumentId, Handle>>>,
     /// 옮기거나 방 없이 복원하는 중인 문서. 이 동안은 그 문서의 방을 새로 열지 않는다(방 목록과 같은 잠금 아래에서 본다).
-    held: Arc<Mutex<HashMap<DocumentId, usize>>>,
+    held: Arc<Mutex<HashMap<HoldKey, usize>>>,
     recovery: Arc<recovery::Epoch>,
     next: Arc<AtomicU64>,
 }
@@ -202,8 +209,17 @@ pub struct Rooms {
 #[derive(Debug)]
 struct HoldGuard {
     rooms: Rooms,
-    doc: DocumentId,
+    keys: Vec<HoldKey>,
     epoch: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum HoldKey {
+    Document(DocumentId),
+    Workspace(Uuid),
+    Organization(Uuid),
+    DocumentWorkspace(Uuid),
+    DocumentOrganization(Uuid),
 }
 
 /// 방에 들어간 연결. 떨어지면 방에서 나간다.
@@ -299,6 +315,7 @@ struct Room {
 enum Change {
     Move,
     Restore,
+    Organization,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

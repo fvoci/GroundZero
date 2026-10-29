@@ -166,10 +166,14 @@ pub struct DeletedWorkspace {
     tag = "workspaces")]
 pub async fn delete(
     State(state): State<OrganizationsState>,
+    axum::Extension(rooms): axum::Extension<crate::runtime::OrganizationRooms>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
     Json(input): Json<DeleteWorkspace>,
 ) -> Result<Json<WorkspaceDeleted>, AppError> {
+    let _rooms = rooms
+        .prepare(&state.db, user, "workspace_delete", ws.0, None)
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     let expires_at: OffsetDateTime = sqlx::query_scalar("SELECT app_delete_workspace($1, $2, $3)")
         .bind(ws)
@@ -216,9 +220,13 @@ pub async fn deleted(
     tag = "workspaces")]
 pub async fn restore(
     State(state): State<OrganizationsState>,
+    axum::Extension(rooms): axum::Extension<crate::runtime::OrganizationRooms>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
+    let _rooms = rooms
+        .prepare(&state.db, user, "workspace_restore", ws.0, None)
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     sqlx::query("SELECT app_restore_workspace($1, $2)")
         .bind(ws)
