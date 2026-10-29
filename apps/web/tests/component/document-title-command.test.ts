@@ -4,6 +4,7 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import type { DocumentView } from '$lib/api/client';
+import { api } from '$lib/api/client';
 import { loadDraft } from '$lib/features/documents/drafts';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
@@ -12,6 +13,8 @@ import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { rec } from '$lib/shared/api/parse';
 
+const opened: { session: LiveSession; confirm: () => void }[] = [];
+
 vi.mock('$lib/features/documents/TiptapEditor.svelte', async () => ({
   default: (await import('./stubs/SilentEditorStub.svelte')).default,
 }));
@@ -19,12 +22,27 @@ vi.mock('$lib/features/documents/live', async (original) => ({
   ...(await original<typeof import('$lib/features/documents/live')>()),
   openLive: (_id: string, user: LiveSession['user']): LiveSession => {
     const document = new Y.Doc();
-    return {
+    const listeners = new Set<(snapshot: Y.Snapshot) => void>();
+    const session: LiveSession = {
       document,
       provider: new WebsocketProvider('ws://localhost', 'collab', document, { connect: false }),
       user,
-      persisted: { on: () => undefined, off: () => undefined },
+      persisted: {
+        on: (listener) => {
+          listeners.add(listener);
+        },
+        off: (listener) => {
+          listeners.delete(listener);
+        },
+      },
     };
+    opened.push({
+      session,
+      confirm: () => {
+        for (const listener of listeners) listener(Y.snapshot(document));
+      },
+    });
+    return session;
   },
 }));
 
@@ -53,10 +71,12 @@ const doc: DocumentView = {
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
   me.userId = 'user-a';
+  vi.spyOn(api, 'document').mockResolvedValue(doc);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  opened.length = 0;
   window.localStorage.clear();
   me.userId = '';
 });
@@ -67,6 +87,60 @@ function sentBody(init?: RequestInit): Record<string, unknown> {
 }
 
 describe('title command and screen-only protection (D-27, #178)', () => {
+  it('uses the confirmed revision after a live body checkpoint without retrying a title PATCH', async () => {
+    const current = {
+      ...doc,
+      revision: 4,
+      body: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '본문' }] }],
+      },
+    };
+    const read = vi.spyOn(api, 'document').mockResolvedValue(current);
+    const fetch = vi.fn((_url: string, init?: RequestInit) => {
+      const body = sentBody(init);
+      const stale = body.base_revision !== current.revision;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            stale
+              ? {
+                  error: 'conflict',
+                  message: 'stale',
+                  current,
+                  changed: ['title'],
+                  request_id: 'server-request',
+                }
+              : { ...current, title: '내 제목', revision: 5 },
+          ),
+          { status: stale ? 409 : 200 },
+        ),
+      );
+    });
+    vi.stubGlobal('fetch', fetch);
+    const saved = vi.fn();
+    render(LiveDocumentEditor, { props: { initial: doc, onsaved: saved } });
+    const live = opened.at(-1);
+    if (live === undefined) throw new Error('missing live session');
+    live.session.document.getText('t').insert(0, '본문');
+    live.confirm();
+    await fireEvent.input(screen.getByLabelText(m.documents_title_label()), {
+      target: { value: '내 제목' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: m.documents_title_save() }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+    expect(sentBody(fetch.mock.calls[0]?.[1]).base_revision).toBe(4);
+    expect(read).toHaveBeenCalledWith(doc.id);
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe('PATCH');
+    await waitFor(() => {
+      expect(saved).toHaveBeenCalledOnce();
+    });
+    expect(screen.queryByRole('region', { name: m.documents_conflict_heading() })).toBeNull();
+  });
+
   it('reuses the title request id after a lost response and sends only one request while saving', async () => {
     let finish: ((response: Response) => void) | undefined;
     const fetch = vi
@@ -103,6 +177,7 @@ describe('title command and screen-only protection (D-27, #178)', () => {
 
   it('sends one title PATCH, shows the stale title and revision, and retries only on explicit save', async () => {
     const current = { ...doc, title: '다른 사람 제목', revision: 4 };
+    vi.spyOn(api, 'document').mockResolvedValue(current);
     let writes = 0;
     const fetch = vi.fn((_url: string, init?: RequestInit) => {
       if (init?.method !== 'GET') writes += 1;

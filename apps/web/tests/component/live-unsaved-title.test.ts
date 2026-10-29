@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import type { DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
+import { documentsApi } from '$lib/features/documents/api';
 import { loadDraft, loadOffers } from '$lib/features/documents/drafts';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
@@ -88,6 +89,50 @@ function closeWith(code: number): void {
 }
 
 describe('a screen-only title when live editing ends (D-27)', () => {
+  for (const pendingBody of [false, true]) {
+    it(`clears the lost-title warning after saving only when no body is pending (${String(pendingBody)})`, async () => {
+      vi.spyOn(api, 'document').mockResolvedValue(doc);
+      vi.spyOn(documentsApi, 'patchTitle').mockResolvedValue({
+        kind: 'saved',
+        document: { ...doc, title: EDITED, revision: 4 },
+      });
+      const saved = vi.fn();
+      render(LiveDocumentEditor, { props: { initial: doc, onsaved: saved } });
+      await editTitleOnly();
+      if (pendingBody) {
+        await fireEvent.click(screen.getByRole('button', { name: 'stub-type' }));
+        opened.at(-1)?.document.getText('t').insert(0, '본문');
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          throw new DOMException('full', 'QuotaExceededError');
+        });
+      }
+      closeWith(4410);
+      await screen.findByText(m.documents_live_title_pending());
+      expect(
+        screen.getByRole('button', { name: m.documents_live_discard_reconnect() }),
+      ).toBeTruthy();
+
+      await fireEvent.click(screen.getByRole('button', { name: m.documents_title_save() }));
+      await waitFor(() => {
+        expect(saved).toHaveBeenCalledOnce();
+      });
+      if (pendingBody) {
+        expect(screen.getByRole('alert')).toHaveTextContent(m.documents_live_unsaved_lost());
+        expect(
+          screen.getByRole('button', { name: m.documents_live_discard_reconnect() }),
+        ).toBeTruthy();
+      } else {
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(
+          screen.queryByRole('button', { name: m.documents_live_discard_reconnect() }),
+        ).toBeNull();
+      }
+      const unload = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(pendingBody);
+    });
+  }
+
   for (const code of [4410, 4403, 4409]) {
     it(`keeps the title on screen and blocks reopening until it is saved or discarded (${String(code)})`, async () => {
       const reopen = vi.fn();
