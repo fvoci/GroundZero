@@ -118,8 +118,10 @@ async function logout(): Promise<void> {
 // SR-221-10: A 응답 생성 → 서버 세션 변경 → 복귀 이벤트 → 늦은 A 수신 → 후속 자기 응답.
 it.each(
   (['initial', 'live', 'persisted'] as const).flatMap((phase) =>
-    (['focus', 'visibilitychange', 'pageshow', 'persisted-pageshow', 'mixed'] as const).flatMap(
-      (event) => (['anonymous', 'other'] as const).map((identity) => ({ phase, event, identity })),
+    (
+      ['focus', 'visibilitychange', 'pageshow', 'persisted-pageshow', 'storage', 'mixed'] as const
+    ).flatMap((event) =>
+      (['anonymous', 'other'] as const).map((identity) => ({ phase, event, identity })),
     ),
   ),
 )(
@@ -138,7 +140,9 @@ it.each(
     else window.dispatchEvent(new Event('focus'));
     expect(read).toHaveBeenCalledOnce();
     for (let count = 0; count < 3; count += 1) {
-      if (event === 'visibilitychange') {
+      if (event === 'storage') {
+        window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+      } else if (event === 'visibilitychange') {
         Object.defineProperty(document, 'visibilityState', {
           configurable: true,
           value: 'visible',

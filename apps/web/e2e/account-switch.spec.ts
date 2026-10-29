@@ -139,6 +139,10 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     // 조작이 막히므로, 이전 문서 안의 기록기가 안전 상태를 0.1초마다 표본으로 남기고(세션 저장소, 같은 탭의 다시 읽기 뒤에도
     // 남는다) 복귀 이벤트를 계속 내서 이전 화면이 요청을 보내는지 네트워크에서 본다.
     const HOLD_MS = 2_500;
+    let releaseIdentity!: () => void;
+    const switchedIdentity = new Promise<void>((resolve) => {
+      releaseIdentity = resolve;
+    });
     const traffic: { t: number; kind: string; path: string }[] = [];
     page.on('request', (request) => {
       traffic.push({
@@ -148,6 +152,9 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       });
     });
     await page.route('**/*', async (route) => {
+      // 탭 간 알림은 로그아웃 직후에도 온다. 이 단계는 B 수락 뒤의 안전 상태를 검사하므로
+      // 확인 요청을 B 로그인 뒤 서버로 보내어 익명 재로그인 대기와 순서를 분리한다.
+      if (new URL(route.request().url()).pathname === '/api/me') await switchedIdentity;
       if (route.request().resourceType() === 'document')
         await new Promise((resolve) => setTimeout(resolve, HOLD_MS));
       await route.continue();
@@ -156,11 +163,16 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
       window.sessionStorage.removeItem(acceptedKey);
       // 새 문서는 이 표지가 없으므로, 새 셸의 최초 me 결과가 이전 문서의 수락 수를 덮지 않는다.
       document.documentElement.setAttribute('data-e2e-auth-observer', '');
-      // 메서드·쿼리와 자기 응답 수락 시점을 함께 적어 제어 확인과 이전 화면 요청을 구분한다.
+      // 메서드·쿼리와 자기 응답 수락 시점, 알림 수를 함께 적는다. 표식으로 신원을 판정하지 않는다.
+      let sessionHints = 0;
+      window.addEventListener('storage', (event) => {
+        if (event.key?.startsWith('fvoci:auth-session')) sessionHints += 1;
+      });
       const fetches: {
         t: number;
         path: string;
         method: string;
+        sessionHints: number;
         switching: boolean;
         afterAcceptance: boolean;
       }[] = [];
@@ -173,6 +185,7 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
           t: Date.now(),
           path: target.pathname + target.search,
           method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
+          sessionHints,
           switching: document.documentElement.hasAttribute('data-account-switching'),
           afterAcceptance: window.sessionStorage.getItem(acceptedKey) !== null,
         });
@@ -211,7 +224,11 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
         window.sessionStorage.setItem('fvoci-e2e-probe', JSON.stringify(samples.slice(-60)));
       }, 100);
     }, ACCEPTED_KEY);
-    expect(await switchTo(other, 'test-user-2')).toBe(b);
+    try {
+      expect(await switchTo(other, 'test-user-2')).toBe(b);
+    } finally {
+      releaseIdentity();
+    }
     await returnToWindow(page, testInfo, (timeout) =>
       page.waitForEvent('load', { timeout }).then(
         () => true,

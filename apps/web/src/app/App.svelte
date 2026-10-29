@@ -6,7 +6,18 @@
   import { api, ApiError, NetworkError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
-  import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
+  import {
+    SESSION_CHECK_MAX_ATTEMPTS,
+    SESSION_SIGNAL_RECHECK_MS,
+  } from '$lib/features/auth/session-check';
+  import {
+    isLogoutPendingSignal,
+    isSessionSignal,
+    publishLogoutPending,
+    publishLogoutResult,
+    publishSessionUser,
+    readSessionGeneration,
+  } from '$lib/features/auth/session-signal';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
   import NotesScreen from '$lib/features/notes/NotesScreen.svelte';
   import SharedScreen from '$lib/features/notes/SharedScreen.svelte';
@@ -104,16 +115,19 @@
   let restoringSession = false;
   let sessionCheckPending = false;
   let cacheRestorePending = false;
+  let signalRecheckTimer: ReturnType<typeof setTimeout> | undefined;
   onDestroy(() => {
     sessionSequence += 1;
     restoreSequence += 1;
     sessionCheckPending = false;
     cacheRestorePending = false;
+    clearTimeout(signalRecheckTimer);
   });
 
   async function load(verified?: Me, attempt = 0): Promise<boolean> {
     const mine = ++sessionSequence;
     loadingSession = true;
+    const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const retryLoad = async (): Promise<boolean> => {
       if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
@@ -124,6 +138,7 @@
       if (mine !== sessionSequence || cacheRestorePending) return false;
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+        void publishSessionUser(me?.id ?? null, generation);
       }
       if (me === undefined) {
         const info = await api.authInfo();
@@ -316,18 +331,24 @@
   }
 
   let loggingOut = false;
+  let logoutUserId: string | undefined;
   async function logout(): Promise<void> {
     if (loggingOut) return;
     loggingOut = true;
+    logoutUserId ??= currentUser.userId;
+    const attemptId = crypto.randomUUID();
     restoreSequence += 1;
     restoringUserId = undefined;
     hideSession('logout');
     flushSync(clearSession);
     try {
+      publishLogoutPending(logoutUserId, attemptId);
       const redirect = await api.logout();
+      void publishLogoutResult(null, attemptId);
       replace(redirect);
     } catch (error: unknown) {
       // 서버 세션이 남았을 수 있다. 비운 화면을 되살리지 않고 같은 안전 상태에서 다시 로그아웃한다(#212 1행).
+      void publishLogoutResult(logoutUserId, attemptId);
       accountSafety.error = errorText(error, m.feedback_logout_failed());
     } finally {
       loggingOut = false;
@@ -349,6 +370,7 @@
     restoringSession = true;
     restoringUserId ??= currentUser.userId;
     hideSession('restore');
+    const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const active = (): boolean =>
       mine === restoreSequence &&
@@ -369,6 +391,7 @@
         recheck();
         return;
       }
+      void publishSessionUser(now?.id ?? null, generation);
       if (now === undefined) {
         flushSync(clearSession);
         hideSession('signed-out');
@@ -435,6 +458,7 @@
     const expected = currentUser.userId;
     const mine = ++restoreSequence;
     checkingSession = true;
+    const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const recheck = (): void => {
       hideSession('reauth');
@@ -459,6 +483,7 @@
         accountSafety.restoring = false;
         void refreshUnread();
       }
+      void publishSessionUser(now?.id ?? null, generation);
     } catch (error: unknown) {
       if (verifyingSession(mine)) {
         if (safetyGeneration !== accountSafety.generation) {
@@ -501,6 +526,18 @@
     if (restoring()) void restoreSession();
     else void verifySession();
     return true;
+  }
+
+  function sessionSignal(event: StorageEvent): void {
+    if (!isSessionSignal(event)) return;
+    if (isLogoutPendingSignal(event) && signalRecheckTimer === undefined) {
+      // SR-221-12: 최종 표식·저장소 세대와 무관하게 예약 하나를 끝까지 실행한다.
+      signalRecheckTimer = setTimeout(() => {
+        signalRecheckTimer = undefined;
+        checkSession();
+      }, SESSION_SIGNAL_RECHECK_MS);
+    }
+    checkSession();
   }
 
   const route = $derived(router.route);
@@ -561,7 +598,7 @@
   });
 </script>
 
-<svelte:window onpageshow={restorePage} onpagehide={hideForCache} />
+<svelte:window onpageshow={restorePage} onpagehide={hideForCache} onstorage={sessionSignal} />
 
 {#if route.name !== 'public' && (session.state !== 'loading' || sessionHidden)}
   <!-- 표시 언어(D-81)를 정한 뒤에 그린다(토스트 영역 라벨도 그 언어로). -->
