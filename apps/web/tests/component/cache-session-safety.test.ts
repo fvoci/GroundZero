@@ -263,7 +263,7 @@ it.each(['missing', 'rejected'])(
   },
 );
 
-// SR-221-5: /api/me 시작 → 최종 익명 → 옛 A 응답. storage 배달보다 먼저 현재 세대를 읽어야 한다.
+// 세대는 옛 응답의 게시만 막는다. 새 알림은 후속 확인을 요청한다.
 it.each(['initial', 'return', 'live', 'persisted'])(
   'does not publish an old-user response over a newer final generation during %s verification',
   async (kind) => {
@@ -280,19 +280,14 @@ it.each(['initial', 'return', 'live', 'persisted'])(
     }
     signalSession(null);
     const finalMarker = localStorage.getItem(sessionKey);
+    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
     oldCheck.resolve(me);
     await oldCheck.promise;
     await tick();
     expect(localStorage.getItem(sessionKey)).toBe(finalMarker);
-    const menu = screen.queryByTestId('user-menu');
-    if (menu !== null) expect(menu).not.toBeVisible();
+    await waitFor(() => expect(screen.getByTestId('user-menu')).toBeVisible());
     freshCheck.resolve(undefined);
-    if (kind === 'initial') await screen.findByRole('link', { name: /^로그인$/ });
-    else if (kind === 'persisted')
-      await waitFor(() => {
-        expect(replace).toHaveBeenCalled();
-      });
-    else await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    await screen.findByRole('link', { name: '새 탭에서 로그인' });
   },
 );
 
@@ -328,16 +323,12 @@ it('always publishes final anonymity when its logout succeeds after a newer atte
   expect(sessionMarker()).toMatchObject({ state: 'settled', userId: null });
 });
 
-// SR-221-7: 진행 표식으로 가림 → 키 소실/읽기 거부/만료 → 새 확인 실패 → 입력을 보존한 재시도.
+// 표식의 소실·판독 실패·만료와 무관하게 자기 확인 실패 후 입력과 재시도를 보존한다.
 it.each(['removed', 'denied', 'expired'])(
-  'recovers a hidden pending logout after its marker is %s and preserves input across a failed check',
+  'preserves input and retry after its own check fails with a %s pending marker',
   async (kind) => {
     const input = await liveInput();
-    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     signalLogout();
-    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    await tick();
-    expect(input).not.toBeVisible();
     const check = deferred<Me | undefined>();
     const read = vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
     const reads = read.mock.calls.length;
@@ -355,13 +346,13 @@ it.each(['removed', 'denied', 'expired'])(
         throw new Error('invalid storage value');
       });
     }
-    await vi.advanceTimersByTimeAsync(30_000);
-    vi.useRealTimers();
     if (kind === 'expired') signalLogout(Date.now() - 30_000);
+    window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
     expect(read).toHaveBeenCalledTimes(reads + 1);
-    expect(input).not.toBeVisible();
+    expect(input).toBeVisible();
     check.reject(new Error('verification failed'));
     await screen.findByRole('alert');
+    expect(input).not.toBeVisible();
     expect(input).toHaveValue('메모리에만 남긴 입력');
     read.mockResolvedValue(me);
     await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
@@ -378,13 +369,14 @@ it('checks immediately when storage is cleared after a pending logout', async ()
   signalLogout();
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
   await tick();
+  await waitFor(() => expect(input).toBeVisible());
   const check = deferred<Me | undefined>();
   const read = vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
   const reads = read.mock.calls.length;
   localStorage.removeItem(sessionKey);
   window.dispatchEvent(new StorageEvent('storage', { key: null }));
   expect(read).toHaveBeenCalledTimes(reads + 1);
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   check.resolve(me);
   await waitFor(() => {
     expect(input).toBeVisible();
@@ -394,12 +386,10 @@ it('checks immediately when storage is cleared after a pending logout', async ()
 it('keeps restored input mounted when a pending marker disappears and verification fails', async () => {
   const input = await liveInput();
   signalLogout();
-  pageshow();
-  await tick();
   const check = deferred<Me | undefined>();
   vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
+  pageshow();
   localStorage.removeItem(sessionKey);
-  window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
   check.reject(new Error('offline'));
   await screen.findByRole('alert');
   expect(input.isConnected).toBe(true);
@@ -408,7 +398,7 @@ it('keeps restored input mounted when a pending marker disappears and verificati
   expect(screen.getByRole('button', { name: '다시 시도' })).toBeVisible();
 });
 
-// SR-221-1 / D-96 / #88: 불일치 표식은 네트워크 응답보다 먼저 가린다. 순번은 비교하지 않는다.
+// 자기 로그아웃의 알림은 서버 요청보다 먼저 보내되 결과 처리를 기다리게 하지 않는다.
 it('publishes a fresh pending logout before each attempt and the original user after failure', async () => {
   const attempts: unknown[] = [];
   const send = vi.spyOn(api, 'logout').mockImplementation(() => {
@@ -442,7 +432,7 @@ it('publishes a fresh pending logout before each attempt and the original user a
 
 // SR-221-4: 서버가 로그아웃되기 전 A를 돌려주는 순서를 고정한다.
 it.each(['live', 'persisted'])(
-  'keeps the %s screen hidden when the old user responds during logout and verifies final anonymity',
+  'accepts its own %s response during logout then verifies final anonymity',
   async (kind) => {
     await signedIn();
     const previous = screen.getByText('이전 비밀 목록');
@@ -451,37 +441,34 @@ it.each(['live', 'persisted'])(
     const pending = signalLogout();
     if (kind === 'persisted') pageshow();
     else window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    expect(previous).not.toBeVisible();
+    if (kind === 'persisted') expect(previous).not.toBeVisible();
+    else expect(previous).toBeVisible();
     check.resolve(me);
     await check.promise;
     await tick();
-    expect(previous).not.toBeVisible();
+    await waitFor(() => expect(screen.getByText('이전 비밀 목록')).toBeVisible());
     expect(localStorage.getItem(sessionKey)).toBe(pending);
-    expect(api.workspaces).toHaveBeenCalledTimes(1);
+    expect(api.workspaces).toHaveBeenCalledTimes(kind === 'persisted' ? 2 : 1);
     vi.spyOn(api, 'me').mockResolvedValue(undefined);
     signalSession(null);
     window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-    if (kind === 'persisted')
-      await waitFor(() => {
-        expect(replace).toHaveBeenCalled();
-      });
-    else await screen.findByRole('link', { name: '새 탭에서 로그인' });
-    expect(previous).not.toBeVisible();
+    await screen.findByRole('link', { name: '새 탭에서 로그인' });
+    expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
   },
 );
 
-it('resumes the same mounted input only after the failed logout final marker is verified', async () => {
+it('retains the same mounted input while independently verifying a failed logout notification', async () => {
   const input = await liveInput();
   const pending = signalLogout();
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
   await tick();
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   expect(localStorage.getItem(sessionKey)).toBe(pending);
   const finalCheck = deferred<Me | undefined>();
   vi.spyOn(api, 'me').mockReturnValueOnce(finalCheck.promise);
   signalSession(me.id);
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   finalCheck.resolve(me);
   await waitFor(() => expect(input).toBeVisible());
   expect(screen.getByLabelText('새 노트 제목')).toBe(input);
@@ -489,47 +476,45 @@ it('resumes the same mounted input only after the failed logout final marker is 
   expect(api.myNotes).toHaveBeenCalledTimes(1);
 });
 
-it('rechecks an abandoned logout at 30 seconds without another browser event', async () => {
+it('never holds an abandoned logout screen or starts a marker-expiry timer', async () => {
   const input = await liveInput();
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   signalLogout();
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
   await vi.advanceTimersByTimeAsync(29_999);
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   const read = vi.spyOn(api, 'me');
   const reads = read.mock.calls.length;
   await vi.advanceTimersByTimeAsync(1);
   await tick();
-  expect(read).toHaveBeenCalledTimes(reads + 1);
+  expect(read).toHaveBeenCalledTimes(reads);
   expect(input).toBeVisible();
   expect(input).toHaveValue('메모리에만 남긴 입력');
   expect(api.myNotes).toHaveBeenCalledTimes(1);
 });
 
-it('rejects the expired-pending old response when a deduplicated final anonymous marker has a newer generation', async () => {
+it('queues final anonymity after an expired pending notification without rejecting its own response', async () => {
   const input = await liveInput();
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   const oldCheck = deferred<Me | undefined>();
   const freshCheck = deferred<Me | undefined>();
   const read = vi
     .spyOn(api, 'me')
-    .mockResolvedValueOnce(me)
     .mockReturnValueOnce(oldCheck.promise)
     .mockReturnValueOnce(freshCheck.promise);
-  signalLogout();
+  signalLogout(Date.now() - 30_000);
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  await vi.advanceTimersByTimeAsync(30_000);
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   const expiredReads = read.mock.calls.length;
   signalSession(null);
   const final = localStorage.getItem(sessionKey);
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  // 같은 null 신호는 중복 억제된다. 응답 수락 경계의 세대 검사가 이 경합을 막는다.
+  // 도착한 알림은 진행 중 응답을 버리지 않고 후속 확인 하나로 합친다.
   expect(read).toHaveBeenCalledTimes(expiredReads);
   oldCheck.resolve(me);
   await vi.advanceTimersByTimeAsync(0);
   expect(read).toHaveBeenCalledTimes(expiredReads + 1);
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   expect(localStorage.getItem(sessionKey)).toBe(final);
   freshCheck.resolve(undefined);
   await vi.advanceTimersByTimeAsync(0);
@@ -541,7 +526,7 @@ it('rejects the expired-pending old response when a deduplicated final anonymous
 });
 
 it.each([true, false])(
-  'discards an old-user verification after final anonymity (storage delivered: %s)',
+  'uses its own response and rechecks on final anonymity delivery: %s',
   async (delivered) => {
     const input = await liveInput();
     const oldCheck = deferred<Me | undefined>();
@@ -551,10 +536,15 @@ it.each([true, false])(
     signalSession(null);
     if (delivered) {
       window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-      await screen.findByRole('link', { name: '새 탭에서 로그인' });
     }
     oldCheck.resolve(me);
     await oldCheck.promise;
+    await tick();
+    if (!delivered) {
+      expect(input).toBeVisible();
+      // 저장소 내용만으로는 화면을 바꾸지 않는다. 다음 복귀에서 직접 확인한다.
+      window.dispatchEvent(new Event('focus'));
+    }
     await screen.findByRole('link', { name: '새 탭에서 로그인' });
     expect(input).not.toBeVisible();
     expect(input).toHaveValue('메모리에만 남긴 입력');
@@ -567,7 +557,7 @@ it('does not let a newly opened shell overwrite a pending logout with its old us
   render(App, { replace, reload });
   const previous = await screen.findByText('이전 비밀 목록');
   await tick();
-  expect(previous).not.toBeVisible();
+  expect(previous).toBeVisible();
   expect(localStorage.getItem(sessionKey)).toBe(pending);
 });
 
@@ -602,7 +592,7 @@ it('publishes an anonymous shell result without making public views publish a ma
 });
 
 it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
-  'hides synchronously on a mismatched marker at %s and preserves the same live screen',
+  'requests its own identity at %s without masking from a mismatched marker',
   async (event) => {
     await signedIn();
     const check = deferred<Me | undefined>();
@@ -615,8 +605,8 @@ it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
       window.dispatchEvent(new StorageEvent(event, { key: sessionKey }));
     } else if (event === 'pageshow') pageshow(false);
     else window.dispatchEvent(new Event(event));
-    expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
-    expect(accountSafety.switching).toBe(true);
+    expect(screen.getByText('이전 비밀 목록')).toBeVisible();
+    expect(accountSafety.switching).toBe(false);
     expect(api.workspaces).toHaveBeenCalledTimes(1);
     check.resolve(me);
     await waitFor(() => expect(screen.getByTestId('user-menu')).toBeVisible());
@@ -626,12 +616,12 @@ it.each(['storage', 'focus', 'visibilitychange', 'pageshow'])(
   },
 );
 
-it('keeps a signed-out marker hidden through a failed verification and offers retry', async () => {
+it('offers retry after its own verification fails regardless of a signed-out marker', async () => {
   await signedIn();
   signalSession(null);
   vi.spyOn(api, 'me').mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
+  expect(screen.getByText('이전 비밀 목록')).toBeVisible();
   await screen.findByRole('alert');
   expect(replace).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
@@ -809,7 +799,8 @@ it('keeps a persisted app hidden if session verification fails', async () => {
   vi.spyOn(api, 'me').mockRejectedValue(new Error('offline'));
   pageshow();
   await screen.findByRole('alert');
-  expect(screen.queryByText('이전 비밀 목록')).toBeNull();
+  expect(screen.getByText('이전 비밀 목록')).not.toBeVisible();
+  expect(screen.getByRole('button', { name: '다시 시도' })).toBeVisible();
 });
 
 it.each(['focus', 'visibilitychange'])(
@@ -845,13 +836,13 @@ async function liveInput(): Promise<HTMLElement> {
   return input;
 }
 
-it('unhides the same live user without remounting screen-only input when draft storage fails', async () => {
+it('keeps the same live user mounted while verifying when draft storage fails', async () => {
   const input = await liveInput();
   signalSession(null);
   const check = deferred<Me | undefined>();
   vi.spyOn(api, 'me').mockReturnValueOnce(check.promise);
   window.dispatchEvent(new StorageEvent('storage', { key: sessionKey }));
-  expect(input).not.toBeVisible();
+  expect(input).toBeVisible();
   check.resolve(me);
   await waitFor(() => {
     expect(input).toBeVisible();

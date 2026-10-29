@@ -1,6 +1,6 @@
 // D-96 / SR-221-1: 탭 사이의 변경 알림일 뿐이다. 실제 사용자는 항상 /api/me로 확인한다.
 const KEY = 'fvoci:auth-session';
-// 끝을 알리지 못하고 닫힌 탭이 다른 탭을 영구히 가리지 않게 한다(SR-221-4).
+// 진행 중인 알림의 중복 게시만 잠시 줄인다. 화면 판단에는 쓰지 않는다.
 const LOGOUT_PENDING_MS = 30_000;
 /** 안전 세대 변경 뒤 무한 확인을 피한다. 첫 요청과 재확인 두 번이다(SR-221-8). */
 export const SESSION_CHECK_MAX_ATTEMPTS = 3;
@@ -24,14 +24,6 @@ async function updateSignal<T>(update: () => T): Promise<T | undefined> {
   return undefined;
 }
 
-async function publishHidingSignal(signal: SessionSignal): Promise<void> {
-  const published = await updateSignal(() => {
-    publish(signal);
-    return true;
-  });
-  if (published !== true) publish(signal);
-}
-
 function publish(signal: SessionSignal): void {
   try {
     lastGeneration = Math.max(lastGeneration, readSessionGeneration()) + 1;
@@ -44,30 +36,32 @@ function publish(signal: SessionSignal): void {
   }
 }
 
-/** 같은 사용자·로그아웃을 연달아 알려도 storage 이벤트가 나도록 매번 순번을 바꾼다. */
+/** 확인 결과의 중복 알림을 줄인다. 거절·잠금 대기는 자기 응답의 수락과 무관하다. */
 export async function publishSessionUser(
   userId: string | null,
   observedGeneration: number,
 ): Promise<boolean> {
-  // 로그아웃 전의 /api/me는 최종 상태가 아니다. 셸 시작·창 복귀·복원 모두 같은 경계를 쓴다.
+  // 새 표식 뒤의 옛 알림·같은 사용자 알림으로 탭 사이의 확인을 되풀이하지 않는다.
   return (
     (await updateSignal(() => {
       if (readSessionGeneration() !== observedGeneration || readLogoutPendingUntil() !== undefined)
         return false;
+      const current = readSignal();
+      if (current?.state === 'settled' && current.userId === userId) return false;
       publish({ state: 'settled', userId });
       return true;
     })) ?? false
   );
 }
 
-export async function publishLogoutPending(userId: string, attemptId: string): Promise<void> {
-  await publishHidingSignal({ state: 'logout-pending', userId, startedAt: Date.now(), attemptId });
+export function publishLogoutPending(userId: string, attemptId: string): void {
+  publish({ state: 'logout-pending', userId, startedAt: Date.now(), attemptId });
 }
 
 /** 요청을 끝낸 탭만 진행 표식을 최종 상태로 바꾼다. */
 export async function publishLogoutResult(userId: string | null, attemptId: string): Promise<void> {
   if (userId === null) {
-    await publishHidingSignal({ state: 'settled', userId });
+    publish({ state: 'settled', userId });
     return;
   }
   await updateSignal(() => {
@@ -118,18 +112,12 @@ function readSignal(): StoredSignal | undefined {
   }
 }
 
-/** /api/me 요청 직전에 읽고, 응답을 게시할 때 같은 세대인지 검사한다(SR-221-5). */
+/** 게시 중복 억제용 스냅샷이다. 응답 수락·가림 판단에는 쓰지 않는다. */
 export function readSessionGeneration(): number {
   return readSignal()?.generation ?? 0;
 }
 
-/** 진행 표식은 사용자 일치로 무시하지 않는다. 만료 뒤에도 익명 신호로 일반 확인을 유도한다. */
-export function readSessionUser(): string | null | undefined {
-  const signal = readSignal();
-  return signal?.state === 'logout-pending' ? null : signal?.userId;
-}
-
-export function readLogoutPendingUntil(): number | undefined {
+function readLogoutPendingUntil(): number | undefined {
   const signal = readSignal();
   if (signal?.state !== 'logout-pending') return undefined;
   const now = Date.now();

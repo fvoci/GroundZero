@@ -42,10 +42,8 @@ function grant(): void {
 
 it('checks the response generation inside the marker lock after a newer logout wins', async () => {
   const observed = readSessionGeneration();
-  const logout = publishLogoutPending('user-a', 'attempt-a');
+  publishLogoutPending('user-a', 'attempt-a');
   const stale = publishSessionUser('user-a', observed);
-  grant();
-  await logout;
   const pending = localStorage.getItem(key);
   expect(readSessionGeneration()).toBeGreaterThan(observed);
   grant();
@@ -54,14 +52,10 @@ it('checks the response generation inside the marker lock after a newer logout w
 });
 
 it('preserves the current attempt when an older failure reaches the lock later', async () => {
-  const first = publishLogoutPending('user-a', 'attempt-a');
-  const second = publishLogoutPending('user-a', 'attempt-b');
-  const failure = publishLogoutResult('user-a', 'attempt-a');
-  grant();
-  await first;
+  publishLogoutPending('user-a', 'attempt-a');
   const generation = readSessionGeneration();
-  grant();
-  await second;
+  publishLogoutPending('user-a', 'attempt-b');
+  const failure = publishLogoutResult('user-a', 'attempt-a');
   const pending = localStorage.getItem(key);
   expect(readSessionGeneration()).toBeGreaterThan(generation);
   grant();
@@ -70,16 +64,11 @@ it('preserves the current attempt when an older failure reaches the lock later',
 });
 
 it('makes final anonymity newer than both attempts and rejects their old response generation', async () => {
-  const first = publishLogoutPending('user-a', 'attempt-a');
-  grant();
-  await first;
+  publishLogoutPending('user-a', 'attempt-a');
   const observed = readSessionGeneration();
-  const second = publishLogoutPending('user-a', 'attempt-b');
-  const success = publishLogoutResult(null, 'attempt-a');
-  grant();
-  await second;
+  publishLogoutPending('user-a', 'attempt-b');
   const otherGeneration = readSessionGeneration();
-  grant();
+  const success = publishLogoutResult(null, 'attempt-a');
   await success;
   const final = localStorage.getItem(key);
   expect(readSessionGeneration()).toBeGreaterThan(otherGeneration);
@@ -106,7 +95,7 @@ it.each(['missing', 'rejected', 'throws'])(
     expect.soft(await publishSessionUser('user-a', readSessionGeneration())).toBe(false);
     expect.soft(await publishSessionUser(null, readSessionGeneration())).toBe(false);
     expect.soft(localStorage.getItem(key)).toBeNull();
-    await publishLogoutPending('user-a', 'attempt-a');
+    publishLogoutPending('user-a', 'attempt-a');
     const pending = localStorage.getItem(key);
     expect(pending).toContain('logout-pending');
     await publishLogoutResult('user-a', 'attempt-a');
@@ -116,3 +105,14 @@ it.each(['missing', 'rejected', 'throws'])(
     expect(final).toMatchObject({ state: 'settled', userId: null });
   },
 );
+
+it('does not echo an already settled identity to the other verifying tabs', async () => {
+  const first = publishSessionUser('user-a', readSessionGeneration());
+  grant();
+  expect(await first).toBe(true);
+  const marker = localStorage.getItem(key);
+  const echo = publishSessionUser('user-a', readSessionGeneration());
+  grant();
+  expect(await echo).toBe(false);
+  expect(localStorage.getItem(key)).toBe(marker);
+});

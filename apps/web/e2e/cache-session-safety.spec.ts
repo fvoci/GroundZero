@@ -53,6 +53,9 @@ test('a late initial old-user response cannot overwrite final logout anonymity',
     // 실제 서버 응답의 상태·머리글·본문을 그대로, 전달 시점만 늦춘다.
     await route.fulfill({ response });
   });
+  const anonymousResponse = late.waitForResponse(
+    (response) => response.url().endsWith('/api/me') && response.status() === 401,
+  );
   const navigation = late.goto('/notes');
   try {
     await capturedOldUser;
@@ -63,7 +66,10 @@ test('a late initial old-user response cannot overwrite final logout anonymity',
     release();
   }
   await navigation;
-  await expect(late.getByRole('link', { name: '로그인', exact: true })).toBeVisible();
+  // 첫 A 응답을 수락한 뒤, 대기 알림의 후속 익명 응답으로 재인증 상태가 된다.
+  await anonymousResponse;
+  await expect(late.getByRole('link', { name: '새 탭에서 로그인' })).toBeVisible();
+  await expect(late.getByTestId('user-menu')).toBeHidden();
   await expect(late.locator('html')).not.toHaveAttribute('data-old-user-published', 'yes');
   const final: unknown = await late.evaluate((): unknown =>
     JSON.parse(localStorage.getItem('fvoci:auth-session') ?? '{}'),
@@ -71,7 +77,7 @@ test('a late initial old-user response cannot overwrite final logout anonymity',
   expect(final).toMatchObject({ state: 'settled', userId: null });
 });
 
-test('another tab stays hidden when its old-user response precedes logout completion', async ({
+test('another tab accepts its own old-user response then verifies logout completion', async ({
   signIn,
 }) => {
   const owner = await signIn('test-user');
@@ -116,8 +122,8 @@ test('another tab stays hidden when its old-user response precedes logout comple
           });
         }),
     );
-    await expect(observer.getByTestId('account-safe-state')).toBeVisible();
-    await expect(input).toBeHidden();
+    await expect(observer.getByTestId('account-safe-state')).toBeHidden();
+    await expect(input).toBeVisible();
     await expect(input).toHaveValue('로그아웃 중 보존할 입력');
     const marker: unknown = await observer.evaluate((): unknown =>
       JSON.parse(localStorage.getItem('fvoci:auth-session') ?? '{}'),
@@ -136,7 +142,7 @@ test('another tab stays hidden when its old-user response precedes logout comple
   await expect(input).toHaveValue('로그아웃 중 보존할 입력');
 });
 
-test('another tab hides without focus while its session verification is held', async ({
+test('another tab verifies without focus and masks only after its own anonymous response', async ({
   signIn,
 }) => {
   const owner = await signIn('test-user');
@@ -173,14 +179,16 @@ test('another tab hides without focus while its session verification is held', a
   try {
     await owner.page.getByTestId('user-menu').click();
     await owner.page.getByRole('menuitem', { name: '로그아웃' }).click();
-    await expect(observer.getByTestId('user-menu')).toBeHidden();
     await checked;
-    await expect(observer.getByTestId('account-safe-state')).toBeVisible();
+    await expect(observer.getByTestId('user-menu')).toBeVisible();
+    await expect(observer.getByTestId('account-safe-state')).toBeHidden();
     await expect(observer.locator('html')).toHaveAttribute('data-focus-count', '0');
   } finally {
     release();
   }
   await expect(owner.page.getByRole('link', { name: '로그인', exact: true })).toBeVisible();
+  await expect(observer.getByRole('link', { name: '새 탭에서 로그인' })).toBeVisible();
+  await expect(observer.getByTestId('user-menu')).toBeHidden();
 });
 
 test('logout hides private data while pending and after going back', async ({ signIn }) => {

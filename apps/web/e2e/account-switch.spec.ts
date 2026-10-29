@@ -67,39 +67,42 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     void prompt.accept();
   });
 
-  // 코디네이터 승인: 앱보다 먼저 설치하고 이 탭이 수락한 B 결과만 센다. 다른 탭 쓰기는 storage 이벤트다.
+  // 코디네이터 승인: 앱보다 먼저 설치하고 이 탭이 판독한 실제 B 응답만 센다.
+  // 표식 게시는 생략될 수 있으므로 사용자 확인의 관찰점이 아니다.
   await page.addInitScript(
     ({ otherUser, acceptedKey }) => {
-      const original: unknown = Object.getOwnPropertyDescriptor(
-        Storage.prototype,
-        'setItem',
-      )?.value;
-      if (typeof original !== 'function') throw new Error('Storage.prototype.setItem');
+      const original: unknown = Object.getOwnPropertyDescriptor(Response.prototype, 'text')?.value;
+      if (typeof original !== 'function') throw new Error('Response.prototype.text');
       const accepted: { userId: string; t: number }[] = [];
-      Storage.prototype.setItem = function (this: Storage, ...args: [string, string]) {
-        // 원래 인자·this·반환·예외를 보존한다. 아래 관찰 실패는 제품의 저장 결과를 바꾸지 않는다.
-        const result: unknown = Reflect.apply(original, this, args);
-        try {
-          if (
-            this === window.localStorage &&
-            args[0] === 'fvoci:auth-session' &&
-            document.documentElement.hasAttribute('data-e2e-auth-observer')
-          ) {
-            const value: unknown = JSON.parse(args[1]);
+      Response.prototype.text = function (this: Response): Promise<string> {
+        // 실제 본문 판독의 this·결과·거절을 보존한다. 관찰 실패는 제품 결과를 바꾸지 않는다.
+        const result: unknown = Reflect.apply(original, this, []);
+        return Promise.resolve(result).then((text: unknown) => {
+          if (typeof text !== 'string') throw new Error('Response.text result');
+          try {
+            const url = new URL(this.url);
             if (
-              typeof value === 'object' &&
-              value !== null &&
-              'userId' in value &&
-              value.userId === otherUser
+              url.pathname === '/api/me' &&
+              url.search === '' &&
+              this.status === 200 &&
+              document.documentElement.hasAttribute('data-e2e-auth-observer')
             ) {
-              accepted.push({ userId: otherUser, t: Date.now() });
-              window.sessionStorage.setItem(acceptedKey, JSON.stringify(accepted));
+              const value: unknown = JSON.parse(text);
+              if (
+                typeof value === 'object' &&
+                value !== null &&
+                'id' in value &&
+                value.id === otherUser
+              ) {
+                accepted.push({ userId: otherUser, t: Date.now() });
+                window.sessionStorage.setItem(acceptedKey, JSON.stringify(accepted));
+              }
             }
+          } catch {
+            /* 관찰만 한다. 원함수의 결과는 그대로다. */
           }
-        } catch {
-          /* 관찰만 한다. 원함수의 결과는 그대로다. */
-        }
-        return result;
+          return text;
+        });
       };
     },
     { otherUser: b, acceptedKey: ACCEPTED_KEY },
@@ -269,8 +272,8 @@ test('unsaved task input survives A→B→A account switches, interrupted reload
     await page.evaluate((key) => {
       window.sessionStorage.removeItem(key);
     }, ACCEPTED_KEY);
-    // #88/D-96: null 표식에서 시작한 확인도 B를 받을 수 있다. 수락은 이 탭의 B 표식 쓰기로 센다.
-    // 요청 시작 표식 힌트로 세지 않고, 감지 1회·수락 뒤 중복 확인 0의 뜻을 유지한다(코디네이터 승인).
+    // #88/D-96: null 표식에서 시작한 확인도 B를 받을 수 있다. 이 탭의 실제 B 본문 판독으로 센다.
+    // 요청 시작 표식·게시 성공으로 세지 않고, 감지 1회·수락 뒤 중복 확인 0을 유지한다.
     writeFileSync(
       testInfo.outputPath('session-switch-requests.json'),
       JSON.stringify({ traffic, fetches, reloadDocument, accepted }, null, 2),

@@ -104,7 +104,7 @@
           accountSafety.reason === 'reauth' ||
           accountSafety.reason === 'restore');
       const refresh = (): boolean => {
-        if (!canCheck() || syncSessionSignal?.()) return false;
+        if (!canCheck()) return false;
         hideSession('reauth');
         return true;
       };
@@ -121,23 +121,15 @@
               if (refresh()) continue;
               return;
             }
-            // 자기 응답으로 먼저 가린다. 표식 게시 거절은 화면 결정을 취소하지 않는다.
+            // 알림 게시와 무관하게 이 탭의 응답만 화면을 결정한다.
+            void publishSessionUser(now?.id ?? null, sessionGeneration);
             if (now === undefined) {
               reportSessionExpired();
               hideSession('reauth');
-            } else if (now.id !== signedIn) hideSession('reauth');
-            else if (syncSessionSignal?.()) return;
-            const acceptedGeneration = accountSafety.generation;
-            await publishSessionUser(now?.id ?? null, sessionGeneration);
-            if (!canCheck()) return;
-            if (acceptedGeneration !== accountSafety.generation) {
-              if (refresh()) continue;
-              return;
             }
             if (now === undefined) return;
             if (now.id !== signedIn) switchAccount();
             else {
-              if (syncSessionSignal?.()) return;
               if (accountSafety.reason === 'reauth') {
                 accountSafety.switching = false;
                 accountSafety.restoring = false;

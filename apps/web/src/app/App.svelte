@@ -11,9 +11,7 @@
     publishLogoutPending,
     publishLogoutResult,
     publishSessionUser,
-    readLogoutPendingUntil,
     readSessionGeneration,
-    readSessionUser,
     SESSION_CHECK_MAX_ATTEMPTS,
   } from '$lib/features/auth/session-signal';
   import DocumentScreen from '$lib/features/documents/DocumentScreen.svelte';
@@ -91,23 +89,21 @@
   let sessionSequence = 0;
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
-  let signaledUser: string | null | undefined;
-  let signaledLogout = false;
   let checkingSignal = false;
-  let waitingLogout = false;
-  let preservePendingInput = false;
-  let logoutWait: ReturnType<typeof setTimeout> | undefined;
+  let loadingSession = false;
+  let restoringSession = false;
+  let signalPending = false;
   onDestroy(() => {
     sessionSequence += 1;
     restoreSequence += 1;
-    clearTimeout(logoutWait);
+    signalPending = false;
   });
 
   async function load(verified?: Me, attempt = 0): Promise<boolean> {
     const mine = ++sessionSequence;
+    loadingSession = true;
     const generation = router.route.name === 'public' ? 0 : readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
-    let acceptedMarker = generation;
     const retryLoad = async (): Promise<boolean> => {
       if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
       return load(undefined, attempt + 1);
@@ -116,23 +112,8 @@
       const me = verified ?? (await api.me());
       if (mine !== sessionSequence) return false;
       if (verified === undefined && router.route.name !== 'public') {
-        if (
-          safetyGeneration !== accountSafety.generation ||
-          (me !== undefined &&
-            generation !== readSessionGeneration() &&
-            readSessionUser() !== me.id)
-        )
-          return await retryLoad();
-        await publishSessionUser(me?.id ?? null, generation);
-        if (mine !== sessionSequence) return false;
-        if (
-          safetyGeneration !== accountSafety.generation ||
-          (me !== undefined &&
-            generation !== readSessionGeneration() &&
-            readSessionUser() !== me.id)
-        )
-          return await retryLoad();
-        acceptedMarker = readSessionGeneration();
+        if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+        void publishSessionUser(me?.id ?? null, generation);
       }
       if (me === undefined) {
         const info = await api.authInfo();
@@ -163,12 +144,6 @@
       if (mine !== sessionSequence) return false;
       org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };
-      if (
-        verified === undefined &&
-        router.route.name !== 'public' &&
-        (readLogoutPendingUntil() !== undefined || acceptedMarker !== readSessionGeneration())
-      )
-        syncSessionSignal();
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence) return false;
@@ -188,6 +163,11 @@
         network,
       };
       return false;
+    } finally {
+      if (mine === sessionSequence) {
+        loadingSession = false;
+        drainSignal();
+      }
     }
   }
 
@@ -354,13 +334,13 @@
     hideSession('logout');
     flushSync(clearSession);
     try {
-      await publishLogoutPending(logoutUserId, attemptId);
+      publishLogoutPending(logoutUserId, attemptId);
       const redirect = await api.logout();
-      await publishLogoutResult(null, attemptId);
+      void publishLogoutResult(null, attemptId);
       replace(redirect);
     } catch (error: unknown) {
       // 서버 세션이 남았을 수 있다. 비운 화면을 되살리지 않고 같은 안전 상태에서 다시 로그아웃한다(#212 1행).
-      await publishLogoutResult(logoutUserId, attemptId);
+      void publishLogoutResult(logoutUserId, attemptId);
       accountSafety.error = errorText(error, m.feedback_logout_failed());
     } finally {
       loggingOut = false;
@@ -379,9 +359,9 @@
       return;
     const mine = ++restoreSequence;
     checkingSignal = false;
+    restoringSession = true;
     restoringUserId ??= currentUser.userId;
     hideSession('restore');
-    const pendingAtStart = readLogoutPendingUntil() !== undefined;
     const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const active = (): boolean =>
@@ -389,7 +369,6 @@
       sessionHidden &&
       (accountSafety.reason === 'restore' || accountSafety.reason === 'reauth');
     const recheck = (): void => {
-      preservePendingInput = true;
       if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void restoreSession(attempt + 1);
       else {
         accountSafety.switching = true;
@@ -403,34 +382,7 @@
         recheck();
         return;
       }
-      const pending = waitForLogout();
-      if (now?.id === restoringUserId && pending) return;
-      if (
-        now?.id === restoringUserId &&
-        (pendingAtStart || generation !== readSessionGeneration()) &&
-        readSessionUser() !== now.id
-      ) {
-        recheck();
-        return;
-      }
-      await publishSessionUser(now?.id ?? null, generation);
-      if (!active()) return;
-      if (safetyGeneration !== accountSafety.generation) {
-        recheck();
-        return;
-      }
-      if (
-        now?.id === restoringUserId &&
-        generation !== readSessionGeneration() &&
-        readSessionUser() !== undefined &&
-        readSessionUser() !== now.id
-      ) {
-        recheck();
-        return;
-      }
-      const acceptedMarker = readSessionGeneration();
-      preservePendingInput = false;
-      signaledUser = undefined;
+      void publishSessionUser(now?.id ?? null, generation);
       if (now === undefined) {
         flushSync(clearSession);
         hideSession('signed-out');
@@ -446,7 +398,6 @@
         const loaded = await load(now);
         if (mine !== restoreSequence || !restoring()) return;
         if (loaded) {
-          if (acceptedMarker !== readSessionGeneration() && syncSessionSignal()) return;
           restoringUserId = undefined;
           accountSafety.restoring = false;
         } else {
@@ -460,10 +411,14 @@
         recheck();
         return;
       }
-      // 진행 표식을 보고 가린 입력은 표식 소실 뒤 확인 실패에도 남긴다(SR-221-7).
-      if (!preservePendingInput) flushSync(clearSession);
+      // 확인 실패는 기존 DOM·입력을 보존하고 직접 다시 시도하게 한다.
       accountSafety.switching = true;
       accountSafety.error = errorText(error, m.feedback_restore_failed());
+    } finally {
+      if (mine === restoreSequence) {
+        restoringSession = false;
+        drainSignal();
+      }
     }
   }
 
@@ -480,8 +435,7 @@
   function verifyingSignal(mine: number): boolean {
     return (
       mine === restoreSequence &&
-      sessionHidden &&
-      (accountSafety.reason === 'reauth' || accountSafety.reason === 'restore')
+      (!sessionHidden || accountSafety.reason === 'reauth' || accountSafety.reason === 'restore')
     );
   }
 
@@ -491,11 +445,10 @@
     const expected = currentUser.userId;
     const mine = ++restoreSequence;
     checkingSignal = true;
-    hideSession('reauth');
-    const pendingAtStart = readLogoutPendingUntil() !== undefined;
     const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const recheck = (): void => {
+      hideSession('reauth');
       if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void verifySessionSignal(attempt + 1);
       else accountSafety.error = m.feedback_restore_failed();
     };
@@ -506,35 +459,9 @@
         recheck();
         return;
       }
-      const pending = waitForLogout();
-      if (now?.id === expected && pending) return;
-      if (
-        now?.id === expected &&
-        (pendingAtStart || generation !== readSessionGeneration()) &&
-        readSessionUser() !== now.id
-      ) {
-        recheck();
-        return;
-      }
-      signaledUser = now?.id ?? null;
-      await publishSessionUser(signaledUser, generation);
-      if (!verifyingSignal(mine)) return;
-      if (safetyGeneration !== accountSafety.generation) {
-        recheck();
-        return;
-      }
-      // 잠금을 기다리는 동안 들어온 최종 표식도 가림을 풀기 전에 확인한다.
-      if (
-        now?.id === expected &&
-        generation !== readSessionGeneration() &&
-        readSessionUser() !== undefined &&
-        readSessionUser() !== now.id
-      ) {
-        recheck();
-        return;
-      }
-      preservePendingInput = false;
+      void publishSessionUser(now?.id ?? null, generation);
       if (now === undefined) {
+        hideSession('reauth');
         reportSessionExpired();
       } else if (now.id !== expected) {
         switchAccount();
@@ -542,6 +469,7 @@
         auth.expired = false;
         accountSafety.switching = false;
         accountSafety.restoring = false;
+        void refreshUnread();
       }
     } catch (error: unknown) {
       if (verifyingSignal(mine)) {
@@ -549,74 +477,43 @@
           recheck();
           return;
         }
+        hideSession('reauth');
         accountSafety.error = errorText(error, m.feedback_restore_failed());
       }
     } finally {
-      if (mine === restoreSequence) checkingSignal = false;
+      if (mine === restoreSequence) {
+        checkingSignal = false;
+        drainSignal();
+      }
     }
   }
 
-  /** 진행 중에는 옛 사용자 응답을 수락하지 않는다. 끝이 안 오면 만료 시 새 응답으로 확인한다. */
-  function waitForLogout(): boolean {
-    clearTimeout(logoutWait);
-    logoutWait = undefined;
-    const until = readLogoutPendingUntil();
-    waitingLogout = until !== undefined;
-    if (until === undefined) return false;
-    preservePendingInput = true;
-    logoutWait = setTimeout(() => {
-      logoutWait = undefined;
-      signaledUser = undefined;
-      syncSessionSignal();
-    }, until - Date.now());
-    return true;
+  function drainSignal(): void {
+    if (!signalPending || loadingSession || restoringSession || checkingSignal) return;
+    signalPending = false;
+    syncSessionSignal();
   }
 
-  /** 돌아올 때도 storage 배달 전에 읽는다. 사용자 불일치만 가리고 같은 사용자의 입력은 남긴다(D-96/#88). */
-  function syncSessionSignal(): boolean {
+  /** 알림 내용은 읽지 않는다. 진행 중 알림은 후속 확인 하나로 합친다. */
+  function syncSessionSignal(followUp = false): boolean {
     if (router.route.name === 'public') return false;
+    if (loadingSession || restoringSession || checkingSignal) {
+      if (followUp) signalPending = true;
+      return true;
+    }
     const expected = restoringUserId ?? currentUser.userId;
     if (
       expected === '' ||
       (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
     )
       return false;
-    const userId = readSessionUser();
-    const wasWaiting = waitingLogout;
-    const pendingLogout = waitForLogout();
-    const reauthenticating = sessionHidden && accountSafety.reason === 'reauth';
-    if (userId === undefined) {
-      if (!wasWaiting) return reauthenticating && checkingSignal;
-      signaledUser = undefined;
-      signaledLogout = false;
-      if (restoring()) void restoreSession();
-      else void verifySessionSignal();
-      return true;
-    }
-    if (userId === expected && !reauthenticating && !wasWaiting) return false;
-    if (
-      (restoring() || checkingSignal) &&
-      signaledUser === userId &&
-      signaledLogout === pendingLogout
-    )
-      return true;
-    signaledUser = userId;
-    signaledLogout = pendingLogout;
     if (restoring()) void restoreSession();
     else void verifySessionSignal();
     return true;
   }
 
   function sessionSignal(event: StorageEvent): void {
-    if (!isSessionSignal(event)) return;
-    // 익명 확인을 여러 탭이 다시 알리더라도 같은 사용자 표식끼리 확인 요청을 되풀이하지 않는다.
-    if (
-      accountSafety.reason === 'reauth' &&
-      signaledUser === readSessionUser() &&
-      signaledLogout === (readLogoutPendingUntil() !== undefined)
-    )
-      return;
-    syncSessionSignal();
+    if (isSessionSignal(event)) syncSessionSignal(true);
   }
 
   const route = $derived(router.route);
