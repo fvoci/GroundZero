@@ -5,7 +5,7 @@
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
-  import { publishSessionUser, readSessionGeneration } from '$lib/features/auth/session-signal';
+  import { publishSessionCheck, readSessionGeneration } from '$lib/features/auth/session-signal';
   import { IsMobile } from '$lib/hooks/is-mobile.svelte';
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -124,7 +124,7 @@
               if (refresh()) continue;
               return;
             }
-            void publishSessionUser(now?.id ?? null, sessionGeneration);
+            void publishSessionCheck(sessionGeneration);
             if (now === undefined) {
               reportSessionExpired();
               hideSession('reauth');

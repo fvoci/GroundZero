@@ -4,6 +4,133 @@ import { expect, str, test, unique } from './fixtures';
 // 코디네이터 승인: 여기서는 일반 기록 이동, persisted=true 복원은 컴포넌트 시험이 검증한다.
 
 for (const withoutLocks of [false, true]) {
+  test(`SR-242-1 retries get a new deadline after failed logout (Web Locks ${withoutLocks ? 'missing' : 'available'})`, async ({
+    signIn,
+  }) => {
+    const owner = await signIn('test-user');
+    if (withoutLocks)
+      await owner.context.addInitScript(() => {
+        Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+      });
+    const observer = await owner.context.newPage();
+    await observer.goto('/notes');
+    const input = observer.getByLabel('새 노트 제목');
+    await input.fill('두 번째 시도 뒤 보존할 입력');
+    await owner.page.goto('/notes');
+    await expect(owner.page.getByTestId('user-menu')).toBeVisible();
+    await owner.endTrace();
+    const now = new Date();
+    await owner.page.clock.install({ time: now });
+    await observer.clock.install({ time: now });
+    let failFirst!: () => void;
+    const firstFailure = new Promise<void>((resolve) => {
+      failFirst = resolve;
+    });
+    let allowCommit!: () => void;
+    const allowed = new Promise<void>((resolve) => {
+      allowCommit = resolve;
+    });
+    let committed!: () => void;
+    const commit = new Promise<void>((resolve) => {
+      committed = resolve;
+    });
+    let attempts = 0;
+    await owner.page.route('**/auth/logout', async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await firstFailure;
+        await route.abort('failed');
+        return;
+      }
+      await allowed;
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      committed();
+    });
+    const first = observer.waitForResponse(
+      (r) => r.url().endsWith('/api/me') && r.status() === 200,
+    );
+    await owner.page.getByTestId('user-menu').click();
+    await owner.page.getByRole('menuitem', { name: '로그아웃' }).click();
+    await first;
+    failFirst();
+    const retry = owner.page.getByRole('button', { name: '로그아웃 다시 하기' });
+    await expect(retry).toBeVisible();
+    await owner.page.clock.runFor(10_000);
+    await observer.clock.runFor(10_000);
+    const second = observer.waitForResponse(
+      (r) => r.url().endsWith('/api/me') && r.status() === 200,
+    );
+    await retry.click();
+    await second;
+    await observer.clock.runFor(20_000); // 첫 시도의 기한, 두 번째 요청은 아직 커밋 전.
+    await expect(input).toBeVisible();
+    allowCommit();
+    await commit;
+    expect(await owner.api.status('/api/me')).toBe(401);
+    await owner.page.close();
+    const anonymous = observer.waitForResponse(
+      (r) => r.url().endsWith('/api/me') && r.status() === 401,
+    );
+    await observer.clock.runFor(10_000);
+    await anonymous;
+    await expect(observer.getByRole('link', { name: '새 탭에서 로그인' })).toBeVisible();
+    await expect(input).toBeHidden();
+    await expect(input).toHaveValue('두 번째 시도 뒤 보존할 입력');
+  });
+
+  test(`SR-242-1 mounts after pending and verifies without a final signal (Web Locks ${withoutLocks ? 'missing' : 'available'})`, async ({
+    signIn,
+  }) => {
+    const owner = await signIn('test-user');
+    if (withoutLocks)
+      await owner.context.addInitScript(() => {
+        Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+      });
+    await owner.page.goto('/notes');
+    await expect(owner.page.getByTestId('user-menu')).toBeVisible();
+    await owner.endTrace();
+    let started!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let allowCommit!: () => void;
+    const allowed = new Promise<void>((resolve) => {
+      allowCommit = resolve;
+    });
+    let committed!: () => void;
+    const commit = new Promise<void>((resolve) => {
+      committed = resolve;
+    });
+    await owner.page.route('**/auth/logout', async (route) => {
+      started();
+      await allowed;
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      committed();
+    });
+    await owner.page.getByTestId('user-menu').click();
+    await owner.page.getByRole('menuitem', { name: '로그아웃' }).click();
+    await pending;
+    const observer = await owner.context.newPage();
+    await observer.clock.install();
+    await observer.goto('/notes');
+    const input = observer.getByLabel('새 노트 제목');
+    await input.fill('늦게 열린 탭의 입력');
+    allowCommit();
+    await commit;
+    expect(await owner.api.status('/api/me')).toBe(401);
+    await owner.page.close();
+    const anonymous = observer.waitForResponse(
+      (r) => r.url().endsWith('/api/me') && r.status() === 401,
+    );
+    await observer.clock.runFor(30_000);
+    await anonymous;
+    await expect(observer.getByRole('link', { name: '새 탭에서 로그인' })).toBeVisible();
+    await expect(input).toBeHidden();
+    await expect(input).toHaveValue('늦게 열린 탭의 입력');
+  });
+
   test(`SR-221-12 verifies after the logout tab closes after server commit (Web Locks ${withoutLocks ? 'missing' : 'available'})`, async ({
     signIn,
   }) => {
@@ -99,7 +226,7 @@ for (const withoutLocks of [false, true]) {
   });
 }
 
-test('a late initial old-user response cannot overwrite final logout anonymity', async ({
+test('a late initial old-user response cannot overwrite the logout completion marker', async ({
   signIn,
 }) => {
   const owner = await signIn('test-user');
@@ -108,29 +235,23 @@ test('a late initial old-user response cannot overwrite final logout anonymity',
   const userId = str(await owner.api.get('/api/me'), 'id');
   await owner.endTrace();
   const late = await owner.context.newPage();
-  // 이 새 문서가 옛 A를 게시하려는 호출을 관찰한다. 저장소의 반환·예외는 그대로다.
-  await late.addInitScript((oldUser: string) => {
+  // 이 새 문서의 표식 게시를 관찰한다. 세대가 지난 응답은 신원 없이도 게시하지 않는다.
+  await late.addInitScript(() => {
     const original: unknown = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem')?.value;
     if (typeof original !== 'function') throw new Error('Storage.prototype.setItem');
     Storage.prototype.setItem = function (this: Storage, key: string, value: string) {
       const result: unknown = Reflect.apply(original, this, [key, value]);
       try {
         const marker: unknown = JSON.parse(value);
-        if (
-          key === 'fvoci:auth-session' &&
-          typeof marker === 'object' &&
-          marker !== null &&
-          'userId' in marker &&
-          marker.userId === oldUser
-        ) {
-          document.documentElement.dataset.oldUserPublished = 'yes';
+        if (key === 'fvoci:auth-session' && typeof marker === 'object' && marker !== null) {
+          document.documentElement.dataset.sessionSignalPublished = 'yes';
         }
       } catch {
         /* 관찰 오류는 원래 쓰기의 결과를 바꾸지 않는다. */
       }
       return result;
     };
-  }, userId);
+  });
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -166,11 +287,12 @@ test('a late initial old-user response cannot overwrite final logout anonymity',
   await anonymousResponse;
   await expect(late.getByRole('link', { name: '새 탭에서 로그인' })).toBeVisible();
   await expect(late.getByTestId('user-menu')).toBeHidden();
-  await expect(late.locator('html')).not.toHaveAttribute('data-old-user-published', 'yes');
+  await expect(late.locator('html')).not.toHaveAttribute('data-session-signal-published', 'yes');
   const final: unknown = await late.evaluate((): unknown =>
     JSON.parse(localStorage.getItem('fvoci:auth-session') ?? '{}'),
   );
-  expect(final).toMatchObject({ state: 'settled', userId: null });
+  expect(final).toMatchObject({ state: 'settled' });
+  expect(final).not.toHaveProperty('userId');
 });
 
 test('another tab accepts its own old-user response then verifies logout completion', async ({
@@ -226,9 +348,9 @@ test('another tab accepts its own old-user response then verifies logout complet
     );
     expect(marker).toMatchObject({
       state: 'logout-pending',
-      userId,
       startedAt: expect.any(Number),
     });
+    expect(marker).not.toHaveProperty('userId');
   } finally {
     release();
   }

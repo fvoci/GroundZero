@@ -7,8 +7,7 @@ const RECHECK_KEY = `${KEY}:recheck`;
 const LOGOUT_PENDING_MS = SESSION_SIGNAL_RECHECK_MS;
 
 type SessionSignal =
-  | { state: 'settled'; userId: string | null }
-  | { state: 'logout-pending'; userId: string; startedAt: number; attemptId: string };
+  { state: 'settled' } | { state: 'logout-pending'; startedAt: number; attemptId: string };
 
 type StoredSignal = SessionSignal & { generation: number };
 let lastGeneration = 0;
@@ -38,31 +37,29 @@ function publish(signal: SessionSignal): void {
 }
 
 /** 확인 결과의 중복 알림을 줄인다. 거절·잠금 대기는 자기 응답의 수락과 무관하다. */
-export async function publishSessionUser(
-  userId: string | null,
-  observedGeneration: number,
-): Promise<boolean> {
-  // 새 표식 뒤의 옛 알림·같은 사용자 알림으로 탭 사이의 확인을 되풀이하지 않는다.
+export async function publishSessionCheck(observedGeneration: number): Promise<boolean> {
+  // 신원·해시를 두지 않는다. 시작·복원·직접 확인만 게시하고 알림으로 시작한 확인은 다시 게시하지 않는다.
   return (
     (await updateSignal(() => {
       if (readSessionGeneration() !== observedGeneration || readLogoutPendingUntil() !== undefined)
         return false;
-      const current = readSignal();
-      if (current?.state === 'settled' && current.userId === userId) return false;
-      publish({ state: 'settled', userId });
+      publish({ state: 'settled' });
       return true;
     })) ?? false
   );
 }
 
-export function publishLogoutPending(userId: string, attemptId: string): void {
-  publish({ state: 'logout-pending', userId, startedAt: Date.now(), attemptId });
+export function publishLogoutPending(attemptId: string): void {
+  publish({ state: 'logout-pending', startedAt: Date.now(), attemptId });
 }
 
 /** 요청을 끝낸 탭만 진행 표식을 최종 상태로 바꾼다. */
-export async function publishLogoutResult(userId: string | null, attemptId: string): Promise<void> {
-  if (userId === null) {
-    publish({ state: 'settled', userId });
+export async function publishLogoutResult(
+  outcome: 'success' | 'failure',
+  attemptId: string,
+): Promise<void> {
+  if (outcome === 'success') {
+    publish({ state: 'settled' });
     return;
   }
   // SR-221-11: 실패한 요청도 다른 탭에 재확인을 알린다. 상태 쓰기·잠금과 무관하며 새 진행 표식을 덮지 않는다.
@@ -74,7 +71,7 @@ export async function publishLogoutResult(userId: string | null, attemptId: stri
   await updateSignal(() => {
     const current = readSignal();
     if (current?.state !== 'logout-pending' || current.attemptId !== attemptId) return;
-    publish({ state: 'settled', userId });
+    publish({ state: 'settled' });
   });
 }
 
@@ -83,9 +80,7 @@ function readSignal(): StoredSignal | undefined {
   try {
     const raw = localStorage.getItem(KEY);
     const value: unknown = raw === null ? undefined : JSON.parse(raw);
-    if (typeof value !== 'object' || value === null || !('userId' in value)) return undefined;
-    const userId = value.userId;
-    if (userId !== null && (typeof userId !== 'string' || userId === '')) return undefined;
+    if (typeof value !== 'object' || value === null) return undefined;
     const generation =
       'generation' in value &&
       typeof value.generation === 'number' &&
@@ -94,9 +89,9 @@ function readSignal(): StoredSignal | undefined {
         ? value.generation
         : 0;
     lastGeneration = Math.max(lastGeneration, generation);
+    let signal: StoredSignal;
     if ('state' in value && value.state === 'logout-pending') {
       if (
-        userId === null ||
         !('startedAt' in value) ||
         typeof value.startedAt !== 'number' ||
         !Number.isFinite(value.startedAt) ||
@@ -105,15 +100,26 @@ function readSignal(): StoredSignal | undefined {
         value.attemptId === ''
       )
         return undefined;
-      return {
+      signal = {
         state: 'logout-pending',
-        userId,
         startedAt: value.startedAt,
         attemptId: value.attemptId,
         generation,
       };
+    } else if ('state' in value && value.state === 'settled') {
+      signal = { state: 'settled', generation };
+    } else {
+      return undefined;
     }
-    return { state: 'settled', userId, generation };
+    if ('userId' in value) {
+      // SR-242-2: 이전 버전이 남긴 신원도 제거한다. 시도·기한·세대는 유지하며 신원을 읽지 않는다.
+      try {
+        localStorage.setItem(KEY, JSON.stringify({ ...signal, sequence: crypto.randomUUID() }));
+      } catch {
+        // 쓰기가 막혀도 읽은 시도로 네트워크 확인은 예약한다.
+      }
+    }
+    return signal;
   } catch {
     return undefined;
   }
@@ -133,22 +139,14 @@ function readLogoutPendingUntil(): number | undefined {
   return until > now && until <= now + LOGOUT_PENDING_MS ? until : undefined;
 }
 
-export function isSessionSignal(event: StorageEvent): boolean {
-  return event.key === KEY || event.key === RECHECK_KEY || event.key === null;
+/** 현재 시도의 예약 정보만 읽는다. 오래된 storage 이벤트 내용으로 새 시도의 기한을 덮지 않는다. */
+export function readLogoutPending(): { attemptId: string; startedAt: number } | undefined {
+  const signal = readSignal();
+  return signal?.state === 'logout-pending'
+    ? { attemptId: signal.attemptId, startedAt: signal.startedAt }
+    : undefined;
 }
 
-/** 알림 내용은 지연 확인 예약에만 쓴다. 저장소를 다시 읽어 예약을 취소하거나 늦추지 않는다. */
-export function isLogoutPendingSignal(event: StorageEvent): boolean {
-  if (event.key !== KEY || event.newValue === null) return false;
-  try {
-    const value: unknown = JSON.parse(event.newValue);
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      'state' in value &&
-      value.state === 'logout-pending'
-    );
-  } catch {
-    return false;
-  }
+export function isSessionSignal(event: StorageEvent): boolean {
+  return event.key === KEY || event.key === RECHECK_KEY || event.key === null;
 }

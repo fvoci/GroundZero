@@ -314,8 +314,8 @@ it('SR-221-12 coalesces pending hints into one delayed check when the final sign
   const input = await signedIn();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const read = vi.spyOn(api, 'me').mockClear().mockResolvedValue(identity);
+  hint('pending');
   for (let count = 0; count < 3; count += 1) {
-    hint('pending');
     window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
   }
   await tick();
@@ -342,4 +342,93 @@ it('cancels the delayed pending check when the app unmounts', async () => {
   const beforeDelay = read.mock.calls.length;
   await vi.advanceTimersByTimeAsync(30_000);
   expect(read).toHaveBeenCalledTimes(beforeDelay);
+});
+
+it('SR-242-1 gives a retry its own deadline after the first logout fails', async () => {
+  const input = await signedIn();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const read = vi.spyOn(api, 'me').mockClear().mockResolvedValue(identity);
+  hint('pending');
+  const firstSignal = localStorage.getItem(key);
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
+  await vi.advanceTimersByTimeAsync(10_000);
+  hint('same'); // 첫 로그아웃 실패의 최종 알림.
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
+  hint('pending'); // 30초 안에 시작한 다른 attemptId.
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: firstSignal }));
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(input).toBeVisible();
+  const beforeCommit = read.mock.calls.length;
+  read.mockResolvedValue(undefined); // 두 번째 요청이 커밋되고 최종 알림 없이 닫힘.
+  await vi.advanceTimersByTimeAsync(10_000);
+  await tick();
+  expect(read).toHaveBeenCalledTimes(beforeCommit + 1);
+  expect(input).not.toBeVisible();
+  expect(input).toHaveValue('이 탭의 입력');
+});
+
+it.each(['mount', 'pageshow'])(
+  'SR-242-1 recovers the remaining pending deadline on %s without a storage event',
+  async (phase) => {
+    if (phase === 'pageshow') await signedIn();
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    hint('pending');
+    vi.setSystemTime(Date.now() + 15_000);
+    if (phase === 'mount') await signedIn();
+    else window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+    await vi.advanceTimersByTimeAsync(0);
+    const input = screen.getByLabelText('새 노트 제목');
+    const read = vi.spyOn(api, 'me').mockClear().mockResolvedValue(identity);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(read).not.toHaveBeenCalled();
+    read.mockResolvedValue(undefined);
+    await vi.advanceTimersByTimeAsync(1);
+    await tick();
+    expect(read).toHaveBeenCalledOnce();
+    expect(input).not.toBeVisible();
+    expect(input).toHaveValue('이 탭의 입력');
+  },
+);
+
+it('SR-242-1 repeated hints for the same attempt keep its original deadline', async () => {
+  const input = await signedIn();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const read = vi.spyOn(api, 'me').mockClear().mockResolvedValue(identity);
+  hint('pending');
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
+  await vi.advanceTimersByTimeAsync(10_000);
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
+  await vi.advanceTimersByTimeAsync(0);
+  const beforeCommit = read.mock.calls.length;
+  read.mockResolvedValue(undefined);
+  await vi.advanceTimersByTimeAsync(20_000);
+  await tick();
+  expect(read).toHaveBeenCalledTimes(beforeCommit + 1);
+  expect(input).not.toBeVisible();
+});
+
+it('SR-242-1 a late older pending write cannot cancel a newer attempt deadline', async () => {
+  const input = await signedIn();
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const read = vi.spyOn(api, 'me').mockClear().mockResolvedValue(identity);
+  hint('pending');
+  const firstSignal = localStorage.getItem(key);
+  if (firstSignal === null) throw new Error('missing first pending');
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: firstSignal }));
+  await vi.advanceTimersByTimeAsync(10_000);
+  hint('pending');
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: localStorage.getItem(key) }));
+  await vi.advanceTimersByTimeAsync(5_000);
+  localStorage.setItem(key, firstSignal);
+  window.dispatchEvent(new StorageEvent('storage', { key, newValue: firstSignal }));
+  await vi.advanceTimersByTimeAsync(15_000);
+  expect(input).toBeVisible();
+  const beforeCommit = read.mock.calls.length;
+  read.mockResolvedValue(undefined);
+  await vi.advanceTimersByTimeAsync(10_000);
+  await tick();
+  expect(read).toHaveBeenCalledTimes(beforeCommit + 1);
+  expect(input).not.toBeVisible();
+  expect(input).toHaveValue('이 탭의 입력');
 });
