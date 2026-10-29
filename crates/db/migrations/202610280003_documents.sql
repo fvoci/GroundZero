@@ -1296,10 +1296,12 @@ CREATE FUNCTION fvoci.app_lock_move(p_doc uuid, p_target uuid, p_item uuid) RETU
   DECLARE
     v_doc  documents%ROWTYPE;
     v_locked documents%ROWTYPE;
+    v_children uuid[];
     v_from text;
     v_to   text;
   BEGIN
     v_doc := app_check_move(p_doc, p_target, p_item);
+    v_children := ARRAY(SELECT id FROM documents WHERE parent_id = p_doc ORDER BY id);
     -- #223: SQL·HTTP 모두 집계가 쥔 공간 행부터 기다린다. FK의 KEY SHARE로는 NO KEY UPDATE를 막지 못한다.
     PERFORM 1 FROM workspaces WHERE id IN (v_doc.workspace_id, p_target) ORDER BY id FOR SHARE;
     v_from := coalesce(v_doc.workspace_id::text, '') || ':' || coalesce(v_doc.item_id::text, '') || ':'
@@ -1322,11 +1324,20 @@ CREATE FUNCTION fvoci.app_lock_move(p_doc uuid, p_target uuid, p_item uuid) RETU
       AND ((u.target_kind = 'document' AND u.target_id = p_doc)
            OR u.file_id IN (SELECT f.id FROM files f WHERE f.document_id = p_doc))
     ORDER BY u.id FOR NO KEY UPDATE;
-    SELECT * INTO v_locked FROM documents WHERE id = p_doc FOR UPDATE;
+    -- SR-248-1: 자식 재배치도 문서를 갱신한다. 제거처럼 전체 갱신 집합을 문서 id 순으로 한 번에 잠근다.
+    -- 자식의 새 부모도 FK 검사에서 잠그므로 같은 순서에 넣는다.
+    PERFORM 1 FROM documents
+    WHERE id = p_doc OR parent_id = p_doc OR (cardinality(v_children) > 0 AND id = v_doc.parent_id)
+    ORDER BY id FOR UPDATE;
+    SELECT * INTO v_locked FROM documents WHERE id = p_doc;
     IF v_locked.workspace_id IS DISTINCT FROM v_doc.workspace_id
        OR v_locked.item_id IS DISTINCT FROM v_doc.item_id
        OR v_locked.owner_user_id IS DISTINCT FROM v_doc.owner_user_id THEN
       RAISE EXCEPTION 'the document was moved; reload and try again' USING ERRCODE = '55000';
+    END IF;
+    IF v_locked.parent_id IS DISTINCT FROM v_doc.parent_id
+       OR v_children IS DISTINCT FROM ARRAY(SELECT id FROM documents WHERE parent_id = p_doc ORDER BY id) THEN
+      RAISE EXCEPTION 'the document hierarchy changed; reload and try again' USING ERRCODE = '55000';
     END IF;
     PERFORM app_check_move(p_doc, p_target, p_item);
   END

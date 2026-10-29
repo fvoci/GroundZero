@@ -335,3 +335,320 @@ async fn http_move_waits_for_uploads_before_locking_the_document() {
     .await;
     assert_eq!(file["workspace_id"], json!(w.ws));
 }
+
+/// SR-248-1: 먼저 만든 자식을 나중에 만든 루트 아래에 둔다. 둘 다 개인 노트이며 출처 조직은 없다.
+struct PersonalMoveTree {
+    w: World,
+    member: common::TestUser,
+    target: Uuid,
+    parent: Uuid,
+    root: Uuid,
+    children: [Uuid; 2],
+    grandchild: Uuid,
+}
+
+impl PersonalMoveTree {
+    async fn new() -> Self {
+        let w = World::new().await;
+        let member = w.member("member").await;
+        let parent = w.note().await;
+        let children = [w.note().await, w.note().await];
+        let root = w.note().await;
+        assert!(children[0] < children[1] && children[1] < root);
+        for child in children {
+            attempt(
+                &w.state,
+                &w.owner,
+                "SELECT fvoci.app_set_document_parent($1,$2,NULL,20,@ids)",
+                &[child, root],
+            )
+            .await
+            .unwrap();
+        }
+        let grandchild = w.note().await;
+        attempt(
+            &w.state,
+            &w.owner,
+            "SELECT fvoci.app_set_document_parent($1,$2,NULL,20,@ids)",
+            &[grandchild, children[0]],
+        )
+        .await
+        .unwrap();
+        for doc in [parent, root, children[0], children[1], grandchild] {
+            w.share(doc, &member, "write").await;
+        }
+        let other_admin = common::login(&w.state, "other organization admin").await;
+        let other_org = common::organization_for(&other_admin).await;
+        assert_ne!(other_org, w.org);
+        common::join_organization(other_org, &w.owner, "member").await;
+        let target = workspace(&w.state, &w.owner, other_org).await;
+        Self {
+            w,
+            member,
+            target,
+            parent,
+            root,
+            children,
+            grandchild,
+        }
+    }
+
+    async fn start_move(&self, http: bool) -> JoinHandle<Result<(), AppError>> {
+        let (db, owner, root, target) = (
+            self.w.state.db.clone(),
+            self.w.owner.clone(),
+            self.root,
+            self.target,
+        );
+        let app = common::app(&self.w.state);
+        let plan = send(
+            &app,
+            Method::POST,
+            &format!("/api/documents/{root}/move-plan"),
+            Some(&owner),
+            Some(json!({"target_workspace_id": target})),
+        )
+        .await;
+        assert_eq!(plan.status, StatusCode::OK, "{:?}", plan.json);
+        tokio::spawn(async move {
+            if http {
+                let reply = send(
+                    &app,
+                    Method::PUT,
+                    &format!("/api/documents/{root}/placement"),
+                    Some(&owner),
+                    Some(json!({"target_workspace_id": target, "acknowledged": plan.json})),
+                )
+                .await;
+                if reply.status == StatusCode::CONFLICT {
+                    // 제거 뒤 미리보기가 달라진 409만 재확인한다. 교착을 뜻하는 invalid_state는 실패다.
+                    assert!(reply.json["changes"].is_array(), "{:?}", reply.json);
+                    let plan = send(
+                        &app,
+                        Method::POST,
+                        &format!("/api/documents/{root}/move-plan"),
+                        Some(&owner),
+                        Some(json!({"target_workspace_id": target})),
+                    )
+                    .await;
+                    assert_eq!(plan.status, StatusCode::OK, "{:?}", plan.json);
+                    let retried = send(
+                        &app,
+                        Method::PUT,
+                        &format!("/api/documents/{root}/placement"),
+                        Some(&owner),
+                        Some(json!({"target_workspace_id": target, "acknowledged": plan.json})),
+                    )
+                    .await;
+                    assert_eq!(retried.status, StatusCode::OK, "{:?}", retried.json);
+                } else {
+                    assert_eq!(reply.status, StatusCode::OK, "{:?}", reply.json);
+                }
+                Ok(())
+            } else {
+                let mut tx = db.begin_as(owner.id).await?;
+                on(
+                    tx.conn(),
+                    "SELECT * FROM fvoci.app_move_document($1,$2,NULL,@ids)",
+                    &[root, target],
+                )
+                .await?;
+                tx.commit().await
+            }
+        })
+    }
+}
+
+async fn personal_tree_move_and_removal(http: bool, parented: bool) {
+    let tree = PersonalMoveTree::new().await;
+    if parented {
+        attempt(
+            &tree.w.state,
+            &tree.w.owner,
+            "SELECT fvoci.app_set_document_parent($1,$2,NULL,20,@ids)",
+            &[tree.root, tree.parent],
+        )
+        .await
+        .unwrap();
+        assert!(tree.parent < tree.children[0]);
+    }
+    let gate = if parented {
+        tree.parent
+    } else {
+        tree.children[0]
+    };
+    let mut held = tree.w.state.db.begin_as(tree.w.owner.id).await.unwrap();
+    on(
+        held.conn(),
+        "SELECT id FROM fvoci.documents WHERE id=$1 FOR UPDATE",
+        &[gate],
+    )
+    .await
+    .unwrap();
+    let holder = pid(held.conn()).await;
+    let mut removal = tree.w.state.db.begin_as(tree.w.owner.id).await.unwrap();
+    let remover = pid(removal.conn()).await;
+    let (org, member) = (tree.w.org, tree.member.id.0);
+    let removing = tokio::spawn(async move {
+        on(
+            removal.conn(),
+            "SELECT fvoci.app_remove_organization_member($1,$2,@ids)",
+            &[org, member],
+        )
+        .await?;
+        removal.commit().await
+    });
+    // 제거가 작은 자식에서 기다리며 조직·멤버 행을 쥔 뒤 이동을 시작한다.
+    blocked(holder, remover).await;
+    let moving = tree.start_move(http).await;
+    move_finished_or_waiting(remover, &moving).await;
+    assert!(
+        !moving.is_finished(),
+        "move did not wait for the shared child"
+    );
+    held.commit().await.unwrap();
+    let removed = tokio::time::timeout(std::time::Duration::from_secs(10), removing)
+        .await
+        .unwrap()
+        .unwrap();
+    let moved = tokio::time::timeout(std::time::Duration::from_secs(10), moving)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        removed.is_ok(),
+        "organization removal deadlocked: {removed:?}"
+    );
+    assert!(moved.is_ok(), "document move deadlocked: {moved:?}");
+    let root = one(
+        &tree.w.state,
+        &tree.w.owner,
+        "SELECT workspace_id, parent_id FROM fvoci.documents WHERE id=$1",
+        &[tree.root],
+    )
+    .await;
+    assert_eq!(root["workspace_id"], json!(tree.target));
+    assert!(root["parent_id"].is_null());
+    for child in tree.children {
+        let current = one(
+            &tree.w.state,
+            &tree.w.owner,
+            "SELECT workspace_id, parent_id FROM fvoci.documents WHERE id=$1",
+            &[child],
+        )
+        .await;
+        assert!(current["workspace_id"].is_null(), "{current}");
+        assert_eq!(
+            current["parent_id"],
+            if parented {
+                json!(tree.parent)
+            } else {
+                serde_json::Value::Null
+            }
+        );
+    }
+    let grandchild = one(
+        &tree.w.state,
+        &tree.w.owner,
+        "SELECT parent_id FROM fvoci.documents WHERE id=$1",
+        &[tree.grandchild],
+    )
+    .await;
+    assert_eq!(grandchild["parent_id"], json!(tree.children[0]));
+    assert!(
+        rows(
+            &tree.w.state,
+            &tree.w.owner,
+            "SELECT id FROM fvoci.document_shares WHERE organization_id=$1 AND grantee_user_id=$2",
+            &[org, member]
+        )
+        .await
+        .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn sr_248_sql_move_and_organization_removal_lock_children_before_root() {
+    personal_tree_move_and_removal(false, false).await;
+}
+
+#[tokio::test]
+async fn sr_248_http_move_and_organization_removal_lock_children_before_root() {
+    personal_tree_move_and_removal(true, false).await;
+}
+
+#[tokio::test]
+async fn sr_248_move_and_organization_removal_lock_the_reparenting_fk_target_in_order() {
+    personal_tree_move_and_removal(false, true).await;
+}
+
+async fn hierarchy_changed_while_move_waits(reparent_root: bool) {
+    let tree = PersonalMoveTree::new().await;
+    let mut hierarchy = tree.w.state.db.begin_as(tree.w.owner.id).await.unwrap();
+    on(
+        hierarchy.conn(),
+        "SELECT pg_advisory_xact_lock(hashtextextended('fvoci-tree:::' || $1::uuid::text,0))",
+        &[tree.w.owner.id.0],
+    )
+    .await
+    .unwrap();
+    let holder = pid(hierarchy.conn()).await;
+    let mut tx = tree.w.state.db.begin_as(tree.w.owner.id).await.unwrap();
+    let waiter = pid(tx.conn()).await;
+    let (root, target) = (tree.root, tree.target);
+    let moving = tokio::spawn(async move {
+        on(
+            tx.conn(),
+            "SELECT * FROM fvoci.app_move_document($1,$2,NULL,@ids)",
+            &[root, target],
+        )
+        .await
+    });
+    blocked(holder, waiter).await;
+    if reparent_root {
+        on(
+            hierarchy.conn(),
+            "SELECT fvoci.app_set_document_parent($1,$2,NULL,20,@ids)",
+            &[root, tree.parent],
+        )
+        .await
+        .unwrap();
+    } else {
+        on(hierarchy.conn(), "SELECT fvoci.app_create_personal_note($1,'new child',1,'{\"type\":\"doc\",\"content\":[]}',$2,20,@ids)", &[Uuid::now_v7(),root]).await.unwrap();
+    }
+    hierarchy.commit().await.unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(10), moving)
+        .await
+        .unwrap()
+        .unwrap();
+    code(&result.unwrap_err(), "55000");
+    let unchanged = one(
+        &tree.w.state,
+        &tree.w.owner,
+        "SELECT workspace_id, owner_user_id FROM fvoci.documents WHERE id=$1",
+        &[root],
+    )
+    .await;
+    assert!(unchanged["workspace_id"].is_null());
+    assert_eq!(unchanged["owner_user_id"], json!(tree.w.owner.id.0));
+    for child in tree.children {
+        let current = one(
+            &tree.w.state,
+            &tree.w.owner,
+            "SELECT parent_id FROM fvoci.documents WHERE id=$1",
+            &[child],
+        )
+        .await;
+        assert_eq!(current["parent_id"], json!(root));
+    }
+}
+
+#[tokio::test]
+async fn sr_248_move_rechecks_added_children_after_locking() {
+    hierarchy_changed_while_move_waits(false).await;
+}
+
+#[tokio::test]
+async fn sr_248_move_rechecks_root_parent_after_locking() {
+    hierarchy_changed_while_move_waits(true).await;
+}
