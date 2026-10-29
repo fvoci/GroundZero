@@ -2006,12 +2006,18 @@ export const api = {
       parseRevision,
     ),
   /** 저장된 리비전 하나를 내보낸다(D-75). 서버가 내보내기 권한을 확인하고 기록을 남긴 뒤 그 리비전을 준다. */
-  exportRevision: (id: string, revision: number, format: 'markdown' | 'zip' | 'pdf') =>
+  exportRevision: (
+    id: string,
+    revision: number,
+    format: 'markdown' | 'zip' | 'pdf',
+    signal?: AbortSignal,
+  ) =>
     expectOk(
       'POST',
       `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/export`,
       parseRevision,
       { format },
+      signal,
     ),
   /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
   /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
@@ -2043,8 +2049,14 @@ export const api = {
       parseList(v, parseCandidate),
     );
   },
-  resolveReferences: (refs: { kind: ReferenceKind; id: string }[]) =>
-    expectOk('POST', '/api/references/resolve', (v) => parseList(v, parseResolved), { refs }),
+  resolveReferences: (refs: { kind: ReferenceKind; id: string }[], signal?: AbortSignal) =>
+    expectOk(
+      'POST',
+      '/api/references/resolve',
+      (v) => parseList(v, parseResolved),
+      { refs },
+      signal,
+    ),
   documentBacklinks: (id: string) =>
     expectOk('GET', `/api/documents/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
