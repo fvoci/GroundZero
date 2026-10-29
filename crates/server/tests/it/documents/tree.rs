@@ -206,7 +206,9 @@ async fn parents_must_be_in_the_same_place_and_hidden_parents_are_not_revealed()
             private_parent["id"].as_str().unwrap()
         ),
         Some(&admin),
-        Some(json!({ "visibility": "private", "allow_copy": false })),
+        Some(
+            json!({ "visibility": "private", "previous_visibility": private_parent["visibility"] }),
+        ),
     )
     .await;
     let visible_child = child(&app, &writer, &ws, &private_parent, "공개 자식").await;

@@ -6,6 +6,7 @@ import type { DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 // ⑯(D-113 개정 2026-10-26): 보관된 항목에서 워크스페이스 관리자·소유자는 공유·공개 링크·설정을 보관 해제 없이 바꿀 수
 // 있다. 서버는 보관 항목 문서의 등급을 read로 낮추지만 `app_document_can_manage`가 워크스페이스 관리자에게 참을 주고,
@@ -46,6 +47,7 @@ const archivedForAdmin: DocumentView = {
 };
 
 beforeEach(async () => {
+  me.userId = 'user-a';
   await setLocale('ko', { reload: false });
   vi.spyOn(api, 'shares').mockResolvedValue([]);
   vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
@@ -53,12 +55,15 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  me.userId = '';
   window.localStorage.clear();
 });
 
 describe('sharing settings of a document under an archived item', () => {
   it('lets a workspace admin widen sharing, settings and public links without unarchiving', async () => {
-    const settings = vi.spyOn(documentsApi, 'setSettings').mockResolvedValue(archivedForAdmin);
+    const settings = vi
+      .spyOn(documentsApi, 'setSettings')
+      .mockResolvedValue({ kind: 'saved', document: archivedForAdmin });
     render(DocumentActions, {
       props: { doc: archivedForAdmin, workspaces, onchanged: () => undefined },
     });
@@ -75,7 +80,10 @@ describe('sharing settings of a document under an archived item', () => {
 
     // 비공개를 풀어 공간에 공개한다(노출을 넓히는 변경).
     await fireEvent.click(privateBox);
-    expect(settings).toHaveBeenCalledWith('doc-1', { visibility: 'workspace' });
+    expect(settings).toHaveBeenCalledWith('doc-1', {
+      visibility: 'workspace',
+      previous_visibility: 'private',
+    });
   });
 });
 import { documentsApi } from '$lib/features/documents/api';

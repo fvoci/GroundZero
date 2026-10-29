@@ -4,14 +4,18 @@ use super::{
     Document, DocumentSettings, DocumentTemplate, SetDocumentTemplate, SetParent, TemplateQuery,
     load_with_access, to_document,
 };
+use crate::model::DocumentSettingsConflict;
 use crate::state::{DocumentLimits as Limits, DocumentsState};
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::DocumentId;
 use fvoci_db::{UserTx, new_ids};
+use fvoci_http::conflict::StaleWrite;
 use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
+use serde_json::json;
 
 /// DB 함수에 넘길 트리 깊이 한도.
 pub(crate) fn max_depth(limits: &Limits) -> i32 {
@@ -64,25 +68,39 @@ pub async fn set_parent(
            ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = DocumentSettings,
     responses((status = 200, body = Document), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
-              (status = 409, body = ErrorBody)), tag = "documents")]
+              (status = 409, body = DocumentSettingsConflict)), tag = "documents")]
 pub async fn set_settings(
     State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<DocumentSettings>,
-) -> Result<Json<Document>, AppError> {
+) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    sqlx::query("SELECT app_set_document_settings($1, $2, $3, $4)")
-        .bind(id)
-        .bind(&input.visibility)
-        .bind(input.allow_copy)
-        .bind(new_ids(2))
-        .execute(tx.conn())
-        .await
-        .map_err(AppError::from_db_function)?;
+    let saved: bool =
+        sqlx::query_scalar("SELECT app_set_document_settings($1, $2, $3, $4, $5, $6)")
+            .bind(id)
+            .bind(&input.visibility)
+            .bind(input.allow_copy)
+            .bind(&input.previous_visibility)
+            .bind(input.previous_allow_copy)
+            .bind(new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
     let (row, access) = load_with_access(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(to_document(row, access)))
+    let document = to_document(row, access);
+    if saved {
+        return Ok(Json(document).into_response());
+    }
+    let mut sent = json!({});
+    if let Some(visibility) = input.visibility {
+        sent["visibility"] = json!(visibility);
+    }
+    if let Some(allow_copy) = input.allow_copy {
+        sent["allow_copy"] = json!(allow_copy);
+    }
+    Ok(StaleWrite::new("conflict", "document settings changed", document, &sent).into_response())
 }
 
 /// 쓸 수 있는 문서 템플릿(읽을 수 있는 것만, 제목순).

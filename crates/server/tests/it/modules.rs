@@ -652,7 +652,8 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
         Method::PATCH,
         &settings,
         Some(&admin),
-        Some(json!({ "visibility": "workspace", "allow_copy": true })),
+        Some(json!({ "visibility": "workspace", "allow_copy": true,
+            "previous_visibility": archived["visibility"], "previous_allow_copy": archived["allow_copy"] })),
     )
     .await;
     assert_eq!(widen.status, StatusCode::OK, "{:?}", widen.json);
@@ -661,7 +662,8 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
         Method::PATCH,
         &settings,
         Some(&admin),
-        Some(json!({ "visibility": "private", "allow_copy": false })),
+        Some(json!({ "visibility": "private", "allow_copy": false,
+            "previous_visibility": widen.json["visibility"], "previous_allow_copy": widen.json["allow_copy"] })),
     )
     .await;
     assert_eq!(narrow.status, StatusCode::OK, "{:?}", narrow.json);

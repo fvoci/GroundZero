@@ -21,7 +21,7 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { me } from '$lib/me.svelte';
   import { workspaceLabel } from '$lib/features/workspaces/badge';
   import { roleLabel } from '$lib/features/members/roles';
@@ -185,6 +185,7 @@
     },
     reset: resetShare,
     dirty: () => shareEmail !== '',
+    screenOnly: () => pendingSettings !== undefined,
     busy: () => sharing,
   });
   onMount(shareDraft.attach);
@@ -276,9 +277,11 @@
   // 서버의 지금 값을 읽는다. 바꿀 때 되돌리지 않는 것은 서버가 정한다(바꾼 칸만 보냄).
   async function refreshSettings(): Promise<void> {
     const mine = ++settingsSeq;
+    const userId = me.userId;
     try {
       const fresh = await api.document(doc.id);
-      if (mine !== settingsSeq || fresh.id !== doc.id) return;
+      if (!alive || userId !== me.userId || mine !== settingsSeq || fresh.id !== doc.id) return;
+      settingsCurrent = fresh;
       settingsChanged({
         ...doc,
         visibility: fresh.visibility,
@@ -293,26 +296,79 @@
 
   // 설정 요청이 진행 중인지. 응답 전에 다른 체크를 누르면 화면이 첫 변경 전의 값을 보이므로 그동안 막는다.
   let settingsBusy = $state(false);
-
-  /**
-   * 바꾼 설정 하나만 보낸다. 건드리지 않은 설정은 서버가 잠근 뒤의 지금 값 그대로 둔다(0085, 감사 W6: 화면의 옛 값을
-   * 함께 보내 다른 소유자의 비공개·복제 금지를 되돌렸다).
-   */
-  async function setSettings(change: {
+  interface SettingsChange {
     visibility?: 'workspace' | 'private';
     allow_copy?: boolean;
-  }): Promise<void> {
-    if (settingsBusy) return;
+  }
+  let pendingSettings = $state<SettingsChange>();
+  let settingsConflict = $state<DocumentView>();
+  // Keep the values actually displayed by this dialog, even before its parent rerenders.
+  let settingsCurrent = $state<DocumentView>();
+  const shownSettings = $derived(settingsCurrent ?? doc);
+  let settingsSession = {};
+
+  function resetSettings(): void {
+    pendingSettings = undefined;
+    settingsConflict = undefined;
+    settingsCurrent = undefined;
+    settingsSession = {};
+  }
+
+  function discardShareAndSettings(): void {
+    if (!shareDraft.leave.open || !shareDraft.active || sharing) return;
+    resetSettings();
+    shareDraft.discardAndLeave();
+  }
+
+  function editSettings(change: SettingsChange): void {
+    if (pendingSettings !== undefined) pendingSettings = { ...pendingSettings, ...change };
+    else void setSettings(change);
+  }
+
+  /**
+   * 바꾸는 설정과 화면이 본 이전 값을 보낸다. 충돌 뒤 입력은 화면에 남기고 명시적인 재시도에서만 다시 보낸다.
+   */
+  async function setSettings(change: SettingsChange): Promise<void> {
+    if (settingsBusy || accountSwitching()) return;
+    const session = settingsSession;
+    const userId = me.userId;
+    const current = (): boolean =>
+      alive && session === settingsSession && userId === me.userId && !accountSwitching();
+    error = undefined;
     settingsBusy = true;
     const mine = ++settingsSeq;
+    const base = settingsConflict ?? shownSettings;
+    const input = {
+      ...change,
+      ...(change.visibility === undefined ? {} : { previous_visibility: base.visibility }),
+      ...(change.allow_copy === undefined ? {} : { previous_allow_copy: base.allow_copy }),
+    };
     try {
-      const saved = await documentsApi.setSettings(doc.id, change);
+      const result = await documentsApi.setSettings(doc.id, input);
+      if (!current()) return;
+      if (result.kind === 'conflict') {
+        if (mine !== settingsSeq) {
+          void refreshSettings();
+          return;
+        }
+        pendingSettings = change;
+        settingsConflict = result.current;
+        settingsCurrent = result.current;
+        settingsChanged(result.current);
+        return;
+      }
+      pendingSettings = undefined;
+      settingsConflict = undefined;
       notifyDone(m.common_saved());
       // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
       // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
-      if (mine === settingsSeq) settingsChanged(saved);
-      else if (alive) void refreshSettings();
+      if (mine === settingsSeq) {
+        settingsCurrent = result.document;
+        settingsChanged(result.document);
+      } else if (alive) void refreshSettings();
     } catch (e: unknown) {
+      if (!current() || mine !== settingsSeq) return;
+      pendingSettings = change;
       fail(e);
     } finally {
       settingsBusy = false;
@@ -457,6 +513,7 @@
     formIdentity = identity;
     untrack(() => {
       resetShare();
+      resetSettings();
       resetCopy();
       sharing = false;
       copying = false;
@@ -801,9 +858,10 @@
             <Checkbox
               id="doc-private"
               disabled={settingsBusy}
-              checked={doc.visibility === 'private'}
-              onCheckedChange={(v) =>
-                void setSettings({ visibility: v === true ? 'private' : 'workspace' })}
+              checked={(pendingSettings?.visibility ?? shownSettings.visibility) === 'private'}
+              onCheckedChange={(v) => {
+                editSettings({ visibility: v === true ? 'private' : 'workspace' });
+              }}
             />
             <Label for="doc-private">{m.documents_private_label()}</Label>
           </div>
@@ -812,8 +870,10 @@
           <Checkbox
             id="doc-allow-copy"
             disabled={settingsBusy}
-            checked={doc.allow_copy}
-            onCheckedChange={(v) => void setSettings({ allow_copy: v === true })}
+            checked={pendingSettings?.allow_copy ?? shownSettings.allow_copy}
+            onCheckedChange={(v) => {
+              editSettings({ allow_copy: v === true });
+            }}
           />
           <Label for="doc-allow-copy">{m.documents_allow_copy()}</Label>
         </div>
@@ -831,6 +891,38 @@
         <p class="text-sm text-muted-foreground">
           {m.documents_copy_limit()}
         </p>
+        {#if settingsConflict !== undefined}
+          <section aria-label={m.documents_compare_current()} class="rounded border p-3">
+            <p role="status">{m.documents_conflict_heading()}</p>
+            <p class="text-sm font-semibold">{m.documents_compare_current()}</p>
+            {#if doc.placement !== 'personal'}
+              <div class="flex items-center gap-2">
+                <Checkbox
+                  id="doc-current-private"
+                  disabled
+                  checked={settingsConflict.visibility === 'private'}
+                />
+                <Label for="doc-current-private">{m.documents_private_label()}</Label>
+              </div>
+            {/if}
+            <div class="flex items-center gap-2">
+              <Checkbox
+                id="doc-current-allow-copy"
+                disabled
+                checked={settingsConflict.allow_copy}
+              />
+              <Label for="doc-current-allow-copy">{m.documents_allow_copy()}</Label>
+            </div>
+          </section>
+        {/if}
+        {#if pendingSettings !== undefined}
+          <Button
+            size="sm"
+            disabled={settingsBusy}
+            onclick={() => pendingSettings !== undefined && void setSettings(pendingSettings)}
+            >{m.common_retry()}</Button
+          >
+        {/if}
       </div>
       <section class="flex flex-col gap-2 border-t pt-3" aria-labelledby="public-link-heading">
         <h3 id="public-link-heading" class="text-sm font-semibold">{m.documents_public_link()}</h3>
@@ -1085,7 +1177,7 @@
 <DiscardChangesConfirm
   open={shareDraft.leave.open}
   onkeep={shareDraft.leave.keep}
-  ondiscard={shareDraft.discardAndLeave}
+  ondiscard={discardShareAndSettings}
 />
 <DiscardChangesConfirm
   open={copyDraft.leave.open}

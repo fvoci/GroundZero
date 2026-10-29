@@ -27,7 +27,7 @@ async fn setup() -> (World, Router, TestUser, TestUser, Uuid) {
         Method::PATCH,
         &format!("/api/documents/{doc}/settings"),
         Some(&w.owner),
-        Some(json!({"visibility":"workspace", "allow_copy":false})),
+        Some(json!({"visibility":"workspace", "allow_copy":false, "previous_visibility":"workspace", "previous_allow_copy":false})),
     )
     .await;
     assert_eq!(settings.status, StatusCode::OK, "{}", settings.json);
@@ -135,7 +135,7 @@ async fn a_document_creator_can_export_with_copy_disabled_but_cannot_change_the_
             Method::PATCH,
             &format!("/api/documents/{doc}/settings"),
             Some(user),
-            Some(json!({"allow_copy":true})),
+            Some(json!({"allow_copy":true,"previous_allow_copy":false})),
         )
         .await;
         assert_eq!(refused.status, StatusCode::FORBIDDEN, "{}", refused.json);

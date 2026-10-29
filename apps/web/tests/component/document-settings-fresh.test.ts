@@ -6,6 +6,7 @@ import type { DocumentView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 
 const workspaces: Workspace[] = [
   {
@@ -43,6 +44,7 @@ function documentWith(visibility: 'workspace' | 'private', allowCopy: boolean): 
 }
 
 beforeEach(async () => {
+  me.userId = 'user-a';
   await setLocale('ko', { reload: false });
   vi.spyOn(api, 'shares').mockResolvedValue([]);
   vi.spyOn(api, 'publicLinks').mockResolvedValue([]);
@@ -50,6 +52,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  me.userId = '';
 });
 
 // 감사 W6: 이 화면이 문서를 연 뒤 다른 소유자가 "비공개"로 바꿨다. 여기서 "복제 허용"만 바꿀 때 화면이 들고 있던 옛
@@ -58,11 +61,15 @@ describe('document settings from an out-of-date view', () => {
   it('sends only the setting the user changed', async () => {
     // 화면의 문서는 아직 "워크스페이스 공개"다. 서버에서는 그사이 비공개가 됐다.
     vi.spyOn(api, 'document').mockResolvedValue(documentWith('private', true));
-    const set = vi
-      .spyOn(documentsApi, 'setSettings')
-      .mockImplementation((_id, change) =>
-        Promise.resolve(documentWith(change.visibility ?? 'private', change.allow_copy ?? true)),
-      );
+    const set = vi.spyOn(documentsApi, 'setSettings').mockImplementation((_id, change) =>
+      Promise.resolve({
+        kind: 'saved',
+        document: documentWith(
+          change.visibility === 'workspace' ? 'workspace' : 'private',
+          change.allow_copy ?? true,
+        ),
+      }),
+    );
     render(DocumentActions, {
       props: { doc: documentWith('workspace', true), workspaces, onchanged: () => undefined },
     });
@@ -75,7 +82,7 @@ describe('document settings from an out-of-date view', () => {
       expect(set).toHaveBeenCalledTimes(1);
     });
     // 바꾼 칸(복제 허용)만 보낸다. 공개 범위는 서버가 지금 값(비공개) 그대로 둔다.
-    expect(set).toHaveBeenCalledWith('d1', { allow_copy: false });
+    expect(set).toHaveBeenCalledWith('d1', { allow_copy: false, previous_allow_copy: true });
   });
 
   it('shows the current server settings when the dialog opens', async () => {
@@ -146,7 +153,13 @@ describe('document settings from an out-of-date view', () => {
       (_id, change) =>
         new Promise((resolve) => {
           finish = () => {
-            resolve(documentWith(change.visibility ?? 'workspace', change.allow_copy ?? true));
+            resolve({
+              kind: 'saved',
+              document: documentWith(
+                change.visibility === 'private' ? 'private' : 'workspace',
+                change.allow_copy ?? true,
+              ),
+            });
           };
         }),
     );
@@ -160,7 +173,10 @@ describe('document settings from an out-of-date view', () => {
     await waitFor(() => {
       expect(set).toHaveBeenCalledTimes(1);
     });
-    expect(set).toHaveBeenLastCalledWith('d1', { visibility: 'private' });
+    expect(set).toHaveBeenLastCalledWith('d1', {
+      visibility: 'private',
+      previous_visibility: 'workspace',
+    });
     await fireEvent.click(screen.getByRole('checkbox', { name: '볼 수 있는 사람의 복제 허용' }));
     await new Promise((r) => setTimeout(r, 0));
     // 첫 요청이 끝나기 전에는 두 번째 요청을 보내지 않는다(응답 전 화면은 첫 변경 전의 값을 보인다).
@@ -175,12 +191,12 @@ describe('document settings from an out-of-date view', () => {
     let finish: () => void = () => undefined;
     vi.spyOn(documentsApi, 'setSettings').mockImplementation((_id, change) => {
       const done: DocumentView = {
-        ...documentWith(change.visibility ?? 'workspace', true),
+        ...documentWith(change.visibility === 'private' ? 'private' : 'workspace', true),
         is_template: serverTemplate,
       };
       return new Promise((resolve) => {
         finish = () => {
-          resolve(done);
+          resolve({ kind: 'saved', document: done });
         };
       });
     });
@@ -230,7 +246,7 @@ describe('a settings save that finishes after the dialog was reopened', () => {
         new Promise((resolve) => {
           // 저장 응답은 저장한 순간의 값(복제 허용)이다.
           finish = () => {
-            resolve(documentWith('private', true));
+            resolve({ kind: 'saved', document: documentWith('private', true) });
           };
         }),
     );
