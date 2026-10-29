@@ -257,8 +257,10 @@ describe('a settings save that finishes after the dialog was reopened', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
     await fireEvent.click(await screen.findByRole('checkbox', { name: /^비공개/ }));
-    // 저장 중에 창을 닫았다 다시 연다.
+    // 저장 중 닫기는 먼저 확인한다. 명시적으로 입력을 버리고 다시 연다(SR-241-1).
     await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await screen.findByRole('alertdialog');
+    await fireEvent.click(screen.getByRole('button', { name: '변경 버리고 닫기' }));
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });

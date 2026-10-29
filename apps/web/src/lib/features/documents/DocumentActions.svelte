@@ -321,6 +321,7 @@
   }
 
   function editSettings(change: SettingsChange): void {
+    if (settingsBusy) return;
     if (pendingSettings !== undefined) pendingSettings = { ...pendingSettings, ...change };
     else void setSettings(change);
   }
@@ -332,8 +333,15 @@
     if (settingsBusy || accountSwitching()) return;
     const session = settingsSession;
     const userId = me.userId;
-    const current = (): boolean =>
-      alive && session === settingsSession && userId === me.userId && !accountSwitching();
+    const documentId = doc.id;
+    const organizationId = org.currentId;
+    const sameTarget = (): boolean =>
+      alive &&
+      userId === me.userId &&
+      documentId === doc.id &&
+      organizationId === org.currentId &&
+      !accountSwitching();
+    const current = (): boolean => sameTarget() && session === settingsSession;
     error = undefined;
     settingsBusy = true;
     const mine = ++settingsSeq;
@@ -343,15 +351,20 @@
       ...(change.visibility === undefined ? {} : { previous_visibility: base.visibility }),
       ...(change.allow_copy === undefined ? {} : { previous_allow_copy: base.allow_copy }),
     };
+    // Keep the attempted input before sending, including while leaving is still cancellable (D-27, SR-241-1).
+    pendingSettings = change;
     try {
-      const result = await documentsApi.setSettings(doc.id, input);
-      if (!current()) return;
+      const result = await documentsApi.setSettings(documentId, input);
+      if (!current()) {
+        // Explicitly discarded input stays discarded; refresh only the current target's server state.
+        if (sameTarget()) void refreshSettings();
+        return;
+      }
       if (result.kind === 'conflict') {
         if (mine !== settingsSeq) {
           void refreshSettings();
           return;
         }
-        pendingSettings = change;
         settingsConflict = result.current;
         settingsCurrent = result.current;
         settingsChanged(result.current);
@@ -368,7 +381,6 @@
       } else if (alive) void refreshSettings();
     } catch (e: unknown) {
       if (!current() || mine !== settingsSeq) return;
-      pendingSettings = change;
       fail(e);
     } finally {
       settingsBusy = false;

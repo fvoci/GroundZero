@@ -6,6 +6,7 @@ import { documentsApi } from '$lib/features/documents/api';
 import DocumentActions from '$lib/features/documents/DocumentActions.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
 
 const initial: DocumentView = {
   id: 'd1',
@@ -40,6 +41,80 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   me.userId = '';
+});
+
+function delaySettings() {
+  type Reply = Awaited<ReturnType<typeof documentsApi.setSettings>>;
+  let finish: (reply: Reply) => void = () => undefined;
+  const response = new Promise<Reply>((resolve) => {
+    finish = resolve;
+  });
+  const save = vi.spyOn(documentsApi, 'setSettings').mockReturnValue(response);
+  return { save, response, finish };
+}
+
+it('guards closing while settings are pending and keeps the selection after a late 409', async () => {
+  const pending = delaySettings();
+  render(DocumentActions, { props: { doc: initial, workspaces: [], onchanged: () => undefined } });
+  await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+  const input = await screen.findByRole('checkbox', { name: /^비공개/ });
+  await fireEvent.click(input);
+  await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  await screen.findByRole('alertdialog');
+  await fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+  expect(input).toBeChecked();
+  pending.finish({
+    kind: 'conflict',
+    current: { ...initial, visibility: 'private' },
+    changed: [],
+    requestId: 'late',
+  });
+  await pending.response;
+  await screen.findByRole('region', { name: '지금과 비교' });
+  expect(input).toBeChecked();
+  expect(pending.save).toHaveBeenCalledTimes(1);
+});
+
+it('guards navigation before a settings reply and preserves the input after cancelling navigation', async () => {
+  const pending = delaySettings();
+  render(DocumentActions, { props: { doc: initial, workspaces: [], onchanged: () => undefined } });
+  await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+  const input = await screen.findByRole('checkbox', { name: '볼 수 있는 사람의 복제 허용' });
+  await fireEvent.click(input);
+  const navigate = vi.fn();
+  if (router.guard === undefined) throw new Error('missing navigation guard');
+  expect(router.guard(navigate, '/another-document')).toBe(false);
+  await screen.findByRole('alertdialog');
+  await fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+  expect(navigate).not.toHaveBeenCalled();
+  expect(input).not.toBeChecked();
+  pending.finish({
+    kind: 'conflict',
+    current: { ...initial, allow_copy: false },
+    changed: [],
+    requestId: 'late-navigation',
+  });
+  await pending.response;
+  await screen.findByRole('region', { name: '지금과 비교' });
+  expect(input).not.toBeChecked();
+  expect(pending.save).toHaveBeenCalledTimes(1);
+});
+
+it('warns before unloading pending settings and clears the warning only after success', async () => {
+  const pending = delaySettings();
+  render(DocumentActions, { props: { doc: initial, workspaces: [], onchanged: () => undefined } });
+  await fireEvent.click(screen.getByRole('button', { name: '공유·설정' }));
+  await fireEvent.click(await screen.findByRole('checkbox', { name: /^비공개/ }));
+  const before = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(before);
+  expect(before.defaultPrevented).toBe(true);
+  pending.finish({ kind: 'saved', document: { ...initial, visibility: 'private' } });
+  await pending.response;
+  await waitFor(() => {
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+  });
 });
 
 it('preserves a settings selection after 409, shows current settings and retries only on request', async () => {

@@ -35,10 +35,43 @@ test('keeps a rejected document setting and compares it before an explicit retry
     ).status;
   }, doc);
   expect(status).toBe(200);
+  let hold: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    hold = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/documents/${doc}/settings`, async (route) => {
+    // Deliver the real server reply after exercising the pending-input leave guards.
+    const response = await route.fetch();
+    if (response.status() === 409) {
+      hold();
+      await released;
+    }
+    await route.fulfill({ response });
+  });
   const rejected = page.waitForResponse(
     (res) => res.url().endsWith(`/documents/${doc}/settings`) && res.status() === 409,
   );
   await input.click();
+  await held;
+  try {
+    await expect(input).toBeChecked();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.getByRole('button', { name: '계속 편집', exact: true }).click();
+    await expect(input).toBeChecked();
+    const warned = await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(warned).toBe(true);
+  } finally {
+    release();
+  }
   await rejected;
   const comparison = page.getByRole('region', { name: '지금과 비교' });
   await expect(comparison).toBeVisible();
