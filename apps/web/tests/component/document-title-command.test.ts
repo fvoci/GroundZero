@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -8,6 +9,7 @@ import { api } from '$lib/api/client';
 import { loadDraft } from '$lib/features/documents/drafts';
 import type { LiveSession } from '$lib/features/documents/live';
 import LiveDocumentEditor from '$lib/features/documents/LiveDocumentEditor.svelte';
+import { accountSafety, markAccountSwitch } from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -76,6 +78,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  accountSafety.switching = false;
   opened.length = 0;
   window.localStorage.clear();
   me.userId = '';
@@ -87,6 +90,131 @@ function sentBody(init?: RequestInit): Record<string, unknown> {
 }
 
 describe('title command and screen-only protection (D-27, #178)', () => {
+  it('saves the title edited and blurred during an earlier successful PATCH', async () => {
+    let finish: ((response: Response) => void) | undefined;
+    const fetch = vi
+      .fn<(_url: string, init?: RequestInit) => Promise<Response>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...doc, title: '새 제목', revision: 5 }), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const saved = vi.fn();
+    render(LiveDocumentEditor, { props: { initial: doc, onsaved: saved } });
+    const title = screen.getByLabelText(m.documents_title_label());
+    await fireEvent.input(title, { target: { value: '첫 제목' } });
+    await fireEvent.blur(title);
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+    await fireEvent.input(title, { target: { value: ' 새 제목 ' } });
+    await fireEvent.blur(title);
+    expect(fetch).toHaveBeenCalledOnce();
+
+    finish?.(
+      new Response(JSON.stringify({ ...doc, title: '첫 제목', revision: 4 }), { status: 200 }),
+    );
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+    const first = sentBody(fetch.mock.calls[0]?.[1]);
+    const second = sentBody(fetch.mock.calls[1]?.[1]);
+    expect(fetch.mock.calls.map((call) => call[1]?.method)).toEqual(['PATCH', 'PATCH']);
+    expect(second).toEqual({ request_id: second.request_id, base_revision: 4, title: '새 제목' });
+    expect(second.request_id).not.toBe(first.request_id);
+    await waitFor(() => {
+      expect(saved).toHaveBeenCalledTimes(2);
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  for (const outcome of [
+    'conflict',
+    'failure',
+    'account switch',
+    'handoff',
+    'empty title',
+  ] as const) {
+    it(`does not follow a pending title after ${outcome}`, async () => {
+      let finish: ((response: Response) => void) | undefined;
+      const fetch = vi
+        .fn<(_url: string, init?: RequestInit) => Promise<Response>>()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            }),
+        )
+        .mockResolvedValue(
+          new Response(JSON.stringify({ ...doc, title: '새 제목', revision: 5 }), { status: 200 }),
+        );
+      vi.stubGlobal('fetch', fetch);
+      const saved = vi.fn();
+      const reload = vi.fn();
+      render(LiveDocumentEditor, { props: { initial: doc, onsaved: saved, onreload: reload } });
+      const title = screen.getByLabelText(m.documents_title_label());
+      await fireEvent.input(title, { target: { value: '첫 제목' } });
+      await fireEvent.blur(title);
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledOnce();
+      });
+      await fireEvent.input(title, {
+        target: { value: outcome === 'empty title' ? '   ' : '새 제목' },
+      });
+      await fireEvent.blur(title);
+      if (outcome === 'account switch') markAccountSwitch();
+      if (outcome === 'handoff') {
+        const live = opened.at(-1)?.session;
+        live?.provider.emit('connection-close', [
+          new CloseEvent('close', { code: 4403 }),
+          live.provider,
+        ]);
+        await fireEvent.click(
+          await screen.findByRole('button', { name: m.documents_live_discard_reconnect() }),
+        );
+        const confirm = await screen.findByRole('alertdialog');
+        await fireEvent.click(
+          within(confirm).getByRole('button', { name: m.documents_live_discard_reconnect() }),
+        );
+        expect(reload).toHaveBeenCalledOnce();
+      }
+      const current = { ...doc, title: '서버 제목', revision: 4 };
+      const status = outcome === 'conflict' ? 409 : outcome === 'failure' ? 500 : 200;
+      const response =
+        outcome === 'conflict'
+          ? {
+              error: 'conflict',
+              message: 'stale',
+              current,
+              changed: ['title'],
+              request_id: 'server-request',
+            }
+          : outcome === 'failure'
+            ? { error: 'internal', message: 'first save failed' }
+            : { ...doc, title: '첫 제목', revision: 4 };
+      finish?.(new Response(JSON.stringify(response), { status }));
+      if (outcome === 'conflict') {
+        const notice = await screen.findByRole('region', { name: m.documents_conflict_heading() });
+        expect(notice).toHaveTextContent('서버 제목');
+        expect(saved).not.toHaveBeenCalled();
+      } else if (outcome === 'failure' || outcome === 'account switch') {
+        await screen.findByRole('alert');
+        expect(saved).not.toHaveBeenCalled();
+      } else {
+        await waitFor(() => {
+          expect(saved).toHaveBeenCalledOnce();
+        });
+      }
+      await tick();
+      expect(fetch).toHaveBeenCalledOnce();
+    });
+  }
+
   it('uses the confirmed revision after a live body checkpoint without retrying a title PATCH', async () => {
     const current = {
       ...doc,

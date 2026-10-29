@@ -416,7 +416,7 @@
     return start.can_edit && !handedOff && !accountSwitching();
   }
 
-  /** 제목 명령은 한 번만 보낸다. 충돌 뒤 재저장은 사람이 최신 제목·판을 확인하고 고른다(D-27). */
+  /** 제목 명령은 하나씩 보낸다. 저장 중 고친 제목은 성공 뒤 이어 보내고, 충돌 뒤 재저장은 사람이 고른다(D-27). */
   async function saveTitle(): Promise<void> {
     if (savingTitle || !canSaveTitle()) return;
     const next = title.trim();
@@ -459,9 +459,12 @@
       onsaved?.(result.document);
     } catch (e: unknown) {
       titleMessage = errorText(e, m.documents_title_save_failed());
+      return;
     } finally {
       savingTitle = false;
     }
+    const pending = title.trim();
+    if (canSaveTitle() && pending !== '' && pending !== next) void saveTitle();
   }
 
   function statusText(s: LiveStatus): string {
