@@ -1,9 +1,10 @@
+import type { HomeTaskView, HomeView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { HomeTaskView, HomeView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
@@ -45,6 +46,7 @@ function task(id: string, title: string, bucket: HomeTaskView['bucket']): HomeTa
 }
 
 const home: HomeView = {
+  my_tasks: { counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 }, workspaces: [] },
   today: '2026-10-20',
   up_next: [task('t1', `${LONG} (다음)`, 'upcoming')],
   up_next_counts: { overdue: 0, today: 0, upcoming: 1 },
@@ -67,8 +69,8 @@ const home: HomeView = {
 describe('home full titles', () => {
   it('keeps the full title on rows that truncate it', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'home').mockResolvedValue(home);
-    vi.mocked(api.myTasks).mockResolvedValue(myTasksView(home));
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
+    home.my_tasks = myTasksView(home);
     vi.spyOn(api, 'calendar').mockResolvedValue({
       tasks: [],
       projected_tasks: [],

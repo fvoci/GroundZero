@@ -1,9 +1,11 @@
+import type { HomeTaskView, HomeView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { CalendarView, HomeTaskView, HomeView } from '$lib/api/client';
+import type { CalendarView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
@@ -56,6 +58,10 @@ describe('home up next counts', () => {
     await setLocale('ko', { reload: false });
     const overdue = Array.from({ length: 50 }, (_, n) => task(n, '2026-10-01', 'overdue'));
     const home: HomeView = {
+      my_tasks: {
+        counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 },
+        workspaces: [],
+      },
       today: '2026-10-21',
       up_next: [...overdue, task(1, '2026-10-21', 'today'), task(2, '2026-10-21', 'today')],
       up_next_counts: { overdue: 73, today: 2, upcoming: 0 },
@@ -65,8 +71,9 @@ describe('home up next counts', () => {
       pins: [],
       favorites: [],
     };
-    vi.spyOn(api, 'home').mockResolvedValue(home);
-    vi.mocked(api.myTasks).mockResolvedValue(myTasksView(home));
+    Object.assign(home, { my_tasks: myTasksView(home) });
+    vi.spyOn(homeApi, 'home').mockResolvedValue(home);
+    vi.mocked(homeApi.myTasks).mockResolvedValue(myTasksView(home));
     vi.spyOn(api, 'calendar').mockResolvedValue(calendar);
     vi.spyOn(activityApi, 'notifications').mockResolvedValue({ notifications: [], next: null });
     render(HomeDashboard, { props: { workspaces: [workspace] } });
@@ -81,5 +88,6 @@ describe('home up next counts', () => {
     );
     // 홈 미리보기 수(5)가 아니라 서버의 전체 수(73)를 표시한다.
     expect(screen.getAllByRole('link', { name: /^overdue / })).toHaveLength(5);
+    expect(homeApi.myTasks).not.toHaveBeenCalled();
   });
 });

@@ -1,9 +1,10 @@
+import type { HomeView } from '$lib/features/home/api';
+import { homeApi } from '$lib/features/home/api';
 import { activityApi } from '$lib/features/activity/api';
 import type { Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { HomeView } from '$lib/api/client';
 import { api, NetworkError } from '$lib/api/client';
 import HomeDashboard from '$lib/features/home/HomeDashboard.svelte';
 import { homeExtras } from './fixtures/home';
@@ -41,6 +42,7 @@ const workspace: Workspace = {
 };
 
 const home: HomeView = {
+  my_tasks: { counts: { overdue: 0, today: 0, upcoming: 0, undated: 0, done: 0 }, workspaces: [] },
   today: '2026-10-20',
   up_next: [],
   up_next_counts: { overdue: 0, today: 0, upcoming: 0 },
@@ -53,14 +55,14 @@ const home: HomeView = {
 
 describe('home first load', () => {
   it('says it is loading until the home arrives', async () => {
-    vi.spyOn(api, 'home').mockImplementation(() => new Promise(() => undefined));
+    vi.spyOn(homeApi, 'home').mockImplementation(() => new Promise(() => undefined));
     render(HomeDashboard, { props: { workspaces: [workspace] } });
     expect(await screen.findByText('불러오는 중…')).toBeInTheDocument();
   });
 
   it('retries after a failed first load', async () => {
     const load = vi
-      .spyOn(api, 'home')
+      .spyOn(homeApi, 'home')
       .mockRejectedValueOnce(new NetworkError('offline'))
       .mockResolvedValue(home);
     render(HomeDashboard, { props: { workspaces: [workspace] } });
@@ -76,7 +78,7 @@ describe('home first load', () => {
   // 리뷰: 한 번 받은 뒤 다시 읽기가 실패하고 "다시 시도"를 누르면, 앞 데이터가 남아 있어 진행 중이라는 표시가 없었다.
   it('says it is loading while a retry runs over earlier data', async () => {
     let finish: (value: HomeView) => void = () => undefined;
-    vi.spyOn(api, 'home')
+    vi.spyOn(homeApi, 'home')
       .mockResolvedValueOnce(home)
       .mockRejectedValueOnce(new NetworkError('offline'))
       .mockImplementationOnce(

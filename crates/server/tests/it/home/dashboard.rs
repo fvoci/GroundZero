@@ -189,13 +189,12 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
         [
             ("지난 마감".to_owned(), "overdue".to_owned()),
             ("오늘 마감".to_owned(), "today".to_owned()),
-            ("내가 만든 일".to_owned(), "upcoming".to_owned()),
             ("곧 마감".to_owned(), "upcoming".to_owned()),
         ]
     );
     assert_eq!(
         home.json["up_next_counts"],
-        json!({ "overdue": 1, "today": 1, "upcoming": 2 })
+        json!({ "overdue": 1, "today": 1, "upcoming": 1 })
     );
     assert_eq!(home.json["recent_tasks"][0]["title"], "내가 만든 일");
     // 진행 중인 항목: 볼 수 있는 것만, 진행률은 업무 완료 비율.
@@ -206,8 +205,8 @@ async fn home_collects_my_upcoming_work_and_marks_only_what_i_can_see() {
         .map(|i| {
             (
                 i["title"].as_str().unwrap().to_owned(),
-                i["tasks_done"].as_i64().unwrap(),
-                i["tasks_total"].as_i64().unwrap(),
+                i["progress"]["done"].as_i64().unwrap(),
+                i["progress"]["total"].as_i64().unwrap(),
             )
         })
         .collect();
@@ -326,7 +325,7 @@ async fn up_next_keeps_today_and_upcoming_behind_a_long_overdue_backlog() {
             &shared,
             &format!("밀린 {n}"),
             Some(day(due)),
-            vec![],
+            vec![me.id.0.to_string()],
             "할 일",
         )
         .await;
@@ -338,7 +337,7 @@ async fn up_next_keeps_today_and_upcoming_behind_a_long_overdue_backlog() {
             &shared,
             &format!("오늘 {n}"),
             Some(day(today)),
-            vec![],
+            vec![me.id.0.to_string()],
             "할 일",
         )
         .await;
@@ -349,7 +348,7 @@ async fn up_next_keeps_today_and_upcoming_behind_a_long_overdue_backlog() {
         &shared,
         "내일",
         Some(day(today + Duration::days(1))),
-        vec![],
+        vec![me.id.0.to_string()],
         "할 일",
     )
     .await;
