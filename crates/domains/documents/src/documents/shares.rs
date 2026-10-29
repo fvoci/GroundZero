@@ -40,6 +40,7 @@ fn share_error(error: sqlx::Error) -> AppError {
     AppError::from_db_function(error)
 }
 
+/// 공유 대상의 계산 역할과 공유 상한을 조회한다. 조회만으로 공유를 만들지 않는다.
 #[utoipa::path(get, path = "/api/documents/{document_id}/share-recipient",
     operation_id = "document_share_recipient",
     params(("document_id" = DocumentId, Path), ShareRecipientQuery),
@@ -65,6 +66,7 @@ pub async fn recipient(
     Ok(Json(recipient))
 }
 
+/// 공유 목록(소유 권한자).
 #[utoipa::path(get, path = "/api/documents/{document_id}/shares",
     params(("document_id" = String, Path, format = Uuid)),
     responses((status = 200, body = [Share]), (status = 403, body = ErrorBody),
@@ -86,6 +88,7 @@ pub async fn list_shares(
     Ok(Json(shares))
 }
 
+/// 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다.
 #[utoipa::path(post, path = "/api/documents/{document_id}/shares",
     params(("document_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = Option<UserId>, Header, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateShare,
@@ -117,6 +120,7 @@ pub async fn create_share(
     Ok((StatusCode::CREATED, Json(share)))
 }
 
+/// 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다.
 #[utoipa::path(delete, path = "/api/document-shares/{share_id}",
     params(("share_id" = String, Path, format = Uuid),
            ("x-fvoci-expected-user" = Option<UserId>, Header, description = EXPECTED_USER_IF_SENT_DOC)),

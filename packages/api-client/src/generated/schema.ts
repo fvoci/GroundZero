@@ -120,6 +120,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** 공유 철회(소유 권한자). 다음 요청부터 접근이 막힌다. */
         delete: operations["delete_share"];
         options?: never;
         head?: never;
@@ -439,6 +440,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** 공유 대상의 계산 역할과 공유 상한을 조회한다. 조회만으로 공유를 만들지 않는다. */
         get: operations["document_share_recipient"];
         put?: never;
         post?: never;
@@ -455,8 +457,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** 공유 목록(소유 권한자). */
         get: operations["list_shares"];
         put?: never;
+        /** 공유 추가(소유 권한자). 받는 사람은 그 이메일을 제공자가 검증한 계정으로 로그인해야 한다. */
         post: operations["create_share"];
         delete?: never;
         options?: never;
