@@ -425,7 +425,9 @@ async fn live_editing_end_to_end() {
     let _ = d.next(Duration::from_millis(500)).await;
     assert!(!d.text().contains("A가 씀"), "{}", d.text());
 
-    // 워크스페이스에서 빠지면(권한 끝) 연결이 닫힌다.
+    // 제거 전 확인받은 편집을 체크포인트한 뒤 옛 방을 닫는다(#235).
+    d.paragraph("제거 전에 확인받은 문단").await;
+    assert!(d.until(acked).await);
     let removed = send(
         &app,
         Method::DELETE,
@@ -434,8 +436,20 @@ async fn live_editing_end_to_end() {
         None,
     )
     .await;
-    assert!(removed.status.is_success(), "{:?}", removed.json);
-    assert_eq!(d.closed().await, Some(4403));
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+    assert_eq!(d.closed().await, Some(4409));
+    assert_eq!(
+        connect(addr, Some(&writer2), &id, true).await.err(),
+        Some(StatusCode::NOT_FOUND)
+    );
+    let checkpointed = get_doc(&app, &admin, &id).await;
+    assert!(checkpointed["revision"].as_i64() > restored.json["revision"].as_i64());
+    assert!(
+        checkpointed["body"]
+            .to_string()
+            .contains("제거 전에 확인받은 문단"),
+        "{checkpointed}"
+    );
 
     // 로그아웃한 세션의 연결도 닫힌다.
     let mut e = connect(addr, Some(&writer), &id, true).await.unwrap();
@@ -4956,32 +4970,114 @@ async fn an_editor_demoted_while_a_move_waits_on_a_later_lock_is_closed_at_the_n
     assert!(took < SHORT_RECHECK + Duration::from_secs(3), "{took:?}");
 }
 
-/// W1b(사용자 요구 2b·2c, 방 안 이동): 같은 것을 워크스페이스에서 내보내기로. 내보내면 이동의 접근 변화가 사용자가 확인한
-/// 미리보기와 달라져 이동은 일어나지 않는다(409, 새 미리보기). 확인받은 편집은 원래 자리에 남는다. 내보낸 뒤 보낸 편집은
-/// 이동과 상관없이 평소처럼 방이 받는다(다음 권한 재확인 때까지, 문서화된 권한 철회 지연).
+/// #235: 이동 중 제거는 409로 무적용이다. 이동을 끝내고 재확인해 제거하면 체크포인트 뒤 방을 닫고 새 연결도 거절한다.
 #[tokio::test]
 async fn write_access_removed_while_a_move_waits() {
-    let out = revoke_while_a_move_waits("3600", "기다리는 이동 중 내보냄", false).await;
-    assert_eq!(
-        out.reply.status,
-        StatusCode::CONFLICT,
-        "{:?}",
-        out.reply.json
+    let (writer, (state, app, addr, admin, from, to, id, mut e, mut r)) =
+        live_move_race_setup_rechecking("기다리는 이동 중 내보냄", "3600").await;
+    assert!(e.until(acked).await);
+    let owner = sqlx::PgPool::connect(&std::env::var("FVOCI_TEST_MIGRATION_URL").unwrap())
+        .await
+        .unwrap();
+    // 이동 자체가 권한을 회수하지 않도록 두 공간의 멤버로 준비한다. 이동 뒤 목적지에서 실제 제거를 검증한다.
+    sqlx::query("INSERT INTO fvoci.workspace_members(workspace_id,user_id,role) VALUES($1::uuid,$2,'member')")
+        .bind(&to).bind(writer.id).execute(&owner).await.unwrap();
+    let (hold, holder) = hold_tree(&owner, &to).await;
+    let moving = tokio::spawn({
+        let (app, admin, id, to) = (app.clone(), admin.clone(), id.clone(), to.clone());
+        async move { move_to(&app, &admin, &id, &to).await }
+    });
+    until_waiting_on_lock("app_lock_move", holder).await;
+    let path = format!("/api/workspaces/{to}/members/{}", writer.id.0);
+    let blocked = send(&app, Method::DELETE, &path, Some(&admin), None).await;
+    assert_eq!(blocked.status, StatusCode::CONFLICT, "{:?}", blocked.json);
+    assert_eq!(blocked.json["error"], "invalid_state");
+    let mut tx = state.db.begin_as(admin.id).await.unwrap();
+    let memberships: i64 = sqlx::query_scalar("SELECT count(*) FROM workspace_members WHERE workspace_id IN ($1::uuid,$2::uuid) AND user_id=$3")
+        .bind(&from).bind(&to).bind(writer.id).fetch_one(tx.conn()).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(memberships, 2, "409 removed a membership");
+    let pending_move = get_doc(&app, &admin, &id).await;
+    assert_eq!(pending_move["workspace_id"], from.as_str());
+    assert!(
+        pending_move["body"]
+            .to_string()
+            .contains("체크포인트 전 문단")
     );
-    assert!(out.reply.json["changes"].is_array(), "{:?}", out.reply.json);
+    assert!(!moving.is_finished());
+    e.paragraph("제거 409 뒤 이어 쓴 문단").await;
+    assert_eq!(e.try_read_by_server().await, None);
+    hold.rollback().await.unwrap();
+    let reply = moving.await.unwrap();
+    let after_relayed = r
+        .until(|c| c.text().contains("제거 409 뒤 이어 쓴 문단"))
+        .await;
+    let closed = e.closed().await;
+    let out = RevokedDuringMove {
+        reply,
+        doc: get_doc(&app, &admin, &id).await,
+        after_acked: acked(&e),
+        after_relayed,
+        closed,
+        from,
+    };
+    assert_eq!(out.reply.status, StatusCode::OK, "{:?}", out.reply.json);
+    assert_eq!(out.doc["workspace_id"], to.as_str());
+    assert_ne!(out.doc["workspace_id"], out.from.as_str());
+    assert!(out.after_relayed && out.after_acked);
+    assert_eq!(out.closed, Some(4409));
     let body = out.doc["body"].to_string();
     assert!(
-        body.contains("체크포인트 전 문단"),
-        "an acknowledged edit was lost: {body}"
+        body.contains("체크포인트 전 문단") && body.contains("제거 409 뒤 이어 쓴 문단"),
+        "{body}"
     );
+
+    let mut current = connect(addr, Some(&writer), &id, true).await.unwrap();
+    current.paragraph("제거 재요청 전에 확인받은 문단").await;
+    assert!(current.until(acked).await);
+    let removed_at = tokio::time::Instant::now();
+    let removed = send(&app, Method::DELETE, &path, Some(&admin), None).await;
+    assert_eq!(removed.status, StatusCode::NO_CONTENT, "{:?}", removed.json);
+    assert_eq!(current.closed().await, Some(4409));
+    assert!(removed_at.elapsed() < Duration::from_secs(3600));
     assert_eq!(
-        out.doc["workspace_id"],
-        out.from.as_str(),
-        "the document moved"
+        connect(addr, Some(&writer), &id, true).await.err(),
+        Some(StatusCode::NOT_FOUND)
     );
-    // 지금 동작: 이동이 없었으므로 방이 그대로 받는다(연결은 열린 채).
-    assert!(out.after_relayed);
-    assert_eq!(out.closed, None);
+    let checkpointed = get_doc(&app, &admin, &id).await;
+    assert!(
+        checkpointed["body"]
+            .to_string()
+            .contains("제거 재요청 전에 확인받은 문단")
+    );
+    let before = current.doc.transact().state_vector();
+    let fragment = current.doc.get_or_insert_xml_fragment(FRAGMENT);
+    {
+        let mut txn = current.doc.transact_mut();
+        let p = fragment.push_back(&mut txn, XmlElementPrelim::empty("paragraph"));
+        p.push_back(&mut txn, XmlTextPrelim::new("제거 뒤 옛 방으로 보낸 문단"));
+    }
+    let update = current.doc.transact().encode_state_as_update_v1(&before);
+    let _closed = current
+        .ws
+        .send(WsMessage::Binary(
+            Message::Sync(SyncMessage::Update(update))
+                .encode_v1()
+                .into(),
+        ))
+        .await;
+    state.collab.persist_all().await;
+    assert_eq!(
+        get_doc(&app, &admin, &id).await["body"],
+        checkpointed["body"]
+    );
+    let observer = connect(addr, Some(&admin), &id, true).await.unwrap();
+    assert!(!observer.text().contains("제거 뒤 옛 방으로 보낸 문단"));
+    observer.close().await;
+    e.close().await;
+    r.close().await;
+    current.close().await;
+    owner.close().await;
 }
 
 /// W1b(사용자 요구 5): 마지막 연결이 나가 방이 닫히며 마지막 리비전을 남기는 중에(방은 아직 목록에 있고 대기열이 열려 있다)

@@ -5,6 +5,7 @@
 pub mod accounts;
 pub mod members;
 pub mod organizations;
+pub mod runtime;
 pub mod state;
 pub mod workspaces;
 
@@ -109,6 +110,7 @@ pub struct OrganizationsApi;
 
 /// 조립 상태에서 부분 상태를 꺼내는 경로(/api 아래). 보낸 기대 사용자는 모든 명령에서 비교한다(D-96).
 /// 이미 필수인 조직 설정·공간 한도는 처리기의 ExpectedUser도 그대로 유지한다.
+/// 조립부는 `runtime::OrganizationRooms` 확장 상태로 명령 전 편집 보존을 주입한다.
 pub fn router<S>(state: &S) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,

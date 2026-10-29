@@ -140,13 +140,16 @@ mod tests {
     fn an_old_hold_guard_cannot_release_a_new_barrier_after_recovery() {
         let rooms = Rooms::default();
         let doc = DocumentId(Uuid::now_v7());
-        let (old, _) = rooms.hold(doc);
+        let (old, _) = rooms.hold(doc, &[], &[]).unwrap();
         poison(&rooms, Registry::Held);
-        let (new, _) = rooms.hold(doc);
+        let (new, _) = rooms.hold(doc, &[], &[]).unwrap();
         drop(old);
         {
             let _rooms = rooms.lock();
-            assert_eq!(rooms.held_set().get(&doc), Some(&1));
+            assert_eq!(
+                rooms.held_set().get(&super::super::HoldKey::Document(doc)),
+                Some(&1)
+            );
         }
         drop(new);
         let _rooms = rooms.lock();

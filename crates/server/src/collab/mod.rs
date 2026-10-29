@@ -4,6 +4,7 @@ pub mod convert;
 mod documents;
 mod file_refs;
 mod lease;
+pub mod organizations;
 pub mod room;
 pub mod visibility;
 pub mod ws;

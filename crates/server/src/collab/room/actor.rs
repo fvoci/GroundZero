@@ -114,6 +114,9 @@ impl Room {
             }
             Command::Move { request, done } => self.move_document(request, done, rx).await,
             Command::Restore { request, done } => self.restore(request, done).await,
+            Command::PrepareOrganization { user, done } => {
+                self.prepare_organization(user, done).await
+            }
             Command::Shutdown {
                 reason,
                 snapshot,
@@ -121,6 +124,32 @@ impl Room {
                 fallback,
             } => self.shutdown(reason, snapshot, saved, fallback).await,
         }
+    }
+
+    async fn prepare_organization(
+        &mut self,
+        user: UserId,
+        done: oneshot::Sender<Result<(), AppError>>,
+    ) -> bool {
+        if done.is_closed() {
+            return true;
+        }
+        if let Err(err) = self.ensure_loaded(user).await {
+            let _sent = done.send(Err(err));
+            return true;
+        }
+        self.flush().await;
+        if let Some(reason) = self.checkpoint(Change::Organization, user).await {
+            let _sent = done.send(Err(AppError::Conflict(reason.into())));
+            return true;
+        }
+        for (_, c) in self.conns.drain() {
+            c.peer.access.close(CloseReason::Reload);
+            let _sent = c.peer.out.try_send(Outbound::Close(CloseReason::Reload));
+        }
+        self.persist().await;
+        let _sent = done.send(Ok(()));
+        false
     }
 
     async fn join(

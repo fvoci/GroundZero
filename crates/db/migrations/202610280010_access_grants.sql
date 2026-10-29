@@ -364,6 +364,9 @@ GRANT ALL ON FUNCTION fvoci.app_claim_schedule(p_name text, p_every interval) TO
 REVOKE ALL ON FUNCTION fvoci.app_collab_access(p_doc uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_collab_access(p_doc uuid) TO fvoci_app;
 
+REVOKE ALL ON FUNCTION fvoci.app_collab_command_pending(p_action text, p_scope uuid, p_member uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_collab_command_pending(p_action text, p_scope uuid, p_member uuid) TO fvoci_app;
+
 REVOKE ALL ON FUNCTION fvoci.app_collab_load(p_doc uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION fvoci.app_collab_load(p_doc uuid) TO fvoci_app;
 

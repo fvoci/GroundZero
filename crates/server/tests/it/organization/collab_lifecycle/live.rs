@@ -22,6 +22,31 @@ pub(super) struct Client {
 }
 
 impl Client {
+    pub(super) async fn refused(addr: SocketAddr, document: &str, user: &TestUser) -> u16 {
+        let mut request = format!(
+            "ws://{addr}/api/documents/{document}/collab?write=1&expected_user={}",
+            user.id.0
+        )
+        .into_client_request()
+        .unwrap();
+        request
+            .headers_mut()
+            .insert("cookie", user.cookie.parse().unwrap());
+        request
+            .headers_mut()
+            .insert("origin", common::PUBLIC_URL.parse().unwrap());
+        let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            match ws.next().await.unwrap().unwrap() {
+                Frame::Close(Some(frame)) => Some(u16::from(frame.code)),
+                _ => None,
+            }
+            .expect("blocked room did not return a close frame")
+        })
+        .await
+        .expect("blocked connection did not close")
+    }
+
     pub(super) async fn connect(addr: SocketAddr, document: &str, user: &TestUser) -> Self {
         let mut request = format!(
             "ws://{addr}/api/documents/{document}/collab?write=1&expected_user={}",

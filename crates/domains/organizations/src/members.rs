@@ -177,9 +177,13 @@ pub async fn set_role(
               (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn remove_member(
     State(state): State<OrganizationsState>,
+    axum::Extension(rooms): axum::Extension<crate::runtime::OrganizationRooms>,
     CurrentUser(user): CurrentUser,
     Path((ws, member)): Path<(WorkspaceId, UserId)>,
 ) -> Result<StatusCode, AppError> {
+    let _rooms = rooms
+        .prepare(&state.db, user, "workspace_remove", ws.0, Some(member))
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     let ids = needed_ids(
         tx.conn(),
@@ -202,9 +206,13 @@ pub async fn remove_member(
     responses((status = 400, body = ErrorBody), (status = 204), (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "members")]
 pub async fn leave(
     State(state): State<OrganizationsState>,
+    axum::Extension(rooms): axum::Extension<crate::runtime::OrganizationRooms>,
     CurrentUser(user): CurrentUser,
     Path(ws): Path<WorkspaceId>,
 ) -> Result<StatusCode, AppError> {
+    let _rooms = rooms
+        .prepare(&state.db, user, "workspace_leave", ws.0, Some(user))
+        .await?;
     let mut tx = state.db.begin_as(user).await?;
     let ids = needed_ids(
         tx.conn(),

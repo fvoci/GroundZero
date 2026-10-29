@@ -1,6 +1,8 @@
 //! #235: 권한 제거의 보류 편집과 삭제·복원 전후의 방 수명(D-27·D-70·D-95·D-99).
 
+mod contracts;
 mod live;
+mod races;
 
 use crate::common::{self, TestUser, send};
 use axum::Router;

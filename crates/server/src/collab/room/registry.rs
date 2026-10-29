@@ -2,8 +2,9 @@
 
 use super::{
     AppError, Change, CloseReason, Command, Db, DocumentId, Duration, Handle, HashMap, HashSet,
-    HoldGuard, Instant, Limits, Membership, MoveReply, MoveRequest, Ordering, Peer, ROOM_QUEUE,
-    RestoreRequest, Room, Rooms, TrySendError, UserId, Uuid, documents, mpsc, oneshot, recovery,
+    HoldGuard, HoldKey, Instant, Limits, Membership, MoveReply, MoveRequest, Ordering, Peer,
+    ROOM_QUEUE, RestoreRequest, Room, Rooms, TrySendError, UserId, Uuid, documents, mpsc, oneshot,
+    recovery,
 };
 
 impl Drop for HoldGuard {
@@ -13,10 +14,12 @@ impl Drop for HoldGuard {
             return;
         }
         let mut held = self.rooms.held_set();
-        if let Some(count) = held.get_mut(&self.doc) {
-            *count -= 1;
-            if *count == 0 {
-                held.remove(&self.doc);
+        for key in &self.keys {
+            if let Some(count) = held.get_mut(key) {
+                *count -= 1;
+                if *count == 0 {
+                    held.remove(key);
+                }
             }
         }
     }
@@ -57,7 +60,7 @@ impl Rooms {
     }
 
     /// 옮기거나 방 없이 복원하는 중인 문서 목록. 늘 방 목록 잠금(`lock`)을 먼저 잡은 뒤에 잡는다.
-    pub(super) fn held_set(&self) -> std::sync::MutexGuard<'_, HashMap<DocumentId, usize>> {
+    pub(super) fn held_set(&self) -> std::sync::MutexGuard<'_, HashMap<HoldKey, usize>> {
         recovery::list(&self.held, &self.recovery) // 오염된 이동·복원 막음도 옛 방과 함께 버린다(#172).
     }
 
@@ -76,8 +79,20 @@ impl Rooms {
         workspace: Option<Uuid>,
         peer: Peer,
     ) -> Result<Membership, AppError> {
+        let organization = if let Some(ws) = workspace {
+            let mut tx = db.begin_as(peer.user).await?;
+            let org = sqlx::query_scalar("SELECT organization_id FROM workspaces WHERE id=$1")
+                .bind(ws)
+                .fetch_optional(tx.conn())
+                .await?;
+            tx.commit().await?;
+            org
+        } else {
+            None
+        };
         for _ in 0..5 {
-            let handle = self.acquire_room(db, limits, recheck_every, doc, workspace)?;
+            let handle =
+                self.acquire_room(db, limits, recheck_every, doc, workspace, organization)?;
             if let Some(membership) = self.request_join(&handle, &peer).await? {
                 return Ok(membership);
             }
@@ -95,15 +110,21 @@ impl Rooms {
         recheck_every: Duration,
         doc: DocumentId,
         workspace: Option<Uuid>,
+        organization: Option<Uuid>,
     ) -> Result<Handle, AppError> {
         let mut rooms = self.lock();
         // 옮기거나 방 없이 복원하는 중이면 들어가지 않는다. 클라이언트는 잠시 뒤 다시 붙고, 그때 새 자리의
         // 권한·설정(복원했으면 복원한 본문)으로 연다.
-        if self.held_set().contains_key(&doc) {
+        let held = self.held_set();
+        if held.contains_key(&HoldKey::Document(doc))
+            || workspace.is_some_and(|ws| held.contains_key(&HoldKey::Workspace(ws)))
+            || organization.is_some_and(|org| held.contains_key(&HoldKey::Organization(org)))
+        {
             return Err(AppError::Upstream(
                 "the document is being moved or restored".into(),
             ));
         }
+        drop(held);
         if let Some(h) = rooms.get(&doc).filter(|h| !h.tx.is_closed()) {
             Ok(h.clone())
         } else {
@@ -112,6 +133,7 @@ impl Rooms {
             let handle = Handle {
                 generation,
                 workspace,
+                organization,
                 tx,
             };
             rooms.insert(doc, handle.clone());
@@ -209,18 +231,47 @@ impl Rooms {
 
     /// 이 문서의 방이 새로 열리지 않게 막고(들어오는 연결은 4503으로 다시 붙는다) 지금 열린 방을 돌려준다. 막음과 방
     /// 찾기를 같은 잠금 아래에서 해, 방이 없다고 본 뒤에 방이 열려 저장 대기 상태를 이어받지 않는다.
-    pub(super) fn hold(&self, doc: DocumentId) -> (HoldGuard, Option<Handle>) {
+    pub(super) fn hold(
+        &self,
+        doc: DocumentId,
+        workspaces: &[Uuid],
+        organizations: &[Uuid],
+    ) -> Result<(HoldGuard, Option<Handle>), AppError> {
         let rooms = self.lock();
-        *self.held_set().entry(doc).or_default() += 1;
+        let mut held = self.held_set();
+        if held.contains_key(&HoldKey::Document(doc))
+            || workspaces
+                .iter()
+                .any(|ws| held.contains_key(&HoldKey::Workspace(*ws)))
+            || organizations
+                .iter()
+                .any(|org| held.contains_key(&HoldKey::Organization(*org)))
+        {
+            return Err(AppError::Conflict(
+                "the document is being changed; retry after reconnecting".into(),
+            ));
+        }
+        let keys: HashSet<_> = std::iter::once(HoldKey::Document(doc))
+            .chain(workspaces.iter().copied().map(HoldKey::DocumentWorkspace))
+            .chain(
+                organizations
+                    .iter()
+                    .copied()
+                    .map(HoldKey::DocumentOrganization),
+            )
+            .collect();
+        for key in &keys {
+            *held.entry(*key).or_default() += 1;
+        }
         let room = rooms.get(&doc).filter(|h| !h.tx.is_closed()).cloned();
-        (
+        Ok((
             HoldGuard {
                 rooms: self.clone(),
-                doc,
+                keys: keys.into_iter().collect(),
                 epoch: self.recovery.current(),
             },
             room,
-        )
+        ))
     }
 
     /// 이 문서의 방이 열려 있는지(방 목록에서 빠지기 전, 닫히며 저장하는 중도 열린 것으로 본다).
@@ -242,7 +293,15 @@ impl Rooms {
         limits: &Limits,
         request: MoveRequest,
     ) -> Result<MoveReply, AppError> {
-        let (_guard, mut room) = self.hold(request.doc);
+        let (_guard, mut room) = self
+            .hold_document(
+                db,
+                request.user,
+                request.doc,
+                request.input.target_workspace_id.map(|ws| ws.0),
+                request.input.target_item_id.map(|item| item.0),
+            )
+            .await?;
         for _ in 0..5 {
             let Some(handle) = room else {
                 // 막음 아래라 그사이 방이 열려 그 상태를 이어받지 않는다.
@@ -290,7 +349,9 @@ impl Rooms {
         limits: &Limits,
         request: RestoreRequest,
     ) -> Result<String, AppError> {
-        let (_guard, mut room) = self.hold(request.doc);
+        let (_guard, mut room) = self
+            .hold_document(db, request.user, request.doc, None, None)
+            .await?;
         for _ in 0..5 {
             let Some(handle) = room else {
                 self.save_pending_before(db, limits, request.doc, request.user, Change::Restore)
@@ -340,6 +401,12 @@ impl Rooms {
         user: UserId,
         change: Change,
     ) -> Result<(), AppError> {
+        if matches!(change, Change::Organization) {
+            // 닫힌 방의 내용 로드는 명령 권한과 별개다. 읽기 공유만 가진 조직 관리자도 대리 저장하지 못한다.
+            let mut tx = db.begin_as(user).await?;
+            fvoci_db::access::require_write(&mut tx, fvoci_db::access::Kind::Document, doc).await?;
+            tx.commit().await?;
+        }
         let generation = self.next.fetch_add(1, Ordering::Relaxed);
         let mut room = Room::new(
             doc,
