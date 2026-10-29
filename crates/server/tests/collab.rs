@@ -495,6 +495,26 @@ async fn live_editing_guards() {
     assert_eq!(saved.status, StatusCode::OK);
     let mut watcher = connect(addr, Some(&w2), &id, true).await.unwrap();
 
+    // 참조 라벨로 비공개 이름을 저장하거나 지원하지 않는 대상을 넣는 것도 실제 소켓에서 거절한다(D-18·D-27).
+    for (kind, label) in [
+        ("item", Some("private-reference-label")),
+        ("workspace", None),
+    ] {
+        let mut bad = connect(addr, Some(&w1), &id, true).await.unwrap();
+        bad.edit(|txn, fragment| {
+            let p = fragment.push_back(txn, XmlElementPrelim::empty("paragraph"));
+            let reference = p.push_back(txn, XmlElementPrelim::empty("reference"));
+            reference.insert_attribute(txn, "kind", kind);
+            reference.insert_attribute(txn, "id", w1.id.0.to_string());
+            if let Some(label) = label {
+                reference.insert_attribute(txn, "label", label);
+            }
+        })
+        .await;
+        assert_eq!(bad.closed().await, Some(4400));
+        assert!(!watcher.text().contains("private-reference-label"));
+    }
+
     // 해시 붙은 표시 이름(브라우저가 `link`로 읽음)으로 링크 검사를 피하려 하면 닫는다.
     let mut bad = connect(addr, Some(&w1), &id, true).await.unwrap();
     bad.edit(|txn, fragment| {

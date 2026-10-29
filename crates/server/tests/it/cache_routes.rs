@@ -161,7 +161,7 @@ async fn cache_headers_cover_errors_files_exports_public_success_and_upgrade() {
             StatusCode::NOT_FOUND,
         ),
         (
-            Method::PUT,
+            Method::PATCH,
             uri.clone(),
             Some(&owner),
             Some(save_body(&new_request_id(), 0, "stale")),
