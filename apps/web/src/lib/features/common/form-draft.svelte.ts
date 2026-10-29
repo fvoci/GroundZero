@@ -53,7 +53,6 @@ export interface FormDraftAttempt {
 export function createFormDraft<T>(options: DraftOptions<T>) {
   let session = $state<{ userId: string; name: string; key: string | undefined }>();
   let offers = $state<StoredFormDraft<Saved<T>>[]>([]);
-  let restoredSource: { key: string; raw: string } | undefined;
   let kept = $state(false);
   let disposed = false;
 
@@ -67,15 +66,6 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
 
   function blocked(): boolean {
     return offers.some((entry) => entry.key === session?.key);
-  }
-
-  function removeRestoredSource(source: typeof restoredSource): void {
-    if (source === undefined) return;
-    try {
-      if (window.localStorage.getItem(source.key) === source.raw) removeFormDraftAt(source.key);
-    } catch {
-      // An unreadable or changed source stays for another proposal, never an inferred deletion.
-    }
   }
 
   function persist(): void {
@@ -124,7 +114,6 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
       if (session?.userId === userId && session.name === name) return;
       leave.keep();
       if (session !== undefined) options.reset();
-      restoredSource = undefined;
       session =
         name === undefined || userId === ''
           ? undefined
@@ -205,26 +194,14 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
         return;
       }
     }
-    // Keep the offered copy if storage fails; never destroy the only durable copy.
-    let source: typeof restoredSource;
-    try {
-      const raw = window.localStorage.getItem(entry.key);
-      // Only capture the raw source that still represents the selected proposal. A parser may have
-      // transformed it, or another tab may have replaced it: in either case retaining it is safer.
-      if (raw !== null && JSON.stringify(JSON.parse(raw)) === JSON.stringify(entry.value))
-        source = { key: entry.key, raw };
-    } catch {
-      // Restoring the in-memory proposal does not authorize deleting an unreadable source.
-    }
+    // B: keep the offered source for another proposal, even after a successful copy or completion.
     options.restore(entry.value.input);
     const value =
       options.storedSnapshot === undefined
         ? entry.value
         : { ...entry.value, input: options.storedSnapshot() };
-    const stored = session !== undefined && writeFormDraftAt(session.key, value);
-    restoredSource = stored ? undefined : source;
+    if (session !== undefined) writeFormDraftAt(session.key, value);
     offers = offers.filter((candidate) => candidate.key !== entry.key);
-    if (stored && entry.key !== session?.key) removeRestoredSource(source);
     persist();
   }
 
@@ -247,16 +224,12 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     if (!offers.some((entry) => entry.key === session?.key)) {
       writeFormDraftAt(session?.key, undefined);
     }
-    removeRestoredSource(restoredSource);
-    restoredSource = undefined;
     options.reset();
     return true;
   }
 
   function discardAndLeave(): void {
     if (!leave.open || !current() || options.busy?.() === true) return;
-    removeRestoredSource(restoredSource);
-    restoredSource = undefined;
     options.reset();
     persist();
     leave.discard();

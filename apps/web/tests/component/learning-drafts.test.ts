@@ -260,7 +260,8 @@ function value(id: string): string {
   return field.value;
 }
 async function restore(): Promise<void> {
-  const offer = await screen.findByTestId('form-draft-offer');
+  const offer = (await screen.findAllByTestId('form-draft-offer'))[0];
+  if (offer === undefined) throw new Error('Missing draft offer');
   await fireEvent.click(within(offer).getByRole('button', { name: m.common_draft_restore() }));
 }
 async function firstButton(name: string): Promise<void> {

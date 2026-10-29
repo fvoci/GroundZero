@@ -152,14 +152,13 @@ function clearLegacyRecordDraftAt(key: string, raw: string | null): RecordDraftC
   try {
     if (raw !== null) checked = checkWriting(JSON.parse(raw), kind);
   } catch {
-    // Malformed JSON is discarded only if this exact raw value is still stored.
+    // B: malformed keys are retained but never admitted by the draft parser.
   }
   const stored = storedStateAt(key, raw);
   if (stored !== 'same') return stored === 'changed' ? 'changed' : 'retry';
-  if (raw === null || checked?.state === 'current') return 'ready';
+  if (raw === null || checked === undefined || checked.state === 'current') return 'ready';
   // localStorage has no atomic compare-and-set across tabs. Compare just before each mutation.
-  if (writeDraftAt(key, checked?.value)) return 'ready';
-  if (checked === undefined) return 'retry';
+  if (writeDraftAt(key, checked.value)) return 'ready';
   const fallback = storedStateAt(key, raw);
   if (fallback !== 'same') return fallback === 'changed' ? 'changed' : 'retry';
   // Storage refusal is not permission to delete valid writing. Block entry until it can be normalized.
@@ -167,9 +166,9 @@ function clearLegacyRecordDraftAt(key: string, raw: string | null): RecordDraftC
 }
 
 /**
- * D-27, SR-199-1: remove old raw retries before any screen opens, across accounts, organizations,
- * tabs and held offers. Snapshot keys so deleting an entry cannot skip the next one. Both startup
- * and event cleanup use the same writing normalization and compare before changing a stored value.
+ * D-27, decision B: normalize trusted record drafts without deleting keys. Untrusted legacy values
+ * stay in storage and are rejected by every read/restore parser. Both startup and event cleanup
+ * use the same writing normalization and compare before changing a stored value.
  */
 export function clearLegacyRecordDrafts(): RecordDraftCleanup {
   const keys = recordDraftKeys();

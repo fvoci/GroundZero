@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
 import { emptyForm } from '$lib/features/records/records';
-import { clearLegacyRecordDrafts } from '$lib/features/records/legacy-drafts';
+import { clearLegacyRecordDrafts, normalizeRecordDraft } from '$lib/features/records/legacy-drafts';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
@@ -73,7 +73,7 @@ afterEach(() => {
   router.guard = undefined;
 });
 
-it('clears raw retry requests at app startup across unopened records, accounts, organizations and held drafts', async () => {
+it('retains invalid retry keys across records, accounts, organizations and held drafts without exposing them', async () => {
   const keys = [
     recordKey,
     'fvoci:user-a:org-a:form-draft:record:other-item:research_log:new:held:old-offer',
@@ -85,22 +85,20 @@ it('clears raw retry requests at app startup across unopened records, accounts, 
 
   await startWithoutOpeningRecords();
 
-  for (const key of keys) expect(localStorage.getItem(key)).toBeNull();
-  expect(
-    Object.keys(localStorage)
-      .map((key) => localStorage.getItem(key))
-      .join(''),
-  ).not.toContain('LEGACY_REQUEST_BODY');
+  for (const key of keys)
+    expect(localStorage.getItem(key)).toBe(saved({ requestId, signature: legacySignature }));
+  expect(document.body.textContent).not.toContain('LEGACY_REQUEST_BODY');
 });
 
 it.each(['f'.repeat(63), 'f'.repeat(65), 'not-a-digest'])(
-  'clears an unsupported stored retry signature (%s) without offering the draft',
+  'retains an unsupported stored retry signature (%s) without admitting the draft',
   async (signature) => {
     localStorage.setItem(recordKey, saved({ requestId, signature }));
 
     await startWithoutOpeningRecords();
 
-    expect(localStorage.getItem(recordKey)).toBeNull();
+    expect(localStorage.getItem(recordKey)).toBe(saved({ requestId, signature }));
+    expect(normalizeRecordDraft('risk', draft({ requestId, signature }).input)).toBeUndefined();
   },
 );
 
@@ -137,12 +135,13 @@ it.each([
   ['non-UUID request ID', saved({ requestId: legacySignature, signature: 'a'.repeat(64) })],
   ['non-hex UUID request ID', saved({ requestId: 'g'.repeat(36), signature: 'a'.repeat(64) })],
   ['non-hex digest', saved({ requestId, signature: 'g'.repeat(64) })],
-])('removes an unverified record draft at startup: %s', async (_name, value) => {
+])('retains an unverified record key without exposing it at startup: %s', async (_name, value) => {
   localStorage.setItem(recordKey, value);
 
   await startWithoutOpeningRecords();
 
-  expect(localStorage.getItem(recordKey)).toBeNull();
+  expect(localStorage.getItem(recordKey)).toBe(value);
+  expect(document.body.textContent).not.toContain('LEGACY_REQUEST_BODY');
 });
 
 it('leaves other domains and non-app storage untouched while cleaning a legacy record', async () => {
@@ -157,11 +156,11 @@ it('leaves other domains and non-app storage untouched while cleaning a legacy r
 
   await startWithoutOpeningRecords();
 
-  expect(localStorage.getItem(recordKey)).toBeNull();
+  expect(localStorage.getItem(recordKey)).toBe(value);
   for (const key of unrelated) expect(localStorage.getItem(key)).toBe(value);
 });
 
-it('clears retry metadata with additional own properties even when UUID and digest are valid', async () => {
+it('retains but rejects retry metadata with additional own properties even when UUID and digest are valid', async () => {
   localStorage.setItem(
     recordKey,
     saved({ requestId, signature: 'a'.repeat(64), request: legacySignature }),
@@ -169,7 +168,15 @@ it('clears retry metadata with additional own properties even when UUID and dige
 
   await startWithoutOpeningRecords();
 
-  expect(localStorage.getItem(recordKey)).toBeNull();
+  expect(localStorage.getItem(recordKey)).toBe(
+    saved({ requestId, signature: 'a'.repeat(64), request: legacySignature }),
+  );
+  expect(
+    normalizeRecordDraft(
+      'risk',
+      draft({ requestId, signature: 'a'.repeat(64), request: legacySignature }).input,
+    ),
+  ).toBeUndefined();
 });
 
 it.each([false, true])(
@@ -237,13 +244,14 @@ it.each([false, true])(
   },
 );
 
-it('clears a draft whose record kind is absent from the offline field definitions', async () => {
+it('retains but rejects a draft whose record kind is absent from the offline field definitions', async () => {
   const unknown = recordKey.replace(':risk:', ':unknown_kind:');
   localStorage.setItem(unknown, saved(null));
 
   await startWithoutOpeningRecords();
 
-  expect(localStorage.getItem(unknown)).toBeNull();
+  expect(localStorage.getItem(unknown)).toBe(saved(null));
+  expect(normalizeRecordDraft('unknown_kind', draft(null).input)).toBeUndefined();
 });
 
 it('keeps unsent body for a known kind with no long_text fields while removing people and settings', async () => {
@@ -335,7 +343,7 @@ it('normalizes an old full-form record draft written by another tab after app st
   expect(localStorage.getItem(untouchedKey)).toBe(value);
 });
 
-it('removes a legacy raw retry written by another tab after app startup', async () => {
+it('retains but rejects a legacy raw retry written by another tab after app startup', async () => {
   await startWithoutOpeningRecords();
   const value = saved({ requestId, signature: legacySignature });
   localStorage.setItem(recordKey, value);
@@ -345,8 +353,11 @@ it('removes a legacy raw retry written by another tab after app startup', async 
   );
 
   await waitFor(() => {
-    expect(localStorage.getItem(recordKey)).toBeNull();
+    expect(localStorage.getItem(recordKey)).toBe(value);
   });
+  expect(
+    normalizeRecordDraft('risk', draft({ requestId, signature: legacySignature }).input),
+  ).toBeUndefined();
 });
 
 it.each(['rewrite', 'remove'])(
@@ -432,7 +443,10 @@ it('rechecks a writing-only snapshot replaced by a raw retry before declaring cl
 
   expect(clearLegacyRecordDrafts()).toBe('ready');
 
-  expect(localStorage.getItem(recordKey)).toBeNull();
+  expect(localStorage.getItem(recordKey)).toBe(newer);
+  expect(
+    normalizeRecordDraft('risk', draft({ requestId, signature: legacySignature }).input),
+  ).toBeUndefined();
 });
 
 it('returns retry after three changing snapshots and repairs the latest writing on the next cleanup', () => {

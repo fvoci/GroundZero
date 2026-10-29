@@ -243,8 +243,8 @@
               JSON.stringify(writing(formOf(def, saved))) &&
             offerStillStored(entry)
           )
-            draft.discard(entry);
-          else remaining.push(entry);
+            continue;
+          remaining.push(entry);
         }
         visibleOffers = remaining;
       },

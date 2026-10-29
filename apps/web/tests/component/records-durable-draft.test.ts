@@ -1,5 +1,6 @@
 import './fixtures/authenticated';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ItemView, RecordView } from '$lib/api/client';
 import { api, ApiError } from '$lib/api/client';
@@ -49,6 +50,12 @@ function input(key: string): HTMLInputElement | HTMLTextAreaElement {
   const value = document.getElementById(`record-risk-${key}`);
   if (value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement) return value;
   throw new Error(`Missing record input ${key}`);
+}
+
+async function restoreFirstOffer(): Promise<void> {
+  const first = (await screen.findAllByRole('button', { name: m.common_draft_restore() }))[0];
+  if (first === undefined) throw new Error('missing draft offer');
+  await fireEvent.click(first);
 }
 
 beforeEach(async () => {
@@ -110,7 +117,7 @@ function failDraftRead(key: string) {
 }
 
 it.each(['held:server-copy', 'tab:other-tab'])(
-  'does not offer edit writing already equal to the current server record (%s)',
+  'hides edit writing equal to the current server record without deleting its key (%s)',
   async (suffix) => {
     const saved = {
       ...record,
@@ -135,9 +142,11 @@ it.each(['held:server-copy', 'tab:other-tab'])(
     render(RecordsPanel, { item, kind: 'project', canWrite: true });
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await waitFor(() => {
-      expect(localStorage.getItem(key)).toBeNull();
-      expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+      expect(api.itemRecords).toHaveBeenCalledTimes(2);
     });
+    await tick();
+    expect(localStorage.getItem(key)).toContain(saved.body);
+    expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
     expect(input('body')).toHaveValue(saved.body);
     expect(input('mitigation')).toHaveValue('Saved mitigation');
   },
@@ -163,6 +172,36 @@ it('keeps a new-record draft even when unrelated server writing is identical', a
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
   expect(await screen.findByTestId('form-draft-offer')).toBeInTheDocument();
   expect(localStorage.getItem(key)).toContain('Same text, different record');
+});
+
+it('keeps new writing in memory on quota failure and warns on leave and window return', async () => {
+  render(RecordsPanel, { item, kind: 'project', canWrite: true });
+  await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
+  const key = formDraftTabKey('record:draft-item:risk:new');
+  if (key === undefined) throw new Error('missing draft key');
+  const writer = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new DOMException('storage quota', 'QuotaExceededError');
+  });
+  await fireEvent.input(input('body'), { target: { value: 'Writing while storage is full' } });
+  expect(localStorage.getItem(key)).toBeNull();
+  expect(input('body')).toHaveValue('Writing while storage is full');
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(true);
+  window.dispatchEvent(new Event('focus'));
+  await waitFor(() => {
+    expect(screen.getByRole('status')).toHaveTextContent(m.records_draft_cleanup_failed());
+    expect(screen.getByRole('button', { name: '고치기' })).toBeDisabled();
+  });
+  expect(input('body')).toHaveValue('Writing while storage is full');
+  expect(localStorage.getItem(key)).toBeNull();
+  writer.mockRestore();
+  await fireEvent.click(screen.getByRole('button', { name: m.common_retry() }));
+  await waitFor(() => {
+    expect(localStorage.getItem(key)).toContain('Writing while storage is full');
+  });
+  expect(input('body')).toHaveValue('Writing while storage is full');
+  expect(screen.getByRole('button', { name: '고치기' })).toBeEnabled();
 });
 
 it.each(['unavailable', 'changed source'])(
@@ -260,6 +299,11 @@ it.each(['rewrite', 'remove'])(
     });
 
     expect(clearLegacyRecordDrafts()).toBe('ready');
+    if (operation === 'remove') {
+      // B no longer removes invalid keys during cleanup. Model the permitted explicit discard.
+      expect(readLocal(key)).toBe(newer);
+      localStorage.removeItem(key);
+    }
     const overwritten = readLocal(key);
     expect(overwritten ?? '').not.toContain('Owner writing after comparison');
     reader.mockRestore();
@@ -647,7 +691,7 @@ it.each(['held:old-offer', 'tab:other-tab'])(
 );
 
 it.each(['held:old-offer', 'tab:other-tab'])(
-  'removes malformed drafts at their original %s key after startup cleanup failed',
+  'retains malformed keys without offering them after startup cleanup failed (%s)',
   async (suffix) => {
     const key = `fvoci:user-a:-:form-draft:record:draft-item:risk:new:${suffix}`;
     localStorage.setItem(key, '{"input":{"form":{"title":"SHORT_BROKEN"');
@@ -659,7 +703,7 @@ it.each(['held:old-offer', 'tab:other-tab'])(
     render(RecordsPanel, { item, kind: 'project', canWrite: true });
     await fireEvent.click(await screen.findByRole('button', { name: '새 위험' }));
 
-    expect(localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem(key)).toBe('{"input":{"form":{"title":"SHORT_BROKEN"');
     expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
   },
 );
@@ -839,7 +883,7 @@ it('keeps raw numbers on screen, restores only long text and reuses the same ret
   expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   view.unmount();
   const restored = render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  await restoreFirstOffer();
   await waitFor(() => expect(input('mitigation')).toHaveValue('긴 입력\n두 번째 줄'));
   expect(input('title')).toHaveValue('');
   expect(input('amount')).toHaveValue('');
@@ -855,7 +899,7 @@ it('keeps raw numbers on screen, restores only long text and reuses the same ret
   const requestId = create.mock.calls[0]?.[1];
   restored.unmount();
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
-  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  await restoreFirstOffer();
   await waitFor(() => expect(input('mitigation')).toHaveValue('긴 입력\n두 번째 줄'));
   expect(create).toHaveBeenCalledTimes(1);
   expect(input('title')).toHaveValue('');
@@ -880,13 +924,13 @@ it('restores the edit-start version after a remount and keeps another account is
   await waitFor(() => expect(input('body')).toHaveValue(''));
   expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
   me.userId = 'user-a';
-  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  await restoreFirstOffer();
   await waitFor(() => expect(input('body')).toHaveValue('개인 긴 입력'));
   view.unmount();
   vi.mocked(api.itemRecords).mockResolvedValue([{ ...record, version: 8 }]);
   render(RecordsPanel, { item, kind: 'project', canWrite: true });
   await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
-  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  await restoreFirstOffer();
   await waitFor(() => expect(input('body')).toHaveValue('개인 긴 입력'));
   expect(update).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
