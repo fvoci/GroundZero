@@ -2613,6 +2613,19 @@
         "operationId": "update_episode",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "episode_id",
             "in": "path",
             "required": true,
@@ -2671,7 +2684,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/EpisodeWriteConflict"
                 }
               }
             }
@@ -2686,6 +2699,19 @@
         "operationId": "delete_episode",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "episode_id",
             "in": "path",
             "required": true,
@@ -2698,6 +2724,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -2718,6 +2754,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -2730,6 +2776,19 @@
         "summary": "내 진도 바꾸기(강좌를 볼 수 있으면 누구나 자기 것). 완료는 직접 표시한다.",
         "operationId": "set_episode_progress",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "episode_id",
             "in": "path",
@@ -2765,6 +2824,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -4478,7 +4547,6 @@
         "tags": [
           "courses"
         ],
-        "summary": "강좌(볼 수 있는 사람). 강의 모듈의 항목이 아니면 404.",
         "operationId": "get_course",
         "parameters": [
           {
@@ -4521,6 +4589,19 @@
         "summary": "강좌 정보 고치기(쓸 수 있는 사람).",
         "operationId": "set_course_details",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "item_id",
             "in": "path",
@@ -4790,7 +4871,93 @@
         }
       }
     },
+    "/api/items/{item_id}/episode-progress": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "operationId": "my_episode_progress",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyProgress"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/episodes": {
+      "get": {
+        "tags": [
+          "courses"
+        ],
+        "operationId": "course_episodes",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Episode"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "courses"
@@ -4798,6 +4965,19 @@
         "summary": "회차 추가(쓸 수 있는 사람). 직접 입력과 CSV 일괄 등록이 같은 길을 쓴다.",
         "operationId": "add_episodes",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "item_id",
             "in": "path",
@@ -5296,6 +5476,19 @@
         "summary": "기록 만들기(항목에 쓸 수 있는 사람). 같은 요청 id면 같은 기록.",
         "operationId": "create_record",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "item_id",
             "in": "path",
@@ -5805,7 +5998,6 @@
         "tags": [
           "study"
         ],
-        "summary": "스터디 계획(볼 수 있는 사람). 스터디 모듈의 항목이 아니면 404.",
         "operationId": "get_study_plan",
         "parameters": [
           {
@@ -5915,6 +6107,19 @@
         "operationId": "plan_study_units",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "item_id",
             "in": "path",
             "required": true,
@@ -5964,11 +6169,107 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/study/progress": {
+      "get": {
+        "tags": [
+          "study"
+        ],
+        "operationId": "my_study_progress",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyUnitProgress"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/items/{item_id}/study/units": {
+      "get": {
+        "tags": [
+          "study"
+        ],
+        "operationId": "study_units",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StudyUnit"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "study"
@@ -5976,6 +6277,19 @@
         "summary": "단위 여러 개 추가(쓸 수 있는 사람). 같은 요청 id는 한 번만.",
         "operationId": "add_study_units",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "item_id",
             "in": "path",
@@ -6428,6 +6742,19 @@
         "summary": "Zotero에서 문헌 가져오기(연구 항목에 쓸 수 있는 사람). 같은 Zotero 문헌은 새로 만들지 않고 서지만 고친다.",
         "operationId": "zotero_import",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "item_id",
             "in": "path",
@@ -9308,6 +9635,19 @@
         "operationId": "update_record",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "record_id",
             "in": "path",
             "required": true,
@@ -9373,7 +9713,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/RecordWriteConflict"
                 }
               }
             }
@@ -9388,6 +9728,19 @@
         "operationId": "delete_record",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "record_id",
             "in": "path",
             "required": true,
@@ -9400,6 +9753,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -9882,6 +10245,19 @@
         "operationId": "update_study_unit",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "unit_id",
             "in": "path",
             "required": true,
@@ -9940,7 +10316,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
+                  "$ref": "#/components/schemas/UnitWriteConflict"
                 }
               }
             }
@@ -9955,6 +10331,19 @@
         "operationId": "delete_study_unit",
         "parameters": [
           {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
             "name": "unit_id",
             "in": "path",
             "required": true,
@@ -9967,6 +10356,16 @@
         "responses": {
           "204": {
             "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           },
           "403": {
             "description": "",
@@ -9987,6 +10386,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -9999,6 +10408,19 @@
         "summary": "내 진행 바꾸기(스터디를 볼 수 있으면 누구나 자기 것).",
         "operationId": "set_unit_progress",
         "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
           {
             "name": "unit_id",
             "in": "path",
@@ -10034,6 +10456,16 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -14304,6 +14736,21 @@
         ],
         "summary": "내 Zotero 라이브러리의 컬렉션(로그인한 사람). 키는 저장하지 않는다.",
         "operationId": "zotero_collections",
+        "parameters": [
+          {
+            "name": "x-fvoci-expected-user",
+            "in": "header",
+            "description": "선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -14329,6 +14776,16 @@
             }
           },
           "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -14682,7 +15139,9 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NewEpisode"
-            }
+            },
+            "maxItems": 1000,
+            "minItems": 1
           }
         }
       },
@@ -14697,7 +15156,9 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NewStudyUnit"
-            }
+            },
+            "maxItems": 1000,
+            "minItems": 1
           }
         }
       },
@@ -15341,25 +15802,17 @@
       },
       "Course": {
         "type": "object",
-        "description": "강좌: 정보·회차(번호순)·내 진도.",
+        "description": "강좌 정보와 접근 상태.",
         "required": [
           "details",
-          "episodes",
-          "can_write"
+          "access"
         ],
         "properties": {
-          "can_write": {
-            "type": "boolean",
-            "description": "강좌 정보·회차를 고칠 수 있는지(진도는 볼 수 있으면 누구나 자기 것)."
+          "access": {
+            "$ref": "#/components/schemas/LearningAccess"
           },
           "details": {
             "$ref": "#/components/schemas/CourseDetails"
-          },
-          "episodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Episode"
-            }
           }
         }
       },
@@ -15403,7 +15856,8 @@
             "type": "string"
           },
           "url": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 2000
           }
         }
       },
@@ -16143,7 +16597,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RecordFileInput"
-            }
+            },
+            "maxItems": 50
           },
           "occurred_on": {
             "type": [
@@ -16153,7 +16608,9 @@
             "format": "date"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "version": {
             "type": "integer",
@@ -16217,7 +16674,6 @@
           "duration_seconds",
           "url",
           "materials",
-          "mine",
           "version"
         ],
         "properties": {
@@ -16226,7 +16682,9 @@
           },
           "duration_seconds": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 360000,
+            "minimum": 0
           },
           "id": {
             "type": "string",
@@ -16234,9 +16692,6 @@
           },
           "materials": {
             "type": "string"
-          },
-          "mine": {
-            "$ref": "#/components/schemas/MyProgress"
           },
           "number": {
             "type": "integer",
@@ -16251,7 +16706,9 @@
             "description": "공통 계획일."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "url": {
             "type": "string"
@@ -16262,6 +16719,17 @@
             "description": "공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409)."
           }
         }
+      },
+      "EpisodeWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_Episode"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "판 충돌은 현재 회차, 그 밖의 409는 공통 오류 본문이다."
       },
       "EpisodesAdded": {
         "type": "object",
@@ -17478,6 +17946,14 @@
           }
         }
       },
+      "LearningAccess": {
+        "type": "string",
+        "enum": [
+          "write",
+          "read",
+          "archived"
+        ]
+      },
       "LinkBase": {
         "type": "object",
         "description": "관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건).",
@@ -18047,6 +18523,7 @@
         "type": "object",
         "description": "내 진도.",
         "required": [
+          "episode_id",
           "status",
           "watch_count",
           "note"
@@ -18060,6 +18537,10 @@
             "format": "date",
             "description": "처음 완료한 날."
           },
+          "episode_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "last_position_seconds": {
             "type": [
               "integer",
@@ -18069,7 +18550,8 @@
           },
           "note": {
             "type": "string",
-            "description": "개인 메모(나만 봄)."
+            "description": "개인 메모(나만 봄).",
+            "maxLength": 20000
           },
           "planned_on": {
             "type": [
@@ -18253,6 +18735,7 @@
         "type": "object",
         "description": "내 진행.",
         "required": [
+          "unit_id",
           "status",
           "done_amount",
           "note"
@@ -18268,11 +18751,14 @@
           "done_amount": {
             "type": "integer",
             "format": "int32",
-            "description": "한 분량(단위의 분량과 같은 단위)."
+            "description": "한 분량(단위의 분량과 같은 단위).",
+            "maximum": 1000000,
+            "minimum": 0
           },
           "note": {
             "type": "string",
-            "description": "개인 메모(나만 봄)."
+            "description": "개인 메모(나만 봄).",
+            "maxLength": 20000
           },
           "planned_on": {
             "type": [
@@ -18285,6 +18771,10 @@
           "status": {
             "type": "string",
             "description": "`not_started`·`in_progress`·`done`."
+          },
+          "unit_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -18365,7 +18855,9 @@
           },
           "duration_seconds": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 360000,
+            "minimum": 0
           },
           "materials": {
             "type": "string"
@@ -18390,7 +18882,9 @@
             "format": "uuid"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "url": {
             "type": "string"
@@ -18416,7 +18910,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RecordFileInput"
-            }
+            },
+            "maxItems": 50
           },
           "kind": {
             "type": "string"
@@ -18433,7 +18928,9 @@
             "format": "uuid"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           }
         }
       },
@@ -18447,10 +18944,13 @@
         "properties": {
           "amount": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 1000000,
+            "minimum": 0
           },
           "chapter": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300
           },
           "number": {
             "type": [
@@ -18471,7 +18971,9 @@
             "format": "uuid"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "unit": {
             "type": "string"
@@ -19224,7 +19726,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlanEntry"
-            }
+            },
+            "maxItems": 1000
           }
         }
       },
@@ -19457,7 +19960,9 @@
             "format": "date"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "updated_at": {
             "type": "string",
@@ -19590,6 +20095,17 @@
             "format": "int32"
           }
         }
+      },
+      "RecordWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_Record"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "판 충돌은 현재 기록, 그 밖의 409는 공통 오류 본문이다."
       },
       "RecurrenceRule": {
         "type": "object",
@@ -20456,7 +20972,8 @@
             "format": "int32"
           },
           "note": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 20000
           },
           "planned_on": {
             "type": [
@@ -20587,10 +21104,13 @@
         "properties": {
           "done_amount": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 1000000,
+            "minimum": 0
           },
           "note": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 20000
           },
           "planned_on": {
             "type": [
@@ -21012,6 +21532,94 @@
           }
         }
       },
+      "StaleWrite_Episode": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "회차.",
+            "required": [
+              "id",
+              "number",
+              "title",
+              "chapter",
+              "duration_seconds",
+              "url",
+              "materials",
+              "version"
+            ],
+            "properties": {
+              "chapter": {
+                "type": "string"
+              },
+              "duration_seconds": {
+                "type": "integer",
+                "format": "int32",
+                "maximum": 360000,
+                "minimum": 0
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "materials": {
+                "type": "string"
+              },
+              "number": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "planned_on": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "공통 계획일."
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 300,
+                "minLength": 1
+              },
+              "url": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32",
+                "description": "공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409)."
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
       "StaleWrite_Event": {
         "type": "object",
         "description": "판 충돌 409 본문.",
@@ -21279,6 +21887,110 @@
           }
         }
       },
+      "StaleWrite_Record": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "항목 기록.",
+            "required": [
+              "id",
+              "kind",
+              "title",
+              "body",
+              "fields",
+              "files",
+              "created_by",
+              "updated_at",
+              "version",
+              "can_edit",
+              "can_delete"
+            ],
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "can_delete": {
+                "type": "boolean"
+              },
+              "can_edit": {
+                "type": "boolean"
+              },
+              "created_by": {
+                "$ref": "#/components/schemas/UserId"
+              },
+              "created_by_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fields": {
+                "type": "object"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RecordFile"
+                }
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "occurred_on": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 300,
+                "minLength": 1
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
       "StaleWrite_SavedView": {
         "type": "object",
         "description": "판 충돌 409 본문.",
@@ -21320,6 +22032,93 @@
                 "type": "integer",
                 "format": "int32",
                 "description": "고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다."
+              }
+            }
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
+      "StaleWrite_StudyUnit": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "type": "object",
+            "description": "계획 단위.",
+            "required": [
+              "id",
+              "number",
+              "title",
+              "chapter",
+              "unit",
+              "amount",
+              "version"
+            ],
+            "properties": {
+              "amount": {
+                "type": "integer",
+                "format": "int32",
+                "maximum": 1000000,
+                "minimum": 0
+              },
+              "chapter": {
+                "type": "string",
+                "description": "교육과정·챕터·단계.",
+                "maxLength": 300
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "number": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "planned_on": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date",
+                "description": "공통 계획일."
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 300,
+                "minLength": 1
+              },
+              "unit": {
+                "type": "string",
+                "description": "`pages`·`problems`·`minutes`·`items`."
+              },
+              "version": {
+                "type": "integer",
+                "format": "int32",
+                "description": "공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409)."
               }
             }
           },
@@ -21732,21 +22531,13 @@
       },
       "StudyPlan": {
         "type": "object",
-        "description": "스터디 계획.",
+        "description": "스터디의 접근 상태.",
         "required": [
-          "units",
-          "can_write"
+          "access"
         ],
         "properties": {
-          "can_write": {
-            "type": "boolean",
-            "description": "단위를 고칠 수 있는지(진행은 볼 수 있으면 누구나 자기 것)."
-          },
-          "units": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StudyUnit"
-            }
+          "access": {
+            "$ref": "#/components/schemas/LearningAccess"
           }
         }
       },
@@ -21760,24 +22551,23 @@
           "chapter",
           "unit",
           "amount",
-          "mine",
           "version"
         ],
         "properties": {
           "amount": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 1000000,
+            "minimum": 0
           },
           "chapter": {
             "type": "string",
-            "description": "교육과정·챕터·단계."
+            "description": "교육과정·챕터·단계.",
+            "maxLength": 300
           },
           "id": {
             "type": "string",
             "format": "uuid"
-          },
-          "mine": {
-            "$ref": "#/components/schemas/MyUnitProgress"
           },
           "number": {
             "type": "integer",
@@ -21792,7 +22582,9 @@
             "description": "공통 계획일."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "unit": {
             "type": "string",
@@ -22546,6 +23338,17 @@
           }
         }
       },
+      "UnitWriteConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_StudyUnit"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "판 충돌은 현재 단위, 그 밖의 409는 공통 오류 본문이다."
+      },
       "UnitsAdded": {
         "type": "object",
         "description": "추가한 수.",
@@ -22660,7 +23463,9 @@
           },
           "duration_seconds": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 360000,
+            "minimum": 0
           },
           "materials": {
             "type": "string"
@@ -22677,7 +23482,9 @@
             "format": "date"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "url": {
             "type": "string"
@@ -22764,10 +23571,13 @@
         "properties": {
           "amount": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "maximum": 1000000,
+            "minimum": 0
           },
           "chapter": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300
           },
           "number": {
             "type": "integer",
@@ -22781,7 +23591,9 @@
             "format": "date"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1
           },
           "unit": {
             "type": "string"

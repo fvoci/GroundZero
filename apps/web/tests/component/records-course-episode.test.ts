@@ -120,7 +120,7 @@ const courseView: CourseView = {
     target_on: null,
   },
   episodes: [episode('ep-1', 1, '벡터'), episode('ep-2', 2, '행렬')],
-  can_write: true,
+  access: 'write' as const,
 };
 
 beforeEach(async () => {

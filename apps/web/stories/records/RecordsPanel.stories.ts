@@ -102,7 +102,7 @@ const COURSE_VIEW: CourseView = {
     target_on: null,
   },
   episodes: [episode('ep-1', 1, '벡터와 공간'), episode('ep-2', 2, '행렬식과 고유값')],
-  can_write: true,
+  access: 'write',
 };
 
 const RECORDS: RecordView[] = [

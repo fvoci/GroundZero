@@ -45,16 +45,7 @@ async fn course(app: &Router, admin: &TestUser, ws: &str) -> String {
 }
 
 async fn get(app: &Router, user: &TestUser, item: &str) -> Value {
-    let r = send(
-        app,
-        Method::GET,
-        &format!("/api/items/{item}/course"),
-        Some(user),
-        None,
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    r.json
+    super::support::view(app, user, item, super::support::LearningKind::Course).await
 }
 
 async fn progress(app: &Router, user: &TestUser, episode: &Value, body: Value) -> StatusCode {
@@ -185,11 +176,8 @@ async fn course_episodes_and_personal_progress() {
     let today = time::OffsetDateTime::now_utc().date();
     let yesterday = today - time::Duration::days(1);
 
-    // 진도는 사람마다. 읽기 전용은 자기 진도도 남기지 못한다(개정 2026-10-26 ⑧, D-20). 다시 보아 완료해도 완료는 한 번.
-    assert_eq!(
-        progress(&app, &reader, &eps[0], json!({ "status": "done" })).await,
-        StatusCode::FORBIDDEN
-    );
+    // 진도는 사람마다. 다시 보아 완료해도 완료는 한 번.
+    // 읽기 전용의 개인 진도 허용은 private_progress 모듈에서 별도로 확인한다(D-113 SR1-11).
     assert_eq!(
         progress(&app, &writer, &eps[0], json!({ "status": "done" })).await,
         StatusCode::NO_CONTENT
@@ -622,9 +610,24 @@ async fn two_writers_on_the_same_episode_version_do_not_overwrite() {
     )
     .await;
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
-    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
-    assert_eq!(second.json["error"], "invalid_state");
+    // D-131·#180: 판 충돌은 공유 회차 자원과 요청 중 다른 칸을 돌려준다.
+    assert_eq!(second.json["error"], "conflict");
     assert_eq!(second.json["message"], "the episode changed; reload it");
+    assert_eq!(second.json["current"]["version"], 2);
+    assert_eq!(second.json["current"]["title"], "벡터 공간");
+    assert!(second.json["current"]["mine"].is_null());
+    assert!(
+        second.json["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("title"))
+    );
+    assert!(
+        !second.json["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("version"))
+    );
     let now = get(&app, &writer, &item).await["episodes"][0].clone();
     assert_eq!(now["title"], "벡터 공간");
     assert_eq!(now["url"], "https://example.test/a");

@@ -865,7 +865,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 강좌(볼 수 있는 사람). 강의 모듈의 항목이 아니면 404. */
         get: operations["get_course"];
         /** 강좌 정보 고치기(쓸 수 있는 사람). */
         put: operations["set_course_details"];
@@ -911,6 +910,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/episode-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_episode_progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/episodes": {
         parameters: {
             query?: never;
@@ -918,7 +933,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["course_episodes"];
         put?: never;
         /** 회차 추가(쓸 수 있는 사람). 직접 입력과 CSV 일괄 등록이 같은 길을 쓴다. */
         post: operations["add_episodes"];
@@ -1079,7 +1094,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 스터디 계획(볼 수 있는 사람). 스터디 모듈의 항목이 아니면 404. */
         get: operations["get_study_plan"];
         put?: never;
         post?: never;
@@ -1123,6 +1137,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/study/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_study_progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/study/units": {
         parameters: {
             query?: never;
@@ -1130,7 +1160,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["study_units"];
         put?: never;
         /** 단위 여러 개 추가(쓸 수 있는 사람). 같은 요청 id는 한 번만. */
         post: operations["add_study_units"];
@@ -3232,12 +3262,10 @@ export interface components {
             /** @description 비우면 원래 제목. */
             title?: string;
         };
-        /** @description 강좌: 정보·회차(번호순)·내 진도. */
+        /** @description 강좌 정보와 접근 상태. */
         Course: {
-            /** @description 강좌 정보·회차를 고칠 수 있는지(진도는 볼 수 있으면 누구나 자기 것). */
-            can_write: boolean;
+            access: components["schemas"]["LearningAccess"];
             details: components["schemas"]["CourseDetails"];
-            episodes: components["schemas"]["Episode"][];
         };
         /** @description 강좌 정보. */
         CourseDetails: {
@@ -3537,7 +3565,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             materials: string;
-            mine: components["schemas"]["MyProgress"];
             /** Format: int32 */
             number: number;
             /**
@@ -3553,6 +3580,8 @@ export interface components {
              */
             version: number;
         };
+        /** @description 판 충돌은 현재 회차, 그 밖의 409는 공통 오류 본문이다. */
+        EpisodeWriteConflict: components["schemas"]["StaleWrite_Episode"] | components["schemas"]["ErrorBody"];
         /** @description 추가한 수(같은 요청 id로 이미 있던 것은 빠짐). */
         EpisodesAdded: {
             /** Format: int32 */
@@ -3948,6 +3977,8 @@ export interface components {
              */
             mine_seconds: number;
         };
+        /** @enum {string} */
+        LearningAccess: "write" | "read" | "archived";
         /** @description 관계 편집을 시작한 때의 종류·지연일(관계 설정의 기준 조건). */
         LinkBase: {
             kind: components["schemas"]["LinkKind"];
@@ -4146,6 +4177,8 @@ export interface components {
              * @description 처음 완료한 날.
              */
             completed_on?: string | null;
+            /** Format: uuid */
+            episode_id: string;
             /** Format: int32 */
             last_position_seconds?: number | null;
             /** @description 개인 메모(나만 봄). */
@@ -4231,6 +4264,8 @@ export interface components {
             planned_on?: string | null;
             /** @description `not_started`·`in_progress`·`done`. */
             status: string;
+            /** Format: uuid */
+            unit_id: string;
         };
         /** @description 덧붙일 체크리스트 항목. */
         NewChecklistItem: {
@@ -4654,6 +4689,8 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        /** @description 판 충돌은 현재 기록, 그 밖의 409는 공통 오류 본문이다. */
+        RecordWriteConflict: components["schemas"]["StaleWrite_Record"] | components["schemas"]["ErrorBody"];
         /** @description 반복 규칙. 기준일이 첫 회차이고 `count`는 첫 회차를 포함한다. 매달 31일·2월 29일처럼 없는 날은 건너뛴다. */
         RecurrenceRule: {
             /**
@@ -5129,6 +5166,43 @@ export interface components {
             request_id?: string;
         };
         /** @description 판 충돌 409 본문. */
+        StaleWrite_Episode: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 회차. */
+            current: {
+                chapter: string;
+                /** Format: int32 */
+                duration_seconds: number;
+                /** Format: uuid */
+                id: string;
+                materials: string;
+                /** Format: int32 */
+                number: number;
+                /**
+                 * Format: date
+                 * @description 공통 계획일.
+                 */
+                planned_on?: string | null;
+                title: string;
+                url: string;
+                /**
+                 * Format: int32
+                 * @description 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409).
+                 */
+                version: number;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
         StaleWrite_Event: {
             /**
              * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
@@ -5217,6 +5291,40 @@ export interface components {
             request_id?: string;
         };
         /** @description 판 충돌 409 본문. */
+        StaleWrite_Record: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 항목 기록. */
+            current: {
+                body: string;
+                can_delete: boolean;
+                can_edit: boolean;
+                created_by: components["schemas"]["UserId"];
+                created_by_name?: string | null;
+                fields: Record<string, never>;
+                files: components["schemas"]["RecordFile"][];
+                /** Format: uuid */
+                id: string;
+                kind: string;
+                /** Format: date */
+                occurred_on?: string | null;
+                title: string;
+                /** Format: date-time */
+                updated_at: string;
+                /** Format: int32 */
+                version: number;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
         StaleWrite_SavedView: {
             /**
              * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
@@ -5232,6 +5340,44 @@ export interface components {
                 /**
                  * Format: int32
                  * @description 고칠 때마다 1 오른다. 고치기의 `base_version`으로 보낸다.
+                 */
+                version: number;
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
+        StaleWrite_StudyUnit: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description 계획 단위. */
+            current: {
+                /** Format: int32 */
+                amount: number;
+                /** @description 교육과정·챕터·단계. */
+                chapter: string;
+                /** Format: uuid */
+                id: string;
+                /** Format: int32 */
+                number: number;
+                /**
+                 * Format: date
+                 * @description 공통 계획일.
+                 */
+                planned_on?: string | null;
+                title: string;
+                /** @description `pages`·`problems`·`minutes`·`items`. */
+                unit: string;
+                /**
+                 * Format: int32
+                 * @description 공통 정보의 판. 고칠 때 읽은 판을 보낸다(그 사이 다른 사람이 고쳤으면 409).
                  */
                 version: number;
             };
@@ -5390,11 +5536,9 @@ export interface components {
             overdue: number;
             user_id: components["schemas"]["UserId"];
         };
-        /** @description 스터디 계획. */
+        /** @description 스터디의 접근 상태. */
         StudyPlan: {
-            /** @description 단위를 고칠 수 있는지(진행은 볼 수 있으면 누구나 자기 것). */
-            can_write: boolean;
-            units: components["schemas"]["StudyUnit"][];
+            access: components["schemas"]["LearningAccess"];
         };
         /** @description 계획 단위. */
         StudyUnit: {
@@ -5404,7 +5548,6 @@ export interface components {
             chapter: string;
             /** Format: uuid */
             id: string;
-            mine: components["schemas"]["MyUnitProgress"];
             /** Format: int32 */
             number: number;
             /**
@@ -5705,6 +5848,8 @@ export interface components {
             task_id: string;
             title: string;
         };
+        /** @description 판 충돌은 현재 단위, 그 밖의 409는 공통 오류 본문이다. */
+        UnitWriteConflict: components["schemas"]["StaleWrite_StudyUnit"] | components["schemas"]["ErrorBody"];
         /** @description 추가한 수. */
         UnitsAdded: {
             /** Format: int32 */
@@ -7589,7 +7734,10 @@ export interface operations {
     update_episode: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 episode_id: string;
             };
@@ -7636,7 +7784,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["EpisodeWriteConflict"];
                 };
             };
         };
@@ -7644,7 +7792,10 @@ export interface operations {
     delete_episode: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 episode_id: string;
             };
@@ -7657,6 +7808,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -7674,12 +7833,23 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     set_episode_progress: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 episode_id: string;
             };
@@ -7706,6 +7876,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8877,7 +9055,10 @@ export interface operations {
     set_course_details: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9057,10 +9238,71 @@ export interface operations {
             };
         };
     };
-    add_episodes: {
+    my_episode_progress: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyProgress"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    course_episodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Episode"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_episodes: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9404,7 +9646,10 @@ export interface operations {
     create_record: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9807,7 +10052,10 @@ export interface operations {
     plan_study_units: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -9843,12 +10091,81 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_study_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyUnitProgress"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    study_units: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyUnit"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     add_study_units: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -10152,7 +10469,10 @@ export interface operations {
     zotero_import: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 item_id: string;
             };
@@ -12095,7 +12415,10 @@ export interface operations {
     update_record: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 record_id: string;
             };
@@ -12144,7 +12467,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["RecordWriteConflict"];
                 };
             };
         };
@@ -12152,7 +12475,10 @@ export interface operations {
     delete_record: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 record_id: string;
             };
@@ -12165,6 +12491,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -12434,7 +12768,10 @@ export interface operations {
     update_study_unit: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 unit_id: string;
             };
@@ -12481,7 +12818,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ErrorBody"];
+                    "application/json": components["schemas"]["UnitWriteConflict"];
                 };
             };
         };
@@ -12489,7 +12826,10 @@ export interface operations {
     delete_study_unit: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 unit_id: string;
             };
@@ -12502,6 +12842,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
             403: {
                 headers: {
@@ -12519,12 +12867,23 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     set_unit_progress: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path: {
                 unit_id: string;
             };
@@ -12551,6 +12910,14 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15318,7 +15685,10 @@ export interface operations {
     zotero_collections: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description 선택. 보내면 세션의 사용자와 비교해 다르면 아무것도 하지 않고 409 account_changed, 형식이 틀리면 400(D-96). 신원과 권한은 세션으로만 정한다 */
+                "x-fvoci-expected-user"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -15337,6 +15707,14 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

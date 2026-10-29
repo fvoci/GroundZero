@@ -64,13 +64,13 @@ export const RestoreDraft: Story = {
   },
 };
 
-/** 읽기 전용·보관 항목: 상태 단추·다시 배정은 없고, 내 분량·메모는 저장 단추 없는 읽기 전용(readonly) 칸으로 볼 수 있다(D-20 ⑧, D3B-F-2). */
-export const ReadOnly: Story = {
+/** 보관 항목은 개인 진도를 읽기만 한다. 읽기 전용 사용자의 개인 진도는 허용한다(D-113 SR1-11). */
+export const Archived: Story = {
   beforeEach: () => {
     // 지난 계획일 단위를 둬, 쓸 수 있었다면 다시 배정 폼이 보일 상태에서 그 부재를 본다(R5 B 최종 FC-14).
     spyOn(api, 'studyPlan').mockResolvedValue({
       ...study,
-      can_write: false,
+      access: 'archived',
       units: study.units.map((u) => ({ ...u, planned_on: '2020-01-01' })),
     });
   },

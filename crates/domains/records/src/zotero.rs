@@ -13,12 +13,12 @@ use serde_json::{Map, Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::features::records::{RecordFileInput, validate};
-use crate::http::AppState;
+use crate::records::{RecordFileInput, validate};
+use crate::{RecordsState, validation as fields_validation};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::ItemId;
 use fvoci_db::UserTx;
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 /// 한 번에 가져오는 최대 문헌 수.
 const MAX_ITEMS: usize = 2000;
@@ -82,19 +82,26 @@ fn library(input: &ZoteroLibrary) -> Result<Library, AppError> {
         "user" => "users",
         "group" => "groups",
         _ => {
-            return Err(AppError::BadRequest(
-                "library_type must be user or group".into(),
+            return Err(fields_validation::invalid(
+                "library_type",
+                "library_type must be user or group",
             ));
         }
     };
     let id = input.library_id.trim();
-    if id.is_empty() || id.len() > 20 || !id.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(AppError::BadRequest("library_id must be a number".into()));
+    fields_validation::length(id, "library_id", 20)?;
+    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(fields_validation::invalid(
+            "library_id",
+            "library_id must be a number",
+        ));
     }
     let key = input.api_key.trim();
-    if key.is_empty() || key.len() > 64 || !key.bytes().all(|b| b.is_ascii_alphanumeric()) {
-        return Err(AppError::BadRequest(
-            "the Zotero API key looks malformed".into(),
+    fields_validation::length(key, "api_key", 64)?;
+    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(fields_validation::invalid(
+            "api_key",
+            "the Zotero API key looks malformed",
         ));
     }
     Ok(Library {
@@ -109,7 +116,7 @@ fn valid_key(key: &str) -> bool {
 
 /// Zotero 목록 한 종류를 끝까지(최대 `limit`개) 읽는다.
 async fn fetch_all(
-    state: &AppState,
+    state: &RecordsState,
     lib: &Library,
     path: &str,
     limit: usize,
@@ -122,7 +129,6 @@ async fn fetch_all(
     let mut out = Vec::new();
     loop {
         let mut url = state
-            .config
             .zotero_api_url
             .join(&format!("{}/{path}", lib.prefix))
             .map_err(|e| AppError::Config(format!("zotero url: {e}")))?;
@@ -141,13 +147,20 @@ async fn fetch_all(
         match response.status().as_u16() {
             200 => {}
             403 => {
-                return Err(AppError::BadRequest(
-                    "Zotero refused the key for this library".into(),
+                return Err(fields_validation::invalid(
+                    "api_key",
+                    "Zotero refused the key for this library",
                 ));
             }
             404 => {
-                return Err(AppError::BadRequest(
-                    "no such Zotero library or collection".into(),
+                let field = if path.starts_with("collections/") {
+                    "collection_key"
+                } else {
+                    "library_id"
+                };
+                return Err(fields_validation::invalid(
+                    field,
+                    "no such Zotero library or collection",
                 ));
             }
             429 | 503 => return Err(AppError::Upstream("Zotero is busy; try again later".into())),
@@ -166,7 +179,10 @@ async fn fetch_all(
     }
 }
 
-async fn collections(state: &AppState, lib: &Library) -> Result<Vec<ZoteroCollection>, AppError> {
+async fn collections(
+    state: &RecordsState,
+    lib: &Library,
+) -> Result<Vec<ZoteroCollection>, AppError> {
     let rows = fetch_all(state, lib, "collections", 1000).await?;
     Ok(rows
         .iter()
@@ -180,11 +196,12 @@ async fn collections(state: &AppState, lib: &Library) -> Result<Vec<ZoteroCollec
 
 /// 내 Zotero 라이브러리의 컬렉션(로그인한 사람). 키는 저장하지 않는다.
 #[utoipa::path(post, path = "/api/zotero/collections", operation_id = "zotero_collections",
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)),
     request_body = ZoteroLibrary,
-    responses((status = 200, body = [ZoteroCollection]), (status = 400, body = ErrorBody),
+    responses((status = 409, body = ErrorBody), (status = 200, body = [ZoteroCollection]), (status = 400, body = ErrorBody),
               (status = 502, body = ErrorBody)), tag = "records")]
 pub async fn list_collections(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(_user): CurrentUser,
     Json(input): Json<ZoteroLibrary>,
 ) -> Result<Json<Vec<ZoteroCollection>>, AppError> {
@@ -197,6 +214,38 @@ fn text(v: Option<&Value>) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
+}
+
+fn authors(data: &Value) -> Vec<String> {
+    data.get("creators")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|c| {
+                    text(c.get("name")).or_else(|| {
+                        let last = text(c.get("lastName"))?;
+                        Some(match text(c.get("firstName")) {
+                            Some(first) => format!("{last}, {first}"),
+                            None => last,
+                        })
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn tags(data: &Value) -> Vec<String> {
+    data.get("tags")
+        .and_then(Value::as_array)
+        .map(|t| {
+            t.iter()
+                .filter_map(|x| text(x.get("tag")))
+                .map(|s| s.chars().take(100).collect())
+                .take(50)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Zotero 문헌 하나 → (제목, 서지 칸). 문헌이 아니면 None.
@@ -215,23 +264,7 @@ fn reference_fields(
         return None;
     }
     let mut f = Map::new();
-    let authors: Vec<String> = data
-        .get("creators")
-        .and_then(Value::as_array)
-        .map(|list| {
-            list.iter()
-                .filter_map(|c| {
-                    text(c.get("name")).or_else(|| {
-                        let last = text(c.get("lastName"))?;
-                        Some(match text(c.get("firstName")) {
-                            Some(first) => format!("{last}, {first}"),
-                            None => last,
-                        })
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let authors = authors(data);
     if !authors.is_empty() {
         f.insert(
             "authors".into(),
@@ -288,17 +321,7 @@ fn reference_fields(
             json!(summary.chars().take(10_000).collect::<String>()),
         );
     }
-    let tags: Vec<String> = data
-        .get("tags")
-        .and_then(Value::as_array)
-        .map(|t| {
-            t.iter()
-                .filter_map(|x| text(x.get("tag")))
-                .map(|s| s.chars().take(100).collect())
-                .take(50)
-                .collect()
-        })
-        .unwrap_or_default();
+    let tags = tags(data);
     if !tags.is_empty() {
         f.insert("tags".into(), json!(tags));
     }
@@ -378,12 +401,12 @@ async fn existing_files(tx: &mut UserTx, record: Uuid) -> Result<Vec<RecordFileI
 
 /// Zotero에서 문헌 가져오기(연구 항목에 쓸 수 있는 사람). 같은 Zotero 문헌은 새로 만들지 않고 서지만 고친다.
 #[utoipa::path(post, path = "/api/items/{item_id}/zotero/import", operation_id = "zotero_import",
-    params(("item_id" = String, Path, format = Uuid)), request_body = ZoteroImport,
+    params(("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC), ("item_id" = String, Path, format = Uuid)), request_body = ZoteroImport,
     responses((status = 200, body = ZoteroImported), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody), (status = 502, body = ErrorBody)),
     tag = "records")]
 pub async fn import(
-    State(state): State<AppState>,
+    State(state): State<RecordsState>,
     CurrentUser(user): CurrentUser,
     Path(item): Path<ItemId>,
     Json(input): Json<ZoteroImport>,
@@ -394,8 +417,14 @@ pub async fn import(
         .as_deref()
         .is_some_and(|key| !valid_key(key))
     {
-        return Err(AppError::BadRequest(
-            "collection_key looks malformed".into(),
+        fields_validation::length(
+            input.collection_key.as_deref().unwrap_or_default(),
+            "collection_key",
+            16,
+        )?;
+        return Err(fields_validation::invalid(
+            "collection_key",
+            "collection_key looks malformed",
         ));
     }
     // 바깥에 묻기 전에 그 항목에 쓸 수 있는지 먼저 본다.
@@ -410,8 +439,9 @@ pub async fn import(
         match kind {
             None => return Err(AppError::NotFound),
             Some((k, _)) if k != "research" => {
-                return Err(AppError::BadRequest(
-                    "Zotero imports go into research items".into(),
+                return Err(fields_validation::invalid(
+                    "item_id",
+                    "Zotero imports go into research items",
                 ));
             }
             Some((_, access)) if access != "owner" && access != "write" => {
@@ -440,51 +470,75 @@ pub async fn import(
         .await?;
     let (mut created, mut updated, mut skipped) = (0, 0, 0);
     for entry in &items {
-        let Some((title, fields)) = reference_fields(entry, &names) else {
-            skipped += 1;
-            continue;
-        };
-        let key = fields
-            .get("zotero_key")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        let found: Option<(Uuid, i32, Value)> = sqlx::query_as(
-            "SELECT id, version, fields FROM item_records
-             WHERE item_id = $1 AND kind = 'reference' AND fields->>'zotero_key' = $2
-             ORDER BY created_at LIMIT 1",
-        )
-        .bind(item)
-        .bind(&key)
-        .fetch_optional(tx.conn())
-        .await?;
-        match found {
-            Some((id, version, old)) => {
-                let old = old.as_object().cloned().unwrap_or_default();
-                let body: Option<String> =
-                    sqlx::query_scalar("SELECT body FROM item_records WHERE id = $1")
-                        .bind(id)
-                        .fetch_optional(tx.conn())
-                        .await?;
-                let occurred: Option<time::Date> =
-                    sqlx::query_scalar("SELECT occurred_on FROM item_records WHERE id = $1")
-                        .bind(id)
-                        .fetch_one(tx.conn())
-                        .await?;
-                let files = existing_files(&mut tx, id).await?;
-                let (fields, files) = validate(
-                    &mut tx,
-                    item,
-                    "reference",
-                    &title,
-                    merged(&old, fields),
-                    Some(&old),
-                    &files,
-                )
-                .await?;
-                sqlx::query_scalar::<_, i32>(
-                    "SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)",
-                )
+        match import_one(&mut tx, item, entry, &names).await? {
+            ImportedEntry::Created => created += 1,
+            ImportedEntry::Updated => updated += 1,
+            ImportedEntry::Skipped => skipped += 1,
+        }
+    }
+    tx.commit().await?;
+    Ok(Json(ZoteroImported {
+        created,
+        updated,
+        skipped,
+    }))
+}
+
+#[derive(Debug)]
+enum ImportedEntry {
+    Created,
+    Updated,
+    Skipped,
+}
+
+async fn import_one(
+    tx: &mut UserTx,
+    item: ItemId,
+    entry: &Value,
+    names: &HashMap<String, String>,
+) -> Result<ImportedEntry, AppError> {
+    let Some((title, fields)) = reference_fields(entry, names) else {
+        return Ok(ImportedEntry::Skipped);
+    };
+    let key = fields
+        .get("zotero_key")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let found: Option<(Uuid, i32, Value)> = sqlx::query_as(
+        "SELECT id, version, fields FROM item_records
+         WHERE item_id = $1 AND kind = 'reference' AND fields->>'zotero_key' = $2
+         ORDER BY created_at LIMIT 1",
+    )
+    .bind(item)
+    .bind(&key)
+    .fetch_optional(tx.conn())
+    .await?;
+    match found {
+        Some((id, version, old)) => {
+            let old = old.as_object().cloned().unwrap_or_default();
+            let body: Option<String> =
+                sqlx::query_scalar("SELECT body FROM item_records WHERE id = $1")
+                    .bind(id)
+                    .fetch_optional(tx.conn())
+                    .await?;
+            let occurred: Option<time::Date> =
+                sqlx::query_scalar("SELECT occurred_on FROM item_records WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(tx.conn())
+                    .await?;
+            let files = existing_files(tx, id).await?;
+            let (fields, files) = validate(
+                tx,
+                item,
+                "reference",
+                &title,
+                merged(&old, fields),
+                Some(&old),
+                &files,
+            )
+            .await?;
+            sqlx::query_scalar::<_, i32>("SELECT app_update_record($1, $2, $3, $4, $5, $6, $7)")
                 .bind(id)
                 .bind(version)
                 .bind(&title)
@@ -495,33 +549,26 @@ pub async fn import(
                 .fetch_one(tx.conn())
                 .await
                 .map_err(AppError::from_db_function)?;
-                updated += 1;
-            }
-            None => {
-                let (fields, files) =
-                    validate(&mut tx, item, "reference", &title, fields, None, &[]).await?;
-                sqlx::query_scalar::<_, Uuid>(
-                    "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)",
-                )
-                .bind(Uuid::now_v7())
-                .bind(item)
-                .bind(&title)
-                .bind(fields)
-                .bind(files)
-                .bind(fvoci_db::new_ids(2))
-                .fetch_one(tx.conn())
-                .await
-                .map_err(AppError::from_db_function)?;
-                created += 1;
-            }
+            Ok(ImportedEntry::Updated)
+        }
+        None => {
+            let (fields, files) =
+                validate(tx, item, "reference", &title, fields, None, &[]).await?;
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT app_create_record($1, $2, 'reference', $3, NULL, '', $4, $5, $6)",
+            )
+            .bind(Uuid::now_v7())
+            .bind(item)
+            .bind(&title)
+            .bind(fields)
+            .bind(files)
+            .bind(fvoci_db::new_ids(2))
+            .fetch_one(tx.conn())
+            .await
+            .map_err(AppError::from_db_function)?;
+            Ok(ImportedEntry::Created)
         }
     }
-    tx.commit().await?;
-    Ok(Json(ZoteroImported {
-        created,
-        updated,
-        skipped,
-    }))
 }
 
 #[cfg(test)]

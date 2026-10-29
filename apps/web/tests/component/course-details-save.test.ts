@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 const course: CourseView = {
-  can_write: true,
+  access: 'write' as const,
   details: {
     subject: '선형대수',
     instructor: '김 강사',
