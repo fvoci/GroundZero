@@ -185,6 +185,16 @@ function matches(path: string, route: string): boolean {
   );
 }
 
+function apiPath(path: string): boolean {
+  return /^\/(?:api|auth|healthz)(?:\/|$)/.test(path);
+}
+
+function outsidePrefix(prefix: string): boolean {
+  return (
+    /^(?:[a-z][\w+.-]*:|\/\/)/i.test(prefix) || (/^\/[^/{}]+\//.test(prefix) && !apiPath(prefix))
+  );
+}
+
 export function checkUsage(
   files: Map<string, string>,
   contract: unknown,
@@ -199,13 +209,92 @@ export function checkUsage(
   const targets = new Map<ts.Symbol, Forwarder | null>();
   const forwarded = new Map<Forwarder, number>();
   const used = new Set<string>();
+  let transport: ts.FunctionDeclaration | undefined;
   let calls = 0;
   function unalias(found: ts.Symbol): ts.Symbol {
     return (found.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(found) : found;
   }
   function symbol(node: ts.Node): ts.Symbol | undefined {
-    const found = checker.getSymbolAtLocation(node);
+    const found =
+      ts.isIdentifier(node) && ts.isShorthandPropertyAssignment(node.parent)
+        ? checker.getShorthandAssignmentValueSymbol(node.parent)
+        : checker.getSymbolAtLocation(node);
     return found ? unalias(found) : undefined;
+  }
+  function parameterWrites(
+    fn: ts.FunctionLikeDeclaration,
+    parameters: readonly ts.ParameterDeclaration[] = fn.parameters,
+  ): string[] {
+    const watched = new Set(
+      parameters.flatMap((parameter) => {
+        const found = symbol(parameter.name);
+        return found ? [found] : [];
+      }),
+    );
+    const writes: string[] = [];
+    function assigned(node: ts.Node): void {
+      if (ts.isIdentifier(node)) {
+        const found = symbol(node);
+        if (found && watched.has(found)) writes.push(node.text);
+      } else if (ts.isShorthandPropertyAssignment(node)) {
+        const found = checker.getShorthandAssignmentValueSymbol(node);
+        if (found && watched.has(unalias(found))) writes.push(node.name.text);
+      } else if (ts.isPropertyAssignment(node)) assigned(node.initializer);
+      else if (ts.isArrayLiteralExpression(node)) node.elements.forEach(assigned);
+      else if (ts.isObjectLiteralExpression(node)) node.properties.forEach(assigned);
+      else if (
+        ts.isParenthesizedExpression(node) ||
+        ts.isSpreadElement(node) ||
+        ts.isSpreadAssignment(node)
+      )
+        assigned(node.expression);
+      else if (ts.isBinaryExpression(node)) assigned(node.left); // Destructuring defaults.
+    }
+    if (fn.body)
+      walk(fn.body, (node) => {
+        if (
+          ts.isBinaryExpression(node) &&
+          node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+          node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+        )
+          assigned(node.left);
+        if (
+          (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+          (node.operator === ts.SyntaxKind.PlusPlusToken ||
+            node.operator === ts.SyntaxKind.MinusMinusToken)
+        )
+          assigned(node.operand);
+        if (
+          (ts.isForOfStatement(node) || ts.isForInStatement(node)) &&
+          !ts.isVariableDeclarationList(node.initializer)
+        )
+          assigned(node.initializer);
+      });
+    return [...new Set(writes)];
+  }
+  function isFetch(node: ts.Node, seen = new Set<ts.Symbol>()): boolean {
+    if (ts.isParenthesizedExpression(node)) return isFetch(node.expression, seen);
+    if (ts.isIdentifier(node) && node.text === 'fetch' && !symbol(node)) return true;
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'fetch' &&
+      ts.isIdentifier(node.expression) &&
+      ['window', 'globalThis', 'self'].includes(node.expression.text) &&
+      !symbol(node.expression)
+    )
+      return true;
+    const found = symbol(node);
+    if (!found || seen.has(found)) return false;
+    seen.add(found);
+    const declaration = found.valueDeclaration;
+    return !!(
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+      isFetch(declaration.initializer, seen)
+    );
   }
   function target(node: ts.Node, seen = new Set<ts.Symbol>()): ts.Symbol | undefined {
     if (ts.isParenthesizedExpression(node)) return target(node.expression, seen);
@@ -244,11 +333,19 @@ export function checkUsage(
       const name = node.name.text;
       const found = symbol(node.name);
       if (!found) return;
-      if (path === shared && name === 'request') targets.set(found, null);
+      if (path === shared && name === 'request') {
+        targets.set(found, null);
+        transport = node;
+      }
       const entry = allowlist.forwarders.find((row) => row.file === path && row.name === name);
       if (entry) {
         targets.set(found, entry);
         forwarded.set(entry, 0);
+      }
+      if (targets.has(found)) {
+        for (const name of parameterWrites(node, node.parameters.slice(0, 2))) {
+          problems.push(`${path}:${node.name.text}: parameter ${name} is written`);
+        }
       }
     });
   }
@@ -257,34 +354,46 @@ export function checkUsage(
     if (!forwarded.has(row)) problems.push(`stale forwarder: ${row.file}:${row.name}`);
   }
 
-  function values(node: ts.Expression | undefined, seen = new Set<ts.Node>()): string[] {
+  type Bindings = Map<ts.Symbol, ts.Expression | string[]>;
+  function values(
+    node: ts.Expression | undefined,
+    seen = new Set<ts.Node>(),
+    bindings: Bindings = new Map(),
+  ): string[] {
     if (!node || seen.has(node)) throw new Error('method/path is not statically resolvable');
     seen = new Set(seen).add(node);
+    const found = symbol(node);
+    const binding = found ? bindings.get(found) : undefined;
+    if (binding) return Array.isArray(binding) ? binding : values(binding, seen, bindings);
+    const evaluate = (expression: ts.Expression | undefined): string[] =>
+      values(expression, seen, bindings);
     if (ts.isStringLiteralLike(node)) return [node.text];
     if (
       ts.isParenthesizedExpression(node) ||
       ts.isAsExpression(node) ||
       ts.isSatisfiesExpression(node)
     ) {
-      return values(node.expression, seen);
+      return evaluate(node.expression);
     }
     if (ts.isConditionalExpression(node)) {
-      return [...new Set([...values(node.whenTrue, seen), ...values(node.whenFalse, seen)])];
+      return [...new Set([...evaluate(node.whenTrue), ...evaluate(node.whenFalse)])];
     }
     if (ts.isTemplateExpression(node)) {
       let prefixes = [node.head.text];
       for (const span of node.templateSpans) {
         prefixes = prefixes.flatMap((prefix) =>
-          /[?#]/.test(prefix)
+          /[?#]/.test(prefix) || outsidePrefix(prefix)
             ? [prefix]
-            : values(span.expression, seen).map((value) => prefix + value + span.literal.text),
+            : evaluate(span.expression).map((value) => prefix + value + span.literal.text),
         );
       }
       return prefixes;
     }
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-      return values(node.left, seen).flatMap((prefix) =>
-        /[?#]/.test(prefix) ? [prefix] : values(node.right, seen).map((value) => prefix + value),
+      return evaluate(node.left).flatMap((prefix) =>
+        /[?#]/.test(prefix) || outsidePrefix(prefix)
+          ? [prefix]
+          : evaluate(node.right).map((value) => prefix + value),
       );
     }
     // Only encoded values may stand for an arbitrary path segment. An unknown
@@ -296,6 +405,39 @@ export function checkUsage(
       !symbol(node.expression)
     ) {
       return ['{}'];
+    }
+    if (ts.isCallExpression(node)) {
+      const declaration = symbol(node.expression)?.valueDeclaration;
+      const fn =
+        declaration && ts.isVariableDeclaration(declaration)
+          ? declaration.initializer
+          : declaration;
+      if (
+        fn &&
+        (ts.isFunctionDeclaration(fn) || ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) &&
+        fn.body
+      ) {
+        if (parameterWrites(fn).length > 0) throw new Error('URL function parameter is written');
+        const argumentsBySymbol = new Map(bindings);
+        fn.parameters.forEach((parameter, index) => {
+          const found = symbol(parameter.name);
+          const argument = node.arguments[index] ?? parameter.initializer;
+          if (found && argument) argumentsBySymbol.set(found, argument);
+        });
+        const returned: ts.Expression[] = [];
+        function returns(part: ts.Node): void {
+          if (ts.isReturnStatement(part) && part.expression) returned.push(part.expression);
+          else if (!ts.isFunctionLike(part)) ts.forEachChild(part, returns);
+        }
+        if (ts.isBlock(fn.body)) returns(fn.body);
+        else returned.push(fn.body);
+        if (returned.length > 0)
+          return [
+            ...new Set(
+              returned.flatMap((expression) => values(expression, seen, argumentsBySymbol)),
+            ),
+          ];
+      }
     }
     if (
       ts.isCallExpression(node) &&
@@ -316,7 +458,7 @@ export function checkUsage(
       ts.isVariableDeclarationList(declaration.parent) &&
       (declaration.parent.flags & ts.NodeFlags.Const) !== 0
     ) {
-      return values(declaration.initializer, seen);
+      return evaluate(declaration.initializer);
     }
     const type = checker.getTypeAtLocation(node);
     const variants = type.isUnion() ? type.types : [type];
@@ -324,6 +466,82 @@ export function checkUsage(
       return variants.flatMap((variant) => (variant.isStringLiteral() ? [variant.value] : []));
     }
     throw new Error(`method/path is not statically resolvable: ${node.getText()}`);
+  }
+
+  // Undefined denotes an absent method property, so a spread without method does
+  // not overwrite an earlier method. An explicit method: undefined means GET.
+  function isUndefined(node: ts.Expression): boolean {
+    return (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0;
+  }
+  function fetchMethods(
+    node: ts.Expression | undefined,
+    bindings: Bindings = new Map(),
+    seen = new Set<ts.Node>(),
+  ): (string | undefined)[] {
+    if (!node || isUndefined(node)) return [undefined];
+    if (seen.has(node)) throw new Error('fetch options are not statically resolvable');
+    seen = new Set(seen).add(node);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return fetchMethods(node.expression, bindings, seen);
+    if (ts.isConditionalExpression(node))
+      return [
+        ...fetchMethods(node.whenTrue, bindings, seen),
+        ...fetchMethods(node.whenFalse, bindings, seen),
+      ];
+    const declaration = symbol(node)?.valueDeclaration;
+    if (
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    ) {
+      const optionSymbol = symbol(declaration.name);
+      walk(declaration.getSourceFile(), (part) => {
+        if (
+          !ts.isBinaryExpression(part) ||
+          part.operatorToken.kind < ts.SyntaxKind.FirstAssignment ||
+          part.operatorToken.kind > ts.SyntaxKind.LastAssignment
+        )
+          return;
+        walk(part.left, (member) => {
+          if (
+            (ts.isPropertyAccessExpression(member) || ts.isElementAccessExpression(member)) &&
+            symbol(member.expression) === optionSymbol &&
+            (ts.isElementAccessExpression(member) || member.name.text === 'method')
+          )
+            throw new Error('fetch options.method is written');
+        });
+      });
+      return fetchMethods(declaration.initializer, bindings, seen);
+    }
+    if (!ts.isObjectLiteralExpression(node))
+      throw new Error(`fetch options are not statically resolvable: ${node.getText()}`);
+    let verbs: (string | undefined)[] = [undefined];
+    for (const property of node.properties) {
+      if (ts.isSpreadAssignment(property)) {
+        const spread = fetchMethods(property.expression, bindings, seen);
+        verbs = verbs.flatMap((verb) => spread.map((value) => value ?? verb));
+        continue;
+      }
+      const names = ts.isComputedPropertyName(property.name)
+        ? values(property.name.expression, new Set(), bindings)
+        : [property.name.getText().replace(/^['"]|['"]$/g, '')];
+      if (!names.includes('method')) continue;
+      const expression = ts.isPropertyAssignment(property)
+        ? property.initializer
+        : ts.isShorthandPropertyAssignment(property)
+          ? property.name
+          : undefined;
+      if (!expression) throw new Error('fetch method is not statically resolvable');
+      const value = isUndefined(expression) ? ['GET'] : values(expression, new Set(), bindings);
+      verbs = names.some((name) => name !== 'method') ? [...verbs, ...value] : value;
+    }
+    return [...new Set(verbs)];
   }
 
   for (const file of sources) {
@@ -389,13 +607,15 @@ export function checkUsage(
       }
       if (!ts.isCallExpression(node)) return;
       const called = target(node.expression);
-      if (!called) return;
+      const directFetch = isFetch(node.expression);
+      if (!called && !directFetch) return;
       const position = file.getLineAndCharacterOfPosition(node.getStart());
       const location = `${relative(virtualRoot, file.fileName).replace(/\.svelte\.ts$/, '.svelte')}:${String(position.line + 1)}:${String(position.character + 1)}`;
       const fn = enclosingFunction(node);
       const ownerSymbol = fn?.name ? symbol(fn.name) : undefined;
       const owner = ownerSymbol ? targets.get(ownerSymbol) : undefined;
       if (
+        !directFetch &&
         owner &&
         fn &&
         node.arguments[0] &&
@@ -408,12 +628,43 @@ export function checkUsage(
         forwarded.set(owner, (forwarded.get(owner) ?? 0) + 1);
         return;
       }
-      calls++;
       try {
-        const verbs = values(node.arguments[0]);
-        const paths = values(node.arguments[1]).map((path) => path.split(/[?#]/, 1)[0] ?? '');
+        // The single shared transport forwards the checked request's parameters.
+        // Validate its URL and method mapping instead of counting it twice.
+        if (
+          directFetch &&
+          fn === transport &&
+          fn?.parameters[0] &&
+          fn.parameters[1] &&
+          node.arguments[0] &&
+          symbol(node.arguments[0]) === symbol(fn.parameters[1].name)
+        ) {
+          const method = symbol(fn.parameters[0].name);
+          const bindings: Bindings = new Map();
+          if (method) bindings.set(method, ['forwarded-method']);
+          const verbs = fetchMethods(node.arguments[1], bindings);
+          if (verbs.length !== 1 || verbs[0] !== 'forwarded-method')
+            throw new Error('request transport method is not forwarded');
+          return;
+        }
+        const paths = values(node.arguments[directFetch ? 0 : 1]).map(
+          (path) => path.split(/[?#]/, 1)[0] ?? '',
+        );
+        const apiPaths = directFetch
+          ? paths.filter((path) => {
+              if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(path)) return false;
+              if (!path.startsWith('/'))
+                throw new Error('relative fetch URL is not statically resolvable');
+              return apiPath(path);
+            })
+          : paths;
+        if (apiPaths.length === 0) return;
+        calls++;
+        const verbs = directFetch
+          ? fetchMethods(node.arguments[1]).map((verb) => verb ?? 'GET')
+          : values(node.arguments[0]);
         for (const verb of verbs) {
-          for (const path of paths) {
+          for (const path of apiPaths) {
             const matched = operations.filter(
               (operation) =>
                 operation.startsWith(`${verb} `) && matches(path, operation.slice(verb.length + 1)),

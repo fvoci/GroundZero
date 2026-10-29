@@ -25,7 +25,6 @@
       "path": "/api/organizations/{organization_id}/members/{user_id}",
       "reason": "샴 가3~가5 조립 예정"
     },
-    { "method": "GET", "path": "/api/files/{file_id}/content", "reason": "가6 판정 예정" },
     { "method": "GET", "path": "/api/me/export", "reason": "가6 판정 예정" },
     {
       "method": "GET",
@@ -57,7 +56,6 @@
     },
     { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
     { "method": "GET", "path": "/auth/login", "reason": "가6 판정 예정" },
-    { "method": "GET", "path": "/healthz", "reason": "가6 판정 예정" },
     {
       "method": "POST",
       "path": "/api/organizations/{organization_id}/invitations",
@@ -88,11 +86,6 @@
       "method": "PUT",
       "path": "/api/organizations/{organization_id}/settings",
       "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/uploads/{upload_id}/parts/{number}",
-      "reason": "가6 판정 예정"
     },
     {
       "method": "PUT",

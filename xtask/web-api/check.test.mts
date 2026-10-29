@@ -32,6 +32,157 @@ await test('wrong method fails even when the path exists', () => {
   );
 });
 
+const listedTask: Allowlist = {
+  forwarders: [],
+  unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '가6 판정 예정' }],
+};
+await test('SR-250-1: direct fetch with a wrong path fails', () => {
+  assert.throws(
+    () => checkUsage(files("fetch('/api/typo/42');"), contract, listedTask),
+    /GET \/api\/typo\/42.*not in OpenAPI/,
+  );
+});
+await test('SR-250-1: direct fetch with a wrong method fails', () => {
+  assert.throws(
+    () => checkUsage(files("fetch('/api/tasks/42', { method: 'DELETE' });"), contract, listedTask),
+    /DELETE \/api\/tasks\/42.*not in OpenAPI/,
+  );
+});
+
+await test('direct fetch uses GET by default, honors method options and excludes used operations from unused', () => {
+  const input = files(`
+    const method = 'GET';
+    const base = { method: 'DELETE' };
+    const options = { ...base, method, ...{ credentials: 'same-origin' } };
+    fetch('/api/tasks/42');
+    fetch('/api/tasks/42', options);
+    fetch('/api/tasks/42', { method: undefined });
+    window.fetch('/api/tasks/42');
+    const send = fetch; send('/api/tasks/42');
+  `);
+  const result = checkUsage(input, contract, empty);
+  assert.equal(result.calls, 5);
+  assert.deepEqual(result.unused, []);
+  assert.throws(() => checkUsage(input, contract, listedTask), /stale unused entry/);
+  assert.throws(
+    () =>
+      checkUsage(
+        files("fetch('/api/tasks/42', { method: 'GET', ...{ method: 'DELETE' } });"),
+        contract,
+        listedTask,
+      ),
+    /DELETE .*not in OpenAPI/,
+  );
+});
+
+await test('direct fetch checks upload templates, healthz and auth routes', () => {
+  const result = checkUsage(
+    files(`
+    function put(upload: string, number: number) {
+      fetch(\`/api/uploads/\${encodeURIComponent(upload)}/parts/\${String(number)}\`, { method: 'PUT' });
+    }
+    fetch('/healthz', { cache: 'no-store' });
+    fetch('/auth/logout', { method: 'POST' });
+  `),
+    {
+      paths: {
+        '/api/uploads/{upload_id}/parts/{number}': { put: {} },
+        '/healthz': { get: {} },
+        '/auth/logout': { post: {} },
+      },
+    },
+    empty,
+  );
+  assert.equal(result.calls, 3);
+  assert.throws(
+    () => checkUsage(files("fetch('/auth/missing');"), { paths: {} }, empty),
+    /not in OpenAPI/,
+  );
+});
+
+await test('direct fetch resolves imported path functions and function arguments in Svelte', () => {
+  const input = files('');
+  input.set(
+    'apps/web/src/lib/urls.ts',
+    `
+    export function fileContentUrl(id: string, version?: number) {
+      const query = version === undefined ? '' : \`?version=\${String(version)}\`;
+      return \`/api/files/\${encodeURIComponent(id)}/content\${query}\`;
+    }
+    export const resourceUrl = (resource: string, id: string) => \`/api/\${resource}/\${encodeURIComponent(id)}\`;
+  `,
+  );
+  input.set(
+    source,
+    `
+    import { fileContentUrl, resourceUrl } from './urls';
+    function download(id: string) { fetch(fileContentUrl(id, 2), { credentials: 'same-origin' }); }
+    function load(id: string) { fetch(resourceUrl('tasks', id)); }
+  `,
+  );
+  input.set(
+    'apps/web/src/lib/Preview.svelte',
+    `<script lang="ts">
+    import { fileContentUrl } from './urls'; let id = 'file';
+  </script><button onclick={() => fetch(fileContentUrl(id))}>preview</button>`,
+  );
+  const routes = {
+    paths: { '/api/files/{id}/content': { get: {} }, '/api/tasks/{id}': { get: {} } },
+  };
+  assert.equal(checkUsage(input, routes, empty).calls, 3);
+  input.set(
+    'apps/web/src/lib/urls.ts',
+    (input.get('apps/web/src/lib/urls.ts') ?? '').replace('/content', '/typo'),
+  );
+  assert.throws(
+    () => checkUsage(input, routes, empty),
+    /GET \/api\/files\/\{\}\/typo not in OpenAPI/,
+  );
+});
+
+await test('direct fetch ignores resources outside contract namespaces and unrelated fetch functions', () => {
+  const result = checkUsage(
+    files(`
+    const scriptUrl = '/pptx-frame.js'; fetch(scriptUrl);
+    fetch('/rhwp/manifest.json'); fetch('https://example.org/api/tasks/42');
+    function assets(name: string, host: string) { fetch(\`/rhwp/\${name}\`); fetch(\`https://\${host}/api/data\`); }
+    const local = { fetch(path: string) {} }; local.fetch('/api/typo');
+  `),
+    { paths: {} },
+    empty,
+  );
+  assert.equal(result.calls, 0);
+});
+
+for (const code of [
+  'function load(url: string) { fetch(url); }',
+  "function load(method: string) { fetch('/api/tasks/42', { method }); }",
+  "function load(options: RequestInit) { fetch('/api/tasks/42', options); }",
+  "fetch('api/tasks/42');",
+  "const options = { method: 'GET' }; options.method = 'DELETE'; fetch('/api/tasks/42', options);",
+  "const options = { method: 'GET' }; options['method'] = 'DELETE'; fetch('/api/tasks/42', options);",
+]) {
+  await test(`unresolved or changed direct fetch fails: ${code}`, () => {
+    assert.throws(
+      () => checkUsage(files(code), contract, listedTask),
+      /not statically resolvable|options.method is written/,
+    );
+  });
+}
+
+await test('shared request fetch transport is counted through its callers and must forward the method', () => {
+  const input = files("request('GET', '/api/tasks/42');");
+  input.set(
+    shared,
+    `export function request(method: string, path: string) {
+    const init = { method, credentials: 'same-origin' }; return fetch(path, init);
+  }`,
+  );
+  assert.equal(checkUsage(input, contract, empty).calls, 1);
+  input.set(shared, (input.get(shared) ?? '').replace('{ method,', "{ method: 'DELETE',"));
+  assert.throws(() => checkUsage(input, contract, empty), /transport method is not forwarded/);
+});
+
 await test('encoded path segments and query expressions resolve without inspecting query values', () => {
   const result = checkUsage(
     files(`
@@ -222,6 +373,57 @@ function wrapped(code: string): Map<string, string> {
   return input;
 }
 
+for (const write of [
+  "path = '/api/typo/42';",
+  "method = 'DELETE';",
+  "path += '/typo';",
+  'path++;',
+  '--method;',
+  "[path] = ['/api/typo/42'];",
+  "({ path } = { path: '/api/typo/42' });",
+  "({ other: method } = { other: 'DELETE' });",
+  "const change = () => { path = '/api/typo/42'; }; change();",
+  "({ path = '/api/typo/42' } = {});",
+  "for (path of ['/api/typo/42']) {}",
+  "method ||= 'DELETE';",
+]) {
+  await test(`SR-250-2: forwarder parameter writes fail: ${write}`, () => {
+    const input = wrapped("expectOk('GET', '/api/tasks/42');");
+    input.set(
+      shared,
+      (input.get(shared) ?? '').replace(
+        'return request(method, path)',
+        `${write} return request(method, path)`,
+      ),
+    );
+    assert.throws(() => checkUsage(input, contract, forwarder), /parameter.*written/);
+  });
+}
+
+await test('forwarder parameter writes after delegation fail; shadowed variables and object fields do not', () => {
+  const input = wrapped("expectOk('GET', '/api/tasks/42');");
+  input.set(
+    shared,
+    (input.get(shared) ?? '').replace(
+      'return request(method, path)',
+      `
+    function inner(path: string) { path = '/api/typo'; }
+    const data = { path }; data.path = '/api/typo';
+    return request(method, path)
+  `,
+    ),
+  );
+  assert.equal(checkUsage(input, contract, forwarder).calls, 1);
+  input.set(
+    shared,
+    (input.get(shared) ?? '').replace(
+      'return request(method, path)',
+      "request(method, path); path = '/api/typo';",
+    ),
+  );
+  assert.throws(() => checkUsage(input, contract, forwarder), /parameter path is written/);
+});
+
 await test('reasoned forwarding helpers check their callers and exclude only the forwarding call', () => {
   assert.equal(
     checkUsage(wrapped("expectOk('GET', '/api/tasks/42');"), contract, forwarder).calls,
@@ -340,16 +542,25 @@ await test('allowlist accepts exactly the two prescribed reason labels and requi
   );
 });
 
-for (const [method, path] of [
-  ['GET', '/api/typo/42'],
-  ['DELETE', '/api/tasks/42'],
+for (const [kind, method, path] of [
+  ['request', 'GET', '/api/typo/42'],
+  ['request', 'DELETE', '/api/tasks/42'],
+  ['fetch', 'GET', '/api/typo/42'],
+  ['fetch', 'DELETE', '/api/tasks/42'],
 ]) {
-  await test(`CLI exits FAIL for deliberately invalid ${method ?? ''} ${path ?? ''}`, () => {
+  await test(`CLI exits FAIL for deliberately invalid ${kind ?? ''} ${method ?? ''} ${path ?? ''}`, () => {
     const root = mkdtempSync(join(tmpdir(), 'fvoci-web-api-'));
     try {
-      const input = files(`request('${method ?? ''}', '${path ?? ''}');`);
+      const input = files(
+        kind === 'fetch'
+          ? `fetch('${path ?? ''}', { method: '${method ?? ''}' });`
+          : `request('${method ?? ''}', '${path ?? ''}');`,
+      );
       input.set('contracts/openapi.json', JSON.stringify(contract));
-      input.set('xtask/web-api/allowlist.json', JSON.stringify(empty));
+      input.set(
+        'xtask/web-api/allowlist.json',
+        JSON.stringify(kind === 'fetch' ? listedTask : empty),
+      );
       input.set('packages/api-client/src/index.ts', '');
       input.set('packages/api-client/src/generated/schema.ts', '');
       for (const [file, content] of input) {
@@ -364,7 +575,7 @@ for (const [method, path] of [
       );
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, /not in OpenAPI/);
-      console.log(`expected FAIL (exit 1): ${method ?? ''} ${path ?? ''}`);
+      console.log(`expected FAIL (exit 1): ${kind ?? ''} ${method ?? ''} ${path ?? ''}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
