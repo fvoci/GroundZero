@@ -106,7 +106,7 @@ async fn unjoined_organization_admin_gets_actionable_409_and_keeps_closed_state(
     assert_eq!(blocked.status, StatusCode::CONFLICT, "{:?}", blocked.json);
     let message = blocked.json["message"].as_str().unwrap();
     assert!(
-        message.contains(&f.document) && message.contains(&f.workspace),
+        !blocked.json.to_string().contains(&f.document) && message.contains(&f.workspace),
         "{message}"
     );
     assert!(
@@ -233,6 +233,11 @@ async fn read_shared_organization_admin_cannot_proxy_save_closed_pending_edits()
     )
     .await;
     assert_eq!(blocked.status, StatusCode::CONFLICT, "{:?}", blocked.json);
+    let message = blocked.json["message"].as_str().unwrap();
+    assert!(
+        message.contains(&f.document) && message.contains(&f.workspace),
+        "readable document id was hidden: {message}"
+    );
     assert_eq!(
         stored(&f).await,
         before,

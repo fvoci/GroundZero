@@ -2,6 +2,7 @@
 
 mod contracts;
 mod live;
+mod privacy;
 mod races;
 mod timeouts;
 

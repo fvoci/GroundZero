@@ -6,7 +6,7 @@ use fvoci_core::{
     error::AppError,
     ids::{DocumentId, UserId},
 };
-use fvoci_db::Db;
+use fvoci_db::{Db, access};
 use fvoci_organizations::runtime::{OrganizationRuntime, PrepareReply, PreparedRooms, RoomChange};
 use std::{collections::HashSet, time::Duration};
 use uuid::Uuid;
@@ -93,31 +93,51 @@ async fn prepare(
         (change.action == "organization_remove").then_some(change.scope),
     )?;
     for (doc, workspace) in docs {
-        rooms
+        if rooms
             .prepare_organization_document(db, limits, doc, user)
             .await
-            .map_err(|_| blocked(doc, workspace))?;
+            .is_err()
+        {
+            return Err(blocked(db, user, doc, workspace).await);
+        }
     }
     // 이미 닫히는 중이던 방의 마지막 저장까지 포함해 한 번 더 확인한다.
     for (doc, workspace) in pending(db, user, change).await? {
         guard.include_document(rooms, doc)?;
-        rooms
+        if rooms
             .prepare_organization_document(db, limits, doc, user)
             .await
-            .map_err(|_| blocked(doc, workspace))?;
+            .is_err()
+        {
+            return Err(blocked(db, user, doc, workspace).await);
+        }
     }
     Ok(Box::new(guard))
 }
 
-fn blocked(doc: DocumentId, workspace: Option<Uuid>) -> AppError {
+async fn blocked(db: &Db, user: UserId, doc: DocumentId, workspace: Option<Uuid>) -> AppError {
+    // 명령 권한으로 찾은 문서가 호출자에게 보인다는 뜻은 아니다. 조회 실패도 식별자를 숨긴다.
+    let visible = async {
+        let mut tx = db.begin_as(user).await?;
+        let grade = access::grade(&mut tx, access::Kind::Document, doc).await?;
+        tx.commit().await?;
+        Ok::<_, AppError>(grade.is_some())
+    }
+    .await
+    .unwrap_or(false);
+    let document = if visible {
+        format!("document {}", doc.0)
+    } else if workspace.is_some() {
+        "a document".into()
+    } else {
+        "a shared personal note".into()
+    };
     let Some(workspace) = workspace else {
         return AppError::Conflict(format!(
-            "document {} has pending edits; nothing was changed. Ask the document owner or an editor to save the edits and retry",
-            doc.0
+            "{document} has pending edits; nothing was changed. Ask its owner or an editor to save the edits and retry"
         ));
     };
     AppError::Conflict(format!(
-        "document {} in workspace {} has pending edits; nothing was changed. Ask an editor to save the edits, or join as admin and retry. Restore trashed content first if needed",
-        doc.0, workspace
+        "{document} in workspace {workspace} has pending edits; nothing was changed. Ask an editor to save the edits, or join as admin and retry. Restore trashed content first if needed"
     ))
 }
