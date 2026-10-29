@@ -1962,6 +1962,10 @@ CREATE FUNCTION fvoci.app_copy_item(p_item uuid, p_module uuid, p_request uuid, 
     v_count   integer;
   BEGIN
     SELECT * INTO v_src FROM items WHERE id = p_item;
+    -- SR-239-1: 직접 넣는 학습 행도 공간 → 현재 멤버 순서로 잠가 회수와 줄 세운 뒤 접근을 다시 본다.
+    PERFORM 1 FROM workspaces WHERE id = v_src.workspace_id FOR SHARE;
+    PERFORM 1 FROM workspace_members
+      WHERE workspace_id = v_src.workspace_id AND user_id = v_user FOR SHARE;
     IF v_src.id IS NULL OR app_access('item', p_item) = 'none' THEN
       RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
     END IF;
