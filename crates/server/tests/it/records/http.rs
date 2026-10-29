@@ -277,7 +277,7 @@ async fn analysis_records_pin_file_versions_and_follow_item_access() {
         send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&admin),
             None
         )

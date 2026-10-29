@@ -3,7 +3,6 @@
 pub mod accounts;
 mod document_locks;
 pub mod documents;
-pub mod export;
 pub mod file_text;
 pub mod home;
 pub mod item_profile;
@@ -15,5 +14,4 @@ pub mod references;
 pub mod revisions;
 pub mod search_api;
 pub mod search_text;
-pub mod trash;
 pub mod workspaces;

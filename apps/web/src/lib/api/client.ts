@@ -3,6 +3,8 @@ import { loadCourseView } from '$lib/features/courses/course-data';
 import { studyApi } from '$lib/features/study/api';
 import { loadStudyView } from '$lib/features/study/study-data';
 import { recordsApi } from '$lib/features/records/api';
+import { systemApi, readTrash } from '$lib/features/trash/api';
+export type { TrashEntryView, TrashView } from '$lib/features/trash/api';
 import { filesApi } from '$lib/features/files/api';
 export { fileContentUrl } from '$lib/features/files/api';
 export type { FileView, FileVersionView, UploadView, FileTarget } from '$lib/features/files/model';
@@ -1111,65 +1113,6 @@ function parseHome(value: Json): HomeView {
   };
 }
 
-export interface TrashEntryView {
-  id: string;
-  kind: 'item' | 'document' | 'task' | 'event' | 'file' | 'module';
-  root_id: string;
-  title: string;
-  member_count: number;
-  deleted_by: string;
-  deleted_by_name: string | null;
-  deleted_at: string;
-  expires_at: string;
-  expired: boolean;
-  /** 만료됐지만 살아 있는 기록·문서가 참조하는 버전이 있어 자동으로 지우지 않는다(D-56). */
-  kept_for_references: boolean;
-  can_purge: boolean;
-}
-
-export interface TrashView {
-  retention_days: number;
-  /** 이전 파일 버전 보존 기간(일, D-56). null이면 영구 보존. */
-  version_retention_days: number | null;
-  entries: TrashEntryView[];
-}
-
-function parseTrash(value: Json): TrashView {
-  const o = rec(value, 'trash');
-  return {
-    retention_days: int(o, 'retention_days'),
-    version_retention_days:
-      typeof o.version_retention_days === 'number' ? o.version_retention_days : null,
-    entries: parseList(o.entries, (v): TrashEntryView => {
-      const e = rec(v, 'trash entry');
-      const kind = str(e, 'kind');
-      if (
-        kind !== 'item' &&
-        kind !== 'document' &&
-        kind !== 'task' &&
-        kind !== 'event' &&
-        kind !== 'file' &&
-        kind !== 'module'
-      )
-        throw new TypeError(`unknown trash kind ${kind}`);
-      return {
-        id: str(e, 'id'),
-        kind,
-        root_id: str(e, 'root_id'),
-        title: str(e, 'title'),
-        member_count: int(e, 'member_count'),
-        deleted_by: str(e, 'deleted_by'),
-        deleted_by_name: optStr(e, 'deleted_by_name'),
-        deleted_at: str(e, 'deleted_at'),
-        expires_at: str(e, 'expires_at'),
-        expired: bool(e, 'expired'),
-        kept_for_references: bool(e, 'kept_for_references'),
-        can_purge: bool(e, 'can_purge'),
-      };
-    }),
-  };
-}
-
 export type {
   EpisodeStatus,
   CourseDetailsView,
@@ -1252,8 +1195,6 @@ function parseSearchResult(value: Json): SearchResultView {
     snippet: optStr(o, 'snippet'),
   };
 }
-
-const parseBatch = (v: Json): string => str(rec(v, 'trashed'), 'batch_id');
 
 /** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
 export interface MoveTargetInput {
@@ -1545,46 +1486,19 @@ export const api = {
     expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
       parseList(v, parseBacklink),
     ),
-  trashDocument: (id: string) =>
-    expectOk('DELETE', `/api/documents/${encodeURIComponent(id)}`, parseBatch),
-  trashItem: (id: string) => expectOk('DELETE', `/api/items/${encodeURIComponent(id)}`, parseBatch),
-  /** 모듈을 휴지통으로(관리자, D-78). 항목은 모듈과 함께 보이지 않고, 되살리면 모듈만 돌아온다. */
-  trashModule: (id: string) =>
-    expectOk('DELETE', `/api/modules/${encodeURIComponent(id)}`, parseBatch),
-  /** 워크스페이스 휴지통, 또는 null이면 내 개인 노트 휴지통. */
-  trash: (workspaceId: string | null) =>
-    expectOk(
-      'GET',
-      workspaceId === null
-        ? '/api/me/trash'
-        : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash`,
-      parseTrash,
-    ),
-  restoreTrash: (batch: string) =>
-    expectOk('POST', `/api/trash/${encodeURIComponent(batch)}/restore`, none),
-  purgeTrash: (batch: string) =>
-    expectOk('DELETE', `/api/trash/${encodeURIComponent(batch)}`, none),
-  purgeExpiredTrash: (workspaceId: string | null) =>
-    expectOk(
-      'POST',
-      workspaceId === null
-        ? '/api/me/trash/purge-expired'
-        : `/api/workspaces/${encodeURIComponent(workspaceId)}/trash/purge-expired`,
-      (v) => int(rec(v, 'purged'), 'purged'),
-    ),
-  /** 이전 파일 버전 보존 기간(D-56). null이면 영구 보존. */
-  setVersionRetention: (workspaceId: string, days: number | null) =>
-    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/version-retention`, none, {
-      days,
-    }),
+  trashDocument: systemApi.trashDocument,
+  trashItem: systemApi.trashItem,
+  trashModule: systemApi.trashModule,
+  trash: readTrash,
+  restoreTrash: systemApi.restoreTrash,
+  purgeTrash: systemApi.purgeTrash,
+  purgeExpiredTrash: systemApi.purgeExpiredTrash,
+  setVersionRetention: systemApi.setVersionRetention,
   setWorkspaceRealtime: (workspaceId: string, enabled: boolean) =>
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/realtime`, none, {
       enabled,
     }),
-  setTrashRetention: (workspaceId: string, days: number) =>
-    expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/trash-retention`, none, {
-      days,
-    }),
+  setTrashRetention: systemApi.setTrashRetention,
   /** 홈은 현재 조직의 요약이다(D-19·D-120). */
   home: (organizationId: string, tz: string) =>
     expectOk(

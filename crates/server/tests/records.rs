@@ -168,7 +168,7 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     );
 
     // 보존 기간: 관리자만, 1~3650일.
-    let retention = format!("/api/workspaces/{ws}/version-retention");
+    let retention = format!("/api/workspaces/{ws}/retention/file-versions");
     assert_eq!(
         send(
             &app,
@@ -208,7 +208,7 @@ async fn old_versions_expire_unless_something_refers_to_them() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/workspaces/{ws}/retention"),
         Some(&admin),
         None,
     )
@@ -282,7 +282,7 @@ async fn version_retention_counts_from_replacement_and_ignores_foreign_pins() {
     let retention = send(
         &app,
         Method::PUT,
-        &format!("/api/workspaces/{ws}/version-retention"),
+        &format!("/api/workspaces/{ws}/retention/file-versions"),
         Some(&admin),
         Some(json!({ "days": 1 })),
     )
@@ -552,18 +552,14 @@ async fn trash_expiry_keeps_files_with_referenced_versions() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await;
-    let entries = trash.json["entries"].as_array().unwrap();
+    let entries = trash.json.as_array().unwrap();
     assert_eq!(entries.len(), 2, "{:?}", trash.json);
-    assert!(
-        entries
-            .iter()
-            .all(|e| e["expired"] == true && e["kept_for_references"] == true)
-    );
+    assert!(entries.iter().all(|e| e["expiry"] == "kept_for_references"));
 
     // 기록이 연결을 놓으면 다음 실행에서 지운다.
     let (_, list) = records(&app, &writer, &item).await;
@@ -903,7 +899,7 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
             send(
                 &app,
                 Method::POST,
-                &format!("/api/trash/{batch}/restore"),
+                &format!("/api/trash-batches/{batch}/restore"),
                 Some(&user),
                 None,
             )
@@ -967,13 +963,14 @@ async fn kept_expired_bundles_restore_with_existing_permissions() {
     let trash = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await;
     assert!(
-        trash.json["entries"]
+        trash
+            .json
             .as_array()
             .unwrap()
             .iter()

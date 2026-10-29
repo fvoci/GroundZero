@@ -8,6 +8,7 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 - 시간 라우터(`crates/domains/time/src/lib.rs`)도 `ExpectedUserIfSent`를 건다. 타이머 시작·동작과 기록 추가·수정·삭제는 머리가 있으면 비교하고, 없으면 허용한다. 필수화하지 않았다. 시험은 `it/time/contracts.rs`다.
 - 파일 라우터(`crates/domains/files/src/router.rs`)도 모든 명령에 `ExpectedUserIfSent`를 건다. 업로드 시작은 계속 필수이고, 조각 전송·완료·중단·이름 변경·휴지통·버전 삭제는 머리가 있으면 비교한다. 웹 `features/files/api.ts`는 날것 조각 전송에도 원래 업로더의 머리를 보내고 완료·중단까지 이어 준다.
 - 기록·학습 라우터(`crates/domains/records/src/lib.rs`의 `router`)도 `ExpectedUserIfSent`를 건다. 기록·강좌·스터디·Zotero의 모든 명령과 읽기 POST `list_collections`는 머리가 있으면 비교하며, 머리를 필수로 요구하지 않는다.
+- 시스템 라우터(`crates/domains/system/src/lib.rs`)도 `ExpectedUserIfSent`를 적용한다. 휴지통 명령·보존 설정에 보낸 머리를 비교한다. 없으면 기존처럼 허용하고 GET 반출·목록·설정 읽기는 비교하지 않는다. 시험은 `tests/it/system/contracts.rs`다.
 - 그 밖의 처리기(`CurrentUser`만 쓰고 공통 처리를 걸지 않은 라우터)는 머리를 보지 않는다.
 - 줄은 각 처리기 `fn` 줄이다. 코드가 바뀌면 다음으로 다시 찾는다.
   - 적용: `rg -n 'ExpectedUser\(' crates/server/src/features crates/domains`
@@ -74,7 +75,6 @@ D-96(`docs/decisions/documents.md#d-96`)은 "별도 경로의 적용 여부·위
 | `organizations.rs` | `set_member`(288, 권한), `remove_member`(334, 권한), `invite`(378, 권한), `join_as_admin`(629, 권한), `restore_workspace`(671, 파괴), `offer_workspace_ownership`(694, 권한), `create`(753, 설정: 서버 관리자의 조직 만들기)                                                                                                                                                                                         |
 | `public_links.rs`  | `create`(105, 권한), `revoke`(142, 권한)                                                                                                                                                                                                                                                                                                                                                                             |
 | `revisions.rs`     | `restore`(276, 귀속)                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `trash.rs`         | `trash_document`(177, 파괴), `trash_item`(206, 파괴), `trash_module`(221, 파괴), `restore`(277, 파괴), `purge`(297, 파괴), `purge_expired`(324, 파괴), `purge_my_expired`(349, 파괴), `set_retention`(380, 설정), `set_version_retention`(411, 설정)                                                                                                                                                                 |
 | `workspaces.rs`    | `create`(130, 귀속), `delete`(196, 파괴), `restore`(246, 파괴), `purge`(266, 파괴), `set_realtime`(295, 설정)                                                                                                                                                                                                                                                                                                        |
 
 ## 쓰기가 아닌 POST (표 밖)
