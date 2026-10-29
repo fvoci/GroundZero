@@ -31,6 +31,7 @@ mod calendar;
 mod conflict_contracts;
 mod db_context;
 mod db_errors;
+mod document_move_lock_order;
 mod documents;
 mod expected_user;
 mod expected_user_writes;

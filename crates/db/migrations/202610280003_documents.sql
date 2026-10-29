@@ -1295,13 +1295,13 @@ CREATE FUNCTION fvoci.app_lock_move(p_doc uuid, p_target uuid, p_item uuid) RETU
     AS $$
   DECLARE
     v_doc  documents%ROWTYPE;
+    v_locked documents%ROWTYPE;
     v_from text;
     v_to   text;
   BEGIN
-    IF app_access('document', p_doc) = 'none' THEN
-      RETURN;
-    END IF;
-    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
+    v_doc := app_check_move(p_doc, p_target, p_item);
+    -- #223: SQL·HTTP 모두 집계가 쥔 공간 행부터 기다린다. FK의 KEY SHARE로는 NO KEY UPDATE를 막지 못한다.
+    PERFORM 1 FROM workspaces WHERE id IN (v_doc.workspace_id, p_target) ORDER BY id FOR SHARE;
     v_from := coalesce(v_doc.workspace_id::text, '') || ':' || coalesce(v_doc.item_id::text, '') || ':'
               || coalesce(v_doc.owner_user_id::text, '');
     v_to := coalesce(p_target::text, '') || ':' || coalesce(p_item::text, '') || ':';
@@ -1312,6 +1312,23 @@ CREATE FUNCTION fvoci.app_lock_move(p_doc uuid, p_target uuid, p_item uuid) RETU
       PERFORM app_lock_tree(p_target, p_item, NULL);
       PERFORM app_lock_tree(v_doc.workspace_id, v_doc.item_id, v_doc.owner_user_id);
     END IF;
+    -- 저장·복원처럼 모듈 → 항목을 문서보다 먼저 잠근다. 양쪽 항목이 같은 모듈이어도 모듈 id 순서는 같다.
+    PERFORM 1 FROM modules m WHERE m.id IN (SELECT i.module_id FROM items i WHERE i.id IN (v_doc.item_id, p_item))
+      ORDER BY m.id FOR SHARE;
+    PERFORM 1 FROM items WHERE id IN (v_doc.item_id, p_item) ORDER BY id FOR SHARE;
+    -- 업로드 마치기(업로드 → 문서 FK KEY SHARE)와 같은 순서. 트리를 기다리는 동안 업로드를 쥐지 않는다.
+    PERFORM 1 FROM uploads u
+    WHERE u.state IN ('uploading', 'completing')
+      AND ((u.target_kind = 'document' AND u.target_id = p_doc)
+           OR u.file_id IN (SELECT f.id FROM files f WHERE f.document_id = p_doc))
+    ORDER BY u.id FOR NO KEY UPDATE;
+    SELECT * INTO v_locked FROM documents WHERE id = p_doc FOR UPDATE;
+    IF v_locked.workspace_id IS DISTINCT FROM v_doc.workspace_id
+       OR v_locked.item_id IS DISTINCT FROM v_doc.item_id
+       OR v_locked.owner_user_id IS DISTINCT FROM v_doc.owner_user_id THEN
+      RAISE EXCEPTION 'the document was moved; reload and try again' USING ERRCODE = '55000';
+    END IF;
+    PERFORM app_check_move(p_doc, p_target, p_item);
   END
   $$;
 
@@ -1345,17 +1362,8 @@ CREATE FUNCTION fvoci.app_move_document(p_doc uuid, p_target uuid, p_item uuid, 
     v_at     integer := 1;
   BEGIN
     SELECT * INTO v_seen FROM documents d WHERE d.id = p_doc;
-    -- 업로드 마치기와 같은 순서(업로드 행 → 문서)로 먼저 잠근다.
-    PERFORM 1 FROM uploads u
-    WHERE u.state IN ('uploading', 'completing')
-      AND ((u.target_kind = 'document' AND u.target_id = p_doc)
-           OR u.file_id IN (SELECT f.id FROM files f WHERE f.document_id = p_doc))
-    ORDER BY u.id
-    FOR NO KEY UPDATE;
+    -- HTTP 이동도 맨 앞에서 같은 사전 잠금을 쓴다(공간 → 트리 → 업로드 → 문서).
     PERFORM app_lock_move(p_doc, p_target, p_item);
-    PERFORM 1 FROM documents d WHERE d.id = p_doc FOR UPDATE;
-    PERFORM app_lock_item((SELECT d.item_id FROM documents d WHERE d.id = p_doc));
-    PERFORM app_lock_item(p_item);
     v_doc := app_check_move(p_doc, p_target, p_item);
     IF v_doc.workspace_id IS DISTINCT FROM v_seen.workspace_id
        OR v_doc.item_id IS DISTINCT FROM v_seen.item_id
