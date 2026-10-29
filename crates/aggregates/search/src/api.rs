@@ -34,7 +34,7 @@ mod validation_tests;
 /// 검색 결과 한 건.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SearchResult {
-    /// `document`·`task`·`item`·`event`·`file`.
+    /// `document`·`task`·`item`·`event`·`file`·`record`.
     pub kind: String,
     #[schema(value_type = String, format = Uuid)]
     pub id: Uuid,

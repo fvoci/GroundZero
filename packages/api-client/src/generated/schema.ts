@@ -4822,7 +4822,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             item_id?: string | null;
-            /** @description `document`·`task`·`item`·`event`·`file`. */
+            /** @description `document`·`task`·`item`·`event`·`file`·`record`. */
             kind: string;
             reference?: string | null;
             /** @description 본문에서 찾은 곳 근처 글자(일반 글자, 강조 표시 없음). */

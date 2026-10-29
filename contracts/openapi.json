@@ -20048,7 +20048,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`document`·`task`·`item`·`event`·`file`."
+            "description": "`document`·`task`·`item`·`event`·`file`·`record`."
           },
           "reference": {
             "type": [
