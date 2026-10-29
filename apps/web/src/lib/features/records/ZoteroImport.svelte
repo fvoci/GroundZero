@@ -32,7 +32,7 @@
   let collection = $state('');
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
-  // D-27: library settings stay on screen and only participate in the leave warning.
+  // Only these non-secret inputs cross the durable draft boundary. Keep the ID verbatim.
   interface ImportSettings {
     libraryType: 'user' | 'group';
     libraryId: string;
@@ -49,7 +49,6 @@
     collection === '' || (collectionsCurrent && collections.some((c) => c.key === collection)),
   );
   const draft = createFormDraft<ImportSettings>({
-    preserve: false,
     name: () => `zotero-import:${itemId}`,
     snapshot,
     parse: (raw) => {

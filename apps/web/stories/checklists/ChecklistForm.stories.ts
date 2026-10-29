@@ -27,7 +27,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const LegacyDraftIgnored: Story = {
+export const RestoreOffer: Story = {
   beforeEach: () => {
     const key = formDraftTabKey('checklist:story-checklist');
     if (key === undefined) throw new Error('missing story user');
@@ -49,24 +49,19 @@ export const LegacyDraftIgnored: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.queryByTestId('checklist-new-item-draft-offer')).toBeNull();
+    await expect(canvas.getByTestId('checklist-new-item-draft-offer')).toBeVisible();
     await expect(canvas.getByLabelText('새 항목')).toHaveValue('');
   },
 };
-export const ScreenInput: Story = {
+export const Restored: Story = {
+  ...RestoreOffer,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.type(canvas.getByLabelText('새 항목'), '추가할 항목');
-    await userEvent.click(canvas.getByRole('button', { name: 'Markdown 붙여넣기' }));
-    await userEvent.type(canvas.getByLabelText(/붙여넣을 체크리스트/), '- [[ ] 붙여넣은 항목');
-    await userEvent.click(canvas.getByRole('button', { name: '항목으로 펼치기' }));
-    await userEvent.clear(canvas.getByLabelText('항목 1 내용'));
-    await userEvent.type(canvas.getByLabelText('항목 1 내용'), '미리보기에서 고친 항목');
+    await userEvent.click(canvas.getByRole('button', { name: '입력 되살리기' }));
     await expect(canvas.getByLabelText('항목 1 내용')).toHaveValue('미리보기에서 고친 항목');
-    await expect(Object.values(localStorage).join('')).not.toContain('미리보기에서 고친 항목');
   },
 };
 export const NarrowLargeText: Story = {
-  ...ScreenInput,
+  ...RestoreOffer,
   globals: { theme: 'dark', viewport: { value: 'narrow375' }, fontScale: '200' },
 };

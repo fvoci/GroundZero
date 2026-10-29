@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/svelte';
 import { expect, spyOn, userEvent, within } from 'storybook/test';
 import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
 import { storeFormDraft } from '$lib/features/common/form-draft';
-import { api } from '$lib/api/client';
+import { api, newRequestId } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import MainFrame from '../fixtures/MainFrame.svelte';
@@ -43,23 +43,25 @@ export const NarrowDark200: Story = {
 
 export const RestoreDraft: Story = {
   beforeEach: () => {
-    storeFormDraft('course:item-1:import', {
+    storeFormDraft('course:item-1:new', {
       savedAt: '2026-10-27T00:00:00Z',
       input: {
-        text: '다음 강의 / Next lecture,2장,12:30',
-        sentText: '',
-        ids: [],
+        title: '다음 강의 / Next lecture',
+        chapter: '2장',
+        duration: '12:xx',
+        planned_on: '2026-11-01',
+        requestId: newRequestId(),
+        requestPayload: '',
       },
     });
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByText(m.courses_csv_summary()));
     await userEvent.click(await canvas.findByRole('button', { name: m.common_draft_restore() }));
-    await expect(canvas.getByLabelText(m.courses_csv_help())).toHaveValue(
-      '다음 강의 / Next lecture,2장,12:30',
+    await expect(canvas.getByLabelText(m.courses_new_title())).toHaveValue(
+      '다음 강의 / Next lecture',
     );
-    await expect(canvas.getByLabelText(m.courses_new_title())).toHaveValue('');
+    await expect(canvas.getByLabelText(m.courses_duration())).toHaveValue('12:xx');
   },
 };
 

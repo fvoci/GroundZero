@@ -29,6 +29,12 @@ const read = () =>
 const run = () => fireEvent.click(screen.getByRole('button', { name: m.records_zotero_run() }));
 const keys = () =>
   Object.keys(localStorage).filter((key) => key.includes('form-draft:zotero-import:'));
+const values = () =>
+  keys()
+    .map((key) => localStorage.getItem(key))
+    .join('\n');
+const restore = () =>
+  fireEvent.click(screen.getByRole('button', { name: m.common_draft_restore() }));
 function unload(): boolean {
   const event = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(event);
@@ -56,40 +62,60 @@ afterEach(() => {
   router.guard = undefined;
 });
 
-it('keeps settings and the API key on screen without offering them after a remount', async () => {
+it('restores raw ID, type and collection explicitly without retaining the API key or sending requests', async () => {
   mount();
   await open();
   await fill();
   await selectCollection();
   expect(field('id')).toHaveAttribute('inputmode', 'numeric');
+  expect(values()).toContain(' 00123 ');
+  expect(values()).toContain('COL-A');
+  expect(values()).not.toContain('synthetic-test-only');
+  expect(values()).not.toMatch(/apiKey|api_key/);
+  cleanup();
+  mount();
+  await screen.findByTestId('form-draft-offer');
+  await restore();
   expect(field('id')).toHaveValue(' 00123 ');
   expect(field('type')).toHaveValue('group');
   expect(field('collection')).toHaveValue('COL-A');
-  expect(unload()).toBe(true);
-  expect(keys()).toHaveLength(0);
-  expect(stored()).not.toContain(' 00123 ');
-  expect(stored()).not.toContain('COL-A');
-  expect(stored()).not.toContain('synthetic-test-only');
-  expect(stored()).not.toMatch(/apiKey|api_key/);
-  cleanup();
-  mount();
-  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
-  await open();
-  expect(field('id')).toHaveValue('');
-  expect(field('type')).toHaveValue('user');
-  expect(document.getElementById('zotero-collection')).toBeNull();
   expect(field('key')).toHaveValue('');
   expect(api.zoteroCollections).toHaveBeenCalledOnce();
   expect(api.zoteroImport).not.toHaveBeenCalled();
-  expect(unload()).toBe(false);
+  await edit('key', 'synthetic-new-key');
+  expect(screen.getByRole('button', { name: m.records_zotero_run() })).toBeDisabled();
+  await read();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: m.records_zotero_run() })).toBeEnabled(),
+  );
+  await run();
+  await waitFor(() => {
+    expect(api.zoteroImport).toHaveBeenCalledWith(
+      'item-a',
+      {
+        library_id: '00123',
+        library_type: 'group',
+        api_key: 'synthetic-new-key',
+      },
+      'COL-A',
+    );
+  });
+  await waitFor(() => {
+    expect(keys()).toHaveLength(0);
+  });
 });
 
-it('keeps a missing current collection until the user explicitly chooses a current option', async () => {
+it('keeps a missing restored collection until the user explicitly chooses a current option', async () => {
   mount();
   await open();
   await fill();
   await selectCollection();
+  cleanup();
+  mount();
+  await screen.findByTestId('form-draft-offer');
+  await restore();
   vi.mocked(api.zoteroCollections).mockResolvedValue([{ key: 'COL-B', name: 'Collection B' }]);
+  await edit('key', 'synthetic-test-only');
   await read();
   await screen.findByRole('option', { name: 'Collection B' });
   expect(field('collection')).toHaveValue('COL-A');
@@ -118,8 +144,6 @@ it('retains failed import input and the original validation and payload contract
     expect(screen.getByRole('alert')).toHaveTextContent(m.records_zotero_failed());
   });
   expect(field('id')).toHaveValue(' 00123 ');
-  expect(field('key')).toHaveValue('synthetic-test-only');
-  expect(keys()).toHaveLength(0);
   expect(api.zoteroImport).toHaveBeenCalledWith(
     'item-a',
     { library_id: '00123', library_type: 'group', api_key: 'synthetic-test-only' },
@@ -127,9 +151,9 @@ it('retains failed import input and the original validation and payload contract
   );
   cleanup();
   mount();
-  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
-  await open();
-  expect(field('id')).toHaveValue('');
+  await screen.findByTestId('form-draft-offer');
+  await restore();
+  expect(field('id')).toHaveValue(' 00123 ');
   expect(field('key')).toHaveValue('');
   expect(api.zoteroImport).toHaveBeenCalledOnce();
 });
@@ -212,13 +236,12 @@ it('discards a key-only edit on close and never offers it after a remount', asyn
   expect(stored()).not.toContain(secret);
 });
 
-it('never stores the key or settings and clears them after a successful import', async () => {
+it('never stores the key while other fields are drafted and clears it after a successful import', async () => {
   mount();
   await open();
   await fill();
   await selectCollection();
   expect(stored()).not.toContain(secret);
-  expect(keys()).toHaveLength(0);
   await edit('key', secret);
   await read();
   await waitFor(() => {
@@ -295,11 +318,12 @@ it('isolates accounts and item targets and ignores late success from a previous 
     me.userId = 'user-a';
   });
   await view.rerender({ itemId: 'item-a', onimported: imported });
-  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
-  expect(field('id')).toHaveValue('');
+  await screen.findByTestId('form-draft-offer');
+  await restore();
+  expect(field('id')).toHaveValue(' 00123 ');
 });
 
-// FC-3: 가져오는 동안(그리고 컬렉션을 읽는 동안) 입력을 잠근다(D-97). 그사이 바뀐 입력은 완료를 버리고 옛 설정의
+// FC-3: 가져오는 동안(그리고 컬렉션을 읽는 동안) 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 완료를 버리고 옛 설정의
 // 결과를 보이게 했다. 결과 수는 토스트로 알린다(D-82, FC-1).
 it('locks the inputs during an import and reports the result counts as a toast', async () => {
   let finish: ((value: typeof result) => void) | undefined;
@@ -326,7 +350,7 @@ it('locks the inputs during an import and reports the result counts as a toast',
   expect(unload()).toBe(false);
 });
 
-it('locks the inputs and ignores obsolete stored settings while collections are read', async () => {
+it('locks the inputs and the restore offer while collections are read', async () => {
   const own = formDraftTabKey(name);
   if (own === undefined) throw new Error('missing owner');
   localStorage.setItem(
@@ -349,10 +373,8 @@ it('locks the inputs and ignores obsolete stored settings while collections are 
   await fill();
   await read();
   expect(field('id')).toBeDisabled();
-  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
-  expect(field('type')).toBeDisabled();
-  expect(field('key')).toBeDisabled();
-  expect(screen.getByRole('button', { name: m.records_zotero_importing() })).toBeDisabled();
+  expect(screen.getByRole('button', { name: m.common_draft_restore() })).toBeDisabled();
+  expect(screen.getByRole('button', { name: m.common_draft_discard() })).toBeDisabled();
   answer?.([{ key: 'COL-A', name: 'Collection A' }]);
   await waitFor(() => {
     expect(done).toHaveBeenCalledWith(m.records_zotero_collections_read({ count: 1 }));
@@ -360,7 +382,7 @@ it('locks the inputs and ignores obsolete stored settings while collections are 
   expect(field('id')).not.toBeDisabled();
 });
 
-it("does not restore or modify another tab's old settings when the current import succeeds", async () => {
+it('keeps other tabs and offered drafts when the current import succeeds', async () => {
   const own = formDraftTabKey(name);
   if (own === undefined) throw new Error('missing owner');
   const other = `${own}-other`;
@@ -378,7 +400,7 @@ it("does not restore or modify another tab's old settings when the current impor
   });
   expect(localStorage.getItem(own)).toBeNull();
   expect(localStorage.getItem(other)).toBe(stored);
-  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
+  expect(screen.getByTestId('form-draft-offer')).toBeInTheDocument();
 });
 
 it('ignores late collection results after library edits and account switches', async () => {
@@ -424,13 +446,24 @@ it('fences late success when account switching starts before user ID changes', a
   finish?.(result);
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(imported).not.toHaveBeenCalled();
-  expect(field('id')).toHaveValue(' 00123 ');
-  expect(keys()).toHaveLength(0);
-  // Both the settings and the key only exist on screen, so switching must still warn.
+  expect(values()).toContain(' 00123 ');
+  // The settings are kept, but the typed key never is, so the reload still warns.
   expect(unload()).toBe(true);
 });
 
-it('does not let a disposed import request clear remounted screen input', async () => {
+it('discards an offered draft explicitly without submitting it', async () => {
+  mount();
+  await open();
+  await fill();
+  cleanup();
+  mount();
+  await screen.findByTestId('form-draft-offer');
+  await fireEvent.click(screen.getByRole('button', { name: m.common_draft_discard() }));
+  expect(keys()).toHaveLength(0);
+  expect(api.zoteroImport).not.toHaveBeenCalled();
+});
+
+it('does not let a disposed import request clear a remounted draft', async () => {
   let finish: ((value: typeof result) => void) | undefined;
   vi.mocked(api.zoteroImport).mockImplementation(
     () =>
@@ -444,13 +477,13 @@ it('does not let a disposed import request clear remounted screen input', async 
   await run();
   cleanup();
   mount();
-  expect(screen.queryByTestId('form-draft-offer')).not.toBeInTheDocument();
-  await open();
+  await screen.findByTestId('form-draft-offer');
+  await restore();
   await edit('id', '333');
   finish?.(result);
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(field('id')).toHaveValue('333');
-  expect(stored()).not.toContain('"libraryId":"333"');
+  expect(values()).toContain('333');
   expect(imported).not.toHaveBeenCalled();
 });
 
@@ -476,10 +509,10 @@ it('requires explicit revalidation after library or key edits and keeps a select
   });
   expect(field('collection')).toHaveValue('COL-A');
   expect(screen.getByRole('button', { name: m.records_zotero_run() })).toBeDisabled();
-  expect(keys()).toHaveLength(0);
+  expect(values()).toContain('COL-A');
 });
 
-it('warns for a type-only screen edit and ignores a previous account late failure', async () => {
+it('preserves a type-only edit and ignores a previous account late failure', async () => {
   let fail: ((error: Error) => void) | undefined;
   vi.mocked(api.zoteroImport).mockImplementation(
     () =>
@@ -491,7 +524,7 @@ it('warns for a type-only screen edit and ignores a previous account late failur
   await open();
   await choose('type', 'group');
   expect(unload()).toBe(true);
-  expect(keys()).toHaveLength(0);
+  expect(values()).toContain('group');
   await fill();
   await run();
   flushSync(() => {
@@ -502,5 +535,5 @@ it('warns for a type-only screen edit and ignores a previous account late failur
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(field('id')).toHaveValue('444');
-  expect(stored()).not.toContain('"libraryId":"444"');
+  expect(values()).toContain('444');
 });

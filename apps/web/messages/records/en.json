@@ -4,7 +4,6 @@
   "records_unknown_person": "Unknown person",
   "records_hidden_course": "Course you can't see",
   "records_load_failed": "Couldn't load records.",
-  "records_draft_cleanup_failed": "Couldn't check saved record drafts. Try again.",
   "records_title_required": "Enter a title.",
   "records_added": "Added a record to {label}.",
   "records_updated": "Updated a record in {label}.",

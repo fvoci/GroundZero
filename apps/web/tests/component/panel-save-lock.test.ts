@@ -145,12 +145,12 @@ describe('course panel', () => {
     episodes: [episode],
   };
   const shared = {
-    number: '',
-    title: '',
-    chapter: '',
-    duration: '',
+    number: '1',
+    title: '다른 탭 제목',
+    chapter: '1부',
+    duration: '12:30',
     url: '',
-    materials: '다른 탭의 긴 강의 자료',
+    materials: '',
     planned_on: '',
   };
 
@@ -159,7 +159,7 @@ describe('course panel', () => {
     vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
   });
 
-  it('locks short course details while saving without a durable offer', async () => {
+  it('locks the course details form and its offer while saving', async () => {
     otherTabDraft('course:i1:details', {
       ...course.details,
       subject: '다른 탭',
@@ -177,21 +177,14 @@ describe('course panel', () => {
     await waitFor(() => {
       expect(api.setCourseDetails).toHaveBeenCalledTimes(1);
     });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expectOffersLocked(1);
     expect(field('course-subject')).toBeDisabled();
     save.reject(offline());
-    await waitFor(() => {
-      expect(field('course-subject')).not.toBeDisabled();
-    });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    await expectReleased(1, byId('course-subject'));
   });
 
   it('locks the versioned episode form and its offer while saving', async () => {
-    otherTabDraft('course:i1:episode:e1:edit', {
-      ...shared,
-      base: JSON.stringify({ materials: '' }),
-      version: '1',
-    });
+    otherTabDraft('course:i1:episode:e1:edit', { ...shared, base: '', version: '1' });
     const save = held<undefined>();
     vi.spyOn(api, 'updateEpisode').mockReturnValue(save.promise);
     render(CoursePanel, { itemId: 'i1' });
@@ -207,9 +200,8 @@ describe('course panel', () => {
     });
     expectOffersLocked(1);
     expect(field('ep-title-e1')).toBeDisabled();
-    expect(field('ep-materials-e1')).toBeDisabled();
     save.reject(offline());
-    await expectReleased(1, byId('ep-title-e1'), byId('ep-materials-e1'));
+    await expectReleased(1, byId('ep-title-e1'));
   });
 
   it('locks my episode notes and their offer while saving', async () => {
@@ -236,7 +228,7 @@ describe('course panel', () => {
     await expectReleased(1, byId('mine-note-e1'));
   });
 
-  it('locks the new episode form and the durable CSV offer while adding', async () => {
+  it('locks the new episode form, the CSV import and both offers while adding', async () => {
     otherTabDraft('course:i1:new', {
       title: '다른 탭 회차',
       chapter: '',
@@ -260,11 +252,11 @@ describe('course panel', () => {
     await waitFor(() => {
       expect(api.addEpisodes).toHaveBeenCalledTimes(1);
     });
-    expectOffersLocked(1);
+    expectOffersLocked(2);
     expect(field('episode-title')).toBeDisabled();
     expect(field('episodes-csv')).toBeDisabled();
     add.reject(offline());
-    await expectReleased(1, byId('episode-title'), byId('episodes-csv'));
+    await expectReleased(2, byId('episode-title'), byId('episodes-csv'));
   });
 
   it('locks the CSV text and the new episode form while importing', async () => {
@@ -306,7 +298,7 @@ describe('study panel', () => {
     vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
   });
 
-  it('locks short new unit fields while adding without a durable offer', async () => {
+  it('locks the new unit form and its offer while adding', async () => {
     otherTabDraft('study:i1:new', {
       title: '다른 탭 단위',
       chapter: '',
@@ -326,18 +318,14 @@ describe('study panel', () => {
     await waitFor(() => {
       expect(api.addStudyUnits).toHaveBeenCalledTimes(1);
     });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expectOffersLocked(1);
     expect(field('study-unit-title')).toBeDisabled();
     expect(field('study-unit-kind')).toBeDisabled();
     add.reject(offline());
-    await waitFor(() => {
-      expect(field('study-unit-title')).not.toBeDisabled();
-      expect(field('study-unit-kind')).not.toBeDisabled();
-    });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    await expectReleased(1, byId('study-unit-title'), byId('study-unit-kind'));
   });
 
-  it('locks short versioned unit fields while saving without a durable offer', async () => {
+  it('locks the versioned unit form and its offer while saving', async () => {
     otherTabDraft('study:i1:unit:u1:edit', {
       number: '1',
       title: '다른 탭 제목',
@@ -359,20 +347,16 @@ describe('study panel', () => {
     await waitFor(() => {
       expect(api.updateStudyUnit).toHaveBeenCalledTimes(1);
     });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expectOffersLocked(1);
     expect(field('unit-title-u1')).toBeDisabled();
     expect(field('unit-kind-u1')).toBeDisabled();
     save.reject(offline());
-    await waitFor(() => {
-      expect(field('unit-title-u1')).not.toBeDisabled();
-      expect(field('unit-kind-u1')).not.toBeDisabled();
-    });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    await expectReleased(1, byId('unit-title-u1'), byId('unit-kind-u1'));
   });
 
   it('locks my unit progress and its offer while saving', async () => {
     otherTabDraft('study:i1:unit:u1:mine', {
-      done_amount: '',
+      done_amount: '3',
       planned_on: '',
       note: '다른 탭 메모',
       base: '',
@@ -392,7 +376,7 @@ describe('study panel', () => {
     await expectReleased(1, byId('unit-note-u1'));
   });
 
-  it('locks short replan settings while rescheduling without a durable offer', async () => {
+  it('locks the replan form and its offer while rescheduling', async () => {
     otherTabDraft('study:i1:replan', { start: '2026-11-01', perDay: '3' });
     const replan = held<number>();
     vi.spyOn(api, 'planStudyUnits').mockReturnValue(replan.promise);
@@ -401,13 +385,10 @@ describe('study panel', () => {
     await waitFor(() => {
       expect(api.planStudyUnits).toHaveBeenCalledTimes(1);
     });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    expectOffersLocked(1);
     expect(field('study-replan-per')).toBeDisabled();
     replan.reject(offline());
-    await waitFor(() => {
-      expect(field('study-replan-per')).not.toBeDisabled();
-    });
-    expect(screen.queryByTestId('form-draft-offer')).toBeNull();
+    await expectReleased(1, byId('study-replan-per'));
   });
 });
 

@@ -115,7 +115,7 @@
     await tick();
     document.getElementById(`episode-delete-${id}`)?.focus();
   }
-  // 숫자 원문은 화면에서 유지하고 제출할 때만 숫자로 바꾼다.
+  // 잘못된 숫자도 초안에 남기고 제출할 때만 숫자로 바꾼다.
   let shared = $state<{
     number: string;
     title: string;
@@ -186,17 +186,6 @@
     sharedBase = JSON.stringify(shared);
     baseVersion = String(e?.version ?? 0);
   }
-  // 저장하는 기준값에서도 긴 작성 입력만 꺼낸다(D-27 개정).
-  function baselineText(base: string, key: string): string {
-    try {
-      const value: unknown = JSON.parse(base);
-      if (typeof value !== 'object' || value === null) return '';
-      const text: unknown = Reflect.get(value, key);
-      return typeof text === 'string' ? text : '';
-    } catch {
-      return '';
-    }
-  }
   function resetMine(): void {
     const e = course?.episodes.find((entry) => entry.id === openEpisode);
     mine = {
@@ -209,7 +198,6 @@
     positionError = undefined;
   }
   const detailsDraft = createFormDraft({
-    preserve: false,
     name: () => `course:${itemId}:details`,
     snapshot: () => ({ ...details, base: detailsBase }),
     parse: (raw) => textFields(raw, { ...details, base: '' }),
@@ -228,59 +216,24 @@
         ? undefined
         : `course:${itemId}:episode:${editingEpisode.id}:edit`,
     snapshot: () => ({ ...shared, base: sharedBase, version: baseVersion }),
-    storedSnapshot: () => ({
-      number: '',
-      title: '',
-      chapter: '',
-      duration: '',
-      url: '',
-      planned_on: '',
-      materials: shared.materials,
-      base: JSON.stringify({ materials: baselineText(sharedBase, 'materials') }),
-      version: baseVersion,
-    }),
     parse: (raw) => textFields(raw, { ...shared, base: '', version: '' }),
-    restore: ({ base, version, materials }) => {
-      shared = { ...shared, materials };
-      sharedBase = JSON.stringify({
-        number: baselineText(sharedBase, 'number'),
-        title: baselineText(sharedBase, 'title'),
-        chapter: baselineText(sharedBase, 'chapter'),
-        duration: baselineText(sharedBase, 'duration'),
-        url: baselineText(sharedBase, 'url'),
-        materials: baselineText(base, 'materials'),
-        planned_on: baselineText(sharedBase, 'planned_on'),
-      });
+    restore: ({ base, version, ...input }) => {
+      shared = input;
+      sharedBase = base;
       baseVersion = version;
     },
     reset: resetShared,
-    dirty: () =>
-      editingEpisode !== undefined && shared.materials !== baselineText(sharedBase, 'materials'),
-    screenOnly: () =>
-      editingEpisode !== undefined &&
-      ['number', 'title', 'chapter', 'duration', 'url', 'planned_on'].some(
-        (key) => Reflect.get(shared, key) !== baselineText(sharedBase, key),
-      ),
+    dirty: () => editingEpisode !== undefined && JSON.stringify(shared) !== sharedBase,
     busy: () => savingEpisode,
   });
   const mineDraft = createFormDraft({
     name: () =>
       openEpisode === undefined ? undefined : `course:${itemId}:episode:${openEpisode}:mine`,
     snapshot: () => ({ ...mine, base: mineBase }),
-    storedSnapshot: () => ({
-      planned_on: '',
-      position: '',
-      note: mine.note,
-      base: JSON.stringify({ note: baselineText(mineBase, 'note') }),
-    }),
     parse: (raw) => textFields(raw, { ...mine, base: '' }),
-    restore: ({ base, note }) => {
-      mine = { ...mine, note };
-      mineBase = JSON.stringify({
-        planned_on: baselineText(mineBase, 'planned_on'),
-        position: baselineText(mineBase, 'position'),
-        note: baselineText(base, 'note'),
-      });
+    restore: ({ base, ...input }) => {
+      mine = input;
+      mineBase = base;
     },
     reset: resetMine,
     // D-113 SR1-11: 읽기 전용도 개인 진도는 남긴다. 보관 상태에서는 읽기만 한다.
@@ -288,18 +241,10 @@
       course !== undefined &&
       course.access !== 'archived' &&
       openEpisode !== undefined &&
-      mine.note !== baselineText(mineBase, 'note'),
-    screenOnly: () =>
-      course !== undefined &&
-      course.access !== 'archived' &&
-      openEpisode !== undefined &&
-      ['planned_on', 'position'].some(
-        (key) => Reflect.get(mine, key) !== baselineText(mineBase, key),
-      ),
+      JSON.stringify(mine) !== mineBase,
     busy: () => savingMine,
   });
   const newDraft = createFormDraft({
-    preserve: false,
     name: () => `course:${itemId}:new`,
     snapshot: () => ({ ...newEpisode, requestId: newId, requestPayload: newPayload }),
     parse: (raw) => textFields(raw, { ...newEpisode, requestId: '', requestPayload: '' }),
