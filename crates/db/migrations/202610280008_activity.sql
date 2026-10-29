@@ -1118,7 +1118,7 @@ CREATE FUNCTION fvoci.app_system_item_reminders(p_today date, p_ids uuid[]) RETU
       JOIN workspaces w ON w.id = i.workspace_id
       CROSS JOIN LATERAL (VALUES ('date', r.occurred_on),
                                  ('revision_due', CASE WHEN r.kind = 'submission'
-                                                       THEN (r.fields->>'revision_due')::date END)) AS x(key, on_date)
+                                                       THEN app_iso_date(r.fields->>'revision_due') END)) AS x(key, on_date)
       WHERE r.kind IN ('review', 'submission', 'deliverable')
         AND x.on_date IN (p_today, p_today + 1)
         AND coalesce(r.fields->>'status', '') NOT IN ('accepted', 'published', 'rejected', 'done')
@@ -1174,7 +1174,7 @@ CREATE FUNCTION fvoci.app_system_item_reminders_ids(p_today date) RETURNS intege
          JOIN workspaces w ON w.id = i.workspace_id
          CROSS JOIN LATERAL (VALUES ('date', r.occurred_on),
                                     ('revision_due', CASE WHEN r.kind = 'submission'
-                                                          THEN (r.fields->>'revision_due')::date END)) AS x(key, on_date)
+                                                          THEN app_iso_date(r.fields->>'revision_due') END)) AS x(key, on_date)
          CROSS JOIN LATERAL (
            SELECT r.created_by
            UNION SELECT (jsonb_array_elements_text(coalesce(r.fields->'coauthors', '[]')))::uuid

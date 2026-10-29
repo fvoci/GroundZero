@@ -2413,6 +2413,26 @@ ALTER TABLE ONLY fvoci.tasks
 ALTER TABLE ONLY fvoci.tasks
     ADD CONSTRAINT tasks_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES fvoci.workspaces(id);
 
+-- 저장된 YYYY-MM-DD가 잘못됐으면 그 날짜만 건너뛴다(#218).
+-- 문자열의 ::date 변환은 DateStyle에 의존하므로 숫자 인자를 받는 make_date를 쓴다.
+CREATE FUNCTION fvoci.app_iso_date(p_value text) RETURNS date
+    LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+BEGIN
+    IF p_value !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
+        RETURN NULL;
+    END IF;
+    RETURN make_date(substring(p_value FROM 1 FOR 4)::integer,
+                     substring(p_value FROM 6 FOR 2)::integer,
+                     substring(p_value FROM 9 FOR 2)::integer);
+EXCEPTION WHEN datetime_field_overflow THEN
+    RETURN NULL;
+END;
+$$;
+
+ALTER FUNCTION fvoci.app_iso_date(p_value text) OWNER TO fvoci_migrator;
+
 -- 달력 집계(D-80). SECURITY INVOKER로 앱 역할의 RLS를 그대로 적용한다.
 -- 학습 표는 다음 기준 파일에서 만들어지므로 PL/pgSQL의 실행 시 이름 해석을 쓴다.
 CREATE FUNCTION fvoci.app_calendar(p_workspace uuid, p_from date, p_to date, p_tz text, p_module uuid DEFAULT NULL, p_item uuid DEFAULT NULL) RETURNS jsonb
@@ -2495,12 +2515,11 @@ BEGIN
             FROM item_records r JOIN scope ON scope.id = r.item_id
             WHERE r.workspace_id = p_workspace AND r.kind = 'submission' AND r.occurred_on BETWEEN p_from AND p_to
             UNION ALL
-            SELECT 'revision_due', r.id, r.item_id, r.title, (r.fields->>'revision_due')::date,
+            SELECT 'revision_due', r.id, r.item_id, r.title, app_iso_date(r.fields->>'revision_due'),
                    false, coalesce(r.fields->>'status' IN ('accepted', 'published', 'rejected'), false)
             FROM item_records r JOIN scope ON scope.id = r.item_id
             WHERE r.workspace_id = p_workspace AND r.kind = 'submission'
-              AND r.fields->>'revision_due' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-              AND (r.fields->>'revision_due')::date BETWEEN p_from AND p_to
+              AND app_iso_date(r.fields->>'revision_due') BETWEEN p_from AND p_to
             UNION ALL
             SELECT 'deliverable', r.id, r.item_id, r.title, r.occurred_on,
                    false, coalesce(r.fields->>'status' IN ('done', 'accepted'), false)
