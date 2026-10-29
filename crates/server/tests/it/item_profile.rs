@@ -469,7 +469,7 @@ async fn items_copy_with_fresh_numbers_and_templates() {
     // 팀 문서의 소유 권한은 관리자에게 있다. 작성자가 복제하려면 복제 허용이 필요하다(D-20).
     let allow = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!(
             "/api/documents/{}/settings",
             mine.json["id"].as_str().unwrap()
@@ -785,7 +785,7 @@ async fn group_changes_and_leaving_end_item_roles() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{doc_id}/move/preview"),
+        &format!("/api/documents/{doc_id}/move-plan"),
         Some(&admin),
         Some(json!({ "target_workspace_id": ws, "target_item_id": it })),
     )

@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { type EventInput, type EventView } from '$lib/features/events/model';
+  import { eventsApi } from '$lib/features/events/api';
   // 항목의 일정(회의·발표·행사, D-31): 목록, 추가, 상세 대화상자.
   import { tick } from 'svelte';
   import { me } from '$lib/me.svelte';
 
-  import type { EventInput, EventView, ItemView } from '$lib/api/client';
-  import { api } from '$lib/api/client';
+  import type { ItemView } from '$lib/api/client';
+
   import { RetryKey } from '$lib/api/retry-key';
   import { errorText } from '$lib/api/errors';
   import { m } from '$lib/paraglide/messages.js';
@@ -47,7 +49,7 @@
   async function reload(itemId: string = item.id): Promise<void> {
     const mine = ++readSeq;
     try {
-      const next = await api.itemEvents(itemId);
+      const next = await eventsApi.itemEvents(itemId);
       if (mine !== readSeq) return;
       events = next;
       loaded = true;
@@ -75,7 +77,7 @@
     // 폼은 이 함수가 끝난 뒤에 결과를 반영하므로 다시 읽기까지 잠가 둔다.
     creating = true;
     try {
-      await api.createEvent(itemId, requestId, input);
+      await eventsApi.createEvent(itemId, requestId, input);
       if (item.id !== itemId || me.userId !== user) return false;
       createKey.done(requestId);
       onchanged?.();

@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import * as feedback from '$lib/features/feedback/feedback.svelte';
 import { org } from '$lib/org.svelte';
@@ -6,7 +7,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, ShiftProposalView, TaskDetailView, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import { editDates } from '$lib/features/tasks/gantt';
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -113,7 +114,7 @@ describe('gantt reschedule', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
   });

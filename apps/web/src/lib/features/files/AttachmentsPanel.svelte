@@ -6,9 +6,8 @@
   import type { FileTarget, FileVersionView, FileView } from '$lib/api/client';
   import { api, fileContentUrl } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
-  import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { formatInstant } from '$lib/display';
   import { me } from '$lib/me.svelte';
@@ -68,6 +67,7 @@
   let controller: AbortController | undefined;
   let seq = 0;
   const renameDraft = createFormDraft<RenameDraft | null>({
+    preserve: false,
     name: () => `attachment-rename:${target.kind}:${target.id}`,
     snapshot: () =>
       renaming === undefined
@@ -102,14 +102,6 @@
     dirty: () => renaming !== undefined && renaming.name !== renaming.baseline,
   });
   onMount(renameDraft.attach);
-  /** 이름 바꾸기 단추와 같이 그 파일의 서버 `can_write`로 정한다(D-113). 패널의 `canWrite`는 새 파일 붙이기다. */
-  function renamable(input: RenameDraft | null): boolean {
-    return (
-      input !== null &&
-      files.find((f) => f.id === input.id)?.can_write === true &&
-      !accountSwitching()
-    );
-  }
   let renameIdentity: string | undefined;
   $effect(() => {
     const identity = JSON.stringify([me.userId, target.kind, target.id]);
@@ -189,8 +181,8 @@
 
   async function showVersions(id: string): Promise<void> {
     try {
-      const detail = await api.file(id);
-      versions = { id, list: detail.versions };
+      const list = await api.fileVersions(id);
+      versions = { id, list };
     } catch (e: unknown) {
       error = errorText(e, m.files_versions_load_failed());
     }
@@ -272,17 +264,6 @@
       <span class="text-destructive">{error}</span>
     {/if}
   </p>
-  {#each renameDraft.offers as offer (offer.key)}
-    <FormDraftOffer
-      restorable={renamable(offer.value.input)}
-      onrestore={() => {
-        if (renamable(offer.value.input)) renameDraft.restore(offer);
-      }}
-      ondiscard={() => {
-        renameDraft.discard(offer);
-      }}
-    />
-  {/each}
   {#if files.length === 0}
     <p class="text-sm text-muted-foreground">{m.files_empty()}</p>
   {:else}

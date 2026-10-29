@@ -1,3 +1,4 @@
+import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
 import { org } from '$lib/org.svelte';
 import './fixtures/task-statuses';
@@ -5,7 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView, TaskDetailView, TaskView } from '$lib/api/client';
-import { api } from '$lib/api/client';
+
 import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
 import { MAX_GANTT_DAYS } from '$lib/features/tasks/gantt';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -67,7 +68,7 @@ describe('gantt bar clipped at the end of the shown period', () => {
   beforeEach(async () => {
     await setLocale('ko', { reload: false });
     window.sessionStorage.setItem(org.key('board:i1'), JSON.stringify({ view: 'gantt' }));
-    vi.spyOn(api, 'savedViews').mockResolvedValue([]);
+    vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
     vi.spyOn(work, 'syncRecurrences').mockResolvedValue(0);
     Element.prototype.setPointerCapture = (): void => undefined;
   });

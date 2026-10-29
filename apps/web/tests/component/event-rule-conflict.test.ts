@@ -1,8 +1,10 @@
+import { type EventView } from '$lib/features/events/model';
+import { RuleConflict, eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventView, RecurrenceRule } from '$lib/api/client';
-import { api, RuleConflict } from '$lib/api/client';
+import type { RecurrenceRule } from '$lib/api/client';
+
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { describeRule } from '$lib/features/events/labels';
 import { m } from '$lib/paraglide/messages.js';
@@ -62,9 +64,9 @@ function reply(status: number, body: unknown): Response {
 describe('event rule saved from a stale rule', () => {
   it('shows the current rule, keeps the typed one, and saves it on the next try', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(api, 'event').mockResolvedValue(ev(5, monday));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev(5, monday));
     const setRule = vi
-      .spyOn(api, 'setEventRecurrence')
+      .spyOn(eventsApi, 'setEventRecurrence')
       .mockRejectedValueOnce(new RuleConflict(ev(6, monWed)))
       .mockImplementation((_id: string, rule: RecurrenceRule | null) =>
         Promise.resolve(ev(7, rule)),

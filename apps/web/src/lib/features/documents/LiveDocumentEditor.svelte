@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DocumentConflictNotice from './DocumentConflictNotice.svelte';
+  import { documentsApi } from './api';
   // 실시간 공동 편집 화면(D-27 워크스페이스별 ON, D-70). 본문은 Yjs로 바로 함께 고치고(저장 단추 없음),
   // 서버가 조용할 때·마지막 사람이 나갈 때 리비전을 남긴다. 제목은 저장 API로 따로 바꾼다.
   // 서버와 맞춰지지 않은 동안(끊김) 고친 본문은 이 사용자의 초안으로 남겨, 실시간이 꺼지거나 권한이 바뀌거나
@@ -65,6 +67,9 @@
   let savedTitle = $state(start.title);
   let titleMessage = $state<string | undefined>(undefined);
   let savingTitle = $state(false);
+  let titleBase = $state(start.revision);
+  let titleConflict = $state<DocumentView | undefined>(undefined);
+  let titleRequest: { title: string; base: number; id: string } | undefined;
 
   // 서버가 받았다고 확인되지 않은 편집을 초안으로 남긴다. 다시 열 때(또는 방을 새로 열 때) 남아 있던 초안은
   // 고르게 할 줄로 옮겨 하나씩 고르게 하고, 그동안의 새 편집은 지금 편집의 초안으로 따로 남는다(덮지 않음).
@@ -87,18 +92,20 @@
   // 다른 계정으로 바뀌어 연결이 거절됐는데(4412) 확인받지 못한 편집을 이 브라우저에 남기지 못했다. 다시 읽지 않고 알린다.
   let accountUnsavedLost = $state(false);
 
-  /** 남겼으면 참. 고를 때까지 자리를 비워 둔 지난 초안이 있거나(`reserved`) 저장소가 가득 차면 남기지 못한다. */
+  /** 본문만 영구 초안으로 남긴다. 미저장 제목은 화면에 두며 이 화면을 바꿀 때 확인한다(D-27, #154). */
   function keepDraft(): boolean {
     if (keepTimer !== undefined) clearTimeout(keepTimer);
     keepTimer = undefined;
+    const titlePending = start.can_edit && title.trim() !== savedTitle;
+    if (watch?.dirty !== true) return !titlePending;
     if (reserved !== undefined) return false;
-    return storeDraft(start.id, {
+    const kept = storeDraft(start.id, {
       baseRevision: start.revision,
-      title,
-      // 편집기가 아직 본문을 넘기지 않았으면(첫 동기화 전) 연 내용 그대로다(제목만 고친 경우도 남긴다).
+      title: savedTitle,
       body: latest ?? start.body,
       savedAt: new Date().toISOString(),
     });
+    return kept && !titlePending;
   }
 
   /** 타자마다 쓰지 않도록 조금 모아 남긴다(멈추거나 닫을 때는 바로 남긴다). */
@@ -107,7 +114,7 @@
     keepTimer = setTimeout(keepDraft, 300);
   }
 
-  /** 멈추거나 닫기 전에, 서버에 반영되지 않은 편집(저장하지 않은 제목 포함)이 있으면 바로 남긴다. */
+  /** 멈추거나 닫기 전에 반영 대기 본문을 남긴다. 제목은 화면 상태와 이탈 경고로 지킨다. */
   function keepIfDirty(): void {
     if (hasPending()) keepDraft();
   }
@@ -133,8 +140,8 @@
   }
 
   /**
-   * 서버가 연결을 닫을 때: 반영되지 않은 편집이 있으면 초안으로 남기고 알린다. 남기지 못했으면 거짓. 제목만 고쳤어도
-   * 남긴다(실시간이 꺼지거나 권한이 바뀌어 다시 열면 이 편집기와 함께 사라진다, CodeRabbit #64).
+   * 서버가 연결을 닫을 때 본문은 초안으로 남기고 알린다. 미저장 제목이나 보존 실패 본문이 있으면
+   * 화면을 바꾸지 않고 저장·버리기를 기다린다(D-27, #154).
    */
   function keepUnsaved(): boolean {
     if (!hasPending()) return true;
@@ -213,9 +220,8 @@
         return;
       }
       if (stop === 'account') {
-        // 이 편집기를 연 계정이 아닌 세션으로 다시 붙었다(4412). 방에 들어가지 않았다. 확인받지 못한 편집(저장하지 않은
-        // 제목 포함)을 앞 계정의 초안으로 남겼으면 이 창을 지금 계정으로 다시 읽는다. 남기지 못했으면(저장소 가득 참 등)
-        // 다시 읽으면 사라지므로 화면에 두고 알린다(사람이 옮겨 둔 뒤 새로 고친다).
+        // 다른 계정으로 다시 붙었다(4412). 본문을 남겼으면 다시 읽되, 미저장 제목이나 보존 실패 본문은
+        // 화면에 두고 알린다. 계정 전환 중에는 다시 저장하지 않는다(D-96).
         next.provider.disconnect();
         stopped = stop;
         if (!hasPending() || keepDraft()) switchAccount();
@@ -406,8 +412,13 @@
     };
   }
 
-  /** 제목만 바꾼다. 본문은 서버의 최신 본문을 그대로 보낸다(실시간 중 저장 API는 본문을 바꾸지 않는다). */
+  function canSaveTitle(): boolean {
+    return start.can_edit && !handedOff && !accountSwitching();
+  }
+
+  /** 제목 명령은 하나씩 보낸다. 저장 중 고친 제목은 성공 뒤 이어 보내고, 충돌 뒤 재저장은 사람이 고른다(D-27). */
   async function saveTitle(): Promise<void> {
+    if (savingTitle || !canSaveTitle()) return;
     const next = title.trim();
     if (next === '') {
       titleMessage = m.documents_title_required();
@@ -417,27 +428,43 @@
     savingTitle = true;
     titleMessage = undefined;
     try {
-      for (let tries = 0; tries < 2; tries += 1) {
+      if (titleRequest?.title !== next || titleRequest.base !== titleBase) {
+        // 본문 체크포인트도 판을 올린다. 제목이 그대로일 때만 확인한 새 판을 쓰고,
+        // 다른 사람이 바꾼 제목은 기존 판으로 보내 서버의 409와 명시적 재저장으로 처리한다.
         const current = await api.document(start.id);
-        const result = await api.saveDocument(start.id, {
-          expectedUser: editingUser,
-          requestId: newRequestId(),
-          baseRevision: current.revision,
-          title: next,
-          body: current.body,
-        });
-        if (result.kind === 'saved') {
-          savedTitle = result.document.title;
-          onsaved?.(result.document);
-          return;
+        if (!canSaveTitle()) return;
+        if (current.title === savedTitle && current.revision > titleBase) {
+          titleBase = current.revision;
         }
+        titleRequest = { title: next, base: titleBase, id: newRequestId() };
       }
-      titleMessage = m.documents_title_conflict();
+      const result = await documentsApi.patchTitle(start.id, {
+        expectedUser: editingUser,
+        requestId: titleRequest.id,
+        baseRevision: titleRequest.base,
+        title: next,
+      });
+      if (result.kind === 'conflict') {
+        titleConflict = result.current;
+        titleBase = result.current.revision;
+        savedTitle = result.current.title;
+        titleMessage = m.documents_title_conflict();
+        return;
+      }
+      savedTitle = result.document.title;
+      titleBase = result.document.revision;
+      titleConflict = undefined;
+      titleRequest = undefined;
+      if (unsaved === 'lost' && !hasPending()) unsaved = undefined;
+      onsaved?.(result.document);
     } catch (e: unknown) {
       titleMessage = errorText(e, m.documents_title_save_failed());
+      return;
     } finally {
       savingTitle = false;
     }
+    const pending = title.trim();
+    if (canSaveTitle() && pending !== '' && pending !== next) void saveTitle();
   }
 
   function statusText(s: LiveStatus): string {
@@ -505,7 +532,9 @@
         id="live-title"
         bind:value={title}
         readonly={!start.can_edit || handedOff}
-        onblur={() => void saveTitle()}
+        onblur={() => {
+          if (titleConflict === undefined) void saveTitle();
+        }}
       />
     </div>
     {#if start.can_edit}
@@ -518,8 +547,27 @@
       >
     {/if}
   </form>
+  {#if titleConflict !== undefined}
+    <DocumentConflictNotice current={titleConflict} {title}>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        disabled={savingTitle}
+        onclick={() => {
+          title = savedTitle;
+          titleConflict = undefined;
+          titleMessage = undefined;
+        }}>{m.documents_conflict_use_server()}</Button
+      >
+    </DocumentConflictNotice>
+  {/if}
   {#if unsaved === 'lost'}
-    <p role="alert" class="text-sm text-destructive">{m.documents_live_unsaved_lost()}</p>
+    <p role="alert" class="text-sm text-destructive">
+      {title.trim() !== savedTitle
+        ? m.documents_live_title_pending()
+        : m.documents_live_unsaved_lost()}
+    </p>
   {/if}
   <p role="status" aria-live="polite" class="text-sm text-destructive empty:hidden">
     {#if unsaved === 'kept' && found === undefined}{m.documents_live_unsaved_kept()}{/if}
@@ -543,7 +591,11 @@
       </p>{/if}
   {/if}
   {#if accountUnsavedLost}
-    <p role="alert" class="text-sm text-destructive">{m.documents_live_account_changed_lost()}</p>
+    <p role="alert" class="text-sm text-destructive">
+      {title.trim() !== savedTitle
+        ? m.documents_live_title_pending()
+        : m.documents_live_account_changed_lost()}
+    </p>
   {/if}
   {#if titleMessage !== undefined}<p role="alert" class="text-sm text-destructive">
       {titleMessage}
@@ -581,7 +633,9 @@
     open={navigationGuard.open}
     description={leaveKept
       ? m.documents_live_leave_description()
-      : m.documents_live_leave_lost_description()}
+      : title.trim() !== savedTitle
+        ? m.documents_live_title_pending()
+        : m.documents_live_leave_lost_description()}
     confirmLabel={m.documents_live_leave()}
     onkeep={() => {
       navigationGuard.keep();

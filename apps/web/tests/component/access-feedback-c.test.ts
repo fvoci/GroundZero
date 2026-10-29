@@ -106,6 +106,7 @@ describe('organization public links and allow_copy', () => {
         can_manage: access === 'owner',
         can_delete: access === 'owner',
         allow_copy: allowCopy,
+        can_export: allowed,
       });
       vi.spyOn(api, 'documentFiles').mockResolvedValue([]);
       vi.spyOn(api, 'documentBacklinks').mockResolvedValue([]);
@@ -199,13 +200,10 @@ describe('organization public links and allow_copy', () => {
         uploaded_by_name: '가람',
         created_at: '2026-10-25T00:00:00Z',
       };
-      vi.spyOn(api, 'file').mockResolvedValue({
-        file: { ...ACCESS_FILE, current_version: 2, can_download: allowCopy },
-        versions: [
-          { ...version, version: 2 },
-          { ...version, version: 1 },
-        ],
-      });
+      vi.spyOn(api, 'fileVersions').mockResolvedValue([
+        { ...version, version: 2 },
+        { ...version, version: 1 },
+      ]);
       await fireEvent.click(
         screen.getByRole('button', { name: m.files_versions_aria({ name: ACCESS_FILE.name }) }),
       );

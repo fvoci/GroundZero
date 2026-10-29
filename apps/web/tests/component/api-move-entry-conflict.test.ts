@@ -1,7 +1,11 @@
+import type { EventInput } from '$lib/features/events/model';
+import { eventsApi } from '$lib/features/events/api';
+import type { TimeEntryInput } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { EventInput, MovePreviewView, TimeEntryInput } from '$lib/api/client';
-import { api, ApiError } from '$lib/api/client';
+import type { MovePreviewView } from '$lib/api/client';
+import { ApiError } from '$lib/api/client';
 
 // 문서 이동의 409는 두 모양이다: 그사이 접근 변화가 바뀌었으면 새 미리보기(`MovePreview`, 다시 확인을 받는다),
 // 그 밖의 충돌은 `ErrorBody`(일반 오류). 일정·시간 기록 고치기의 409는 기준 버전이 지난 것이며 서버 최신본이 온다.
@@ -94,6 +98,15 @@ function reply(status: number, json: object): Seen[] {
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body;
     const url =
       typeof target === 'string' ? target : target instanceof URL ? target.href : target.url;
+    if (url.startsWith('/api/time-entry-targets?')) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { entry_id: 't1', kind: 'task', id: 'b', label: '구현', workspace_id: null },
+          ]),
+        ),
+      );
+    }
     seen.push({ method: init?.method ?? 'GET', url, body });
     return Promise.resolve(
       new Response(JSON.stringify(json), {
@@ -120,12 +133,12 @@ afterEach(() => {
 describe('document move', () => {
   it('reads a 200 move preview', async () => {
     const seen = reply(200, preview);
-    const result = await api.movePreview('d1', { workspaceId: 'ws-2', itemId: null });
+    const result = await documentsApi.movePreview('d1', { workspaceId: 'ws-2', itemId: null });
     expect(result).toEqual(preview);
     expect(seen).toStrictEqual([
       {
         method: 'POST',
-        url: '/api/documents/d1/move/preview',
+        url: '/api/documents/d1/move-plan',
         body: { target_workspace_id: 'ws-2', target_item_id: null },
       },
     ]);
@@ -146,7 +159,11 @@ describe('document move', () => {
       ],
     };
     const seen = reply(409, changed);
-    const result = await api.moveDocument('d1', { workspaceId: 'ws-2', itemId: 'i2' }, preview);
+    const result = await documentsApi.moveDocument(
+      'd1',
+      { workspaceId: 'ws-2', itemId: 'i2' },
+      preview,
+    );
     expect(result.kind).toBe('changed');
     expect(
       result.kind === 'changed' ? result.preview.changes.map((c) => c.display_name) : [],
@@ -154,8 +171,8 @@ describe('document move', () => {
     // 확인한 것은 접근이 생기고 사라지는 사람뿐이다.
     expect(seen).toStrictEqual([
       {
-        method: 'POST',
-        url: '/api/documents/d1/move',
+        method: 'PUT',
+        url: '/api/documents/d1/placement',
         body: {
           target_workspace_id: 'ws-2',
           target_item_id: 'i2',
@@ -168,7 +185,7 @@ describe('document move', () => {
   it('reports any other move conflict (409 ErrorBody) as an ApiError', async () => {
     reply(409, { error: 'conflict', message: 'the document moved in between' });
     const failed = await failure(
-      api.moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview),
+      documentsApi.moveDocument('d1', { workspaceId: 'ws-2', itemId: null }, preview),
     );
     expect(failed).toBeInstanceOf(ApiError);
     expect(failed instanceof ApiError ? [failed.status, failed.code, failed.message] : []).toEqual([
@@ -182,7 +199,7 @@ describe('document move', () => {
 describe('event and time entry conflicts', () => {
   it('turns a stale event version (409 EventConflict) into a conflict with the latest event', async () => {
     const seen = reply(409, { error: 'conflict', current: event });
-    const result = await api.updateEvent('e1', 3, eventInput);
+    const result = await eventsApi.updateEvent('e1', 3, eventInput);
     expect(result.kind).toBe('conflict');
     expect(result.kind === 'conflict' ? result.current.version : 0).toBe(4);
     expect(seen).toStrictEqual([
@@ -190,9 +207,14 @@ describe('event and time entry conflicts', () => {
     ]);
   });
 
-  it('turns a stale time entry version (409 TimeEntryConflict) into a conflict with the latest entry', async () => {
-    const seen = reply(409, { error: 'conflict', current: entry });
-    const result = await api.updateTimeEntry('t1', 1, entryInput);
+  it('turns a stale time entry version (409 StaleWrite<TimeEntry>) into a conflict with the latest entry', async () => {
+    const seen = reply(409, {
+      error: 'conflict',
+      message: 'the time entry changed',
+      changed: ['memo'],
+      current: entry,
+    });
+    const result = await timeData.updateTimeEntry('t1', 1, entryInput);
     expect(result.kind).toBe('conflict');
     expect(result.kind === 'conflict' ? result.current.version : 0).toBe(2);
     // 대상이 없으면 칸을 빼지 않고 `target: null`로 보낸다.
@@ -203,8 +225,8 @@ describe('event and time entry conflicts', () => {
   });
 
   it('sends the time entry target as given', async () => {
-    const seen = reply(200, { ...entry, target: { kind: 'task', id: 'b', label: '구현' } });
-    const result = await api.updateTimeEntry('t1', 2, {
+    const seen = reply(200, { ...entry, target: { kind: 'task', id: 'b' } });
+    const result = await timeData.updateTimeEntry('t1', 2, {
       ...entryInput,
       target: { kind: 'task', id: 'b' },
     });
@@ -215,8 +237,8 @@ describe('event and time entry conflicts', () => {
   it('reports a 409 without the latest copy (ErrorBody) as an ApiError', async () => {
     reply(409, { error: 'invalid_state', message: 'archived' });
     const failed = [
-      await failure(api.updateEvent('e1', 3, eventInput)),
-      await failure(api.updateTimeEntry('t1', 1, entryInput)),
+      await failure(eventsApi.updateEvent('e1', 3, eventInput)),
+      await failure(timeData.updateTimeEntry('t1', 1, entryInput)),
     ];
     expect(failed.map((e) => (e instanceof ApiError ? [e.status, e.code] : e))).toEqual([
       [409, 'invalid_state'],
@@ -224,3 +246,4 @@ describe('event and time entry conflicts', () => {
     ]);
   });
 });
+import { documentsApi } from '$lib/features/documents/api';

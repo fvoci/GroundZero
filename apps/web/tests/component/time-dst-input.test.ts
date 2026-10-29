@@ -1,8 +1,8 @@
+import type { TimeEntryView } from '$lib/features/time/model';
+import { timeData } from '$lib/features/time/data';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TimeEntryView } from '$lib/api/client';
-import { api } from '$lib/api/client';
 import TimeEntryDialog from '$lib/features/time/TimeEntryDialog.svelte';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
 import { me } from '$lib/me.svelte';
@@ -19,10 +19,10 @@ describe('time entries at a wall time that does not exist', () => {
     me.timeZone = ZONE;
     me.userId = 'user-a';
     localStorage.clear();
-    vi.spyOn(api, 'timeEntries').mockResolvedValue([]);
-    vi.spyOn(api, 'timeSummary').mockResolvedValue([]);
-    vi.spyOn(api, 'currentTimer').mockResolvedValue(null);
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeEntries').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
   });
   afterEach(() => {
     me.timeZone = '';
@@ -38,7 +38,7 @@ describe('time entries at a wall time that does not exist', () => {
   };
 
   it('manual entry: 02:30–03:30 on the gap day is refused instead of becoming a 24-hour entry', async () => {
-    const add = vi.spyOn(api, 'addTimeEntry').mockResolvedValue({
+    const add = vi.spyOn(timeData, 'addTimeEntry').mockResolvedValue({
       id: 'n1',
       started_at: '2026-03-08T07:30:00Z',
       ended_at: '2026-03-09T07:30:00Z',
@@ -99,7 +99,7 @@ describe('time entries at a wall time that does not exist', () => {
   it('manual entry: an end earlier on the clock than the start goes to the next day even if that hour is missing today', async () => {
     // 다음 날로 넘길지는 입력한 벽시계 시각으로 정한다. 틈만큼 밀린 값으로 비교하면 03:00 → 02:30은 같은 날의 없는
     // 02:30으로 거절되고 03:30 → 02:30은 더해져, 같은 꼴의 입력이 시작 시각에 따라 갈린다.
-    const add = vi.spyOn(api, 'addTimeEntry').mockResolvedValue({
+    const add = vi.spyOn(timeData, 'addTimeEntry').mockResolvedValue({
       id: 'n1',
       started_at: '2026-03-08T07:00:00Z',
       ended_at: '2026-03-09T06:30:00Z',
@@ -147,7 +147,7 @@ describe('time entries at a wall time that does not exist', () => {
 
   it('manual entry: changing only the date clears the missing-time error beside the field', async () => {
     // 없는 시각인지는 날짜와 시각을 함께 보고 정하므로, 날짜만 바꿔도 칸 옆 오류를 지운다(다시 저장할 때 다시 본다).
-    const add = vi.spyOn(api, 'addTimeEntry').mockRejectedValue(new Error('not expected'));
+    const add = vi.spyOn(timeData, 'addTimeEntry').mockRejectedValue(new Error('not expected'));
     render(TimeScreen);
     const day = await screen.findByLabelText(m.time_date());
     await fireEvent.input(day, { target: { value: '2026-03-08' } });
@@ -189,7 +189,7 @@ describe('time entries at a wall time that does not exist', () => {
       version: 1,
     };
     const update = vi
-      .spyOn(api, 'updateTimeEntry')
+      .spyOn(timeData, 'updateTimeEntry')
       .mockResolvedValue({ kind: 'updated', entry: { ...entry, version: 2 } });
     render(TimeEntryDialog, {
       props: { entry, zone: ZONE, onclose: () => undefined, onchanged: () => undefined },
@@ -252,7 +252,7 @@ describe('time entries at a wall time that does not exist', () => {
 
   it('editing: a general error already fixed does not stay beside a new missing-time error', async () => {
     const update = vi
-      .spyOn(api, 'updateTimeEntry')
+      .spyOn(timeData, 'updateTimeEntry')
       .mockResolvedValue({ kind: 'updated', entry: finished('a') });
     render(TimeEntryDialog, {
       props: {
@@ -291,7 +291,7 @@ describe('editing a time entry at a wall time that occurs twice', () => {
     // 항목의 시각은 표시 설정(D-81)을 따르므로 한국어·24시간 표시로 본다.
     Object.assign(me, { userId: 'user-a', timeZone: ZONE, locale: 'ko', hourCycle: 'h23' });
     localStorage.clear();
-    vi.spyOn(api, 'timeEntryRevisions').mockResolvedValue([]);
+    vi.spyOn(timeData, 'timeEntryRevisions').mockResolvedValue([]);
   });
   afterEach(() => {
     Object.assign(me, { userId: '', timeZone: '', locale: '', hourCycle: '' });
@@ -321,7 +321,7 @@ describe('editing a time entry at a wall time that occurs twice', () => {
       version: 1,
     };
     const update = vi
-      .spyOn(api, 'updateTimeEntry')
+      .spyOn(timeData, 'updateTimeEntry')
       .mockResolvedValue({ kind: 'updated', entry: { ...entry, version: 2 } });
     render(TimeEntryDialog, {
       props: { entry, zone: ZONE, onclose: () => undefined, onchanged: () => undefined },
@@ -378,7 +378,7 @@ describe('editing a time entry at a wall time that occurs twice', () => {
       version: 1,
     };
     const update = vi
-      .spyOn(api, 'updateTimeEntry')
+      .spyOn(timeData, 'updateTimeEntry')
       .mockResolvedValue({ kind: 'updated', entry: { ...entry, version: 2 } });
     render(TimeEntryDialog, {
       props: { entry, zone: ZONE, onclose: () => undefined, onchanged: () => undefined },

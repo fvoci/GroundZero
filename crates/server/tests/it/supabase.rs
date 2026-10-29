@@ -41,6 +41,104 @@ async fn supabase_admin_is_the_non_superuser_postgres_role() {
     );
 }
 
+/// CI의 직접 연결·session pooler 단계에서 실제 관리자 자격으로 같은 잠금 도우미를 부른다.
+/// pooler 단계는 기존 앱 주소의 host/port/tenant와 기존 관리자 자격만 조합한다(새 자격 증명 없음).
+#[tokio::test]
+async fn supabase_migrator_lock_preserves_the_backend_session() {
+    use fvoci_core::secret::Secret;
+    use fvoci_db::admin::{MIGRATOR_LOCK, lock_migrator, unlock_migrator};
+
+    let admin_url = url::Url::parse(&std::env::var("FVOCI_TEST_ADMIN_URL").unwrap()).unwrap();
+    let mut endpoint = url::Url::parse(&std::env::var("DATABASE_URL").unwrap()).unwrap();
+    if std::env::var_os("FVOCI_TEST_DIRECT_APP_URL").is_some() {
+        let (_, tenant) = endpoint
+            .username()
+            .split_once('.')
+            .expect("pooler tenant suffix");
+        let username = format!("{}.{tenant}", admin_url.username());
+        endpoint.set_username(&username).unwrap();
+        endpoint.set_password(admin_url.password()).unwrap();
+    } else {
+        endpoint = admin_url;
+    }
+    // 대상 경로가 무엇이든 잠금 연결은 postgres로 고정해야 한다.
+    endpoint.set_path("/ignored_restore_target");
+    let secret = Secret::new(endpoint.to_string());
+    let mut first = lock_migrator(&secret).await.unwrap();
+    let (pid, database): (i32, String) =
+        sqlx::query_as("SELECT pg_backend_pid(), current_database()::text")
+            .fetch_one(&mut first)
+            .await
+            .unwrap();
+    assert_eq!(database, "postgres");
+    let mut inspector = admin().await;
+    for _ in 0..3 {
+        let mut tx = first.begin().await.unwrap();
+        let current: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(
+            current, pid,
+            "the pooler changed the locked backend session"
+        );
+        tx.commit().await.unwrap();
+        let held: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid = $1 AND locktype = 'advisory'
+               AND granted AND ((classid::bigint << 32) | objid::bigint) = $2)",
+        )
+        .bind(pid)
+        .bind(MIGRATOR_LOCK)
+        .fetch_one(&mut inspector)
+        .await
+        .unwrap();
+        assert!(held, "commit released the session advisory lock");
+    }
+
+    let release =
+        async {
+            loop {
+                let blocked: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted
+                   AND ((classid::bigint << 32) | objid::bigint) = $1
+                   AND $2 = ANY(pg_blocking_pids(pid)))",
+            ).bind(MIGRATOR_LOCK).bind(pid).fetch_one(&mut inspector).await.unwrap();
+                if blocked {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+            unlock_migrator(first).await.unwrap();
+        };
+    let (second, ()) = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        tokio::join!(lock_migrator(&secret), release)
+    })
+    .await
+    .expect("closing the pooler client did not hand off the advisory lock");
+    unlock_migrator(second.unwrap()).await.unwrap();
+    // pooler의 비동기 세션 정리까지 관찰하고, 시험 연결이 얻은 잠금도 바로 반납한다.
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            let got: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+                .bind(MIGRATOR_LOCK)
+                .fetch_one(&mut inspector)
+                .await
+                .unwrap();
+            if got {
+                sqlx::query("SELECT pg_advisory_unlock($1)")
+                    .bind(MIGRATOR_LOCK)
+                    .execute(&mut inspector)
+                    .await
+                    .unwrap();
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("pooler sessions left the migrator lock behind");
+}
+
 /// Supabase 역할은 fvoci 스키마·표·함수에 권한이 없고, GroundZero 역할은 Supabase 역할의 멤버가 아니다.
 #[tokio::test]
 async fn supabase_roles_cannot_reach_the_fvoci_schema() {

@@ -22,9 +22,8 @@ use fvoci_db::Db;
 use fvoci_http::origin::{PublicOrigin, require_same_origin};
 // personal scope (2단계 B)
 use crate::features::{
-    accounts, courses, documents, event_recurrence, events, export, files, home, item_profile,
-    members, modules, organizations, public_links, records, references, revisions, saved_views,
-    search_api, study, time_tracking, trash, workspaces, zotero,
+    accounts, courses, home, item_profile, members, modules, organizations, records, search_api,
+    study, workspaces, zotero,
 };
 
 /// 핸들러가 공유하는 상태.
@@ -96,7 +95,44 @@ pub async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Health>
     }
 }
 
+impl fvoci_files::PersistWorkspace for crate::collab::Rooms {
+    fn persist_workspace(
+        &self,
+        workspace: uuid::Uuid,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(crate::collab::Rooms::persist_workspace(self, workspace))
+    }
+}
+
+impl FromRef<AppState> for fvoci_files::FilesState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            storage: state.storage.clone(),
+            limits: state.config.files,
+            upload_permits: Arc::clone(&state.upload_permits),
+            collab: Arc::new(state.collab.clone()),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_calendar::CalendarState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_activity::ActivityState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_time::TimeState {
     fn from_ref(state: &AppState) -> Self {
         Self {
             db: state.db.clone(),
@@ -109,6 +145,26 @@ impl FromRef<AppState> for fvoci_work::WorkState {
         Self {
             db: state.db.clone(),
             max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_references::ReferencesState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            max_title_chars: state.config.limits.max_title_chars,
+        }
+    }
+}
+
+impl FromRef<AppState> for fvoci_documents::DocumentsState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            limits: state.config.limits,
+            public_url: state.config.public_url.clone(),
+            runtime: Arc::new(state.collab.clone()),
         }
     }
 }
@@ -271,75 +327,10 @@ async fn api_not_found() -> AppError {
         organizations::server_organizations,
         organizations::create,
         organizations::server_admins,
-        documents::list_wiki,
-        documents::create_wiki,
-        documents::get,
-        documents::save,
-        documents::my_notes,
-        documents::create_note,
-        documents::set_settings,
-        documents::list_shares,
-        documents::create_share,
-        documents::delete_share,
-        documents::copy,
-        documents::move_preview,
-        documents::move_document,
-        documents::set_parent,
-        events::list,
-        events::get,
-        events::create,
-        events::update,
-        events::delete,
-        events::calendar,
-        event_recurrence::set_event,
-        event_recurrence::exclude_event,
-        time_tracking::current,
-        time_tracking::start,
-        time_tracking::action,
-        time_tracking::list,
-        time_tracking::add,
-        time_tracking::update,
-        time_tracking::delete,
-        time_tracking::revisions,
-        time_tracking::summary,
-        time_tracking::task_time,
-        time_tracking::item_time,
         // personal scope (2단계 B)
         home::home,
         home::my_tasks,
-        documents::shared_with_me,
         search_api::search,
-        trash::trash_document,
-        trash::trash_item,
-        trash::trash_module,
-        trash::workspace_trash,
-        trash::my_trash,
-        trash::restore,
-        trash::purge,
-        trash::purge_expired,
-        trash::purge_my_expired,
-        trash::set_retention,
-        trash::set_version_retention,
-        files::create_upload,
-        files::get_upload,
-        files::put_part,
-        files::complete_upload,
-        files::abort_upload,
-        files::document_files,
-        files::item_files,
-        files::get_file,
-        files::rename_file,
-        files::trash_file,
-        files::content,
-        files::delete_version,
-        export::workspace,
-        export::mine,
-        documents::templates,
-        documents::set_template,
-        saved_views::list,
-        saved_views::create,
-        saved_views::update,
-        saved_views::delete,
         study::get,
         study::add_units,
         study::update_unit,
@@ -367,11 +358,6 @@ async fn api_not_found() -> AppError {
         courses::delete_episode,
         courses::set_progress,
         courses::participants,
-        references::task_backlinks,
-        revisions::list,
-        revisions::get,
-        revisions::export,
-        revisions::restore,
         modules::list_modules,
         modules::get_module,
         modules::create_module,
@@ -383,16 +369,6 @@ async fn api_not_found() -> AppError {
         modules::get_item,
         modules::update_item,
         modules::archive_item,
-        modules::list_item_documents,
-        modules::create_item_document,
-        references::candidates,
-        references::resolve,
-        references::document_backlinks,
-        references::item_backlinks,
-        public_links::list,
-        public_links::create,
-        public_links::revoke,
-        public_links::view,
         members::list_members,
         members::set_role,
         members::remove_member,
@@ -439,61 +415,6 @@ async fn api_not_found() -> AppError {
         workspaces::SetRealtime,
         workspaces::WorkspaceDeleted,
         workspaces::DeletedWorkspace,
-        documents::DocumentSummary,
-        documents::Document,
-        documents::CreateDocument,
-        documents::SaveDocument,
-        documents::ConflictBody,
-        documents::SaveConflict,
-        documents::Access,
-        documents::SharedDocument,
-        documents::DocumentSettings,
-        documents::Share,
-        documents::CreateShare,
-        documents::CopyDocument,
-        documents::MoveTarget,
-        documents::MoveDocument,
-        documents::MovePreview,
-        documents::MoveAccessChange,
-        documents::MoveConflict,
-        documents::AcknowledgedPreview,
-        documents::MoveOutcome,
-        documents::SetParent,
-        events::EventKind,
-        events::Event,
-        events::EventInput,
-        events::CreateEvent,
-        events::UpdateEvent,
-        events::EventConflict,
-        events::CalendarTask,
-        events::CalendarItem,
-        events::CalendarDate,
-        events::CalendarDateKind,
-        events::Calendar,
-        events::EventOccurrence,
-        events::ProjectedTask,
-        event_recurrence::SetEventRecurrence,
-        event_recurrence::ExcludeOccurrence,
-        time_tracking::TimeKind,
-        time_tracking::TargetKind,
-        time_tracking::TargetInput,
-        time_tracking::Target,
-        time_tracking::TimeEntry,
-        time_tracking::StartTimer,
-        time_tracking::TimerStartMode,
-        time_tracking::StartedTimer,
-        time_tracking::TimerAction,
-        time_tracking::TimerActionInput,
-        time_tracking::EntryInput,
-        time_tracking::AddEntry,
-        time_tracking::UpdateEntry,
-        time_tracking::TimeEntryConflict,
-        time_tracking::TimeEntryRevision,
-        time_tracking::SummaryGroup,
-        time_tracking::TimeSummaryRow,
-        time_tracking::TaskTime,
-        time_tracking::ItemTime,
-        time_tracking::ItemTimeKind,
         home::DueBucket,
         home::HomeTask,
         home::HomeDocument,
@@ -517,28 +438,7 @@ async fn api_not_found() -> AppError {
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
         home::UpNextCounts,
-        trash::Trashed,
-        trash::TrashKind,
-        trash::TrashEntry,
-        trash::Trash,
-        trash::Purged,
-        trash::SetRetention,
-        trash::SetVersionRetention,
         search_api::SearchResult,
-        files::UploadTarget,
-        files::CreateUpload,
-        files::UploadView,
-        files::VersionView,
-        files::FileView,
-        files::FileDetail,
-        files::RenameFile,
-        files::FileTrashed,
-        documents::DocumentTemplate,
-        documents::SetDocumentTemplate,
-        saved_views::SavedView,
-        saved_views::CreateView,
-        saved_views::UpdateView,
-        saved_views::SavedViewConflict,
         study::MyUnitProgress,
         study::StudyUnit,
         study::StudyPlan,
@@ -587,12 +487,6 @@ async fn api_not_found() -> AppError {
         courses::UpdateEpisode,
         courses::SetProgress,
         courses::Participant,
-        revisions::RevisionSummary,
-        revisions::Revision,
-        revisions::ExportFormat,
-        revisions::ExportRequest,
-        revisions::RestoreRevision,
-        revisions::RestoreConflict,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -604,21 +498,11 @@ async fn api_not_found() -> AppError {
         modules::UpdateItem,
         modules::ItemConflict,
         modules::ItemSaveConflict,
-        references::ReferenceKind,
-        references::ReferenceCandidate,
-        references::ReferenceInput,
-        references::ResolveReferences,
-        references::ResolvedReference,
-        references::Backlink,
         // personal scope (2단계 B)
         home::MyTask,
         home::MyTaskCounts,
         home::WorkspaceTasks,
         home::MyTasks,
-        public_links::PublicLink,
-        public_links::CreatePublicLink,
-        public_links::CreatedPublicLink,
-        public_links::PublicDocument,
         fvoci_core::ids::Role,
     )),
     tags(
@@ -651,6 +535,12 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_references::ReferencesApi::openapi());
+        openapi.merge(fvoci_documents::DocumentsApi::openapi());
+        openapi.merge(fvoci_system::SystemApi::openapi());
+        openapi.merge(fvoci_files::FilesApi::openapi());
+        openapi.merge(fvoci_calendar::CalendarApi::openapi());
+        openapi.merge(fvoci_time::TimeApi::openapi());
         openapi.merge(fvoci_activity::ActivityApi::openapi());
     }
 }
@@ -688,15 +578,6 @@ impl utoipa::Modify for SessionSecurity {
     }
 }
 
-/// 라우터를 조립한다.
-/// 업로드 조각은 서버 전체에서 정해진 수만 동시에 받는다(본문을 읽기 전에 자리를 잡는다, D-52).
-async fn upload_slot(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let Ok(_permit) = Arc::clone(&state.upload_permits).acquire_owned().await else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
-    };
-    next.run(req).await
-}
-
 pub fn router(state: AppState) -> Router {
     // JSON 직렬화 여유를 두고 문서 상한보다 조금 크게 받는다. 정확한 상한 검사는 핸들러가 한다.
     let body_limit = state
@@ -706,12 +587,14 @@ pub fn router(state: AppState) -> Router {
         .saturating_mul(2)
         .saturating_add(64 * 1024);
 
-    // 업로드 조각은 설정한 조각 크기만큼(머리글 여유 포함) 받는다.
-    let part_limit = usize::try_from(state.config.files.chunk_bytes)
-        .unwrap_or(usize::MAX)
-        .saturating_add(64 * 1024);
     let api = Router::new()
         .merge(fvoci_work::router(&state))
+        .merge(fvoci_references::router(&state))
+        .merge(fvoci_documents::router(&state))
+        .merge(fvoci_system::router(&state))
+        .merge(fvoci_files::router(&state))
+        .merge(fvoci_calendar::router())
+        .merge(fvoci_time::router(&state))
         .merge(fvoci_activity::router(&state))
         .route("/me", get(accounts::me))
         .route("/me/settings", put(accounts::set_settings))
@@ -770,24 +653,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/workspaces/{workspace_id}", delete(workspaces::delete))
         .route("/me/deleted-workspaces", get(workspaces::deleted))
-        .route("/workspaces/{workspace_id}/export", get(export::workspace))
-        .route("/me/export", get(export::mine))
         .route("/record-kinds", get(records::kinds))
         .route("/zotero/collections", post(zotero::list_collections))
         .route("/items/{item_id}/zotero/import", post(zotero::import))
-        .route("/document-templates", get(documents::templates))
-        .route(
-            "/documents/{document_id}/template",
-            put(documents::set_template),
-        )
-        .route(
-            "/items/{item_id}/views",
-            get(saved_views::list).post(saved_views::create),
-        )
-        .route(
-            "/views/{view_id}",
-            put(saved_views::update).delete(saved_views::delete),
-        )
         .route("/items/{item_id}/study", get(study::get))
         .route("/items/{item_id}/study/units", post(study::add_units))
         .route("/items/{item_id}/study/plan", put(study::plan))
@@ -848,173 +716,17 @@ pub fn router(state: AppState) -> Router {
             "/me/deleted-workspaces/{workspace_id}/restore",
             post(workspaces::restore),
         )
-        .route(
-            "/workspaces/{workspace_id}/wiki/documents",
-            get(documents::list_wiki).post(documents::create_wiki),
-        )
-        .route(
-            "/me/notes",
-            get(documents::my_notes).post(documents::create_note),
-        )
-        .route(
-            "/documents/{document_id}/settings",
-            put(documents::set_settings),
-        )
-        .route(
-            "/documents/{document_id}/shares",
-            get(documents::list_shares).post(documents::create_share),
-        )
-        .route(
-            "/document-shares/{share_id}",
-            delete(documents::delete_share),
-        )
-        .route("/documents/{document_id}/copy", post(documents::copy))
-        .route(
-            "/documents/{document_id}/move/preview",
-            post(documents::move_preview),
-        )
-        .route(
-            "/documents/{document_id}/move",
-            post(documents::move_document),
-        )
-        .route(
-            "/documents/{document_id}/public-links",
-            get(public_links::list).post(public_links::create),
-        )
-        .route("/public-links/{link_id}", delete(public_links::revoke))
-        .route("/reference-candidates", get(references::candidates))
-        .route(
-            "/documents/{document_id}/parent",
-            put(documents::set_parent),
-        )
-        .route(
-            "/items/{item_id}/events",
-            get(events::list).post(events::create),
-        )
-        .route(
-            "/events/{event_id}",
-            get(events::get).put(events::update).delete(events::delete),
-        )
-        .route("/workspaces/{workspace_id}/calendar", get(events::calendar))
-        .route(
-            "/events/{event_id}/recurrence",
-            put(event_recurrence::set_event),
-        )
-        .route(
-            "/events/{event_id}/exclusions",
-            post(event_recurrence::exclude_event),
-        )
-        .route(
-            "/me/timer",
-            get(time_tracking::current).post(time_tracking::start),
-        )
-        .route(
-            "/time-entries/{entry_id}/timer",
-            post(time_tracking::action),
-        )
-        .route(
-            "/me/time-entries",
-            get(time_tracking::list).post(time_tracking::add),
-        )
-        .route(
-            "/time-entries/{entry_id}",
-            put(time_tracking::update).delete(time_tracking::delete),
-        )
-        .route(
-            "/time-entries/{entry_id}/revisions",
-            get(time_tracking::revisions),
-        )
-        .route("/me/time-summary", get(time_tracking::summary))
-        .route("/tasks/{task_id}/time", get(time_tracking::task_time))
-        .route("/items/{item_id}/time", get(time_tracking::item_time))
-        .route(
-            "/workspaces/{workspace_id}/trash",
-            get(trash::workspace_trash),
-        )
-        .route(
-            "/workspaces/{workspace_id}/trash/purge-expired",
-            post(trash::purge_expired),
-        )
-        .route(
-            "/workspaces/{workspace_id}/trash-retention",
-            put(trash::set_retention),
-        )
-        .route(
-            "/workspaces/{workspace_id}/version-retention",
-            put(trash::set_version_retention),
-        )
-        .route("/me/trash", get(trash::my_trash))
-        .route("/uploads", post(files::create_upload))
-        .route(
-            "/uploads/{upload_id}",
-            get(files::get_upload).delete(files::abort_upload),
-        )
-        .route(
-            "/uploads/{upload_id}/parts/{number}",
-            put(files::put_part)
-                .layer(DefaultBodyLimit::max(part_limit))
-                .layer(middleware::from_fn_with_state(state.clone(), upload_slot)),
-        )
-        .route(
-            "/uploads/{upload_id}/complete",
-            post(files::complete_upload),
-        )
-        .route("/documents/{document_id}/files", get(files::document_files))
-        .route("/items/{item_id}/files", get(files::item_files))
-        .route(
-            "/files/{file_id}",
-            get(files::get_file)
-                .put(files::rename_file)
-                .delete(files::trash_file),
-        )
-        .route("/files/{file_id}/content", get(files::content))
-        .route(
-            "/files/{file_id}/versions/{version}",
-            delete(files::delete_version),
-        )
-        .route("/me/trash/purge-expired", post(trash::purge_my_expired))
-        .route("/trash/{batch_id}", delete(trash::purge))
-        .route("/trash/{batch_id}/restore", post(trash::restore))
-        .route(
-            "/tasks/{task_id}/backlinks",
-            get(references::task_backlinks),
-        )
-        .route("/documents/{document_id}/revisions", get(revisions::list))
-        .route(
-            "/documents/{document_id}/revisions/{revision}",
-            get(revisions::get),
-        )
-        .route(
-            "/documents/{document_id}/revisions/{revision}/restore",
-            post(revisions::restore),
-        )
-        .route(
-            "/documents/{document_id}/revisions/{revision}/export",
-            post(revisions::export),
-        )
         // personal scope (2단계 B)
         .route("/me/home", get(home::home))
         .route("/me/tasks", get(home::my_tasks))
-        .route("/me/shared", get(documents::shared_with_me))
         .route("/search", get(search_api::search))
-        .route("/references/resolve", post(references::resolve))
-        .route(
-            "/documents/{document_id}/backlinks",
-            get(references::document_backlinks),
-        )
-        .route(
-            "/items/{item_id}/backlinks",
-            get(references::item_backlinks),
-        )
         .route(
             "/workspaces/{workspace_id}/modules",
             get(modules::list_modules).post(modules::create_module),
         )
         .route(
             "/modules/{module_id}",
-            get(modules::get_module)
-                .put(modules::update_module)
-                .delete(trash::trash_module),
+            get(modules::get_module).put(modules::update_module),
         )
         .route(
             "/modules/{module_id}/archived",
@@ -1026,22 +738,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/items/{item_id}",
-            get(modules::get_item)
-                .put(modules::update_item)
-                .delete(trash::trash_item),
+            get(modules::get_item).put(modules::update_item),
         )
         .route("/items/{item_id}/archived", put(modules::archive_item))
-        .route(
-            "/items/{item_id}/documents",
-            get(modules::list_item_documents).post(modules::create_item_document),
-        )
-        .route("/public/{token}", get(public_links::view))
-        .route(
-            "/documents/{document_id}",
-            get(documents::get)
-                .put(documents::save)
-                .delete(trash::trash_document),
-        )
         .route(
             "/documents/{document_id}/collab",
             get(crate::collab::ws::connect),
@@ -1303,8 +1002,8 @@ mod tests {
     #[test]
     fn the_move_conflict_is_a_preview_or_error_body() {
         let doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_default();
-        let conflict = &doc["paths"]["/api/documents/{document_id}/move"]["post"]["responses"]["409"]
-            ["content"]["application/json"]["schema"];
+        let conflict = &doc["paths"]["/api/documents/{document_id}/placement"]["put"]["responses"]
+            ["409"]["content"]["application/json"]["schema"];
         assert_eq!(
             conflict,
             &serde_json::json!({ "$ref": "#/components/schemas/MoveConflict" })
@@ -1322,7 +1021,7 @@ mod tests {
         );
     }
 
-    /// CodeRabbit(`fb3a11e`): 복원의 409도 두 모양이다. 기준이 지났으면 `ConflictBody`(최신본), 실시간 편집을 먼저 남기지
+    /// D-62·D-131: 복원의 409도 두 모양이다. 기준이 지났으면 `StaleWrite_Document`(최신본), 실시간 편집을 먼저 남기지
     /// 못했거나 잠금 한도를 넘었으면 `ErrorBody`. 계약이 둘 다 적는다.
     #[test]
     fn the_restore_conflict_is_a_stale_base_or_error_body() {
@@ -1340,7 +1039,7 @@ mod tests {
         assert_eq!(
             one_of,
             [
-                "#/components/schemas/ConflictBody",
+                "#/components/schemas/StaleWrite_Document",
                 "#/components/schemas/ErrorBody"
             ]
         );

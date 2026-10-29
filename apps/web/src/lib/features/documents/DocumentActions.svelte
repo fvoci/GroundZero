@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { documentsApi } from './api';
   // 문서 공유·설정·복제·이동 (D-20, D-23, D-24, D-49, D-59). 권한 판단은 서버가 하고,
   // 화면은 현재 권한(access)에 맞는 동작만 보여준다. 이동은 서버 미리보기로 접근 변화를 보여준 뒤 확인받는다.
   // 좁은 화면에서 동작 단추 여덟 개가 두 줄을 차지해, 공유·설정과 (부르는 쪽의) 기록만 두고 나머지는 "더 보기" 메뉴에 둔다.
@@ -58,7 +59,7 @@
   // 워크스페이스 관리자는 보관 해제 없이 넓히는 변경까지 할 수 있다(D-113 ⑯, SQL `app_document_can_manage`).
   // 템플릿 지정과 이동은 owner 등급만이다.
   const canManage = $derived(isOwner || doc.can_manage);
-  const canCopy = $derived(isOwner || doc.allow_copy);
+  const canCopy = $derived(doc.can_export);
   // 공개 링크 정책은 문서가 속한 워크스페이스의 조직 것이다(지금 고른 조직이 아니다). 개인 노트에는 조직 정책이 없다
   // (SQL `app_create_public_link`). 그 조직을 알 수 없으면 숨기지 않고 서버의 거절(409)을 그대로 알린다.
   const publicLinksEnabled = $derived.by(() => {
@@ -230,6 +231,7 @@
         ...doc,
         visibility: fresh.visibility,
         allow_copy: fresh.allow_copy,
+        can_export: fresh.can_export,
         is_template: fresh.is_template,
       });
     } catch (e: unknown) {
@@ -252,7 +254,7 @@
     settingsBusy = true;
     const mine = ++settingsSeq;
     try {
-      const saved = await api.setSettings(doc.id, change);
+      const saved = await documentsApi.setSettings(doc.id, change);
       notifyDone(m.common_saved());
       // 그사이 설정 창을 다시 열어 다시 읽었으면 이 응답과 그 읽기 중 어느 쪽이 더 새로운지 모른다. 그대로 넣으면 그사이
       // 다른 소유자가 바꾼 값을 되돌려 보일 수 있으므로 한 번 더 읽어 서버의 지금 값으로 맞춘다(리뷰).
@@ -491,7 +493,7 @@
     preview = undefined;
     if (selectedTarget === undefined) return;
     try {
-      preview = await api.movePreview(doc.id, selectedTarget.target);
+      preview = await documentsApi.movePreview(doc.id, selectedTarget.target);
     } catch (e: unknown) {
       fail(e);
     }
@@ -500,7 +502,7 @@
   async function confirmMove(): Promise<void> {
     if (preview === undefined || selectedTarget === undefined) return;
     try {
-      const result = await api.moveDocument(doc.id, selectedTarget.target, preview);
+      const result = await documentsApi.moveDocument(doc.id, selectedTarget.target, preview);
       if (result.kind === 'changed') {
         // 그사이 접근 변화가 바뀌었다. 새 미리보기를 보여주고 다시 확인받는다.
         preview = result.preview;

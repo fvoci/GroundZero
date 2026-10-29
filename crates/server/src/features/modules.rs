@@ -18,11 +18,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::access::Grade;
-use crate::features::documents::{
-    Access, CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION,
-    SUMMARY_COLUMNS, SummaryRow, TREE_ORDER, initial_body, load_with_access, max_depth,
-    to_document, to_summaries,
-};
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
@@ -30,7 +25,7 @@ use fvoci_http::session::CurrentUser;
 
 time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;
-use fvoci_core::ids::{DocumentId, ItemId, ModuleId, WorkspaceId};
+use fvoci_core::ids::{ItemId, ModuleId, WorkspaceId};
 
 /// 설명 글 상한(문자). 제목보다 길게 받지만 본문은 문서로 쓴다.
 const MAX_DESCRIPTION_CHARS: usize = 2_000;
@@ -94,7 +89,7 @@ pub struct Item {
     pub description: String,
     /// `workspace` 또는 `private`.
     pub visibility: String,
-    pub access: Access,
+    pub access: Grade,
     pub archived: bool,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
@@ -266,7 +261,7 @@ fn to_item(
         version,
     ): ItemRow,
 ) -> Result<Item, AppError> {
-    let access = Access::parse_present(&access)?;
+    let access = Grade::parse_present(&access)?;
     Ok(Item {
         id,
         module_id,
@@ -634,68 +629,6 @@ pub async fn archive_item(
     let item = load_item(&mut tx, id).await?;
     tx.commit().await?;
     Ok(Json(item))
-}
-
-/// 항목 아래 문서 목록. 볼 수 있는 문서만 나온다.
-#[utoipa::path(get, path = "/api/items/{item_id}/documents",
-    params(("item_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = [DocumentSummary]), (status = 404, body = ErrorBody)), tag = "modules")]
-pub async fn list_item_documents(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(id): Path<ItemId>,
-) -> Result<Json<Vec<DocumentSummary>>, AppError> {
-    let mut tx = state.db.begin_as(user).await?;
-    load_item(&mut tx, id).await?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
-        "SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY {TREE_ORDER}"
-    ))
-    .bind(id)
-    .fetch_all(tx.conn())
-    .await?;
-    tx.commit().await?;
-    Ok(Json(to_summaries(rows)))
-}
-
-/// 항목 아래 문서 생성(항목 쓰기 권한). 모듈 번호열에서 번호를 받는다.
-#[utoipa::path(post, path = "/api/items/{item_id}/documents",
-    params(("item_id" = String, Path, format = Uuid)), request_body = CreateDocument,
-    responses((status = 201, body = Document), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
-pub async fn create_item_document(
-    State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(item): Path<ItemId>,
-    Json(input): Json<CreateDocument>,
-) -> Result<(StatusCode, Json<Document>), AppError> {
-    let title = validate_title(&input.title, state.config.limits.max_title_chars, "title")?;
-    let run = || async {
-        let mut tx = state.db.begin_as(user).await?;
-        let body = initial_body(&mut tx, &input, NewDocumentPlace::Item(item)).await?;
-        let id: DocumentId =
-            sqlx::query_scalar("SELECT app_create_module_document($1, $2, $3, $4, $5, $6, $7, $8)")
-                .bind(item)
-                .bind(input.request_id)
-                .bind(&title)
-                .bind(SCHEMA_VERSION)
-                .bind(body)
-                .bind(input.parent_id)
-                .bind(max_depth(&state.config.limits))
-                .bind(new_ids(4))
-                .fetch_one(tx.conn())
-                .await
-                .map_err(AppError::from_db_function)?;
-        let (row, access) = load_with_access(&mut tx, id).await?;
-        tx.commit().await?;
-        Ok(to_document(row, access))
-    };
-    match run().await {
-        Ok(doc) => Ok((StatusCode::CREATED, Json(doc))),
-        Err(AppError::Database(e)) if is_unique_violation(&e) => {
-            Ok((StatusCode::CREATED, Json(run().await?)))
-        }
-        Err(e) => Err(e),
-    }
 }
 
 #[cfg(test)]
