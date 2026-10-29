@@ -2,10 +2,7 @@
 
 use super::Health;
 use crate::build_info::BuildInfo;
-use crate::features::{
-    accounts, courses, item_profile, members, modules, organizations, records, study, workspaces,
-    zotero,
-};
+use crate::features::{accounts, item_profile, members, modules, organizations, workspaces};
 use fvoci_core::error::ErrorBody;
 use utoipa::OpenApi;
 
@@ -49,33 +46,12 @@ use utoipa::OpenApi;
         organizations::create,
         organizations::server_admins,
         // personal scope (2단계 B)
-        study::get,
-        study::add_units,
-        study::update_unit,
-        study::delete_unit,
-        study::set_progress,
-        study::plan,
-        study::participants,
-        zotero::list_collections,
-        zotero::import,
-        records::kinds,
-        records::list,
-        records::create,
-        records::update,
-        records::delete,
         item_profile::get,
         item_profile::set,
         item_profile::set_members,
         item_profile::set_module_icon,
         item_profile::copy,
         item_profile::set_template,
-        courses::get,
-        courses::set_details,
-        courses::add_episodes,
-        courses::update_episode,
-        courses::delete_episode,
-        courses::set_progress,
-        courses::participants,
         modules::list_modules,
         modules::get_module,
         modules::create_module,
@@ -148,32 +124,6 @@ use utoipa::OpenApi;
         organizations::CreateOrganization,
         organizations::CreatedOrganization,
         organizations::ServerAdmin,
-        study::MyUnitProgress,
-        study::StudyUnit,
-        study::StudyPlan,
-        study::NewStudyUnit,
-        study::AddStudyUnits,
-        study::UnitsAdded,
-        study::UpdateStudyUnit,
-        study::SetUnitProgress,
-        study::PlanEntry,
-        study::PlanUnits,
-        study::UnitsPlanned,
-        study::StudyParticipant,
-        zotero::ZoteroLibrary,
-        zotero::ZoteroCollection,
-        zotero::ZoteroImport,
-        zotero::ZoteroImported,
-        records::FieldType,
-        records::ChoiceDef,
-        records::FieldDef,
-        records::RecordKindDef,
-        records::Record,
-        records::RecordFile,
-        records::RecordFileInput,
-        records::NewRecord,
-        records::EditRecord,
-        records::RecordVersion,
         item_profile::ItemDetails,
         item_profile::ItemProfile,
         item_profile::PersonRef,
@@ -186,16 +136,6 @@ use utoipa::OpenApi;
         item_profile::CopyItem,
         item_profile::CopiedItem,
         item_profile::SetTemplate,
-        courses::CourseDetails,
-        courses::MyProgress,
-        courses::Episode,
-        courses::Course,
-        courses::NewEpisode,
-        courses::AddEpisodes,
-        courses::EpisodesAdded,
-        courses::UpdateEpisode,
-        courses::SetProgress,
-        courses::Participant,
         modules::ModuleKind,
         modules::Module,
         modules::CreateModule,
@@ -239,6 +179,7 @@ struct DomainApis;
 impl utoipa::Modify for DomainApis {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.merge(fvoci_work::WorkApi::openapi());
+        openapi.merge(fvoci_records::RecordsApi::openapi());
         openapi.merge(fvoci_home::HomeApi::openapi());
         openapi.merge(fvoci_search::SearchApi::openapi());
         openapi.merge(fvoci_references::ReferencesApi::openapi());

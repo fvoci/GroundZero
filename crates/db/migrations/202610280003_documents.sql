@@ -179,6 +179,68 @@ CREATE FUNCTION fvoci.app_document_can_manage(p_doc uuid) RETURNS boolean
 
 ALTER FUNCTION fvoci.app_document_can_manage(p_doc uuid) OWNER TO fvoci_migrator;
 
+-- D-20: 저장 역할과 분리한 공유 수신자의 계산 역할·상한. 문서 관리자에게만 보이는 자원 읽기다.
+CREATE FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_user uuid, p_organization uuid)
+RETURNS TABLE(user_id uuid, email text, display_name text, recipient_role text, max_permission text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  DECLARE
+    v_doc documents%ROWTYPE;
+    v_org uuid;
+    v_role text;
+  BEGIN
+    PERFORM app_require_document_manager(p_doc);
+    SELECT * INTO v_doc FROM documents WHERE id = p_doc;
+    v_org := CASE WHEN v_doc.owner_user_id IS NULL
+      THEN (SELECT organization_id FROM workspaces WHERE id = v_doc.workspace_id) ELSE p_organization END;
+    IF v_org IS NULL OR v_org IS DISTINCT FROM p_organization
+       OR (v_doc.source_organization_id IS NOT NULL AND v_doc.source_organization_id <> v_org)
+       OR NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND organization_members.user_id = p_user)
+       OR (v_doc.owner_user_id IS NOT NULL AND NOT EXISTS (
+         SELECT 1 FROM organization_members WHERE organization_id = v_org AND organization_members.user_id = v_doc.owner_user_id)) THEN
+      RETURN;
+    END IF;
+    IF v_doc.owner_user_id IS NULL THEN
+      v_role := CASE WHEN EXISTS (
+        SELECT 1 FROM workspaces WHERE id = v_doc.workspace_id AND owner_id = p_user
+      ) THEN 'owner' ELSE coalesce(app_workspace_role(v_doc.workspace_id, p_user), 'outside_member') END;
+    END IF;
+    RETURN QUERY SELECT u.id, u.email, u.display_name, v_role,
+      CASE WHEN v_role IN ('readonly', 'outside_member') THEN 'read' ELSE 'write' END
+      FROM users u WHERE u.id = p_user;
+  END
+  $$;
+
+ALTER FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_user uuid, p_organization uuid) OWNER TO fvoci_migrator;
+
+-- 앱 역할에는 이메일로 전역 계정을 찾는 내부 함수를 직접 열지 않는다. 관리자 검사 뒤 같은 자원을 읽는다.
+CREATE FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_email text, p_organization uuid)
+RETURNS TABLE(user_id uuid, email text, display_name text, recipient_role text, max_permission text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+  BEGIN
+    PERFORM app_require_document_manager(p_doc);
+    RETURN QUERY SELECT * FROM app_document_share_recipient(p_doc, app_invitation_recipient(lower(btrim(p_email))), p_organization);
+  END
+  $$;
+
+ALTER FUNCTION fvoci.app_document_share_recipient(p_doc uuid, p_email text, p_organization uuid) OWNER TO fvoci_migrator;
+
+-- 저장된 공유 행을 통해서만 id 기반 수신자 정보를 읽는다. 임의의 조직원 id 조회로 이메일을 열지 않는다.
+CREATE FUNCTION fvoci.app_document_share_recipient_for_share(p_share uuid)
+RETURNS TABLE(user_id uuid, email text, display_name text, recipient_role text, max_permission text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'fvoci', 'pg_temp'
+    AS $$
+    SELECT r.* FROM document_shares s
+    CROSS JOIN LATERAL app_document_share_recipient(s.document_id, s.grantee_user_id, s.organization_id) r
+    WHERE s.id = p_share
+  $$;
+
+ALTER FUNCTION fvoci.app_document_share_recipient_for_share(p_share uuid) OWNER TO fvoci_migrator;
+
 -- 개별 공유(D-23·D-49·D-114). 받는 사람은 이메일이 검증된 사용자이자 같은 조직 멤버다. 공간 문서는 그 공간의 조직,
 -- 개인 노트는 둘이 함께 속한 조직(둘 이상이면 p_organization으로 고른다)을 공유 행에 적는다. 역할이 상한이다(D-20).
 CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission text, p_organization uuid, p_ids uuid[]) RETURNS uuid
@@ -240,10 +302,6 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
       IF NOT EXISTS (SELECT 1 FROM organization_members WHERE organization_id = v_org AND user_id = v_grantee) THEN
         RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
       END IF;
-      v_role := app_workspace_role(v_doc.workspace_id, v_grantee);
-      IF v_role = 'readonly' AND p_permission = 'write' THEN
-        RAISE EXCEPTION 'a read-only member cannot receive write access' USING ERRCODE = '22023';
-      END IF;
     END IF;
     -- 조직 제거·탈퇴(멤버 행 갱신 잠금 → 공유한 문서 행 → 공유 삭제)와 같은 순서로 줄 세운다(D-114, #177 SR1-3 후속).
     -- 문서를 먼저 잠그면 이미 공유한 문서를 제거되는 사람에게 다시 공유할 때 제거와 엇갈려 교착된다.
@@ -256,6 +314,17 @@ CREATE FUNCTION fvoci.app_share_document(p_doc uuid, p_email text, p_permission 
       FOR SHARE) m;
     IF v_members < num_nonnulls(v_grantee, v_doc.owner_user_id) THEN
       RAISE EXCEPTION 'the recipient must be a member of the organization' USING ERRCODE = '22023';
+    END IF;
+    IF v_doc.owner_user_id IS NULL THEN
+      -- 조직 멤버 → 공간 → 공간 멤버 → 문서. 제거·역할 변경이 끝난 뒤의 역할로 상한을 검사한다.
+      PERFORM 1 FROM workspaces WHERE id = v_doc.workspace_id FOR SHARE;
+      PERFORM 1 FROM workspace_members
+        WHERE workspace_id = v_doc.workspace_id AND user_id IN (app_user_id(), v_grantee)
+        ORDER BY user_id FOR SHARE;
+      v_role := app_workspace_role(v_doc.workspace_id, v_grantee);
+      IF p_permission = 'write' AND (v_role IS NULL OR v_role = 'readonly') THEN
+        RAISE EXCEPTION 'the recipient role only allows read access' USING ERRCODE = '22023';
+      END IF;
     END IF;
     -- 멤버 행을 기다리는 사이 문서가 옮겨졌으면 처음 읽은 자리로 정한 조직이 맞지 않으므로 거절한다(이동과 같은 409).
     SELECT * INTO v_locked FROM documents WHERE id = p_doc FOR UPDATE;
@@ -307,7 +376,11 @@ CREATE FUNCTION fvoci.app_shared_with_me(p_organization uuid DEFAULT NULL::uuid)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT d.id, d.title, s.permission, granter.display_name, d.updated_at
+    -- 저장 공유는 보존하고 현재 접근 등급으로 낮춘다. 읽기 공유가 공간 권한 때문에 수정 공유로 올라가지는 않는다(D-20·D-113).
+    SELECT d.id, d.title,
+      CASE WHEN s.permission = 'write' AND app_access('document', d.id) IN ('write', 'owner')
+           THEN 'write' ELSE 'read' END,
+      granter.display_name, d.updated_at
     FROM document_shares s
     JOIN documents d ON d.id = s.document_id
     JOIN users granter ON granter.id = s.granted_by

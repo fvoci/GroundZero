@@ -11,12 +11,7 @@ import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 
-// ⑧(D-20 개정 2026-10-26): 읽기 전용은 본인 강의·스터디 진도도 남기지 못한다(서버 `app_set_episode_progress`·
-// `app_set_unit_progress`·`app_plan_units`가 42501로 거절). 화면은 서버가 준 `can_write`로 진도 단추와 다시 배정을
-// 감춘다. 시간 측정은 진도가 아니라 그대로 둔다. 결정은 남기기만 막고 읽기는 막지 않으므로 내 메모·위치·한 분량은 쓸 수
-// 없을 때도(읽기 전용, 보관 항목의 모든 멤버: `can_write` = `!archived && access in (owner, write)`) 저장 단추 없는
-// 읽기 전용(readonly) 칸으로 보인다(R5 delta3 B D3B-F-2, D5-F-3). 쓸 수 없게 되면 그 칸은 고친 것으로 치지 않고(이탈 확인
-// 없음) 남은 초안은 지우지 않는다(확인 필요 2).
+// D-113 SR1-11: 읽기 전용의 개인 진도는 허용한다. 보관 상태에서만 읽기 전용으로 보인다.
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
@@ -63,11 +58,11 @@ const course = (canWrite: boolean): CourseView => ({
       version: 1,
     },
   ],
-  can_write: canWrite,
+  access: canWrite ? 'write' : 'archived',
 });
 
 const plan = (canWrite: boolean): StudyPlanView => ({
-  can_write: canWrite,
+  access: canWrite ? 'write' : 'archived',
   units: [
     {
       id: 'u1',
@@ -103,7 +98,7 @@ function expectReadable(field: HTMLElement): void {
 const draftKeys = (): string[] =>
   Object.keys(localStorage).filter((k) => localStorage.getItem(k)?.includes('바뀐 메모') === true);
 
-describe('course progress without write access (read-only member or archived item)', () => {
+describe('course progress on an archived item', () => {
   it('hides the progress buttons but shows my note and position read-only', async () => {
     vi.spyOn(api, 'course').mockResolvedValue(course(false));
     vi.spyOn(api, 'courseParticipants').mockResolvedValue([]);
@@ -138,7 +133,7 @@ describe('course progress without write access (read-only member or archived ite
     expect(screen.getByRole('button', { name: m.common_save() })).toBeInTheDocument();
   });
 
-  it('does not ask to leave after losing write access and keeps the typed draft', async () => {
+  it('does not ask to leave after archiving the item and keeps the typed draft', async () => {
     window.history.replaceState(null, '', '/w/ws-1/i/item-1');
     router.path = '/w/ws-1/i/item-1';
     vi.spyOn(api, 'course').mockResolvedValueOnce(course(true)).mockResolvedValue(course(false));
@@ -149,7 +144,7 @@ describe('course progress without write access (read-only member or archived ite
     await fireEvent.input(screen.getByLabelText(m.courses_my_note()), {
       target: { value: '바뀐 메모' },
     });
-    // 다른 동작 뒤의 다시 읽기에서 쓸 수 없게 됐다(역할 강등·보관).
+    // 다른 동작 뒤의 다시 읽기에서 쓸 수 없게 됐다(보관).
     await fireEvent.click(screen.getByRole('button', { name: '1회 완료' }));
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '1회 완료' })).toBeNull();
@@ -163,7 +158,7 @@ describe('course progress without write access (read-only member or archived ite
   });
 });
 
-describe('study progress without write access (read-only member or archived item)', () => {
+describe('study progress on an archived item', () => {
   it('hides status buttons and rescheduling but shows my amount and note read-only', async () => {
     vi.spyOn(api, 'studyPlan').mockResolvedValue(plan(false));
     vi.spyOn(api, 'studyParticipants').mockResolvedValue([]);
@@ -199,7 +194,7 @@ describe('study progress without write access (read-only member or archived item
     expect(screen.getByRole('button', { name: m.common_save() })).toBeInTheDocument();
   });
 
-  it('does not ask to leave after losing write access and keeps the typed draft', async () => {
+  it('does not ask to leave after archiving the item and keeps the typed draft', async () => {
     window.history.replaceState(null, '', '/w/ws-1/i/item-1');
     router.path = '/w/ws-1/i/item-1';
     vi.spyOn(api, 'studyPlan').mockResolvedValueOnce(plan(true)).mockResolvedValue(plan(false));

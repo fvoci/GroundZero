@@ -37,25 +37,21 @@ async fn course_and_study_plans_are_private_and_disappear_when_item_access_is_re
         let visible = send(&app, Method::PUT, &format!("/api/items/{item_id}"), Some(&admin),
             Some(json!({ "base_version": item.json["version"], "title": key, "description": "", "visibility": "workspace" }))).await;
         assert_eq!(visible.status, StatusCode::OK, "{:?}", visible.json);
-        let (create_path, create_body, read_path, list) = if kind == "course" {
+        let (resource_path, create_body) = if kind == "course" {
             (
                 "episodes",
                 json!({ "episodes": [{ "request_id": new_request_id(), "title": key, "duration_seconds": 60, "planned_on": "2026-11-05" }] }),
-                "course",
-                "episodes",
             )
         } else {
             (
                 "study/units",
                 json!({ "units": [{ "request_id": new_request_id(), "title": key, "unit": "pages", "amount": 10, "planned_on": "2026-11-05" }] }),
-                "study",
-                "units",
             )
         };
         let added = send(
             &app,
             Method::POST,
-            &format!("/api/items/{item_id}/{create_path}"),
+            &format!("/api/items/{item_id}/{resource_path}"),
             Some(&admin),
             Some(create_body),
         )
@@ -64,12 +60,18 @@ async fn course_and_study_plans_are_private_and_disappear_when_item_access_is_re
         let plan = send(
             &app,
             Method::GET,
-            &format!("/api/items/{item_id}/{read_path}"),
+            &format!("/api/items/{item_id}/{resource_path}"),
             Some(&writer),
             None,
         )
         .await;
-        let unit_id = plan.json[list][0]["id"].as_str().unwrap();
+        assert_eq!(plan.status, StatusCode::OK, "{:?}", plan.json);
+        let units = plan
+            .json
+            .as_array()
+            .expect("shared learning resource array");
+        assert_eq!(units.len(), 1, "{:?}", plan.json);
+        let unit_id = units[0]["id"].as_str().expect("learning resource id");
         let (path, body) = if kind == "course" {
             (
                 format!("/api/episodes/{unit_id}/progress"),

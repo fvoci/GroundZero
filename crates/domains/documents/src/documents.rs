@@ -6,6 +6,7 @@ mod management;
 mod movement;
 mod read;
 mod repository;
+mod shares;
 mod title;
 mod validation;
 
@@ -13,8 +14,8 @@ pub use crate::document_locks::for_save as lock_for_save;
 pub use crate::model::{
     AcknowledgedPreview, CopyDocument, CreateDocument, CreateShare, Document, DocumentSettings,
     DocumentSummary, DocumentTemplate, MoveAccessChange, MoveConflict, MoveDocument, MoveOutcome,
-    MovePreview, MoveReply, MoveTarget, SetDocumentTemplate, SetParent, Share, SharedDocument,
-    TemplateQuery,
+    MovePreview, MoveReply, MoveTarget, SetDocumentTemplate, SetParent, Share, ShareRecipient,
+    SharedDocument, TemplateQuery,
 };
 pub use fvoci_core::access::Grade as Access;
 
@@ -42,9 +43,8 @@ pub use create::{
 pub(crate) use create::{NewDocumentPlace, initial_body};
 pub(crate) use management::max_depth;
 pub use management::{
-    __path_create_share, __path_delete_share, __path_list_shares, __path_set_parent,
-    __path_set_settings, __path_set_template, __path_templates, create_share, delete_share,
-    list_shares, set_parent, set_settings, set_template, templates,
+    __path_set_parent, __path_set_settings, __path_set_template, __path_templates, set_parent,
+    set_settings, set_template, templates,
 };
 pub use movement::{
     __path_copy, __path_move_document, __path_move_preview, copy, document_for, move_document,
@@ -57,6 +57,10 @@ use repository::load;
 pub use repository::{DocRow, load_for_update, write_revision};
 pub(crate) use repository::{
     SUMMARY_COLUMNS, SummaryRow, TREE_ORDER, load_with_access, to_document, to_summaries,
+};
+pub use shares::{
+    __path_create_share, __path_delete_share, __path_list_shares, __path_recipient,
+    ShareRecipientQuery, create_share, delete_share, list_shares, recipient,
 };
 pub(crate) use validation::empty_body;
 pub use validation::validate_body;

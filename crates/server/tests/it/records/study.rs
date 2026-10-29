@@ -47,16 +47,7 @@ async fn open_item(app: &Router, admin: &TestUser, module: &str, title: &str) ->
 }
 
 async fn plan(app: &Router, user: &TestUser, item: &str) -> Value {
-    let r = send(
-        app,
-        Method::GET,
-        &format!("/api/items/{item}/study"),
-        Some(user),
-        None,
-    )
-    .await;
-    assert_eq!(r.status, StatusCode::OK, "{:?}", r.json);
-    r.json
+    super::support::view(app, user, item, super::support::LearningKind::Study).await
 }
 
 #[tokio::test]
@@ -152,16 +143,7 @@ async fn study_units_are_shared_and_progress_is_personal() {
     let yesterday = today - time::Duration::days(1);
     let progress =
         |unit: &Value| format!("/api/study-units/{}/progress", unit["id"].as_str().unwrap());
-    // 읽기 전용은 자기 진도도 남기지 못한다(개정 2026-10-26 ⑧, D-20).
-    let refused = send(
-        &app,
-        Method::PUT,
-        &progress(&units[0]),
-        Some(&reader),
-        Some(json!({ "status": "done", "done_amount": 30, "today": today.to_string() })),
-    )
-    .await;
-    assert_eq!(refused.status, StatusCode::FORBIDDEN, "{:?}", refused.json);
+    // 읽기 전용의 개인 진도·계획 허용은 private_progress 모듈에서 확인한다(D-113 SR1-11).
     let done = send(
         &app,
         Method::PUT,
@@ -181,21 +163,6 @@ async fn study_units_are_shared_and_progress_is_personal() {
     assert_eq!(theirs["units"][0]["mine"]["note"], "");
 
     // 밀린 단위를 사용자가 정한 날짜로 재배치(내 계획일만, 상태는 그대로).
-    let refused_plan = send(
-        &app,
-        Method::PUT,
-        &format!("/api/items/{item}/study/plan"),
-        Some(&reader),
-        Some(json!({ "entries": [{ "unit_id": units[1]["id"], "planned_on": yesterday.to_string() }] })),
-    )
-    .await;
-    assert_eq!(
-        refused_plan.status,
-        StatusCode::FORBIDDEN,
-        "{:?}",
-        refused_plan.json
-    );
-    assert!(plan(&app, &reader, &item).await["units"][1]["mine"]["planned_on"].is_null());
     let replan = send(
         &app,
         Method::PUT,
@@ -375,9 +342,24 @@ async fn two_writers_on_the_same_unit_version_do_not_overwrite() {
     )
     .await;
     assert_eq!(second.status, StatusCode::CONFLICT, "{:?}", second.json);
-    // 판 충돌은 다시 보내라는 재시도가 아니라 다시 읽으라는 뜻이다(감사 C32, #77): 409 `invalid_state`와 SQL의 설명 그대로.
-    assert_eq!(second.json["error"], "invalid_state");
+    // D-131·#180: 판 충돌은 공유 단위 자원과 요청 중 다른 칸을 돌려준다.
+    assert_eq!(second.json["error"], "conflict");
     assert_eq!(second.json["message"], "the unit changed; reload it");
+    assert_eq!(second.json["current"]["version"], 2);
+    assert_eq!(second.json["current"]["title"], "1장 기술통계");
+    assert!(second.json["current"]["mine"].is_null());
+    assert!(
+        second.json["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("title"))
+    );
+    assert!(
+        !second.json["changed"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("version"))
+    );
     let now = plan(&app, &writer, &item).await["units"][0].clone();
     assert_eq!(now["title"], "1장 기술통계");
     assert_eq!(now["unit"], "pages");

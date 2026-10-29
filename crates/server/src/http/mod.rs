@@ -157,6 +157,15 @@ impl FromRef<AppState> for fvoci_work::WorkState {
     }
 }
 
+impl FromRef<AppState> for fvoci_records::RecordsState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+            zotero_api_url: state.config.zotero_api_url.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_search::SearchState {
     fn from_ref(state: &AppState) -> Self {
         Self {

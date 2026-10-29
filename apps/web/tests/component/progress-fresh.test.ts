@@ -42,7 +42,7 @@ function course(note: string, position: number | null): CourseView {
       target_on: null,
     },
     episodes: [episode],
-    can_write: true,
+    access: 'write' as const,
   };
 }
 

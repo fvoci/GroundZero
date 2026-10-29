@@ -1,16 +1,14 @@
 //! 서버에 남은 기능의 HTTP 배선. 도메인 라우터와 같은 API 경계에서 조립한다.
 
 use super::AppState;
-use crate::features::{
-    accounts, courses, item_profile, members, modules, organizations, records, study, workspaces,
-    zotero,
-};
+use crate::features::{accounts, item_profile, members, modules, organizations, workspaces};
 use axum::routing::{delete, get, post, put};
 use axum::{Router, middleware};
 
 pub(super) fn api(state: &AppState) -> Router<AppState> {
     Router::new()
         .merge(fvoci_work::router(state))
+        .merge(fvoci_records::router(state))
         .merge(fvoci_home::router(state))
         .merge(fvoci_search::router(state))
         .merge(fvoci_references::router(state))
@@ -23,12 +21,8 @@ pub(super) fn api(state: &AppState) -> Router<AppState> {
         .merge(accounts_routes())
         .merge(organizations_routes())
         .merge(workspaces_routes())
-        .merge(records_routes())
-        .merge(zotero_routes())
-        .merge(study_routes())
         .merge(item_profile_routes())
         .merge(modules_routes())
-        .merge(courses_routes())
         .merge(collab_routes())
         .merge(members_routes())
         .fallback(super::api_not_found)
@@ -111,41 +105,6 @@ fn workspaces_routes() -> Router<AppState> {
         )
 }
 
-fn records_routes() -> Router<AppState> {
-    Router::new()
-        .route("/record-kinds", get(records::kinds))
-        .route(
-            "/items/{item_id}/records",
-            get(records::list).post(records::create),
-        )
-        .route(
-            "/records/{record_id}",
-            put(records::update).delete(records::delete),
-        )
-}
-
-fn zotero_routes() -> Router<AppState> {
-    Router::new()
-        .route("/zotero/collections", post(zotero::list_collections))
-        .route("/items/{item_id}/zotero/import", post(zotero::import))
-}
-
-fn study_routes() -> Router<AppState> {
-    Router::new()
-        .route("/items/{item_id}/study", get(study::get))
-        .route("/items/{item_id}/study/units", post(study::add_units))
-        .route("/items/{item_id}/study/plan", put(study::plan))
-        .route(
-            "/items/{item_id}/study/participants",
-            get(study::participants),
-        )
-        .route(
-            "/study-units/{unit_id}",
-            put(study::update_unit).delete(study::delete_unit),
-        )
-        .route("/study-units/{unit_id}/progress", put(study::set_progress))
-}
-
 fn item_profile_routes() -> Router<AppState> {
     Router::new()
         .route(
@@ -188,27 +147,6 @@ fn modules_routes() -> Router<AppState> {
             get(modules::get_item).put(modules::update_item),
         )
         .route("/items/{item_id}/archived", put(modules::archive_item))
-}
-
-fn courses_routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/items/{item_id}/course",
-            get(courses::get).put(courses::set_details),
-        )
-        .route(
-            "/items/{item_id}/course/participants",
-            get(courses::participants),
-        )
-        .route("/items/{item_id}/episodes", post(courses::add_episodes))
-        .route(
-            "/episodes/{episode_id}",
-            put(courses::update_episode).delete(courses::delete_episode),
-        )
-        .route(
-            "/episodes/{episode_id}/progress",
-            put(courses::set_progress),
-        )
 }
 
 fn collab_routes() -> Router<AppState> {
