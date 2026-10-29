@@ -141,17 +141,17 @@ async fn move_to(
     ws: &str,
     item: Option<&Value>,
 ) -> (StatusCode, Value) {
-    let uri = format!("/api/documents/{}/move", doc["id"].as_str().unwrap());
+    let uri = format!("/api/documents/{}/placement", doc["id"].as_str().unwrap());
     let target =
         json!({ "target_workspace_id": ws, "target_item_id": item.map(|i| i["id"].clone()) });
-    let preview = send(app, Method::POST, &uri, Some(user), Some(target.clone())).await;
+    let preview = send(app, Method::PUT, &uri, Some(user), Some(target.clone())).await;
     if preview.status != StatusCode::CONFLICT || preview.json.get("changes").is_none() {
         return (preview.status, preview.json);
     }
     let mut body = target;
     // D-114: 표시 이름 집합 대신 사용자별 등급 변화를 확인한다.
     body["acknowledged"] = json!({ "changes": preview.json["changes"] });
-    let r = send(app, Method::POST, &uri, Some(user), Some(body)).await;
+    let r = send(app, Method::PUT, &uri, Some(user), Some(body)).await;
     (r.status, r.json)
 }
 
@@ -530,10 +530,7 @@ async fn documents_move_between_wiki_and_items() {
     assert_eq!(get(&app, &peer, &doc_uri).await.0, StatusCode::OK);
 
     // 위키 → 비공개 항목: 동료가 볼 수 없게 되는 것을 미리보기에서 보여 준다.
-    let uri = format!(
-        "/api/documents/{}/move/preview",
-        doc["id"].as_str().unwrap()
-    );
+    let uri = format!("/api/documents/{}/move-plan", doc["id"].as_str().unwrap());
     let preview = send(
         &app,
         Method::POST,
@@ -655,7 +652,7 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
     let settings = format!("/api/documents/{doc_id}/settings");
     let widen = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &settings,
         Some(&admin),
         Some(json!({ "visibility": "workspace", "allow_copy": true })),
@@ -664,7 +661,7 @@ async fn archived_documents_allow_manager_settings_shares_and_links() {
     assert_eq!(widen.status, StatusCode::OK, "{:?}", widen.json);
     let narrow = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &settings,
         Some(&admin),
         Some(json!({ "visibility": "private", "allow_copy": false })),
@@ -787,7 +784,7 @@ async fn copies_moves_and_retries_respect_item_boundaries() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{doc_id}/move/preview"),
+        &format!("/api/documents/{doc_id}/move-plan"),
         Some(&admin),
         Some(json!({ "target_workspace_id": ws, "target_item_id": second["id"] })),
     )
@@ -802,7 +799,7 @@ async fn copies_moves_and_retries_respect_item_boundaries() {
     let preview = send(
         &app,
         Method::POST,
-        &format!("/api/documents/{doc_id}/move/preview"),
+        &format!("/api/documents/{doc_id}/move-plan"),
         Some(&admin),
         Some(json!({ "target_workspace_id": ws })),
     )

@@ -241,8 +241,8 @@ async fn worker_retries_the_whole_job_and_leaves_nothing_on_short_ids() {
     };
 
     // 상한을 0으로 속이면 매번 모자란다: 정해진 횟수만큼 다시 하고 오류로 끝나며 아무것도 남지 않는다.
-    let short = [Job {
-        ids: Some("SELECT 0"),
+    let short = [Job::WithIds {
+        bound: "SELECT 0",
         call: "SELECT app_system_due_notifications(current_date, $1)",
     }];
     let err = run_jobs(&state.db, &short).await.unwrap_err();
@@ -254,8 +254,8 @@ async fn worker_retries_the_whole_job_and_leaves_nothing_on_short_ids() {
     assert_eq!(due_count().await, 0, "a failed attempt left notifications");
 
     // 맞는 상한이면 한 번 만들고, 다시 돌려도 더 만들지 않는다.
-    let right = [Job {
-        ids: Some("SELECT app_system_due_notifications_ids(current_date)"),
+    let right = [Job::WithIds {
+        bound: "SELECT app_system_due_notifications_ids(current_date)",
         call: "SELECT app_system_due_notifications(current_date, $1)",
     }];
     run_jobs(&state.db, &right).await.unwrap();

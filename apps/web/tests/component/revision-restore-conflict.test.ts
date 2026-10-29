@@ -65,10 +65,12 @@ describe('restore conflict', () => {
       Promise.resolve(n === 1 ? revisionAt(1, '옛 내용') : revisionAt(n, '지금 화면')),
     );
     const restore = vi
-      .spyOn(api, 'restoreRevision')
+      .spyOn(documentsApi, 'restoreRevision')
       .mockResolvedValueOnce({
         kind: 'conflict',
         current: documentAt(4, '다른 사람의 실시간 문장'),
+        changed: ['body'],
+        requestId: 'restore-conflict',
       })
       .mockResolvedValueOnce({ kind: 'restored', document: documentAt(5, '옛 내용') });
     const restored = vi.fn();
@@ -104,8 +106,13 @@ describe('restore conflict, then the page moves on', () => {
     vi.spyOn(api, 'revisions').mockResolvedValue([revisionAt(1, '옛 내용')]);
     vi.spyOn(api, 'revision').mockResolvedValue(revisionAt(1, '옛 내용'));
     const restore = vi
-      .spyOn(api, 'restoreRevision')
-      .mockResolvedValueOnce({ kind: 'conflict', current: documentAt(4, '충돌 때 내용') })
+      .spyOn(documentsApi, 'restoreRevision')
+      .mockResolvedValueOnce({
+        kind: 'conflict',
+        current: documentAt(4, '충돌 때 내용'),
+        changed: ['body'],
+        requestId: 'restore-conflict',
+      })
       .mockResolvedValueOnce({ kind: 'restored', document: documentAt(6, '옛 내용') });
     const view = render(RevisionHistory, {
       props: { doc: documentAt(3, '지금 화면'), onrestored: () => undefined },
@@ -124,3 +131,4 @@ describe('restore conflict, then the page moves on', () => {
     expect(restore.mock.calls[1]?.[2].baseRevision).toBe(5);
   });
 });
+import { documentsApi } from '$lib/features/documents/api';

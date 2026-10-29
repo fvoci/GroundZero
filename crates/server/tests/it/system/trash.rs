@@ -47,7 +47,7 @@ async fn trash(app: &Router, user: &TestUser, ws: &str) -> Value {
     send(
         app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(user),
         None,
     )
@@ -112,17 +112,25 @@ async fn deleted_documents_disappear_and_come_back_with_their_subtree() {
 
     // 지운 사람과 관리자만 휴지통에서 본다. 다른 작성자는 되살릴 수 없다(없는 것과 같다).
     let mine = trash(&app, &writer, &ws).await;
-    assert_eq!(mine["retention_days"], 30);
-    assert_eq!(mine["entries"][0]["member_count"], 2);
-    assert_eq!(mine["entries"][0]["can_purge"], false);
-    assert_eq!(trash(&app, &other, &ws).await["entries"], json!([]));
     assert_eq!(
-        trash(&app, &admin, &ws).await["entries"][0]["can_purge"],
-        true
+        send(
+            &app,
+            Method::GET,
+            &format!("/api/workspaces/{ws}/retention"),
+            Some(&writer),
+            None
+        )
+        .await
+        .json["retention_days"],
+        30
     );
+    assert_eq!(mine[0]["member_count"], 2);
+    assert_eq!(mine[0]["can_purge"], false);
+    assert_eq!(trash(&app, &other, &ws).await, json!([]));
+    assert_eq!(trash(&app, &admin, &ws).await[0]["can_purge"], true);
     let restore = |user: TestUser| {
         let app = app.clone();
-        let uri = format!("/api/trash/{batch}/restore");
+        let uri = format!("/api/trash-batches/{batch}/restore");
         async move {
             send(&app, Method::POST, &uri, Some(&user), None)
                 .await
@@ -201,7 +209,7 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
         send(
             &app,
             Method::POST,
-            &format!("/api/trash/{batch}/restore"),
+            &format!("/api/trash-batches/{batch}/restore"),
             Some(&admin),
             None
         )
@@ -243,7 +251,7 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
     // 보존 기간은 관리자만 바꾼다. 기간이 지나면 되살릴 수 없고 영구 삭제만 된다.
     let retention = |user: TestUser, days: i64| {
         let app = app.clone();
-        let uri = format!("/api/workspaces/{ws}/trash-retention");
+        let uri = format!("/api/workspaces/{ws}/retention/trash");
         async move {
             send(
                 &app,
@@ -264,13 +272,13 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
         &item_batch,
     )
     .await;
-    let entry = trash(&app, &admin, &ws).await["entries"][0].clone();
-    assert_eq!(entry["expired"], true);
+    let entry = trash(&app, &admin, &ws).await[0].clone();
+    assert_eq!(entry["expiry"], "expired");
     assert_eq!(
         send(
             &app,
             Method::POST,
-            &format!("/api/trash/{item_batch}/restore"),
+            &format!("/api/trash-batches/{item_batch}/restore"),
             Some(&admin),
             None
         )
@@ -281,13 +289,13 @@ async fn items_and_tasks_go_to_the_trash_together_and_expire() {
     let r = send(
         &app,
         Method::POST,
-        &format!("/api/workspaces/{ws}/trash/purge-expired"),
+        &format!("/api/trash-batches/purge-expired?workspace_id={ws}"),
         Some(&admin),
         None,
     )
     .await;
     assert_eq!(r.json["purged"], 1);
-    assert_eq!(trash(&app, &admin, &ws).await["entries"], json!([]));
+    assert_eq!(trash(&app, &admin, &ws).await, json!([]));
 
     // 영구 삭제해도 번호는 다시 쓰지 않는다.
     let next_item = send(
@@ -439,7 +447,7 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
     .await;
     assert_eq!(r.status, StatusCode::OK);
     let mine = trash(&app, &writer, &ws).await;
-    let entry = mine["entries"]
+    let entry = mine
         .as_array()
         .unwrap()
         .iter()
@@ -493,7 +501,7 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
         send(
             &app,
             Method::POST,
-            &format!("/api/trash/{task_batch}/restore"),
+            &format!("/api/trash-batches/{task_batch}/restore"),
             Some(&admin),
             None
         )
@@ -506,7 +514,7 @@ async fn trashed_content_is_closed_everywhere_and_others_children_stay() {
         send(
             &app,
             Method::POST,
-            &format!("/api/trash/{item_batch}/restore"),
+            &format!("/api/trash-batches/{item_batch}/restore"),
             Some(&admin),
             None
         )
@@ -586,7 +594,7 @@ async fn purged_repeating_occurrences_are_not_recreated() {
         send(
             &app,
             Method::DELETE,
-            &format!("/api/trash/{batch}"),
+            &format!("/api/trash-batches/{batch}"),
             Some(&admin),
             None
         )
@@ -833,7 +841,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     .await;
     assert!(modules.json.as_array().unwrap().is_empty());
     let listed = trash(&app, &admin, &ws).await;
-    let entry = listed["entries"]
+    let entry = listed
         .as_array()
         .unwrap()
         .iter()
@@ -846,7 +854,8 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     );
     // 작성자는 남이 지운 모듈을 휴지통에서 보지 못한다.
     assert!(
-        trash(&app, &writer, &ws).await["entries"]
+        trash(&app, &writer, &ws)
+            .await
             .as_array()
             .unwrap()
             .is_empty()
@@ -855,7 +864,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let r = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{separate_batch}/restore"),
+        &format!("/api/trash-batches/{separate_batch}/restore"),
         Some(&admin),
         None,
     )
@@ -866,7 +875,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let r = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{module_batch}/restore"),
+        &format!("/api/trash-batches/{module_batch}/restore"),
         Some(&writer),
         None,
     )
@@ -875,7 +884,7 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let r = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{module_batch}/restore"),
+        &format!("/api/trash-batches/{module_batch}/restore"),
         Some(&admin),
         None,
     )
@@ -909,7 +918,8 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
         StatusCode::NOT_FOUND
     );
     assert!(
-        trash(&app, &admin, &ws).await["entries"]
+        trash(&app, &admin, &ws)
+            .await
             .as_array()
             .unwrap()
             .iter()
@@ -932,14 +942,15 @@ async fn module_trash_hides_its_items_and_restores_only_the_module() {
     let r = send(
         &app,
         Method::DELETE,
-        &format!("/api/trash/{again}"),
+        &format!("/api/trash-batches/{again}"),
         Some(&admin),
         None,
     )
     .await;
     assert!(r.status.is_success(), "{:?}", r.json);
     assert!(
-        trash(&app, &admin, &ws).await["entries"]
+        trash(&app, &admin, &ws)
+            .await
             .as_array()
             .unwrap()
             .is_empty()
@@ -1119,7 +1130,10 @@ async fn purged_module_keys_stay_reserved() {
     let purged = send(
         &app,
         Method::DELETE,
-        &format!("/api/trash/{}", trashed.json["batch_id"].as_str().unwrap()),
+        &format!(
+            "/api/trash-batches/{}",
+            trashed.json["batch_id"].as_str().unwrap()
+        ),
         Some(&admin),
         None,
     )
@@ -1437,7 +1451,7 @@ async fn trashed_items_keep_assignees_who_did_not_lose_access() {
         &app,
         Method::POST,
         &format!(
-            "/api/trash/{}/restore",
+            "/api/trash-batches/{}/restore",
             trashed.json["batch_id"].as_str().unwrap()
         ),
         Some(&admin),
@@ -1536,7 +1550,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     let organization = common::organization_of_workspace(&ws).await;
     let private = send(
         &app,
-        Method::PUT,
+        Method::PATCH,
         &format!("/api/documents/{doc_id}/settings"),
         Some(&author),
         Some(json!({ "visibility": "private", "allow_copy": true })),
@@ -1580,7 +1594,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     let restored = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{batch}/restore"),
+        &format!("/api/trash-batches/{batch}/restore"),
         Some(&helper),
         None,
     )
@@ -1616,7 +1630,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     let by_helper = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{batch}/restore"),
+        &format!("/api/trash-batches/{batch}/restore"),
         Some(&helper),
         None,
     )
@@ -1629,7 +1643,7 @@ async fn restoring_an_attachment_needs_write_access_to_its_document() {
     );
 }
 
-/// 감사 C22: 개인 노트 휴지통(`GET /api/me/trash`, `POST /api/me/trash/purge-expired`)에는 시험이 없었다. 개인 노트는
+/// 감사 C22: 개인 노트 휴지통(`GET /api/trash-batches`, `POST /api/trash-batches/purge-expired`)에는 시험이 없었다. 개인 노트는
 /// 워크스페이스 관리자에게도 비공개다(AGENTS.md). 목록과 만료 비우기는 노트 주인의 것만 보고 지운다.
 #[tokio::test]
 async fn personal_trash_lists_and_purges_only_the_owners_notes() {
@@ -1671,7 +1685,7 @@ async fn personal_trash_lists_and_purges_only_the_owners_notes() {
 
     // 목록은 내 노트만. 관리자의 노트는 같은 워크스페이스 멤버에게도 보이지 않는다(반대도 같다).
     let titles = |v: &Value| -> Vec<String> {
-        let mut t: Vec<String> = v["entries"]
+        let mut t: Vec<String> = v
             .as_array()
             .unwrap()
             .iter()
@@ -1680,16 +1694,16 @@ async fn personal_trash_lists_and_purges_only_the_owners_notes() {
         t.sort();
         t
     };
-    let mine = send(&app, Method::GET, "/api/me/trash", Some(&member), None).await;
+    let mine = send(&app, Method::GET, "/api/trash-batches", Some(&member), None).await;
     assert_eq!(mine.status, StatusCode::OK, "{:?}", mine.json);
     assert_eq!(titles(&mine.json), ["어제 메모", "지난 메모"]);
-    let admins = send(&app, Method::GET, "/api/me/trash", Some(&admin), None).await;
+    let admins = send(&app, Method::GET, "/api/trash-batches", Some(&admin), None).await;
     assert_eq!(titles(&admins.json), ["관리자 메모"]);
     // 워크스페이스 휴지통에는 개인 노트가 없다.
     let team = send(
         &app,
         Method::GET,
-        &format!("/api/workspaces/{ws}/trash"),
+        &format!("/api/trash-batches?workspace_id={ws}"),
         Some(&admin),
         None,
     )
@@ -1705,22 +1719,22 @@ async fn personal_trash_lists_and_purges_only_the_owners_notes() {
     let purged = send(
         &app,
         Method::POST,
-        "/api/me/trash/purge-expired",
+        "/api/trash-batches/purge-expired",
         Some(&member),
         None,
     )
     .await;
     assert_eq!(purged.status, StatusCode::OK, "{:?}", purged.json);
     assert_eq!(purged.json["purged"], 1);
-    let mine = send(&app, Method::GET, "/api/me/trash", Some(&member), None).await;
+    let mine = send(&app, Method::GET, "/api/trash-batches", Some(&member), None).await;
     assert_eq!(titles(&mine.json), ["어제 메모"]);
-    let admins = send(&app, Method::GET, "/api/me/trash", Some(&admin), None).await;
+    let admins = send(&app, Method::GET, "/api/trash-batches", Some(&admin), None).await;
     assert_eq!(titles(&admins.json), ["관리자 메모"]);
     // 남의 묶음은 되살리지 못한다(볼 수 없으면 404).
     let restore = send(
         &app,
         Method::POST,
-        &format!("/api/trash/{theirs_old}/restore"),
+        &format!("/api/trash-batches/{theirs_old}/restore"),
         Some(&member),
         None,
     )

@@ -1,59 +1,23 @@
 //! 공유 자원 읽기와 명령(D-20·D-113·D-114). 역할·상한은 SQL이 계산한다.
 
-use axum::extract::{FromRef, Path, Query, State};
+use axum::Json;
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::middleware::from_extractor_with_state;
-use axum::routing::{delete, get};
-use axum::{Json, Router};
 use fvoci_core::error::{AppError, ErrorBody, InvalidReason};
 use fvoci_core::ids::{DocumentId, OrganizationId, UserId};
-use fvoci_core::share::{SharePermission, ShareRecipientRole};
 use fvoci_db::new_ids;
-use fvoci_http::session::{CurrentUser, ExpectedUserIfSent, SessionState};
-use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
+use serde::Deserialize;
+use utoipa::IntoParams;
 use uuid::Uuid;
 
-use super::require_manager;
-use crate::http::AppState;
-
-/// 저장된 공유 권한과 수신자의 현재 역할 상한. 기존 write 저장값도 그대로 반환한다.
-#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
-pub struct Share {
-    #[schema(value_type = String, format = Uuid)]
-    pub id: Uuid,
-    pub organization_id: OrganizationId,
-    pub grantee_user_id: UserId,
-    pub email: Option<String>,
-    pub display_name: String,
-    pub permission: SharePermission,
-    /// 개인 노트에는 공간 역할을 적용하지 않아 null이다.
-    pub recipient_role: Option<ShareRecipientRole>,
-    pub max_permission: SharePermission,
-}
-
-/// 공유할 사람의 계산 역할과 상한. 조회만으로 공유를 만들지 않는다.
-#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
-pub struct ShareRecipient {
-    pub user_id: UserId,
-    pub email: Option<String>,
-    pub display_name: String,
-    pub recipient_role: Option<ShareRecipientRole>,
-    pub max_permission: SharePermission,
-}
+use super::{CreateShare, Share, ShareRecipient, require_manager};
+use crate::state::DocumentsState;
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct ShareRecipientQuery {
     pub organization_id: OrganizationId,
     pub email: String,
-}
-
-/// 공유 추가 요청. 같은 이메일이면 저장 권한을 바꾼다.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateShare {
-    pub organization_id: Option<OrganizationId>,
-    pub email: String,
-    pub permission: SharePermission,
 }
 
 const SHARE_COLUMNS: &str = "SELECT s.id, s.organization_id, s.grantee_user_id,
@@ -82,12 +46,12 @@ fn share_error(error: sqlx::Error) -> AppError {
     responses((status = 200, body = ShareRecipient), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn recipient(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Query(input): Query<ShareRecipientQuery>,
 ) -> Result<Json<ShareRecipient>, AppError> {
-    let email = crate::features::members::validate_email(&input.email)?;
+    let email = fvoci_core::validate::validate_email(&input.email)?;
     let mut tx = state.db.begin_as(user).await?;
     let recipient = sqlx::query_as("SELECT * FROM app_document_share_recipient($1, $2::text, $3)")
         .bind(id)
@@ -106,7 +70,7 @@ pub async fn recipient(
     responses((status = 200, body = [Share]), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody)), tag = "documents")]
 pub async fn list_shares(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
 ) -> Result<Json<Vec<Share>>, AppError> {
@@ -124,17 +88,17 @@ pub async fn list_shares(
 
 #[utoipa::path(post, path = "/api/documents/{document_id}/shares",
     params(("document_id" = String, Path, format = Uuid),
-           ("x-fvoci-expected-user" = Option<UserId>, Header)), request_body = CreateShare,
+           ("x-fvoci-expected-user" = Option<UserId>, Header, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateShare,
     responses((status = 201, body = Share), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn create_share(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<DocumentId>,
     Json(input): Json<CreateShare>,
 ) -> Result<(StatusCode, Json<Share>), AppError> {
-    let email = crate::features::members::validate_email(&input.email)?;
+    let email = fvoci_core::validate::validate_email(&input.email)?;
     let mut tx = state.db.begin_as(user).await?;
     let share_id: Uuid = sqlx::query_scalar("SELECT app_share_document($1, $2, $3, $4, $5)")
         .bind(id)
@@ -155,12 +119,12 @@ pub async fn create_share(
 
 #[utoipa::path(delete, path = "/api/document-shares/{share_id}",
     params(("share_id" = String, Path, format = Uuid),
-           ("x-fvoci-expected-user" = Option<UserId>, Header)),
+           ("x-fvoci-expected-user" = Option<UserId>, Header, description = EXPECTED_USER_IF_SENT_DOC)),
     responses((status = 204), (status = 400, body = ErrorBody),
               (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "documents")]
 pub async fn delete_share(
-    State(state): State<AppState>,
+    State(state): State<DocumentsState>,
     CurrentUser(user): CurrentUser,
     Path(share): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
@@ -173,20 +137,4 @@ pub async fn delete_share(
         .map_err(AppError::from_db_function)?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// 공유 자원과 명령. 모든 명령에 선택형 기대 사용자 검사를 공통 적용한다(D-96).
-pub fn router(state: &AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/documents/{document_id}/shares",
-            get(list_shares).post(create_share),
-        )
-        .route("/documents/{document_id}/share-recipient", get(recipient))
-        .route("/document-shares/{share_id}", delete(delete_share))
-        .route_layer(
-            from_extractor_with_state::<ExpectedUserIfSent, SessionState>(SessionState::from_ref(
-                state,
-            )),
-        )
 }

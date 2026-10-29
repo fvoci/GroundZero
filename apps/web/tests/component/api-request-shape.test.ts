@@ -2,6 +2,7 @@ import { activityApi } from '$lib/features/activity/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { api, ApiError } from '$lib/api/client';
+import { systemApi } from '$lib/features/trash/api';
 
 // API 클라이언트가 실제로 보내는 요청(메서드·주소·본문)을 서버 대역으로 기록해 확인한다. 범위·커서 쿼리,
 // 개인 영역과 워크스페이스 경로 전환, 빈 본문과 값이 있는 본문, 같은 주소의 PUT·DELETE 구분을 본다.
@@ -53,7 +54,6 @@ const calendar = {
   dates: [],
   items: [],
 };
-const trash = { retention_days: 30, version_retention_days: null, entries: [] };
 const range = 'from=2026-10-01&to=2026-10-31&tz=Asia%2FSeoul';
 
 interface Case {
@@ -175,19 +175,19 @@ const cases: Case[] = [
   },
   {
     name: 'workspace trash',
-    call: () => api.trash('ws-1'),
+    call: () => systemApi.batches('ws-1'),
     status: 200,
-    reply: trash,
+    reply: [],
     method: 'GET',
-    url: '/api/workspaces/ws-1/trash',
+    url: '/api/trash-batches?workspace_id=ws-1',
   },
   {
     name: 'personal trash',
-    call: () => api.trash(null),
+    call: () => systemApi.batches(null),
     status: 200,
-    reply: trash,
+    reply: [],
     method: 'GET',
-    url: '/api/me/trash',
+    url: '/api/trash-batches',
   },
   {
     name: 'purging expired workspace trash',
@@ -195,7 +195,7 @@ const cases: Case[] = [
     status: 200,
     reply: { purged: 0 },
     method: 'POST',
-    url: '/api/workspaces/ws-1/trash/purge-expired',
+    url: '/api/trash-batches/purge-expired?workspace_id=ws-1',
   },
   {
     name: 'purging expired personal trash',
@@ -203,7 +203,7 @@ const cases: Case[] = [
     status: 200,
     reply: { purged: 0 },
     method: 'POST',
-    url: '/api/me/trash/purge-expired',
+    url: '/api/trash-batches/purge-expired',
   },
   {
     name: 'document revisions from the newest',
@@ -224,6 +224,20 @@ const cases: Case[] = [
 ];
 
 describe('API request shape', () => {
+  it('composes workspace trash from the batch and retention resources', async () => {
+    const replies = [[], { retention_days: 30, version_retention_days: 90 }];
+    const seen = stub(() => json(200, replies.shift()));
+    await expect(api.trash('ws-1')).resolves.toEqual({
+      entries: [],
+      retention_days: 30,
+      version_retention_days: 90,
+    });
+    expect(seen.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'GET', url: '/api/trash-batches?workspace_id=ws-1' },
+      { method: 'GET', url: '/api/workspaces/ws-1/retention' },
+    ]);
+  });
+
   it.each(cases)('$name', async (c) => {
     const seen = stub(() =>
       c.status === 204 ? new Response(null, { status: 204 }) : json(c.status, c.reply),
