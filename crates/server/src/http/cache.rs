@@ -44,7 +44,7 @@ fn document_cache(method: &Method, path: &str) -> DocumentCache {
     if !rest.contains('/') {
         return match *method {
             Method::GET | Method::HEAD => DocumentCache::Read,
-            Method::PUT => DocumentCache::LegacyWrite,
+            Method::PUT | Method::PATCH => DocumentCache::LegacyWrite,
             _ => DocumentCache::None,
         };
     }
@@ -97,8 +97,8 @@ pub async fn policy(request: Request, next: Next) -> Response {
     let value = match scope {
         Scope::Api => {
             let revalidate = document == DocumentCache::Read && ok;
-            // #212 5행, PR4c가 본문 PUT을 지울 때 이 예외도 지운다.
-            // 정확한 PUT 단건·POST 리비전 복원 200만 다음 If-Match용 ETag를 남긴다.
+            // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
+            // 정확한 PUT·PATCH 단건·POST 리비전 복원 200만 다음 If-Match용 ETag를 남긴다.
             let legacy_etag = document == DocumentCache::LegacyWrite && status == StatusCode::OK;
             if !revalidate && !legacy_etag {
                 headers.remove(header::ETAG);
@@ -185,7 +185,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn policy_preserves_only_single_document_reads_and_two_legacy_write_etags() {
+    async fn policy_preserves_only_single_document_reads_and_three_legacy_write_etags() {
         for method in [Method::GET, Method::HEAD] {
             for status in [StatusCode::OK, StatusCode::NOT_MODIFIED] {
                 let response =
@@ -197,9 +197,10 @@ mod tests {
                 assert_eq!(response.headers()[header::ETAG], "\"downstream\"");
             }
         }
-        // #212 5행, PR4c가 본문 PUT을 지울 때 이 예외도 지운다
+        // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
         for (method, path) in [
             (Method::PUT, "/api/documents/x"),
+            (Method::PATCH, "/api/documents/x"),
             (Method::POST, "/api/documents/x/revisions/1/restore"),
         ] {
             let response = downstream(method, path, StatusCode::OK).await;
@@ -214,6 +215,12 @@ mod tests {
             (Method::POST, "/api/documents/x"),
             (Method::DELETE, "/api/documents/x"),
             (Method::PUT, "/api/documents/x/"),
+            (Method::PATCH, "/api/documents"),
+            (Method::PATCH, "/api/documents/"),
+            (Method::PATCH, "/api/documents/x/"),
+            (Method::PATCH, "/api/documents/x/settings"),
+            (Method::PATCH, "/api/documents-other/x"),
+            (Method::PATCH, "/api/documents/x/revisions/1/restore"),
             (Method::GET, "/api/documents/x/revisions/1/restore"),
             (Method::PUT, "/api/documents/x/revisions/1/restore"),
             (Method::POST, "/api/documents/x/revisions/1/restore/"),
@@ -231,15 +238,20 @@ mod tests {
             StatusCode::INTERNAL_SERVER_ERROR,
             StatusCode::SERVICE_UNAVAILABLE,
         ] {
-            for method in [Method::GET, Method::HEAD, Method::PUT] {
+            for method in [Method::GET, Method::HEAD, Method::PUT, Method::PATCH] {
                 assert_no_store(&downstream(method, "/api/documents/x", status).await);
             }
             assert_no_store(
                 &downstream(Method::POST, "/api/documents/x/revisions/1/restore", status).await,
             );
         }
-        for status in [StatusCode::CREATED, StatusCode::NOT_MODIFIED] {
+        for status in [
+            StatusCode::CREATED,
+            StatusCode::NO_CONTENT,
+            StatusCode::NOT_MODIFIED,
+        ] {
             assert_no_store(&downstream(Method::PUT, "/api/documents/x", status).await);
+            assert_no_store(&downstream(Method::PATCH, "/api/documents/x", status).await);
             assert_no_store(
                 &downstream(Method::POST, "/api/documents/x/revisions/1/restore", status).await,
             );

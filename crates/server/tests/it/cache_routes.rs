@@ -34,9 +34,10 @@ fn cache_headers(method: &Method, template: &str, status: StatusCode, headers: &
     let document_read = method == Method::GET
         && template == "/api/documents/{document_id}"
         && matches!(status, StatusCode::OK | StatusCode::NOT_MODIFIED);
-    // #212 5행, PR4c가 본문 PUT을 지울 때 이 예외도 지운다
+    // #212 5행, PR4c가 제목 PATCH의 If-Match 유지 여부와 함께 이 예외 셋을 정리한다.
     let write_etag = status == StatusCode::OK
-        && ((method == Method::PUT && template == "/api/documents/{document_id}")
+        && ((matches!(*method, Method::PUT | Method::PATCH)
+            && template == "/api/documents/{document_id}")
             || (method == Method::POST
                 && template == "/api/documents/{document_id}/revisions/{revision}/restore"));
     assert_eq!(
