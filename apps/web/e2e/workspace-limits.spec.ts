@@ -179,11 +179,9 @@ test('only a workspace administrator sees limits and retention', async ({ signIn
   await member.api.acceptInvitation(ws);
   await member.page.goto(`/w/${ws}/members`);
   await expect(member.page.getByTestId('member-list')).toBeVisible();
-  const searchStatus = member.page.getByRole('status');
+  const searchStatus = member.page.getByTestId('workspace-member-search-status');
   await expect(searchStatus).toHaveCount(1);
   await expect(searchStatus).toHaveText('');
-  await expect(searchStatus).toHaveCSS('display', 'block');
-  await expect(searchStatus).toHaveCSS('visibility', 'visible');
   await expect(searchStatus).not.toHaveAttribute('hidden');
   await expect(member.page.getByRole('region', { name: '한도·보존' })).toHaveCount(0);
   await owner.page.goto(`/w/${ws}/members`);

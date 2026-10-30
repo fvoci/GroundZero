@@ -105,7 +105,7 @@ describe('members screen after a refresh of the same workspace', () => {
     expect(done).toHaveBeenCalledOnce();
     expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
     expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe('');
+    expect(screen.getByTestId('workspace-member-search-status').textContent).toBe('');
     expect(screen.getByLabelText('이메일')).toBe(email);
     // 첫 읽기 + 초대 뒤 다시 읽기. 같은 id의 갱신으로 또 읽지 않는다.
     expect(api.members).toHaveBeenCalledTimes(2);

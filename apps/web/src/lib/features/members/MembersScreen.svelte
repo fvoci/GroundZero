@@ -365,7 +365,7 @@
     <p
       role="status"
       data-testid="workspace-member-search-status"
-      class="text-sm text-muted-foreground"
+      class="text-sm text-muted-foreground empty:hidden"
     >
       {v.members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
     </p>

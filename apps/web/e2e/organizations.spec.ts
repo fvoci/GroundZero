@@ -40,11 +40,9 @@ for (const scale of [100, 200] as const) {
     }
     await expect(page.getByRole('tab')).toHaveCount(4);
     await expect(page.getByRole('list', { name: '멤버' })).toBeVisible();
-    const searchStatus = page.getByRole('tabpanel').getByRole('status');
+    const searchStatus = page.getByRole('tabpanel').getByRole('status', { includeHidden: true });
     await expect(searchStatus).toHaveCount(1);
     await expect(searchStatus).toHaveText('');
-    await expect(searchStatus).toHaveCSS('display', 'block');
-    await expect(searchStatus).toHaveCSS('visibility', 'visible');
     await expect(searchStatus).not.toHaveAttribute('hidden');
     await expect(page.getByRole('tab', { name: '멤버 2명', exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
@@ -304,5 +302,57 @@ for (const scale of [100, 200] as const) {
       expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
       expect(await pageOverflows(page)).toBe(false);
     }
+  });
+
+  test(`organization settings stay usable while members are pending at ${String(scale)}%`, async ({
+    signIn,
+  }, testInfo) => {
+    const { page, api } = await signIn('test-user');
+    const organization = await api.initialOrganization();
+    const membersPath = `/api/organizations/${organization.id}/members`;
+    const count = list(await api.get(membersPath)).length;
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Delay the real member request, then send it unchanged to the isolated server.
+    await page.route(`**${membersPath}`, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    const requested = page.waitForRequest(
+      (request) => new URL(request.url()).pathname === membersPath,
+    );
+    let name: string;
+    try {
+      await page.goto(`/o/${organization.id}/settings`);
+      await requested;
+      await expectViewport(page, testInfo.project.name === 'narrow-375');
+      if (scale === 200) {
+        await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+        await page.evaluate(() => {
+          document.documentElement.classList.add('dark');
+        });
+      }
+      const input = page.getByRole('textbox', { name: '이름', exact: true });
+      await expect(input).toBeVisible();
+      name = await input.inputValue();
+      await input.fill('멤버 읽기를 기다리지 않고 편집한 이름');
+      await expect(page.getByRole('tab', { name: '설정', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(page.getByRole('tab', { name: '멤버', exact: true })).toHaveCount(1);
+      expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
+      expect(await pageOverflows(page)).toBe(false);
+    } finally {
+      release?.();
+    }
+    await expect(
+      page.getByRole('tab', { name: `멤버 ${String(count)}명`, exact: true }),
+    ).toHaveCount(1);
+    const input = page.getByRole('textbox', { name: '이름', exact: true });
+    await expect(input).toHaveValue('멤버 읽기를 기다리지 않고 편집한 이름');
+    await input.fill(name);
   });
 }

@@ -2,12 +2,13 @@ import type { MembersView, Workspace } from '@fvoci/api-client';
 import { fireEvent, render, screen, within, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
 import { workspaceLimitsApi } from '$lib/features/members/limits-api';
 import { organizationsApi } from '$lib/features/organizations/api';
 import OrganizationScreen from '$lib/features/organizations/OrganizationScreen.svelte';
 import { me } from '$lib/me.svelte';
+import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { router } from '$lib/router.svelte';
 
@@ -68,6 +69,129 @@ function organizationView() {
     onchanged: () => undefined,
   });
 }
+
+function jsonResponse(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+it.each([
+  {
+    kind: 'GET 500',
+    fail: () =>
+      Promise.resolve(jsonResponse({ error: 'internal', request_id: 'sr-257-members-500' }, 500)),
+    expectedError: () => m.common_server_error({ requestId: 'sr-257-members-500' }),
+  },
+  {
+    kind: 'network',
+    fail: () => Promise.reject(new TypeError('Failed to fetch')),
+    expectedError: () => m.organizations_load_failed(),
+  },
+  {
+    kind: 'parsing',
+    fail: () => Promise.resolve(jsonResponse({ invalid: 'members' })),
+    expectedError: () => m.organizations_load_failed(),
+  },
+])(
+  'SR-257-3: keeps direct settings on a member $kind failure and retries only members',
+  async ({ fail, expectedError }) => {
+    vi.mocked(organizationsApi.members).mockRestore();
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(fail)
+      .mockResolvedValue(jsonResponse(members));
+    const rendered = render(OrganizationScreen, {
+      organizationId: organization.id,
+      tab: 'settings',
+      meId: me.userId,
+      onchanged: () => undefined,
+    });
+    expect(await screen.findByRole('textbox', { name: '이름' })).toHaveValue(organization.name);
+    expect(screen.getByRole('tab', { name: '설정' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(screen.getByRole('tab', { name: '멤버' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '멤버 11명' })).toBeNull();
+    await rendered.rerender({ tab: 'members' });
+    const panel = screen.getByRole('tabpanel');
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(expectedError());
+    expect(within(panel).queryByRole('list', { name: '멤버' })).toBeNull();
+    expect(fetch).toHaveBeenCalledOnce();
+    await fireEvent.click(within(panel).getByRole('button', { name: '다시 시도' }));
+    await screen.findByRole('tab', { name: '멤버 11명' });
+    expect(
+      within(screen.getByRole('list', { name: '멤버' })).getAllByRole('listitem'),
+    ).toHaveLength(11);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(api.organization).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(['invitations', 'workspaces'] as const)(
+  'SR-257-3: keeps the $0 tab on a member server failure',
+  async (tab) => {
+    vi.mocked(organizationsApi.members).mockRejectedValue(
+      new ApiError(500, 'internal', 'members unavailable'),
+    );
+    vi.spyOn(organizationsApi, 'invitations').mockResolvedValue([]);
+    vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([]);
+    render(OrganizationScreen, {
+      organizationId: organization.id,
+      tab,
+      meId: me.userId,
+      onchanged: () => undefined,
+    });
+    const label = tab === 'invitations' ? '초대' : '공간';
+    expect(await screen.findByRole('tab', { name: label })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(screen.getByRole('tab', { name: '멤버' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '멤버 11명' })).toBeNull();
+  },
+);
+
+it.each([403, 404])(
+  'SR-257-3: treats a member %s as loss of organization access',
+  async (status) => {
+    vi.mocked(organizationsApi.members).mockRejectedValue(
+      new ApiError(status, status === 403 ? 'forbidden' : 'not_found', 'no access'),
+    );
+    render(OrganizationScreen, {
+      organizationId: organization.id,
+      tab: 'settings',
+      meId: me.userId,
+      onchanged: () => undefined,
+    });
+    await screen.findByText(m.organizations_unavailable());
+    expect(screen.queryByTestId('management-screen')).toBeNull();
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
+  },
+);
+
+it('SR-257-3: opens settings while members are pending and keeps an edit when the count arrives', async () => {
+  let finish: ((value: typeof members) => void) | undefined;
+  const pending = new Promise<typeof members>((resolve) => {
+    finish = resolve;
+  });
+  vi.mocked(organizationsApi.members).mockReturnValue(pending);
+  render(OrganizationScreen, {
+    organizationId: organization.id,
+    tab: 'settings',
+    meId: me.userId,
+    onchanged: () => undefined,
+  });
+  const input = await screen.findByRole('textbox', { name: '이름' });
+  expect(screen.getByRole('tab', { name: '멤버' })).toBeInTheDocument();
+  await fireEvent.input(input, { target: { value: '편집 중인 조직 이름' } });
+  if (finish === undefined) throw new Error('member read was not captured');
+  finish(members);
+  await screen.findByRole('tab', { name: '멤버 11명' });
+  expect(input).toHaveValue('편집 중인 조직 이름');
+  expect(screen.getByRole('tab', { name: '설정' })).toHaveAttribute('aria-selected', 'true');
+});
 
 it.each(['invitations', 'workspaces', 'settings'] as const)(
   'loads the member count on a direct organization $0 entry and reuses it across tabs',
@@ -256,22 +380,21 @@ it.each([
   { kind: 'workspace', locale: 'en', empty: 'No members match your search.' },
   { kind: 'organization', locale: 'en', empty: 'No members match your search.' },
 ] as const)(
-  'SR-257-2: keeps the $kind search status exposed before and after filtering in $locale',
+  'SR-257-2: keeps the $kind search status mounted before and after filtering in $locale',
   async ({ kind, locale, empty }) => {
     await setLocale(locale, { reload: false });
     if (kind === 'organization') organizationView();
     else render(MembersScreen, { workspace, meId: me.userId, onchanged: () => undefined });
     const filter = await screen.findByRole('searchbox');
-    const status = screen.getByRole('status');
-    expect(status).toBeVisible();
+    const status = screen.getByRole('status', { hidden: true });
+    expect(status).not.toHaveAttribute('hidden');
     expect(status.textContent).toBe('');
     await fireEvent.input(filter, { target: { value: '없는 이름' } });
-    expect(screen.getByRole('status')).toBe(status);
+    expect(screen.getByRole('status', { hidden: true })).toBe(status);
     expect(status).toHaveTextContent(empty);
     expect(status).toBeVisible();
     await fireEvent.input(filter, { target: { value: '연구자 8' } });
-    expect(screen.getByRole('status')).toBe(status);
-    expect(status).toBeVisible();
+    expect(screen.getByRole('status', { hidden: true })).toBe(status);
     expect(status.textContent).toBe('');
   },
 );

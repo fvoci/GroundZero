@@ -24,11 +24,13 @@
   const { organizationId, tab, meId, onchanged }: Props = $props();
   let organization = $state<Organization>();
   let members = $state<OrganizationMember[]>();
+  let memberError = $state('');
   const memberCount = $derived(members?.length);
   let error = $state('');
   let unavailable = $state(false);
   let disposed = false;
   let generation = 0;
+  let memberGeneration = 0;
   onDestroy(() => {
     disposed = true;
   });
@@ -46,23 +48,41 @@
     const id = organizationId;
     const user = meId;
     const current = (): boolean =>
-      !disposed && sequence === generation && organizationId === id && meId === user;
+      !disposed &&
+      sequence === generation &&
+      organizationId === id &&
+      meId === user &&
+      !unavailable;
     error = '';
     unavailable = false;
+    if (refreshMembers) void loadMembers();
     try {
-      const [found, list] = await Promise.all([
-        api.organization(id),
-        refreshMembers ? organizationsApi.members(id) : Promise.resolve(undefined),
-      ]);
+      const found = await api.organization(id);
       if (!current()) return;
       organization = found;
-      if (refreshMembers) members = list;
     } catch (e: unknown) {
       if (!current()) return;
       unavailable = e instanceof ApiError && (e.status === 403 || e.status === 404);
       error = unavailable
         ? m.organizations_unavailable()
         : errorText(e, m.organizations_load_failed());
+    }
+  }
+  async function loadMembers(): Promise<void> {
+    const sequence = ++memberGeneration;
+    const id = organizationId;
+    const user = meId;
+    const current = (): boolean =>
+      !disposed && sequence === memberGeneration && organizationId === id && meId === user;
+    memberError = '';
+    try {
+      const list = await organizationsApi.members(id);
+      if (current()) members = list;
+    } catch (e: unknown) {
+      if (!current()) return;
+      members = undefined;
+      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) noAccess();
+      else memberError = errorText(e, m.organizations_load_failed());
     }
   }
   const isAdmin = $derived(organization?.role === 'admin');
@@ -106,7 +126,7 @@
   }
   function changed(): void {
     onchanged();
-    void load(false);
+    if (!unavailable) void load(false);
   }
   function settingsChanged(saved: Organization): void {
     organization = saved;
@@ -128,7 +148,7 @@
   >
 {:else if error !== ''}
   <Button variant="outline" onclick={() => void load()}>{m.common_retry()}</Button>
-{:else if organization === undefined || members === undefined}
+{:else if organization === undefined}
   <div class="animate-pulse space-y-4" aria-label={m.app_loading()} aria-busy="true">
     <div class="h-8 w-1/2 rounded bg-muted"></div>
     <div class="h-48 rounded bg-muted"></div>
@@ -146,11 +166,10 @@
         {isAdmin}
         {meId}
         {members}
+        loadError={memberError}
+        onreload={loadMembers}
         onchanged={changed}
         onunavailable={noAccess}
-        onmemberschange={(list: OrganizationMember[]) => {
-          members = list;
-        }}
       />
     {:else if tab === 'invitations'}
       <OrganizationInvitations {organizationId} onunavailable={noAccess} />
