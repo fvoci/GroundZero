@@ -39,10 +39,12 @@ export function itemGroupsFor(kind: ModuleKind): ItemGroupName[] {
 /** 모듈 화면의 보기(D-121, 사용자 R7 A): 항목(`/m/:mod`)과 달력(`/m/:mod/calendar`). */
 export type ModuleViewName = 'items' | 'calendar';
 export type OrganizationTab = 'members' | 'invitations' | 'workspaces' | 'settings';
+export type ServerAdminTab = 'organizations' | 'admins';
 
 export type Route =
   | { name: 'home' }
   | { name: 'organization'; organizationId: string; tab: OrganizationTab }
+  | { name: 'server-admin'; tab: ServerAdminTab }
   | { name: 'my-tasks' }
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
@@ -118,6 +120,9 @@ function itemGroup(raw: string): Exclude<ItemGroupName, 'tasks'> {
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
+  const admin = /^\/admin(?:\/(organizations|admins))?\/?$/.exec(pathname);
+  if (admin !== null)
+    return { name: 'server-admin', tab: admin[1] === 'admins' ? 'admins' : 'organizations' };
   const organization = ORGANIZATION.exec(pathname);
   if (organization?.[1] !== undefined) {
     const tab = organization[2];
@@ -218,6 +223,10 @@ export function parseRoute(pathname: string): Route {
 
 export function workspacePath(workspaceId: string): string {
   return `/w/${workspaceId}`;
+}
+
+export function serverAdminPath(tab: ServerAdminTab = 'organizations'): string {
+  return `/admin/${tab}`;
 }
 
 export function organizationPath(organizationId: string, tab: OrganizationTab = 'members'): string {

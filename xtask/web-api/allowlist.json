@@ -24,10 +24,5 @@
       "detail": "파일의 기대 사용자 처리. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
     }
   ],
-  "unused": [
-    { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
-    { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
-    { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
-    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" }
-  ]
+  "unused": [{ "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" }]
 }

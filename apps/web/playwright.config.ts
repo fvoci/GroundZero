@@ -55,6 +55,7 @@ export default defineConfig({
         'gantt.spec.ts',
         'ui-dialog.spec.ts',
         'organizations.spec.ts',
+        'server-admin.spec.ts',
         'workspace-limits.spec.ts',
       ],
       use: {

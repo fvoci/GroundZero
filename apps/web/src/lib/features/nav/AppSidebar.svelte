@@ -39,6 +39,7 @@
     membersPath,
     modulePath,
     organizationPath,
+    serverAdminPath,
     router,
     trashPath,
     workspacePath,
@@ -58,6 +59,7 @@
     /** 경로가 가리키는 워크스페이스(없으면 마지막으로 연 워크스페이스를 보인다). */
     current: Workspace | undefined;
     displayName: string;
+    isServerAdmin?: boolean;
     unreadCount: number;
     onsearch: () => void;
     ondisplay: () => void;
@@ -69,6 +71,7 @@
     workspaces,
     current,
     displayName,
+    isServerAdmin = false,
     unreadCount,
     onsearch,
     ondisplay,
@@ -554,6 +557,15 @@
             {/snippet}
           </DropdownMenu.Trigger>
           <DropdownMenu.Content side="top" align="start" class="min-w-56">
+            {#if isServerAdmin}
+              <DropdownMenu.Item
+                onSelect={closingDrawer(() => {
+                  router.navigate(serverAdminPath());
+                })}
+              >
+                <Building2 aria-hidden="true" />{m.organizations_server_manage()}
+              </DropdownMenu.Item>
+            {/if}
             <DropdownMenu.Item onSelect={closingDrawer(ondisplay)}>
               <Settings2 aria-hidden="true" />{m.app_menu_display()}
             </DropdownMenu.Item>

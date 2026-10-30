@@ -35,6 +35,7 @@
   import DeletedWorkspaces from '$lib/features/trash/DeletedWorkspaces.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
   import OrganizationScreen from '$lib/features/organizations/OrganizationScreen.svelte';
+  import ServerAdminScreen from '$lib/features/server-admin/ServerAdminScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import SearchDialog from '$lib/features/search/SearchDialog.svelte';
@@ -578,6 +579,8 @@
   const headerTitle = $derived.by(() => {
     if (currentWorkspace !== undefined) return currentWorkspace.name;
     switch (route.name) {
+      case 'server-admin':
+        return m.organizations_server_manage();
       case 'organization':
         return (
           org.organizations.find((organization) => organization.id === route.organizationId)
@@ -674,6 +677,7 @@
         workspaces={signedIn.workspaces}
         current={currentWorkspace}
         displayName={signedIn.me.display_name}
+        isServerAdmin={signedIn.me.is_server_admin}
         {unreadCount}
         onsearch={() => {
           searchOpen = true;
@@ -723,6 +727,15 @@
                 onjoined={reloadWorkspaces}
               />
             {/if}
+          {:else if route.name === 'server-admin'}
+            {#key signedIn.me.id}
+              <ServerAdminScreen
+                tab={route.tab}
+                isServerAdmin={signedIn.me.is_server_admin}
+                meId={signedIn.me.id}
+                oncreated={() => void reloadWorkspaces()}
+              />
+            {/key}
           {:else if route.name === 'organization'}
             {#key `${signedIn.me.id}:${route.organizationId}`}
               <OrganizationScreen
