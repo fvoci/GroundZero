@@ -43,10 +43,11 @@ function renderer(value: unknown): value is MathRenderer {
 
 async function importRenderer(): Promise<MathRenderer> {
   // This optional renderer has a local retry UI. Do not let the global stale-chunk
-  // handler reload the editor on its failure. Other chunks retain that handler.
+  // handler reload the editor on its failure. Other explicit chunk URLs retain it.
   const dispose = registerPreloadErrorHandler((payload) => {
     if (!(payload instanceof Error)) return false;
-    for (const text of payload.message.match(/https?:\/\/[^\s"'<>)]*/g) ?? []) {
+    const urls = payload.message.match(/https?:\/\/[^\s"'<>)]*/g) ?? [];
+    for (const text of urls) {
       if (!URL.canParse(text)) continue;
       const url = new URL(text);
       if (
@@ -57,7 +58,9 @@ async function importRenderer(): Promise<MathRenderer> {
       failedModuleUrl = url;
       return true;
     }
-    return false;
+    // Native import errors may omit the URL. This handler exists only until
+    // the in-flight import settles; finally disposes it before global handling resumes.
+    return urls.length === 0;
   });
   try {
     let module: unknown;
