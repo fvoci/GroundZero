@@ -1,6 +1,7 @@
 <script lang="ts">
   // 사이드바 링크 한 줄. 접힌 사이드바에서는 아이콘과 툴팁만 보인다. 경로 이동은 앱 라우터로(미저장 보호를 거친다).
   import type { NavItem } from './nav-item';
+  import { prefetchMyTasks, prefetchOnIntent } from '$lib/features/common/navigation-intent';
 
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
@@ -22,6 +23,10 @@
     e.preventDefault();
     router.navigate(item.path);
   }
+
+  function prefetchTasks(): void {
+    if (item.path === '/tasks' && router.route.name === 'home') prefetchMyTasks();
+  }
 </script>
 
 <Sidebar.MenuItem>
@@ -29,6 +34,7 @@
     {#snippet child({ props })}
       <a
         href={item.path}
+        use:prefetchOnIntent={prefetchTasks}
         {...props}
         aria-label={unread > 0 ? name : undefined}
         aria-current={item.active ? 'page' : undefined}

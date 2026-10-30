@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { MyTasksView, MyTaskView } from '$lib/features/home/api';
-  import { homeApi } from '$lib/features/home/api';
+  import {
+    prefetchMyTasks,
+    prefetchOnIntent,
+    readMyTasks,
+  } from '$lib/features/common/navigation-intent';
   // 내 업무(D-120): 담당자가 나인 업무를 현재 조직 전체에서 워크스페이스별로 묶어 보인다. 기한 없는 업무는 "날짜 없음"
   // 묶음이다. 범주 기준 집계(`counts`)는 서버가 센다.
 
@@ -38,8 +42,7 @@
       return;
     }
     const today = dayIn(new Date().toISOString(), displaySettings().timeZone);
-    void homeApi
-      .myTasks(organizationId, today)
+    void readMyTasks(organizationId, today)
       .then((d) => {
         if (mine !== loadSeq) return;
         data = d;
@@ -141,6 +144,7 @@
       <a
         class="text-sm underline"
         href="/tasks"
+        use:prefetchOnIntent={prefetchMyTasks}
         onclick={(e) => {
           go(e, '/tasks');
         }}>{m.home_all_my_tasks()}</a

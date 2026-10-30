@@ -7,6 +7,7 @@
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { object, strings, retry } from './draft-values';
+  import { prefetchItem, prefetchOnIntent } from '$lib/features/common/navigation-intent';
 
   import type { ItemView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
@@ -420,6 +421,9 @@
               <a
                 class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded px-2 py-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 href={itemPath(workspace.id, it.id)}
+                use:prefetchOnIntent={() => {
+                  prefetchItem(it.id);
+                }}
                 onclick={(e) => {
                   e.preventDefault();
                   router.navigate(itemPath(workspace.id, it.id));

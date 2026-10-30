@@ -13,6 +13,7 @@
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { object } from './draft-values';
+  import { readItem } from '$lib/features/common/navigation-intent';
 
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
@@ -352,7 +353,7 @@
     conflict = undefined;
     docTemplate = '';
     Promise.all([
-      api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+      readItem(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
       api.itemDocuments(id),
     ])
       .then(([{ it, found }, list]) => {
