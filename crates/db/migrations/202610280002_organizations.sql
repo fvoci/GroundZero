@@ -541,14 +541,6 @@ CREATE FUNCTION fvoci.app_grade_document_at(p_doc uuid, p_workspace uuid, p_item
       END IF;
     END IF;
 
-    -- #240 A단계 실험: 기본 owner/write는 공유로 바뀌지 않는다. 보관 상한은 그대로 적용한다.
-    IF v_base IN ('owner', 'write') THEN
-      IF p_item IS NOT NULL AND app_item_archived(p_item) THEN
-        RETURN 'read';
-      END IF;
-      RETURN v_base;
-    END IF;
-
     -- 공유는 기록된 조직 안에서만 유효하다(D-114): 받는 사람이 그 조직의 멤버이고, 공간 문서면 그 조직이 지금 문서가 속한
     -- 조직이어야 하며(다른 조직의 공간으로 옮긴 뒤에는 효력 없음), 개인 노트면 소유자도 그 조직의 멤버여야 한다.
     SELECT s.permission INTO v_share
