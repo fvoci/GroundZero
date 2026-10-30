@@ -10,7 +10,7 @@ axum.workspace = true
 fvoci-core.workspace = true
 fvoci-db.workspace = true
 fvoci-http.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "json"] }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
