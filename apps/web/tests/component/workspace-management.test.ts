@@ -1,5 +1,5 @@
 import type { MembersView, Workspace } from '@fvoci/api-client';
-import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '$lib/api/client';
@@ -8,6 +8,7 @@ import { workspaceLimitsApi } from '$lib/features/members/limits-api';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { membersPath, parseRoute, router } from '$lib/router.svelte';
+import MembersRouteHost from './fixtures/MembersRouteHost.svelte';
 
 const id = '0198f1f2-0000-7000-8000-000000000002';
 const workspace: Workspace = {
@@ -167,6 +168,59 @@ describe('workspace management tabs (D-121, n1)', () => {
     expect(screen.getByRole('tabpanel')).toBeVisible();
     expect(screen.getByLabelText('이메일')).toHaveValue('draft@lab.test');
   });
+
+  it.each(['group deletion', 'leaving', 'member removal'] as const)(
+    'clears the %s confirmation when popstate changes the management tab (SR-258-1)',
+    async (action) => {
+      vi.mocked(api.members).mockResolvedValue({
+        ...view,
+        members: [
+          ...view.members,
+          { user_id: 'u2', display_name: '동료', email: null, role: 'member', is_owner: false },
+        ],
+      });
+      vi.mocked(api.groups).mockResolvedValue([{ id: 'g1', name: '연구팀', members: ['u1'] }]);
+      const mutations = [
+        vi.spyOn(api, 'deleteGroup').mockResolvedValue(undefined),
+        vi.spyOn(api, 'leave').mockResolvedValue(undefined),
+        vi.spyOn(api, 'removeMember').mockResolvedValue(undefined),
+      ];
+      const tab = action === 'member removal' ? 'members' : 'groups';
+      const otherTab = tab === 'groups' ? 'members' : 'groups';
+      router.replace(membersPath(id, tab));
+      render(MembersRouteHost, { props });
+      let trigger: HTMLElement;
+      if (action === 'member removal') {
+        const row = (await screen.findByText('동료')).closest('li');
+        if (row === null) throw new Error('missing member row');
+        trigger = within(row).getByRole('button', { name: '제거' });
+      } else {
+        trigger = await screen.findByRole('button', {
+          name: action === 'group deletion' ? '그룹 삭제' : '워크스페이스 탈퇴',
+        });
+      }
+      await fireEvent.click(trigger);
+      expect(await screen.findByRole('dialog')).toBeVisible();
+
+      // jsdom에서는 주소를 먼저 바꾸고 popstate를 보내 실제 라우터와 화면 prop 연결을 거친다.
+      window.history.replaceState(null, '', membersPath(id, otherTab));
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await vi.waitFor(() => {
+        expect(screen.queryByRole('dialog')).toBeNull();
+      });
+      expect(router.path).toBe(membersPath(id, otherTab));
+      window.history.replaceState(null, '', membersPath(id, tab));
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      await vi.waitFor(() => {
+        expect(
+          screen.getByRole('tab', { name: tab === 'members' ? '멤버' : '그룹' }),
+        ).toHaveAttribute('aria-selected', 'true');
+      });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(api.members).toHaveBeenCalledOnce();
+      for (const mutation of mutations) expect(mutation).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['member', 'readonly'] as const)('keeps groups and leaving for %s', async (role) => {
     vi.mocked(api.members).mockResolvedValue({ ...view, can_manage_members: false, my_role: role });

@@ -98,6 +98,17 @@
   $effect(() => {
     if (currentView !== undefined && activeTab !== tab) router.replace(membersPath(workspace.id));
   });
+  let confirmationTab: WorkspaceManagementTab | undefined;
+  $effect(() => {
+    // 이력 이동으로 탭을 떠나면 확인창과 실행 대상을 함께 버린다(SR-258-1).
+    const nextTab = tab;
+    untrack(() => {
+      if (confirmationTab !== nextTab) {
+        confirmationTab = nextTab;
+        confirm = undefined;
+      }
+    });
+  });
   function changeTab(value: string): void {
     if (
       value === 'members' ||

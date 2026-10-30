@@ -293,3 +293,94 @@ for (const scale of [100, 200] as const) {
     });
   });
 }
+
+test('history tab changes clear destructive workspace confirmations (SR-258-1)', async ({
+  signIn,
+}) => {
+  const owner = await signIn('test-user');
+  const member = await signIn('test-user-2');
+  const workspaceName = `확인 대상 이탈 ${unique()}`;
+  const ws = await owner.api.createWorkspace(workspaceName);
+  await owner.api.ensureOrganizationMember(member.api, member.user.email);
+  await owner.api.invite(ws, member.user.email, 'member');
+  await member.api.acceptInvitation(ws);
+  const memberMe = await member.api.get('/api/me');
+  const memberId = str(memberMe, 'id');
+  const memberName = str(memberMe, 'display_name');
+  const group = str(
+    await owner.api.send('POST', `/api/workspaces/${ws}/groups`, { name: '검토팀' }),
+    'id',
+  );
+  const scenarios = [
+    {
+      page: owner.page,
+      source: 'groups',
+      sourceLabel: '그룹',
+      other: 'members',
+      otherLabel: '멤버',
+      trigger: owner.page.getByRole('button', { name: '그룹 삭제', exact: true }),
+      title: '‘검토팀’ 그룹을 삭제할까요?',
+    },
+    {
+      page: member.page,
+      source: 'groups',
+      sourceLabel: '그룹',
+      other: 'members',
+      otherLabel: '멤버',
+      trigger: member.page.getByRole('button', { name: '워크스페이스 탈퇴', exact: true }),
+      title: `${workspaceName}에서 탈퇴할까요?`,
+    },
+    {
+      page: owner.page,
+      source: 'members',
+      sourceLabel: '멤버',
+      other: 'groups',
+      otherLabel: '그룹',
+      trigger: owner.page
+        .getByTestId('member-list')
+        .getByRole('listitem')
+        .filter({ has: owner.page.getByText(memberName, { exact: true }) })
+        .getByRole('button', { name: '제거', exact: true }),
+      title: `${memberName}을(를) 제거할까요?`,
+    },
+  ];
+  for (const { page, source, sourceLabel, other, otherLabel, trigger, title } of scenarios) {
+    for (const direction of ['back', 'forward'] as const) {
+      const mutations: string[] = [];
+      const track = (request: import('@playwright/test').Request): void => {
+        if (request.method() === 'DELETE' || request.url().endsWith('/leave'))
+          mutations.push(`${request.method()} ${request.url()}`);
+      };
+      page.on('request', track);
+      try {
+        await page.goto(`/w/${ws}/${direction === 'back' ? other : source}`);
+        await page
+          .getByRole('tab', { name: direction === 'back' ? sourceLabel : otherLabel, exact: true })
+          .click();
+        if (direction === 'forward') await page.goBack();
+        await expect(page).toHaveURL(`/w/${ws}/${source}`);
+        await trigger.click();
+        await expect(page.getByRole('dialog', { name: title, exact: true })).toBeVisible();
+        if (direction === 'back') await page.goBack();
+        else await page.goForward();
+        await expect(page).toHaveURL(`/w/${ws}/${other}`);
+        await expect(page.getByRole('dialog', { name: title, exact: true })).toHaveCount(0);
+        if (direction === 'back') await page.goForward();
+        else await page.goBack();
+        await expect(page).toHaveURL(`/w/${ws}/${source}`);
+        await expect(page.getByRole('dialog', { name: title, exact: true })).toHaveCount(0);
+        expect(mutations, `${title}: ${direction} must not execute the confirmed action`).toEqual(
+          [],
+        );
+      } finally {
+        page.off('request', track);
+      }
+    }
+  }
+  expect(await owner.api.get(`/api/workspaces/${ws}/members`)).toMatchObject({
+    members: expect.arrayContaining([expect.objectContaining({ user_id: memberId })]),
+  });
+  expect(await owner.api.get(`/api/workspaces/${ws}/groups`)).toContainEqual(
+    expect.objectContaining({ id: group }),
+  );
+});
