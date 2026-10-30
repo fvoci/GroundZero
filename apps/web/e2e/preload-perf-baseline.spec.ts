@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Request } from '@playwright/test';
 
 import { list, listField, num, str } from './fixtures';
 
@@ -123,6 +123,7 @@ if (measurementRoot !== undefined) {
         source: '/',
         link: 'main a[href="/tasks"]',
         api: '/api/me/tasks',
+        gate: '',
         target: '/tasks',
         content: 'main [data-testid="my-tasks-counts"]',
         heading: '내 업무',
@@ -132,6 +133,7 @@ if (measurementRoot !== undefined) {
         source: `/w/${ws}/m/${moduleId}`,
         link: `main a[href="/w/${ws}/i/${item}"]`,
         api: `/api/items/${item}`,
+        gate: `/api/modules/${moduleId}`,
         target: `/w/${ws}/i/${item}`,
         content: '#item-heading',
         heading: '',
@@ -151,20 +153,30 @@ if (measurementRoot !== undefined) {
           const link = page.locator(flow.link).first();
           await expect(link).toBeVisible();
           await page.waitForLoadState('networkidle');
-          const requests: { start: number; end?: number; status?: number }[] = [];
+          const requests: { request: Request; start: number; end?: number; status?: number }[] = [];
+          const gateRequests: Request[] = [];
           page.on('request', (request) => {
+            if (
+              request.method() === 'GET' &&
+              new URL(request.url()).pathname === flow.gate &&
+              gateRequests.length === 0
+            )
+              gateRequests.push(request);
             if (request.method() === 'GET' && new URL(request.url()).pathname === flow.api)
-              requests.push({ start: request.timing().startTime });
+              requests.push({ request, start: request.timing().startTime });
           });
           page.on('response', (response) => {
             if (new URL(response.url()).pathname !== flow.api) return;
-            const request = requests.find(
-              (row) => row.start === response.request().timing().startTime,
-            );
+            const request = requests.find((row) => row.request === response.request());
             if (request !== undefined) {
-              request.end = Date.now();
+              request.start = response.request().timing().startTime;
               request.status = response.status();
             }
+          });
+          page.on('requestfinished', (request) => {
+            if (new URL(request.url()).pathname !== flow.api) return;
+            const row = requests.find((entry) => entry.request === request);
+            if (row !== undefined) row.end = Date.now();
           });
           if (action !== 'click') {
             await link.hover();
@@ -172,8 +184,11 @@ if (measurementRoot !== undefined) {
             await page.waitForTimeout(200);
           }
           const beforeClick = requests.length;
-          const finishedBeforeClick = requests.filter((row) => row.status === 200).length;
+          const finishedBeforeClick = requests.filter(
+            (row) => row.status === 200 && row.end !== undefined,
+          ).length;
           let firstContentMs: number | null = null;
+          let clickedAt: number | null = null;
           if (action === 'hover-away') {
             await page.mouse.move(0, 0);
             await page.waitForLoadState('networkidle');
@@ -184,6 +199,9 @@ if (measurementRoot !== undefined) {
                 'click',
                 () => {
                   started = performance.now();
+                  document.documentElement.dataset.intentClickAt = String(
+                    performance.timeOrigin + started,
+                  );
                 },
                 { capture: true, once: true },
               );
@@ -215,9 +233,28 @@ if (measurementRoot !== undefined) {
             firstContentMs = await page.evaluate(() =>
               Number(document.documentElement.dataset.intentFirst),
             );
+            clickedAt = await page.evaluate(() =>
+              Number(document.documentElement.dataset.intentClickAt),
+            );
             await page.waitForLoadState('networkidle');
           }
           expect(requests.every((row) => row.status === 200)).toBe(true);
+          const firstModule = gateRequests[0]?.timing().startTime;
+          const prefetchedReads = await page.evaluate(
+            ({ api, clickedAt }) =>
+              performance
+                .getEntriesByType('resource')
+                .filter(
+                  (entry) =>
+                    new URL(entry.name).pathname === api &&
+                    (clickedAt === null || performance.timeOrigin + entry.startTime < clickedAt),
+                ).length,
+            { api: flow.api, clickedAt },
+          );
+          // A board's later grade read is independent of the prefetched entry read.
+          const initialReads = requests.filter(
+            (row) => firstModule === undefined || row.start < firstModule,
+          ).length;
           results.push({
             flow: flow.name,
             action,
@@ -226,7 +263,9 @@ if (measurementRoot !== undefined) {
             beforeClick,
             finishedBeforeClick,
             totalReads: requests.length,
-            consumed: action === 'hover-click' && beforeClick === 1 && requests.length === 1,
+            initialReads,
+            prefetchedReads,
+            consumed: action !== 'hover-away' && prefetchedReads === 1 && initialReads === 1,
             firstContentMs,
           });
           writeFileSync(
@@ -264,13 +303,34 @@ if (measurementRoot !== undefined) {
       if (scenario === 'signed-in' || scenario === 'logout-before-app')
         await context.addCookies([cookie]);
       const page = await context.newPage();
-      const responses: { status: number; id: string | null; cache: string | null }[] = [];
+      // Observe the actual app fetch result without changing its request options or body.
+      // The app also performs later session rechecks: total /me counts alone cannot prove reuse.
+      await page.addInitScript(() => {
+        const nativeFetch = window.fetch.bind(window);
+        window.fetch = async (...args) => {
+          const response = await nativeFetch(...args);
+          if (
+            new URL(response.url).pathname === '/api/me' &&
+            document.documentElement.dataset.firstMeFetchId === undefined
+          )
+            document.documentElement.dataset.firstMeFetchId =
+              response.headers.get('x-request-id') ?? 'missing';
+          return response;
+        };
+      });
+      const responses: {
+        status: number;
+        id: string | null;
+        cache: string | null;
+        start: number;
+      }[] = [];
       const pending: Promise<void>[] = [];
       page.on('response', (response) => {
         if (new URL(response.url()).pathname !== '/api/me') return;
         pending.push(
           (async () => {
             responses.push({
+              start: response.request().timing().startTime,
               status: response.status(),
               id: await response.headerValue('x-request-id'),
               cache: await response.headerValue('cache-control'),
@@ -311,12 +371,20 @@ if (measurementRoot !== undefined) {
           await expect(page.getByTestId('user-menu')).toHaveCount(0);
         } else await expect(page.locator('main [data-testid="my-tasks-counts"]')).toBeVisible();
         await Promise.all(pending);
+        responses.sort((a, b) => a.start - b.start);
+        const firstAppFetchId = await page.evaluate(
+          () => document.documentElement.dataset.firstMeFetchId,
+        );
+        expect(firstAppFetchId).toBeDefined();
+        const preloadId = responses[0]?.id;
+        expect(preloadId).toBeTruthy();
         const ids = new Set(responses.map((response) => response.id));
         results.push({
           scenario,
           responses,
           distinctServerReads: ids.size,
-          reused: ids.size === 1,
+          firstAppFetchId,
+          reused: preloadId === firstAppFetchId,
         });
         writeFileSync(
           path.join(measurementRoot, 'preload-samples.json'),
