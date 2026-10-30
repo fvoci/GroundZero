@@ -15,11 +15,14 @@
     targetId,
     workspaceId,
     version = 0,
+    initialActivity,
   }: {
     kind?: 'item' | 'document' | 'task';
     targetId?: string;
     workspaceId?: string;
     version?: number;
+    /** 홈이 같은 조직·회차에서 이미 시작한 첫 읽기. 재시도는 새 요청을 보낸다. */
+    initialActivity?: Promise<Activity[]> | undefined;
   } = $props();
   let items = $state<Activity[]>([]);
   let next = $state<PageCursor | undefined>();
@@ -27,9 +30,19 @@
   let error = $state<string | undefined>();
   let sequence = 0;
   let failedCursor: PageCursor | undefined;
-  const request = $derived({ organizationId: org.currentId, kind, targetId, version });
+  const request = $derived({
+    organizationId: org.currentId,
+    kind,
+    targetId,
+    version,
+    initialActivity,
+  });
 
-  async function load(cursor?: PageCursor, scope = request): Promise<void> {
+  async function load(
+    cursor?: PageCursor,
+    scope = request,
+    initial?: Promise<Activity[]>,
+  ): Promise<void> {
     const { organizationId, kind, targetId } = scope;
     if (organizationId === undefined) return;
     const ticket = ++sequence;
@@ -49,7 +62,7 @@
             ? { before: page.next_before, before_id: page.next_before_id }
             : undefined;
       } else {
-        const recent = await activityApi.recentActivity(organizationId);
+        const recent = await (initial ?? activityApi.recentActivity(organizationId));
         if (ticket !== sequence) return;
         items = recent;
         next = undefined;
@@ -67,7 +80,7 @@
     next = undefined;
     error = undefined;
     loading = false;
-    untrack(() => void load(undefined, scope));
+    untrack(() => void load(undefined, scope, scope.initialActivity));
     return () => {
       sequence += 1;
     };

@@ -193,7 +193,7 @@ if (measurementRoot !== undefined) {
                 if (!window.location.pathname.startsWith(target)) return;
                 if (
                   heading !== '' &&
-                  document.querySelector('main h1')?.textContent?.trim() !== heading
+                  document.querySelector('main h1')?.textContent.trim() !== heading
                 )
                   return;
                 const found = document.querySelector(content);
