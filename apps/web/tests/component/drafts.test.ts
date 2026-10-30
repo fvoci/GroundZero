@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import * as draftStorage from '$lib/features/common/draft-storage';
 import {
   adoptOrphans,
   clearDraft,
@@ -21,8 +22,54 @@ const body = { type: 'doc', content: [{ type: 'paragraph' }] };
 const draft = { baseRevision: 3, title: 'A의 초안', body, savedAt: '2026-10-19T00:00:00Z' };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   window.localStorage.clear();
   me.userId = '';
+});
+
+describe('existing document draft keys', () => {
+  it('restores the current draft and offers in key order using the existing storage format', () => {
+    me.userId = 'user-a';
+    window.sessionStorage.setItem('fvoci:tab', 'existing-tab');
+    const currentKey = 'fvoci:user-a:-:draft:existing-doc:tab:existing-tab';
+    const firstKey = 'fvoci:user-a:-:draft:existing-doc:offer:000000000000001.000000001.a';
+    const secondKey = 'fvoci:user-a:-:draft:existing-doc:offer:000000000000002.000000001.b';
+    // 복원 순서는 savedAt이나 저장소 삽입 순서가 아니라 기존 offer 키의 순서다.
+    const first = { ...draft, title: '먼저 보관', savedAt: '2026-10-20T00:00:00Z' };
+    const second = { ...draft, title: '나중 보관', savedAt: '2026-10-18T00:00:00Z' };
+    window.localStorage.setItem(currentKey, JSON.stringify(draft));
+    window.localStorage.setItem(secondKey, JSON.stringify(second));
+    window.localStorage.setItem(firstKey, JSON.stringify(first));
+
+    org.load('user-a', [TEST_ORGANIZATION], TEST_ORGANIZATION.id);
+    expect(loadDraft('existing-doc')).toEqual(draft);
+    expect(loadOffers('existing-doc')).toEqual([first, second]);
+    expect(takeOrReserve('existing-doc').reserved).toBeUndefined();
+    expect(loadOffers('existing-doc')).toEqual([first, second, draft]);
+    expect(window.localStorage.getItem(currentKey)).toBeNull();
+
+    const edited = { ...draft, title: '되살린 뒤 편집' };
+    expect(storeDraft('existing-doc', edited)).toBe(true);
+    expect(window.localStorage.getItem(currentKey)).toBe(JSON.stringify(edited));
+    removeOffer('existing-doc', first);
+    expect(window.localStorage.getItem(firstKey)).toBeNull();
+    expect(window.localStorage.getItem(secondKey)).toBe(JSON.stringify(second));
+  });
+
+  it('reserves an existing draft when the shared store rejects writes', () => {
+    me.userId = 'user-a';
+    window.sessionStorage.setItem('fvoci:tab', 'existing-tab');
+    const currentKey = 'fvoci:user-a:-:draft:existing-doc:tab:existing-tab';
+    const stored = JSON.stringify(draft);
+    window.localStorage.setItem(currentKey, stored);
+    vi.spyOn(draftStorage, 'writeDraftAt').mockReturnValue(false);
+
+    expect(takeOrReserve('existing-doc').reserved).toEqual(draft);
+    expect(loadOffers('existing-doc')).toEqual([]);
+    expect(storeDraft('existing-doc', { ...draft, title: '새 편집' })).toBe(false);
+    clearDraft('existing-doc');
+    expect(window.localStorage.getItem(currentKey)).toBe(stored);
+  });
 });
 
 // 같은 브라우저를 함께 쓰는 사용자 사이에서 초안이 섞이지 않는다(제품 로직 점검 3번 불변식).

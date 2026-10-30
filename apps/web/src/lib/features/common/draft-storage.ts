@@ -1,13 +1,14 @@
-/** 폼과 CSV 초안의 저장·열거·보류를 한 곳에서 처리한다. 키는 호출부가 사용자·조직·탭 문맥으로 정한다. */
+/** 폼·문서·CSV 초안의 저장·열거·보류를 한 곳에서 처리한다. 키는 호출부가 기존 문맥 규칙으로 정한다. */
 export interface StoredDraft<T> {
   key: string;
   value: T;
 }
 
 export function readDraftAt<T>(
-  key: string,
+  key: string | undefined,
   parse: (value: unknown) => T | undefined,
 ): T | undefined {
+  if (key === undefined) return undefined;
   try {
     const raw = window.localStorage.getItem(key);
     return raw === null ? undefined : parse(JSON.parse(raw));
