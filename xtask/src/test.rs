@@ -12,7 +12,11 @@
 //! `db migrate`·시험을 겹쳐 돌리고, 먼저 끝난 쪽의 `down`이 다른 쪽 DB를 지운다. SIGINT·SIGTERM·SIGHUP을 받으면 진행 중인
 //! 단계를 실패로 끝내고 실패와 같은 정리를 한다(#93, [`compose::watch_interrupts`]). `--external-services`는 Compose를
 //! 쓰지 않으므로 잠그지 않는다.
+//!
+//! 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다. `--host`만 기존 게시 포트 경로를 쓴다.
+//! 컨테이너 빌드의 HOME·Cargo 캐시·target·임시 파일은 `target/test-container` 안에서 호스트 빌드와 분리한다.
 
+use std::ffi::OsString;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -20,6 +24,148 @@ use xshell::{Shell, cmd};
 
 use crate::compose::{self, Compose, DbUrls, Env};
 use crate::supabase::Supabase;
+
+fn ci_base_image(digest: &str) -> Result<String> {
+    let hash = digest.strip_prefix("sha256:").unwrap_or_default();
+    anyhow::ensure!(
+        hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "FVOCI_TEST_CI_BASE_IMAGE_DIGEST must be a sha256 digest (64 hex digits)"
+    );
+    Ok(format!("ghcr.io/fvoci/groundzero-ci-base@{digest}"))
+}
+
+fn container_args(root: &Path, project: &str, user: &str) -> Vec<OsString> {
+    let mut volume = root.as_os_str().to_os_string();
+    volume.push(":/work");
+    let mut args: Vec<OsString> = ["run", "--rm", "--init", "--name"]
+        .into_iter()
+        .map(OsString::from)
+        .collect();
+    args.push(format!("{project}-runner").into());
+    for (option, value) in [
+        ("--label", format!("com.docker.compose.project={project}")),
+        (
+            "--label",
+            "com.docker.compose.service=test-runner".to_owned(),
+        ),
+        ("--network", format!("{project}_default")),
+        ("--user", user.to_owned()),
+    ] {
+        args.extend([option.into(), value.into()]);
+    }
+    args.extend([
+        "--volume".into(),
+        volume,
+        "--workdir".into(),
+        "/work".into(),
+    ]);
+    for value in [
+        "HOME=/work/target/test-container/home",
+        "CARGO_HOME=/work/target/test-container/cargo",
+        "CARGO_TARGET_DIR=/work/target/test-container/build",
+        "TMPDIR=/work/target/test-container/tmp",
+        "FVOCI_TEST_PG_HOST_PORT=postgres:5432",
+        "FVOCI_TEST_SEARCH_URL=http://meilisearch:7700",
+        "FVOCI_TEST_S3_ENDPOINT=http://seaweedfs:8333",
+    ] {
+        args.extend(["--env".into(), value.into()]);
+    }
+    args
+}
+
+#[derive(Debug)]
+struct TestContainer {
+    args: Vec<OsString>,
+    image: String,
+}
+
+impl TestContainer {
+    fn new(root: &Path, compose: &Compose, sh: &Shell) -> Result<Self> {
+        let digest = match std::env::var("FVOCI_TEST_CI_BASE_IMAGE_DIGEST") {
+            Ok(digest) => digest,
+            Err(std::env::VarError::NotPresent) => cmd!(
+                sh,
+                "gh api repos/fvoci/GroundZero/actions/variables/CI_BASE_IMAGE_DIGEST --jq .value"
+            )
+            .quiet()
+            .read()
+            .context(
+                "read CI_BASE_IMAGE_DIGEST with existing gh access, or set FVOCI_TEST_CI_BASE_IMAGE_DIGEST explicitly",
+            )?,
+            Err(error) => return Err(error).context("read FVOCI_TEST_CI_BASE_IMAGE_DIGEST"),
+        };
+        let image = ci_base_image(digest.trim())?;
+        println!("==> test runner image: {image}");
+        let uid = cmd!(sh, "id -u").quiet().read()?;
+        let gid = cmd!(sh, "id -g").quiet().read()?;
+        let user = format!("{}:{}", uid.trim(), gid.trim());
+        for dir in ["home", "cargo", "build", "tmp"] {
+            std::fs::create_dir_all(root.join("target/test-container").join(dir))?;
+        }
+        let mut args = container_args(root, compose.project(), &user);
+        // 빌드 자원 제한과 사용자가 명시한 시험 동시성만 전달한다. 호스트의 경로·빌드 래퍼는 전달하지 않는다.
+        for key in ["CARGO_BUILD_JOBS", "RUST_TEST_THREADS"] {
+            if let Ok(value) = sh.var(key) {
+                args.extend(["--env".into(), format!("{key}={value}").into()]);
+            }
+        }
+        Ok(Self { args, image })
+    }
+
+    fn run(&self, sh: &Shell, env: &[String], command: &[&str]) -> Result<()> {
+        let mut args = self.args.clone();
+        for value in env {
+            args.extend(["--env".into(), value.into()]);
+        }
+        let image = &self.image;
+        compose::check_interrupt()?;
+        cmd!(sh, "docker {args...} {image} {command...}").run()?;
+        Ok(())
+    }
+
+    fn prepare_database(&self, sh: &Shell, urls: &DbUrls) -> Result<()> {
+        let env = [
+            format!("DATABASE_ADMIN_URL={}", urls.admin),
+            format!("DATABASE_MIGRATION_URL={}", urls.migration),
+            format!(
+                "FVOCI_DB_MIGRATOR_PASSWORD={}",
+                compose::TEST_MIGRATOR_PASSWORD
+            ),
+            format!("FVOCI_DB_APP_PASSWORD={}", compose::TEST_APP_PASSWORD),
+        ];
+        for operation in ["bootstrap", "migrate"] {
+            self.run(
+                sh,
+                &env,
+                &[
+                    "cargo",
+                    "run",
+                    "--quiet",
+                    "--package",
+                    "fvoci-server",
+                    "--locked",
+                    "--",
+                    "db",
+                    operation,
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn test(&self, sh: &Shell, oidc: bool) -> Result<()> {
+        let mut command = vec!["cargo", "xtask", "test", "--external-services"];
+        let mut env = Vec::new();
+        if oidc {
+            command.push("--oidc");
+            env.push(format!(
+                "FVOCI_TEST_OIDC_ISSUER=http://keycloak:8080/realms/{}",
+                compose::OIDC_REALM
+            ));
+        }
+        self.run(sh, &env, &command)
+    }
+}
 
 fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
     let mut skip: Vec<&str> = Vec::new();
@@ -53,7 +199,19 @@ fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Result<()> {
+#[derive(Debug, Clone, Copy)]
+pub enum Execution {
+    Container,
+    Host,
+}
+
+pub fn run(
+    root: &Path,
+    keep: bool,
+    oidc: bool,
+    external_services: bool,
+    execution: Execution,
+) -> Result<()> {
     if external_services {
         return run_external(root, oidc);
     }
@@ -64,6 +222,10 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
     let _lock = compose.lock_run()?;
     compose::watch_interrupts()?;
     let sh = compose.shell()?;
+    let runner = match execution {
+        Execution::Container => Some(TestContainer::new(root, &compose, &sh)?),
+        Execution::Host => None,
+    };
     println!("==> compose up ({})", compose.project());
     print_recovery(&compose);
 
@@ -71,6 +233,12 @@ pub fn run(root: &Path, keep: bool, oidc: bool, external_services: bool) -> Resu
     let result = compose::check_interrupt()
         .and_then(|()| compose.up(&sh))
         .and_then(|()| {
+            if let Some(runner) = &runner {
+                crate::dev::check_seeds_with(root, &compose, &sh, |database| {
+                    runner.prepare_database(&sh, &DbUrls::at_database("postgres:5432", database))
+                })?;
+                return runner.test(&sh, oidc);
+            }
             let pg_port = compose.host_port(&sh, "postgres", 5432)?;
             println!("==> postgres on 127.0.0.1:{pg_port}");
             let urls = DbUrls::local(pg_port);
@@ -302,7 +470,7 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     let _s3_env = push_s3_credentials(&sh);
     run_tests(&sh, oidc, s3, false)?;
     println!(
-        "NOT RUN: dev seed check (needs psql in a Compose PostgreSQL container). Use `cargo xtask test` or `--supabase`; CI runs it in the supabase job."
+        "NOT RUN: dev seed check inside --external-services (checked by the outer local Compose runner or the CI supabase job)."
     );
     Ok(())
 }
@@ -321,14 +489,79 @@ mod tests {
     use super::*;
     use crate::compose::tests::{assert_held, scratch_root};
 
+    #[test]
+    fn ci_base_image_requires_a_sha256_digest() -> Result<()> {
+        let digest = format!("sha256:{}", "a".repeat(64));
+        assert_eq!(
+            ci_base_image(&digest)?,
+            format!("ghcr.io/fvoci/groundzero-ci-base@{digest}")
+        );
+        for invalid in [
+            "latest",
+            "",
+            "sha256:abc",
+            &format!("sha256:{}", "g".repeat(64)),
+        ] {
+            assert!(ci_base_image(invalid).is_err(), "accepted {invalid:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn container_uses_its_network_paths_and_the_callers_identity() {
+        let root = Path::new("/checkout with spaces/$literal");
+        let args = container_args(root, "fvoci-example-test", "1234:5678");
+        let pair = |option: &str, value: &str| {
+            args.windows(2)
+                .any(|pair| pair[0] == option && pair[1] == value)
+        };
+        assert!(pair("--network", "fvoci-example-test_default"));
+        assert!(pair("--user", "1234:5678"));
+        assert!(pair("--volume", "/checkout with spaces/$literal:/work"));
+        assert!(pair("--env", "HOME=/work/target/test-container/home"));
+        assert!(pair(
+            "--env",
+            "CARGO_HOME=/work/target/test-container/cargo"
+        ));
+        assert!(pair(
+            "--env",
+            "CARGO_TARGET_DIR=/work/target/test-container/build"
+        ));
+        assert!(pair("--env", "TMPDIR=/work/target/test-container/tmp"));
+        assert!(pair("--env", "FVOCI_TEST_PG_HOST_PORT=postgres:5432"));
+        assert!(pair(
+            "--env",
+            "FVOCI_TEST_SEARCH_URL=http://meilisearch:7700"
+        ));
+        assert!(pair(
+            "--env",
+            "FVOCI_TEST_S3_ENDPOINT=http://seaweedfs:8333"
+        ));
+        assert!(pair(
+            "--label",
+            "com.docker.compose.project=fvoci-example-test"
+        ));
+        assert!(pair("--name", "fvoci-example-test-runner"));
+        assert!(
+            args.iter()
+                .all(|arg| !arg.to_string_lossy().contains("docker.sock"))
+        );
+        assert!(
+            args.iter()
+                .all(|arg| !arg.to_string_lossy().contains("RUST_TEST_THREADS"))
+        );
+    }
+
     /// 같은 체크아웃의 시험 실행(기본·`--supabase`)은 앞 실행이 잠금을 쥐는 동안 Compose를 건드리기 전에 실패한다.
     /// 잠금이 막지 못하면 Compose 파일이 없는 가짜 체크아웃에서 `docker compose` 오류로 실패한다.
     #[test]
     fn held_lock_rejects_test_runs_before_compose() -> Result<()> {
         let root = scratch_root()?;
         let holder = Compose::new(&root, Env::Test).lock_run()?;
-        assert_held(run(&root, false, false, false), "test");
-        assert_held(run(&root, true, true, false), "test");
+        for execution in [Execution::Container, Execution::Host] {
+            assert_held(run(&root, false, false, false, execution), "test");
+            assert_held(run(&root, true, true, false, execution), "test");
+        }
         assert_held(run_supabase(&root, false, false, false), "test");
         drop(holder);
         drop(Compose::new(&root, Env::Test).lock_run()?);

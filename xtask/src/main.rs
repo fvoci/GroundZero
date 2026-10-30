@@ -58,6 +58,9 @@ enum Command {
         /// OIDC 통합 테스트용 Keycloak도 함께 띄운다.
         #[arg(long)]
         oidc: bool,
+        /// 시험을 호스트에서 실행하고 Compose 게시 포트에 연결한다(디버깅용). 기본값은 ci-base 컨테이너 실행.
+        #[arg(long, conflicts_with_all = ["external_services", "supabase"])]
+        host: bool,
         /// Compose를 띄우지 않고 환경 변수(`FVOCI_TEST_PG_HOST_PORT`·`FVOCI_TEST_SEARCH_URL`, `--oidc`면
         /// `FVOCI_TEST_OIDC_ISSUER`)로 주어진 외부 서비스를 쓴다. CI job용.
         #[arg(long)]
@@ -163,8 +166,19 @@ fn main() -> Result<()> {
             keep,
             oidc,
             external_services,
+            host,
             ..
-        } => test::run(&root, keep, oidc, external_services),
+        } => test::run(
+            &root,
+            keep,
+            oidc,
+            external_services,
+            if host {
+                test::Execution::Host
+            } else {
+                test::Execution::Container
+            },
+        ),
         Command::Dev { oidc, no_web } => dev::run(&root, oidc, !no_web),
         Command::Browser { keep, playwright } => browser::run(&root, keep, &playwright),
         Command::Down => compose::down_all(&root),
