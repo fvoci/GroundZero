@@ -138,6 +138,8 @@ describe('workspace limits in workspace administration', () => {
       const region = await screen.findByRole('region', { name: heading });
       await within(region).findByLabelText(field, { exact: true });
       expect(within(region).getAllByRole('textbox')).toHaveLength(5);
+      expect(within(region).getAllByRole('checkbox')).toHaveLength(5);
+      expect(within(region).getAllByRole('combobox')).toHaveLength(2);
       expect(within(region).getAllByText(cap)).toHaveLength(5);
       expect(within(region).getByText(sizeHint)).toBeVisible();
       expect(within(region).getByText(retentionHint)).toBeVisible();
@@ -196,16 +198,16 @@ describe('workspace limits in workspace administration', () => {
   it('sends only changed fields, converts GB to bytes and sends explicit null to clear a field', async () => {
     render(MembersScreen, { props });
     const region = await panel();
-    await fireEvent.change(within(region).getByLabelText('공간 전체 저장 공간 설정'), {
-      target: { value: 'set' },
-    });
+    await fireEvent.click(
+      within(region).getByRole('checkbox', { name: '공간 전체 저장 공간 설정 안 함' }),
+    );
     await type('공간 전체 저장 공간', '1.5');
     await fireEvent.change(within(region).getByLabelText('공간 전체 저장 공간 단위'), {
       target: { value: 'GB' },
     });
-    await fireEvent.change(within(region).getByLabelText('동시 업로드 수 설정'), {
-      target: { value: 'unset' },
-    });
+    await fireEvent.click(
+      within(region).getByRole('checkbox', { name: '동시 업로드 수 설정 안 함' }),
+    );
     await submit();
     await vi.waitFor(() => {
       expect(puts).toEqual([{ max_storage_bytes: 1.5 * 1024 ** 3, max_concurrent_uploads: null }]);
@@ -226,9 +228,10 @@ describe('workspace limits in workspace administration', () => {
     saved.max_storage_bytes = 1024 ** 3;
     render(MembersScreen, { props });
     const region = await panel();
-    await fireEvent.change(within(region).getByLabelText(`${label} 설정`), {
-      target: { value: 'unset' },
-    });
+    const unset = within(region).getByRole('checkbox', { name: `${label} 설정 안 함` });
+    expect(unset).not.toBeChecked();
+    await fireEvent.click(unset);
+    expect(unset).toBeChecked();
     const input = within(region).getByLabelText(label, { exact: true });
     expect(input).toBeDisabled();
     expect(description(input)).toContain('서버 기본값과 조직 값을 따릅니다.');
@@ -236,6 +239,24 @@ describe('workspace limits in workspace administration', () => {
     await vi.waitFor(() => {
       expect(puts).toEqual([{ [key]: null }]);
     });
+  });
+
+  it('keeps the typed size and unit when unset is checked and unchecked', async () => {
+    render(MembersScreen, { props });
+    const region = await panel();
+    const input = await type('파일 하나 최대 크기', '1.5');
+    const unit = within(region).getByLabelText('파일 하나 최대 크기 단위');
+    await fireEvent.change(unit, { target: { value: 'GB' } });
+    const unset = within(region).getByRole('checkbox', { name: '파일 하나 최대 크기 설정 안 함' });
+    await fireEvent.click(unset);
+    expect(input).toBeDisabled();
+    expect(unit).toBeDisabled();
+    await fireEvent.click(unset);
+    expect(input).toBeEnabled();
+    expect(input).toHaveValue('1.5');
+    expect(unit).toBeEnabled();
+    expect(unit).toHaveValue('GB');
+    expect(puts).toEqual([]);
   });
 
   it.each([
@@ -261,9 +282,9 @@ describe('workspace limits in workspace administration', () => {
     render(MembersScreen, { props });
     const region = await panel();
     expect(within(region).getAllByText('조직 상한: 설정 안 함')).toHaveLength(5);
-    await fireEvent.change(within(region).getByLabelText('공간 전체 저장 공간 설정'), {
-      target: { value: 'set' },
-    });
+    await fireEvent.click(
+      within(region).getByRole('checkbox', { name: '공간 전체 저장 공간 설정 안 함' }),
+    );
     await type('공간 전체 저장 공간', '0');
     await type('활동 보존 일수', '3650');
     await submit();

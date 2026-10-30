@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/svelte';
-import { expect, spyOn, within } from 'storybook/test';
+import { expect, spyOn, userEvent, within } from 'storybook/test';
 
 import { api } from '$lib/api/client';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
@@ -48,6 +48,17 @@ export const Default: Story = {
     await expect(within(canvas.getByTestId('member-list')).getAllByRole('listitem')).toHaveLength(
       50,
     );
+    await expect(canvas.getByRole('heading', { name: '멤버 50명' })).toBeVisible();
+    const filter = canvas.getByRole('searchbox', { name: '이름·이메일로 멤버 검색' });
+    await userEvent.type(filter, 'research-collaborator-50.');
+    await expect(within(canvas.getByTestId('member-list')).getAllByRole('listitem')).toHaveLength(
+      1,
+    );
+    await userEvent.clear(filter);
+    await expect(within(canvas.getByTestId('member-list')).getAllByRole('listitem')).toHaveLength(
+      50,
+    );
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(5);
   },
 };
 export const NarrowDarkLargeText: Story = {

@@ -40,7 +40,12 @@ for (const scale of [100, 200] as const) {
     }
     await expect(page.getByRole('tab')).toHaveCount(4);
     await expect(page.getByRole('list', { name: '멤버' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: '멤버 2명', exact: true })).toBeVisible();
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
     const memberMenu = page.locator(`#org-member-menu-${memberId}`);
+    await expect(memberMenu).toHaveAccessibleName(`${memberName} 동작`);
+    await expect(memberMenu.locator('svg')).toBeVisible();
+    await expect(memberMenu).toHaveText('');
     await memberMenu.click();
     await page.getByRole('menuitem', { name: '내보내기', exact: true }).click();
     const removal = page.getByRole('dialog');
@@ -66,15 +71,35 @@ for (const scale of [100, 200] as const) {
     await expect(demotion).toHaveCount(0);
     await expect(memberMenu).toBeFocused();
     const tabs = page.getByTestId('management-tabs-scroll');
+    const overflows = await tabs.evaluate((el) => el.scrollWidth > el.clientWidth);
     if (testInfo.project.name === 'narrow-375' && scale === 200)
-      expect(
-        await tabs.evaluate((el) => el.scrollWidth > el.clientWidth),
-        'tabs scroll at 375px and 200%',
-      ).toBe(true);
+      expect(overflows, 'tabs scroll at 375px and 200%').toBe(true);
+    if (overflows) {
+      await tabs.evaluate((el) => {
+        el.scrollLeft = 0;
+      });
+      const left = page.getByTestId('management-tabs-fade-left');
+      const right = page.getByTestId('management-tabs-fade-right');
+      await expect(right).toBeVisible();
+      await expect(right).toHaveCSS('background-image', /linear-gradient/);
+      await expect(left).toHaveCount(0);
+      await tabs.evaluate((el) => {
+        el.scrollLeft = el.scrollWidth;
+      });
+      await expect(left).toBeVisible();
+      await expect(right).toHaveCount(0);
+      await tabs.evaluate((el) => {
+        el.scrollLeft = 0;
+      });
+      await expect(right).toBeVisible();
+    } else {
+      await expect(page.getByTestId('management-tabs-fade-left')).toHaveCount(0);
+      await expect(page.getByTestId('management-tabs-fade-right')).toHaveCount(0);
+    }
     await page.getByRole('tab', { name: '초대', exact: true }).click();
     await expect(page).toHaveURL(`/o/${organization.id}/invitations`);
     await page.goBack();
-    await expect(page.getByRole('tab', { name: '멤버', exact: true })).toHaveAttribute(
+    await expect(page.getByRole('tab', { name: '멤버 2명', exact: true })).toHaveAttribute(
       'aria-selected',
       'true',
     );

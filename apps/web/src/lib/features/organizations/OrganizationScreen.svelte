@@ -21,6 +21,7 @@
   }
   const { organizationId, tab, meId, onchanged }: Props = $props();
   let organization = $state<Organization>();
+  let memberCount = $state<number>();
   let error = $state('');
   let unavailable = $state(false);
   let disposed = false;
@@ -46,7 +47,13 @@
   }
   const isAdmin = $derived(organization?.role === 'admin');
   const tabs = $derived([
-    { value: 'members', label: m.organizations_members() },
+    {
+      value: 'members',
+      label:
+        memberCount === undefined
+          ? m.organizations_members()
+          : m.organizations_member_count({ count: memberCount }),
+    },
     ...(isAdmin
       ? [
           { value: 'invitations', label: m.organizations_invitations() },
@@ -120,6 +127,9 @@
         {meId}
         onchanged={changed}
         onunavailable={noAccess}
+        oncountchange={(count) => {
+          memberCount = count;
+        }}
       />
     {:else if tab === 'invitations'}
       <OrganizationInvitations {organizationId} onunavailable={noAccess} />

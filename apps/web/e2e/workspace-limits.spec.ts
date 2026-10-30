@@ -51,6 +51,9 @@ for (const scale of [100, 200] as const) {
         await document.fonts.ready;
       });
       const panel = page.getByRole('region', { name: '한도·보존' });
+      await expect(page.getByRole('heading', { name: '멤버 1명', exact: true })).toBeVisible();
+      await expect(page.getByRole('searchbox')).toHaveCount(0);
+      await expect(panel.getByRole('checkbox')).toHaveCount(5);
       const activity = panel.getByLabel('활동 보존 일수', { exact: true });
       await expect(activity).toHaveValue('30');
       await expect(
@@ -146,7 +149,9 @@ for (const scale of [100, 200] as const) {
           .click();
       }
       await expect(activity).toHaveValue('46');
-      await panel.getByLabel('활동 보존 일수 설정').selectOption('unset');
+      await panel.getByRole('checkbox', { name: '활동 보존 일수 설정 안 함' }).check();
+      await expect(activity).toBeDisabled();
+      await expect(activity).toHaveAccessibleDescription(/서버 기본값과 조직 값을 따릅니다/);
       await panel.getByRole('button', { name: '저장', exact: true }).click();
       await expect(panel.getByRole('button', { name: '저장', exact: true })).toBeDisabled();
       expect(await api.get(`/api/workspaces/${ws}/limits`)).toMatchObject({
