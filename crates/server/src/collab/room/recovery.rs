@@ -105,15 +105,15 @@ impl Drop for Room {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, test))]
 #[derive(Debug, Clone, Copy)]
 pub enum Registry {
     Rooms,
     Held,
 }
 
-/// 격리 통합 시험에서 실제 목록 잠금을 쥔 패닉을 재현한다. 배포 빌드에는 포함하지 않는다.
-#[cfg(debug_assertions)]
+/// 단위·격리 통합 시험에서 실제 목록 잠금을 쥔 패닉을 재현한다. 배포 빌드에는 포함하지 않는다.
+#[cfg(any(debug_assertions, test))]
 pub fn poison(rooms: &super::Rooms, registry: Registry) {
     let _panicked = std::panic::catch_unwind(|| match registry {
         Registry::Rooms => {
