@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Regression checks for #264 measurement evidence; no DB or product server required.
+# Optional argument: a recorded screens.json instead of the synthetic sample.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
-fixture=${1:-target/perf-screens-10-SS7FC9/screens.json}
+fixture=${1:-tools/fixtures/perf-screens-sample.json}
+mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf-tools-test-XXXXXX")
 failures=0
 printf 'evidence: %s\n' "$out"
@@ -50,7 +52,15 @@ cleanup_dead_monitor() {
   test "$(cat "$out/compose-called")" = 'down --volumes'
 CLEANUP
 }
-check valid-depth jq -f tools/perf-depth.jq "$fixture"
+valid_depth() {
+  jq -f tools/perf-depth.jq "$fixture" > "$out/depth.json" || return 1
+  jq -e 'group_by(.screen) |
+    map({key: .[0].screen, value: (map(.depth) | unique)}) | from_entries == {
+      home: [6], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [7],
+      "document-tree": [5], "document-open": [4], calendar: [3], activity: [6]
+    }' "$out/depth.json"
+}
+check valid-depth valid_depth
 check missing-workspaces reject_gate missing /api/workspaces
 check missing-organizations reject_gate missing /api/me/organizations
 check early-workspaces reject_gate early /api/workspaces
