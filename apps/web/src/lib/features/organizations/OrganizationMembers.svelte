@@ -92,6 +92,14 @@
     void readPreview();
   }
 
+  function closeConfirm(): void {
+    confirm = undefined;
+    preview = undefined;
+    previewError = '';
+    dialogError = '';
+    previewSeq += 1;
+  }
+
   function removalText(name: string, impact: OrganizationRemovalPreview): string {
     const parts = [
       impact.workspaces > 0
@@ -121,7 +129,7 @@
     try {
       await action();
       if (disposed) return;
-      confirm = undefined;
+      closeConfirm();
       notifyDone(m.organizations_member_updated());
       await load();
       if (current()) {
@@ -228,10 +236,7 @@
 <Dialog.Root
   open={confirm !== undefined}
   onOpenChange={(open) => {
-    if (!open && !busy) {
-      confirm = undefined;
-      previewSeq += 1;
-    }
+    if (!open && !busy) closeConfirm();
   }}
 >
   <Dialog.Content
@@ -256,19 +261,15 @@
         {:else}{m.app_loading()}{/if}
       </Dialog.Description>
     </Dialog.Header>
-    <p role="alert" class="text-sm text-destructive empty:hidden">{dialogError || previewError}</p>
-    {#if previewError !== ''}<Button variant="outline" onclick={() => void readPreview()}
-        >{m.common_retry()}</Button
+    <p role="alert" class="text-sm text-destructive empty:hidden">
+      {dialogError || (confirm?.kind === 'remove' ? previewError : '')}
+    </p>
+    {#if confirm?.kind === 'remove' && previewError !== ''}<Button
+        variant="outline"
+        onclick={() => void readPreview()}>{m.common_retry()}</Button
       >{/if}
     <Dialog.Footer>
-      <Button
-        variant="ghost"
-        disabled={busy}
-        onclick={() => {
-          confirm = undefined;
-          previewSeq += 1;
-        }}>{m.common_cancel()}</Button
-      >
+      <Button variant="ghost" disabled={busy} onclick={closeConfirm}>{m.common_cancel()}</Button>
       <Button
         variant="destructive"
         disabled={busy || (confirm?.kind === 'remove' && preview === undefined)}

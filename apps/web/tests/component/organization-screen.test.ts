@@ -80,6 +80,34 @@ it('confirms self demotion with the loss of management and joined roles', async 
   expect(within(dialog).getByRole('button', { name: '멤버로 바꾸기' })).toBeEnabled();
 });
 
+it.each(['취소', '닫기'])(
+  'does not carry a failed removal preview into self demotion after %s',
+  async (closeLabel) => {
+    vi.mocked(organizationsApi.members).mockResolvedValue([
+      ...members,
+      { ...firstMember, user_id: 'other', display_name: '둘째 관리자' },
+    ]);
+    const preview = vi
+      .spyOn(organizationsApi, 'removalPreview')
+      .mockRejectedValue(new ApiError(500, 'internal', '제거 미리보기를 불러오지 못했습니다'));
+    view();
+    await fireEvent.click(await screen.findByRole('button', { name: '둘째 관리자 동작' }));
+    await fireEvent.click(screen.getByRole('menuitem', { name: '내보내기' }));
+    const removal = await screen.findByRole('dialog');
+    await within(removal).findByText('제거 미리보기를 불러오지 못했습니다');
+    expect(within(removal).getByRole('button', { name: '다시 시도' })).toBeEnabled();
+    await fireEvent.click(within(removal).getByRole('button', { name: closeLabel }));
+
+    await fireEvent.click(screen.getByRole('button', { name: '첫 관리자 동작' }));
+    await fireEvent.click(screen.getByRole('menuitem', { name: '멤버로 바꾸기' }));
+    const demotion = await screen.findByRole('dialog', { name: '내 역할을 멤버로 바꿀까요?' });
+    expect(demotion).not.toHaveTextContent('제거 미리보기를 불러오지 못했습니다');
+    expect(within(demotion).queryByRole('button', { name: '다시 시도' })).toBeNull();
+    expect(within(demotion).getByRole('button', { name: '멤버로 바꾸기' })).toBeEnabled();
+    expect(preview).toHaveBeenCalledExactlyOnceWith(id, 'other');
+  },
+);
+
 it.each([
   [
     { workspaces: 2, shares: 0, assignments: 3 },
