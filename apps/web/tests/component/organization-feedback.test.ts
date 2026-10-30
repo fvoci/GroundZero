@@ -69,6 +69,14 @@ it.each([
   },
 );
 
+it.each([
+  ['ko', '이 이메일은 이미 이 조직의 멤버입니다. 초대할 수 없습니다.'],
+  ['en', 'This email is already a member of this organization. It cannot be invited.'],
+] as const)('explains an existing organization membership in %s', async (locale, message) => {
+  await setLocale(locale, { reload: false });
+  expect(organizationError(new ApiError(409, 'invalid_state', 'already a member'))).toBe(message);
+});
+
 it('retains the last administrator and account-change guidance', () => {
   expect(
     organizationError(

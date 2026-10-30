@@ -11,6 +11,7 @@
   "organizations_members_empty": "There are no members yet",
   "organizations_joined": "Joined {when}",
   "organizations_action_failed": "Could not complete the action.",
+  "organizations_already_member": "This email is already a member of this organization. It cannot be invited.",
   "organizations_actions": "Actions",
   "organizations_member_actions": "Actions for {name}",
   "organizations_last_admin": "The last administrator cannot be changed",

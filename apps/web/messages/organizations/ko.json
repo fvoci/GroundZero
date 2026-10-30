@@ -11,6 +11,7 @@
   "organizations_members_empty": "아직 멤버가 없습니다",
   "organizations_joined": "가입일 {when}",
   "organizations_action_failed": "작업을 마치지 못했습니다.",
+  "organizations_already_member": "이 이메일은 이미 이 조직의 멤버입니다. 초대할 수 없습니다.",
   "organizations_actions": "동작",
   "organizations_member_actions": "{name} 동작",
   "organizations_last_admin": "마지막 관리자는 바꿀 수 없습니다",

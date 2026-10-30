@@ -14,6 +14,7 @@ for (const scale of [100, 200] as const) {
     const tag = unique();
     const name = `긴 이름을 쓰는 공동 연구 공간과 여러 팀이 함께 보는 문서와 기록 ${tag}`;
     const workspace = await member.api.createWorkspace(name);
+    const ownedWorkspace = await api.createWorkspace(`소유권 제안 검증 ${tag}`);
     const memberMe = await member.api.get('/api/me');
     const memberId = str(memberMe, 'id');
     const memberName = str(memberMe, 'display_name');
@@ -79,6 +80,16 @@ for (const scale of [100, 200] as const) {
     );
 
     await page.getByRole('tab', { name: '초대', exact: true }).click();
+    await page
+      .getByRole('textbox', { name: '이메일', exact: true })
+      .fill(testUser('test-user-2').email);
+    await page.getByRole('button', { name: '초대 보내기', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText([
+      '이 이메일은 이미 이 조직의 멤버입니다. 초대할 수 없습니다.',
+    ]);
+    await expect(page.getByRole('textbox', { name: '이메일', exact: true })).toHaveValue(
+      testUser('test-user-2').email,
+    );
     const email = `long.organization.invitation.address.${tag}@organization-management.example.test`;
     await page.getByRole('textbox', { name: '이메일', exact: true }).fill(email);
     await page.getByRole('button', { name: '초대 보내기', exact: true }).click();
@@ -158,6 +169,27 @@ for (const scale of [100, 200] as const) {
     await expect(ownership).toContainText('제안할 다른 조직 멤버가 없습니다');
     await page.keyboard.press('Escape');
     await expect(row.getByRole('button', { name: '소유권 이전 제안', exact: true })).toBeFocused();
+    const ownedRow = page.locator(`[data-organization-workspace="${ownedWorkspace}"]`);
+    const offer = ownedRow.getByRole('button', { name: '소유권 이전 제안', exact: true });
+    await offer.click();
+    const rejectedOffer = page.getByRole('dialog', { name: '소유권 이전 제안', exact: true });
+    const rejectedRecipient = rejectedOffer.getByRole('combobox', {
+      name: '받을 사람',
+      exact: true,
+    });
+    await rejectedRecipient.selectOption(memberId);
+    await rejectedOffer.getByRole('button', { name: '제안 보내기', exact: true }).click();
+    await expect(rejectedOffer.getByRole('alert')).toContainText([
+      '이 공간의 멤버에게만 제안할 수 있습니다',
+    ]);
+    await expect(rejectedRecipient).toHaveAttribute('aria-invalid', 'true');
+    await expect(rejectedRecipient).toHaveAccessibleDescription(
+      '이 공간의 멤버에게만 제안할 수 있습니다',
+    );
+    expect(await offenders(rejectedOffer)).toEqual([]);
+    await rejectedRecipient.selectOption('');
+    await page.keyboard.press('Escape');
+    await expect(offer).toBeFocused();
     expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
 
     await page.getByRole('tab', { name: '설정', exact: true }).click();

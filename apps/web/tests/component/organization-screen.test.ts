@@ -250,6 +250,37 @@ it('keeps invitation input on conflict and maps email errors to the input', asyn
   expect(email).toHaveAccessibleDescription(/이메일/);
 });
 
+it.each([
+  ['ko', '이메일', '초대 보내기', '이 이메일은 이미 이 조직의 멤버입니다. 초대할 수 없습니다.'],
+  [
+    'en',
+    'Email',
+    'Send invitation',
+    'This email is already a member of this organization. It cannot be invited.',
+  ],
+] as const)(
+  'announces an existing member invitation and preserves input in %s',
+  async (locale, label, submit, message) => {
+    await setLocale(locale, { reload: false });
+    vi.spyOn(organizationsApi, 'invitations').mockResolvedValue([]);
+    const invite = vi
+      .spyOn(organizationsApi, 'inviteOrganization')
+      .mockRejectedValue(new ApiError(409, 'invalid_state', 'already a member'));
+    view('invitations');
+    const email = await screen.findByRole('textbox', { name: label });
+    await fireEvent.input(email, { target: { value: 'member@example.test' } });
+    await fireEvent.click(screen.getByRole('button', { name: submit }));
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert').some((alert) => alert.textContent === message)).toBe(
+        true,
+      );
+    });
+    expect(email).toHaveValue('member@example.test');
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(invite).toHaveBeenCalledExactlyOnceWith(id, 'member@example.test', 'member');
+  },
+);
+
 it('requires all three disclosures before joining as administrator', async () => {
   vi.stubGlobal(
     'fetch',
@@ -409,10 +440,21 @@ it('excludes self and the owner from ownership recipients, explains eligibility 
   const recipient = screen.getByRole('combobox', { name: '받을 사람' });
   expect(recipient).toHaveAccessibleDescription('이 공간의 멤버에게만 제안할 수 있습니다');
   expect(recipient).toHaveAttribute('aria-invalid', 'false');
+  const dialog = screen.getByRole('dialog');
+  const initialAlerts = within(dialog).getAllByRole('alert');
+  expect(initialAlerts.every((alert) => alert.textContent === '')).toBe(true);
   await fireEvent.change(recipient, { target: { value: 'target' } });
   await fireEvent.click(screen.getByRole('button', { name: '제안 보내기' }));
-  await screen.findByText('이 공간의 멤버에게만 제안할 수 있습니다');
+  await waitFor(() => {
+    const recipientAlert = within(dialog)
+      .getAllByRole('alert')
+      .find((alert) => alert.textContent === '이 공간의 멤버에게만 제안할 수 있습니다');
+    expect(recipientAlert).toBeDefined();
+    expect(initialAlerts).toContain(recipientAlert);
+  });
   expect(recipient).toHaveValue('target');
+  expect(recipient).toHaveAttribute('aria-invalid', 'true');
+  expect(recipient).toHaveAttribute('aria-describedby', 'organization-recipient-error');
   expect(recipient).toHaveAccessibleDescription('이 공간의 멤버에게만 제안할 수 있습니다');
   expect(offer).toHaveBeenCalledExactlyOnceWith(id, workspace.id, 'target');
 });
