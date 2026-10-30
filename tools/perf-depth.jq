@@ -13,6 +13,15 @@ def branch($requests; $pattern; $after):
   if ($matches | length) == 0 then error("missing dependency witness: " + $pattern)
   elif any($matches[]; .start < $after) then error("early dependency witness: " + $pattern)
   else $matches end;
+def require_overlap($requests):
+  ($requests | to_entries) as $arms |
+  reduce $arms[] as $arm (.;
+    # Exclude the request itself: its own end cannot witness parallelism.
+    # Both interval boundaries must overlap at least one actual sibling.
+    if any($arms[] | select(.key != $arm.key);
+      $arm.value.start < .value.end and .value.start < $arm.value.end)
+    then .
+    else error("non-overlapping dependency witness: " + $arm.value.path) end);
 def item_screen($screen):
   ["board", "gantt", "task-detail", "document-tree"] | index($screen) != null;
 def patterns($screen):
@@ -41,11 +50,16 @@ map(
     pick($requests; "^/api/me/home$"; $gate.end; false) as $home |
     (["^/api/workspaces/[^/]+/calendar$", "^/api/me/notifications$", "^/api/me/activity$"] |
       map(branch($requests; .; $home.end)) | add) as $children |
+    require_overlap($children) |
     {chain: [$root, $gate, $home, ($children | max_by(.end))], parallel: $children}
   else
     (if item_screen(.screen) then
       pick($requests; "^/api/items/[^/]+$"; $gate.end; false) as $item |
       branch($requests; "^/api/items/[^/]+/documents$"; $gate.end) as $documents |
+      if any($documents[]; .start >= $item.end)
+      then error("non-overlapping dependency witness: item documents did not start before item completion")
+      else . end |
+      require_overlap([$item] + $documents) |
       branch($requests; "^/api/modules/[^/]+$"; $item.end) as $modules |
       ($modules | min_by(.start)) as $module |
       {chain: [$root, $gate, $item, $module],
