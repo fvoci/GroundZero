@@ -830,8 +830,8 @@ export function checkUsage(
       for (const raw of [...new Set(paths)]) {
         const socket = exit.kind === 'WebSocket';
         const path =
-          socket || /^https?:\/\/fvoci\.invalid(?:\/|$)/.test(raw)
-            ? raw.replace(/^(?:https?|wss?):\/\/[^/]+/, '')
+          socket || /^(?:https?:)?\/\/fvoci\.invalid(?:\/|$)/.test(raw)
+            ? raw.replace(/^(?:(?:https?|wss?):)?\/\/[^/]+/, '')
             : raw;
         canonicalPath(path);
         if (!socket && /^(?:[a-z][\w+.-]*:|\/\/)/i.test(path)) continue;

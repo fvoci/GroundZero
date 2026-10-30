@@ -221,6 +221,35 @@ await test('SR-250-1: direct fetch with a wrong method fails', () => {
     /DELETE \/api\/tasks\/42.*not in OpenAPI/,
   );
 });
+for (const [code, expected] of [
+  ['fetch(`//${location.host}/api/typo/42`);', /GET \/api\/typo\/42.*not in OpenAPI/],
+  [
+    'fetch(`//${window.location.host}/api/tasks/42`, { method: "DELETE" });',
+    /DELETE \/api\/tasks\/42.*not in OpenAPI/,
+  ],
+] as const) {
+  await test(`CodeRabbit: same-origin protocol-relative fetch is checked: ${code}`, () => {
+    assert.throws(() => checkUsage(files(code), contract, listedTask), expected);
+  });
+}
+await test('same-origin protocol-relative fetch marks the contract operation used', () => {
+  const result = checkUsage(files('fetch(`//${location.host}/api/tasks/42`);'), contract, empty);
+  assert.equal(result.calls, 1);
+  assert.deepEqual(result.used, ['GET /api/tasks/{task_id}']);
+  assert.deepEqual(result.unused, []);
+});
+await test('external protocol-relative fetch remains outside the contract check', () => {
+  const result = checkUsage(
+    files(`
+      fetch('//example.org/api/typo/42');
+      fetch('//fvoci.invalid.example.org/api/typo/42');
+    `),
+    contract,
+    listedTask,
+  );
+  assert.equal(result.calls, 0);
+  assert.deepEqual(result.unused, ['GET /api/tasks/{task_id}']);
+});
 
 await test('direct fetch uses GET by default, honors method options and excludes used operations from unused', () => {
   const input = files(`
