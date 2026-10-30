@@ -41,32 +41,49 @@ fetch 기본값도 호출 지점에서 다른 구현으로 덮어쓰지 않았�
 
 `allowlist.json`에는 다음을 둔다. 자동으로 항목을 늘리지 않는다.
 
-- `forwarders`: method와 path를 그대로 전달하는 도우미의 파일·이름·이유.
+- `forwarders`: method와 path를 그대로 전달하는 도우미의 파일·이름·이유·상세 이유(`detail`).
   앞 두 매개변수에 대입·증감·구조 분해 재대입이 있으면 실패하며, 전달은 정확히
   한 번이어야 한다. 모든 호출 지점을 별도로 검사한다.
 - `unused`: 웹이 부르지 않는 계약 작업의 정확한 메서드·경로·이유.
   목록 밖 누락, 중복, 이미 사용하거나 계약에서 사라진 낡은 항목은 실패한다.
-  이유 꼬리표는 `샴 가3~가5 조립 예정`과 `가6 판정 예정` 두 개뿐이다.
 - `websocket`: 이름 있는 협업 경로 한 항목 `document_collaboration`.
   정확한 경로 `/api/documents/{document_id}/collab`와 이유를 적는다. D-27·D-70의
   CRDT upgrade는 HTTP OpenAPI에 없으므로 이 항목과 대조한다. y-websocket의
   base와 room을 합쳐 검사하며, 항목이 없거나 경로가 다르거나 쓰이지 않으면 실패한다.
 
+`forwarders`·`unused`의 이유 꼬리표는 다음 두 개뿐이다.
+
+- `샴 가3~가5 조립 예정`: 아직 연결하지 않은 관리 화면 작업.
+- `설계상 직접 호출하지 않음`: OIDC 제공자가 브라우저를 돌려보내는 콜백이나,
+  작업을 직접 지정하지 않고 호출자의 method·path를 전달하는 도우미 내부 호출.
+  이 꼬리표에는 공백뿐인 문자열이 아닌 상세 이유(`detail`)가 필수다.
+  전달 도우미는 꼬리표와 관계없이 항상 상세 이유가 필요하다.
+
+`가6 판정 예정`은 폐기했으며 쓰면 실패한다. 가6에서 `/auth/callback`은
+`LoginScreen.svelte:18`·`FeedbackHost.svelte:183`의 `/auth/login` 진입 뒤
+`accounts.rs:77`·`:171`이 설정한 OIDC redirect_uri로 제공자가 돌려보내는 경로임을
+확인했다. 인증 코드 교환·세션 발급·원래 화면 복귀에 필요하므로 영구 예외로 남긴다.
+전달 도우미 세 개도 상세 이유를 유지하고 새 꼬리표로 옮겼다.
+새 꼬리표는 특정 작업의 판정 이유만 나타낸다. 목록 밖 미사용은 계속 실패하며,
+정확한 메서드·경로 대조, 중복·낡은 예외 거절과 전달 도우미 호출자 검사를 유지한다.
+
 ## 검사하지 않는 것
 
-아래 한계는 후속 [#251](https://github.com/fvoci/GroundZero/issues/251)에서 가6과 함께 다시 본다.
+아래 한계는 [#251](https://github.com/fvoci/GroundZero/issues/251) 본문과 후속 댓글을
+가6에서 현재 코드(main `093ecd0d`, 2026-10-30)와 다시 대조했다. 검사 범위는 그대로다.
 현재 검사는 화면의 실제 도달 가능성이나 브라우저의 모든 네트워크 동작을 증명하지 않는다.
 
-| 항목                    | 현재 범위 밖인 것                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------- |
-| SR-250-8                | Svelte spread 속성으로 넘긴 URL                                                          |
-| SR-250-9                | DOMParser·innerHTML로 만든 HTML 안 자원                                                  |
-| SR-250-10               | 동적 encodeURIComponent 값의 `.`·`..` (현재 값은 서버가 발급한 UUID)                     |
-| SR-250-11               | WebSocket 원점 (현재는 같은 원점)                                                        |
-| SR-250-12               | 호출 인자를 따라가도 끝까지 풀리지 않는 링크·location의 런타임 값(앱 경로·사용자 콘텐츠) |
-| SR-250-13               | 링크·location 도우미를 불변 별칭(`const move = go`)으로 부른 호출 지점                   |
-| SR-250-14               | 정적 `undefined` 인자에 매개변수 기본값을 적용하지 않음                                  |
-| 현재 웹 사용 0건인 출구 | XMLHttpRequest·EventSource·navigator.sendBeacon·new Request                              |
+| 항목                    | 현재 범위 밖인 것                                           | 가6 재확인                                                                                                              |
+| ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| SR-250-8                | Svelte spread 속성으로 넘긴 URL                             | sidebar 부품이 spread를 유지한다. AppSidebar는 앱 경로를 명시적으로 넘긴다                                              |
+| SR-250-9                | DOMParser·innerHTML로 만든 HTML 안 자원                     | 문서 내보내기 외에 붙여넣기 정리와 Office 미리보기 HTML도 있다                                                          |
+| SR-250-10               | 동적 encodeURIComponent 값의 `.`·`..`                       | 자원 ID는 UUID다. 공개 링크의 token도 있으며 UUID만이라는 종전 설명은 부정확하다. 발급 토큰은 URL-safe base64다         |
+| SR-250-11               | WebSocket 원점                                              | live.ts가 window.location의 protocol·host로 같은 원점을 만든다                                                          |
+| SR-250-12               | 끝까지 풀리지 않는 링크·location 런타임 값                  | 앱 경로·사용자 콘텐츠·로그아웃 응답의 이동 주소가 있다                                                                  |
+| SR-250-13               | 링크·location 도우미의 불변 별칭 호출 지점                  | callable은 함수 선언·const 함수 본문만 인식한다. 현재 이동 출구에서 해당 별칭 사용은 확인되지 않았다                    |
+| SR-250-14               | 정적 `undefined` 인자에 매개변수 기본값 적용                | 첨부 미리보기 링크에도 undefined 인자가 있다. 해당 version 매개변수는 기본값 없는 선택 인자라 이 한계를 일으키지 않는다 |
+| #251 후속 댓글          | 재대입된 let·매개변수의 `/api` 리터럴을 apiHint가 보지 않음 | initializer만 읽는 한계가 남는다. 현재 링크·이동 출구에서 이 재대입으로 API 주소를 만드는 사용은 확인되지 않았다        |
+| 현재 웹 사용 0건인 출구 | XMLHttpRequest·EventSource·navigator.sendBeacon·new Request | apps/web/src에서 여전히 0건이다                                                                                         |
 
 이 종류를 새로 사용하면 검사 범위를 먼저 결정한다. 특히 XMLHttpRequest·sendBeacon·
 EventSource의 상대 URL 거절은 현재 범위 밖이므로 구현하지 않는다.

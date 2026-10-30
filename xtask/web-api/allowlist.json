@@ -8,26 +8,31 @@
     {
       "file": "apps/web/src/lib/shared/api/index.ts",
       "name": "expectOk",
-      "reason": "가6 판정 예정",
+      "reason": "설계상 직접 호출하지 않음",
       "detail": "공통 응답 파서. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
     },
     {
       "file": "apps/web/src/lib/features/tasks/api.ts",
       "name": "expectTask",
-      "reason": "가6 판정 예정",
+      "reason": "설계상 직접 호출하지 않음",
       "detail": "업무의 기대 사용자와 충돌 처리. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
     },
     {
       "file": "apps/web/src/lib/features/files/api.ts",
       "name": "withExpected",
-      "reason": "가6 판정 예정",
+      "reason": "설계상 직접 호출하지 않음",
       "detail": "파일의 기대 사용자 처리. method와 path를 그대로 request에 전달하며 모든 호출 지점에서 계약을 검사한다."
     }
   ],
   "unused": [
     { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
     { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
-    { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
+    {
+      "method": "GET",
+      "path": "/auth/callback",
+      "reason": "설계상 직접 호출하지 않음",
+      "detail": "웹은 LoginScreen.svelte:18·FeedbackHost.svelte:183에서 /auth/login을 링크로 연다. accounts.rs:77·:171이 /auth/callback을 OIDC redirect_uri로 설정하므로 제공자가 브라우저를 이 경로로 돌려보낸다. accounts.rs:336·:420·:435에서 인증 코드를 교환하고 세션을 발급한 뒤 원래 화면으로 돌아간다. 웹이 직접 부를 작업이 아니며 로그인 완료에 필요하다."
+    },
     { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" }
   ]
 }
