@@ -1,12 +1,143 @@
 //! Exercise the default HTTP client's OS trust store in separate processes.
-//! Requires the existing OpenSSL CLI to serve the test-only certificate fixtures.
+//! OpenSSL generates one-day certificates in a private temporary directory.
 
 use std::error::Error;
 use std::fmt::Write as _;
+use std::fs;
+use std::io;
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+#[cfg(unix)]
+use std::os::unix::fs::DirBuilderExt as _;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
+
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new() -> io::Result<Self> {
+        let path = std::env::temp_dir().join(format!("fvoci-private-ca-{}", uuid::Uuid::now_v7()));
+        #[cfg(unix)]
+        fs::DirBuilder::new().mode(0o700).create(&path)?;
+        #[cfg(not(unix))]
+        fs::create_dir(&path)?;
+        Ok(Self(path))
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_dir_all(&self.0) {
+            eprintln!("removing temporary TLS fixtures: {error}");
+        }
+    }
+}
+
+fn openssl(directory: &Path, args: &[&str]) -> Result<(), Box<dyn Error>> {
+    let output = Command::new("openssl")
+        .current_dir(directory)
+        .args(args)
+        .output()
+        .map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("OpenSSL CLI is required for private CA tests: {error}"),
+            )
+        })?;
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "OpenSSL fixture generation failed ({}): {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ))
+        .into());
+    }
+    Ok(())
+}
+
+fn generate_fixtures() -> Result<TempDir, Box<dyn Error>> {
+    let directory = TempDir::new()?;
+    for (name, subject) in [
+        ("ca", "/CN=fvoci private CA test only"),
+        ("unrelated-ca", "/CN=fvoci unrelated CA test only"),
+    ] {
+        openssl(
+            &directory.0,
+            &[
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-noenc",
+                "-sha256",
+                "-days",
+                "1",
+                "-subj",
+                subject,
+                "-addext",
+                "basicConstraints=critical,CA:TRUE",
+                "-addext",
+                "keyUsage=critical,keyCertSign,cRLSign",
+                "-keyout",
+                &format!("{name}.key"),
+                "-out",
+                &format!("{name}.pem"),
+            ],
+        )?;
+    }
+    openssl(
+        &directory.0,
+        &[
+            "req",
+            "-new",
+            "-newkey",
+            "rsa:2048",
+            "-noenc",
+            "-sha256",
+            "-subj",
+            "/CN=fvoci TLS server test only",
+            "-addext",
+            "subjectAltName=DNS:localhost,IP:127.0.0.1",
+            "-addext",
+            "basicConstraints=critical,CA:FALSE",
+            "-addext",
+            "keyUsage=critical,digitalSignature,keyEncipherment",
+            "-addext",
+            "extendedKeyUsage=serverAuth",
+            "-keyout",
+            "server.key",
+            "-out",
+            "server.csr",
+        ],
+    )?;
+    openssl(
+        &directory.0,
+        &[
+            "x509",
+            "-req",
+            "-sha256",
+            "-days",
+            "1",
+            "-copy_extensions",
+            "copy",
+            "-in",
+            "server.csr",
+            "-CA",
+            "ca.pem",
+            "-CAkey",
+            "ca.key",
+            "-CAcreateserial",
+            "-CAserial",
+            "ca.srl",
+            "-out",
+            "server.pem",
+        ],
+    )?;
+    let mut bundle = fs::read(directory.0.join("unrelated-ca.pem"))?;
+    bundle.extend_from_slice(&fs::read(directory.0.join("ca.pem"))?);
+    fs::write(directory.0.join("combined-ca.pem"), bundle)?;
+    Ok(directory)
+}
 
 struct TlsServer(Child);
 
@@ -63,7 +194,8 @@ async fn verify_ca_files(
     if let Ok(url) = std::env::var("FVOCI_TLS_TEST_URL") {
         return probe(&url).await;
     }
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tls");
+    let directory = generate_fixtures()?;
+    let fixtures = &directory.0;
     let address = TcpListener::bind("127.0.0.1:0")?.local_addr()?;
     let mut server = TlsServer(
         Command::new("openssl")
