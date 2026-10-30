@@ -24,9 +24,13 @@ def patterns($screen):
 map(
   . as $sample | .requests as $requests |
   pick($requests; "^/api/me$"; 0; false) as $root |
-  ([$requests[] | select(.path == "/api/workspaces" or .path == "/api/me/organizations")]
-    | max_by(.end)) as $gate |
-  if $gate.start < $root.end then error("session gate order changed") else . end |
+  ([$requests[] | select(.path == "/api/workspaces" or .path == "/api/me/organizations")]) as $arms |
+  if ([$arms[].path] | index("/api/workspaces")) == null
+     or ([$arms[].path] | index("/api/me/organizations")) == null
+  then error("missing session gate request")
+  elif ($arms | map(.start) | min) < $root.end
+  then error("session gate order changed") else . end |
+  ($arms | max_by(.end)) as $gate |
   reduce patterns(.screen)[] as $pattern ([$root, $gate];
     .[-1].end as $after |
     . + [pick($requests; $pattern; $after; $sample.screen == "task-detail" and ($pattern | endswith("/tasks$")))]) |

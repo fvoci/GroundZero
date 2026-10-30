@@ -13,6 +13,18 @@ case "$mode" in rooms|screens) ;; *) exit 2 ;; esac
 case "$count" in 10|100|1000) ;; *) exit 2 ;; esac
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+check_web_inputs() {
+  local current_inputs
+  current_inputs=$(git status --porcelain -- apps/web package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json) || return
+  if [[ -n "$current_inputs" || "$current_inputs" != "${1:-}" ]]; then
+    printf 'web inputs are dirty\n' >&2
+    exit 2
+  fi
+  printf '%s' "$current_inputs"
+}
+if [[ "$mode" == screens ]]; then
+  check_web_inputs
+fi
 out=$(mktemp -d "$root/target/perf-${mode}-${count}-XXXXXX")
 project="fvoci-perf-w1-${mode}-${count}-$$"
 overlay="$out/postgres.yaml"
@@ -33,7 +45,7 @@ cleanup() {
     touch "$out/STOP"
     wait "$server_pid" || true
   fi
-  if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid"; wait "$monitor_pid" || true; fi
+  if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1
 }
 trap cleanup EXIT
@@ -53,6 +65,15 @@ export FVOCI_DB_APP_PASSWORD=fvoci-test-app-password
 target/release/fvoci-server db bootstrap > "$out/bootstrap.log" 2>&1
 target/release/fvoci-server db migrate > "$out/migrate.log" 2>&1
 cargo test --release --locked -p fvoci-server --test it restore_measure::restore_measure_generate -- --ignored --exact --nocapture > "$out/generate.log" 2>&1
+if [[ "$mode" == screens ]]; then
+  web_inputs_before=$(check_web_inputs)
+  pnpm --filter @fvoci/web run build > "$out/web-build.log" 2>&1
+  check_web_inputs "$web_inputs_before"
+  test -s "$root/apps/web/dist/index.html"
+  test "$(git rev-parse HEAD)" = "$(cat "$out/sha.txt")"
+  cp "$out/sha.txt" "$root/apps/web/dist/.perf-head"
+  cp "$out/sha.txt" "$out/web-build-sha.txt"
+fi
 (
   while true; do
     if pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null; then busy=true; else busy=false; fi
@@ -81,18 +102,24 @@ else
   FVOCI_BROWSER_BASE_URL=$(jq -r .origin "$out/browser.json")
   export FVOCI_BROWSER_RAW="$out"
   pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts --project desktop > "$out/playwright.log" 2>&1
+  jq -e -f tools/perf-arguments.jq "$out/screens.json" > "$out/db-arguments.json"
+  sql_variables=()
+  while IFS= read -r binding; do
+    sql_variables+=(-v "$binding")
+  done < <(jq -r 'to_entries[] | select(.value | type == "string") | "\(.key)=\(.value)"' "$out/db-arguments.json")
   psql_test -At -c "SELECT json_agg(s) FROM (SELECT queryid::text, calls, total_exec_time, mean_exec_time, rows, shared_blks_hit, shared_blks_read, query FROM pg_stat_statements WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) ORDER BY total_exec_time DESC LIMIT 40) s" > "$out/queries.json"
   actor=$(jq -r .user "$out/browser.json")
   item=$(jq -r .item "$out/browser.json")
   for repeat in 1 2 3; do
     workspace=$(jq -r .workspace "$out/browser.json")
-    psql_test -v actor="$actor" -v item="$item" -v workspace="$workspace" < tools/perf-db.sql > "$out/db-$repeat.log"
+    psql_test -v actor="$actor" -v item="$item" -v workspace="$workspace" "${sql_variables[@]}" < tools/perf-db.sql > "$out/db-$repeat.log"
   done
   touch "$out/STOP"
   wait "$server_pid"
   server_pid=
   jq -Rn '[inputs | fromjson? | select(.event == "http.request")]' "$out/server.log" > "$out/access.json"
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
+  jq -f tools/perf-depth.jq "$out/screens.json" > "$out/depth.json"
   printf 'PASS screens: %s\n' "$out"
 fi
 

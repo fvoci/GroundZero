@@ -1,0 +1,111 @@
+[
+  {
+    "screen": "home",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/me/home", "start": 30, "end": 40 },
+      { "path": "/api/workspaces/sample-workspace/calendar", "start": 40, "end": 50 },
+      { "path": "/api/me/notifications", "start": 50, "end": 60 },
+      { "path": "/api/me/activity", "start": 60, "end": 70 }
+    ]
+  },
+  {
+    "screen": "my-tasks",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/me/tasks", "start": 30, "end": 40 }
+    ]
+  },
+  {
+    "screen": "board",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/sample-item", "start": 30, "end": 40 },
+      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/recurrences/sync", "start": 50, "end": 60 },
+      { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 }
+    ]
+  },
+  {
+    "screen": "gantt",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/sample-item", "start": 30, "end": 40 },
+      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/recurrences/sync", "start": 50, "end": 60 },
+      { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 }
+    ]
+  },
+  {
+    "screen": "task-detail",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/sample-item", "start": 30, "end": 40 },
+      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/tasks/sample-task", "start": 50, "end": 60 },
+      { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 },
+      { "path": "/api/tasks/sample-task/comments", "start": 70, "end": 80 }
+    ]
+  },
+  {
+    "screen": "document-tree",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/sample-item", "start": 30, "end": 40 },
+      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/backlinks", "start": 50, "end": 60 }
+    ]
+  },
+  {
+    "screen": "document-open",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/documents/sample-document", "start": 30, "end": 40 },
+      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 }
+    ]
+  },
+  {
+    "screen": "calendar",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/workspaces/sample-workspace/calendar", "start": 30, "end": 40 }
+    ]
+  },
+  {
+    "screen": "activity",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/me/home", "start": 30, "end": 40 },
+      { "path": "/api/workspaces/sample-workspace/calendar", "start": 40, "end": 50 },
+      { "path": "/api/me/notifications", "start": 50, "end": 60 },
+      { "path": "/api/me/activity", "start": 60, "end": 70 }
+    ]
+  }
+]
