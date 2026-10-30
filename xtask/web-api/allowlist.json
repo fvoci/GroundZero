@@ -27,17 +27,7 @@
   "unused": [
     { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
     { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
-    {
-      "method": "GET",
-      "path": "/api/workspaces/{workspace_id}/limits",
-      "reason": "샴 가3~가5 조립 예정"
-    },
     { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
-    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
-    {
-      "method": "PUT",
-      "path": "/api/workspaces/{workspace_id}/limits",
-      "reason": "샴 가3~가5 조립 예정"
-    }
+    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" }
   ]
 }

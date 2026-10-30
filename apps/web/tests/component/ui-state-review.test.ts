@@ -10,6 +10,7 @@ import type { TaskView } from '$lib/api/client';
 import { api } from '$lib/api/client';
 import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
 import MembersScreen from '$lib/features/members/MembersScreen.svelte';
+import { workspaceLimitsApi } from '$lib/features/members/limits-api';
 import TaskCalendar from '$lib/features/tasks/TaskCalendar.svelte';
 import TaskTimePanel from '$lib/features/time/TaskTimePanel.svelte';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
@@ -80,6 +81,18 @@ describe('audit', () => {
 });
 
 describe('members', () => {
+  beforeEach(() => {
+    vi.spyOn(workspaceLimitsApi, 'get').mockResolvedValue({});
+    vi.spyOn(api, 'organization').mockResolvedValue({
+      id: workspace.organization_id,
+      name: '조직',
+      role: 'admin',
+      public_links_enabled: true,
+      created_at: '2026-10-30T00:00:00Z',
+      limits: {},
+    });
+  });
+
   it('keeps the list retry when an action fails after a list read failed', async () => {
     vi.spyOn(api, 'members').mockResolvedValue(view);
     vi.spyOn(api, 'groups').mockResolvedValue([{ id: 'g-1', name: '세미나', members: [] }]);
