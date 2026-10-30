@@ -480,16 +480,40 @@ ALTER FUNCTION fvoci.app_target_activity(p_kind text, p_id uuid, p_limit integer
 
 -- 홈의 최근 활동(D-19·D-119): 현재 조직(p_organization; NULL이면 전체)에서 내가 볼 수 있는 대상의 활동.
 CREATE FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) RETURNS TABLE(id uuid, kind text, actor_id uuid, actor_name text, workspace_id uuid, target_kind text, target_id uuid, item_id uuid, detail jsonb, created_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
-    SELECT a.id, a.kind, a.actor, CASE WHEN app_shares_organization(a.actor) THEN u.display_name END,
-           a.workspace_id, a.target_kind, a.target_id, a.item_id, a.detail, a.created_at
-    FROM activity a LEFT JOIN users u ON u.id = a.actor
-    WHERE a.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
-      AND app_access(a.target_kind, a.target_id) <> 'none'
-    ORDER BY a.created_at DESC, a.id DESC
-    LIMIT greatest(1, least(coalesce(p_limit, 20), 100))
+  DECLARE
+    v_row record;
+    v_count integer := 0;
+    v_limit integer := greatest(1, least(coalesce(p_limit, 20), 100));
+  BEGIN
+    -- #240 A-stage experiment: filter workspace membership before target access.
+    -- The cursor preserves the complete order and continues past denied rows.
+    FOR v_row IN
+      SELECT a.* FROM activity a
+      WHERE a.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+      ORDER BY a.created_at DESC, a.id DESC
+    LOOP
+      CONTINUE WHEN (app_access(v_row.target_kind, v_row.target_id) <> 'none') IS NOT TRUE;
+      id := v_row.id;
+      kind := v_row.kind;
+      actor_id := v_row.actor;
+      actor_name := NULL;
+      IF app_shares_organization(v_row.actor) THEN
+        SELECT u.display_name INTO actor_name FROM users u WHERE u.id = v_row.actor;
+      END IF;
+      workspace_id := v_row.workspace_id;
+      target_kind := v_row.target_kind;
+      target_id := v_row.target_id;
+      item_id := v_row.item_id;
+      detail := v_row.detail;
+      created_at := v_row.created_at;
+      RETURN NEXT;
+      v_count := v_count + 1;
+      EXIT WHEN v_count >= v_limit;
+    END LOOP;
+  END
   $$;
 
 

@@ -1,10 +1,15 @@
 -- #240 / #245: compare every output column AND order, including clamped limits.
 -- Run with the app role, against a reference cloned before candidate (b).
+\if :{?candidate}
+\else
+\set candidate app_recent_activity
+\endif
 BEGIN;
 SELECT set_config('perf240.owner', :'owner', true),
        set_config('perf240.reader', :'reader', true),
        set_config('perf240.recipient', :'recipient', true),
-       set_config('perf240.organization', :'organization', true);
+       set_config('perf240.organization', :'organization', true),
+       set_config('perf240.candidate', :'candidate', true);
 SET LOCAL ROLE fvoci_app;
 DO $$
 DECLARE
@@ -23,8 +28,10 @@ BEGIN
       LOOP
         SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY n), '[]') INTO expected
         FROM fvoci.perf240_recent_reference(org,lim) WITH ORDINALITY r(id,kind,actor_id,actor_name,workspace_id,target_kind,target_id,item_id,detail,created_at,n);
-        SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY n), '[]') INTO actual
-        FROM fvoci.app_recent_activity(org,lim) WITH ORDINALITY r(id,kind,actor_id,actor_name,workspace_id,target_kind,target_id,item_id,detail,created_at,n);
+        EXECUTE format($compare$
+          SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY n), '[]')
+          FROM fvoci.%I($1,$2) WITH ORDINALITY r(id,kind,actor_id,actor_name,workspace_id,target_kind,target_id,item_id,detail,created_at,n)
+        $compare$, current_setting('perf240.candidate')) INTO actual USING org,lim;
         IF actual IS DISTINCT FROM expected THEN
           RAISE EXCEPTION 'recent mismatch: actor %, organization %, limit %', who,org,lim;
         END IF;
