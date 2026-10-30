@@ -5,3 +5,4 @@ mod contracts;
 mod home_marks;
 mod notifications;
 mod personal_marks;
+mod recent_activity;
