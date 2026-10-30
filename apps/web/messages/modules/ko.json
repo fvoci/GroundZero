@@ -152,5 +152,7 @@
   "modules_item_group_activities": "활동",
   "modules_views_label": "모듈 보기",
   "modules_view_items": "항목",
-  "modules_view_calendar": "달력"
+  "modules_view_calendar": "달력",
+  "modules_summary_leader": "리더 {name}",
+  "modules_summary_no_leader": "리더 없음"
 }

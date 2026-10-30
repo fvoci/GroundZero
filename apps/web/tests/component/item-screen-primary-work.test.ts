@@ -113,7 +113,7 @@ it('shows loading instead of invented leader and member values until the profile
   expect(toggle).toHaveTextContent('비공개');
   const status = within(toggle).getByRole('status');
   request.resolve(profile);
-  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 김리더 · 멤버 1명 · 비공개'));
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 리더 김리더 · 멤버 1명 · 비공개'));
   expect(status).toBeInTheDocument();
   expect(status).not.toHaveTextContent('불러오는 중…');
 });
@@ -135,7 +135,7 @@ it('shows a collapsed profile failure and retries from the summary without openi
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(api.itemProfile).toHaveBeenCalledTimes(2);
   retryRequest.resolve(profile);
-  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 김리더 · 멤버 1명 · 비공개'));
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 리더 김리더 · 멤버 1명 · 비공개'));
   expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
 });
@@ -143,7 +143,7 @@ it('shows a collapsed profile failure and retries from the summary without openi
 it('shows a genuinely empty leader and member list only after a successful read (SR-259-1)', async () => {
   vi.mocked(api.itemProfile).mockResolvedValue({ ...profile, leader: null, members: [] });
   const toggle = await mount();
-  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 없음 · 멤버 0명 · 비공개'));
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 리더 없음 · 멤버 0명 · 비공개'));
   expect(toggle).not.toHaveTextContent('불러오는 중…');
   expect(toggle).not.toHaveTextContent('항목 정보를 불러오지 못했습니다.');
 });
@@ -176,14 +176,16 @@ it.each(['success', 'failure'] as const)(
     expect(toggle).not.toHaveTextContent('김리더');
     expect(toggle).not.toHaveTextContent('항목 정보를 불러오지 못했습니다.');
     next.resolve({ ...profile, leader: { user_id: 'second-leader', display_name: '다음 리더' } });
-    await waitFor(() => expect(toggle).toHaveTextContent('진행 · 다음 리더 · 멤버 1명 · 비공개'));
+    await waitFor(() =>
+      expect(toggle).toHaveTextContent('진행 · 리더 다음 리더 · 멤버 1명 · 비공개'),
+    );
   },
 );
 
 it('starts with a summary and keeps unsaved title edits visible when collapse is requested', async () => {
   const toggle = await mount();
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 김리더 · 멤버 1명 · 비공개'));
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 리더 김리더 · 멤버 1명 · 비공개'));
   expect(screen.queryByRole('form', { name: '항목 정보' })).toBeNull();
   await fireEvent.click(toggle);
   await fireEvent.input(screen.getByLabelText('제목', { exact: true }), {
@@ -197,6 +199,21 @@ it('starts with a summary and keeps unsaved title edits visible when collapse is
   });
   await fireEvent.click(toggle);
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+it.each([
+  ['ko', profile.leader, '리더 김리더'],
+  ['ko', null, '리더 없음'],
+  ['en', profile.leader, 'Leader 김리더'],
+  ['en', null, 'No leader'],
+] as const)('labels the summary leader in %s as %s', async (locale, leader, expected) => {
+  await setLocale(locale, { reload: false });
+  vi.mocked(api.itemProfile).mockResolvedValue({ ...profile, leader });
+  render(ItemScreen, { workspace, itemId: item.id, workspaces: [workspace] });
+  const toggle = await screen.findByRole('button', {
+    name: locale === 'ko' ? /^항목 정보/ : /^Item details/,
+  });
+  await waitFor(() => expect(within(toggle).getByRole('status')).toHaveTextContent(expected));
 });
 
 it('opens only the first entry after creating an empty item', async () => {

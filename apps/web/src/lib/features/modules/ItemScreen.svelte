@@ -642,7 +642,9 @@
             <span id="item-info-profile-status" role="status" class="text-sm text-muted-foreground">
               {itemStatusLabel(current.status)} ·
               {#if profileRead?.status === 'ready'}
-                {profileRead.profile.leader?.display_name ?? m.modules_none()} · {m.modules_member_count(
+                {profileRead.profile.leader === null
+                  ? m.modules_summary_no_leader()
+                  : m.modules_summary_leader({ name: profileRead.profile.leader.display_name })} · {m.modules_member_count(
                   { count: profileRead.profile.members.length },
                 )}
               {:else if profileRead?.status === 'failed'}
