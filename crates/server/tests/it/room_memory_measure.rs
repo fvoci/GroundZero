@@ -18,7 +18,8 @@
 //! `/proc/self/status`의 kB는 KiB다. RSS/HWM에는 서버와 시험 클라이언트 소켓이 함께 든다.
 //! 클라이언트는 CRDT 복제본 없이 초기 상태를 받아 버리고, 편집은 보내지 않는다.
 //! 기준선은 서버·세션·ID 목록 준비 뒤 방 0개일 때다. 해제 뒤 allocator가 RSS를 보유할 수 있다.
-//! 결과는 `room-memory.json`에도 남는다. 같은 데이터 재사용은 저장 상태 검사로 거절한다.
+//! 결과는 `room-memory.json`에도 남는다. 현재 T6는 모든 본문을 CRDT로 저장하므로 저장 상태가 1000건이다.
+//! 저장 상태를 지우지 않고 재며, 전 측정의 JSON→yrs 초기화 경로와 다르다는 점을 비교 제한으로 남긴다.
 
 use crate::common::{self, TestUser};
 use std::path::PathBuf;
@@ -88,8 +89,17 @@ async fn room_memory_measure() {
         .await
         .unwrap();
     assert_eq!(
-        saved, 0,
-        "stored collab state changes the loading path; regenerate T6 data"
+        saved, 1000,
+        "current T6 stores every document through CRDT; use fresh complete T6 data"
+    );
+    let pending: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM fvoci.document_collab_states WHERE pending")
+            .fetch_one(&mut fixture)
+            .await
+            .unwrap();
+    assert_eq!(
+        pending, 0,
+        "T6 generation must finish persisting every edit"
     );
     fixture.close().await.unwrap();
     let files = root.join("source-files").to_string_lossy().into_owned();
@@ -200,7 +210,8 @@ async fn room_memory_measure() {
     let delta = i64::try_from(opened["rss_kib"].as_u64().unwrap()).unwrap()
         - i64::try_from(baseline["rss_kib"].as_u64().unwrap()).unwrap();
     let result = json!({
-        "rooms": count, "source_db": database, "baseline": baseline, "opened": opened, "closed": closed,
+        "rooms": count, "source_db": database, "stored_collab_states": saved,
+        "pending_collab_states": pending, "baseline": baseline, "opened": opened, "closed": closed,
         "rss_delta_kib": delta, "rss_per_room_kib": delta as f64 / count as f64,
         "open_secs": open_secs, "close_secs": close_secs, "measure_secs": started.elapsed().as_secs_f64(),
     });
