@@ -164,14 +164,13 @@
     <div class="flex items-center gap-3">
       <Switch.Root
         id="organization-public-links"
-        checked={publicLinks}
-        onCheckedChange={changeLinks}
+        bind:checked={() => publicLinks, changeLinks}
         disabled={busy}
         aria-describedby="organization-links-error"
-        class="inline-flex h-6 w-10 shrink-0 items-center rounded-full border border-input-border bg-muted px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary"
+        class="inline-flex h-6 w-10 shrink-0 items-center rounded-full border border-input-border bg-muted px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=checked]:bg-primary"
       >
         <Switch.Thumb
-          class="block size-4 rounded-full bg-background transition-transform data-checked:translate-x-4"
+          class="block size-4 rounded-full bg-background transition-transform data-[state=checked]:translate-x-4"
         />
       </Switch.Root>
       <Label for="organization-public-links">{m.organizations_public_links()}</Label>

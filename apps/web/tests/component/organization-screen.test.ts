@@ -234,6 +234,17 @@ it('confirms disabling public links and saves only changed fields including expl
   });
 });
 
+it('keeps public links enabled when the disable confirmation is cancelled', async () => {
+  view('settings');
+  const links = await screen.findByRole('switch', { name: '공개 링크 허용' });
+  expect(links).toBeChecked();
+  await fireEvent.click(links);
+  const dialog = await screen.findByRole('dialog');
+  await fireEvent.click(within(dialog).getByRole('button', { name: '취소' }));
+  expect(links).toBeChecked();
+  expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+});
+
 it('shows unavailable and a home link on 403', async () => {
   vi.mocked(api.organization).mockRejectedValue(new ApiError(403, 'forbidden', 'forbidden'));
   view();
