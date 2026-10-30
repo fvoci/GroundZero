@@ -173,8 +173,7 @@ export const modulesApi = {
   itemProfile: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
   /** 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
-  async setItemProfile(
-    this: void,
+  setItemProfile: async (
     itemId: string,
     baseVersion: number,
     profile: {
@@ -186,7 +185,7 @@ export const modulesApi = {
       status: ItemStatus;
       details: ItemDetailsView;
     },
-  ): Promise<{ kind: 'saved' } | { kind: 'conflict'; current: ItemProfileView }> {
+  ): Promise<{ kind: 'saved' } | { kind: 'conflict'; current: ItemProfileView }> => {
     const { status, json } = await request(
       'PUT',
       `/api/items/${encodeURIComponent(itemId)}/profile`,
@@ -252,13 +251,12 @@ export const modulesApi = {
     }),
   item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
   /** 항목 정보(제목·설명·공개 범위) 고치기. 읽은 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
-  async updateItem(
-    this: void,
+  updateItem: async (
     id: string,
     baseVersion: number,
     /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
     input: { title: string; description: string; visibility?: 'workspace' | 'private' },
-  ): Promise<{ kind: 'updated'; item: ItemView } | { kind: 'conflict'; current: ItemView }> {
+  ): Promise<{ kind: 'updated'; item: ItemView } | { kind: 'conflict'; current: ItemView }> => {
     const { status, json } = await request('PUT', `/api/items/${encodeURIComponent(id)}`, {
       base_version: baseVersion,
       ...input,

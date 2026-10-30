@@ -307,21 +307,20 @@ export const documentsApi = {
       before_id: beforeId,
     }),
   /** 문서 한 건. 브라우저 캐시가 ETag로 서버에 재검증하고(304면 저장본), 응답의 ETag를 문서에 붙인다(D-77). */
-  async document(this: void, id: string): Promise<DocumentView> {
+  document: async (id: string): Promise<DocumentView> => {
     const { status, json, etag } = await request('GET', `/api/documents/${encodeURIComponent(id)}`);
     if (status !== 200) fail(status, json);
     return withEtag(parseDocument(json), etag);
   },
   myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
   /** 내 노트 만들기. `expectedUser`는 이 만들기를 시작한 화면의 사용자 id(서버가 세션과 다르면 409 `account_changed`). */
-  async createNote(
-    this: void,
+  createNote: async (
     expectedUser: string,
     requestId: string,
     title: string,
     parentId: string | null = null,
     templateId: string | null = null,
-  ): Promise<DocumentView> {
+  ): Promise<DocumentView> => {
     const { status, json } = await request(
       'POST',
       '/api/me/notes',

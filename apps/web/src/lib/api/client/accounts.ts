@@ -70,13 +70,13 @@ export const accountsApi = {
       oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),
     })),
   /** 로그인하지 않았으면 undefined. */
-  async me(this: void): Promise<Me | undefined> {
+  me: async (): Promise<Me | undefined> => {
     const { status, json } = await request('GET', '/api/me');
     if (status === 401) return undefined;
     if (status !== 200) fail(status, json);
     return parseMe(json);
   },
-  async logout(this: void): Promise<string> {
+  logout: async (): Promise<string> => {
     return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
   },
 };
