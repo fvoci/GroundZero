@@ -38,7 +38,7 @@
 
 `cargo xtask check`는 외부 서비스를 띄우지 않는다. 데이터베이스가 필요한 통합 테스트는 `cargo xtask test`에서만 돌고, `DATABASE_URL`이 없으면 건너뛰지 않고 실패한다.
 
-amd64·rootful Docker의 기본·OIDC 통합 시험은 호스트 사용자 UID/GID로 ci-base 안에서 빌드·실행하며, HOME·Cargo 캐시·빌드·임시 파일을 `target/test-container/`에 따로 둔다. 비amd64·rootful은 이유를 출력하고 기존 호스트 경로로 자동 실행한다. rootless Docker의 기본 실행은 서비스 기동 전에 거절하며 `--host`를 안내한다. 이미지 digest는 `FVOCI_TEST_CI_BASE_IMAGE_DIGEST=sha256:<64자리 hex>`로 지정하거나, 기존 `gh` 접근으로 저장소의 `CI_BASE_IMAGE_DIGEST` 변수를 읽는다. 태그로 대체하지 않으며, 필요한 digest 조회·pull이 실패하면 시험도 실패한다. `--external-services`는 CI가 제공한 서비스를 쓰는 기존 경로다.
+UID 매핑이 없는 amd64 Docker의 기본·OIDC 통합 시험은 호스트 사용자 UID/GID로 ci-base 안에서 빌드·실행하며, HOME·Cargo 캐시·빌드·임시 파일을 `target/test-container/`에 따로 둔다. UID 매핑이 없는 비amd64 환경은 이유를 출력하고 기존 호스트 경로로 자동 실행한다. rootless 또는 userns-remap Docker의 기본 실행은 서비스 기동 전에 거절하며 `--host`를 안내한다. 이미지 digest는 `FVOCI_TEST_CI_BASE_IMAGE_DIGEST=sha256:<64자리 hex>`로 지정하거나, 기존 `gh` 접근으로 저장소의 `CI_BASE_IMAGE_DIGEST` 변수를 읽는다. 태그로 대체하지 않으며, 필요한 digest 조회·pull이 실패하면 시험도 실패한다. `--external-services`는 CI가 제공한 서비스를 쓰는 기존 경로다.
 
 `cargo xtask down`은 이 체크아웃의 개발·시험·브라우저·Supabase 시험 프로젝트의 컨테이너·Compose 프로젝트 네트워크와 DB·검색·Keycloak 볼륨을 지운다. `cargo xtask test --supabase --keep`으로 남긴 시험 DB도 사라진다.
 `target/dev-files` 첨부는 남는다. 기존 데이터를 지우기 전에 보존 범위와 사용자 승인을 확인한다.

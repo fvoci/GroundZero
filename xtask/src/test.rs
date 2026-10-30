@@ -13,8 +13,8 @@
 //! 단계를 실패로 끝내고 실패와 같은 정리를 한다(#93, [`compose::watch_interrupts`]). `--external-services`는 Compose를
 //! 쓰지 않으므로 잠그지 않는다.
 //!
-//! amd64·rootful Docker의 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다.
-//! 비amd64·rootful은 이유를 출력하고 호스트 경로로 실행한다. rootless는 기본 실행을 거절하고 `--host`를 안내한다.
+//! UID 매핑이 없는 amd64 Docker의 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다.
+//! UID 매핑이 없는 비amd64는 이유를 출력하고 호스트 경로로 실행한다. 매핑이 있으면 기본 실행을 거절하고 `--host`를 안내한다.
 //! 컨테이너 빌드의 HOME·Cargo 캐시·target·임시 파일은 `target/test-container` 안에서 호스트 빌드와 분리한다.
 
 use std::ffi::OsString;
@@ -220,16 +220,22 @@ enum ExecutionChoice {
     Unsupported(&'static str),
 }
 
-fn select_execution(architecture: &str, rootless: bool) -> ExecutionChoice {
-    if rootless {
+fn select_execution(architecture: &str, remapped: bool) -> ExecutionChoice {
+    if remapped {
         ExecutionChoice::Unsupported(
-            "rootless Docker는 아직 지원하지 않습니다. --host로 실행하세요",
+            "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요",
         )
     } else if matches!(architecture, "amd64" | "x86_64") {
         ExecutionChoice::Container
     } else {
         ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다")
     }
+}
+
+fn user_is_remapped(options: &[String]) -> bool {
+    options
+        .iter()
+        .any(|option| matches!(option.as_str(), "name=rootless" | "name=userns"))
 }
 
 fn prepare_test_container(
@@ -248,11 +254,8 @@ fn prepare_test_container(
         .context("read Docker security options before selecting the test runner")?;
     let options: Option<Vec<String>> =
         serde_json::from_str(&options).context("parse Docker security options")?;
-    let rootless = options
-        .unwrap_or_default()
-        .iter()
-        .any(|option| option == "name=rootless");
-    match select_execution(std::env::consts::ARCH, rootless) {
+    let remapped = user_is_remapped(&options.unwrap_or_default());
+    match select_execution(std::env::consts::ARCH, remapped) {
         ExecutionChoice::Container => Ok(Some(TestContainer::new(root, compose, sh)?)),
         ExecutionChoice::Host(reason) => {
             println!("==> {reason}");
@@ -544,7 +547,7 @@ mod tests {
     use crate::compose::tests::{assert_held, scratch_root};
 
     #[test]
-    fn amd64_rootful_uses_the_container() {
+    fn amd64_unmapped_uses_the_container() {
         for architecture in ["amd64", "x86_64"] {
             assert_eq!(
                 select_execution(architecture, false),
@@ -555,7 +558,7 @@ mod tests {
     }
 
     #[test]
-    fn arm64_rootful_uses_the_host_with_a_reason() {
+    fn arm64_unmapped_uses_the_host_with_a_reason() {
         for architecture in ["arm64", "aarch64"] {
             assert_eq!(
                 select_execution(architecture, false),
@@ -566,12 +569,12 @@ mod tests {
     }
 
     #[test]
-    fn amd64_rootless_fails_with_the_host_instruction() {
+    fn amd64_remapped_fails_with_the_host_instruction() {
         for architecture in ["amd64", "x86_64"] {
             assert_eq!(
                 select_execution(architecture, true),
                 ExecutionChoice::Unsupported(
-                    "rootless Docker는 아직 지원하지 않습니다. --host로 실행하세요"
+                    "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
                 ),
                 "{architecture}"
             );
@@ -579,12 +582,40 @@ mod tests {
     }
 
     #[test]
-    fn arm64_rootless_fails_before_the_host_fallback() {
+    fn arm64_remapped_fails_before_the_host_fallback() {
         for architecture in ["arm64", "aarch64"] {
             assert_eq!(
                 select_execution(architecture, true),
                 ExecutionChoice::Unsupported(
-                    "rootless Docker는 아직 지원하지 않습니다. --host로 실행하세요"
+                    "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
+                ),
+                "{architecture}"
+            );
+        }
+    }
+
+    #[test]
+    fn security_options_detect_rootless_and_userns_mapping() {
+        let mut options = vec![
+            "name=seccomp,profile=builtin".to_owned(),
+            "name=cgroupns".to_owned(),
+        ];
+        assert!(!user_is_remapped(&options));
+        for mapping in ["name=rootless", "name=userns"] {
+            options.push(mapping.to_owned());
+            assert!(user_is_remapped(&options), "{mapping}");
+            options.pop();
+        }
+    }
+
+    #[test]
+    fn userns_mapping_is_rejected_on_both_architectures() {
+        let remapped = user_is_remapped(&["name=userns".to_owned()]);
+        for architecture in ["amd64", "x86_64", "arm64", "aarch64"] {
+            assert_eq!(
+                select_execution(architecture, remapped),
+                ExecutionChoice::Unsupported(
+                    "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
                 ),
                 "{architecture}"
             );
