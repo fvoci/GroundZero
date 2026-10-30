@@ -183,21 +183,16 @@ if (measurementRoot !== undefined) {
         // Use one document's performance clock for API dependency boundaries.
         // Keep protocol timing separately: it can place a sequential child's start
         // slightly before its parent's reported responseEnd (observed: 0.593ms).
-        const browserTimings = await page.evaluate(() =>
-          performance
+        const browserTimings = await page.evaluate(() => {
+          return performance
             .getEntriesByType('resource')
-            .flatMap((entry) =>
-              entry instanceof PerformanceResourceTiming
-                ? [
-                    {
-                      url: entry.name,
-                      start: performance.timeOrigin + entry.startTime,
-                      end: performance.timeOrigin + entry.responseEnd,
-                    },
-                  ]
-                : [],
-            ),
-        );
+            .filter((entry) => entry instanceof PerformanceResourceTiming)
+            .map((entry) => ({
+              url: entry.name,
+              start: performance.timeOrigin + entry.startTime,
+              end: performance.timeOrigin + entry.responseEnd,
+            }));
+        });
         const byUrl = new Map<string, { start: number; end: number }[]>();
         for (const timing of browserTimings.sort((a, b) => a.start - b.start)) {
           const entries = byUrl.get(timing.url) ?? [];
