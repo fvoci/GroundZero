@@ -16,6 +16,7 @@ declare global {
 interface SampleRequest {
   method: string;
   path: string;
+  query: Record<string, string>;
   resource: string;
   start: number;
   end: number;
@@ -135,9 +136,11 @@ if (measurementRoot !== undefined) {
           if (response === null) throw new Error('finished request has no response');
           const sizes = await request.sizes();
           const timing = request.timing();
+          const url = new URL(request.url());
           requests.push({
             method: request.method(),
-            path: new URL(request.url()).pathname,
+            path: url.pathname,
+            query: Object.fromEntries(url.searchParams),
             resource: request.resourceType(),
             start: timing.startTime,
             end: timing.startTime + timing.responseEnd,

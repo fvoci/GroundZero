@@ -1,12 +1,39 @@
 //! #210: serve unchanged product routing and T6 data for the browser measurement.
 //! Run only through tools/measure-perf.sh in the isolated test Compose stack.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use fvoci_server::features::accounts::{SESSION_COOKIE, VerifiedIdentity, start_session};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
+
+fn verify_web_build(web: &Path, head: &str) -> Result<(), std::io::Error> {
+    if !web.join("index.html").is_file() {
+        return Err(std::io::Error::other("build the production web first"));
+    }
+    if std::fs::read_to_string(web.join(".perf-head"))?.trim() != head.trim() {
+        return Err(std::io::Error::other(
+            "web bundle is not from the current HEAD",
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn web_build_rejects_missing_or_stale_evidence() -> Result<(), Box<dyn std::error::Error>> {
+    let web = std::env::temp_dir().join(format!("fvoci-perf-web-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir(&web)?;
+    assert!(verify_web_build(&web, "current").is_err());
+    std::fs::write(web.join("index.html"), "fixture")?;
+    assert!(verify_web_build(&web, "current").is_err());
+    std::fs::write(web.join(".perf-head"), "old\n")?;
+    assert!(verify_web_build(&web, "current").is_err());
+    std::fs::write(web.join(".perf-head"), "current\n")?;
+    verify_web_build(&web, "current")?;
+    std::fs::remove_dir_all(web)?;
+    Ok(())
+}
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "#210 baseline; isolated T6 stack and production web build required"]
@@ -21,10 +48,13 @@ async fn serve_t6() -> Result<(), Box<dyn std::error::Error>> {
     let origin = format!("http://{}", listener.local_addr()?);
     let files = root.join("source-files").to_string_lossy().into_owned();
     let web = std::env::current_dir()?.join("../../apps/web/dist");
-    assert!(
-        web.join("index.html").is_file(),
-        "build the production web first"
-    );
+    let head = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    if !head.status.success() {
+        return Err("cannot determine the measurement HEAD".into());
+    }
+    verify_web_build(&web, std::str::from_utf8(&head.stdout)?)?;
     let config = fvoci_server::config::Config::from_lookup(|key| match key {
         "DATABASE_URL" => Some(database.to_string()),
         "FVOCI_PUBLIC_URL" => Some(origin.clone()),

@@ -1,4 +1,6 @@
--- #210 measurement only. psql variables: actor, item. No product DDL or policy changes.
+-- #210 measurement only. actor/item/workspace are the fixture; replay arguments come
+-- from db-arguments.json (first observed request in repeat 1 of each named screen).
+-- No product DDL or policy changes.
 \pset pager off
 \echo schema and data shape
 SELECT version();
@@ -31,9 +33,9 @@ ROLLBACK;
 BEGIN;
 SET LOCAL ROLE fvoci_app;
 SELECT set_config('app.user_id', :'actor', true);
-EXPLAIN (ANALYZE, BUFFERS) SELECT fvoci.app_home(:'org'::uuid, 'Asia/Seoul');
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM fvoci.app_my_tasks(:'org'::uuid, '2026-10-30'::date);
-EXPLAIN (ANALYZE, BUFFERS) SELECT fvoci.app_calendar(:'workspace'::uuid, '2026-09-28'::date, '2026-11-08'::date, 'Asia/Seoul');
+EXPLAIN (ANALYZE, BUFFERS) SELECT fvoci.app_home(:'home_org'::uuid, :'home_tz');
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM fvoci.app_my_tasks(:'tasks_org'::uuid, :'today'::date);
+EXPLAIN (ANALYZE, BUFFERS) SELECT fvoci.app_calendar(:'calendar_workspace'::uuid, :'calendar_from'::date, :'calendar_to'::date, :'calendar_tz', nullif(:'calendar_module', '')::uuid, nullif(:'calendar_item', '')::uuid);
 EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM fvoci.app_recent_activity(:'org'::uuid, 20);
 ROLLBACK;
 \echo identical item read with the product RLS policy, app role
