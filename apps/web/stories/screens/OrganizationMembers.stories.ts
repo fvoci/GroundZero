@@ -26,6 +26,18 @@ export const Default: Story = {
     await expect(canvas.getAllByRole('tab')).toHaveLength(4);
     await expect(canvas.getByRole('tab', { name: '멤버 50명' })).toBeVisible();
     const filter = canvas.getByRole('searchbox', { name: '이름·이메일로 멤버 검색' });
+    const status = canvas.getByRole('status');
+    await expect(status.textContent).toBe('');
+    await expect(getComputedStyle(status).display).toBe('block');
+    await expect(getComputedStyle(status).visibility).toBe('visible');
+    await userEvent.type(filter, '없는 이름');
+    await expect(canvas.getByRole('status')).toBe(status);
+    await expect(status).toHaveTextContent('검색 조건에 맞는 멤버가 없습니다.');
+    await expect(status).toBeVisible();
+    await userEvent.clear(filter);
+    await expect(canvas.getByRole('status')).toBe(status);
+    await expect(status.textContent).toBe('');
+    await expect(getComputedStyle(status).display).toBe('block');
     await userEvent.type(filter, 'address.49@');
     await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
     await expect(canvas.getByRole('tab', { name: '멤버 50명' })).toBeVisible();

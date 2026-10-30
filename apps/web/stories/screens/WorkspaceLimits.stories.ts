@@ -50,6 +50,19 @@ export const Default: Story = {
     );
     await expect(canvas.getByRole('heading', { name: '멤버 50명' })).toBeVisible();
     const filter = canvas.getByRole('searchbox', { name: '이름·이메일로 멤버 검색' });
+    const status = canvas.getByTestId('workspace-member-search-status');
+    await expect(status).toHaveAttribute('role', 'status');
+    await expect(status.textContent).toBe('');
+    await expect(getComputedStyle(status).display).toBe('block');
+    await expect(getComputedStyle(status).visibility).toBe('visible');
+    await userEvent.type(filter, '없는 이름');
+    await expect(canvas.getByTestId('workspace-member-search-status')).toBe(status);
+    await expect(status).toHaveTextContent('검색 조건에 맞는 멤버가 없습니다.');
+    await expect(status).toBeVisible();
+    await userEvent.clear(filter);
+    await expect(canvas.getByTestId('workspace-member-search-status')).toBe(status);
+    await expect(status.textContent).toBe('');
+    await expect(getComputedStyle(status).display).toBe('block');
     await userEvent.type(filter, 'research-collaborator-50.');
     await expect(within(canvas.getByTestId('member-list')).getAllByRole('listitem')).toHaveLength(
       1,

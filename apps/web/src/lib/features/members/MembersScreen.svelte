@@ -44,7 +44,8 @@
     view?.members.filter(
       (member) =>
         member.display_name.toLocaleLowerCase().includes(memberQuery) ||
-        (member.email?.toLocaleLowerCase().includes(memberQuery) ?? false),
+        (view?.can_manage_members &&
+          (member.email?.toLocaleLowerCase().includes(memberQuery) ?? false)),
     ) ?? [],
   );
   let error = $state<string | undefined>(undefined);
@@ -355,14 +356,16 @@
     <h2 class="font-semibold">{m.organizations_member_count({ count: v.members.length })}</h2>
     {#if v.members.length > 10}
       <div class="flex min-w-0 flex-col gap-1">
-        <Label for="workspace-member-filter">{m.members_filter()}</Label>
+        <Label for="workspace-member-filter"
+          >{v.can_manage_members ? m.members_filter() : m.members_filter_name()}</Label
+        >
         <Input id="workspace-member-filter" type="search" bind:value={memberFilter} />
       </div>
     {/if}
     <p
       role="status"
-      hidden={v.members.length === 0 || filteredMembers.length > 0}
-      class="text-sm text-muted-foreground empty:hidden"
+      data-testid="workspace-member-search-status"
+      class="text-sm text-muted-foreground"
     >
       {v.members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
     </p>

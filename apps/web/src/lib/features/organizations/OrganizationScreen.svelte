@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Organization } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import ManagementFrame from '$lib/features/common/ManagementFrame.svelte';
@@ -12,6 +12,8 @@
   import OrganizationWorkspaces from './OrganizationWorkspaces.svelte';
   import OrganizationSettings from './OrganizationSettings.svelte';
   import { org } from '$lib/org.svelte';
+  import { organizationsApi } from './api';
+  import type { OrganizationMember } from './model';
 
   interface Props {
     organizationId: string;
@@ -21,24 +23,42 @@
   }
   const { organizationId, tab, meId, onchanged }: Props = $props();
   let organization = $state<Organization>();
-  let memberCount = $state<number>();
+  let members = $state<OrganizationMember[]>();
+  const memberCount = $derived(members?.length);
   let error = $state('');
   let unavailable = $state(false);
   let disposed = false;
-  onMount(() => {
-    void load();
-    return () => {
-      disposed = true;
-    };
+  let generation = 0;
+  onDestroy(() => {
+    disposed = true;
   });
-  async function load(): Promise<void> {
+  const loadKey = $derived(JSON.stringify([organizationId, meId]));
+  $effect(() => {
+    if (loadKey !== '')
+      untrack(() => {
+        organization = undefined;
+        members = undefined;
+        void load();
+      });
+  });
+  async function load(refreshMembers = true): Promise<void> {
+    const sequence = ++generation;
+    const id = organizationId;
+    const user = meId;
+    const current = (): boolean =>
+      !disposed && sequence === generation && organizationId === id && meId === user;
     error = '';
     unavailable = false;
     try {
-      const found = await api.organization(organizationId);
-      if (!disposed) organization = found;
+      const [found, list] = await Promise.all([
+        api.organization(id),
+        refreshMembers ? organizationsApi.members(id) : Promise.resolve(undefined),
+      ]);
+      if (!current()) return;
+      organization = found;
+      if (refreshMembers) members = list;
     } catch (e: unknown) {
-      if (disposed) return;
+      if (!current()) return;
       unavailable = e instanceof ApiError && (e.status === 403 || e.status === 404);
       error = unavailable
         ? m.organizations_unavailable()
@@ -86,7 +106,7 @@
   }
   function changed(): void {
     onchanged();
-    void load();
+    void load(false);
   }
   function settingsChanged(saved: Organization): void {
     organization = saved;
@@ -108,7 +128,7 @@
   >
 {:else if error !== ''}
   <Button variant="outline" onclick={() => void load()}>{m.common_retry()}</Button>
-{:else if organization === undefined}
+{:else if organization === undefined || members === undefined}
   <div class="animate-pulse space-y-4" aria-label={m.app_loading()} aria-busy="true">
     <div class="h-8 w-1/2 rounded bg-muted"></div>
     <div class="h-48 rounded bg-muted"></div>
@@ -125,10 +145,11 @@
         {organizationId}
         {isAdmin}
         {meId}
+        {members}
         onchanged={changed}
         onunavailable={noAccess}
-        oncountchange={(count: number) => {
-          memberCount = count;
+        onmemberschange={(list: OrganizationMember[]) => {
+          members = list;
         }}
       />
     {:else if tab === 'invitations'}

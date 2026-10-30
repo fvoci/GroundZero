@@ -40,6 +40,12 @@ for (const scale of [100, 200] as const) {
     }
     await expect(page.getByRole('tab')).toHaveCount(4);
     await expect(page.getByRole('list', { name: '멤버' })).toBeVisible();
+    const searchStatus = page.getByRole('tabpanel').getByRole('status');
+    await expect(searchStatus).toHaveCount(1);
+    await expect(searchStatus).toHaveText('');
+    await expect(searchStatus).toHaveCSS('display', 'block');
+    await expect(searchStatus).toHaveCSS('visibility', 'visible');
+    await expect(searchStatus).not.toHaveAttribute('hidden');
     await expect(page.getByRole('tab', { name: '멤버 2명', exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox')).toHaveCount(0);
     const memberMenu = page.locator(`#org-member-menu-${memberId}`);
@@ -257,5 +263,46 @@ for (const scale of [100, 200] as const) {
     await expect(member.page.getByRole('list', { name: '멤버' })).not.toContainText(
       testUser('test-user').email,
     );
+  });
+
+  test(`organization direct tabs reuse the initial members at ${String(scale)}%`, async ({
+    signIn,
+  }, testInfo) => {
+    const { page, api } = await signIn('test-user');
+    const organization = await api.initialOrganization();
+    const membersPath = `/api/organizations/${organization.id}/members`;
+    const count = list(await api.get(membersPath)).length;
+    let reads = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'GET' && new URL(request.url()).pathname === membersPath) reads += 1;
+    });
+    const tabs = [
+      { path: 'invitations', label: '초대' },
+      { path: 'workspaces', label: '공간' },
+      { path: 'settings', label: '설정' },
+    ];
+    for (const [index, tab] of tabs.entries()) {
+      await page.goto(`/o/${organization.id}/${tab.path}`);
+      await expectViewport(page, testInfo.project.name === 'narrow-375');
+      if (scale === 200) {
+        await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+        await page.evaluate(() => {
+          document.documentElement.classList.add('dark');
+        });
+      }
+      const memberTab = page.getByRole('tab', { name: `멤버 ${String(count)}명`, exact: true });
+      await expect(memberTab).toBeVisible();
+      expect(reads).toBe(index + 1);
+      await memberTab.click();
+      await expect(page.getByRole('list', { name: '멤버' }).getByRole('listitem')).toHaveCount(
+        count,
+      );
+      expect(reads).toBe(index + 1);
+      await page.getByRole('tab', { name: tab.label, exact: true }).click();
+      await expect(memberTab).toBeVisible();
+      expect(reads).toBe(index + 1);
+      expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
+      expect(await pageOverflows(page)).toBe(false);
+    }
   });
 }

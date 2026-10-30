@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import { formatInstant } from '$lib/display';
   import { roleLabel } from '$lib/features/members/roles';
@@ -19,21 +19,28 @@
     organizationId: string;
     isAdmin: boolean;
     meId: string;
+    members: OrganizationMember[];
     onchanged: () => void;
     onunavailable: () => void;
-    oncountchange: (count: number) => void;
+    onmemberschange: (members: OrganizationMember[]) => void;
   }
-  const { organizationId, isAdmin, meId, onchanged, onunavailable, oncountchange }: Props =
-    $props();
-  let members = $state<OrganizationMember[]>();
+  const {
+    organizationId,
+    isAdmin,
+    meId,
+    members,
+    onchanged,
+    onunavailable,
+    onmemberschange,
+  }: Props = $props();
   let filter = $state('');
   const query = $derived(filter.trim().toLocaleLowerCase());
   const filteredMembers = $derived(
-    members?.filter(
+    members.filter(
       (member) =>
         member.display_name.toLocaleLowerCase().includes(query) ||
         (isAdmin && (member.email?.toLocaleLowerCase().includes(query) ?? false)),
-    ) ?? [],
+    ),
   );
   let error = $state('');
   let busy = $state(false);
@@ -45,23 +52,19 @@
   let previewSeq = 0;
   let disposed = false;
   const current = (): boolean => !disposed;
-  const adminCount = $derived(members?.filter((member) => member.role === 'admin').length ?? 0);
+  const adminCount = $derived(members.filter((member) => member.role === 'admin').length);
   const lastAdmin = (member: OrganizationMember): boolean =>
     member.role === 'admin' && adminCount === 1;
-  onMount(() => {
-    void load();
-    return () => {
-      disposed = true;
-    };
+  onDestroy(() => {
+    disposed = true;
   });
   async function load(): Promise<void> {
     error = '';
     try {
       const list = await organizationsApi.members(organizationId);
       if (!disposed) {
-        members = list;
         if (list.length <= 10) filter = '';
-        oncountchange(list.length);
+        onmemberschange(list);
       }
     } catch (e: unknown) {
       if (disposed) return;
@@ -173,97 +176,84 @@
 </script>
 
 <h2 id="organization-members-heading" tabindex="-1" class="font-semibold">
-  {members === undefined
-    ? m.organizations_members()
-    : m.organizations_member_count({ count: members.length })}
+  {m.organizations_member_count({ count: members.length })}
 </h2>
 <p role="alert" class="text-sm text-destructive empty:hidden">{error}</p>
 {#if error !== ''}<Button variant="outline" onclick={() => void load()}>{m.common_retry()}</Button
   >{/if}
-{#if members === undefined && error === ''}
-  <div class="animate-pulse space-y-3" aria-label={m.app_loading()} aria-busy="true">
-    {#each [1, 2, 3] as n (n)}<div class="h-16 rounded bg-muted"></div>{/each}
+{#if members.length > 10}
+  <div class="flex min-w-0 flex-col gap-1">
+    <Label for="organization-member-filter"
+      >{isAdmin ? m.members_filter() : m.members_filter_name()}</Label
+    >
+    <Input id="organization-member-filter" type="search" bind:value={filter} />
   </div>
-{:else if members !== undefined}
-  {#if members.length > 10}
-    <div class="flex min-w-0 flex-col gap-1">
-      <Label for="organization-member-filter"
-        >{isAdmin ? m.members_filter() : m.members_filter_name()}</Label
+{/if}
+{#if members.length === 0}<p>{m.organizations_members_empty()}</p>{/if}
+<p role="status" class="text-sm text-muted-foreground">
+  {members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
+</p>
+<ul class="divide-y" aria-label={m.organizations_members()}>
+  {#each filteredMembers as member (member.user_id)}
+    <li class="flex min-w-0 flex-wrap items-center gap-3 py-3">
+      <div class="min-w-0 flex-1 basis-48 wrap-anywhere">
+        <p class="font-medium">{member.display_name}</p>
+        {#if isAdmin && member.email}<p class="text-sm text-muted-foreground">
+            {member.email}
+          </p>{/if}
+      </div>
+      <span class="rounded border px-2 py-1 text-sm">{roleLabel(member.role)}</span>
+      <span class="text-sm text-muted-foreground"
+        >{m.organizations_joined({ when: formatInstant(member.created_at) })}</span
       >
-      <Input id="organization-member-filter" type="search" bind:value={filter} />
-    </div>
-  {/if}
-  {#if members.length === 0}<p>{m.organizations_members_empty()}</p>{/if}
-  <p
-    role="status"
-    hidden={members.length === 0 || filteredMembers.length > 0}
-    class="text-sm text-muted-foreground empty:hidden"
-  >
-    {members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
-  </p>
-  <ul class="divide-y" aria-label={m.organizations_members()}>
-    {#each filteredMembers as member (member.user_id)}
-      <li class="flex min-w-0 flex-wrap items-center gap-3 py-3">
-        <div class="min-w-0 flex-1 basis-48 wrap-anywhere">
-          <p class="font-medium">{member.display_name}</p>
-          {#if isAdmin && member.email}<p class="text-sm text-muted-foreground">
-              {member.email}
+      {#if isAdmin}
+        <div>
+          <DropdownMenu.Root
+            onOpenChange={(open) => {
+              if (open) returnFocus = document.getElementById(`org-member-menu-${member.user_id}`);
+            }}
+          >
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  id={`org-member-menu-${member.user_id}`}
+                  variant="outline"
+                  size="icon"
+                  disabled={busy}
+                  aria-label={m.organizations_member_actions({ name: member.display_name })}
+                  ><EllipsisIcon class="size-4" aria-hidden="true" /></Button
+                >
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content>
+              <DropdownMenu.Item
+                disabled={busy || lastAdmin(member)}
+                aria-describedby={lastAdmin(member) ? `last-admin-${member.user_id}` : undefined}
+                onSelect={() => void setRole(member)}
+              >
+                {member.role === 'admin' ? m.organizations_demote() : m.organizations_promote()}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                disabled={busy || lastAdmin(member)}
+                aria-describedby={lastAdmin(member) ? `last-admin-${member.user_id}` : undefined}
+                onSelect={() => {
+                  askRemove(member);
+                }}>{m.organizations_remove()}</DropdownMenu.Item
+              >
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
+          {#if lastAdmin(member)}<p
+              id={`last-admin-${member.user_id}`}
+              class="mt-1 text-xs text-muted-foreground"
+            >
+              {m.organizations_last_admin()}
             </p>{/if}
         </div>
-        <span class="rounded border px-2 py-1 text-sm">{roleLabel(member.role)}</span>
-        <span class="text-sm text-muted-foreground"
-          >{m.organizations_joined({ when: formatInstant(member.created_at) })}</span
-        >
-        {#if isAdmin}
-          <div>
-            <DropdownMenu.Root
-              onOpenChange={(open) => {
-                if (open)
-                  returnFocus = document.getElementById(`org-member-menu-${member.user_id}`);
-              }}
-            >
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <Button
-                    {...props}
-                    id={`org-member-menu-${member.user_id}`}
-                    variant="outline"
-                    size="icon"
-                    disabled={busy}
-                    aria-label={m.organizations_member_actions({ name: member.display_name })}
-                    ><EllipsisIcon class="size-4" aria-hidden="true" /></Button
-                  >
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content>
-                <DropdownMenu.Item
-                  disabled={busy || lastAdmin(member)}
-                  aria-describedby={lastAdmin(member) ? `last-admin-${member.user_id}` : undefined}
-                  onSelect={() => void setRole(member)}
-                >
-                  {member.role === 'admin' ? m.organizations_demote() : m.organizations_promote()}
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  disabled={busy || lastAdmin(member)}
-                  aria-describedby={lastAdmin(member) ? `last-admin-${member.user_id}` : undefined}
-                  onSelect={() => {
-                    askRemove(member);
-                  }}>{m.organizations_remove()}</DropdownMenu.Item
-                >
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-            {#if lastAdmin(member)}<p
-                id={`last-admin-${member.user_id}`}
-                class="mt-1 text-xs text-muted-foreground"
-              >
-                {m.organizations_last_admin()}
-              </p>{/if}
-          </div>
-        {/if}
-      </li>
-    {/each}
-  </ul>
-{/if}
+      {/if}
+    </li>
+  {/each}
+</ul>
 
 <Dialog.Root
   open={confirm !== undefined}
