@@ -11,7 +11,8 @@ const { parse } = loadSvelte('svelte/compiler');
 const shared = 'apps/web/src/lib/shared/api/index.ts';
 const virtualRoot = '/web-api-check';
 const methods = new Set(['GET', 'PUT', 'POST', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'TRACE']);
-const reasons = new Set(['샴 가3~가5 조립 예정', '가6 판정 예정']);
+const designReason = '설계상 직접 호출하지 않음';
+const reasons = new Set(['샴 가3~가5 조립 예정', designReason]);
 
 export interface Forwarder {
   file: string;
@@ -23,6 +24,7 @@ export interface Unused {
   method: string;
   path: string;
   reason: string;
+  detail?: string;
 }
 export interface Allowlist {
   forwarders: Forwarder[];
@@ -87,7 +89,13 @@ export function readAllowlist(value: unknown): Allowlist {
     }),
     unused: input.unused.map((value: unknown) => {
       const row = record(value);
-      return { method: text(row.method), path: text(row.path), reason: reason(row.reason) };
+      const label = reason(row.reason);
+      return {
+        method: text(row.method),
+        path: text(row.path),
+        reason: label,
+        ...(label === designReason ? { detail: text(row.detail) } : {}),
+      };
     }),
   };
 }

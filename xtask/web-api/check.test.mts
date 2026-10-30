@@ -34,7 +34,7 @@ await test('wrong method fails even when the path exists', () => {
 
 const listedTask: Allowlist = {
   forwarders: [],
-  unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '가6 판정 예정' }],
+  unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '샴 가3~가5 조립 예정' }],
 };
 for (const [method, path] of [
   ['GET', '/api/typo/42'],
@@ -87,7 +87,7 @@ await test('SR-250-4: links use GET and detect a method mismatch', () => {
         { paths: { '/api/tasks/{id}': { post: {} } } },
         {
           forwarders: [],
-          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '가6 판정 예정' }],
+          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '샴 가3~가5 조립 예정' }],
         },
       ),
     /GET \/api\/tasks\/42.*not in OpenAPI/,
@@ -132,7 +132,7 @@ await test('SR-250-12: forwarded links still use GET', () => {
         { paths: { '/api/tasks/{id}': { post: {} } } },
         {
           forwarders: [],
-          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '가6 판정 예정' }],
+          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '샴 가3~가5 조립 예정' }],
         },
       ),
     /GET \/api\/tasks\/42.*not in OpenAPI/,
@@ -531,7 +531,7 @@ await test('comments, prefix checks, unrelated request functions and URL constan
   `);
   const result = checkUsage(input, contract, {
     forwarders: [],
-    unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '가6 판정 예정' }],
+    unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '샴 가3~가5 조립 예정' }],
   });
   assert.equal(result.calls, 0);
 });
@@ -574,7 +574,7 @@ for (const code of [
       () =>
         checkUsage(input, contract, {
           forwarders: [],
-          unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '가6 판정 예정' }],
+          unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '샴 가3~가5 조립 예정' }],
         }),
       /not in OpenAPI|not statically resolvable/,
     );
@@ -586,7 +586,7 @@ const forwarder: Allowlist = {
     {
       file: shared,
       name: 'expectOk',
-      reason: '가6 판정 예정',
+      reason: '설계상 직접 호출하지 않음',
       detail: 'Forward method/path; check callers.',
     },
   ],
@@ -742,7 +742,14 @@ await test('Svelte condition, loop children and const tags retain nested calls',
 await test('unused operations require exact method/path entries; stale and duplicate entries fail', () => {
   const unused: Allowlist = {
     forwarders: [],
-    unused: [{ method: 'GET', path: '/api/tasks/{task_id}', reason: '가6 판정 예정' }],
+    unused: [
+      {
+        method: 'GET',
+        path: '/api/tasks/{task_id}',
+        reason: '설계상 직접 호출하지 않음',
+        detail: 'This fixture has no direct caller; only the exact listed operation is exempt.',
+      },
+    ],
   };
   assert.throws(() => checkUsage(files(''), contract, empty), /unlisted unused operation/);
   assert.deepEqual(checkUsage(files(''), contract, unused).unused, ['GET /api/tasks/{task_id}']);
@@ -758,7 +765,7 @@ await test('unused operations require exact method/path entries; stale and dupli
   );
 });
 
-await test('allowlist accepts exactly the two prescribed reason labels and requires forwarding detail', () => {
+await test('allowlist rejects unknown reasons and requires forwarding detail', () => {
   assert.throws(
     () =>
       readAllowlist({
@@ -770,6 +777,51 @@ await test('allowlist accepts exactly the two prescribed reason labels and requi
   assert.throws(
     () => readAllowlist({ ...forwarder, forwarders: [{ ...forwarder.forwarders[0], detail: '' }] }),
     /nonempty text/,
+  );
+});
+
+await test('design exceptions preserve the required detail for unused operations and forwarders', () => {
+  const reason = '설계상 직접 호출하지 않음';
+  const detail = 'OIDC provider redirects the browser to this callback after login.';
+  const input = {
+    forwarders: [{ ...forwarder.forwarders[0], reason }],
+    unused: [{ method: 'GET', path: '/auth/callback', reason, detail }],
+  };
+  assert.deepEqual(readAllowlist(input), input);
+});
+
+for (const detail of [undefined, null, '', ' \t ', 42]) {
+  await test(`design exceptions require nonempty text detail: ${String(detail)}`, () => {
+    const reason = '설계상 직접 호출하지 않음';
+    assert.throws(
+      () =>
+        readAllowlist({
+          forwarders: [],
+          unused: [{ method: 'GET', path: '/auth/callback', reason, detail }],
+        }),
+      /nonempty text/,
+    );
+    assert.throws(
+      () =>
+        readAllowlist({ ...empty, forwarders: [{ ...forwarder.forwarders[0], reason, detail }] }),
+      /nonempty text/,
+    );
+  });
+}
+
+await test('retired pending judgment reason is rejected for unused operations and forwarders', () => {
+  const reason = '가6 판정 예정';
+  assert.throws(
+    () =>
+      readAllowlist({
+        ...empty,
+        unused: [{ method: 'GET', path: '/auth/callback', reason, detail: 'Still pending.' }],
+      }),
+    /invalid reason/,
+  );
+  assert.throws(
+    () => readAllowlist({ ...empty, forwarders: [{ ...forwarder.forwarders[0], reason }] }),
+    /invalid reason/,
   );
 });
 
