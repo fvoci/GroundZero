@@ -190,11 +190,11 @@
       if (returnFocus !== undefined && returnFocus !== null) {
         event.preventDefault();
         const id = item.id;
+        const target = returnFocus;
         // 버리기 확인과 복제창이 함께 닫히면 두 focus scope의 정리가 끝난 뒤 메뉴로 돌린다(TaskBoard와 같다).
         void tick().then(() => {
           requestAnimationFrame(() => {
-            if (!open && item.id === id && draft.active && returnFocus?.isConnected === true)
-              returnFocus.focus();
+            if (!open && item.id === id && draft.active && target.isConnected) target.focus();
           });
         });
       }
