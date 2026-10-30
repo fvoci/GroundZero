@@ -42,6 +42,8 @@
   let viewWorkspaceId = $state<string>();
   let invitations = $state<Invitation[]>([]);
   let groups = $state<Group[]>([]);
+  let memberFilter = $state('');
+  const memberQuery = $derived(memberFilter.trim().toLocaleLowerCase());
   let error = $state<string | undefined>(undefined);
   let inviteEmail = $state('');
   let inviteRole = $state<Role>('member');
@@ -82,9 +84,23 @@
 
   // 서버의 권한 판정은 읽어 온 공간에만 쓴다. 전환 직후 reset 효과 전에도 새 공간에 넘기지 않는다(D-113).
   const currentView = $derived(viewWorkspaceId === workspace.id ? view : undefined);
+  const filteredMembers = $derived(
+    currentView?.members.filter(
+      (member) =>
+        member.display_name.toLocaleLowerCase().includes(memberQuery) ||
+        (currentView.can_manage_members &&
+          (member.email?.toLocaleLowerCase().includes(memberQuery) ?? false)),
+    ) ?? [],
+  );
   const isAdmin = $derived(currentView?.can_manage_members === true);
   const tabs = $derived([
-    { value: 'members', label: m.organizations_members() },
+    {
+      value: 'members',
+      label:
+        currentView === undefined
+          ? m.organizations_members()
+          : m.organizations_member_count({ count: currentView.members.length }),
+    },
     ...(isAdmin ? [{ value: 'invitations', label: m.members_invite_heading() }] : []),
     { value: 'groups', label: m.members_groups_heading() },
     ...(isAdmin || currentView?.i_am_owner === true
@@ -265,6 +281,7 @@
       if (!current()) return;
       viewWorkspaceId = wsId;
       view = v;
+      if (v.members.length <= 10) memberFilter = '';
       const loadedGroups = await api.groups(wsId);
       if (!current()) return;
       groups = loadedGroups;
@@ -319,6 +336,7 @@
     });
   });
   function reset(id: string): void {
+    memberFilter = '';
     viewWorkspaceId = undefined;
     view = undefined;
     groups = [];
@@ -334,7 +352,12 @@
 </script>
 
 <!-- 탭 본문과 뼈대가 바뀌어도 상태 알림 노드는 유지한다(D-110, SR-258-2). -->
-<p role="status" aria-live="polite" class="sr-only empty:hidden">
+<p
+  role="status"
+  aria-live="polite"
+  data-testid="workspace-management-loading-status"
+  class="sr-only empty:hidden"
+>
   {#if currentView === undefined && loadError === undefined}{m.app_loading()}{/if}
 </p>
 
@@ -400,8 +423,23 @@
     {:else}
       {@const v = currentView}
       {#if activeTab === 'members'}
+        {#if v.members.length > 10}
+          <div class="flex min-w-0 flex-col gap-1">
+            <Label for="workspace-member-filter"
+              >{v.can_manage_members ? m.members_filter() : m.members_filter_name()}</Label
+            >
+            <Input id="workspace-member-filter" type="search" bind:value={memberFilter} />
+          </div>
+        {/if}
+        <p
+          role="status"
+          data-testid="workspace-member-search-status"
+          class="text-sm text-muted-foreground empty:hidden"
+        >
+          {v.members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
+        </p>
         <ul class="flex flex-col divide-y rounded border" data-testid="member-list">
-          {#each v.members as member (member.user_id)}
+          {#each filteredMembers as member (member.user_id)}
             <li class="flex flex-wrap items-center gap-3 px-3 py-2">
               <span class="font-medium">{member.display_name}</span>
               {#if member.is_owner}<Badge variant="secondary">{m.members_owner()}</Badge>{/if}
