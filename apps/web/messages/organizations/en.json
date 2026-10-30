@@ -62,7 +62,16 @@
       }
     }
   ],
-  "organizations_removal_assignments": "release {count} assignments",
+  "organizations_removal_assignments": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "release {count} assignment",
+        "countPlural=other": "release {count} assignments"
+      }
+    }
+  ],
   "organizations_removal_none": "No workspaces, shares or assignments are affected",
   "organizations_removal_body": "Removing {name} from the organization will {impact}.",
   "organizations_member_updated": "Member updated",

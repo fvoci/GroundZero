@@ -24,6 +24,12 @@ it.each([
     'leave 0 workspaces',
   ],
   [m.organizations_removal_shares_end, 'revoke 1 share', 'revoke 2 shares', 'revoke 0 shares'],
+  [
+    m.organizations_removal_assignments,
+    'release 1 assignment',
+    'release 2 assignments',
+    'release 0 assignments',
+  ],
   [m.organizations_member_count, '1 member', '2 members', '0 members'],
 ] as const)('inflects the English organization count: %s', (message, one, other, zero) => {
   expect(message({ count: 1 }, { locale: 'en' })).toBe(one);
