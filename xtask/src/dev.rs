@@ -194,6 +194,22 @@ const DEV_KEYCLOAK_PORT: u16 = 8180;
 /// 시험의 DB를 건드리지 않는다(준비 SQL이 초기 관리자를 정한다). 시험 DB는 tmpfs라 프로젝트를 내릴 때 함께 사라진다.
 /// 하위 단계(새 DB, 기준 SQL, 지문 조회, 첫·둘째 적용) 사이마다 중단 신호를 확인해 남은 단계를 건너뛴다.
 pub fn check_seeds(root: &Path, compose: &Compose, sh: &Shell, pg_port: u16) -> Result<()> {
+    check_seeds_with(root, compose, sh, |database| {
+        compose::prepare_database(
+            sh,
+            &compose::DbUrls::at_database(&format!("127.0.0.1:{pg_port}"), database),
+        )
+    })
+}
+
+/// 같은 준비 SQL 검사를 실행하되 새 DB의 역할·기준 SQL 준비는 호출자가 맡는다.
+/// 컨테이너 시험 실행기는 게시 포트 없이 Compose 네트워크 안에서 DB를 준비한다.
+pub fn check_seeds_with(
+    root: &Path,
+    compose: &Compose,
+    sh: &Shell,
+    prepare_database: impl FnOnce(&str) -> Result<()>,
+) -> Result<()> {
     let database = format!("fvoci_dev_seed_{}", uuid::Uuid::now_v7().simple());
     println!("==> dev seed check on a new database {database}");
     compose.exec(
@@ -206,10 +222,7 @@ pub fn check_seeds(root: &Path, compose: &Compose, sh: &Shell, pg_port: u16) -> 
         "",
     )?;
     compose::check_interrupt()?;
-    compose::prepare_database(
-        sh,
-        &compose::DbUrls::at_database(&format!("127.0.0.1:{pg_port}"), &database),
-    )?;
+    prepare_database(&database)?;
     compose::check_interrupt()?;
     let issuer = issuer(DEV_KEYCLOAK_PORT);
     let empty = table_digests(compose, sh, &database)?;
