@@ -1511,6 +1511,8 @@
   }
   const DRAG_THRESHOLD = 6;
   const SCROLL_EDGE = 48;
+  const DRAG_SCROLL_SPEED = 480;
+  let boardElement = $state<HTMLDivElement | undefined>(undefined);
   let drag = $state<Drag | undefined>(undefined);
   // 끌기를 마친 직후 같은 손짓의 click이 카드를 열지 않게 한다.
   let justDragged = $state(false);
@@ -1565,10 +1567,49 @@
     }
     event.preventDefault();
     window.getSelection()?.removeAllRanges();
-    d.slot = slotAt(d.x, d.y, d.id);
     if (d.y < SCROLL_EDGE) window.scrollBy(0, -16);
     else if (d.y > window.innerHeight - SCROLL_EDGE) window.scrollBy(0, 16);
+    d.slot = slotAt(d.x, d.y, d.id);
   }
+
+  // 포인터를 멈춰도 가장자리에서 가로 스크롤을 계속한다. 속도는 CSS px/초다.
+  $effect(() => {
+    if (drag?.active !== true) return;
+    let previous: number | undefined;
+    let frame: number;
+    const scroll = (time: number): void => {
+      const d = drag;
+      if (d?.active !== true) return;
+      const elapsed = previous === undefined ? 0 : Math.min(time - previous, 32);
+      previous = time;
+      const element = boardElement;
+      if (element !== undefined && element.scrollWidth > element.clientWidth) {
+        const bounds = element.getBoundingClientRect();
+        if (
+          d.x >= bounds.left &&
+          d.x <= bounds.right &&
+          d.y >= bounds.top &&
+          d.y <= bounds.bottom
+        ) {
+          const edge = Math.min(SCROLL_EDGE, bounds.width / 2);
+          const direction = d.x < bounds.left + edge ? -1 : d.x > bounds.right - edge ? 1 : 0;
+          if (direction !== 0 && elapsed > 0) {
+            const before = element.scrollLeft;
+            element.scrollBy({
+              left: (direction * DRAG_SCROLL_SPEED * elapsed) / 1000,
+              behavior: 'instant',
+            });
+            if (element.scrollLeft !== before) d.slot = slotAt(d.x, d.y, d.id);
+          }
+        }
+      }
+      frame = requestAnimationFrame(scroll);
+    };
+    frame = requestAnimationFrame(scroll);
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  });
 
   function onDragEnd(event: PointerEvent): void {
     const d = drag;
@@ -1816,7 +1857,14 @@
   {#if loading}
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
   {:else if view === 'board'}
-    <div class="grid gap-3 @2xl:grid-cols-3" data-testid="task-board">
+    <div
+      bind:this={boardElement}
+      class={[
+        'grid min-w-0 auto-cols-[100%] grid-flow-col gap-3 overflow-x-auto @2xl:snap-none @2xl:auto-cols-auto @2xl:grid-flow-row @2xl:grid-cols-3',
+        drag?.active === true ? 'snap-none' : 'snap-x snap-mandatory',
+      ]}
+      data-testid="task-board"
+    >
       {#each statusNames as lane (lane)}
         <BoardLane
           {lane}

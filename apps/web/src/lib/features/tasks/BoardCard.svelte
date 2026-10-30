@@ -67,7 +67,7 @@
 <li
   data-board-card={t.id}
   class={[
-    'group flex flex-col gap-1.5 rounded-md border bg-card p-2 shadow-xs',
+    'group flex min-w-0 flex-col gap-1.5 rounded-md border bg-card p-2 shadow-xs',
     canWrite && 'cursor-grab',
     dragging && 'opacity-40',
   ]}
@@ -75,78 +75,86 @@
     startDrag(e, t.id, false);
   }}
 >
-  <div class="flex items-start gap-1">
-    {#if canWrite}
-      <span
-        aria-hidden="true"
-        title={m.tasks_drag_handle()}
-        class="-ml-1 shrink-0 cursor-grab touch-none px-1 text-muted-foreground select-none"
-        onpointerdown={(e: PointerEvent) => {
-          startDrag(e, t.id, true);
-        }}
-        oncontextmenu={(e: MouseEvent) => {
-          e.preventDefault();
-        }}>⠿</span
+  <!-- 제목은 전체 폭을 쓰고, DOM의 제목 → 시간 기록 → 메뉴 순서는 유지한다. -->
+  <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-1.5">
+    <div class="col-start-1 row-start-1 flex min-w-0 items-start gap-1">
+      {#if canWrite}
+        <span
+          aria-hidden="true"
+          title={m.tasks_drag_handle()}
+          class="-ml-1 shrink-0 cursor-grab touch-none px-1 text-muted-foreground select-none"
+          onpointerdown={(e: PointerEvent) => {
+            startDrag(e, t.id, true);
+          }}
+          oncontextmenu={(e: MouseEvent) => {
+            e.preventDefault();
+          }}>⠿</span
+        >
+      {/if}
+      <span aria-hidden="true" class="min-w-0 font-mono text-xs text-muted-foreground"
+        >{t.reference ?? ''}</span
       >
-    {/if}
+    </div>
     <button
       type="button"
       data-task-card={t.id}
+      aria-label={`${t.reference ?? ''} ${t.title}`.trim()}
       aria-keyshortcuts={canWrite
         ? 'Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight'
         : undefined}
       onkeydown={(e) => {
         onCardKey(e, t.id);
       }}
-      class="flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      class="col-span-full row-start-2 min-w-0 rounded text-left text-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       onclick={() => {
         if (!justDragged) open(t.id);
       }}
     >
-      <span class="font-mono text-xs text-muted-foreground">{t.reference ?? ''}</span>
-      <span class="max-w-full min-w-0 font-medium break-words">{t.title}</span>
+      <span class="block w-full min-w-0 font-medium break-words">{t.title}</span>
     </button>
-    <!-- 시간 기록 시작은 업무 카드 안에 둔다(D-117). -->
-    <TaskTimeStart taskId={t.id} title={t.title} />
-    {#if canWrite}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              size="sm"
-              variant="ghost"
-              class="-mt-0.5 -mr-1 h-6 shrink-0 px-1.5 text-xs"
-              aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
-            >
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end">
-          {#each statusNames.filter((s) => s !== t.status) as target (target)}
-            <DropdownMenu.Item
-              disabled={busy(t.id)}
-              onSelect={() => void moveAndFocus(t.id, { status: target, beforeId: null }, 'menu')}
-              >{m.tasks_move_to_status({ status: target })}</DropdownMenu.Item
-            >
-          {/each}
-          <!-- 같은 열 안 순서: 화살표 줄은 보조 표시(aria-hidden)이고 Alt+위·아래는 키보드에서만 되므로, 터치
-                             화면의 낭독기 사용자도 쓸 수 있게 메뉴에도 둔다. 정렬이 기본 순서가 아니면 순서를 바꿀 수 없다. -->
-          {#if ordered}
-            <DropdownMenu.Separator />
-            {#each ['up', 'down'] as const as action (action)}
+    <div class="col-start-2 row-start-1 flex items-start gap-1">
+      <!-- 시간 기록 시작은 업무 카드 안에 둔다(D-117). -->
+      <TaskTimeStart taskId={t.id} title={t.title} />
+      {#if canWrite}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                size="sm"
+                variant="ghost"
+                class="-mt-0.5 -mr-1 h-6 shrink-0 px-1.5 text-xs"
+                aria-label={m.tasks_move_menu({ title: t.title })}>⋯</Button
+              >
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            {#each statusNames.filter((s) => s !== t.status) as target (target)}
               <DropdownMenu.Item
-                disabled={busy(t.id) ||
-                  planBoardMove(shown, t.id, action, statusNames) === undefined}
-                onSelect={() => void move(t.id, action)}
-                >{action === 'up'
-                  ? m.tasks_move_up_menu()
-                  : m.tasks_move_down_menu()}</DropdownMenu.Item
+                disabled={busy(t.id)}
+                onSelect={() => void moveAndFocus(t.id, { status: target, beforeId: null }, 'menu')}
+                >{m.tasks_move_to_status({ status: target })}</DropdownMenu.Item
               >
             {/each}
-          {/if}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    {/if}
+            <!-- 같은 열 안 순서: 화살표 줄은 보조 표시(aria-hidden)이고 Alt+위·아래는 키보드에서만 되므로, 터치
+                             화면의 낭독기 사용자도 쓸 수 있게 메뉴에도 둔다. 정렬이 기본 순서가 아니면 순서를 바꿀 수 없다. -->
+            {#if ordered}
+              <DropdownMenu.Separator />
+              {#each ['up', 'down'] as const as action (action)}
+                <DropdownMenu.Item
+                  disabled={busy(t.id) ||
+                    planBoardMove(shown, t.id, action, statusNames) === undefined}
+                  onSelect={() => void move(t.id, action)}
+                  >{action === 'up'
+                    ? m.tasks_move_up_menu()
+                    : m.tasks_move_down_menu()}</DropdownMenu.Item
+                >
+              {/each}
+            {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      {/if}
+    </div>
   </div>
   {#if t.parent_id !== null}
     <span class="text-xs text-muted-foreground">↳ {titleOf(t.parent_id)}</span>

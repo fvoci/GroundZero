@@ -23,7 +23,7 @@
 <section
   data-lane={lane}
   class={[
-    'flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/40 p-2',
+    'flex min-w-0 snap-start snap-always flex-col gap-2 rounded-lg border bg-muted/40 p-2',
     dragActive && 'ring-2 ring-ring',
   ]}
   aria-label={m.tasks_lane_aria({ status: lane })}
