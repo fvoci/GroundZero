@@ -38,9 +38,11 @@ export function itemGroupsFor(kind: ModuleKind): ItemGroupName[] {
 
 /** 모듈 화면의 보기(D-121, 사용자 R7 A): 항목(`/m/:mod`)과 달력(`/m/:mod/calendar`). */
 export type ModuleViewName = 'items' | 'calendar';
+export type OrganizationTab = 'members' | 'invitations' | 'workspaces' | 'settings';
 
 export type Route =
   | { name: 'home' }
+  | { name: 'organization'; organizationId: string; tab: OrganizationTab }
   | { name: 'my-tasks' }
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
@@ -76,6 +78,7 @@ export type Route =
 const PUBLIC = /^\/p\/([A-Za-z0-9_-]{16,128})\/?$/;
 
 const UUID = '[0-9a-fA-F-]{36}';
+const ORGANIZATION = new RegExp(`^/o/(${UUID})(?:/(members|invitations|workspaces|settings))?/?$`);
 const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
 const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
@@ -115,6 +118,18 @@ function itemGroup(raw: string): Exclude<ItemGroupName, 'tasks'> {
 
 export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { name: 'home' };
+  const organization = ORGANIZATION.exec(pathname);
+  if (organization?.[1] !== undefined) {
+    const tab = organization[2];
+    if (
+      tab === undefined ||
+      tab === 'members' ||
+      tab === 'invitations' ||
+      tab === 'workspaces' ||
+      tab === 'settings'
+    )
+      return { name: 'organization', organizationId: organization[1], tab: tab ?? 'members' };
+  }
   const pub = PUBLIC.exec(pathname);
   if (pub?.[1] !== undefined) return { name: 'public', token: pub[1] };
   if (pathname === '/tasks' || pathname === '/tasks/') return { name: 'my-tasks' };
@@ -203,6 +218,10 @@ export function parseRoute(pathname: string): Route {
 
 export function workspacePath(workspaceId: string): string {
   return `/w/${workspaceId}`;
+}
+
+export function organizationPath(organizationId: string, tab: OrganizationTab = 'members'): string {
+  return `/o/${organizationId}/${tab}`;
 }
 
 export function membersPath(workspaceId: string): string {

@@ -25,64 +25,9 @@
     }
   ],
   "unused": [
-    {
-      "method": "DELETE",
-      "path": "/api/organizations/{organization_id}/members/{user_id}",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "GET",
-      "path": "/api/organizations/{organization_id}/invitations",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "GET",
-      "path": "/api/organizations/{organization_id}/members",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "GET",
-      "path": "/api/organizations/{organization_id}/members/{user_id}/removal-preview",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "GET",
-      "path": "/api/organizations/{organization_id}/workspaces",
-      "reason": "샴 가3~가5 조립 예정"
-    },
     { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
     { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
     { "method": "GET", "path": "/auth/callback", "reason": "가6 판정 예정" },
-    {
-      "method": "POST",
-      "path": "/api/organizations/{organization_id}/invitations",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "POST",
-      "path": "/api/organizations/{organization_id}/workspaces/{workspace_id}/join-as-admin",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "POST",
-      "path": "/api/organizations/{organization_id}/workspaces/{workspace_id}/ownership-offer",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "POST",
-      "path": "/api/organizations/{organization_id}/workspaces/{workspace_id}/restore",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
-    {
-      "method": "PUT",
-      "path": "/api/organizations/{organization_id}/members/{user_id}",
-      "reason": "샴 가3~가5 조립 예정"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/organizations/{organization_id}/settings",
-      "reason": "샴 가3~가5 조립 예정"
-    }
+    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" }
   ]
 }

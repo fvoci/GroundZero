@@ -34,6 +34,7 @@
   import AuditScreen from '$lib/features/audit/AuditScreen.svelte';
   import DeletedWorkspaces from '$lib/features/trash/DeletedWorkspaces.svelte';
   import MembersScreen from '$lib/features/members/MembersScreen.svelte';
+  import OrganizationScreen from '$lib/features/organizations/OrganizationScreen.svelte';
   import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
   import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
   import SearchDialog from '$lib/features/search/SearchDialog.svelte';
@@ -577,6 +578,11 @@
   const headerTitle = $derived.by(() => {
     if (currentWorkspace !== undefined) return currentWorkspace.name;
     switch (route.name) {
+      case 'organization':
+        return (
+          org.organizations.find((organization) => organization.id === route.organizationId)
+            ?.name ?? m.organizations_member_entry()
+        );
       case 'notes':
         return m.app_nav_notes();
       case 'shared':
@@ -605,7 +611,9 @@
   // 지금 보는 워크스페이스의 조직이 현재 조직이다(D-111). 워크스페이스로 들어간 것은 사용자의 선택이므로 그 조직을 기억해
   // 뒤이어 홈·알림함 같은 개인 화면도 같은 조직 범위로 본다(구현 해석; 여러 조직 중 첫 조직을 조용히 고르는 것과 다르다).
   $effect(() => {
-    org.routeOrganizationId = currentWorkspace?.organization_id;
+    org.routeOrganizationId =
+      route.name === 'organization' ? route.organizationId : currentWorkspace?.organization_id;
+    if (route.name === 'organization') org.select(route.organizationId);
     if (currentWorkspace !== undefined) org.select(currentWorkspace.organization_id);
   });
 </script>
@@ -715,6 +723,15 @@
                 onjoined={reloadWorkspaces}
               />
             {/if}
+          {:else if route.name === 'organization'}
+            {#key `${signedIn.me.id}:${route.organizationId}`}
+              <OrganizationScreen
+                organizationId={route.organizationId}
+                tab={route.tab}
+                meId={signedIn.me.id}
+                onchanged={() => void reloadWorkspaces()}
+              />
+            {/key}
           {:else if WORKSPACE_ROUTES.has(route.name)}
             {#if currentWorkspace === undefined}
               <p role="alert">{m.app_workspace_missing()}</p>

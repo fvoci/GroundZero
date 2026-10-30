@@ -1,5 +1,143 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "organizations_manage": "Manage organization",
+  "organizations_members": "Members",
+  "organizations_member_entry": "Organization members",
+  "organizations_invitations": "Invitations",
+  "organizations_workspaces": "Workspaces",
+  "organizations_settings": "Settings",
+  "organizations_load_failed": "Could not load the organization.",
+  "organizations_unavailable": "You cannot view this organization",
+  "organizations_go_home": "Go home",
+  "organizations_members_empty": "There are no members yet",
+  "organizations_joined": "Joined {when}",
+  "organizations_action_failed": "Could not complete the action.",
+  "organizations_already_member": "This email is already a member of this organization. It cannot be invited.",
+  "organizations_actions": "Actions",
+  "organizations_member_actions": "Actions for {name}",
+  "organizations_last_admin": "The last administrator cannot be changed",
+  "organizations_demote": "Change to member",
+  "organizations_promote": "Change to administrator",
+  "organizations_demote_question": "Change your role to member?",
+  "organizations_demote_body": "You will lose access to management tabs. Workspace roles received through 'Join as administrator' will revert to their previous roles.",
+  "organizations_demote_other_question": "Change {name}'s role to member?",
+  "organizations_demote_other_body": "{name} will lose access to organization management tabs. Workspace roles received through 'Join as administrator' will revert to their previous roles.",
+  "organizations_remove": "Remove member",
+  "organizations_remove_question": "Remove {name} from the organization?",
+  "organizations_removal_workspaces": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "leave {count} workspace",
+        "countPlural=other": "leave {count} workspaces"
+      }
+    }
+  ],
+  "organizations_removal_shares": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "revoke {count} share",
+        "countPlural=other": "revoke {count} shares"
+      }
+    }
+  ],
+  "organizations_removal_workspaces_end": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "leave {count} workspace",
+        "countPlural=other": "leave {count} workspaces"
+      }
+    }
+  ],
+  "organizations_removal_shares_end": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "revoke {count} share",
+        "countPlural=other": "revoke {count} shares"
+      }
+    }
+  ],
+  "organizations_removal_assignments": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "release {count} assignment",
+        "countPlural=other": "release {count} assignments"
+      }
+    }
+  ],
+  "organizations_removal_none": "No workspaces, shares or assignments are affected",
+  "organizations_removal_body": "Removing {name} from the organization will {impact}.",
+  "organizations_member_updated": "Member updated",
+  "organizations_email": "Email",
+  "organizations_role": "Role",
+  "organizations_send_invite": "Send invitation",
+  "organizations_invited": "Invitation sent to {email}",
+  "organizations_invitations_empty": "There are no invitations yet",
+  "organizations_write_invite": "Write an invitation",
+  "organizations_expires": "Expires {when}",
+  "organizations_expired": "Expired",
+  "organizations_revoke": "Revoke",
+  "organizations_revoke_named": "Revoke invitation to {email}",
+  "organizations_revoked": "Invitation revoked",
+  "organizations_deleted_workspaces": "Deleted workspaces",
+  "organizations_deleted_empty": "There are no deleted workspaces",
+  "organizations_workspaces_empty": "There are no workspaces yet. You can create one from home.",
+  "organizations_workspace_owner": "Owner: {name}",
+  "organizations_member_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} member", "countPlural=other": "{count} members" }
+    }
+  ],
+  "organizations_created": "Created {when}",
+  "organizations_deleted": "Deleted {when}",
+  "organizations_my_role": "My role: {role}",
+  "organizations_open": "Open",
+  "organizations_open_workspace": "Open workspace",
+  "organizations_join_as_admin": "Join as administrator",
+  "organizations_join_question": "Join {name} as administrator?",
+  "organizations_join_read_all": "You will be able to view all documents and records in this workspace.",
+  "organizations_join_audit": "Your participation will be recorded in the audit log.",
+  "organizations_join_revert": "If you stop being an organization administrator, this role will revert to its previous state.",
+  "organizations_joined_done": "Joined the workspace",
+  "organizations_offer_ownership": "Offer ownership transfer",
+  "organizations_offer_hint": "Choose a recipient. Ownership transfers when they accept.",
+  "organizations_recipient": "Recipient",
+  "organizations_choose_recipient": "Choose a recipient",
+  "organizations_recipients_empty": "There are no other organization members to receive an offer",
+  "organizations_recipient_must_be_member": "You can only offer ownership to a member of this workspace",
+  "organizations_send_offer": "Send offer",
+  "organizations_ownership_sent": "Offer sent. Ownership transfers when the recipient accepts.",
+  "organizations_restore": "Restore",
+  "organizations_restored": "Restored workspace {name}",
+  "organizations_name": "Name",
+  "organizations_name_required": "Enter a name",
+  "organizations_public_links": "Allow public links",
+  "organizations_disable_links": "Disable public links",
+  "organizations_disable_links_body": "Disabling this immediately prevents all public links in this organization from opening. Re-enabling it restores links that have not expired or been revoked.",
+  "organizations_limits": "Limits and retention",
+  "organizations_max_file": "Maximum file size",
+  "organizations_max_storage": "Organization storage",
+  "organizations_max_uploads": "Concurrent uploads",
+  "organizations_activity_retention": "Activity retention days",
+  "organizations_audit_retention": "Audit log retention days",
+  "organizations_retention_hint": "Workspace values cannot exceed this value",
+  "organizations_unset": "Not set",
+  "organizations_unset_named": "{label}: not set",
+  "organizations_unit": "{label} unit",
+  "organizations_default_hint": "Uses the server default",
+  "organizations_limit_invalid": "Enter an integer within the allowed range. Sizes must be a whole number of bytes.",
+  "organizations_retention_invalid": "Enter a whole number from 1 to 3650 days",
   "organizations_limits_heading": "Limits and retention",
   "organizations_limits_effective_hint": "For file size, storage and concurrent uploads, the effective value is the smallest of the server default, organization and workspace values.",
   "organizations_retention_effective_hint": "For retention periods, use the smaller of the organization and workspace values when both are set, or the set value when only one is set. When neither is set, use the server settings (365 days for activity and 730 days for audit logs unless configured otherwise).",
@@ -21,6 +159,5 @@
   "organizations_limits_save_failed": "Could not save limits and retention.",
   "organizations_limits_saving": "Saving changes.",
   "organizations_limits_unchanged": "There are no changes to save.",
-  "organizations_unavailable": "You cannot view this organization",
   "organizations_home": "Go home"
 }
