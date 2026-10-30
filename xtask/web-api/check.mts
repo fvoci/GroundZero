@@ -484,8 +484,13 @@ export function checkUsage(
     return undefined;
   }
   const sources = program.getSourceFiles();
+  const callers = new Map<ts.FunctionLikeDeclaration, ts.CallExpression[]>();
   for (const file of sources) {
     walk(file, (node) => {
+      if (ts.isCallExpression(node)) {
+        const fn = callable(node.expression);
+        if (fn) callers.set(fn, [...(callers.get(fn) ?? []), node]);
+      }
       if (!ts.isFunctionDeclaration(node) || !node.name) return;
       const path = relative(virtualRoot, file.fileName);
       const name = node.name.text;
@@ -513,6 +518,43 @@ export function checkUsage(
   }
 
   type Bindings = Map<ts.Symbol, ts.Expression | string[]>;
+  function* navigationBindings(node: ts.Node, seen = new Set<ts.Node>()): Generator<Bindings> {
+    for (let parent = node.parent; !ts.isSourceFile(parent); parent = parent.parent) {
+      if (
+        !ts.isFunctionDeclaration(parent) &&
+        !ts.isFunctionExpression(parent) &&
+        !ts.isArrowFunction(parent)
+      )
+        continue;
+      if (seen.has(parent)) {
+        yield new Map();
+        return;
+      }
+      seen = new Set(seen).add(parent);
+      const sites = callers.get(parent) ?? [];
+      if (sites.length === 0) {
+        // Runtime callbacks may still capture a statically known outer argument.
+        yield* navigationBindings(parent, seen);
+        return;
+      }
+      const written = parameterWrites(parent);
+      for (const site of sites) {
+        for (const outer of navigationBindings(site, seen)) {
+          const bindings = new Map(outer);
+          parent.parameters.forEach((parameter, index) => {
+            if (!ts.isIdentifier(parameter.name) || written.includes(parameter.name.text)) return;
+            const found = symbol(parameter.name);
+            const argument = site.arguments[index] ?? parameter.initializer;
+            if (found && argument && !site.arguments.slice(0, index + 1).some(ts.isSpreadElement))
+              bindings.set(found, argument);
+          });
+          yield bindings;
+        }
+      }
+      return;
+    }
+    yield new Map();
+  }
   function values(
     node: ts.Expression | undefined,
     seen = new Set<ts.Node>(),
@@ -769,13 +811,18 @@ export function checkUsage(
     const line = exit.line ?? file.getLineAndCharacterOfPosition(node.getStart()).line + 1;
     const location = filename(file) + ':' + String(line);
     try {
-      let paths: string[];
-      try {
-        paths = values(exit.url);
-      } catch (error: unknown) {
-        if (strict || exit.kind === 'fetch' || exit.kind === 'WebSocket' || apiHint(exit.url))
-          throw error;
-        return; // Opaque app/content links are outside the contract-only check.
+      let paths: string[] = [];
+      const contexts =
+        exit.kind === 'link' || exit.kind === 'location' ? navigationBindings(node) : [new Map()];
+      for (const bindings of contexts) {
+        try {
+          paths.push(...values(exit.url, new Set(), bindings));
+        } catch (error: unknown) {
+          if (strict || exit.kind === 'fetch' || exit.kind === 'WebSocket' || apiHint(exit.url))
+            throw error;
+          // Opaque runtime app/content links remain outside the check. Keep
+          // checking other callers so an unknown value cannot hide a literal.
+        }
       }
       if (exit.append)
         paths = paths.flatMap((path) => values(exit.append).map((room) => path + '/' + room));
@@ -786,8 +833,8 @@ export function checkUsage(
           socket || /^https?:\/\/fvoci\.invalid(?:\/|$)/.test(raw)
             ? raw.replace(/^(?:https?|wss?):\/\/[^/]+/, '')
             : raw;
-        if (!socket && /^(?:[a-z][\w+.-]*:|\/\/)/i.test(path)) continue;
         canonicalPath(path);
+        if (!socket && /^(?:[a-z][\w+.-]*:|\/\/)/i.test(path)) continue;
         const pathname = path.split(/[?#]/, 1)[0] ?? '';
         if (socket) {
           const entry = allowlist.websocket;

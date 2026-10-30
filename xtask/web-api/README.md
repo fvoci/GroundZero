@@ -31,6 +31,8 @@ AST·심벌로 import 별칭·재노출·const 별칭을 따라간다. 리터럴
 호출로 세지 않는다. 대상 API 호출을 정적으로 풀 수 없으면 실패한다.
 URL 헬퍼 변수의 initializer는 const일 때만 따른다. const 화살표 함수·함수 표현식의
 fetch 기본값도 호출 지점에서 다른 구현으로 덮어쓰지 않았는지 확인한다.
+링크·location의 매개변수는 호출 지점의 인자와 기본값을 따라 풀며, 호출 지점마다
+정적으로 풀린 URL을 검사한다. 런타임 인자가 있어도 다른 호출의 리터럴을 건너뛰지 않는다.
 
 알려진 점 세그먼트(`.`·`..`)·인코딩 점·구분자·역슬래시를 거절해
 `/rhwp/../api/...`가 정적 자원으로 빠지지 않게 한다.
@@ -55,13 +57,14 @@ fetch 기본값도 호출 지점에서 다른 구현으로 덮어쓰지 않았�
 아래 한계는 후속 [#251](https://github.com/fvoci/GroundZero/issues/251)에서 가6과 함께 다시 본다.
 현재 검사는 화면의 실제 도달 가능성이나 브라우저의 모든 네트워크 동작을 증명하지 않는다.
 
-| 항목                    | 현재 범위 밖인 것                                                    |
-| ----------------------- | -------------------------------------------------------------------- |
-| SR-250-8                | Svelte spread 속성으로 넘긴 URL                                      |
-| SR-250-9                | DOMParser·innerHTML로 만든 HTML 안 자원                              |
-| SR-250-10               | 동적 encodeURIComponent 값의 `.`·`..` (현재 값은 서버가 발급한 UUID) |
-| SR-250-11               | WebSocket 원점 (현재는 같은 원점)                                    |
-| 현재 웹 사용 0건인 출구 | XMLHttpRequest·EventSource·navigator.sendBeacon·new Request          |
+| 항목                    | 현재 범위 밖인 것                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| SR-250-8                | Svelte spread 속성으로 넘긴 URL                                                          |
+| SR-250-9                | DOMParser·innerHTML로 만든 HTML 안 자원                                                  |
+| SR-250-10               | 동적 encodeURIComponent 값의 `.`·`..` (현재 값은 서버가 발급한 UUID)                     |
+| SR-250-11               | WebSocket 원점 (현재는 같은 원점)                                                        |
+| SR-250-12               | 호출 인자를 따라가도 끝까지 풀리지 않는 링크·location의 런타임 값(앱 경로·사용자 콘텐츠) |
+| 현재 웹 사용 0건인 출구 | XMLHttpRequest·EventSource·navigator.sendBeacon·new Request                              |
 
 이 종류를 새로 사용하면 검사 범위를 먼저 결정한다. 특히 XMLHttpRequest·sendBeacon·
 EventSource의 상대 URL 거절은 현재 범위 밖이므로 구현하지 않는다.

@@ -93,6 +93,99 @@ await test('SR-250-4: links use GET and detect a method mismatch', () => {
     /GET \/api\/tasks\/42.*not in OpenAPI/,
   );
 });
+for (const [path, expected] of [
+  ['/api/typo', /GET \/api\/typo.*not in OpenAPI/],
+  ['/rhwp/../api/typo', /dot segment/],
+] as const) {
+  await test(`SR-250-12: navigation follows the caller argument ${path}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`function go(p: string) { location.assign(p); } go('${path}');`),
+          contract,
+          listedTask,
+        ),
+      expected,
+    );
+  });
+}
+await test('SR-250-12: runtime callers do not hide a known invalid link argument', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+          const link = (p: string) => { anchor.href = p; };
+          function go(p: string) { link(p); }
+          go(userContent); go('/api/typo');
+        `),
+        contract,
+        listedTask,
+      ),
+    /GET \/api\/typo.*not in OpenAPI/,
+  );
+});
+await test('SR-250-12: forwarded links still use GET', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`const go = function (p: string) { window.open(p); }; go('/api/tasks/42');`),
+        { paths: { '/api/tasks/{id}': { post: {} } } },
+        {
+          forwarders: [],
+          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '가6 판정 예정' }],
+        },
+      ),
+    /GET \/api\/tasks\/42.*not in OpenAPI/,
+  );
+});
+await test('SR-250-12: defaults and nested arguments resolve used operations', () => {
+  const result = checkUsage(
+    files(`
+      const link = (p: string) => { anchor.setAttribute('href', p); };
+      function go(p = '/api/tasks/42') { link(p); }
+      go(); go(userContent); go('/rhwp/viewer');
+    `),
+    contract,
+    empty,
+  );
+  assert.equal(result.calls, 1);
+  assert.deepEqual(result.used, ['GET /api/tasks/{task_id}']);
+  assert.deepEqual(result.unused, []);
+});
+await test('SR-250-12: runtime-only callers remain outside the check', () => {
+  assert.equal(
+    checkUsage(
+      files(`function go(p: string) { location.assign(p); } go(userContent);`),
+      contract,
+      listedTask,
+    ).calls,
+    0,
+  );
+});
+await test('SR-250-12: recursive callers cannot hide a literal inside the function', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`function go() { location.assign('/api/typo'); go(); }`),
+        contract,
+        listedTask,
+      ),
+    /GET \/api\/typo.*not in OpenAPI/,
+  );
+});
+for (const path of ['/rhwp/%2e%2e/api/typo', '/app/../page', 'https://example.org/../page']) {
+  await test(`SR-250-12: forwarded literals reject dot segments before prefix classification: ${path}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`function go(p: string) { location.assign(p); } go('${path}');`),
+          contract,
+          listedTask,
+        ),
+      /dot segment/,
+    );
+  });
+}
 await test('SR-250-4: undeclared WebSocket routes fail', () => {
   assert.throws(
     () => checkUsage(files("new WebSocket('wss://example.org/api/wrong');"), contract, listedTask),
@@ -747,6 +840,8 @@ for (const [kind, method, path] of [
   ['fetch parameter', 'GET', '/api/typo/42'],
   ['fetch parameter', 'DELETE', '/api/tasks/42'],
   ['location', 'GET', '/api/typo/42'],
+  ['location parameter', 'GET', '/api/typo'],
+  ['location parameter', 'GET', '/rhwp/../api/typo'],
   ['WebSocket', 'GET', '/api/typo/42'],
   ['fetch', 'GET', '/rhwp/../api/typo/42'],
   ['fetch', 'DELETE', '/rhwp/%2e%2e/api/tasks/42'],
@@ -761,9 +856,11 @@ for (const [kind, method, path] of [
             ? `function load(fetchImpl: typeof fetch = fetch) { fetchImpl('${path ?? ''}', {method: '${method ?? ''}'}); }`
             : kind === 'location'
               ? `window.location.assign('${path ?? ''}');`
-              : kind === 'WebSocket'
-                ? `new WebSocket('wss://example.org${path ?? ''}');`
-                : `request('${method ?? ''}', '${path ?? ''}');`,
+              : kind === 'location parameter'
+                ? `function go(p: string) { location.assign(p); } go('${path ?? ''}');`
+                : kind === 'WebSocket'
+                  ? `new WebSocket('wss://example.org${path ?? ''}');`
+                  : `request('${method ?? ''}', '${path ?? ''}');`,
       );
       input.set('contracts/openapi.json', JSON.stringify(contract));
       input.set(
