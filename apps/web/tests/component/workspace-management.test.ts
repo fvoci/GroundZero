@@ -138,7 +138,10 @@ describe('workspace management tabs (D-121, n1)', () => {
         expect(router.path).toBe(membersPath(id, tab));
       } else {
         await screen.findByTestId('member-list');
-        expect(screen.getByRole('tab', { name: '멤버' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('tab', { name: '멤버 1명' })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        );
         expect(screen.queryByRole('tab', { name: label })).toBeNull();
         expect(router.path).toBe(membersPath(id));
         expect(workspaceLimitsApi.get).not.toHaveBeenCalled();
@@ -157,7 +160,7 @@ describe('workspace management tabs (D-121, n1)', () => {
       render(MembersScreen, { props });
       await screen.findByTestId('member-list');
       expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual(
-        role === 'admin' ? ['멤버', '초대', '그룹', '설정'] : ['멤버', '그룹'],
+        role === 'admin' ? ['멤버 1명', '초대', '그룹', '설정'] : ['멤버 1명', '그룹'],
       );
       expect(screen.queryByLabelText('이메일')).toBeNull();
       expect(screen.queryByRole('region', { name: '한도·보존' })).toBeNull();
@@ -244,7 +247,7 @@ describe('workspace management tabs (D-121, n1)', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
       await vi.waitFor(() => {
         expect(
-          screen.getByRole('tab', { name: tab === 'members' ? '멤버' : '그룹' }),
+          screen.getByRole('tab', { name: tab === 'members' ? '멤버 2명' : '그룹' }),
         ).toHaveAttribute('aria-selected', 'true');
       });
       expect(screen.queryByRole('dialog')).toBeNull();
@@ -313,7 +316,7 @@ describe('workspace management tabs (D-121, n1)', () => {
     render(MembersScreen, { props: { ...props, tab: 'settings' } });
     await screen.findByRole('heading', { name: '위험 구역' });
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual([
-      '멤버',
+      '멤버 1명',
       '그룹',
       '설정',
     ]);

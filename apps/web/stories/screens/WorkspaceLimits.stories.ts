@@ -28,6 +28,7 @@ export const Default: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByLabelText('활동 보존 일수', { exact: true })).toHaveValue('60');
     await expect(canvas.getAllByRole('tab')).toHaveLength(4);
+    await expect(canvas.getAllByRole('checkbox')).toHaveLength(5);
     await expect(canvas.getByRole('heading', { name: '위험 구역' })).toBeVisible();
     await expect(canvas.queryByTestId('member-list')).toBeNull();
   },

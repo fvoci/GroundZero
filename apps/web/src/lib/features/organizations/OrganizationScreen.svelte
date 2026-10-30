@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Organization } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { api, ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import ManagementFrame from '$lib/features/common/ManagementFrame.svelte';
@@ -12,6 +12,8 @@
   import OrganizationWorkspaces from './OrganizationWorkspaces.svelte';
   import OrganizationSettings from './OrganizationSettings.svelte';
   import { org } from '$lib/org.svelte';
+  import { organizationsApi } from './api';
+  import type { OrganizationMember } from './model';
 
   interface Props {
     organizationId: string;
@@ -21,32 +23,77 @@
   }
   const { organizationId, tab, meId, onchanged }: Props = $props();
   let organization = $state<Organization>();
+  let members = $state<OrganizationMember[]>();
+  let memberError = $state('');
+  const memberCount = $derived(members?.length);
   let error = $state('');
   let unavailable = $state(false);
   let disposed = false;
-  onMount(() => {
-    void load();
-    return () => {
-      disposed = true;
-    };
+  let generation = 0;
+  let memberGeneration = 0;
+  onDestroy(() => {
+    disposed = true;
   });
-  async function load(): Promise<void> {
+  const loadKey = $derived(JSON.stringify([organizationId, meId]));
+  $effect(() => {
+    if (loadKey !== '')
+      untrack(() => {
+        organization = undefined;
+        members = undefined;
+        void load();
+      });
+  });
+  async function load(refreshMembers = true): Promise<void> {
+    const sequence = ++generation;
+    const id = organizationId;
+    const user = meId;
+    const current = (): boolean =>
+      !disposed &&
+      sequence === generation &&
+      organizationId === id &&
+      meId === user &&
+      !unavailable;
     error = '';
     unavailable = false;
+    if (refreshMembers) void loadMembers();
     try {
-      const found = await api.organization(organizationId);
-      if (!disposed) organization = found;
+      const found = await api.organization(id);
+      if (!current()) return;
+      organization = found;
     } catch (e: unknown) {
-      if (disposed) return;
+      if (!current()) return;
       unavailable = e instanceof ApiError && (e.status === 403 || e.status === 404);
       error = unavailable
         ? m.organizations_unavailable()
         : errorText(e, m.organizations_load_failed());
     }
   }
+  async function loadMembers(): Promise<void> {
+    const sequence = ++memberGeneration;
+    const id = organizationId;
+    const user = meId;
+    const current = (): boolean =>
+      !disposed && sequence === memberGeneration && organizationId === id && meId === user;
+    memberError = '';
+    try {
+      const list = await organizationsApi.members(id);
+      if (current()) members = list;
+    } catch (e: unknown) {
+      if (!current()) return;
+      members = undefined;
+      if (e instanceof ApiError && (e.status === 403 || e.status === 404)) noAccess();
+      else memberError = errorText(e, m.organizations_load_failed());
+    }
+  }
   const isAdmin = $derived(organization?.role === 'admin');
   const tabs = $derived([
-    { value: 'members', label: m.organizations_members() },
+    {
+      value: 'members',
+      label:
+        memberCount === undefined
+          ? m.organizations_members()
+          : m.organizations_member_count({ count: memberCount }),
+    },
     ...(isAdmin
       ? [
           { value: 'invitations', label: m.organizations_invitations() },
@@ -79,7 +126,7 @@
   }
   function changed(): void {
     onchanged();
-    void load();
+    if (!unavailable) void load(false);
   }
   function settingsChanged(saved: Organization): void {
     organization = saved;
@@ -118,6 +165,9 @@
         {organizationId}
         {isAdmin}
         {meId}
+        {members}
+        loadError={memberError}
+        onreload={loadMembers}
         onchanged={changed}
         onunavailable={noAccess}
       />

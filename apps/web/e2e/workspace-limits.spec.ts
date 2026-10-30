@@ -54,6 +54,9 @@ for (const scale of [100, 200] as const) {
       await expect(page).toHaveURL(`/w/${ws}/settings`);
       await expect(page.getByTestId('member-list')).toHaveCount(0);
       const panel = page.getByRole('region', { name: '한도·보존' });
+      await expect(page.getByRole('tab', { name: '멤버 1명', exact: true })).toBeVisible();
+      await expect(page.getByRole('searchbox')).toHaveCount(0);
+      await expect(panel.getByRole('checkbox')).toHaveCount(5);
       const activity = panel.getByLabel('활동 보존 일수', { exact: true });
       await expect(activity).toHaveValue('30');
       await expect(
@@ -149,7 +152,9 @@ for (const scale of [100, 200] as const) {
           .click();
       }
       await expect(activity).toHaveValue('46');
-      await panel.getByLabel('활동 보존 일수 설정').selectOption('unset');
+      await panel.getByRole('checkbox', { name: '활동 보존 일수 설정 안 함' }).check();
+      await expect(activity).toBeDisabled();
+      await expect(activity).toHaveAccessibleDescription(/서버 기본값과 조직 값을 따릅니다/);
       await panel.getByRole('button', { name: '저장', exact: true }).click();
       await expect(panel.getByRole('button', { name: '저장', exact: true })).toBeDisabled();
       expect(await api.get(`/api/workspaces/${ws}/limits`)).toMatchObject({
@@ -189,7 +194,11 @@ test('workspace tabs preserve administrator, member and readonly visibility', as
     } else {
       await expect(member.page).toHaveURL(`/w/${ws}/members`);
       await expect(member.page.getByTestId('member-list')).toBeVisible();
-      await expect(member.page.getByRole('tab')).toHaveText(['멤버', '그룹']);
+      await expect(member.page.getByRole('tab')).toHaveText(['멤버 2명', '그룹']);
+      const searchStatus = member.page.getByTestId('workspace-member-search-status');
+      await expect(searchStatus).toHaveCount(1);
+      await expect(searchStatus).toHaveText('');
+      await expect(searchStatus).not.toHaveAttribute('hidden');
       await expect(member.page.getByRole('region', { name: '한도·보존' })).toHaveCount(0);
       await member.page.goto(`/w/${ws}/invitations`);
       await expect(member.page).toHaveURL(`/w/${ws}/members`);
@@ -246,7 +255,7 @@ for (const scale of [100, 200] as const) {
     expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
     await page.goBack();
     await expect(page).toHaveURL(`/w/${ws}/members`);
-    await expect(page.getByRole('tab', { name: '멤버', exact: true })).toHaveAttribute(
+    await expect(page.getByRole('tab', { name: '멤버 1명', exact: true })).toHaveAttribute(
       'aria-selected',
       'true',
     );
@@ -317,7 +326,7 @@ test('history tab changes clear destructive workspace confirmations (SR-258-1)',
       source: 'groups',
       sourceLabel: '그룹',
       other: 'members',
-      otherLabel: '멤버',
+      otherLabel: '멤버 2명',
       trigger: owner.page.getByRole('button', { name: '그룹 삭제', exact: true }),
       title: '‘검토팀’ 그룹을 삭제할까요?',
     },
@@ -326,14 +335,14 @@ test('history tab changes clear destructive workspace confirmations (SR-258-1)',
       source: 'groups',
       sourceLabel: '그룹',
       other: 'members',
-      otherLabel: '멤버',
+      otherLabel: '멤버 2명',
       trigger: member.page.getByRole('button', { name: '워크스페이스 탈퇴', exact: true }),
       title: `${workspaceName}에서 탈퇴할까요?`,
     },
     {
       page: owner.page,
       source: 'members',
-      sourceLabel: '멤버',
+      sourceLabel: '멤버 2명',
       other: 'groups',
       otherLabel: '그룹',
       trigger: owner.page

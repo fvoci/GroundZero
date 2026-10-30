@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
+  import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import { formatInstant } from '$lib/display';
   import { roleLabel } from '$lib/features/members/roles';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
+  import { Input } from '$lib/ui/input';
+  import { Label } from '$lib/ui/label';
   import * as Dialog from '$lib/ui/dialog';
   import * as DropdownMenu from '$lib/ui/dropdown-menu';
   import { organizationsApi } from './api';
   import type { OrganizationMember, OrganizationRemovalPreview } from './model';
-  import { errorText } from '$lib/api/errors';
   import { organizationError, organizationUnavailable } from './feedback';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 
@@ -16,12 +18,36 @@
     organizationId: string;
     isAdmin: boolean;
     meId: string;
+    members: OrganizationMember[] | undefined;
+    loadError: string;
+    onreload: () => Promise<void>;
     onchanged: () => void;
     onunavailable: () => void;
   }
-  const { organizationId, isAdmin, meId, onchanged, onunavailable }: Props = $props();
-  let members = $state<OrganizationMember[]>();
+  const {
+    organizationId,
+    isAdmin,
+    meId,
+    members,
+    loadError,
+    onreload,
+    onchanged,
+    onunavailable,
+  }: Props = $props();
+  let filter = $state('');
+  const query = $derived(filter.trim().toLocaleLowerCase());
+  const filteredMembers = $derived(
+    members?.filter(
+      (member) =>
+        member.display_name.toLocaleLowerCase().includes(query) ||
+        (isAdmin && (member.email?.toLocaleLowerCase().includes(query) ?? false)),
+    ) ?? [],
+  );
   let error = $state('');
+  const memberError = $derived(error || loadError);
+  $effect(() => {
+    if (members !== undefined && members.length <= 10) filter = '';
+  });
   let busy = $state(false);
   let confirm = $state<{ kind: 'demote' | 'remove'; member: OrganizationMember }>();
   let preview = $state<OrganizationRemovalPreview>();
@@ -34,22 +60,12 @@
   const adminCount = $derived(members?.filter((member) => member.role === 'admin').length ?? 0);
   const lastAdmin = (member: OrganizationMember): boolean =>
     member.role === 'admin' && adminCount === 1;
-  onMount(() => {
-    void load();
-    return () => {
-      disposed = true;
-    };
+  onDestroy(() => {
+    disposed = true;
   });
   async function load(): Promise<void> {
     error = '';
-    try {
-      const list = await organizationsApi.members(organizationId);
-      if (!disposed) members = list;
-    } catch (e: unknown) {
-      if (disposed) return;
-      if (organizationUnavailable(e)) onunavailable();
-      else error = errorText(e, m.organizations_load_failed());
-    }
+    await onreload();
   }
 
   async function setRole(member: OrganizationMember): Promise<void> {
@@ -154,18 +170,38 @@
   }
 </script>
 
-<h2 id="organization-members-heading" tabindex="-1" class="sr-only">{m.organizations_members()}</h2>
-<p role="alert" class="text-sm text-destructive empty:hidden">{error}</p>
-{#if error !== ''}<Button variant="outline" onclick={() => void load()}>{m.common_retry()}</Button
+<h2 id="organization-members-heading" tabindex="-1" class="font-semibold">
+  {members === undefined
+    ? m.organizations_members()
+    : m.organizations_member_count({ count: members.length })}
+</h2>
+<p role="alert" class="text-sm text-destructive empty:hidden">{memberError}</p>
+{#if memberError !== ''}<Button variant="outline" onclick={() => void load()}
+    >{m.common_retry()}</Button
   >{/if}
-{#if members === undefined && error === ''}
-  <div class="animate-pulse space-y-3" aria-label={m.app_loading()} aria-busy="true">
-    {#each [1, 2, 3] as n (n)}<div class="h-16 rounded bg-muted"></div>{/each}
+{#if members !== undefined && members.length > 10}
+  <div class="flex min-w-0 flex-col gap-1">
+    <Label for="organization-member-filter"
+      >{isAdmin ? m.members_filter() : m.members_filter_name()}</Label
+    >
+    <Input id="organization-member-filter" type="search" bind:value={filter} />
   </div>
-{:else if members !== undefined}
+{/if}
+<p role="status" class="text-sm text-muted-foreground empty:hidden">
+  {members !== undefined && members.length > 0 && filteredMembers.length === 0
+    ? m.members_filter_empty()
+    : ''}
+</p>
+{#if members === undefined}
+  {#if memberError === ''}
+    <div class="animate-pulse space-y-3" aria-label={m.app_loading()} aria-busy="true">
+      {#each [1, 2, 3] as n (n)}<div class="h-16 rounded bg-muted"></div>{/each}
+    </div>
+  {/if}
+{:else}
   {#if members.length === 0}<p>{m.organizations_members_empty()}</p>{/if}
   <ul class="divide-y" aria-label={m.organizations_members()}>
-    {#each members as member (member.user_id)}
+    {#each filteredMembers as member (member.user_id)}
       <li class="flex min-w-0 flex-wrap items-center gap-3 py-3">
         <div class="min-w-0 flex-1 basis-48 wrap-anywhere">
           <p class="font-medium">{member.display_name}</p>
@@ -191,10 +227,10 @@
                     {...props}
                     id={`org-member-menu-${member.user_id}`}
                     variant="outline"
-                    size="sm"
+                    size="icon"
                     disabled={busy}
                     aria-label={m.organizations_member_actions({ name: member.display_name })}
-                    >{m.organizations_actions()}</Button
+                    ><EllipsisIcon class="size-4" aria-hidden="true" /></Button
                   >
                 {/snippet}
               </DropdownMenu.Trigger>

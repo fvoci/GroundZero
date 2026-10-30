@@ -10,6 +10,7 @@
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
+  import { Checkbox } from '$lib/ui/checkbox';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import { NativeSelect } from '$lib/ui/native-select';
@@ -187,17 +188,6 @@
           {@const label = limitLabel(key)}
           <div class="flex min-w-0 flex-col gap-2">
             <Label for={id}>{label}</Label>
-            <NativeSelect
-              aria-label={m.organizations_limit_setting({ field: label })}
-              bind:value={inputs[key].mode}
-              onchange={() => {
-                changed(key);
-              }}
-              class="w-full"
-            >
-              <option value="unset">{m.organizations_limit_unset()}</option>
-              <option value="set">{m.organizations_limit_set()}</option>
-            </NativeSelect>
             <div class="flex min-w-0 flex-wrap items-center gap-2">
               <Input
                 {id}
@@ -224,6 +214,18 @@
                   <option value="MB">MB</option><option value="GB">GB</option>
                 </NativeSelect>
               {/if}
+              <div class="flex items-center gap-2">
+                <Checkbox
+                  id={`${id}-unset-control`}
+                  checked={inputs[key].mode === 'unset'}
+                  onCheckedChange={(checked) => {
+                    inputs[key].mode = checked ? 'unset' : 'set';
+                    changed(key);
+                  }}
+                  aria-label={m.organizations_unset_named({ label })}
+                />
+                <Label for={`${id}-unset-control`}>{m.organizations_unset()}</Label>
+              </div>
             </div>
             <p id={`${id}-cap`} class="text-sm text-muted-foreground">
               {m.organizations_limit_organization_cap({
