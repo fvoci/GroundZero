@@ -8,7 +8,25 @@ import { defineConfig } from 'vitest/config';
 const apiUrl = process.env['VITE_API_URL'] ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
-  plugins: [tailwindcss(), svelte(), svelteTesting()],
+  plugins: [
+    {
+      name: 'fvoci-lazy-math-renderer',
+      enforce: 'pre',
+      resolveId(source, importer) {
+        // Keep Tiptap's node definitions/commands intact; replace only its renderer binding.
+        if (
+          source === 'katex' &&
+          importer?.replaceAll('\\', '/').includes('/@tiptap/extension-mathematics/')
+        )
+          return path.resolve(import.meta.dirname, 'src/lib/features/documents/katex-view.ts');
+        return undefined;
+      },
+    },
+    tailwindcss(),
+    svelte(),
+    svelteTesting(),
+  ],
+  optimizeDeps: { exclude: ['@tiptap/extension-mathematics'] },
   resolve: {
     alias: { $lib: path.resolve(import.meta.dirname, 'src/lib') },
   },
@@ -26,6 +44,7 @@ export default defineConfig({
     },
   },
   test: {
+    server: { deps: { inline: ['@tiptap/extension-mathematics'] } },
     environment: 'jsdom',
     globals: true,
     setupFiles: ['tests/setup.ts'],

@@ -351,10 +351,11 @@
     formError = undefined;
     conflict = undefined;
     docTemplate = '';
-    api
-      .item(id)
-      .then(async (it) => {
-        const [found, list] = await Promise.all([api.module(it.module_id), api.itemDocuments(id)]);
+    Promise.all([
+      api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+      api.itemDocuments(id),
+    ])
+      .then(([{ it, found }, list]) => {
         if (cancelled) return;
         fill(it);
         // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.

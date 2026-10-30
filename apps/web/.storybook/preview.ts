@@ -1,5 +1,6 @@
 // 모든 story에 공통인 준비. 제품의 전역 스타일·서체·번역을 그대로 쓰고, 표시 설정과 네트워크를 결정적으로 고정한다.
 import type { Preview } from '@storybook/svelte';
+import { sb } from 'storybook/test';
 
 import { asLocale, type DisplayLocale } from '$lib/display';
 import { applyDocFont } from '$lib/doc-font';
@@ -9,7 +10,10 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 import { applyTheme } from '$lib/theme.svelte';
 
 import '../src/styles/app.css';
-import '../src/styles/katex-layout.css';
+
+// Let the document story provide a synthetic Yjs body in native ESM as well
+// as composeStories; the original functions remain available in other stories.
+sb.mock('../src/lib/features/documents/live.ts', { spy: true });
 
 // 실제 서버로 갈 요청(같은 원점의 /api·/auth·/healthz, 다른 원점 전체)은 보내지 않고 실패시킨다. 데이터가 필요한
 // story는 `api`의 함수를 story 안에서 바꿔 끼운다(stories/fixtures). 막힌 요청은 콘솔 오류로 남겨 찾을 수 있게 한다.

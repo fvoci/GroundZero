@@ -6,7 +6,7 @@
   // 홈(D-19·D-120): 현재 조직 요약. 시간 기록 표시는 앱 상단에서 맡는다.
   import FileText from '@lucide/svelte/icons/file-text';
   import SquareCheck from '@lucide/svelte/icons/square-check';
-  import type { Workspace } from '@fvoci/api-client';
+  import type { Activity, Workspace } from '@fvoci/api-client';
   import { onMount } from 'svelte';
 
   import type { CalendarView } from '$lib/api/client';
@@ -49,6 +49,7 @@
   let home = $state<HomeView | undefined>(undefined);
   let week = $state<Map<string, CalendarEntry[]>>(new Map());
   let notifications = $state<NotificationView[]>([]);
+  let initialActivity = $state<Promise<Activity[]> | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
   let reloadKey = $state(0);
   /** "다시 시도"로 다시 받는 중(앞서 받은 홈이 남아 있어도 진행 중이라고 보인다). */
@@ -73,6 +74,7 @@
     const mine = ++loadSeq;
     home = undefined;
     notifications = [];
+    initialActivity = undefined;
     week = new Map();
     error = undefined;
     if (organizationId === undefined) {
@@ -89,11 +91,17 @@
         const from = startOfWeek(h.today, settings.weekStart);
         const to = fromDayNumber(dayNumber(from) + 6);
         // 워크스페이스 하나의 달력이 실패해도(그사이 나간 경우 등) 나머지는 보인다.
-        const settled = await Promise.allSettled(
-          list
-            .filter((w) => w.organization_id === organizationId)
-            .map((w) => api.calendar(w.id, from, to, zone)),
-        );
+        // 세 읽기는 서로 의존하지 않는다. 활동의 오류·재시도는 기존 ActivityList가 맡는다.
+        const recent = activityApi.recentActivity(organizationId);
+        void recent.catch(() => undefined);
+        const [settled, notes] = await Promise.all([
+          Promise.allSettled(
+            list
+              .filter((w) => w.organization_id === organizationId)
+              .map((w) => api.calendar(w.id, from, to, zone)),
+          ),
+          activityApi.notifications(organizationId, undefined, 20),
+        ]);
         const calendars: CalendarView[] = settled.flatMap((s) =>
           s.status === 'fulfilled' ? [s.value] : [],
         );
@@ -109,8 +117,7 @@
           calendars.flatMap((c) => c.dates),
         );
         if (mine !== loadSeq) return;
-        const notes = await activityApi.notifications(organizationId, undefined, 20);
-        if (mine !== loadSeq) return;
+        initialActivity = recent;
         home = h;
         week = merged;
         notifications = notes.notifications.filter((x) => !x.read).slice(0, 5);
@@ -493,7 +500,7 @@
     </div>
     <section class="rounded-md border bg-card p-3" aria-label={m.home_activity_heading()}>
       <h2 class="mb-3 text-lg font-semibold">{m.home_activity_heading()}</h2>
-      {#if home !== undefined}<ActivityList version={reloadKey} />{/if}
+      {#if home !== undefined}<ActivityList version={reloadKey} {initialActivity} />{/if}
     </section>
   </section>
 {/if}

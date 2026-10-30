@@ -1,21 +1,36 @@
 # jq -f tools/perf-depth.jq screens.json
-# API dependency witnesses for product baseline 4ab54392 (not a generic timing heuristic).
+# API dependency witnesses for #211's parallel source boundaries (not a timing heuristic).
 # Edges follow App.load, HomeDashboard, ItemScreen, TaskBoard.loadItem,
 # detail-data.loadDetail and DocumentScreen. Each observed edge must finish before its child.
-# The parallel workspaces/organizations gate contributes one level, taking its slower arm.
+# Every parallel arm is checked. Session/home fan-outs contribute one level;
+# ItemScreen joins documents with item -> module before rendering the selected view.
 def pick($requests; $pattern; $after; $last):
   [$requests[] | select(.path | test($pattern)) | select(.start >= $after)] |
   if length == 0 then error("missing dependency witness: " + $pattern)
   elif $last then max_by(.start) else min_by(.start) end;
+def branch($requests; $pattern; $after):
+  [$requests[] | select(.path | test($pattern))] as $matches |
+  if ($matches | length) == 0 then error("missing dependency witness: " + $pattern)
+  elif any($matches[]; .start < $after) then error("early dependency witness: " + $pattern)
+  else $matches end;
+def require_overlap($requests):
+  ($requests | to_entries) as $arms |
+  reduce $arms[] as $arm (.;
+    # Exclude the request itself: its own end cannot witness parallelism.
+    # Both interval boundaries must overlap at least one actual sibling.
+    if any($arms[] | select(.key != $arm.key);
+      $arm.value.start < .value.end and .value.start < $arm.value.end)
+    then .
+    else error("non-overlapping dependency witness: " + $arm.value.path) end);
+def item_screen($screen):
+  ["board", "gantt", "task-detail", "document-tree"] | index($screen) != null;
 def patterns($screen):
-  if $screen == "home" or $screen == "activity" then
-    ["^/api/me/home$", "^/api/workspaces/[^/]+/calendar$", "^/api/me/notifications$", "^/api/me/activity$"]
-  elif $screen == "board" or $screen == "gantt" then
-    ["^/api/items/[^/]+$", "^/api/items/[^/]+/documents$", "^/api/items/[^/]+/recurrences/sync$", "^/api/items/[^/]+/tasks$"]
+  if $screen == "board" or $screen == "gantt" then
+    ["^/api/items/[^/]+/recurrences/sync$", "^/api/items/[^/]+/tasks$"]
   elif $screen == "task-detail" then
-    ["^/api/items/[^/]+$", "^/api/items/[^/]+/documents$", "^/api/tasks/[^/]+$", "^/api/items/[^/]+/tasks$", "^/api/tasks/[^/]+/comments$"]
+    ["^/api/tasks/[^/]+$", "^/api/items/[^/]+/tasks$", "^/api/tasks/[^/]+/comments$"]
   elif $screen == "document-tree" then
-    ["^/api/items/[^/]+$", "^/api/items/[^/]+/documents$", "^/api/items/[^/]+/backlinks$"]
+    ["^/api/items/[^/]+/backlinks$"]
   elif $screen == "document-open" then
     ["^/api/documents/[^/]+$", "^/api/items/[^/]+/documents$"]
   elif $screen == "calendar" then ["^/api/workspaces/[^/]+/calendar$"]
@@ -31,9 +46,29 @@ map(
   elif ($arms | map(.start) | min) < $root.end
   then error("session gate order changed") else . end |
   ($arms | max_by(.end)) as $gate |
-  reduce patterns(.screen)[] as $pattern ([$root, $gate];
-    .[-1].end as $after |
-    . + [pick($requests; $pattern; $after; $sample.screen == "task-detail" and ($pattern | endswith("/tasks$")))]) |
-  {screen: $sample.screen, repeat: $sample.repeat, depth: length,
-   chain: map({path, start, end})}
+  (if .screen == "home" or .screen == "activity" then
+    pick($requests; "^/api/me/home$"; $gate.end; false) as $home |
+    (["^/api/workspaces/[^/]+/calendar$", "^/api/me/notifications$", "^/api/me/activity$"] |
+      map(branch($requests; .; $home.end)) | add) as $children |
+    require_overlap($children) |
+    {chain: [$root, $gate, $home, ($children | max_by(.end))], parallel: $children}
+  else
+    (if item_screen(.screen) then
+      pick($requests; "^/api/items/[^/]+$"; $gate.end; false) as $item |
+      branch($requests; "^/api/items/[^/]+/documents$"; $gate.end) as $documents |
+      if any($documents[]; .start >= $item.end)
+      then error("non-overlapping dependency witness: item documents did not start before item completion")
+      else . end |
+      require_overlap([$item] + $documents) |
+      branch($requests; "^/api/modules/[^/]+$"; $item.end) as $modules |
+      ($modules | min_by(.start)) as $module |
+      {chain: [$root, $gate, $item, $module],
+       after: ([$documents[].end, $module.end] | max), parallel: ($documents + [$module])}
+    else {chain: [$root, $gate], after: $gate.end, parallel: []} end) as $initial |
+    reduce patterns(.screen)[] as $pattern ($initial;
+      pick($requests; $pattern; .after; $sample.screen == "task-detail" and ($pattern | endswith("/tasks$"))) as $child |
+      .chain += [$child] | .after = $child.end)
+  end) |
+  {screen: $sample.screen, repeat: $sample.repeat, depth: (.chain | length),
+   chain: (.chain | map({path, start, end})), parallel: (.parallel | map({path, start, end}))}
 )

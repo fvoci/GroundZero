@@ -56,8 +56,8 @@ valid_depth() {
   jq -f tools/perf-depth.jq "$fixture" > "$out/depth.json" || return 1
   jq -e 'group_by(.screen) |
     map({key: .[0].screen, value: (map(.depth) | unique)}) | from_entries == {
-      home: [6], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [7],
-      "document-tree": [5], "document-open": [4], calendar: [3], activity: [6]
+      home: [4], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [7],
+      "document-tree": [5], "document-open": [4], calendar: [3], activity: [4]
     }' "$out/depth.json"
 }
 check valid-depth valid_depth
@@ -65,6 +65,113 @@ check missing-workspaces reject_gate missing /api/workspaces
 check missing-organizations reject_gate missing /api/me/organizations
 check early-workspaces reject_gate early /api/workspaces
 check early-organizations reject_gate early /api/me/organizations
+reject_branch() {
+  local screen=$1 pattern=$2 kind=$3
+  jq --arg screen "$screen" --arg pattern "$pattern" --arg kind "$kind" '
+    map(if .screen == $screen then
+      .requests |= (if $kind == "missing" then map(select(.path | test($pattern) | not))
+        else map(if .path | test($pattern) then .start = 0 else . end) end)
+    else . end)' "$fixture" > "$out/branch-input.json"
+  if jq -f tools/perf-depth.jq "$out/branch-input.json" > /dev/null 2> "$out/branch-error.log"; then
+    return 1
+  fi
+  grep -F 'dependency witness' "$out/branch-error.log"
+}
+reject_join() {
+  local screen=$1 pattern=$2
+  jq --arg screen "$screen" --arg pattern "$pattern" '
+    map(if .screen == $screen then
+      .requests |= map(if .path | test($pattern) then .end = 999999999999999 else . end)
+    else . end)' "$fixture" > "$out/join-input.json"
+  if jq -f tools/perf-depth.jq "$out/join-input.json" > /dev/null 2> "$out/join-error.log"; then
+    return 1
+  fi
+  grep -F 'dependency witness' "$out/join-error.log"
+}
+for kind in missing early; do
+  for screen in home activity; do
+    check "$kind-$screen-calendar" reject_branch "$screen" '/calendar$' "$kind"
+    check "$kind-$screen-notifications" reject_branch "$screen" '^/api/me/notifications$' "$kind"
+    check "$kind-$screen-activity" reject_branch "$screen" '^/api/me/activity$' "$kind"
+  done
+  for screen in board gantt task-detail document-tree; do
+    check "$kind-$screen-item" reject_branch "$screen" '^/api/items/[^/]+$' "$kind"
+    check "$kind-$screen-documents" reject_branch "$screen" '^/api/items/[^/]+/documents$' "$kind"
+    check "$kind-$screen-module" reject_branch "$screen" '^/api/modules/[^/]+$' "$kind"
+  done
+done
+for screen in board gantt task-detail document-tree; do
+  check "unfinished-$screen-documents" reject_join "$screen" '^/api/items/[^/]+/documents$'
+  check "unfinished-$screen-module" reject_join "$screen" '^/api/modules/[^/]+$'
+done
+reject_serialized() {
+  local screen=$1 kind=$2
+  local input="$out/serialized-$screen-$kind.json"
+  jq --arg screen "$screen" --arg kind "$kind" '
+    def home_children:
+      to_entries | map(select(.value.path | test("^/api/(workspaces/[^/]+/calendar|me/(notifications|activity))$")));
+    map(if .screen != $screen then . else
+      .requests |= (
+        . as $requests |
+        if $kind == "documents" then
+          (to_entries | map(select(.value.path | test("^/api/items/[^/]+$"))) | min_by(.value.start)) as $item |
+          (to_entries | map(select(.value.path | test("^/api/items/[^/]+/documents$")))) as $documents |
+          (map(select(.path | test("^/api/modules/[^/]+$"))) | min_by(.start)) as $module |
+          ([$documents[].value.end, $module.end] | max) as $old_join |
+          (reduce $documents[] as $document ($requests;
+            ($document.value.end - $document.value.start) as $duration |
+            .[$document.key].start = $item.value.end |
+            .[$document.key].end = ($item.value.end + $duration))) as $delayed |
+          ([$documents[] | .key as $key | $delayed[$key].end] + [$module.end] | max) as $new_join |
+          # Move downstream calls with the join: rejection must be for lost
+          # overlap, rather than accidentally breaking an existing parent edge.
+          $delayed | to_entries | map(
+            if (.key as $key | any($documents[]; .key == $key)) or .value.start < $old_join
+            then .value
+            else .value | .start += ($new_join - $old_join) | .end += ($new_join - $old_join) end)
+        else
+          home_children as $children |
+          (map(select(.path == "/api/me/home")) | min_by(.start).end) as $parent_end |
+          if $kind == "home" then
+            ($children | sort_by(if .value.path | endswith("/calendar") then 0
+              elif .value.path == "/api/me/notifications" then 1 else 2 end)) as $ordered |
+            reduce $ordered[] as $child ({requests: $requests, after: $parent_end};
+              ($child.value.end - $child.value.start) as $duration |
+              .requests[$child.key].start = .after |
+              .requests[$child.key].end = (.after + $duration) |
+              .after += $duration) | .requests
+          else
+            ($children | map(select(.value.path | endswith("/" + (if $kind == "first" then "calendar" else $kind end)))) | min_by(.value.start)) as $target |
+            if $kind == "first" then
+              ($parent_end + $target.value.end - $target.value.start) as $first_end |
+              reduce $children[] as $child ($requests;
+                ($child.value.end - $child.value.start) as $duration |
+                (if $child.key == $target.key then $parent_end else $first_end end) as $start |
+                .[$child.key].start = $start | .[$child.key].end = ($start + $duration))
+            else
+              ($children | map(select(.key != $target.key) | .value.end) | max) as $siblings_end |
+              .[$target.key].start = $siblings_end |
+              .[$target.key].end = ($siblings_end + $target.value.end - $target.value.start)
+            end
+          end
+        end)
+    end)' "$fixture" > "$input"
+  if jq -f tools/perf-depth.jq "$input" > /dev/null 2> "$out/serialized-error.log"; then
+    printf 'accepted serialized fixture: %s %s\n' "$screen" "$kind"
+    return 1
+  fi
+  grep -F 'non-overlapping dependency witness' "$out/serialized-error.log"
+}
+for screen in home activity; do
+  check "serialized-$screen" reject_serialized "$screen" home
+  # An overlapping pair must not hide another branch that runs by itself.
+  for branch in calendar notifications activity first; do
+    check "isolated-$screen-$branch" reject_serialized "$screen" "$branch"
+  done
+done
+for screen in board gantt task-detail document-tree; do
+  check "serialized-$screen-documents" reject_serialized "$screen" documents
+done
 check cleanup-dead-monitor cleanup_dead_monitor
 replay_arguments() {
   jq -n '[

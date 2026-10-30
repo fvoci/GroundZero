@@ -8,8 +8,8 @@
       { "path": "/api/me/organizations", "start": 10, "end": 30 },
       { "path": "/api/me/home", "start": 30, "end": 40 },
       { "path": "/api/workspaces/sample-workspace/calendar", "start": 40, "end": 50 },
-      { "path": "/api/me/notifications", "start": 50, "end": 60 },
-      { "path": "/api/me/activity", "start": 60, "end": 70 }
+      { "path": "/api/me/notifications", "start": 40, "end": 60 },
+      { "path": "/api/me/activity", "start": 40, "end": 70 }
     ]
   },
   {
@@ -30,7 +30,8 @@
       { "path": "/api/workspaces", "start": 10, "end": 20 },
       { "path": "/api/me/organizations", "start": 10, "end": 30 },
       { "path": "/api/items/sample-item", "start": 30, "end": 40 },
-      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/documents", "start": 30, "end": 50 },
+      { "path": "/api/modules/sample-module", "start": 40, "end": 50 },
       { "path": "/api/items/sample-item/recurrences/sync", "start": 50, "end": 60 },
       { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 }
     ]
@@ -43,7 +44,8 @@
       { "path": "/api/workspaces", "start": 10, "end": 20 },
       { "path": "/api/me/organizations", "start": 10, "end": 30 },
       { "path": "/api/items/sample-item", "start": 30, "end": 40 },
-      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/documents", "start": 30, "end": 50 },
+      { "path": "/api/modules/sample-module", "start": 40, "end": 50 },
       { "path": "/api/items/sample-item/recurrences/sync", "start": 50, "end": 60 },
       { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 }
     ]
@@ -56,7 +58,8 @@
       { "path": "/api/workspaces", "start": 10, "end": 20 },
       { "path": "/api/me/organizations", "start": 10, "end": 30 },
       { "path": "/api/items/sample-item", "start": 30, "end": 40 },
-      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/documents", "start": 30, "end": 50 },
+      { "path": "/api/modules/sample-module", "start": 40, "end": 50 },
       { "path": "/api/tasks/sample-task", "start": 50, "end": 60 },
       { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 },
       { "path": "/api/tasks/sample-task/comments", "start": 70, "end": 80 }
@@ -70,7 +73,8 @@
       { "path": "/api/workspaces", "start": 10, "end": 20 },
       { "path": "/api/me/organizations", "start": 10, "end": 30 },
       { "path": "/api/items/sample-item", "start": 30, "end": 40 },
-      { "path": "/api/items/sample-item/documents", "start": 40, "end": 50 },
+      { "path": "/api/items/sample-item/documents", "start": 30, "end": 50 },
+      { "path": "/api/modules/sample-module", "start": 40, "end": 50 },
       { "path": "/api/items/sample-item/backlinks", "start": 50, "end": 60 }
     ]
   },
@@ -104,8 +108,8 @@
       { "path": "/api/me/organizations", "start": 10, "end": 30 },
       { "path": "/api/me/home", "start": 30, "end": 40 },
       { "path": "/api/workspaces/sample-workspace/calendar", "start": 40, "end": 50 },
-      { "path": "/api/me/notifications", "start": 50, "end": 60 },
-      { "path": "/api/me/activity", "start": 60, "end": 70 }
+      { "path": "/api/me/notifications", "start": 40, "end": 60 },
+      { "path": "/api/me/activity", "start": 40, "end": 70 }
     ]
   }
 ]

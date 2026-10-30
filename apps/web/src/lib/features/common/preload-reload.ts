@@ -17,6 +17,16 @@
  */
 export const PRELOAD_RELOAD_KEY = 'fvoci:preload-reload';
 
+const localErrorHandlers = new Set<(error: unknown) => boolean>();
+
+/** Return true only for an error whose feedback/retry the caller owns. Dispose after loading. */
+export function registerPreloadErrorHandler(handler: (error: unknown) => boolean): () => void {
+  localErrorHandlers.add(handler);
+  return () => {
+    localErrorHandlers.delete(handler);
+  };
+}
+
 /** 다시 읽어 뜬 페이지가 같은 실패 묶음으로 보는 시간. 이 안의 실패는 다시 읽지 않는다. */
 export const PRELOAD_RELOAD_SETTLE_MS = 30_000;
 
@@ -109,6 +119,14 @@ export function watchPreloadErrors(options: PreloadReloadOptions = {}): () => vo
   };
 
   const onError = (event: Event): void => {
+    // Window-targeted dispatch invokes listeners in registration order, even for
+    // capture listeners. Consult local renderers before any reload/draft side effects.
+    const error = 'payload' in event ? event.payload : undefined;
+    for (const handler of localErrorHandlers) {
+      if (!handler(error)) continue;
+      event.preventDefault();
+      return;
+    }
     if (reloading) {
       event.preventDefault();
       return;

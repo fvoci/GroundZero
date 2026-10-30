@@ -390,9 +390,11 @@ export async function printBodyHtml(prepared: PreparedExport): Promise<string> {
   try {
     editor.commands.setContent(prepared.body);
     const html = editor.getHTML();
-    const { default: katex } = await import('katex');
     const dom = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
-    for (const el of dom.querySelectorAll('[data-type="inline-math"], [data-type="block-math"]')) {
+    const formulas = dom.querySelectorAll('[data-type="inline-math"], [data-type="block-math"]');
+    if (formulas.length === 0) return dom.body.innerHTML;
+    const { default: katex } = await import('katex');
+    for (const el of formulas) {
       const latex = el.getAttribute('data-latex') ?? '';
       el.innerHTML = katex.renderToString(latex, {
         displayMode: el.getAttribute('data-type') === 'block-math',
