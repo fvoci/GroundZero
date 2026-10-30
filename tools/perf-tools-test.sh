@@ -124,6 +124,13 @@ sharing_lifecycle() {
   local case_root="$out/sharing-$scenario"
   mkdir -p "$case_root/tools" "$case_root/crates/server/tests" "$case_root/crates/db/migrations"
   cp tools/measure-240.sh tools/perf240-run.sh tools/perf240-summary.jq "$case_root/tools/"
+  if [[ "$scenario" == injection-mismatch ]]; then
+    local mutated_source
+    mutated_source=$(cat "$case_root/tools/measure-240.sh")
+    mutated_source=${mutated_source/'measure_lock="$HOME/.cache/fvoci-measure.lock"'/'measure_lock="${HOME}/.cache/fvoci-measure.lock"'}
+    [[ "$mutated_source" == *'measure_lock="${HOME}/.cache/fvoci-measure.lock"'* ]] || return 1
+    printf '%s\n' "$mutated_source" > "$case_root/tools/measure-240.sh"
+  fi
   cp crates/server/tests/perf240.rs "$case_root/crates/server/tests/"
   cp crates/db/migrations/*.sql "$case_root/crates/db/migrations/"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$case_root/server-stub"
@@ -140,6 +147,10 @@ sharing_lifecycle() {
   # Inject only the lock pathname into an isolated copy; HOME is never changed.
   script_source=$(cat "$test_sharing_root/tools/measure-240.sh")
   script_source=${script_source/'measure_lock="$HOME/.cache/fvoci-measure.lock"'/'measure_lock="$test_sharing_lock"'}
+  if [[ "$script_source" != *'measure_lock="$test_sharing_lock"'* ]]; then
+    printf 'lock path substitution failed; refusing to use the real HOME lock\n' >&2
+    exit 97
+  fi
   git() {
     case "$*" in
       'rev-parse --show-toplevel') printf '%s\n' "$test_sharing_root" ;;
@@ -215,9 +226,17 @@ sharing_lifecycle() {
     touch "$test_sharing_root/deferred-build-lock"
   fi
   if [[ "$test_sharing_scenario" == invalid-lock ]]; then mkdir "$test_sharing_lock"; fi
+  if [[ "$test_sharing_scenario" == injection-mismatch ]]; then
+    # Catch an unsafe launch even before the guard exists; never run the real lock path.
+    timeout() { touch "$test_sharing_root/unsafe-launch"; return 98; }
+  fi
   timeout 10 bash -c "$script_source"
 SHARING
   case "$scenario" in
+    injection-mismatch)
+      test "$status" -eq 97 || return 1
+      grep -Fx 'lock path substitution failed; refusing to use the real HOME lock' "$case_root/run.log" || return 1
+      test ! -e "$case_root/unsafe-launch" && test ! -e "$case_root/cargo.log" || return 1 ;;
     cleanup) test "$status" -eq 23 || return 1 ;;
     prior-failure) test "$status" -eq 17 || return 1 ;;
     contamination)
@@ -247,4 +266,5 @@ check sharing-missing-lock-directory sharing_lifecycle missing-lock-dir
 check sharing-invalid-lock sharing_lifecycle invalid-lock
 check sharing-lock-creation-error sharing_lifecycle lock-error
 check sharing-missing-owned-lock sharing_lifecycle missing-owned-lock
+check sharing-rejects-lock-injection-mismatch sharing_lifecycle injection-mismatch
 test "$failures" -eq 0
