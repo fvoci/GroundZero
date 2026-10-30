@@ -13,7 +13,8 @@
 //! 단계를 실패로 끝내고 실패와 같은 정리를 한다(#93, [`compose::watch_interrupts`]). `--external-services`는 Compose를
 //! 쓰지 않으므로 잠그지 않는다.
 //!
-//! 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다. `--host`만 기존 게시 포트 경로를 쓴다.
+//! amd64·rootful Docker의 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다.
+//! 비amd64·rootful은 이유를 출력하고 호스트 경로로 실행한다. rootless는 기본 실행을 거절하고 `--host`를 안내한다.
 //! 컨테이너 빌드의 HOME·Cargo 캐시·target·임시 파일은 `target/test-container` 안에서 호스트 빌드와 분리한다.
 
 use std::ffi::OsString;
@@ -212,6 +213,55 @@ pub enum Execution {
     Host,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ExecutionChoice {
+    Container,
+    Host(&'static str),
+    Unsupported(&'static str),
+}
+
+fn select_execution(architecture: &str, rootless: bool) -> ExecutionChoice {
+    if rootless {
+        ExecutionChoice::Unsupported(
+            "rootless Docker는 아직 지원하지 않습니다. --host로 실행하세요",
+        )
+    } else if matches!(architecture, "amd64" | "x86_64") {
+        ExecutionChoice::Container
+    } else {
+        ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다")
+    }
+}
+
+fn prepare_test_container(
+    root: &Path,
+    compose: &Compose,
+    sh: &Shell,
+    execution: Execution,
+) -> Result<Option<TestContainer>> {
+    if let Execution::Host = execution {
+        return Ok(None);
+    }
+    let format = "{{json .SecurityOptions}}";
+    let options = cmd!(sh, "docker info --format {format}")
+        .quiet()
+        .read()
+        .context("read Docker security options before selecting the test runner")?;
+    let options: Option<Vec<String>> =
+        serde_json::from_str(&options).context("parse Docker security options")?;
+    let rootless = options
+        .unwrap_or_default()
+        .iter()
+        .any(|option| option == "name=rootless");
+    match select_execution(std::env::consts::ARCH, rootless) {
+        ExecutionChoice::Container => Ok(Some(TestContainer::new(root, compose, sh)?)),
+        ExecutionChoice::Host(reason) => {
+            println!("==> {reason}");
+            Ok(None)
+        }
+        ExecutionChoice::Unsupported(reason) => anyhow::bail!("{reason}"),
+    }
+}
+
 pub fn run(
     root: &Path,
     keep: bool,
@@ -229,10 +279,7 @@ pub fn run(
     let _lock = compose.lock_run()?;
     compose::watch_interrupts()?;
     let sh = compose.shell()?;
-    let runner = match execution {
-        Execution::Container => Some(TestContainer::new(root, &compose, &sh)?),
-        Execution::Host => None,
-    };
+    let runner = prepare_test_container(root, &compose, &sh, execution)?;
     println!("==> compose up ({})", compose.project());
     print_recovery(&compose);
 
@@ -495,6 +542,54 @@ fn push_s3_credentials(sh: &Shell) -> [xshell::PushEnv<'_>; 3] {
 mod tests {
     use super::*;
     use crate::compose::tests::{assert_held, scratch_root};
+
+    #[test]
+    fn amd64_rootful_uses_the_container() {
+        for architecture in ["amd64", "x86_64"] {
+            assert_eq!(
+                select_execution(architecture, false),
+                ExecutionChoice::Container,
+                "{architecture}"
+            );
+        }
+    }
+
+    #[test]
+    fn arm64_rootful_uses_the_host_with_a_reason() {
+        for architecture in ["arm64", "aarch64"] {
+            assert_eq!(
+                select_execution(architecture, false),
+                ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다"),
+                "{architecture}"
+            );
+        }
+    }
+
+    #[test]
+    fn amd64_rootless_fails_with_the_host_instruction() {
+        for architecture in ["amd64", "x86_64"] {
+            assert_eq!(
+                select_execution(architecture, true),
+                ExecutionChoice::Unsupported(
+                    "rootless Docker는 아직 지원하지 않습니다. --host로 실행하세요"
+                ),
+                "{architecture}"
+            );
+        }
+    }
+
+    #[test]
+    fn arm64_rootless_fails_before_the_host_fallback() {
+        for architecture in ["arm64", "aarch64"] {
+            assert_eq!(
+                select_execution(architecture, true),
+                ExecutionChoice::Unsupported(
+                    "rootless Docker는 아직 지원하지 않습니다. --host로 실행하세요"
+                ),
+                "{architecture}"
+            );
+        }
+    }
 
     #[test]
     fn ci_base_image_requires_a_sha256_digest() -> Result<()> {
