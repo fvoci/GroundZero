@@ -20,7 +20,9 @@
     oncreated,
     onunavailable,
   }: { meId: string; oncreated: () => void; onunavailable: () => void } = $props();
-  let requestId = $state<string>();
+  let dialogId = $state<string>();
+  let requestId: string | undefined;
+  let submitted: { name: string; firstAdmin: string } | undefined;
   let name = $state('');
   let firstAdmin = $state('');
   let admins = $state<ServerAdmin[]>();
@@ -33,7 +35,7 @@
   let candidateSeq = 0;
   const draft = createFormDraft<{ name: string; firstAdmin: string }>({
     preserve: false,
-    name: () => (requestId === undefined ? undefined : `server-organization:${requestId}`),
+    name: () => (dialogId === undefined ? undefined : `server-organization:${dialogId}`),
     snapshot: () => ({ name, firstAdmin }),
     parse: (v) =>
       isRecord(v) && typeof v.name === 'string' && typeof v.firstAdmin === 'string'
@@ -48,7 +50,7 @@
       firstAdmin = meId;
     },
     dirty: () =>
-      requestId !== undefined && (name !== '' || (firstAdmin !== '' && firstAdmin !== meId)),
+      dialogId !== undefined && (name !== '' || (firstAdmin !== '' && firstAdmin !== meId)),
     busy: () => busy,
   });
   onMount(() => {
@@ -75,8 +77,10 @@
     }
   }
   function open(): void {
-    // One logical creation per dialog. A lost response must retry this same UUID.
-    requestId = crypto.randomUUID();
+    // Keep the form session stable when a changed payload needs a new request ID.
+    dialogId = crypto.randomUUID();
+    requestId = dialogId;
+    submitted = undefined;
     name = '';
     firstAdmin = meId;
     error = '';
@@ -86,7 +90,9 @@
   }
   function close(): void {
     draft.leave.request(() => {
+      dialogId = undefined;
       requestId = undefined;
+      submitted = undefined;
       candidateSeq += 1;
     });
   }
@@ -100,17 +106,27 @@
     if (nameError !== '' || adminError !== '') return;
     const attempt = draft.capture();
     if (attempt === undefined) return;
+    // Match SQL btrim(text): remove ordinary spaces, preserving tabs and other characters.
+    const input = { name: name.replace(/^ +| +(?![\s\S])/g, ''), firstAdmin };
+    if (
+      submitted !== undefined &&
+      (submitted.name !== input.name || submitted.firstAdmin !== input.firstAdmin)
+    )
+      requestId = crypto.randomUUID();
+    submitted = input;
     busy = true;
     error = '';
     try {
       await serverAdminApi.createOrganization({
         request_id: requestId,
-        name: name.trim(),
-        first_admin_user_id: firstAdmin,
+        name: input.name,
+        first_admin_user_id: input.firstAdmin,
       });
       if (!draft.isOwner(attempt)) return;
       if (draft.complete(attempt)) {
+        dialogId = undefined;
         requestId = undefined;
+        submitted = undefined;
         candidateSeq += 1;
         notifyDone(m.organizations_created_done());
         oncreated();
@@ -141,7 +157,7 @@
 <Button id="server-create-organization" onclick={open}>{m.organizations_create()}</Button>
 <Dialog.Root
   bind:open={
-    () => requestId !== undefined,
+    () => dialogId !== undefined,
     (open: boolean) => {
       if (!open) close();
     }

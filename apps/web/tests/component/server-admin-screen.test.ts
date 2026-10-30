@@ -238,6 +238,106 @@ it('keeps the request ID and input after a lost response and prevents concurrent
   expect(create.mock.calls[2]?.[0].request_id).not.toBe(first?.request_id);
 });
 
+it.each([
+  {
+    scenario: 'unchanged input',
+    name: '원래 조직',
+    admin: 'user-a',
+    sentName: '원래 조직',
+    sameId: true,
+  },
+  {
+    scenario: 'surrounding spaces',
+    name: '  원래 조직  ',
+    admin: 'user-a',
+    sentName: '원래 조직',
+    sameId: true,
+  },
+  {
+    scenario: 'a changed name',
+    name: '바꾼 조직',
+    admin: 'user-a',
+    sentName: '바꾼 조직',
+    sameId: false,
+  },
+  {
+    scenario: 'a changed first administrator',
+    name: '원래 조직',
+    admin: 'user-b',
+    sentName: '원래 조직',
+    sameId: false,
+  },
+  {
+    scenario: 'a name changed by a tab',
+    name: '\t원래 조직',
+    admin: 'user-a',
+    sentName: '\t원래 조직',
+    sameId: false,
+  },
+])(
+  'uses request IDs for $scenario after a lost response without resetting the form',
+  async ({ name, admin, sentName, sameId }) => {
+    const create = vi
+      .spyOn(serverAdminApi, 'createOrganization')
+      .mockRejectedValue(new NetworkError('response lost'));
+    view();
+    const dialog = await openCreate();
+    const nameInput = within(dialog).getByRole('textbox', { name: '이름' });
+    const adminInput = within(dialog).getByRole('combobox', { name: '첫 관리자' });
+    const submit = within(dialog).getByRole('button', { name: '조직 만들기' });
+    await fireEvent.input(nameInput, { target: { value: '원래 조직' } });
+    await fireEvent.click(submit);
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(submit).toBeEnabled();
+    });
+    await fireEvent.input(nameInput, { target: { value: name } });
+    await fireEvent.change(adminInput, { target: { value: admin } });
+    await fireEvent.click(submit);
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(submit).toBeEnabled();
+    });
+    const first = create.mock.calls[0]?.[0];
+    const second = create.mock.calls[1]?.[0];
+    expect(first?.request_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second?.request_id).toMatch(/^[0-9a-f-]{36}$/);
+    if (sameId) expect(second?.request_id).toBe(first?.request_id);
+    else expect(second?.request_id).not.toBe(first?.request_id);
+    expect(second).toEqual({
+      request_id: second?.request_id,
+      name: sentName,
+      first_admin_user_id: admin,
+    });
+    expect(nameInput).toHaveValue(name);
+    expect(adminInput).toHaveValue(admin);
+  },
+);
+
+it('compares retries with the last submitted values, including a return to an earlier name', async () => {
+  const create = vi
+    .spyOn(serverAdminApi, 'createOrganization')
+    .mockRejectedValue(new NetworkError('response lost'));
+  view();
+  const dialog = await openCreate();
+  const input = within(dialog).getByRole('textbox', { name: '이름' });
+  const submit = within(dialog).getByRole('button', { name: '조직 만들기' });
+  for (const [index, value] of ['원래 조직', '바꾼 조직', '바꾼 조직', '원래 조직'].entries()) {
+    await fireEvent.input(input, { target: { value } });
+    await fireEvent.click(submit);
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledTimes(index + 1);
+      expect(submit).toBeEnabled();
+    });
+    expect(input).toHaveValue(value);
+  }
+  const ids = create.mock.calls.map(([body]) => body.request_id);
+  expect(ids[0]).not.toBe(ids[1]);
+  expect(ids[1]).toBe(ids[2]);
+  expect(ids[3]).not.toBe(ids[0]);
+  expect(ids[3]).not.toBe(ids[2]);
+});
+
 it.each(['name', 'first_admin_user_id'])(
   'attaches a server 400 to %s and keeps the input',
   async (field) => {
