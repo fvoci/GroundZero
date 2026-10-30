@@ -140,7 +140,7 @@ if (measurementRoot !== undefined) {
       },
     ];
     for (const flow of flows) {
-      for (const action of ['click', 'hover-click', 'hover-away']) {
+      for (const action of ['click', 'hover-click', 'hover-away', 'save-data-hover-click']) {
         for (let repeat = 1; repeat <= 3; repeat += 1) {
           const context = await browser.newContext({
             baseURL: origin,
@@ -148,6 +148,14 @@ if (measurementRoot !== undefined) {
             viewport: { width: 1280, height: 800 },
           });
           await context.addCookies([cookie]);
+          if (action === 'save-data-hover-click') {
+            await context.addInitScript(() => {
+              Object.defineProperty(navigator, 'connection', {
+                configurable: true,
+                value: { saveData: true },
+              });
+            });
+          }
           const page = await context.newPage();
           await page.goto(flow.source);
           const link = page.locator(flow.link).first();
@@ -155,7 +163,12 @@ if (measurementRoot !== undefined) {
           await page.waitForLoadState('networkidle');
           const requests: { request: Request; start: number; end?: number; status?: number }[] = [];
           const gateRequests: Request[] = [];
+          const inFlight = new Set<Request>();
+          let lastNetworkAt = Date.now();
           page.on('request', (request) => {
+            if (!request.url().startsWith('http')) return;
+            inFlight.add(request);
+            lastNetworkAt = Date.now();
             if (
               request.method() === 'GET' &&
               new URL(request.url()).pathname === flow.gate &&
@@ -174,9 +187,15 @@ if (measurementRoot !== undefined) {
             }
           });
           page.on('requestfinished', (request) => {
+            inFlight.delete(request);
+            lastNetworkAt = Date.now();
             if (new URL(request.url()).pathname !== flow.api) return;
             const row = requests.find((entry) => entry.request === request);
             if (row !== undefined) row.end = Date.now();
+          });
+          page.on('requestfailed', (request) => {
+            inFlight.delete(request);
+            lastNetworkAt = Date.now();
           });
           if (action !== 'click') {
             await link.hover();
@@ -191,7 +210,6 @@ if (measurementRoot !== undefined) {
           let clickedAt: number | null = null;
           if (action === 'hover-away') {
             await page.mouse.move(0, 0);
-            await page.waitForLoadState('networkidle');
           } else {
             await page.evaluate(({ content, heading, target }) => {
               let started: number | undefined;
@@ -236,9 +254,12 @@ if (measurementRoot !== undefined) {
             clickedAt = await page.evaluate(() =>
               Number(document.documentElement.dataset.intentClickAt),
             );
-            await page.waitForLoadState('networkidle');
           }
-          expect(requests.every((row) => row.status === 200)).toBe(true);
+          // SPA moves keep the document lifecycle's old networkidle state.
+          await expect
+            .poll(() => inFlight.size === 0 && Date.now() - lastNetworkAt >= 500)
+            .toBe(true);
+          expect(requests.map((row) => row.status)).toEqual(requests.map(() => 200));
           const firstModule = gateRequests[0]?.timing().startTime;
           const prefetchedReads = await page.evaluate(
             ({ api, clickedAt }) =>
@@ -251,6 +272,7 @@ if (measurementRoot !== undefined) {
                 ).length,
             { api: flow.api, clickedAt },
           );
+          if (action === 'save-data-hover-click') expect(prefetchedReads).toBe(0);
           // A board's later grade read is independent of the prefetched entry read.
           const initialReads = requests.filter(
             (row) => firstModule === undefined || row.start < firstModule,
@@ -378,13 +400,24 @@ if (measurementRoot !== undefined) {
         expect(firstAppFetchId).toBeDefined();
         const preloadId = responses[0]?.id;
         expect(preloadId).toBeTruthy();
+        const preloadObserved = await page.evaluate(() =>
+          performance
+            .getEntriesByType('resource')
+            .some(
+              (entry) =>
+                entry instanceof PerformanceResourceTiming &&
+                new URL(entry.name).pathname === '/api/me' &&
+                entry.initiatorType === 'link',
+            ),
+        );
         const ids = new Set(responses.map((response) => response.id));
         results.push({
           scenario,
           responses,
           distinctServerReads: ids.size,
           firstAppFetchId,
-          reused: preloadId === firstAppFetchId,
+          preloadObserved,
+          reused: preloadObserved && preloadId === firstAppFetchId,
         });
         writeFileSync(
           path.join(measurementRoot, 'preload-samples.json'),
