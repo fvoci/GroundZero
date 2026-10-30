@@ -147,7 +147,7 @@ it('invokes the existing template and archive commands through the menu', async 
   await fireEvent.click(await screen.findByRole('menuitem', { name: '템플릿으로 표시' }));
   expect(template).toHaveBeenCalledWith(item.id, true);
   await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: '보관', exact: true }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: '보관' }));
   expect(archive).toHaveBeenCalledWith(item.id, true);
   expect(await screen.findByText('보관됨 · 읽기 전용')).toBeVisible();
 });
@@ -182,7 +182,7 @@ it('keeps the copy dialog and its input mounted when Escape requests discarding 
   vi.spyOn(api, 'modules').mockResolvedValue([mod]);
   await mount();
   await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: '복제', exact: true }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: '복제' }));
   const copy = await screen.findByRole('dialog', { name: '항목 복제' });
   await fireEvent.input(within(copy).getByLabelText('새 제목'), {
     target: { value: '사본 편집 중' },

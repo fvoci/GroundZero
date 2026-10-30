@@ -92,7 +92,7 @@
   let infoOpen = $state(false);
   let profile = $state<ItemProfileView | undefined>(undefined);
   let profileDirty = $state(false);
-  let copy = $state<ReturnType<typeof ItemCopy> | undefined>(undefined);
+  let copy = $state<{ start: () => Promise<void> } | undefined>(undefined);
   let moreButton = $state<HTMLButtonElement | null>(null);
   let deleting = $state(false);
 
@@ -610,7 +610,9 @@
         oncancel={() => moreButton?.focus()}
         what={m.modules_delete_item_what()}
         remove={() => api.trashItem(current.id)}
-        ondeleted={() => router.navigate(modulePath(workspace.id, current.module_id))}
+        ondeleted={() => {
+          router.navigate(modulePath(workspace.id, current.module_id));
+        }}
       />
     {/if}
     {#if mod !== undefined && workspace.access !== 'read'}
@@ -730,8 +732,8 @@
               <!-- 머리: 묶음과 상관없이 늘 보이는 항목 프로필과 복제·템플릿(R7 A가 묶음을 정하지 않은 영역). -->
               <ItemProfilePanel
                 item={view}
-                bind:profile
-                bind:dirty={profileDirty}
+                onprofile={(next: ItemProfileView | undefined) => (profile = next)}
+                ondirty={(next: boolean) => (profileDirty = next)}
                 onrestore={() => (infoOpen = true)}
                 kind={mod.kind}
                 stays={staysOnThisItem}

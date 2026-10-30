@@ -165,12 +165,6 @@
     />
   </fieldset>
 {/each}
-<DiscardChangesConfirm
-  open={draft.leave.open}
-  onkeep={draft.leave.keep}
-  ondiscard={draft.discardAndLeave}
-/>
-
 <div class="contents text-sm">
   {#if trigger && !open}
     <div>
@@ -189,7 +183,10 @@
 >
   <Dialog.Content
     class="max-h-[90vh] overflow-y-auto"
-    onCloseAutoFocus={(event) => {
+    escapeKeydownBehavior={draft.leave.open || busy ? 'ignore' : 'close'}
+    interactOutsideBehavior={draft.leave.open || busy ? 'ignore' : 'close'}
+    showCloseButton={!busy}
+    onCloseAutoFocus={(event: Event) => {
       if (returnFocus !== undefined && returnFocus !== null) {
         event.preventDefault();
         returnFocus.focus();
@@ -235,3 +232,8 @@
     {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
   </Dialog.Content>
 </Dialog.Root>
+<DiscardChangesConfirm
+  open={draft.leave.open}
+  onkeep={draft.leave.keep}
+  ondiscard={draft.discardAndLeave}
+/>

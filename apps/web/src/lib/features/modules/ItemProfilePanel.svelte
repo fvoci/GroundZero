@@ -38,20 +38,13 @@
     onchanged: () => void;
     /** 앱 안 이동의 다음 경로에서도 이 패널이 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
     stays?: ((next: string) => boolean) | undefined;
-    profile?: ItemProfileView | undefined;
-    dirty?: boolean;
+    onprofile?: (profile: ItemProfileView | undefined) => void;
+    ondirty?: (dirty: boolean) => void;
     onrestore?: () => void;
   }
 
-  let {
-    item,
-    kind,
-    onchanged,
-    stays,
-    profile = $bindable(undefined),
-    dirty = $bindable(false),
-    onrestore,
-  }: Props = $props();
+  const { item, kind, onchanged, stays, onprofile, ondirty, onrestore }: Props = $props();
+  let profile = $state<ItemProfileView | undefined>(undefined);
   let people = $state<AssigneeView[]>([]);
   let error = $state<string | undefined>(undefined);
   let editing = $state(false);
@@ -95,7 +88,7 @@
   let busy = $state(false);
   let membersBaseline = $state('');
   let membersBusy = $state(false);
-  const memberSnapshot = () => JSON.stringify([memberIds.toSorted(), groupIds.toSorted()]);
+  const memberSnapshot = () => JSON.stringify([[...memberIds].sort(), [...groupIds].sort()]);
   const membersDirty = $derived(managing && memberSnapshot() !== membersBaseline);
   const membersDraft = createFormDraft({
     preserve: false,
@@ -199,7 +192,12 @@
   });
   onMount(draft.attach);
   $effect(() => {
-    dirty = busy || membersBusy || (editing && JSON.stringify(form) !== baseline) || membersDirty;
+    onprofile?.(profile);
+  });
+  $effect(() => {
+    ondirty?.(
+      busy || membersBusy || (editing && JSON.stringify(form) !== baseline) || membersDirty,
+    );
   });
 
   // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
@@ -584,8 +582,9 @@
             size="sm"
             variant="ghost"
             disabled={membersBusy}
-            onclick={() => membersDraft.leave.request(() => (managing = false))}
-            >{m.common_cancel()}</Button
+            onclick={() => {
+              membersDraft.leave.request(() => (managing = false));
+            }}>{m.common_cancel()}</Button
           >
         </div>
       {:else if p.members.length === 0 && p.groups.length === 0}

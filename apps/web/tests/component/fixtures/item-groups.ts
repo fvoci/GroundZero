@@ -13,7 +13,7 @@ export async function openItemInfo(): Promise<void> {
 
 export async function openItemAction(label: string): Promise<void> {
   await fireEvent.click(await screen.findByRole('button', { name: m.modules_more_actions() }));
-  await fireEvent.click(await screen.findByRole('menuitem', { name: label, exact: true }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: label }));
 }
 
 // 항목 화면은 고른 묶음만 마운트한다(D-121). 묶음 안 패널을 보는 시험은 먼저 그 묶음으로 간다.
