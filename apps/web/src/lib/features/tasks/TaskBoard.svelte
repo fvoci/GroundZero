@@ -1,10 +1,7 @@
 <script lang="ts">
-  import { type SavedViewView } from '$lib/features/events/saved-views-model';
-  import { savedViewsApi } from '$lib/features/events/saved-views-api';
+  import TaskKanban from './TaskKanban.svelte';
+  import TaskList from './TaskList.svelte';
   import BoardFilters from './BoardFilters.svelte';
-  import BoardCard from './BoardCard.svelte';
-  import BoardLane from './BoardLane.svelte';
-  import BoardQuickAdd from './BoardQuickAdd.svelte';
   import { handleCardKey } from './board-keyboard';
   import { taskData as work } from '$lib/features/tasks/detail-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
@@ -23,11 +20,8 @@
     PlanBlockedView,
     UndatedTaskView,
   } from '$lib/api/client';
-  import { ApiError, newRequestId } from '$lib/api/client';
-  import { canonicalJson } from '$lib/features/documents/drafts';
+  import { ApiError } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { org } from '$lib/org.svelte';
-  import { readSession, writeSession } from '$lib/storage';
   import StatusEditor from './StatusEditor.svelte';
   import { me } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
@@ -41,7 +35,6 @@
   import { Input } from '$lib/ui/input';
   import { NativeSelect } from '$lib/ui/native-select';
   import { durationText } from '$lib/features/time/format';
-  import TaskTimeStart from '$lib/features/time/TaskTimeStart.svelte';
   import CalendarTaskDialog from '$lib/features/events/CalendarTaskDialog.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import type { StoredFormDraft } from '$lib/features/tasks/drafts';
@@ -53,7 +46,6 @@
     storeFormDraft,
   } from '$lib/features/tasks/drafts';
   import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
-  import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import { dismissDone, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay, formatInstant } from '$lib/display';
@@ -78,23 +70,15 @@
     reconcileMove,
     replan,
   } from './move-sync';
-  import type { TaskFilter, TaskSort, TaskViewMode } from './filters';
-  import {
-    applyFilter,
-    assigneesOf,
-    EMPTY_FILTER,
-    isFiltered,
-    isRecord,
-    readConfig,
-    sortTasks,
-    VIEWS,
-  } from './filters';
+  import { createBoardViews } from './board-views.svelte';
+  import type { TaskViewMode } from './filters';
+  import { applyFilter, assigneesOf, isFiltered, sortTasks, VIEWS } from './filters';
   import { undatedText } from './labels';
   import GanttChart from './GanttChart.svelte';
   import { formOf } from './form';
   import ShiftProposals from './ShiftProposals.svelte';
   import TaskCalendar from './TaskCalendar.svelte';
-  import TaskDetail from './TaskDetail.svelte';
+  import TaskBoardDetailDialog from './TaskBoardDetailDialog.svelte';
 
   interface Props {
     item: ItemView;
@@ -118,7 +102,6 @@
   const statusNames = $derived(definitions.map((s) => s.name));
   let editingStatuses = $state(false);
   let tasks = $state<TaskView[]>([]);
-  let view = $state<TaskViewMode>('board');
   let error = $state<string | undefined>(undefined);
   let status = $state('');
   // 옮기기 실패 안내. 항목을 다시 읽어 목록을 새로 받아도(error를 지움) 남는다. 다음 옮기기가 성공하면 지운다.
@@ -149,312 +132,45 @@
     }
   }
 
-  // 검색·필터·정렬과 저장한 보기(D-31).
-  let filter = $state<TaskFilter>({ ...EMPTY_FILTER });
-  let sort = $state<TaskSort>('position');
-  let filtersOpen = $state(false);
-  let views = $state<SavedViewView[]>([]);
-  let selectedView = $state('');
-  // 보기를 지우는 중(두 번 눌러 같은 보기를 다시 지우려다 404 실패를 보이지 않게).
-  let deletingView = $state(false);
-  // 저장한 보기 지우기를 묻는 중. 확인 단추로 초점을 옮기고, 그만두면 지우기 단추로 돌려준다.
-  let askingViewDelete = $state(false);
-  let viewDeleteConfirm = $state<HTMLButtonElement | null>(null);
-  async function askViewDelete(): Promise<void> {
-    askingViewDelete = true;
-    await tick();
-    viewDeleteConfirm?.focus();
-  }
-  async function stopViewDelete(): Promise<void> {
-    askingViewDelete = false;
-    await tick();
-    document.getElementById('view-delete')?.focus();
-  }
-  let viewName = $state('');
-  let viewDefault = $state(false);
-  interface ViewRequest {
-    id: string;
-    payload: string;
-    target: { id: string; version: number } | null;
-  }
-  let viewRequest = $state<ViewRequest | null>(null);
-  const isViewRequest = (id: string): boolean => viewRequest?.id === id;
-  const viewDirty = $derived(
-    viewRequest !== null ||
-      viewName.trim() !== (views.find((v) => v.id === selectedView)?.name ?? ''),
+  const boardViews = createBoardViews({
+    get item() {
+      return item;
+    },
+    get routeView() {
+      return routeView;
+    },
+    get leave() {
+      return leave;
+    },
+    get error() {
+      return error;
+    },
+    set error(value) {
+      error = value;
+    },
+    get status() {
+      return status;
+    },
+    set status(value) {
+      status = value;
+    },
+  });
+  const {
+    viewDraft,
+    touchContext,
+    changeView,
+    loadViews,
+    applyView,
+    saveView,
+    deleteView,
+    askViewDelete,
+    stopViewDelete,
+  } = boardViews;
+  const shown = $derived(
+    sortTasks(applyFilter(tasks, boardViews.filter, me.userId), boardViews.sort),
   );
-  interface ViewDraft {
-    name: string;
-    config: { view: TaskViewMode; filter: TaskFilter; sort: TaskSort; default: boolean };
-    request: ViewRequest | null;
-  }
-  const viewDraft = createFormDraft<ViewDraft>({
-    preserve: false,
-    name: () => `task-view:${item.id}`,
-    snapshot: () => ({
-      name: viewName,
-      config: { view, filter: { ...filter }, sort, default: viewDefault },
-      request: viewRequest,
-    }),
-    parse: (value) => {
-      if (!isRecord(value) || typeof value.name !== 'string' || !isRecord(value.config))
-        return undefined;
-      let request: ViewRequest | null = null;
-      if (
-        isRecord(value.request) &&
-        typeof value.request.id === 'string' &&
-        typeof value.request.payload === 'string'
-      ) {
-        const target = value.request.target;
-        if (target === null) {
-          request = { id: value.request.id, payload: value.request.payload, target: null };
-        } else if (
-          isRecord(target) &&
-          typeof target.id === 'string' &&
-          typeof target.version === 'number'
-        ) {
-          request = {
-            id: value.request.id,
-            payload: value.request.payload,
-            target: { id: target.id, version: target.version },
-          };
-        }
-      }
-      return {
-        name: value.name,
-        config: { ...readConfig(value.config), default: value.config.default === true },
-        request,
-      };
-    },
-    restore: (value) => {
-      contextTouched = true;
-      viewName = value.name;
-      filter = value.config.filter;
-      sort = value.config.sort;
-      viewDefault = value.config.default;
-      viewRequest = value.request;
-      // 보기는 다른 보기 전환처럼 주소로 바꾼다(D-121). 되살린 이 입력을 버릴지 이 보드가 다시 묻지 않는다.
-      leave.proceed(() => {
-        changeView(value.config.view);
-      });
-    },
-    reset: () => {
-      viewName = views.find((v) => v.id === selectedView)?.name ?? '';
-      viewRequest = null;
-    },
-    dirty: () => viewDirty,
-  });
-  let contextTouched = false;
-  /**
-   * 사용자가 보기·필터·정렬·검색을 만졌으면 늦게 온 기본 저장 보기를 적용하지 않는다. 새 업무 제목·CSV 칸처럼 보기와
-   * 무관한 입력은 세지 않는다(R5 최종 A 확인 필요 3). 보기 단추와 저장한 보기 고르기는 각자 켠다.
-   */
-  function touchContext(event: Event): void {
-    if (event.target instanceof Element && event.target.closest('[role="search"]') !== null)
-      contextTouched = true;
-  }
-  // 같은 이름·설정의 재시도는 같은 요청 id, 고치면 새 id.
-  // 보기·필터·정렬은 이 탭에서 항목마다 기억한다. 다른 화면에 갔다 돌아와도 그대로다(이 브라우저 탭에만 남는 개인
-  // 편의라 저장한 보기와 다르다). 저장소를 쓸 수 없으면 기억하지 않는다.
-  const contextKey = (itemId: string): string => org.key(`board:${itemId}`);
-  function restoreContext(itemId: string): void {
-    let raw: unknown = null;
-    try {
-      raw = JSON.parse(readSession(contextKey(itemId)) ?? 'null');
-    } catch {
-      // 저장소를 쓸 수 없거나 값이 깨졌으면 기본값으로.
-    }
-    if (!isRecord(raw)) {
-      // 기억한 것이 없는 항목은 기본값으로 연다(앞 항목의 보기·필터가 남아 이 항목 이름으로 저장되지 않게).
-      view = 'board';
-      filter = { ...EMPTY_FILTER };
-      sort = 'position';
-      return;
-    }
-    const config = readConfig(raw);
-    view = config.view;
-    filter = config.filter;
-    sort = config.sort;
-  }
-  let contextFor = untrack(() => contextKey(item.id));
-  restoreContext(untrack(() => item.id));
-  $effect(() => {
-    const id = item.id;
-    const snapshot = JSON.stringify({ view, filter, sort });
-    const key = contextKey(id);
-    if (contextFor !== key) {
-      // 다른 항목으로 바뀌었다: 그 항목의 맥락을 불러온다(지금 것을 그 항목 이름으로 남기지 않는다).
-      contextFor = key;
-      contextTouched = false;
-      untrack(() => {
-        restoreContext(id);
-      });
-      return;
-    }
-    try {
-      writeSession(contextKey(id), snapshot);
-    } catch {
-      // 저장소를 쓸 수 없으면 기억하지 않는다.
-    }
-  });
-  // 경로의 보기는 저장 문맥보다 우선하며 경로 없는 진입은 주소를 바꾸지 않는다.
-  function applyUrl(): void {
-    const route = router.route;
-    if (routeView !== undefined) view = routeView;
-    if (route.name !== 'item' || route.itemId !== item.id) return;
-    if (routeView === undefined && route.view !== undefined) view = route.view;
-    const query = new URLSearchParams(window.location.search);
-    const queryStatus = query.get('status');
-    const querySort = query.get('sort');
-    if (queryStatus !== null) filter.status = queryStatus;
-    if (querySort !== null) sort = readConfig({ sort: querySort }).sort;
-  }
-  $effect(() => {
-    applyUrl();
-  });
-  function changeView(next: TaskViewMode): void {
-    contextTouched = true;
-    router.navigate(itemViewPath(item.workspace_id, item.id, next));
-    if (router.path === itemViewPath(item.workspace_id, item.id, next)) view = next;
-  }
-  const shown = $derived(sortTasks(applyFilter(tasks, filter, me.userId), sort));
   const people = $derived(assigneesOf(tasks));
-  const ordered = $derived(sort === 'position');
-
-  async function loadViews(itemId: string, restore = false): Promise<void> {
-    const key = contextKey(itemId);
-    const loaded = await savedViewsApi.savedViews(itemId).catch(() => []);
-    if (itemId !== item.id || key !== contextKey(item.id)) return;
-    views = loaded;
-    if (!restore || contextTouched) return;
-    const defaults = loaded.filter((v) => v.config.default === true);
-    const chosen = defaults.length === 1 ? defaults[0] : undefined;
-    if (chosen === undefined) return;
-    const config = readConfig(chosen.config);
-    view = config.view;
-    filter = config.filter;
-    sort = config.sort;
-    selectedView = chosen.id;
-    viewName = chosen.name;
-    viewDefault = true;
-    applyUrl();
-  }
-
-  /** `list`에 `saved`가 없거나 더 오래된 판이면 `saved`로 바꾼다(이름순은 다음 다시 읽기에 맡긴다). */
-  function withView(list: SavedViewView[], saved: SavedViewView): SavedViewView[] {
-    const found = list.find((v) => v.id === saved.id);
-    if (found !== undefined && found.version >= saved.version) return list;
-    return found === undefined
-      ? [...list, saved]
-      : list.map((v) => (v.id === saved.id ? saved : v));
-  }
-
-  function applyView(id: string): void {
-    leave.request(() => {
-      applyViewNow(id);
-    });
-  }
-  function applyViewNow(id: string): void {
-    askingViewDelete = false;
-    selectedView = id;
-    const v = views.find((x) => x.id === id);
-    if (v === undefined) return;
-    const config = readConfig(v.config);
-    filter = config.filter;
-    sort = config.sort;
-    viewName = v.name;
-    viewDefault = v.config.default === true;
-    changeView(config.view);
-    applyUrl();
-  }
-
-  async function saveView(): Promise<void> {
-    const name = viewName.trim();
-    if (name === '') {
-      error = m.tasks_view_name_required();
-      return;
-    }
-    const itemId = item.id;
-    if (viewDefault && views.some((v) => v.name !== name && v.config.default === true)) {
-      error = m.tasks_default_already_set();
-      return;
-    }
-    const config = { view, filter: { ...filter }, sort, default: viewDefault };
-    // 목록에 같은 이름의 보기가 있으면 읽은 판으로 그 보기를 고치고, 없으면 새로 만든다(D-103). 재시도 키에 대상과
-    // 판을 넣어, 목록을 다시 읽은 뒤의 저장은 새 요청이 된다.
-    const target = views.find((v) => v.name === name);
-    // 기다리는 사이 사용자가 목록에서 다른 보기를 고르면 늦은 응답이 그 선택을 되돌리지 않는다.
-    const selectedAtStart = selectedView;
-    const payload = canonicalJson({
-      item: itemId,
-      name,
-      config,
-    });
-    if (viewRequest?.payload !== payload)
-      viewRequest = {
-        id: newRequestId(),
-        payload,
-        target: target === undefined ? null : { id: target.id, version: target.version },
-      };
-    const requestId = viewRequest.id;
-    const requestedTarget = viewRequest.target;
-    const draftAttempt = viewDraft.capture();
-    if (draftAttempt === undefined) return;
-    try {
-      const result =
-        requestedTarget === null
-          ? await savedViewsApi.createView(itemId, requestId, name, config)
-          : await savedViewsApi.updateView(
-              requestedTarget.id,
-              requestId,
-              requestedTarget.version,
-              config,
-            );
-      if (!viewDraft.isOwner(draftAttempt)) return;
-      // 응답이 준 보기(저장한 것 또는 409의 최신)는 목록 다시 읽기가 실패해도 남긴다. 비면 다시 저장이 PUT 대신 POST가
-      // 되어 또 409였다(CodeRabbit).
-      const returned = result.kind === 'saved' ? result.view : result.current;
-      const reread = await savedViewsApi.savedViews(itemId).catch(() => views);
-      if (item.id !== itemId) return;
-      views = withView(reread, returned);
-      if (selectedView === selectedAtStart) selectedView = returned.id;
-      if (result.kind !== 'saved') {
-        viewRequest = null;
-        // 다른 탭이 이 이름으로 먼저 만들거나 저장했다. 서버는 아무것도 바꾸지 않았다. 지금 화면의 설정과 이름은 그대로
-        // 두고 최신 목록만 읽는다(최신 설정은 목록에서 고르면 보이고, 다시 저장하면 최신 판을 기준으로 이 설정이 된다).
-        status = '';
-        error = m.tasks_view_conflict({ name });
-        return;
-      }
-      if (!viewDraft.complete(draftAttempt)) {
-        // 저장하는 사이 이름·검색어·필터가 바뀌었다. 바뀐 입력은 두되, 보낸 요청은 저장돼 소진됐다. 남기면
-        // `viewDirty`가 참으로 굳어 떠나기 확인과 되살리기 제안이 계속 떴다(R5 최종 A FA-3).
-        // 그사이 다시 저장을 눌러 새 요청이 나갔으면 그것은 두고 이 요청만 비운다.
-        if (isViewRequest(requestId)) viewRequest = null;
-        viewDraft.persist();
-      }
-      notifyDone(m.tasks_view_saved({ name }));
-      error = undefined;
-    } catch (e: unknown) {
-      error = errorText(e, m.tasks_view_save_failed());
-    }
-  }
-
-  async function deleteView(): Promise<void> {
-    if (selectedView === '' || deletingView) return;
-    deletingView = true;
-    try {
-      await savedViewsApi.deleteView(selectedView);
-      selectedView = '';
-      askingViewDelete = false;
-      await loadViews(item.id);
-      notifyDone(m.tasks_view_deleted());
-    } catch (e: unknown) {
-      error = errorText(e, m.tasks_view_delete_failed());
-    } finally {
-      deletingView = false;
-    }
-  }
+  const ordered = $derived(boardViews.sort === 'position');
 
   // 글자는 읽을 때 지금 언어로 만든다.
   const VIEW_LABEL: Record<TaskViewMode, string> = {
@@ -735,13 +451,13 @@
     const parts = [
       shownSum.missing === shownSum.count
         ? m.tasks_lane_estimate_none()
-        : isFiltered(filter)
+        : isFiltered(boardViews.filter)
           ? m.tasks_lane_estimate_shown({ duration })
           : m.tasks_lane_estimate({ duration }),
     ];
     if (shownSum.missing > 0 && shownSum.missing < shownSum.count)
       parts.push(m.tasks_lane_estimate_missing({ count: shownSum.missing }));
-    if (isFiltered(filter)) {
+    if (isFiltered(boardViews.filter)) {
       const all = laneEstimate(allLanes[lane] ?? []);
       parts.push(m.tasks_lane_estimate_all({ duration: durationText(all.minutes * 60) }));
     }
@@ -772,7 +488,7 @@
   }
 
   // 주소로 연 대화상자는 여는 단추를 모르므로, 닫으면 마지막으로 연 업무의 카드로 초점을 돌린다.
-  let returnTo: string | undefined;
+  let returnTo = $state<string | undefined>();
   function restoreClosedTaskFocus(id: string): void {
     const itemId = item.id;
     // 폐기 확인과 상세가 함께 닫힐 때는 두 focus scope가 정리된 다음 카드로 돌린다.
@@ -814,7 +530,7 @@
   const leave = createLeaveGuard({
     dirty: (next) =>
       (detailUnsaved && openTaskId !== undefined) ||
-      (!detailNavigation && !boardStays(next) && (newDirty.size > 0 || viewDirty)),
+      (!detailNavigation && !boardStays(next) && (newDirty.size > 0 || boardViews.viewDirty)),
     busy: () => detailSaving,
     identity: () => openTaskId,
     onAsk: (next) => {
@@ -834,17 +550,18 @@
       beforeUnload: () => {
         if (openTaskId === undefined)
           return leavingWithDrafts()
-            ? (viewDirty && !viewDraft.kept) || [...newKept.values()].some((kept) => !kept)
-            : newDirty.size > 0 || viewDirty;
+            ? (boardViews.viewDirty && !viewDraft.kept) ||
+                [...newKept.values()].some((kept) => !kept)
+            : newDirty.size > 0 || boardViews.viewDirty;
         // 편집 가능 여부(canEdit)와 무관하게 "고친 입력이 있는데 초안을 남기지 못했는지"만 본다(TaskDetail이 알린다; 고친 칸이
         // 없거나 폼이 사라지면 true). 저장이 409 account_changed로 끝나 폼이 잠긴 뒤에도 입력은 지켜야 한다.
         if (leavingWithDrafts())
           return (
             !detailDraftKept ||
-            (viewDirty && !viewDraft.kept) ||
+            (boardViews.viewDirty && !viewDraft.kept) ||
             [...newKept.values()].some((kept) => !kept)
           );
-        return detailUnsaved || detailSaving || newDirty.size > 0 || viewDirty;
+        return detailUnsaved || detailSaving || newDirty.size > 0 || boardViews.viewDirty;
       },
     }),
   );
@@ -1686,8 +1403,8 @@
       {#each VIEWS as v (v)}
         <Button
           size="sm"
-          variant={view === v ? 'secondary' : 'ghost'}
-          aria-pressed={view === v}
+          variant={boardViews.view === v ? 'secondary' : 'ghost'}
+          aria-pressed={boardViews.view === v}
           onclick={() => {
             changeView(v);
           }}>{VIEW_LABEL[v]}</Button
@@ -1754,9 +1471,9 @@
   <!-- 찾기와 "필터·정렬" 단추만 늘 보이고 나머지 조건·저장한 보기는 펼쳐서 쓴다(좁은 화면에서 업무보다 조건이 먼저 한
        화면을 차지했다). 접혀 있어도 단추가 걸린 조건 수를 보인다. 접어도 조건 값은 그대로다. -->
   <BoardFilters
-    bind:filtersOpen
-    bind:filter
-    bind:sort
+    bind:filtersOpen={boardViews.filtersOpen}
+    bind:filter={boardViews.filter}
+    bind:sort={boardViews.sort}
     {statusNames}
     {people}
     shownCount={shown.length}
@@ -1768,13 +1485,13 @@
         <NativeSelect
           aria-label={m.tasks_saved_views()}
           class="w-full"
-          value={selectedView}
+          value={boardViews.selectedView}
           onchange={(e: Event) => {
             if (e.currentTarget instanceof HTMLSelectElement) applyView(e.currentTarget.value);
           }}
         >
           <option value="">{m.tasks_saved_view_choose()}</option>
-          {#each views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
+          {#each boardViews.views as v (v.id)}<option value={v.id}>{v.name}</option>{/each}
         </NativeSelect>
       </label>
       {#each viewDraft.offers as entry (entry.key)}
@@ -1791,33 +1508,33 @@
         <span class="text-xs text-muted-foreground">{m.tasks_view_name()}</span>
         <Input
           class="w-32"
-          bind:value={viewName}
+          bind:value={boardViews.viewName}
           aria-label={m.tasks_view_name_aria()}
           maxlength={100}
         />
       </label>
       <label class="flex items-center gap-2"
-        ><Checkbox bind:checked={viewDefault} />{m.tasks_default_view()}</label
+        ><Checkbox bind:checked={boardViews.viewDefault} />{m.tasks_default_view()}</label
       >
       <Button variant="outline" onclick={() => void saveView()}>{m.tasks_view_save()}</Button>
-      {#if selectedView !== '' && askingViewDelete}
+      {#if boardViews.selectedView !== '' && boardViews.askingViewDelete}
         <!-- 저장한 보기 지우기는 되돌릴 수 없어 한 번 더 묻는다(다른 지우기와 같다). -->
         <span class="flex flex-wrap items-center gap-1 self-center text-sm">
           <span id="view-delete-warning"
             >{m.tasks_view_delete_confirm({
-              name: views.find((v) => v.id === selectedView)?.name ?? '',
+              name: boardViews.views.find((v) => v.id === boardViews.selectedView)?.name ?? '',
             })}</span
           >
           <Button
             variant="destructive"
-            bind:ref={viewDeleteConfirm}
+            bind:ref={boardViews.viewDeleteConfirm}
             aria-describedby="view-delete-warning"
-            disabled={deletingView}
+            disabled={boardViews.deletingView}
             onclick={() => void deleteView()}>{m.tasks_view_delete()}</Button
           >
           <Button variant="ghost" onclick={() => void stopViewDelete()}>{m.common_cancel()}</Button>
         </span>
-      {:else if selectedView !== ''}
+      {:else if boardViews.selectedView !== ''}
         <Button id="view-delete" variant="ghost" onclick={() => void askViewDelete()}
           >{m.tasks_view_delete()}</Button
         >
@@ -1856,96 +1573,50 @@
 
   {#if loading}
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
-  {:else if view === 'board'}
-    <div
-      bind:this={boardElement}
-      class={[
-        'grid min-w-0 auto-cols-[100%] grid-flow-col gap-3 overflow-x-auto @2xl:snap-none @2xl:auto-cols-auto @2xl:grid-flow-row @2xl:grid-cols-3',
-        drag?.active === true ? 'snap-none' : 'snap-x snap-mandatory',
-      ]}
-      data-testid="task-board"
-    >
-      {#each statusNames as lane (lane)}
-        <BoardLane
-          {lane}
-          color={definitions.find((s) => s.name === lane)?.color}
-          count={board[lane]?.length ?? 0}
-          estimate={laneEstimateText(lane)}
-          filtered={isFiltered(filter)}
-          dragActive={drag?.active === true && drag.slot?.status === lane}
-        >
-          <ul class="flex min-h-12 flex-col gap-2">
-            {#each board[lane] as t (t.id)}
-              {#if dropMark(lane, t.id)}
-                <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
-              {/if}
-              <BoardCard
-                {t}
-                {canWrite}
-                {ordered}
-                {statusNames}
-                {shown}
-                {justDragged}
-                dragging={drag?.active === true && drag.id === t.id}
-                save={pending[t.id]}
-                actions={{
-                  startDrag,
-                  onCardKey,
-                  open,
-                  busy,
-                  moveAndFocus,
-                  move,
-                  titleOf,
-                  recheck,
-                  retryMove,
-                  keepAsIs,
-                  reorderable,
-                }}
-              />
-            {/each}
-            {#if dropMark(lane, null)}
-              <li aria-hidden="true" class="h-1 rounded bg-primary"></li>
-            {/if}
-          </ul>
-          {#if canWrite}<BoardQuickAdd
-              {lane}
-              adding={adding === lane}
-              initial={quickInitial?.lane === lane ? quickInitial : undefined}
-              create={(id: string, title: string) => quickAdd(lane, id, title)}
-              cancel={() => closeQuickAdd(lane)}
-              onchange={(draft: { name: string; requestId: string | null } | undefined) => {
-                keepNewDraft(lane, draft);
-              }}
-              onopen={() => {
-                adding = lane;
-              }}
-            />{/if}
-        </BoardLane>
-      {/each}
-    </div>
-    {#if drag?.active === true}
-      <div
-        aria-hidden="true"
-        class="pointer-events-none fixed z-50 max-w-60 truncate rounded-md border bg-card px-2 py-1 text-sm shadow-md"
-        style:left={`${String(drag.x + 12)}px`}
-        style:top={`${String(drag.y + 12)}px`}
-      >
-        {titleOf(drag.id)}
-      </div>
-    {/if}
-    {#if canWrite}
-      <p class="text-xs text-muted-foreground">
-        {m.tasks_board_hint()}{ordered ? '' : ` ${m.tasks_board_hint_unordered()}`}
-      </p>
-    {/if}
-    <!-- 열 머리 예상 시간의 뜻. 업무보다 먼저 보이지 않게 보드 아래에 둔다. -->
-    <p class="text-xs text-muted-foreground">{m.tasks_lane_estimate_hint()}</p>
-  {:else if view === 'gantt'}
+  {:else if boardViews.view === 'board'}
+    <TaskKanban
+      bind:boardElement
+      bind:adding
+      {statusNames}
+      {definitions}
+      {board}
+      {laneEstimateText}
+      {titleOf}
+      filtered={isFiltered(boardViews.filter)}
+      {drag}
+      {dropMark}
+      {pending}
+      {quickInitial}
+      {quickAdd}
+      {closeQuickAdd}
+      {keepNewDraft}
+      cards={{
+        canWrite,
+        ordered,
+        statusNames,
+        shown,
+        justDragged,
+        actions: {
+          startDrag,
+          onCardKey,
+          open,
+          busy,
+          moveAndFocus,
+          move,
+          titleOf,
+          recheck,
+          retryMove,
+          keepAsIs,
+          reorderable,
+        },
+      }}
+    />
+  {:else if boardViews.view === 'gantt'}
     {#if ganttNotice !== undefined}
       <p role="alert" class="text-sm text-destructive">{ganttNotice}</p>
     {/if}
     <GanttChart tasks={shown} onopen={open} reschedule={canWrite ? reschedule : undefined} />
-  {:else if view === 'calendar'}
+  {:else if boardViews.view === 'calendar'}
     <div bind:this={boardCalendar}>
       <TaskCalendar
         tasks={shown}
@@ -1958,51 +1629,7 @@
       />
     </div>
   {:else}
-    <!-- 여섯 칸 표는 좁은 화면에서 옆으로 넘치므로 표만 가로로 스크롤한다(기록 표와 같다). -->
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm" data-testid="task-list">
-        <thead class="text-left text-muted-foreground">
-          <tr
-            ><th class="py-1 font-medium">{m.tasks_col_number()}</th><th class="font-medium"
-              >{m.tasks_title()}</th
-            ><th class="font-medium">{m.tasks_status()}</th><th class="font-medium"
-              >{m.tasks_assignee()}</th
-            ><th class="font-medium">{m.tasks_col_due()}</th><th class="font-medium"
-              >{m.tasks_col_checklist()}</th
-            ></tr
-          >
-        </thead>
-        <tbody>
-          {#each list as t (t.id)}
-            <tr class="border-t">
-              <td class="py-1 font-mono text-xs text-muted-foreground">{t.reference ?? ''}</td>
-              <td class={t.parent_id === null ? '' : 'pl-4'}>
-                <button
-                  type="button"
-                  data-task-card={t.id}
-                  class="text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  onclick={() => {
-                    open(t.id);
-                  }}>{t.parent_id === null ? '' : '↳ '}{t.title}</button
-                >
-                <!-- 시간 기록 시작은 업무 행 안에 둔다(D-117). -->
-                <TaskTimeStart taskId={t.id} title={t.title} />
-              </td>
-              <td>{t.status}</td>
-              <td>{t.assignees.map((a) => a.display_name).join(', ')}</td>
-              <td>{t.due_date ?? ''}</td>
-              <td
-                >{t.checklist_total > 0
-                  ? `${String(t.checklist_done)}/${String(t.checklist_total)}`
-                  : ''}</td
-              >
-            </tr>
-          {:else}
-            <tr><td colspan="6" class="py-2 text-muted-foreground">{m.tasks_empty()}</td></tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+    <TaskList {list} {open} />
   {/if}
 
   {#if canWrite}
@@ -2027,58 +1654,31 @@
   <p class="sr-only" aria-live="polite">{status}</p>
 </section>
 
-<!-- 닫기를 대화상자가 정하지 않고 requestClose()가 정한다(고친 입력이 있으면 열어 둔 채 묻는다). -->
-<Dialog.Root
-  bind:open={
-    () => openTaskId !== undefined,
-    (o: boolean) => {
-      if (!o) requestClose();
-    }
-  }
->
-  <Dialog.Content
-    bind:ref={dialogContent}
-    class="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
-    escapeKeydownBehavior={leave.open || detailSaving ? 'ignore' : 'close'}
-    interactOutsideBehavior={leave.open || detailSaving ? 'ignore' : 'close'}
-    showCloseButton={!detailSaving}
-    onCloseAutoFocus={(e: Event) => {
-      if (returnTo !== undefined) {
-        e.preventDefault();
-        restoreClosedTaskFocus(returnTo);
-      }
-    }}
-  >
-    <Dialog.Header>
-      <Dialog.Title
-        >{openTaskId === undefined ? '' : titleOf(openTaskId) || m.tasks_task()}</Dialog.Title
-      >
-      <Dialog.Description>{m.tasks_dialog_description()}</Dialog.Description>
-    </Dialog.Header>
-    {#if openTaskId !== undefined}
-      {#key openTaskId}
-        <TaskDetail
-          readOnly={item.archived || locked}
-          bind:this={detailEditor}
-          taskId={openTaskId}
-          {tasks}
-          {workspaces}
-          onchanged={() => void reload()}
-          onopen={requestOpen}
-          onunsaved={(value: boolean) => {
-            detailUnsaved = value;
-          }}
-          ondraftkept={(kept: boolean) => {
-            detailDraftKept = kept;
-          }}
-          onsaving={(value: boolean) => {
-            detailSaving = value;
-          }}
-        />
-      {/key}
-    {/if}
-  </Dialog.Content>
-</Dialog.Root>
+<TaskBoardDetailDialog
+  {openTaskId}
+  readOnly={item.archived || locked}
+  {tasks}
+  {workspaces}
+  title={openTaskId === undefined ? '' : titleOf(openTaskId)}
+  leaveOpen={leave.open}
+  {returnTo}
+  {requestClose}
+  {requestOpen}
+  {restoreClosedTaskFocus}
+  onchanged={() => void reload()}
+  bind:this={detailEditor}
+  bind:dialogContent
+  {detailSaving}
+  onunsaved={(value: boolean) => {
+    detailUnsaved = value;
+  }}
+  onsaving={(value: boolean) => {
+    detailSaving = value;
+  }}
+  ondraftkept={(value: boolean) => {
+    detailDraftKept = value;
+  }}
+/>
 
 <DiscardChangesConfirm
   open={leave.open}
@@ -2095,9 +1695,10 @@
       newTaskSeed += 1;
       adding = undefined;
       quickInitial = undefined;
-      viewName = views.find((v) => v.id === selectedView)?.name ?? '';
+      boardViews.viewName =
+        boardViews.views.find((v) => v.id === boardViews.selectedView)?.name ?? '';
       // 응답을 잃은 저장의 요청도 버린다. 남기면 버린 보기 초안을 다음에 다시 제안했다(⑱·D-97).
-      viewRequest = null;
+      boardViews.viewRequest = null;
       viewDraft.persist();
     }
     leave.discard();

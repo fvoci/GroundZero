@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TaskHierarchy from './TaskHierarchy.svelte';
   import TaskFields from './TaskFields.svelte';
   import TaskDependencies from './TaskDependencies.svelte';
   import TaskRecurrence from './TaskRecurrence.svelte';
@@ -38,7 +39,6 @@
     removeFormDraftAt,
     storeFormDraft,
   } from '$lib/features/tasks/drafts';
-  import { canonicalJson } from '$lib/features/documents/drafts';
   import { formatInstant } from '$lib/display';
   import ChecklistForm from '$lib/features/checklists/ChecklistForm.svelte';
 
@@ -47,23 +47,12 @@
   import { itemPath, router } from '$lib/router.svelte';
   import { localTimeZone } from '$lib/features/events/time';
 
-  import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
-  import * as Select from '$lib/ui/select';
-
   import ClashConfirm from './ClashConfirm.svelte';
-  import type { MergeUnit } from './form';
-  import {
-    edited,
-    estimateOf,
-    formOf,
-    mergeEstimate,
-    mergeForm,
-    scheduleOf,
-    trimLikeServer,
-  } from './form';
+  import { createTaskForm, type Merge } from './task-form.svelte';
+  import { edited, estimateOf, formOf } from './form';
   import type { ClashRow } from './labels';
   import { assigneeLabels, clashRows, linkText, undatedText } from './labels';
   import ShiftProposals from './ShiftProposals.svelte';
@@ -142,7 +131,7 @@
 
   let definitions = $state<TaskStatusDefinition[]>([]);
   $effect(() => {
-    const itemId = task?.item_id;
+    const itemId = detailForm.task?.item_id;
     if (itemId === undefined) return;
     let cancelled = false;
     void work
@@ -158,10 +147,8 @@
     };
   });
   const statusNames = $derived(definitions.map((s) => s.name));
-  let task = $state<TaskDetailView | undefined>(undefined);
-  let form = $state<TaskInput | undefined>(undefined);
-  let tagsText = $state('');
-  let estimateText = $state('');
+  const detailForm = createTaskForm();
+  const { mergeOnto, inputOf, currentInput, toggleAssignee } = detailForm;
   // 지정할 수 있는 사람. 받기 전(undefined)에는 "없습니다"를 보이지 않는다.
   let people = $state<AssigneeView[] | undefined>(undefined);
   // 지정할 수 있는 사람을 받지 못했을 때의 안내(업무는 받았으므로 업무 불러오기 실패와 따로 알린다).
@@ -206,7 +193,6 @@
 
   let linkPending = $state<LinkPending | undefined>(undefined);
   // 상위 업무 고르기. 'top'은 최상위로 빼기. 서버 규칙(한 단계, 하위 업무가 있으면 옮길 수 없음)에 맞는 후보만 보인다.
-  const TOP = 'top';
   let parentChoice = $state('');
   let childDraft = $state<{ name: string; requestId: string | null } | undefined>();
   let checklistUnsaved = $state(false);
@@ -217,83 +203,33 @@
   let recurrenceDraftKept = $state(true);
   let taskDraftKept = $state(true);
   const parentCandidates = $derived(
-    tasks.filter((t) => t.id !== taskId && t.parent_id === null && t.id !== task?.parent_id),
+    tasks.filter(
+      (t) => t.id !== taskId && t.parent_id === null && t.id !== detailForm.task?.parent_id,
+    ),
   );
   const candidates = $derived(
-    task === undefined
+    detailForm.task === undefined
       ? []
       : tasks.filter(
-          (t) => t.id !== taskId && !(task?.predecessors.some((p) => p.task_id === t.id) ?? false),
+          (t) =>
+            t.id !== taskId &&
+            !(detailForm.task?.predecessors.some((p) => p.task_id === t.id) ?? false),
         ),
   );
 
   // 다시 채울 때 비교할 기준(마지막으로 다 불러온 판의 값, 사용자가 바꾸지 않은 칸만 새 값으로 옮긴다)과, 같은 칸을
   // 양쪽에서 바꿔 충돌이 있었는지(다음 저장·불러오기까지 지킨다), 그때 남겨 둘 옛 판 번호. 기준은 저장하지 않은 입력이
   // 있는지(`unsaved`)도 정하므로 상태로 둔다.
-  let baseline = $state.raw<TaskInput | undefined>(undefined);
-  let baseVersion = 0;
-  let clashed = false;
 
   function fill(next: TaskDetailView): void {
-    task = next;
-    form = formOf(next);
-    baseline = formOf(next);
-    baseVersion = next.version;
-    clashed = false;
+    detailForm.fill(next);
     pending = undefined;
     clashAsk = undefined;
-    tagsText = next.tags.join(', ');
-    estimateText = next.estimate_minutes === null ? '' : String(next.estimate_minutes);
   }
-
-  /** 지금 입력을 기준 판에서 서버의 새 판으로 옮긴 결과(`mergeOnto`). */
-  interface Merge {
-    freshForm: TaskInput;
-    form: TaskInput;
-    baseline: TaskInput;
-    /** 나와 서버가 서로 다른 값으로 바꾼 단위(일정은 시작일·마감일·마일스톤 한 묶음). */
-    clashes: MergeUnit[];
-    keepTagsText: boolean;
-    keepEstimateText: boolean;
-  }
-
-  /**
-   * 내 입력(`mine`)을 기준(`before`)에서 서버의 새 판(`fresh`)으로 옮긴다. 고치지 않은 칸은 새 값, 고친 칸은 내 값이고,
-   * 고친 칸을 서버에서도 다른 값으로 바꿨으면 `clashes`에 든다. 태그는 저장할 때 보내는 값으로 견주고, 예상 시간은
-   * 입력한 글자의 값으로 따로 맞춘다(병합에는 고치지 않은 칸으로 넘긴다). 다시 채우기와 충돌 뒤 저장이 같이 쓴다.
-   */
-  function mergeOnto(fresh: TaskDetailView, mine: TaskInput, before: TaskInput): Merge {
-    const freshForm = formOf(fresh);
-    const estimate = mergeEstimate(
-      before.estimate_minutes,
-      estimateText,
-      freshForm.estimate_minutes,
-    );
-    const merged = mergeForm(
-      before,
-      { ...mine, estimate_minutes: before.estimate_minutes },
-      freshForm,
-    );
-    return {
-      freshForm,
-      form: merged.form,
-      baseline: { ...merged.baseline, estimate_minutes: estimate.baseline },
-      clashes: estimate.clash ? [...merged.clashes, 'estimate_minutes'] : merged.clashes,
-      keepTagsText: canonicalJson(mine.tags) !== canonicalJson(before.tags),
-      keepEstimateText: estimate.keepText,
-    };
-  }
-
-  /** 병합한 값을 폼에 옮긴다. 태그·예상 시간 글자는 내가 고치지 않았을 때만 새 값으로 바꾼다. */
   function applyMerge(merge: Merge): void {
-    form = merge.form;
+    detailForm.applyMerge(merge);
     pending = undefined;
     clashAsk = undefined;
-    if (!merge.keepTagsText) tagsText = merge.freshForm.tags.join(', ');
-    if (!merge.keepEstimateText) {
-      const fresh = merge.freshForm.estimate_minutes;
-      estimateText = fresh === null ? '' : String(fresh);
-    }
   }
 
   /**
@@ -304,17 +240,17 @@
   function refresh(fresh: TaskDetailView): void {
     const asking = clashAsk;
     const mine = currentInput();
-    if (task === undefined || mine === undefined || baseline === undefined) {
+    if (detailForm.task === undefined || mine === undefined || detailForm.baseline === undefined) {
       fill(fresh);
       return;
     }
-    const merge = mergeOnto(fresh, mine, baseline);
-    baseline = merge.baseline;
+    const merge = mergeOnto(fresh, mine, detailForm.baseline);
+    detailForm.baseline = merge.baseline;
     // 충돌은 지금의 병합으로 다시 본다. 기준은 사용자가 바꾼 칸을 옛 값으로 지키므로, 서버가 그 칸을 다르게 두는 한 계속
     // 충돌이고, 사용자가 서버 값으로 맞추면 풀려 최신 판으로 저장한다.
-    clashed = merge.clashes.length > 0;
-    if (!clashed) baseVersion = fresh.version;
-    task = clashed ? { ...fresh, version: baseVersion } : fresh;
+    detailForm.clashed = merge.clashes.length > 0;
+    if (!detailForm.clashed) detailForm.baseVersion = fresh.version;
+    detailForm.task = detailForm.clashed ? { ...fresh, version: detailForm.baseVersion } : fresh;
     applyMerge(merge);
     if (asking !== undefined)
       askAgain(fresh.version > asking.latest.version ? fresh : asking.latest);
@@ -328,9 +264,9 @@
    */
   function askAgain(latest: TaskDetailView): void {
     const mine = currentInput();
-    if (mine === undefined || baseline === undefined) return;
+    if (mine === undefined || detailForm.baseline === undefined) return;
     if (conflict !== undefined && latest.version > conflict.version) conflict = latest;
-    const merge = mergeOnto(latest, mine, baseline);
+    const merge = mergeOnto(latest, mine, detailForm.baseline);
     if (merge.clashes.length === 0) {
       void focusLater('task-save-mine');
       return;
@@ -344,10 +280,16 @@
 
   // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람). 같은 이름은 구분한다.
   function assigneeNames(latest: TaskDetailView): Map<string, string> {
-    return assigneeLabels([...(task?.assignees ?? []), ...latest.assignees, ...(people ?? [])]);
+    return assigneeLabels([
+      ...(detailForm.task?.assignees ?? []),
+      ...latest.assignees,
+      ...(people ?? []),
+    ]);
   }
   // 폼의 담당자 이름표. 충돌 확인과 같은 글이라 확인에 보인 사람을 폼에서 찾을 수 있다.
-  const peopleLabels = $derived(assigneeLabels([...(task?.assignees ?? []), ...(people ?? [])]));
+  const peopleLabels = $derived(
+    assigneeLabels([...(detailForm.task?.assignees ?? []), ...(people ?? [])]),
+  );
 
   /**
    * 충돌 화면의 "내 입력으로 다시 저장"(D-94): 서버 최신 판(`latest`) 위에 내가 고친 칸만 올려 그 판 번호로 저장한다.
@@ -357,13 +299,13 @@
    */
   async function saveMine(latest: TaskDetailView): Promise<void> {
     const mine = currentInput();
-    if (busy || mine === undefined || baseline === undefined) return;
+    if (busy || mine === undefined || detailForm.baseline === undefined) return;
     // 잘못된 예상 시간은 병합 전에 막는다(입력을 그대로 두고 알린다).
-    if (estimateOf(estimateText) === 'invalid') {
+    if (estimateOf(detailForm.estimateText) === 'invalid') {
       error = m.tasks_estimate_invalid();
       return;
     }
-    const merge = mergeOnto(latest, mine, baseline);
+    const merge = mergeOnto(latest, mine, detailForm.baseline);
     if (merge.clashes.length > 0) {
       error = undefined;
       clashAsk = {
@@ -393,10 +335,10 @@
    */
   async function saveMerged(latest: TaskDetailView, merge: Merge): Promise<void> {
     applyMerge(merge);
-    task = latest;
-    baseline = formOf(latest);
-    baseVersion = latest.version;
-    clashed = false;
+    detailForm.task = latest;
+    detailForm.baseline = formOf(latest);
+    detailForm.baseVersion = latest.version;
+    detailForm.clashed = false;
     await submit(latest);
     // 충돌 화면이 남으면(저장 실패. 다시 409는 `save`가 돌린다) 누른 단추가 사라졌거나 잠겼던 자리이므로 "내 입력으로
     // 다시 저장"으로 돌린다. 미리보기 패널이 떴으면 초점은 패널에 있다.
@@ -406,7 +348,7 @@
   $effect(() => {
     const id = taskId;
     let cancelled = false;
-    task = undefined;
+    detailForm.task = undefined;
     latestRule = undefined;
     conflict = undefined;
     clashAsk = undefined;
@@ -443,53 +385,20 @@
   });
 
   const canEdit = $derived(
-    !hiddenForAccount && !readOnly && task !== undefined && task.access !== 'read',
+    !hiddenForAccount &&
+      !readOnly &&
+      detailForm.task !== undefined &&
+      detailForm.task.access !== 'read',
   );
   // 폼을 저장하는 동안은 폼 칸을 잠근다: 저장되면 폼을 저장된 판으로 다시 채우므로(`fill`) 그사이 친 글이 말없이
   // 사라졌다. 관계·상위 업무 요청은 돌아오면 고친 칸을 지켜 다시 채우므로(`refresh`) 잠그지 않는다.
   let saving = $state(false);
   const locked = $derived(!canEdit || saving);
 
-  /** 폼 값·태그 글자·예상 시간 글자를 저장될 모양의 입력으로(지금 입력과 보관한 입력을 같은 규칙으로 견준다). */
-  function inputOf(f: TaskInput, tags: string, estimate: string): TaskInput {
-    const minutes = estimateOf(estimate);
-    return {
-      ...f,
-      // 병합과 같은 규칙(마일스톤이면 시작일 없음, 빈 칸은 없음)이라 병합이 고른 일정이 그대로 보내진다.
-      ...scheduleOf(f),
-      // 잘못된 입력은 저장 전에 막는다(submit). 여기서는 비교용으로만 쓴다.
-      estimate_minutes: minutes === 'invalid' ? null : minutes,
-      // 서버(`validate_tags`)처럼 앞뒤 공백을 떼고 겹친 태그는 처음 것만 둔다: 비교·확인·보내는 값이 저장될 값과 같다.
-      tags: [
-        ...new Set(
-          tags
-            .split(',')
-            .map(trimLikeServer)
-            .filter((t) => t !== ''),
-        ),
-      ],
-    };
-  }
-
-  function currentInput(): TaskInput | undefined {
-    return form === undefined ? undefined : inputOf(form, tagsText, estimateText);
-  }
-
-  // 기준과 다르게 고친 칸이 있는지. 병합과 같은 판정이다: 저장될 모양으로 견주고(제목·설명은 서버처럼 앞뒤 공백을 떼고
-  // 태그는 서버처럼 정리), 예상 시간은 입력한 글자의 값으로 본다(잘못된 글자는 고친 것이다). 편집할 수 있는지와 무관하다
-  // (계정이 바뀌어 폼을 숨겨도 고친 입력은 고친 입력이라 브라우저에 남긴다).
-  const changed = $derived.by(() => {
-    const mine = currentInput();
-    if (mine === undefined || baseline === undefined) return false;
-    return (
-      estimateOf(estimateText) !== baseline.estimate_minutes ||
-      edited(baseline, { ...mine, estimate_minutes: baseline.estimate_minutes })
-    );
-  });
   // 업무 대화상자가 닫기 전에 버릴지 물을 입력이 있는지(편집할 수 있을 때만).
   const unsaved = $derived(
     !hiddenForAccount &&
-      (changed ||
+      (detailForm.changed ||
         linkChanged ||
         parentChoice !== '' ||
         childDraft !== undefined ||
@@ -553,18 +462,18 @@
   /** 되살리기: 폼·기준·판을 남길 때대로 되돌린다. 보내는 것은 없다(사용자가 "저장"을 누른다). */
   function restoreDraft(): void {
     const entry = restorable;
-    const current = task;
+    const current = detailForm.task;
     if (entry === undefined || current === undefined || current.access === 'read' || busy) return;
     const kept = entry.value;
     removeFormDraftAt(entry.key);
     restorable = undefined;
     reserved = false;
-    form = kept.form;
-    tagsText = kept.tagsText;
-    estimateText = kept.estimateText;
-    baseline = kept.baseline;
-    baseVersion = kept.baseVersion;
-    clashed = false;
+    detailForm.form = kept.form;
+    detailForm.tagsText = kept.tagsText;
+    detailForm.estimateText = kept.estimateText;
+    detailForm.baseline = kept.baseline;
+    detailForm.baseVersion = kept.baseVersion;
+    detailForm.clashed = false;
     conflict = undefined;
     pending = undefined;
     clashAsk = undefined;
@@ -576,7 +485,7 @@
     // 남길 때의 판보다 서버가 앞섰으면 기존 다시 채우기로 병합한다(양쪽이 다르게 바꾼 칸은 옛 판 번호를 남겨 저장이 충돌
     // 화면으로 간다). 같은 판이면 그 판으로 저장한다.
     if (current.version !== kept.baseVersion) refresh(current);
-    else task = current;
+    else detailForm.task = current;
     offerDraft(current, true);
     void focusLater('task-title');
   }
@@ -586,22 +495,27 @@
     removeFormDraftAt(entry.key);
     restorable = undefined;
     reserved = false;
-    if (task !== undefined) offerDraft(task, true);
+    if (detailForm.task !== undefined) offerDraft(detailForm.task, true);
   }
   $effect(() => {
     const mine = currentInput();
-    const before = baseline;
-    const dirty = changed || childDraft !== undefined;
-    if (task === undefined || mine === undefined || before === undefined || form === undefined)
+    const before = detailForm.baseline;
+    const dirty = detailForm.changed || childDraft !== undefined;
+    if (
+      detailForm.task === undefined ||
+      mine === undefined ||
+      before === undefined ||
+      detailForm.form === undefined
+    )
       return;
     if (reserved || me.userId !== editingUser) return;
     if (dirty) {
       const kept = storeFormDraft(draftName, {
-        baseVersion,
+        baseVersion: detailForm.baseVersion,
         baseline: before,
-        form: $state.snapshot(form),
-        tagsText,
-        estimateText,
+        form: $state.snapshot(detailForm.form),
+        tagsText: detailForm.tagsText,
+        estimateText: detailForm.estimateText,
         child: childDraft ?? null,
         savedAt: new Date().toISOString(),
       } satisfies TaskDraft);
@@ -633,9 +547,9 @@
   /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
   async function submit(base: TaskDetailView): Promise<void> {
     const input = currentInput();
-    if (task === undefined || input === undefined || busy) return;
+    if (detailForm.task === undefined || input === undefined || busy) return;
     // 잘못된 예상 시간을 빈 값으로 보내면 저장된 값이 지워진다. 입력을 그대로 두고 알린다.
-    if (estimateOf(estimateText) === 'invalid') {
+    if (estimateOf(detailForm.estimateText) === 'invalid') {
       error = m.tasks_estimate_invalid();
       return;
     }
@@ -646,7 +560,11 @@
       // 목록의 선행 정보는 오래됐을 수 있으므로 날짜가 바뀌면 언제나 서버에 묻는다.
       let undated: UndatedTaskView[] = [];
       if (input.start_date !== base.start_date || input.due_date !== base.due_date) {
-        const plan = await work.previewSchedule(task.id, input.start_date, input.due_date);
+        const plan = await work.previewSchedule(
+          detailForm.task.id,
+          input.start_date,
+          input.due_date,
+        );
         if (plan.shifts.length > 0) {
           pending = {
             proposals: plan.shifts,
@@ -708,10 +626,10 @@
     // 처음 저장의 값을 넘겨받는다(RA-2).
     refocus = pending !== undefined,
   ): Promise<void> {
-    if (task === undefined) return;
+    if (detailForm.task === undefined) return;
     const result = await work.updateTask(
       editingUser,
-      task.id,
+      detailForm.task.id,
       baseVersion,
       input,
       shifts.map(toShift),
@@ -725,7 +643,7 @@
     if (result.kind === 'shift_conflict') {
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
       // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
-      const plan = await work.previewSchedule(task.id, input.start_date, input.due_date);
+      const plan = await work.previewSchedule(detailForm.task.id, input.start_date, input.due_date);
       if (plan.shifts.length === 0) {
         pending = undefined;
         await save(input, baseVersion, [], plan.undated, true, refocus);
@@ -768,10 +686,10 @@
 
   async function reloadChecklist(next: Promise<unknown>): Promise<void> {
     await next;
-    if (task === undefined) return;
-    const fresh = await work.task(task.id);
-    if (task.version === fresh.version) {
-      task = fresh;
+    if (detailForm.task === undefined) return;
+    const fresh = await work.task(detailForm.task.id);
+    if (detailForm.task.version === fresh.version) {
+      detailForm.task = fresh;
     } else {
       refresh(fresh);
     }
@@ -788,13 +706,13 @@
     rule: RecurrenceRule | null,
     baseRule?: RecurrenceRule | null,
   ): Promise<void> {
-    if (task === undefined || hiddenForAccount) return;
+    if (detailForm.task === undefined || hiddenForAccount) return;
     const identity = recurrenceIdentity;
-    const id = task.id;
+    const id = detailForm.task.id;
     const stillCurrent = (): boolean =>
-      mounted && identity === recurrenceIdentity && task?.id === id;
+      mounted && identity === recurrenceIdentity && detailForm.task?.id === id;
     try {
-      const base = latestRule ?? task;
+      const base = latestRule ?? detailForm.task;
       const fresh = await work.setTaskRecurrence(
         editingUser,
         id,
@@ -804,7 +722,7 @@
       );
       if (!stillCurrent()) return;
       latestRule = undefined;
-      if (task.version === fresh.version) task = fresh;
+      if (detailForm.task.version === fresh.version) detailForm.task = fresh;
       else refresh(fresh);
       onchanged();
     } catch (e: unknown) {
@@ -822,12 +740,12 @@
    * 관계를 고치던 중이면 그 편집은 그대로 둔다. 실패하면 관계와 편집 내용을 그대로 두고 알린다.
    */
   async function removeLink(predecessor: string): Promise<void> {
-    if (task === undefined || busy) return;
+    if (detailForm.task === undefined || busy) return;
     busy = true;
     error = undefined;
     try {
-      const fresh = await work.removePredecessor(editingUser, task.id, predecessor);
-      if (task.version === fresh.version) task = fresh;
+      const fresh = await work.removePredecessor(editingUser, detailForm.task.id, predecessor);
+      if (detailForm.task.version === fresh.version) detailForm.task = fresh;
       else refresh(fresh);
       if (editing === predecessor) resetLinkEditor();
       notifyDone(m.tasks_link_removed(), 'task-link');
@@ -850,7 +768,7 @@
   }
 
   function startEdit(predecessor: string): void {
-    const link = task?.predecessors.find((l) => l.task_id === predecessor);
+    const link = detailForm.task?.predecessors.find((l) => l.task_id === predecessor);
     if (link === undefined) return;
     editing = predecessor;
     linkKind = link.kind;
@@ -868,9 +786,9 @@
 
   /** 관계 저장: 먼저 서버에 영향을 묻고, 옮길 후속 업무가 있으면 사용자에게 보인다(D-31, D-91). */
   async function applyLink(predecessor: string): Promise<void> {
-    if (task === undefined || busy || predecessor === '') return;
+    if (detailForm.task === undefined || busy || predecessor === '') return;
     // 고치던 관계가 그사이 없어졌으면(다시 읽은 판에 없음) 새로 만들지 않고 편집 칸을 닫는다.
-    if (editing !== undefined && !task.predecessors.some((l) => l.task_id === editing)) {
+    if (editing !== undefined && !detailForm.task.predecessors.some((l) => l.task_id === editing)) {
       resetLinkEditor();
       return;
     }
@@ -884,7 +802,7 @@
     const kind = linkKind;
     const base = linkBase;
     try {
-      const plan = await work.previewLink(task.id, predecessor, kind, lag);
+      const plan = await work.previewLink(detailForm.task.id, predecessor, kind, lag);
       if (plan.shifts.length > 0) {
         linkPending = {
           predecessor,
@@ -917,10 +835,10 @@
     /** 다시 계산해 보니 밀릴 업무가 없어 묻지 않고 저장했다(저장한 뒤 알린다, D-125). */
     noShiftNeeded = false,
   ): Promise<void> {
-    if (task === undefined) return;
+    if (detailForm.task === undefined) return;
     const result = await work.setPredecessor(
       editingUser,
-      task.id,
+      detailForm.task.id,
       predecessor,
       kind,
       lag,
@@ -932,7 +850,7 @@
       // 그대로 두며, 다음 저장은 최신 관계를 기준으로 한다(다시 누르면 알고 덮는다).
       linkPending = undefined;
       const current = result.current;
-      if (task.version === current.version) task = current;
+      if (detailForm.task.version === current.version) detailForm.task = current;
       else refresh(current);
       const now = current.predecessors.find((l) => l.task_id === predecessor);
       if (now === undefined) {
@@ -949,7 +867,7 @@
     if (result.kind === 'shift_conflict') {
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
       // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
-      const plan = await work.previewLink(task.id, predecessor, kind, lag);
+      const plan = await work.previewLink(detailForm.task.id, predecessor, kind, lag);
       if (plan.shifts.length === 0) {
         linkPending = undefined;
         await saveLink(predecessor, kind, lag, base, [], plan.undated, true);
@@ -970,7 +888,7 @@
     linkPending = undefined;
     resetLinkEditor();
     const fresh = result.task;
-    if (task.version === fresh.version) task = fresh;
+    if (detailForm.task.version === fresh.version) detailForm.task = fresh;
     else refresh(fresh);
     notifyDone(
       [m.tasks_link_saved(), noShiftNeeded ? m.tasks_gantt_no_shifts() : '', undatedText(undated)]
@@ -1011,7 +929,7 @@
     try {
       const fresh = await work.setTaskParent(editingUser, id, parentId);
       if (parentChoice === choiceAtStart) parentChoice = '';
-      if (task?.version === fresh.version) task = fresh;
+      if (detailForm.task?.version === fresh.version) detailForm.task = fresh;
       else refresh(fresh);
       notifyDone(m.tasks_parent_changed());
       onchanged();
@@ -1019,13 +937,6 @@
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
       error = errorText(e, m.tasks_parent_failed());
     }
-  }
-
-  function toggleAssignee(id: string, on: boolean): void {
-    if (form === undefined) return;
-    form.assignee_ids = on
-      ? [...new Set([...form.assignee_ids, id])]
-      : form.assignee_ids.filter((x) => x !== id);
   }
 </script>
 
@@ -1037,14 +948,14 @@
   <Button onclick={() => void verifyAccount()}>{m.tasks_account_verify()}</Button>
 {/if}
 <div class="@container" hidden={hiddenForAccount} inert={hiddenForAccount}>
-  {#if task === undefined && error === undefined}
+  {#if detailForm.task === undefined && error === undefined}
     <!-- 읽는 동안 빈 창으로 두지 않는다. -->
     <p class="py-6 text-center text-sm text-muted-foreground" role="status">
       {m.modules_loading()}
     </p>
   {/if}
-  {#if task !== undefined && form !== undefined}
-    {@const current = task}
+  {#if detailForm.task !== undefined && detailForm.form !== undefined}
+    {@const current = detailForm.task}
     <!-- 덮어쓰기 확인이 떠 있는 동안에는 충돌 알림(확인 포함) 말고는 모두 잠근다. 체크리스트·반복·선행·상위 업무를
        바꾸면 다시 채우기가 확인을 말없이 닫고, 보인 값과 저장할 값이 어긋날 수 있다. -->
     <div class="flex flex-col gap-4">
@@ -1132,9 +1043,9 @@
       <div class="flex flex-col gap-4" inert={clashAsk !== undefined}>
         <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
         <TaskFields
-          bind:f={form}
-          bind:tagsText
-          bind:estimateText
+          bind:f={detailForm.form}
+          bind:tagsText={detailForm.tagsText}
+          bind:estimateText={detailForm.estimateText}
           {current}
           previewing={pending !== undefined}
           {locked}
@@ -1163,108 +1074,26 @@
           />
         {/if}
 
-        <section class="flex flex-col gap-2" aria-labelledby="parent-heading">
-          <h3 id="parent-heading" class="text-sm font-semibold">{m.tasks_parent()}</h3>
-          {#if current.parent_id !== null}
-            {@const parentId = current.parent_id}
-            <button
-              type="button"
-              class="self-start rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              onclick={() => {
-                onopen(parentId);
-              }}>{label(byId.get(parentId)) || m.tasks_hidden_task()}</button
-            >
-          {:else}
-            <p class="text-sm text-muted-foreground">{m.tasks_parent_top()}</p>
-          {/if}
-          {#if canEdit && subtasks.length > 0}
-            <p class="text-sm text-muted-foreground">{m.tasks_parent_has_subtasks()}</p>
-          {:else if canEdit && (parentCandidates.length > 0 || current.parent_id !== null)}
-            <div class="flex flex-wrap items-center gap-2">
-              <span id="parent-choose-label" class="sr-only">{m.tasks_parent_choose()}</span>
-              <Select.Root
-                type="single"
-                value={parentChoice}
-                onValueChange={(v: string) => (parentChoice = v)}
-              >
-                <Select.Trigger aria-labelledby="parent-choose-label"
-                  >{parentChoice === ''
-                    ? m.tasks_parent_choose()
-                    : parentChoice === TOP
-                      ? m.tasks_parent_top()
-                      : label(byId.get(parentChoice))}</Select.Trigger
-                >
-                <Select.Content>
-                  {#if current.parent_id !== null}
-                    <Select.Item value={TOP} label={m.tasks_parent_top()}
-                      >{m.tasks_parent_top()}</Select.Item
-                    >
-                  {/if}
-                  {#each parentCandidates as c (c.id)}
-                    <Select.Item value={c.id} label={label(c)}>{label(c)}</Select.Item>
-                  {/each}
-                </Select.Content>
-              </Select.Root>
-              <Button
-                size="sm"
-                disabled={parentChoice === ''}
-                onclick={() => {
-                  const chosen = parentChoice;
-                  void changeParent(current.id, chosen === TOP ? null : chosen);
-                }}>{m.tasks_parent_change()}</Button
-              >
-            </div>
-          {/if}
-        </section>
-
-        {#if current.parent_id === null}
-          <section class="flex flex-col gap-2" aria-labelledby="subtasks-heading">
-            <h3 id="subtasks-heading" class="text-sm font-semibold">{m.tasks_subtasks()}</h3>
-            {#each subtasks as sub (sub.id)}
-              <button
-                type="button"
-                class="flex items-baseline gap-2 rounded px-2 py-1 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                onclick={() => {
-                  onopen(sub.id);
-                }}
-              >
-                <span class="shrink-0 font-mono text-xs whitespace-nowrap text-muted-foreground"
-                  >{sub.reference ?? ''}</span
-                >
-                <span class="min-w-0 [overflow-wrap:anywhere]">{sub.title}</span>
-                <span class="ml-auto shrink-0 text-xs whitespace-nowrap text-muted-foreground"
-                  >{sub.status}</span
-                >
-              </button>
-            {:else}
-              <p class="text-sm text-muted-foreground">{m.tasks_none()}</p>
-            {/each}
-            {#if canEdit}
-              {#key childSeed}
-                <CreateForm
-                  id="new-subtask"
-                  label={m.tasks_subtask_title()}
-                  placeholder={m.tasks_subtask_placeholder()}
-                  submitLabel={m.tasks_subtask_add()}
-                  initial={childInitial}
-                  onchange={(draft: { name: string; requestId: string | null } | undefined) => {
-                    childDraft = draft;
-                  }}
-                  create={async (requestId: string, title: string) => {
-                    await work.createTask(
-                      editingUser,
-                      current.item_id,
-                      requestId,
-                      title,
-                      current.id,
-                    );
-                    onchanged();
-                  }}
-                />
-              {/key}
-            {/if}
-          </section>
-        {/if}
+        <TaskHierarchy
+          {current}
+          {canEdit}
+          {subtasks}
+          {parentCandidates}
+          {byId}
+          {label}
+          {onopen}
+          {changeParent}
+          bind:parentChoice
+          {childSeed}
+          {childInitial}
+          onchilddraft={(draft: { name: string; requestId: string | null } | undefined) => {
+            childDraft = draft;
+          }}
+          createChild={async (requestId: string, title: string) => {
+            await work.createTask(editingUser, current.item_id, requestId, title, current.id);
+            onchanged();
+          }}
+        />
 
         <TaskDependencies
           {current}
