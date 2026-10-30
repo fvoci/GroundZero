@@ -1,6 +1,6 @@
 import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ItemView } from '$lib/api/client';
@@ -8,6 +8,7 @@ import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import './fixtures/authenticated';
+import { openItemInfo } from './fixtures/item-groups';
 
 // CodeRabbit(#141 e5e001a5, outside diff): 서버 등급(app_grade_item)은 보관을 반영하지 않아 보관된 항목의 소유자도 owner를
 // 받는다. 화면이 등급만 보면 편집 폼과 "보관" 단추(실제로는 해제)가 열리고 {:else} 분기의 "보관 해제" 단추가 숨는다. 보관된
@@ -77,7 +78,8 @@ async function mount(current: ItemView, mod: Module): Promise<void> {
 describe('archived item screen', () => {
   it('shows the owner the unarchive button instead of the edit form', async () => {
     await mount(item({ archived: true }), module());
-    expect(await screen.findByRole('button', { name: '보관 해제' })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    expect(await screen.findByRole('menuitem', { name: '보관 해제' })).toBeInTheDocument();
     expect(document.getElementById('item-title')).toBeNull();
     expect(screen.queryByRole('button', { name: '보관' })).toBeNull();
     expect(screen.getByText('보관됨 · 읽기 전용')).toBeInTheDocument();
@@ -93,7 +95,9 @@ describe('archived item screen', () => {
 
   it('still lets the owner edit an item that is not archived', async () => {
     await mount(item(), module());
-    expect(await screen.findByRole('button', { name: '보관' })).toBeInTheDocument();
+    await openItemInfo();
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    expect(await screen.findByRole('menuitem', { name: '보관' })).toBeInTheDocument();
     expect(document.getElementById('item-title')).not.toBeNull();
   });
 });

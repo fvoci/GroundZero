@@ -8,7 +8,7 @@ import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
-import { openItemGroup, resetRoute } from './fixtures/item-groups';
+import { openItemGroup, openItemInfo, resetRoute } from './fixtures/item-groups';
 
 const workspace: Workspace = {
   id: 'ws-restore',
@@ -81,6 +81,7 @@ afterEach(() => {
 async function mount(itemId = 'item-a', title = `서버 항목 ${itemId}`) {
   const view = render(ItemScreen, { workspace, itemId, workspaces: [workspace] });
   await screen.findByText(title, { selector: 'h1, h2, h3, h4, h5, h6' });
+  await openItemInfo();
   await openItemGroup('문서');
   await screen.findByText(/선택할 양식/, { selector: 'option' });
   return view;

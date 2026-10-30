@@ -83,6 +83,18 @@
   "modules_item_load_failed": "Couldn't load the item.",
   "modules_breadcrumb": "Breadcrumb",
   "modules_item_info": "Item details",
+  "modules_more_actions": "More actions",
+  "modules_member_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} member",
+        "countPlural=other": "{count} members"
+      }
+    }
+  ],
+  "modules_info_unsaved": "You have unsaved changes. Save or undo them before collapsing this section.",
   "modules_title": "Title",
   "modules_title_required": "Enter a title.",
   "modules_share_with_members": "Share with workspace members (readers can view, writers can edit)",

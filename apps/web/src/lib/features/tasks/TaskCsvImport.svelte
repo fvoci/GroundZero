@@ -67,7 +67,7 @@
   let generation = 0;
   // 마지막 저장이 이 탭에 남았는지. 계정 전환으로 다시 읽을 때 남았으면 막지 않는다(D-96).
   let kept = $state(true);
-  let expanded = $state(true);
+  let expanded = $state(false);
 
   $effect(() => {
     const key = storageKey;

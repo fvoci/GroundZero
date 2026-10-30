@@ -19,15 +19,18 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import { NativeSelect } from '$lib/ui/native-select';
+  import * as Dialog from '$lib/ui/dialog';
 
   interface Props {
     item: ItemView;
     module: Module;
     /** 앱 안 이동의 다음 경로에서도 이 대화상자가 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
     stays?: ((next: string) => boolean) | undefined;
+    trigger?: boolean;
+    returnFocus?: HTMLButtonElement | null;
   }
 
-  const { item, module, stays }: Props = $props();
+  const { item, module, stays, trigger = true, returnFocus }: Props = $props();
 
   let open = $state(false);
   let targets = $state<Module[]>([]);
@@ -84,7 +87,7 @@
     targets = all.filter((mod) => mod.kind === module.kind && !mod.archived);
   }
 
-  async function start(): Promise<void> {
+  export async function start(): Promise<void> {
     error = undefined;
     try {
       const all = await api.modules(item.workspace_id);
@@ -168,12 +171,35 @@
   ondiscard={draft.discardAndLeave}
 />
 
-<div class="flex flex-col gap-2 text-sm">
-  {#if !open}
+<div class="contents text-sm">
+  {#if trigger && !open}
     <div>
       <Button size="sm" variant="outline" onclick={() => void start()}>{m.modules_copy()}</Button>
     </div>
-  {:else}
+  {/if}
+  {#if error !== undefined && !open}<p role="alert" class="text-destructive">{error}</p>{/if}
+</div>
+<Dialog.Root
+  bind:open={
+    () => open,
+    (next: boolean) => {
+      if (!next) draft.leave.request(() => (open = false));
+    }
+  }
+>
+  <Dialog.Content
+    class="max-h-[90vh] overflow-y-auto"
+    onCloseAutoFocus={(event) => {
+      if (returnFocus !== undefined && returnFocus !== null) {
+        event.preventDefault();
+        returnFocus.focus();
+      }
+    }}
+  >
+    <Dialog.Header>
+      <Dialog.Title>{m.modules_copy_form()}</Dialog.Title>
+      <Dialog.Description>{m.modules_copy_hint()}</Dialog.Description>
+    </Dialog.Header>
     <fieldset class="min-w-0" disabled={busy}>
       <form
         class="flex flex-wrap items-end gap-2 rounded-md border p-2"
@@ -204,9 +230,8 @@
             draft.leave.request(() => (open = false));
           }}>{m.common_cancel()}</Button
         >
-        <p class="w-full text-muted-foreground">{m.modules_copy_hint()}</p>
       </form>
     </fieldset>
-  {/if}
-  {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
-</div>
+    {#if error !== undefined}<p role="alert" class="text-destructive">{error}</p>{/if}
+  </Dialog.Content>
+</Dialog.Root>

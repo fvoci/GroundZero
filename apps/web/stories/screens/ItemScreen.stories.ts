@@ -158,6 +158,19 @@ function groupStory({ kind, group }: Args, globals: Story['globals'] = {}): Stor
         if (shown.has(id)) continue;
         await expect(canvasElement.querySelector(`#${id}`)).toBeNull();
       }
+      const info = canvas.getByRole('button', { name: /^항목 정보/ });
+      await expect(info).toHaveAttribute('aria-expanded', 'false');
+      await expect(canvas.queryByRole('form', { name: '항목 정보' })).toBeNull();
+      await expect(canvas.getByRole('button', { name: '더 보기' })).toBeVisible();
+      if (group === 'tasks') {
+        await expect(
+          await canvas.findByRole('button', { name: '여러 업무 한꺼번에 등록' }),
+        ).toHaveAttribute('aria-expanded', 'false');
+      }
+      await userEvent.click(info);
+      await expect(canvas.getByRole('form', { name: '항목 정보' })).toBeVisible();
+      await userEvent.click(info);
+      await expect(info).toHaveAttribute('aria-expanded', 'false');
     },
   };
 }

@@ -38,11 +38,20 @@
     onchanged: () => void;
     /** 앱 안 이동의 다음 경로에서도 이 패널이 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
     stays?: ((next: string) => boolean) | undefined;
+    profile?: ItemProfileView | undefined;
+    dirty?: boolean;
+    onrestore?: () => void;
   }
 
-  const { item, kind, onchanged, stays }: Props = $props();
-
-  let profile = $state<ItemProfileView | undefined>(undefined);
+  let {
+    item,
+    kind,
+    onchanged,
+    stays,
+    profile = $bindable(undefined),
+    dirty = $bindable(false),
+    onrestore,
+  }: Props = $props();
   let people = $state<AssigneeView[]>([]);
   let error = $state<string | undefined>(undefined);
   let editing = $state(false);
@@ -84,6 +93,27 @@
   let groupChoices = $state<{ id: string; name: string }[]>([]);
   let baseline = $state('');
   let busy = $state(false);
+  let membersBaseline = $state('');
+  let membersBusy = $state(false);
+  const memberSnapshot = () => JSON.stringify([memberIds.toSorted(), groupIds.toSorted()]);
+  const membersDirty = $derived(managing && memberSnapshot() !== membersBaseline);
+  const membersDraft = createFormDraft({
+    preserve: false,
+    name: () => `item-members:${item.id}`,
+    snapshot: () => ({ memberIds, groupIds }),
+    parse: () => undefined,
+    restore: () => undefined,
+    reset: () => {
+      managing = false;
+      memberIds = [];
+      groupIds = [];
+      membersBusy = false;
+    },
+    dirty: () => membersDirty,
+    busy: () => membersBusy,
+    stays: (next) => stays?.(next) === true,
+  });
+  onMount(membersDraft.attach);
   const draft = createFormDraft({
     name: () => `item-profile:${item.id}:${kind}`,
     snapshot: () => ({ form, base: editBase, baseline, leader: editLeader }),
@@ -168,6 +198,9 @@
     stays: (next) => stays?.(next) === true,
   });
   onMount(draft.attach);
+  $effect(() => {
+    dirty = busy || membersBusy || (editing && JSON.stringify(form) !== baseline) || membersDirty;
+  });
 
   // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
   const leaderLabel = $derived.by(() => {
@@ -291,6 +324,7 @@
       groupChoices = groups.map((g) => ({ id: g.id, name: g.name }));
       memberIds = p.members.map((x) => x.user_id);
       groupIds = p.groups.map((g) => g.id);
+      membersBaseline = memberSnapshot();
       managing = true;
     } catch (err: unknown) {
       error = errorText(err, m.modules_members_load_failed());
@@ -303,14 +337,20 @@
   }
 
   async function saveMembers(): Promise<void> {
+    if (membersBusy) return;
+    const attempt = membersDraft.capture();
+    if (attempt === undefined) return;
     error = undefined;
+    membersBusy = true;
     try {
       await api.setItemMembers(item.id, memberIds, groupIds);
-      managing = false;
+      if (!membersDraft.complete(attempt)) return;
       notifyDone(m.modules_people_saved({ label: labels.members }));
       reloadKey += 1;
     } catch (err: unknown) {
-      error = errorText(err, m.modules_save_failed());
+      if (membersDraft.isOwner(attempt)) error = errorText(err, m.modules_save_failed());
+    } finally {
+      if (membersDraft.isOwner(attempt)) membersBusy = false;
     }
   }
 </script>
@@ -322,7 +362,10 @@
     <FormDraftOffer
       restorable={profile?.can_edit === true && !accountSwitching()}
       onrestore={() => {
-        if (profile?.can_edit === true && !accountSwitching()) draft.restore(entry);
+        if (profile?.can_edit === true && !accountSwitching()) {
+          draft.restore(entry);
+          onrestore?.();
+        }
       }}
       ondiscard={() => {
         draft.discard(entry);
@@ -334,6 +377,11 @@
   open={draft.leave.open}
   onkeep={draft.leave.keep}
   ondiscard={draft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={membersDraft.leave.open}
+  onkeep={membersDraft.leave.keep}
+  ondiscard={membersDraft.discardAndLeave}
 />
 
 <section class="flex flex-col gap-3" aria-labelledby="item-profile-heading">
@@ -496,7 +544,7 @@
           : m.modules_members_shared_hint()}
       </p>
       {#if managing}
-        <fieldset class="flex flex-col gap-2 rounded-md border p-2">
+        <fieldset class="flex flex-col gap-2 rounded-md border p-2" disabled={membersBusy}>
           <legend class="px-1">{m.modules_people()}</legend>
           {#each candidates as c (c.id)}
             <div class="flex items-center gap-2">
@@ -512,7 +560,7 @@
           {/each}
         </fieldset>
         {#if groupChoices.length > 0}
-          <fieldset class="flex flex-col gap-2 rounded-md border p-2">
+          <fieldset class="flex flex-col gap-2 rounded-md border p-2" disabled={membersBusy}>
             <legend class="px-1">{m.modules_groups()}</legend>
             {#each groupChoices as g (g.id)}
               <div class="flex items-center gap-2">
@@ -529,8 +577,14 @@
           </fieldset>
         {/if}
         <div class="flex gap-2">
-          <Button size="sm" onclick={() => void saveMembers()}>{m.common_save()}</Button>
-          <Button size="sm" variant="ghost" onclick={() => (managing = false)}
+          <Button size="sm" disabled={membersBusy} onclick={() => void saveMembers()}
+            >{m.common_save()}</Button
+          >
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={membersBusy}
+            onclick={() => membersDraft.leave.request(() => (managing = false))}
             >{m.common_cancel()}</Button
           >
         </div>
