@@ -66,6 +66,9 @@ for (const code of [
   "window.location.assign('/api/typo/42');",
   "window.open('/api/typo/42');",
   "const a = document.createElement('a'); a.href = '/api/typo/42';",
+  "const a = document.createElement('a'); a.setAttribute('href', '/api/typo/42');",
+  "window.location.href = '/api/typo/42';",
+  "location = '/api/typo/42';",
 ]) {
   await test(`SR-250-4: navigation checks paths: ${code}`, () => {
     assert.throws(
@@ -656,6 +659,18 @@ await test('fetch aliases include defaults, const aliases, global members and de
   `);
   assert.equal(checkUsage(input, contract, empty).calls, 2);
 });
+
+for (const declaration of [
+  "const load = (send: typeof fetch = fetch) => send('/api/tasks/42');",
+  "const load = function (send: typeof fetch = fetch) { return send('/api/tasks/42'); };",
+]) {
+  await test(`CodeRabbit: const function fetch defaults reject an unknown override: ${declaration}`, () => {
+    assert.throws(
+      () => checkUsage(files(`${declaration} load(other);`), contract, empty),
+      /override|not statically resolvable/,
+    );
+  });
+}
 for (const code of [
   'let invoke = fetch; invoke("/api/tasks/42");',
   'const invoke = fetch.bind(window); invoke("/api/tasks/42");',
@@ -671,116 +686,52 @@ for (const code of [
   });
 }
 
-for (const code of [
-  "new Request('/api/tasks/42', { method: 'DELETE' });",
-  "fetch(new Request('/api/tasks/42'), { method: 'DELETE' });",
-  "const xhr = new XMLHttpRequest(); xhr.open('DELETE', '/api/tasks/42');",
-  "new EventSource('/api/typo/42');",
-  "navigator.sendBeacon('/api/tasks/42', 'payload');",
-  "const a = document.createElement('a'); a.setAttribute('href', '/api/typo/42');",
-  "window.location.href = '/api/typo/42';",
-  "location = '/api/typo/42';",
-]) {
-  await test(`network outlet cannot hide invalid operations: ${code}`, () => {
-    assert.throws(() => checkUsage(files(code), contract, listedTask), /not in OpenAPI/);
-  });
-}
-await test('Request, XMLHttpRequest, EventSource and beacon use their actual methods', () => {
-  const input = files(`
-    fetch(new Request('/api/tasks/42', { method: 'GET' }));
-    const xhr = new XMLHttpRequest(); xhr.open('GET', '/api/tasks/42');
-    new EventSource('/api/tasks/42');
-    navigator.sendBeacon('/api/beacons', 'payload');
-  `);
-  const result = checkUsage(
-    input,
-    { paths: { ...contract.paths, '/api/beacons': { post: {} } } },
-    empty,
-  );
-  assert.deepEqual(result.unused, []);
-  assert.ok(
-    result.exits.every(
-      (row) => row.reason !== '' && ['대조함', '이유 있는 예외'].includes(row.classification),
-    ),
-  );
-});
-await test('href, src and form action use GET or the form method, including HTML entry files', () => {
+await test('Svelte and HTML links are checked as GET', () => {
   const input = files('');
-  input.set(
-    'apps/web/src/lib/Links.svelte',
-    '<img src="/api/tasks/42"><a href="/api/tasks/42">ok</a><form action="/api/submit" method="post"></form>',
-  );
-  input.set(
-    'apps/web/index.html',
-    '<html><body><script src="/api/tasks/42"></script></body></html>',
-  );
-  const routes = { paths: { ...contract.paths, '/api/submit': { post: {} } } };
-  assert.equal(checkUsage(input, routes, empty).calls, 4);
-  input.set('apps/web/src/lib/Links.svelte', '<form action="/api/submit" method="get"></form>');
-  assert.throws(() => checkUsage(input, routes, empty), /GET \/api\/submit.*not in OpenAPI/);
+  input.set('apps/web/src/lib/Links.svelte', '<a href="/api/tasks/42">ok</a>');
+  input.set('apps/web/index.html', '<html><body><a href="/api/tasks/42">ok</a></body></html>');
+  assert.equal(checkUsage(input, contract, empty).calls, 2);
 });
-await test('WebSocket exception checks y-websocket room composition and never exempts HTTP', () => {
+
+await test('named WebSocket item checks room composition and never exempts HTTP', () => {
   const input = files(`
     import { WebsocketProvider as Provider } from 'y-websocket';
     new Provider('wss://example.org/api/tasks/42', 'collab', doc);
   `);
-  const policy = {
-    websockets: [{ path: '/api/tasks/{id}/collab', reason: 'CRDT upgrade outside OpenAPI' }],
-    sites: [],
+  const named: Allowlist = {
+    ...empty,
+    websocket: {
+      name: 'document_collaboration',
+      path: '/api/tasks/{id}/collab',
+      reason: 'CRDT upgrade outside OpenAPI',
+    },
   };
-  const result = checkUsage(input, { paths: {} }, empty, policy);
-  assert.equal(result.exits[0]?.classification, '이유 있는 예외');
+  assert.deepEqual(checkUsage(input, { paths: {} }, named).unused, []);
   input.set(source, (input.get(source) ?? '').replace("'collab'", "'typo'"));
-  assert.throws(() => checkUsage(input, { paths: {} }, empty, policy), /unlisted WebSocket/);
+  assert.throws(() => checkUsage(input, { paths: {} }, named), /unlisted WebSocket/);
   assert.throws(
     () =>
-      checkUsage(
-        files("fetch('/api/tasks/42/collab', {method: 'DELETE'});"),
-        { paths: {} },
-        empty,
-        policy,
-      ),
+      checkUsage(files("fetch('/api/tasks/42/collab', {method: 'DELETE'});"), { paths: {} }, named),
     /DELETE .*not in OpenAPI/,
   );
-});
-await test('opaque exceptions require exact sites and nonempty reasons; literals still get checked', () => {
-  const input = files('');
-  input.set('apps/web/src/lib/Link.svelte', '<a href={value}>user URL</a>');
-  const policy = {
-    websockets: [],
-    sites: [
-      {
-        file: 'apps/web/src/lib/Link.svelte',
-        kind: 'href',
-        expression: '(value)',
-        reason: 'Runtime document content',
-      },
-    ],
-  };
-  assert.equal(
-    checkUsage(input, { paths: {} }, empty, policy).exits[0]?.classification,
-    '이유 있는 예외',
-  );
   assert.throws(
-    () =>
-      checkUsage(input, { paths: {} }, empty, {
-        ...policy,
-        sites: [
-          { file: 'apps/web/src/lib/Link.svelte', kind: 'href', expression: '(value)', reason: '' },
-        ],
-      }),
+    () => readAllowlist({ ...named, websocket: { ...named.websocket, reason: '' } }),
     /nonempty text/,
   );
-  input.set('apps/web/src/lib/Link.svelte', '<a href="/api/typo">wrong</a>');
-  assert.throws(
-    () => checkUsage(input, { paths: {} }, empty, policy),
-    /GET \/api\/typo.*not in OpenAPI/,
-  );
 });
+await test('app paths, static resources and external URLs need no per-site exceptions', () => {
+  const input = files(`
+    fetch('/rhwp/manifest.json', {method: unknownMethod});
+    fetch('https://example.org/api/typo');
+    function move(url: string) { window.location.replace(url); }
+  `);
+  input.set('apps/web/src/lib/Link.svelte', '<script>let route;</script><a href={route}>route</a>');
+  assert.equal(checkUsage(input, { paths: {} }, empty).calls, 0);
+});
+
 for (const code of [
   "const suffix = '../api/typo'; fetch('/rhwp/' + suffix);",
   "fetch(`/rhwp/${encodeURIComponent('..')}/api/typo`);",
-  "new Request('/rhwp/%2E%2E/api/typo', { method: 'DELETE' });",
   "window.location.assign('/rhwp/.%2e/api/typo');",
 ]) {
   await test(`noncanonical paths fail across outlets: ${code}`, () => {
@@ -818,10 +769,6 @@ for (const [kind, method, path] of [
       input.set(
         'xtask/web-api/allowlist.json',
         JSON.stringify(kind === 'request' ? empty : listedTask),
-      );
-      input.set(
-        'xtask/web-api/network-exceptions.json',
-        JSON.stringify({ websockets: [], sites: [] }),
       );
       input.set('packages/api-client/src/index.ts', '');
       input.set('packages/api-client/src/generated/schema.ts', '');

@@ -1,20 +1,9 @@
 // D-131 가1. Use the installed TS parser and symbols, not a search for URL strings.
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import {
-  capability,
-  networkExit,
-  canonicalPath,
-  compact,
-  readNetworkPolicy,
-  type NetworkPolicy,
-  type NetworkEntry,
-  type Exit,
-} from './network.mts';
-
 const loadSvelte: (id: string) => typeof import('svelte/compiler') = createRequire(
   new URL('../../apps/web/package.json', import.meta.url),
 );
@@ -38,6 +27,16 @@ export interface Unused {
 export interface Allowlist {
   forwarders: Forwarder[];
   unused: Unused[];
+  websocket?: { name: string; path: string; reason: string };
+}
+
+interface Exit {
+  kind: 'fetch' | 'link' | 'location' | 'WebSocket' | 'request';
+  url?: ts.Expression | undefined;
+  options?: ts.Expression | undefined;
+  method?: ts.Expression | undefined;
+  line?: number | undefined;
+  append?: ts.Expression | undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -66,7 +65,17 @@ export function readAllowlist(value: unknown): Allowlist {
     if (!reasons.has(label)) throw new Error(`invalid reason: ${label}`);
     return label;
   };
+  const websocket = input.websocket === undefined ? undefined : record(input.websocket);
   return {
+    ...(websocket
+      ? {
+          websocket: {
+            name: text(websocket.name),
+            path: text(websocket.path),
+            reason: text(websocket.reason),
+          },
+        }
+      : {}),
     forwarders: input.forwarders.map((value: unknown) => {
       const row = record(value);
       return {
@@ -90,7 +99,6 @@ function svelteSource(source: string): string {
   // Offsets in both parsers are UTF-16, not Unicode code points.
   const masked: string[] = source.split('').map((ch) => (ch === '\n' || ch === '\r' ? ch : ' '));
   const outlets: string[] = [];
-  const actionMethods = new Map<object, string>();
   function copy(start: number, end: number): void {
     for (let index = start; index < end; index++) masked[index] = source[index] ?? ' ';
   }
@@ -108,41 +116,7 @@ function svelteSource(source: string): string {
       value.forEach(visit);
     } else if (typeof value === 'object' && value !== null) {
       const node = record(value);
-      if (
-        node.type === 'RegularElement' &&
-        node.name === 'form' &&
-        Array.isArray(node.attributes)
-      ) {
-        const attributes: unknown[] = node.attributes;
-        const action = attributes.find(
-          (attribute: unknown) => isRecord(attribute) && attribute.name === 'action',
-        );
-        const method = attributes.find(
-          (attribute: unknown) => isRecord(attribute) && attribute.name === 'method',
-        );
-        if (isRecord(action) && isRecord(method)) {
-          const part: unknown = Array.isArray(method.value) ? method.value[0] : method.value;
-          if (isRecord(part) && part.type === 'Text')
-            actionMethods.set(action, JSON.stringify(String(part.data).toUpperCase()));
-          else if (
-            isRecord(part) &&
-            isRecord(part.expression) &&
-            typeof part.expression.start === 'number' &&
-            typeof part.expression.end === 'number'
-          )
-            actionMethods.set(action, source.slice(part.expression.start, part.expression.end));
-        }
-        if (!action) {
-          const line =
-            typeof node.start === 'number' ? source.slice(0, node.start).split('\n').length : 1;
-          outlets.push(`__fvoci_network('form', '', ${String(line)});`);
-        }
-      }
-      if (
-        node.type === 'Attribute' &&
-        typeof node.name === 'string' &&
-        ['href', 'src', 'action', 'srcdoc'].includes(node.name)
-      ) {
+      if (node.type === 'Attribute' && typeof node.name === 'string' && node.name === 'href') {
         const parts = Array.isArray(node.value) ? node.value : [node.value];
         const expression = parts
           .map((part: unknown) => {
@@ -156,9 +130,7 @@ function svelteSource(source: string): string {
           .join(' + ');
         const line =
           typeof node.start === 'number' ? source.slice(0, node.start).split('\n').length : 1;
-        outlets.push(
-          `__fvoci_network(${JSON.stringify(node.name)}, ${expression || "''"}, ${String(line)}${actionMethods.has(node) ? `, ${actionMethods.get(node) ?? "'GET'"}` : ''});`,
-        );
+        outlets.push(`__fvoci_link(${expression || "''"}, ${String(line)});`);
       }
       if (
         node.type === 'RegularElement' &&
@@ -203,24 +175,10 @@ function sourceProgram(files: Map<string, string>): ts.Program {
   const sources = new Map(
     [...files].map(([file, code]) => {
       const svelte = /\.(svelte|html)$/.test(file);
-      const css = file.endsWith('.css');
-      const path = resolve(virtualRoot, svelte || css ? `${file}.ts` : file);
-      const cssSource = [
-        ...code.matchAll(/url\(\s*['"]?([^)'"\s]+)['"]?\s*\)|@import\s+['"]([^'"]+)['"]/g),
-      ]
-        .map(
-          (match) =>
-            `__fvoci_network('css', ${JSON.stringify(match[1] ?? match[2])}, ${String(code.slice(0, match.index).split('\n').length)});`,
-        )
-        .join('\n');
+      const path = resolve(virtualRoot, svelte ? `${file}.ts` : file);
       return [
         path,
-        ts.createSourceFile(
-          path,
-          svelte ? svelteSource(code) : css ? cssSource : code,
-          ts.ScriptTarget.Latest,
-          true,
-        ),
+        ts.createSourceFile(path, svelte ? svelteSource(code) : code, ts.ScriptTarget.Latest, true),
       ];
     }),
   );
@@ -278,6 +236,12 @@ function matches(path: string, route: string): boolean {
   );
 }
 
+function canonicalPath(url: string): void {
+  const path = (url.split(/[?#]/, 1)[0] ?? '').replace(/%2e/gi, '.');
+  if (/(?:^|\/)\.{1,2}(?:\/|$)/.test(path) || /\\|%2f|%5c/i.test(path))
+    throw new Error('noncanonical URL or dot segment: ' + url);
+}
+
 function apiPath(path: string): boolean {
   return /^\/(?:api|auth|healthz)(?:\/|$)/.test(path);
 }
@@ -286,14 +250,10 @@ export function checkUsage(
   files: Map<string, string>,
   contract: unknown,
   allowlist: Allowlist,
-  policy: NetworkPolicy = { websockets: [], sites: [] },
-): { calls: number; used: string[]; unused: string[]; exits: NetworkEntry[] } {
+): { calls: number; used: string[]; unused: string[] } {
   // Validate injected test inputs as strictly as the on-disk list.
   allowlist = readAllowlist(allowlist);
-  policy = readNetworkPolicy(policy);
-  const exits: NetworkEntry[] = [];
-  const exceptionsUsed = new Set<NetworkPolicy['sites'][number]>();
-  const websocketsUsed = new Set<NetworkPolicy['websockets'][number]>();
+  const websocketUsage = { used: false };
   const program = sourceProgram(files);
   const checker = program.getTypeChecker();
   const problems: string[] = [];
@@ -364,8 +324,135 @@ export function checkUsage(
       });
     return [...new Set(writes)];
   }
-  function isFetch(node: ts.Node, seen = new Set<ts.Symbol>()): boolean {
-    return capability(node, checker, symbol, seen) === 'fetch';
+  // Only the entry kinds accepted in the #250 scope decision are traced.
+  function capability(node: ts.Node, seen = new Set<ts.Symbol>()): string | undefined {
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return capability(node.expression, seen);
+    const found = symbol(node);
+    if (
+      ts.isIdentifier(node) &&
+      (!found || (node.text === 'globalThis' && !found.valueDeclaration))
+    ) {
+      if (node.text === 'fetch' || node.text === 'WebSocket') return node.text;
+      if (['window', 'globalThis', 'self', 'document'].includes(node.text)) return 'global';
+      if (node.text === 'location') return 'location';
+    }
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      const name = ts.isPropertyAccessExpression(node)
+        ? node.name.text
+        : ts.isStringLiteralLike(node.argumentExpression)
+          ? node.argumentExpression.text
+          : undefined;
+      const owner = capability(node.expression, seen);
+      if (owner === 'global' && name) {
+        if (name === 'fetch' || name === 'WebSocket' || name === 'location') return name;
+        if (name === 'open') return 'window.open';
+      }
+      if (owner === 'location' && name && ['assign', 'replace'].includes(name))
+        return `location.${name}`;
+    }
+    const imported = checker.getSymbolAtLocation(node)?.declarations?.find(ts.isImportSpecifier);
+    if (imported && (imported.propertyName ?? imported.name).text === 'WebsocketProvider') {
+      const declaration = imported.parent.parent.parent;
+      if (
+        ts.isImportDeclaration(declaration) &&
+        ts.isStringLiteral(declaration.moduleSpecifier) &&
+        declaration.moduleSpecifier.text === 'y-websocket'
+      )
+        return 'WebsocketProvider';
+    }
+    if (!found || seen.has(found)) return undefined;
+    seen = new Set(seen).add(found);
+    const declaration = found.valueDeclaration;
+    if (
+      declaration &&
+      ts.isBindingElement(declaration) &&
+      ts.isObjectBindingPattern(declaration.parent)
+    ) {
+      const owner = declaration.parent.parent;
+      const name = declaration.propertyName ?? declaration.name;
+      if (
+        ts.isVariableDeclaration(owner) &&
+        owner.initializer &&
+        ts.isIdentifier(name) &&
+        name.text === 'fetch' &&
+        capability(owner.initializer, seen) === 'global'
+      )
+        return 'fetch';
+    }
+    if (
+      declaration &&
+      (ts.isParameter(declaration) || ts.isVariableDeclaration(declaration)) &&
+      declaration.initializer
+    )
+      return capability(declaration.initializer, seen);
+    return undefined;
+  }
+  function isFetch(node: ts.Node): boolean {
+    return capability(node) === 'fetch';
+  }
+  function callable(
+    node: ts.Node,
+  ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | undefined {
+    const declaration = symbol(node)?.valueDeclaration;
+    const value =
+      declaration && ts.isVariableDeclaration(declaration)
+        ? ts.isVariableDeclarationList(declaration.parent) &&
+          (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+          ? declaration.initializer
+          : undefined
+        : declaration;
+    return value &&
+      (ts.isFunctionDeclaration(value) ||
+        ts.isFunctionExpression(value) ||
+        ts.isArrowFunction(value))
+      ? value
+      : undefined;
+  }
+  function exitAt(node: ts.Node): Exit | undefined {
+    if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+      const args = node.arguments ?? [];
+      const name = capability(node.expression);
+      if (name === 'fetch') return { kind: 'fetch', url: args[0], options: args[1] };
+      if (name === 'WebSocket' || name === 'WebsocketProvider')
+        return {
+          kind: 'WebSocket',
+          url: args[0],
+          append: name === 'WebsocketProvider' ? args[1] : undefined,
+        };
+      if (name === 'window.open' || name?.startsWith('location.'))
+        return { kind: 'location', url: args[0] };
+      if (ts.isIdentifier(node.expression) && node.expression.text === '__fvoci_link') {
+        const line = args[1];
+        return {
+          kind: 'link',
+          url: args[0],
+          line: line && ts.isNumericLiteral(line) ? Number(line.text) : undefined,
+        };
+      }
+      if (
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === 'setAttribute' &&
+        args[0] &&
+        ts.isStringLiteralLike(args[0]) &&
+        args[0].text === 'href'
+      )
+        return { kind: 'link', url: args[1] };
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      if (ts.isPropertyAccessExpression(node.left)) {
+        if (node.left.name.text === 'href') return { kind: 'link', url: node.right };
+        if (node.left.name.text === 'location' && capability(node.left.expression) === 'global')
+          return { kind: 'location', url: node.right };
+      }
+      if (ts.isIdentifier(node.left) && node.left.text === 'location' && !symbol(node.left))
+        return { kind: 'location', url: node.right };
+    }
+    return undefined;
   }
   function target(node: ts.Node, seen = new Set<ts.Symbol>()): ts.Symbol | undefined {
     if (ts.isParenthesizedExpression(node)) return target(node.expression, seen);
@@ -460,20 +547,6 @@ export function checkUsage(
       !symbol(node.expression)
     )
       return evaluate(node.arguments[0]);
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.getText() === 'URL.createObjectURL'
-    )
-      return ['blob:fvoci-generated'];
-    if (
-      ts.isNewExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'URL'
-    )
-      return evaluate(node.arguments?.[0]);
-    if (ts.isNewExpression(node) && capability(node.expression, checker, symbol) === 'Request')
-      return evaluate(node.arguments?.[0]);
     if (
       ts.isParenthesizedExpression(node) ||
       ts.isAsExpression(node) ||
@@ -668,153 +741,84 @@ export function checkUsage(
 
   function filename(file: ts.SourceFile): string {
     const path = relative(virtualRoot, file.fileName);
-    return files.has(path) ? path : path.replace(/\.(svelte|html|css)\.ts$/, '.$1');
+    return files.has(path) ? path : path.replace(/\.(svelte|html)\.ts$/, '.$1');
   }
-  function inspect(exit: Exit, node: ts.Node, file: ts.SourceFile, required = false): void {
-    const row: NetworkEntry = {
-      file: filename(file),
-      line: exit.line ?? file.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-      kind: exit.kind,
-      expression: compact(exit.url?.getText() ?? ''),
-      classification: '대조함',
-      reason: '',
-      operations: [],
-    };
-    exits.push(row);
-    const location = `${row.file}:${String(row.line)}`;
-    const site = policy.sites.find(
-      (site) =>
-        site.file === row.file &&
-        site.kind === row.kind &&
-        compact(site.expression) === row.expression,
-    );
-    const except = (reason: string): void => {
-      row.classification = '이유 있는 예외';
-      row.reason = reason;
-    };
+  function apiHint(node: ts.Node | undefined, seen = new Set<ts.Node>()): boolean {
+    if (!node || seen.has(node)) return false;
+    seen = new Set(seen).add(node);
+    if (ts.isStringLiteralLike(node) && apiPath(node.text)) return true;
+    if (ts.isTemplateExpression(node) && apiPath(node.head.text)) return true;
+    const declaration = symbol(node)?.valueDeclaration;
+    if (
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      apiHint(declaration.initializer, seen)
+    )
+      return true;
+    if (ts.isCallExpression(node)) {
+      const fn = callable(node.expression);
+      if (fn?.body && apiHint(fn.body, seen)) return true;
+    }
+    let found = false;
+    ts.forEachChild(node, (child) => {
+      if (apiHint(child, seen)) found = true;
+    });
+    return found;
+  }
+  function inspect(exit: Exit, node: ts.Node, file: ts.SourceFile, strict = false): void {
+    const line = exit.line ?? file.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+    const location = filename(file) + ':' + String(line);
     try {
-      if (exit.kind === 'location.reload') {
-        except('현재 문서를 다시 읽으며 새 URL을 구성하지 않는다.');
-        return;
-      }
-      if (exit.kind === 'XMLHttpRequest constructor') {
-        except('생성자는 URL이 없고 open(method, url)에서 대조한다.');
-        return;
-      }
-      if (exit.kind === 'form') {
-        except(
-          '명시 action 없는 현재 앱 화면의 폼이다. 제출 처리는 앱 이벤트 핸들러에 있으며 새 계약 URL을 구성하지 않는다.',
-        );
-        return;
-      }
-      if (
-        [
-          'srcdoc',
-          'innerHTML',
-          'outerHTML',
-          'dynamic attribute',
-          'Worker',
-          'SharedWorker',
-          'WASM loader',
-        ].includes(exit.kind)
-      ) {
-        if (!site) throw new Error('network exit requires a reasoned exception');
-        exceptionsUsed.add(site);
-        except(site.reason);
-        return;
-      }
-      if (
-        (exit.kind === 'import' || exit.kind === 'css') &&
-        exit.url &&
-        ts.isStringLiteralLike(exit.url) &&
-        !apiPath(exit.url.text)
-      ) {
-        if (/^(?:\/|[a-z][\w+.-]*:)/i.test(exit.url.text)) canonicalPath(exit.url.text);
-        except('Vite가 해석하는 패키지·상대 경로 자원이며 서버 API 주소가 아니다.');
-        return;
-      }
       let paths: string[];
       try {
         paths = values(exit.url);
       } catch (error: unknown) {
-        if (!site || exit.kind === 'fetch' || exit.kind === 'Request') throw error;
-        exceptionsUsed.add(site);
-        except(site.reason);
-        return;
-      }
-      let verbs = exit.verb
-        ? [exit.verb]
-        : exit.method
-          ? values(exit.method).map((method) => method.toUpperCase())
-          : fetchMethods(exit.options).map((verb) => verb ?? 'GET');
-      // Fetch inherits a Request's URL/method unless explicit options override it.
-      if (
-        exit.kind === 'fetch' &&
-        exit.url &&
-        ts.isNewExpression(exit.url) &&
-        capability(exit.url.expression, checker, symbol) === 'Request'
-      ) {
-        paths = values(exit.url.arguments?.[0]);
-        const overrides = fetchMethods(exit.options);
-        verbs = overrides.flatMap((verb) =>
-          verb
-            ? [verb]
-            : fetchMethods(
-                exit.url && ts.isNewExpression(exit.url) ? exit.url.arguments?.[1] : undefined,
-              ).map((value) => value ?? 'GET'),
-        );
+        if (strict || exit.kind === 'fetch' || exit.kind === 'WebSocket' || apiHint(exit.url))
+          throw error;
+        return; // Opaque app/content links are outside the contract-only check.
       }
       if (exit.append)
-        paths = paths.flatMap((path) => values(exit.append).map((room) => `${path}/${room}`));
+        paths = paths.flatMap((path) => values(exit.append).map((room) => path + '/' + room));
+      const contractPaths: string[] = [];
       for (const raw of [...new Set(paths)]) {
-        canonicalPath(raw);
-        const absolute = /^(?:[a-z][\w+.-]*:|\/\/)/i.test(raw);
         const socket = exit.kind === 'WebSocket';
         const path =
           socket || /^https?:\/\/fvoci\.invalid(?:\/|$)/.test(raw)
             ? raw.replace(/^(?:https?|wss?):\/\/[^/]+/, '')
             : raw;
+        if (!socket && /^(?:[a-z][\w+.-]*:|\/\/)/i.test(path)) continue;
+        canonicalPath(path);
         const pathname = path.split(/[?#]/, 1)[0] ?? '';
         if (socket) {
-          const match = policy.websockets.find((entry) => matches(pathname, entry.path));
-          if (!match) throw new Error(`unlisted WebSocket exception: GET ${pathname}`);
-          websocketsUsed.add(match);
-          except(match.reason);
+          const entry = allowlist.websocket;
+          if (!entry || !matches(pathname, entry.path))
+            throw new Error('unlisted WebSocket: GET ' + pathname);
+          websocketUsage.used = true;
           continue;
         }
-        if (!required && ((absolute && path === raw) || !apiPath(pathname))) {
-          if (!absolute && raw !== '' && !raw.startsWith('/') && exit.kind === 'fetch')
-            throw new Error('relative fetch URL is not statically resolvable');
-          except(
-            absolute
-              ? '외부 URL·blob·data 자원이며 OpenAPI의 동일 원점 HTTP 작업이 아니다.'
-              : '앱 화면·정적 자원으로 이동하며 OpenAPI 작업이 아니다.',
-          );
-          continue;
-        }
+        if (exit.kind === 'fetch' && path !== '' && !path.startsWith('/'))
+          throw new Error('relative fetch URL is not statically resolvable');
+        if (apiPath(pathname)) contractPaths.push(pathname);
+      }
+      if (contractPaths.length === 0) return;
+      const verbs = exit.method
+        ? values(exit.method)
+        : exit.kind === 'fetch'
+          ? fetchMethods(exit.options).map((verb) => verb ?? 'GET')
+          : ['GET'];
+      for (const path of contractPaths)
         for (const verb of [...new Set(verbs)]) {
           const matched = operations.filter(
             (operation) =>
-              operation.startsWith(`${verb} `) &&
-              matches(pathname, operation.slice(verb.length + 1)),
+              operation.startsWith(verb + ' ') && matches(path, operation.slice(verb.length + 1)),
           );
-          if (matched.length === 0) throw new Error(`${verb} ${pathname} not in OpenAPI`);
+          if (matched.length === 0) throw new Error(verb + ' ' + path + ' not in OpenAPI');
           const operation = matched.sort((a, b) => a.split('{').length - b.split('{').length)[0];
-          if (operation) {
-            used.add(operation);
-            row.operations.push(operation);
-          }
+          if (operation) used.add(operation);
         }
-      }
-      if (row.operations.length > 0) {
-        row.classification = '대조함';
-        row.reason = 'OpenAPI의 경로·메서드와 대조했다.';
-        calls++;
-      }
+      calls++;
     } catch (error: unknown) {
-      problems.push(
-        `${location}: ${error instanceof Error ? error.message : String(error)} [${row.kind}: ${row.expression}]`,
-      );
+      problems.push(location + ': ' + (error instanceof Error ? error.message : String(error)));
     }
   }
 
@@ -841,21 +845,12 @@ export function checkUsage(
           ts.isElementAccessExpression(node)) &&
         [
           'fetch',
-          'Request',
-          'XMLHttpRequest',
-          'XMLHttpRequest.open',
-          'EventSource',
           'WebSocket',
           'WebsocketProvider',
-          'Worker',
-          'SharedWorker',
-          'sendBeacon',
           'window.open',
           'location.assign',
           'location.replace',
-          'location.reload',
-          'xhr',
-        ].includes(capability(node, checker, symbol) ?? '')
+        ].includes(capability(node) ?? '')
       ) {
         const parent = node.parent;
         let type = false;
@@ -870,10 +865,6 @@ export function checkUsage(
           }
         }
         const property = ts.isPropertyAccessExpression(parent) && parent.name === node;
-        const objectMember =
-          capability(node, checker, symbol) === 'xhr' &&
-          (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) &&
-          parent.expression === node;
         const call =
           (ts.isCallExpression(parent) || ts.isNewExpression(parent)) && parent.expression === node;
         const alias =
@@ -887,18 +878,15 @@ export function checkUsage(
           ts.isVariableDeclaration(parent.parent.parent) &&
           ts.isVariableDeclarationList(parent.parent.parent.parent) &&
           (parent.parent.parent.parent.flags & ts.NodeFlags.Const) !== 0;
-        const recipient = ts.isCallExpression(parent)
-          ? symbol(parent.expression)?.valueDeclaration
-          : undefined;
+        const recipient = ts.isCallExpression(parent) ? callable(parent.expression) : undefined;
         const recipientParameter =
-          recipient && ts.isFunctionDeclaration(recipient) && ts.isCallExpression(parent)
+          recipient && ts.isCallExpression(parent)
             ? recipient.parameters[parent.arguments.indexOf(node)]
             : undefined;
         const argument = recipientParameter ? isFetch(recipientParameter.name) : false;
         if (
           !type &&
           !property &&
-          !objectMember &&
           !ts.isImportSpecifier(parent) &&
           !ts.isExportSpecifier(parent) &&
           !call &&
@@ -978,19 +966,14 @@ export function checkUsage(
           );
         }
       }
-      const exit = networkExit(node, checker, symbol);
+      const exit = exitAt(node);
       if (!ts.isCallExpression(node)) {
         if (exit) inspect(exit, node, file);
         return;
       }
       const called = target(node.expression);
-      const callee = symbol(node.expression)?.valueDeclaration;
-      if (
-        callee &&
-        (ts.isFunctionDeclaration(callee) ||
-          ts.isFunctionExpression(callee) ||
-          ts.isArrowFunction(callee))
-      ) {
+      const callee = callable(node.expression);
+      if (callee) {
         callee.parameters.forEach((parameter, index) => {
           const argument = node.arguments[index];
           if (argument && isFetch(parameter.name) && !isFetch(argument))
@@ -1019,15 +1002,6 @@ export function checkUsage(
         symbol(node.arguments[1]) === symbol(fn.parameters[1].name)
       ) {
         forwarded.set(owner, (forwarded.get(owner) ?? 0) + 1);
-        exits.push({
-          file: filename(file),
-          line: position.line + 1,
-          kind: 'forwarder',
-          expression: compact(node.getText()),
-          classification: '대조함',
-          reason: '매개변수 쓰기 없이 전달하며 도우미 호출 지점에서 대조한다.',
-          operations: [],
-        });
         return;
       }
       try {
@@ -1047,25 +1021,16 @@ export function checkUsage(
           const verbs = fetchMethods(node.arguments[1], bindings);
           if (verbs.length !== 1 || verbs[0] !== 'forwarded-method')
             throw new Error('request transport method is not forwarded');
-          exits.push({
-            file: filename(file),
-            line: position.line + 1,
-            kind: 'fetch transport',
-            expression: compact(node.getText()),
-            classification: '대조함',
-            reason: '공통 request의 URL·메서드 전달을 확인했고 호출 지점에서 대조한다.',
-            operations: [],
-          });
           return;
         }
-        if (called)
+        if (exit) inspect(exit, node, file);
+        else
           inspect(
             { kind: 'request', url: node.arguments[1], method: node.arguments[0] },
             node,
             file,
             true,
           );
-        else if (exit) inspect(exit, node, file);
       } catch (error: unknown) {
         problems.push(`${location}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -1074,11 +1039,8 @@ export function checkUsage(
   for (const [row, count] of forwarded) {
     if (count !== 1) problems.push(`forwarder must delegate exactly once: ${row.file}:${row.name}`);
   }
-  for (const site of policy.sites)
-    if (!exceptionsUsed.has(site))
-      problems.push(`stale network site exception: ${site.file} ${site.kind} ${site.expression}`);
-  for (const socket of policy.websockets)
-    if (!websocketsUsed.has(socket)) problems.push(`stale WebSocket exception: ${socket.path}`);
+  if (allowlist.websocket && !websocketUsage.used)
+    problems.push(`stale WebSocket item: ${allowlist.websocket.name}`);
   const unused = operations.filter((operation) => !used.has(operation)).sort();
   const listed = new Set<string>();
   for (const row of allowlist.unused) {
@@ -1091,7 +1053,7 @@ export function checkUsage(
     if (!listed.has(operation)) problems.push(`unlisted unused operation: ${operation}`);
   }
   if (problems.length > 0) throw new Error(problems.join('\n'));
-  return { calls, used: [...used].sort(), unused, exits };
+  return { calls, used: [...used].sort(), unused };
 }
 
 export function readSources(root: string): Map<string, string> {
@@ -1101,7 +1063,7 @@ export function readSources(root: string): Map<string, string> {
       const path = `${directory}/${entry.name}`;
       if (path === 'apps/web/src/lib/paraglide') continue; // Generated translations, not application code.
       if (entry.isDirectory()) visit(path);
-      else if (/\.(?:[cm]?[jt]sx?|svelte|css)$/.test(path) && !/\.d\.[cm]?ts$/.test(path)) {
+      else if (/\.(?:[cm]?[jt]sx?|svelte)$/.test(path) && !/\.d\.[cm]?ts$/.test(path)) {
         files.set(path, readFileSync(resolve(root, path), 'utf8'));
       }
     }
@@ -1129,25 +1091,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const list: unknown = JSON.parse(
       readFileSync(resolve(root, 'xtask/web-api/allowlist.json'), 'utf8'),
     );
-    const policy: unknown = JSON.parse(
-      readFileSync(resolve(root, 'xtask/web-api/network-exceptions.json'), 'utf8'),
-    );
-    const result = checkUsage(
-      readSources(root),
-      contract,
-      readAllowlist(list),
-      readNetworkPolicy(policy),
-    );
-    mkdirSync(resolve(root, 'target/web-api'), { recursive: true });
-    writeFileSync(
-      resolve(root, 'target/web-api/network-exits.json'),
-      JSON.stringify(result.exits, null, 2) + '\n',
-    );
+    const result = checkUsage(readSources(root), contract, readAllowlist(list));
     console.log(
       `${String(result.calls)} web calls, ${String(result.used.length)} used operations, ${String(result.unused.length)} reasoned unused operations`,
-    );
-    console.log(
-      `${String(result.exits.length)} network exits classified; target/web-api/network-exits.json`,
     );
   } catch (error: unknown) {
     console.error(error instanceof Error ? error.message : String(error));

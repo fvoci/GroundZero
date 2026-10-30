@@ -1,4 +1,9 @@
 {
+  "websocket": {
+    "name": "document_collaboration",
+    "path": "/api/documents/{document_id}/collab",
+    "reason": "D-27·D-70 문서 CRDT의 y-websocket upgrade 경로다. HTTP OpenAPI에 없으며 base와 room 이름 collab을 합친 경로를 대조한다."
+  },
   "forwarders": [
     {
       "file": "apps/web/src/lib/shared/api/index.ts",
