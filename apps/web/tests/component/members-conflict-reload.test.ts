@@ -59,7 +59,9 @@ describe('members screen after a conflicting request', () => {
       .spyOn(api, 'revokeInvitation')
       .mockRejectedValue(new ApiError(409, 'invalid_state', 'invitation is no longer open'));
     const changed = vi.fn();
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: changed } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: changed },
+    });
 
     await screen.findByText('kim@lab.example');
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));
@@ -83,7 +85,9 @@ describe('members screen after a conflicting request', () => {
     vi.spyOn(api, 'revokeInvitation').mockRejectedValue(
       new ApiError(403, 'forbidden', 'admins only'),
     );
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+    });
 
     await screen.findByText('kim@lab.example');
     await fireEvent.click(screen.getByRole('button', { name: '취소' }));

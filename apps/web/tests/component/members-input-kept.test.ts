@@ -69,11 +69,17 @@ describe('members screen keeps typed input on failure', () => {
   it('keeps short invitation input on screen with a leave warning and does not persist it', async () => {
     const invite = vi.spyOn(organizationsApi, 'invite');
     const create = vi.spyOn(api, 'createGroup');
-    const props = { workspace, meId: 'u1', onchanged: () => undefined };
-    render(MembersScreen, { props });
+    const props = {
+      workspace,
+      tab: 'invitations' as const,
+      meId: 'u1',
+      onchanged: () => undefined,
+    };
+    const rendered = render(MembersScreen, { props });
     await fireEvent.input(await screen.findByLabelText('이메일'), {
       target: { value: 'draft@example.test' },
     });
+    await rendered.rerender({ tab: 'groups' });
     await fireEvent.input(screen.getByLabelText('새 그룹 이름'), {
       target: { value: '남길 그룹' },
     });
@@ -82,14 +88,16 @@ describe('members screen keeps typed input on failure', () => {
     expect(unload.defaultPrevented).toBe(true);
     expect(JSON.stringify(Object.values(localStorage))).not.toContain('draft@example.test');
     cleanup();
-    render(MembersScreen, { props });
+    const restored = render(MembersScreen, { props });
     expect(await screen.findByLabelText('이메일')).toHaveValue('');
+    await restored.rerender({ tab: 'groups' });
     const offers = await screen.findAllByTestId('form-draft-offer');
     expect(offers).toHaveLength(1);
     for (const offer of offers)
       await fireEvent.click(within(offer).getByRole('button', { name: '입력 되살리기' }));
-    expect(screen.getByLabelText('이메일')).toHaveValue('');
     expect(screen.getByLabelText('새 그룹 이름')).toHaveValue('남길 그룹');
+    await restored.rerender({ tab: 'invitations' });
+    expect(screen.getByLabelText('이메일')).toHaveValue('');
     expect(invite).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -108,7 +116,9 @@ describe('members screen keeps typed input on failure', () => {
       vi.spyOn(organizationsApi, 'invite').mockRejectedValue(
         new ApiError(400, 'bad_request', 'server diagnostic', undefined, reason, 'email', limit),
       );
-      render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+      render(MembersScreen, {
+        props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+      });
       const input = await submitWith(locale === 'ko' ? '이메일' : 'Email', 'kim@lab');
       await vi.waitFor(() => {
         expect(describedText(input)).toBe(text);
@@ -124,7 +134,9 @@ describe('members screen keeps typed input on failure', () => {
       .spyOn(organizationsApi, 'invite')
       .mockRejectedValueOnce(new ApiError(400, 'bad_request', 'email is not valid'))
       .mockRejectedValueOnce(new NetworkError('Failed to fetch'));
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+    });
 
     const input = await submitWith('이메일', 'kim@lab');
     await vi.waitFor(() => {
@@ -155,7 +167,7 @@ describe('members screen keeps typed input on failure', () => {
     const invite = vi.spyOn(organizationsApi, 'invite').mockReturnValue(pending);
     const changed = vi.fn();
     const rendered = render(MembersScreen, {
-      props: { workspace, meId: 'u1', onchanged: changed },
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: changed },
     });
     await submitWith('이메일', 'draft@example.test');
     await vi.waitFor(() => {
@@ -182,7 +194,9 @@ describe('members screen keeps typed input on failure', () => {
       role: 'member',
       expires_at: '2026-10-28T00:00:00Z',
     });
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+    });
     const input = await submitWith('이메일', 'kim@lab.example');
     await vi.waitFor(() => {
       expect(input).toHaveValue('');
@@ -194,7 +208,9 @@ describe('members screen keeps typed input on failure', () => {
     const create = vi
       .spyOn(api, 'createGroup')
       .mockRejectedValue(new ApiError(409, 'invalid_state', 'a group with this name exists'));
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'groups', meId: 'u1', onchanged: () => undefined },
+    });
 
     const input = await submitWith('새 그룹 이름', 'Design');
     await vi.waitFor(() => {

@@ -35,7 +35,7 @@ const view: MembersView = {
   i_am_owner: true,
   pending_owner: null,
 };
-const props = { workspace, meId: 'u1', onchanged: () => undefined };
+const props = { workspace, tab: 'settings' as const, meId: 'u1', onchanged: () => undefined };
 const typed = '연구';
 
 function unload(): boolean {
@@ -113,8 +113,8 @@ describe('workspace delete confirmation name', () => {
 
   it('does not warn when the delete succeeds and leaves the screen', async () => {
     // R5 delta F-1: 실제 라우터로 이동을 본다(navigate를 바꿔 끼우면 가드를 거치지 않아 막힌 이동을 놓쳤다).
-    window.history.replaceState(null, '', '/w/ws-1/members');
-    router.path = '/w/ws-1/members';
+    window.history.replaceState(null, '', '/w/ws-1/settings');
+    router.path = '/w/ws-1/settings';
     const deleted = vi.spyOn(api, 'deleteWorkspace').mockResolvedValue('2026-11-26T00:00:00Z');
     render(MembersScreen, { props });
     const input = await nameInput();

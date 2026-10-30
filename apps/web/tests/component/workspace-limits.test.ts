@@ -39,7 +39,7 @@ const orgLimits: OrganizationLimits = {
   activity_retention_days: 90,
   audit_retention_days: 180,
 };
-const props = { workspace, meId: 'u1', onchanged: () => undefined };
+const props = { workspace, tab: 'settings' as const, meId: 'u1', onchanged: () => undefined };
 let saved: OrganizationLimits;
 let puts: unknown[];
 let failure: { status: number; body: object } | undefined;
