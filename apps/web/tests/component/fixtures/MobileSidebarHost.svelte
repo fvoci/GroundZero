@@ -7,9 +7,10 @@
     onsearch: () => void;
     ondisplay: () => void;
     onexport: () => void;
+    isServerAdmin?: boolean;
   }
 
-  const { onsearch, ondisplay, onexport }: Props = $props();
+  const { onsearch, ondisplay, onexport, isServerAdmin = false }: Props = $props();
 </script>
 
 <Sidebar.Provider>
@@ -17,6 +18,7 @@
     workspaces={[]}
     current={undefined}
     displayName="Test User"
+    {isServerAdmin}
     unreadCount={0}
     {onsearch}
     {ondisplay}

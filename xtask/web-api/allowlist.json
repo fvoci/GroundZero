@@ -25,14 +25,11 @@
     }
   ],
   "unused": [
-    { "method": "GET", "path": "/api/server/admins", "reason": "샴 가3~가5 조립 예정" },
-    { "method": "GET", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" },
     {
       "method": "GET",
       "path": "/auth/callback",
       "reason": "설계상 직접 호출하지 않음",
       "detail": "웹은 LoginScreen.svelte:18·FeedbackHost.svelte:183에서 /auth/login을 링크로 연다. accounts.rs:77·:171이 /auth/callback을 OIDC redirect_uri로 설정하므로 제공자가 브라우저를 이 경로로 돌려보낸다. accounts.rs:336·:420·:435에서 인증 코드를 교환하고 세션을 발급한 뒤 원래 화면으로 돌아간다. 웹이 직접 부를 작업이 아니며 로그인 완료에 필요하다."
-    },
-    { "method": "POST", "path": "/api/server/organizations", "reason": "샴 가3~가5 조립 예정" }
+    }
   ]
 }

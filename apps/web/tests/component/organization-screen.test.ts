@@ -669,7 +669,7 @@ it('recognizes the four organization routes and defaults to members', () => {
     organizationId: id,
     tab: 'members',
   });
-  expect(parseRoute('/admin')).toEqual({ name: 'not-found' });
+  expect(parseRoute('/admin')).toEqual({ name: 'server-admin', tab: 'organizations' });
 });
 
 it('shows four tabs and member email to an administrator', async () => {
