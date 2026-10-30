@@ -2,7 +2,7 @@
   // 항목 복제(D-33): 같은 종류 모듈로 업무·하위 업무·체크리스트·선행 관계·문서 트리를 새 번호로 옮긴다. 담당자·반복
   // 규칙·기록·첨부·진도는 옮기지 않고, 복제를 허용하지 않은 남의 문서는 건너뛴다(D-20).
   import type { Module } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -189,7 +189,14 @@
     onCloseAutoFocus={(event: Event) => {
       if (returnFocus !== undefined && returnFocus !== null) {
         event.preventDefault();
-        returnFocus.focus();
+        const id = item.id;
+        // 버리기 확인과 복제창이 함께 닫히면 두 focus scope의 정리가 끝난 뒤 메뉴로 돌린다(TaskBoard와 같다).
+        void tick().then(() => {
+          requestAnimationFrame(() => {
+            if (!open && item.id === id && draft.active && returnFocus?.isConnected === true)
+              returnFocus.focus();
+          });
+        });
       }
     }}
   >
