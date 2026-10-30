@@ -106,8 +106,7 @@
     if (nameError !== '' || adminError !== '') return;
     const attempt = draft.capture();
     if (attempt === undefined) return;
-    // Match SQL btrim(text): remove ordinary spaces, preserving tabs and other characters.
-    const input = { name: name.replace(/^ +| +(?![\s\S])/g, ''), firstAdmin };
+    const input = { name: name.trim(), firstAdmin };
     if (
       submitted !== undefined &&
       (submitted.name !== input.name || submitted.firstAdmin !== input.firstAdmin)
