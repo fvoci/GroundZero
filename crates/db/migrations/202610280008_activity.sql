@@ -1213,6 +1213,9 @@ CREATE UNIQUE INDEX audit_log_document_rename ON fvoci.audit_log USING btree (ta
 
 CREATE INDEX activity_item ON fvoci.activity USING btree (item_id, created_at DESC) WHERE (item_id IS NOT NULL);
 
+-- #240 A-stage index experiment; result membership and ordering are unchanged.
+CREATE INDEX activity_recent ON fvoci.activity USING btree (created_at DESC, id DESC);
+
 CREATE INDEX activity_target ON fvoci.activity USING btree (target_kind, target_id, created_at DESC);
 
 CREATE INDEX activity_workspace ON fvoci.activity USING btree (workspace_id, created_at DESC);

@@ -6,7 +6,7 @@ sql=${2:?experiment SQL file}
 test -f "$out/READY"
 test ! -f "$out/STOP"
 project=$(jq -r .project "$out/runtime.json")
-database=$(jq -r .source_db "$out/state.json")
+database=${4:-$(jq -r .source_db "$out/state.json")}
 variables=()
 while IFS= read -r binding; do variables+=(-v "$binding"); done < <(
   jq -r 'to_entries[] | select(.value | type == "string") | "\(.key)=\(.value)"' "$out/sharing-fixture.json"
