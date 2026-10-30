@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { serverAdminApi } from '$lib/features/server-admin/api';
+import type { ServerOrganization } from '$lib/features/server-admin/model';
 import ServerAdminScreen from '$lib/features/server-admin/ServerAdminScreen.svelte';
 import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
@@ -107,6 +109,43 @@ it('shows a loading skeleton, an inline failure with retry and an empty list wit
   expect(await screen.findByText('아직 조직이 없습니다')).toBeVisible();
   expect(screen.getByRole('button', { name: '조직 만들기' })).toBeEnabled();
 });
+
+it.each(['success', 'network error', '403', '404'] as const)(
+  'ignores a superseded initial %s after the creation refresh completes',
+  async (outcome) => {
+    let resolveFirst: (list: ServerOrganization[]) => void = () => undefined;
+    let rejectFirst: (reason: unknown) => void = () => undefined;
+    const first = new Promise<ServerOrganization[]>((resolve, reject) => {
+      resolveFirst = resolve;
+      rejectFirst = reject;
+    });
+    const created = { ...organization, id: 'created', name: '새로 만든 조직' };
+    vi.mocked(serverAdminApi.organizations)
+      .mockImplementationOnce(() => first)
+      .mockResolvedValueOnce([organization, created]);
+    vi.spyOn(serverAdminApi, 'createOrganization').mockResolvedValue({ id: created.id });
+    view();
+    const dialog = await openCreate();
+    await fireEvent.input(within(dialog).getByRole('textbox', { name: '이름' }), {
+      target: { value: created.name },
+    });
+    await fireEvent.click(within(dialog).getByRole('button', { name: '조직 만들기' }));
+    await screen.findByText(created.name);
+    expect(serverAdminApi.organizations).toHaveBeenCalledTimes(2);
+
+    if (outcome === 'success') resolveFirst([organization]);
+    else if (outcome === 'network error') rejectFirst(new NetworkError('old request failed'));
+    else rejectFirst(new ApiError(outcome === '403' ? 403 : 404, 'forbidden', 'old denial'));
+    await first.catch(() => undefined);
+    await tick();
+
+    const list = screen.getByRole('list', { name: '조직' });
+    expect(list).toHaveTextContent(created.name);
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.queryByText('이 조직을 볼 수 없습니다')).toBeNull();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+  },
+);
 
 it.each([
   {

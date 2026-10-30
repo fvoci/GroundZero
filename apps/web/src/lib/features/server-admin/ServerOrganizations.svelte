@@ -16,6 +16,7 @@
   let organizations = $state<ServerOrganization[]>();
   let error = $state('');
   let disposed = false;
+  let loadSequence = 0;
   onMount(() => {
     void load();
     return () => {
@@ -23,12 +24,13 @@
     };
   });
   async function load(): Promise<void> {
+    const sequence = ++loadSequence;
     error = '';
     try {
       const list = await serverAdminApi.organizations();
-      if (!disposed) organizations = list;
+      if (!disposed && sequence === loadSequence) organizations = list;
     } catch (e: unknown) {
-      if (disposed) return;
+      if (disposed || sequence !== loadSequence) return;
       if (organizationUnavailable(e)) onunavailable();
       else error = organizationError(e);
     }
