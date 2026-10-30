@@ -484,18 +484,20 @@ CREATE FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) 
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   DECLARE
-    v_row record;
+    v_candidate record;
+    v_row activity%ROWTYPE;
     v_count integer := 0;
     v_limit integer := greatest(1, least(coalesce(p_limit, 20), 100));
   BEGIN
     -- #240: filter workspace membership before target access. STABLE keeps one
     -- snapshot while the ordered cursor continues past denied rows to fill LIMIT.
-    FOR v_row IN
-      SELECT a.* FROM activity a
+    FOR v_candidate IN
+      SELECT a.id, a.target_kind, a.target_id, a.created_at FROM activity a
       WHERE a.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
       ORDER BY a.created_at DESC, a.id DESC
     LOOP
-      CONTINUE WHEN (app_access(v_row.target_kind, v_row.target_id) <> 'none') IS NOT TRUE;
+      CONTINUE WHEN (app_access(v_candidate.target_kind, v_candidate.target_id) <> 'none') IS NOT TRUE;
+      SELECT a.* INTO v_row FROM activity a WHERE a.id = v_candidate.id;
       id := v_row.id;
       kind := v_row.kind;
       actor_id := v_row.actor;
