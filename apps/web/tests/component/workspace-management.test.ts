@@ -64,6 +64,56 @@ describe('workspace management tabs (D-121, n1)', () => {
     },
   );
 
+  it.each([
+    { tab: 'invitations', label: '초대', allowed: true },
+    { tab: 'settings', label: '설정', allowed: true },
+    { tab: 'invitations', label: '초대', allowed: false },
+    { tab: 'settings', label: '설정', allowed: false },
+  ] as const)(
+    'keeps the requested $tab panel while permissions load (allowed: $allowed)',
+    async ({ tab, label, allowed }) => {
+      let finish: ((value: MembersView) => void) | undefined;
+      vi.mocked(api.members).mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      router.replace(membersPath(id, tab));
+      render(MembersScreen, { props: { ...props, tab } });
+
+      await vi.waitFor(() => {
+        expect(api.members).toHaveBeenCalledWith(id);
+      });
+      expect(screen.getByRole('tab', { name: '멤버' })).toHaveAttribute('aria-selected', 'false');
+      expect(screen.queryByRole('button', { name: '역할별 공유 상한' })).toBeNull();
+      expect(screen.queryByTestId('member-list')).toBeNull();
+      expect(screen.queryByLabelText('이메일')).toBeNull();
+      expect(screen.queryByRole('tab', { name: label })).toBeNull();
+      const loading = screen.getByLabelText('불러오는 중…');
+      expect(loading).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('tabpanel')).toContainElement(loading);
+      expect(router.path).toBe(membersPath(id, tab));
+      expect(workspaceLimitsApi.get).not.toHaveBeenCalled();
+      expect(api.invitations).not.toHaveBeenCalled();
+
+      if (finish === undefined) throw new Error('missing permissions read');
+      finish({ ...view, can_manage_members: allowed, my_role: allowed ? 'admin' : 'readonly' });
+      if (allowed) {
+        if (tab === 'invitations') await screen.findByLabelText('이메일');
+        else await screen.findByRole('region', { name: '한도·보존' });
+        expect(screen.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.queryByRole('button', { name: '역할별 공유 상한' })).toBeNull();
+        expect(router.path).toBe(membersPath(id, tab));
+      } else {
+        await screen.findByTestId('member-list');
+        expect(screen.getByRole('tab', { name: '멤버' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.queryByRole('tab', { name: label })).toBeNull();
+        expect(router.path).toBe(membersPath(id));
+        expect(workspaceLimitsApi.get).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it.each(['admin', 'member', 'readonly'] as const)(
     'keeps existing visibility for %s',
     async (role) => {

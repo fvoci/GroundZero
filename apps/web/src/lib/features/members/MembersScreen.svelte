@@ -18,6 +18,7 @@
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Skeleton } from '$lib/ui/skeleton';
   import { me } from '$lib/me.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -90,7 +91,10 @@
       ? [{ value: 'settings', label: m.organizations_settings() }]
       : []),
   ]);
-  const activeTab = $derived(tabs.some((entry) => entry.value === tab) ? tab : 'members');
+  // 읽기 전에는 주소의 탭을 유지하고, 권한을 읽은 뒤 볼 수 없는 탭만 멤버 탭으로 돌린다.
+  const activeTab = $derived(
+    currentView === undefined || tabs.some((entry) => entry.value === tab) ? tab : 'members',
+  );
   $effect(() => {
     if (currentView !== undefined && activeTab !== tab) router.replace(membersPath(workspace.id));
   });
@@ -372,7 +376,10 @@
     {#if currentView === undefined}
       <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->
       {#if loadError === undefined}
-        <p aria-live="polite">{m.app_loading()}</p>
+        <div aria-label={m.app_loading()} aria-busy="true" class="grid gap-3">
+          <Skeleton class="h-8 w-1/2" />
+          <Skeleton class="h-48 w-full" />
+        </div>
       {/if}
     {:else}
       {@const v = currentView}
