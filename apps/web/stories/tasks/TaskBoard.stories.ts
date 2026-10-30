@@ -51,6 +51,7 @@ const meta = {
   component: TaskBoard,
   args: { item: TASK_ITEM, workspaces: [WORKSPACE], openTaskId: undefined, onstale: fn() },
   decorators: [() => ({ Component: MainFrame })],
+  globals: { theme: 'light', fontScale: '100', viewport: { value: 'desktop' } },
   beforeEach: story(),
 } satisfies Meta<typeof TaskBoard>;
 
@@ -220,5 +221,6 @@ export const ManySameTitle: Story = {
   }),
 };
 export const Dark375Font200: Story = {
+  ...Board,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375', isRotated: false } },
 };

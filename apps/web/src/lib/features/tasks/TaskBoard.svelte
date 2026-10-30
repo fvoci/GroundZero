@@ -1816,7 +1816,10 @@
   {#if loading}
     <p class="text-sm text-muted-foreground" role="status">{m.modules_loading()}</p>
   {:else if view === 'board'}
-    <div class="grid gap-3 @2xl:grid-cols-3" data-testid="task-board">
+    <div
+      class="grid min-w-0 snap-x snap-mandatory auto-cols-[100%] grid-flow-col gap-3 overflow-x-auto @2xl:snap-none @2xl:auto-cols-auto @2xl:grid-flow-row @2xl:grid-cols-3"
+      data-testid="task-board"
+    >
       {#each statusNames as lane (lane)}
         <BoardLane
           {lane}
