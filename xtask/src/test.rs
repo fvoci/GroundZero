@@ -42,12 +42,19 @@ fn container_args(root: &Path, project: &str, user: &str) -> Vec<OsString> {
         .map(OsString::from)
         .collect();
     args.push(format!("{project}-runner").into());
+    // Compose는 config-hash 라벨이 있는 컨테이너만 조회한다. 정의하지 않은 서비스로 표시해
+    // 중단된 실행기도 이 프로젝트의 up/down --remove-orphans로 정리한다.
     for (option, value) in [
         ("--label", format!("com.docker.compose.project={project}")),
         (
             "--label",
             "com.docker.compose.service=test-runner".to_owned(),
         ),
+        (
+            "--label",
+            "com.docker.compose.config-hash=xtask-test-runner".to_owned(),
+        ),
+        ("--label", "com.docker.compose.oneoff=False".to_owned()),
         ("--network", format!("{project}_default")),
         ("--user", user.to_owned()),
     ] {
@@ -541,6 +548,11 @@ mod tests {
             "--label",
             "com.docker.compose.project=fvoci-example-test"
         ));
+        assert!(pair(
+            "--label",
+            "com.docker.compose.config-hash=xtask-test-runner"
+        ));
+        assert!(pair("--label", "com.docker.compose.oneoff=False"));
         assert!(pair("--name", "fvoci-example-test-runner"));
         assert!(
             args.iter()
