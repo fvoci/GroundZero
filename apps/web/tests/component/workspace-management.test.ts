@@ -74,7 +74,7 @@ describe('workspace management tabs (D-121, n1)', () => {
       });
       render(MembersScreen, { props });
       await screen.findByTestId('member-list');
-      expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual(
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual(
         role === 'admin' ? ['멤버', '초대', '그룹', '설정'] : ['멤버', '그룹'],
       );
       expect(screen.queryByLabelText('이메일')).toBeNull();
@@ -148,7 +148,7 @@ describe('workspace management tabs (D-121, n1)', () => {
     vi.mocked(api.members).mockResolvedValue({ ...view, i_am_owner: true });
     render(MembersScreen, { props: { ...props, tab: 'settings' } });
     await screen.findByRole('region', { name: '한도·보존' });
-    expect(screen.getAllByRole('heading').map((heading) => heading.textContent?.trim())).toEqual([
+    expect(screen.getAllByRole('heading').map((heading) => heading.textContent.trim())).toEqual([
       '연구실 · 공간 관리',
       '한도·보존',
       '데이터 반출',
@@ -177,7 +177,7 @@ describe('workspace management tabs (D-121, n1)', () => {
     });
     render(MembersScreen, { props: { ...props, tab: 'settings' } });
     await screen.findByRole('heading', { name: '위험 구역' });
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())).toEqual([
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent.trim())).toEqual([
       '멤버',
       '그룹',
       '설정',
