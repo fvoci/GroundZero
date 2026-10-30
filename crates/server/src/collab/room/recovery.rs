@@ -137,6 +137,26 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
+    fn a_poisoned_room_registry_discards_holds_and_invalidates_old_rooms() {
+        let rooms = Rooms::default();
+        let doc = DocumentId(Uuid::now_v7());
+        let (_hold, _) = rooms.hold(doc, &[], &[]).unwrap();
+        let epoch = rooms.recovery.current();
+        let receiver = rooms.recovery.subscribe();
+
+        poison(&rooms, Registry::Rooms);
+        assert!(rooms.inner.is_poisoned());
+        {
+            let registry = rooms.lock();
+            assert!(registry.is_empty());
+            assert!(rooms.held_set().is_empty());
+            assert!(!rooms.inner.is_poisoned());
+        }
+        assert_eq!(rooms.recovery.current(), epoch + 1);
+        assert!(receiver.has_changed().unwrap());
+    }
+
+    #[test]
     fn an_old_hold_guard_cannot_release_a_new_barrier_after_recovery() {
         let rooms = Rooms::default();
         let doc = DocumentId(Uuid::now_v7());
