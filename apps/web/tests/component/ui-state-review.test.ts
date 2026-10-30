@@ -98,7 +98,9 @@ describe('members', () => {
     vi.spyOn(api, 'groups').mockResolvedValue([{ id: 'g-1', name: '세미나', members: [] }]);
     vi.spyOn(api, 'invitations').mockRejectedValue(new Error('offline'));
     const del = vi.spyOn(api, 'deleteGroup').mockRejectedValue(new Error('offline'));
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'groups', meId: 'u1', onchanged: () => undefined },
+    });
 
     expect(await screen.findByRole('button', { name: '다시 시도' })).toBeInTheDocument();
     await fireEvent.click(await screen.findByRole('button', { name: '그룹 삭제' }));
@@ -117,7 +119,9 @@ describe('members', () => {
     vi.spyOn(api, 'groups').mockResolvedValue([{ id: 'g-1', name: '세미나', members: [] }]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
     vi.spyOn(api, 'deleteGroup').mockRejectedValue(new Error('offline'));
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'groups', meId: 'u1', onchanged: () => undefined },
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '그룹 삭제' }));
     await fireEvent.click(await screen.findByRole('button', { name: '확인' }));
@@ -132,7 +136,9 @@ describe('members', () => {
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'groups', meId: 'u1', onchanged: () => undefined },
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '다시 시도' }));
     await waitFor(() => {

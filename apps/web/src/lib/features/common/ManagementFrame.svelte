@@ -14,7 +14,7 @@
 
 <section class="flex min-w-0 flex-col gap-5" data-testid="management-screen">
   <h1 class="text-2xl font-semibold wrap-anywhere">{title}</h1>
-  <Tabs.Root {value} onValueChange={onchange} activationMode="manual" class="min-w-0">
+  <Tabs.Root bind:value={() => value, onchange} activationMode="manual" class="min-w-0">
     <div class="max-w-full overflow-x-auto" data-testid="management-tabs-scroll">
       <Tabs.List aria-label={title} class="flex w-max min-w-full gap-1 border-b p-1">
         {#each tabs as tab (tab.value)}

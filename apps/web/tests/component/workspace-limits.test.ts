@@ -39,7 +39,7 @@ const orgLimits: OrganizationLimits = {
   activity_retention_days: 90,
   audit_retention_days: 180,
 };
-const props = { workspace, meId: 'u1', onchanged: () => undefined };
+const props = { workspace, tab: 'settings' as const, meId: 'u1', onchanged: () => undefined };
 let saved: OrganizationLimits;
 let puts: unknown[];
 let failure: { status: number; body: object } | undefined;
@@ -334,7 +334,8 @@ describe('workspace limits in workspace administration', () => {
     });
     vi.mocked(fetch).mockReturnValueOnce(pending);
     render(MembersScreen, { props });
-    const loading = await screen.findByLabelText('불러오는 중…');
+    const region = await screen.findByRole('region', { name: '한도·보존' });
+    const loading = within(region).getByLabelText('불러오는 중…');
     expect(loading).toHaveAttribute('aria-busy', 'true');
     expect(loading.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(5);
     expect(screen.queryByLabelText('활동 보존 일수', { exact: true })).toBeNull();

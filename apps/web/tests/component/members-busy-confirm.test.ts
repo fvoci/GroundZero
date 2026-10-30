@@ -76,7 +76,9 @@ describe('members screen', () => {
     vi.spyOn(api, 'groups').mockResolvedValue([group]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
     const del = vi.spyOn(api, 'deleteGroup').mockResolvedValue(undefined);
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'groups', meId: 'u1', onchanged: () => undefined },
+    });
 
     await fireEvent.click(await screen.findByRole('button', { name: '그룹 삭제' }));
     expect(del).not.toHaveBeenCalled();
@@ -93,7 +95,9 @@ describe('members screen', () => {
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
     const invite = vi.spyOn(organizationsApi, 'invite').mockReturnValue(pending());
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+    });
 
     const input = await screen.findByLabelText('이메일');
     await fireEvent.input(input, { target: { value: 'kim@lab.example' } });
@@ -117,7 +121,9 @@ describe('members screen', () => {
       expires_at: '2026-11-01T00:00:00Z',
     });
     const done = vi.spyOn(feedback, 'notifyDone');
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+    });
 
     const input = await screen.findByLabelText('이메일');
     await fireEvent.input(input, { target: { value: 'kim@lab.example' } });
@@ -128,7 +134,7 @@ describe('members screen', () => {
       expect(done).toHaveBeenCalledOnce();
     });
     expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status', { hidden: true })).toBeEmptyDOMElement();
     expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
   });
 
@@ -151,7 +157,7 @@ describe('members screen', () => {
       expect(done).toHaveBeenCalledOnce();
     });
     expect(done).toHaveBeenCalledWith(m.members_became_owner());
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status', { hidden: true })).toBeEmptyDOMElement();
     expect(screen.queryByText(m.members_became_owner())).toBeNull();
   });
 });

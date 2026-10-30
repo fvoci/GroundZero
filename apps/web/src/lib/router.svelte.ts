@@ -39,6 +39,7 @@ export function itemGroupsFor(kind: ModuleKind): ItemGroupName[] {
 /** 모듈 화면의 보기(D-121, 사용자 R7 A): 항목(`/m/:mod`)과 달력(`/m/:mod/calendar`). */
 export type ModuleViewName = 'items' | 'calendar';
 export type OrganizationTab = 'members' | 'invitations' | 'workspaces' | 'settings';
+export type WorkspaceManagementTab = 'members' | 'invitations' | 'groups' | 'settings';
 export type ServerAdminTab = 'organizations' | 'admins';
 
 export type Route =
@@ -48,7 +49,7 @@ export type Route =
   | { name: 'my-tasks' }
   | { name: 'workspace'; workspaceId: string }
   | { name: 'document'; workspaceId: string; documentId: string }
-  | { name: 'members'; workspaceId: string }
+  | { name: 'members'; workspaceId: string; tab: WorkspaceManagementTab }
   | { name: 'calendar'; workspaceId: string }
   | { name: 'trash'; workspaceId: string }
   | { name: 'my-trash' }
@@ -83,7 +84,7 @@ const UUID = '[0-9a-fA-F-]{36}';
 const ORGANIZATION = new RegExp(`^/o/(${UUID})(?:/(members|invitations|workspaces|settings))?/?$`);
 const WORKSPACE = new RegExp(`^/w/(${UUID})/?$`);
 const DOCUMENT = new RegExp(`^/w/(${UUID})/wiki/(${UUID})/?$`);
-const MEMBERS = new RegExp(`^/w/(${UUID})/members/?$`);
+const MEMBERS = new RegExp(`^/w/(${UUID})/(members|invitations|groups|settings)/?$`);
 const CALENDAR = new RegExp(`^/w/(${UUID})/calendar/?$`);
 const TRASH = new RegExp(`^/w/(${UUID})/trash/?$`);
 const AUDIT = new RegExp(`^/w/(${UUID})/audit/?$`);
@@ -211,7 +212,11 @@ export function parseRoute(pathname: string): Route {
   const cal = CALENDAR.exec(pathname);
   if (cal?.[1] !== undefined) return { name: 'calendar', workspaceId: cal[1] };
   const members = MEMBERS.exec(pathname);
-  if (members?.[1] !== undefined) return { name: 'members', workspaceId: members[1] };
+  if (members?.[1] !== undefined) {
+    const tab = members[2];
+    if (tab === 'members' || tab === 'invitations' || tab === 'groups' || tab === 'settings')
+      return { name: 'members', workspaceId: members[1], tab };
+  }
   const doc = DOCUMENT.exec(pathname);
   if (doc?.[1] !== undefined && doc[2] !== undefined) {
     return { name: 'document', workspaceId: doc[1], documentId: doc[2] };
@@ -233,8 +238,8 @@ export function organizationPath(organizationId: string, tab: OrganizationTab = 
   return `/o/${organizationId}/${tab}`;
 }
 
-export function membersPath(workspaceId: string): string {
-  return `/w/${workspaceId}/members`;
+export function membersPath(workspaceId: string, tab: WorkspaceManagementTab = 'members'): string {
+  return `/w/${workspaceId}/${tab}`;
 }
 
 export function calendarPath(workspaceId: string): string {

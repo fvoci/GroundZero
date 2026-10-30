@@ -1,4 +1,4 @@
-import { expect, test, unique } from './fixtures';
+import { expect, str, test, unique } from './fixtures';
 import { expectViewport, pageOverflows } from './layout';
 import { offenders } from './offenders';
 
@@ -50,6 +50,9 @@ for (const scale of [100, 200] as const) {
       await page.evaluate(async () => {
         await document.fonts.ready;
       });
+      await page.getByRole('tab', { name: '설정', exact: true }).click();
+      await expect(page).toHaveURL(`/w/${ws}/settings`);
+      await expect(page.getByTestId('member-list')).toHaveCount(0);
       const panel = page.getByRole('region', { name: '한도·보존' });
       const activity = panel.getByLabel('활동 보존 일수', { exact: true });
       await expect(activity).toHaveValue('30');
@@ -165,16 +168,219 @@ for (const scale of [100, 200] as const) {
   });
 }
 
-test('only a workspace administrator sees limits and retention', async ({ signIn }) => {
+test('workspace tabs preserve administrator, member and readonly visibility', async ({
+  signIn,
+}) => {
   const owner = await signIn('test-user');
   const member = await signIn('test-user-2');
   const ws = await owner.api.createWorkspace(`권한별 한도 ${unique()}`);
   await owner.api.ensureOrganizationMember(member.api, member.user.email);
   await owner.api.invite(ws, member.user.email, 'member');
   await member.api.acceptInvitation(ws);
-  await member.page.goto(`/w/${ws}/members`);
-  await expect(member.page.getByTestId('member-list')).toBeVisible();
-  await expect(member.page.getByRole('region', { name: '한도·보존' })).toHaveCount(0);
-  await owner.page.goto(`/w/${ws}/members`);
+  const memberId = str(await member.api.get('/api/me'), 'id');
+  for (const role of ['admin', 'member', 'readonly']) {
+    await owner.api.send('PUT', `/api/workspaces/${ws}/members/${memberId}`, { role });
+    await member.page.goto(`/w/${ws}/settings`);
+    if (role === 'admin') {
+      await expect(member.page.getByRole('tab')).toHaveCount(4);
+      await expect(member.page.getByRole('region', { name: '한도·보존' })).toBeVisible();
+      await expect(member.page.getByRole('link', { name: 'ZIP으로 내려받기' })).toBeVisible();
+      await expect(member.page.getByRole('heading', { name: '위험 구역' })).toHaveCount(0);
+    } else {
+      await expect(member.page).toHaveURL(`/w/${ws}/members`);
+      await expect(member.page.getByTestId('member-list')).toBeVisible();
+      await expect(member.page.getByRole('tab')).toHaveText(['멤버', '그룹']);
+      await expect(member.page.getByRole('region', { name: '한도·보존' })).toHaveCount(0);
+      await member.page.goto(`/w/${ws}/invitations`);
+      await expect(member.page).toHaveURL(`/w/${ws}/members`);
+    }
+    await member.page.getByRole('tab', { name: '그룹', exact: true }).click();
+    await expect(member.page.getByRole('button', { name: '워크스페이스 탈퇴' })).toBeVisible();
+    await expect(member.page.getByRole('textbox', { name: '새 그룹 이름' })).toHaveCount(
+      role === 'admin' ? 1 : 0,
+    );
+  }
+  await owner.page.goto(`/w/${ws}/settings`);
   await expect(owner.page.getByRole('region', { name: '한도·보존' })).toBeVisible();
+  await expect(owner.page.getByRole('heading', { name: '위험 구역' })).toBeVisible();
+});
+
+for (const scale of [100, 200] as const) {
+  test(`workspace management tabs, history and dialog focus at ${String(scale)}%`, async ({
+    signIn,
+  }, testInfo) => {
+    const { page, api } = await signIn('test-user');
+    const ws = await api.createWorkspace(`공간 관리 ${unique()}`);
+    await page.goto(`/w/${ws}/members`);
+    await expectViewport(page, testInfo.project.name === 'narrow-375');
+    if (scale === 200) {
+      await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+      await page.evaluate(() => {
+        document.documentElement.classList.add('dark');
+      });
+    }
+    await expect(page.getByTestId('member-list')).toBeVisible();
+    const roleLimits = page.getByRole('button', { name: '역할별 공유 상한' });
+    await expect(roleLimits).toHaveAttribute('aria-expanded', 'false');
+    await roleLimits.click();
+    await expect(page.getByText('공간 밖 조직원', { exact: true })).toBeVisible();
+    await roleLimits.click();
+    expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
+
+    await page.getByRole('tab', { name: '초대', exact: true }).click();
+    await expect(page).toHaveURL(`/w/${ws}/invitations`);
+    await expect(page.getByTestId('member-list')).toHaveCount(0);
+    const email = page.getByRole('textbox', { name: '이메일', exact: true });
+    await email.fill('review@example.test');
+    await page.getByRole('tab', { name: '그룹', exact: true }).click();
+    const discard = page.getByRole('alertdialog');
+    await expect(discard).toBeVisible();
+    await discard.getByRole('button', { name: '계속 편집' }).click();
+    await expect(page.getByRole('tab', { name: '그룹', exact: true })).toBeFocused();
+    await expect(page.getByRole('tab', { name: '초대', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(email).toHaveValue('review@example.test');
+    await email.fill('');
+    expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
+    await page.goBack();
+    await expect(page).toHaveURL(`/w/${ws}/members`);
+    await expect(page.getByRole('tab', { name: '멤버', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await page.goForward();
+    await expect(email).toBeVisible();
+
+    await page.getByRole('tab', { name: '그룹', exact: true }).click();
+    await expect(page).toHaveURL(`/w/${ws}/groups`);
+    await page.getByRole('textbox', { name: '새 그룹 이름' }).fill('연구팀');
+    await page.getByRole('button', { name: '그룹 만들기', exact: true }).click();
+    const remove = page.getByRole('button', { name: '그룹 삭제', exact: true });
+    await expect(remove).toBeVisible();
+    expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
+    await remove.click();
+    const dialog = page.getByRole('dialog', { name: '‘연구팀’ 그룹을 삭제할까요?' });
+    await expect(dialog).toBeVisible();
+    await expect
+      .poll(() => dialog.evaluate((el) => el.contains(document.activeElement)))
+      .toBe(true);
+    for (const key of ['Tab', 'Shift+Tab']) {
+      for (let i = 0; i < 8; i += 1) {
+        await page.keyboard.press(key);
+        expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+      }
+    }
+    expect(await offenders(dialog)).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(remove).toBeFocused();
+
+    await page.getByRole('tab', { name: '설정', exact: true }).click();
+    await expect(page).toHaveURL(`/w/${ws}/settings`);
+    await expect(page.getByRole('region', { name: '한도·보존' })).toBeVisible();
+    await expect(page.getByRole('tabpanel').getByRole('heading')).toHaveText([
+      '한도·보존',
+      '데이터 반출',
+      '위험 구역',
+      '워크스페이스 삭제',
+    ]);
+    expect(await offenders(page.getByRole('tabpanel'))).toEqual([]);
+    expect(await pageOverflows(page)).toBe(false);
+    await page.screenshot({
+      path: testInfo.outputPath(`workspace-tabs-${String(scale)}.png`),
+      fullPage: true,
+    });
+  });
+}
+
+test('history tab changes clear destructive workspace confirmations (SR-258-1)', async ({
+  signIn,
+}) => {
+  const owner = await signIn('test-user');
+  const member = await signIn('test-user-2');
+  const workspaceName = `확인 대상 이탈 ${unique()}`;
+  const ws = await owner.api.createWorkspace(workspaceName);
+  await owner.api.ensureOrganizationMember(member.api, member.user.email);
+  await owner.api.invite(ws, member.user.email, 'member');
+  await member.api.acceptInvitation(ws);
+  const memberMe = await member.api.get('/api/me');
+  const memberId = str(memberMe, 'id');
+  const memberName = str(memberMe, 'display_name');
+  const group = str(
+    await owner.api.send('POST', `/api/workspaces/${ws}/groups`, { name: '검토팀' }),
+    'id',
+  );
+  const scenarios = [
+    {
+      page: owner.page,
+      source: 'groups',
+      sourceLabel: '그룹',
+      other: 'members',
+      otherLabel: '멤버',
+      trigger: owner.page.getByRole('button', { name: '그룹 삭제', exact: true }),
+      title: '‘검토팀’ 그룹을 삭제할까요?',
+    },
+    {
+      page: member.page,
+      source: 'groups',
+      sourceLabel: '그룹',
+      other: 'members',
+      otherLabel: '멤버',
+      trigger: member.page.getByRole('button', { name: '워크스페이스 탈퇴', exact: true }),
+      title: `${workspaceName}에서 탈퇴할까요?`,
+    },
+    {
+      page: owner.page,
+      source: 'members',
+      sourceLabel: '멤버',
+      other: 'groups',
+      otherLabel: '그룹',
+      trigger: owner.page
+        .getByTestId('member-list')
+        .getByRole('listitem')
+        .filter({ has: owner.page.getByText(memberName, { exact: true }) })
+        .getByRole('button', { name: '제거', exact: true }),
+      title: `${memberName}을(를) 제거할까요?`,
+    },
+  ];
+  for (const { page, source, sourceLabel, other, otherLabel, trigger, title } of scenarios) {
+    for (const direction of ['back', 'forward'] as const) {
+      const mutations: string[] = [];
+      const track = (request: import('@playwright/test').Request): void => {
+        if (request.method() === 'DELETE' || request.url().endsWith('/leave'))
+          mutations.push(`${request.method()} ${request.url()}`);
+      };
+      page.on('request', track);
+      try {
+        await page.goto(`/w/${ws}/${direction === 'back' ? other : source}`);
+        await page
+          .getByRole('tab', { name: direction === 'back' ? sourceLabel : otherLabel, exact: true })
+          .click();
+        if (direction === 'forward') await page.goBack();
+        await expect(page).toHaveURL(`/w/${ws}/${source}`);
+        await trigger.click();
+        await expect(page.getByRole('dialog', { name: title, exact: true })).toBeVisible();
+        if (direction === 'back') await page.goBack();
+        else await page.goForward();
+        await expect(page).toHaveURL(`/w/${ws}/${other}`);
+        await expect(page.getByRole('dialog', { name: title, exact: true })).toHaveCount(0);
+        if (direction === 'back') await page.goForward();
+        else await page.goBack();
+        await expect(page).toHaveURL(`/w/${ws}/${source}`);
+        await expect(page.getByRole('dialog', { name: title, exact: true })).toHaveCount(0);
+        expect(mutations, `${title}: ${direction} must not execute the confirmed action`).toEqual(
+          [],
+        );
+      } finally {
+        page.off('request', track);
+      }
+    }
+  }
+  expect(await owner.api.get(`/api/workspaces/${ws}/members`)).toMatchObject({
+    members: expect.arrayContaining([expect.objectContaining({ user_id: memberId })]),
+  });
+  expect(await owner.api.get(`/api/workspaces/${ws}/groups`)).toContainEqual(
+    expect.objectContaining({ id: group }),
+  );
 });
