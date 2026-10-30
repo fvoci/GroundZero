@@ -127,7 +127,7 @@
         {meId}
         onchanged={changed}
         onunavailable={noAccess}
-        oncountchange={(count) => {
+        oncountchange={(count: number) => {
           memberCount = count;
         }}
       />

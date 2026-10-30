@@ -107,7 +107,12 @@ it('shows the organization total on its tab and filters locally by name or email
 it('offers name search to ordinary organization members without exposing email or actions', async () => {
   vi.mocked(api.organization).mockResolvedValue({ ...organization, role: 'member' });
   vi.mocked(organizationsApi.members).mockResolvedValue(
-    members.map(({ email: _email, ...member }) => member),
+    members.map((member) => ({
+      user_id: member.user_id,
+      display_name: member.display_name,
+      role: member.role,
+      created_at: member.created_at,
+    })),
   );
   organizationView();
   const filter = await screen.findByRole('searchbox', { name: '이름으로 멤버 검색' });

@@ -27,7 +27,9 @@
     observer.observe(scroller);
     observer.observe(tabList);
     updateOverflow();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   });
 </script>
 
