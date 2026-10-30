@@ -283,22 +283,26 @@
       }}
     >
       <fieldset class="contents" disabled={daysSaving}>
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1">
           <Label for="trash-retention">{m.trash_retention_label()}</Label>
-          <Input
-            id="trash-retention"
-            class="w-28"
-            inputmode="numeric"
-            bind:value={days}
-            disabled={!daysDraft.active}
-            oninput={() => (editingDays = true)}
-            aria-invalid={daysError !== undefined}
-            aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
-          />
+          <div class="flex flex-wrap items-end gap-2">
+            <Input
+              id="trash-retention"
+              class="w-28"
+              inputmode="numeric"
+              bind:value={days}
+              disabled={!daysDraft.active}
+              oninput={() => (editingDays = true)}
+              aria-invalid={daysError !== undefined}
+              aria-describedby={daysError !== undefined ? 'trash-retention-error' : undefined}
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={!daysDraft.active || daysDraft.blocked}>{m.trash_change()}</Button
+            >
+          </div>
         </div>
-        <Button type="submit" variant="outline" disabled={!daysDraft.active || daysDraft.blocked}
-          >{m.trash_change()}</Button
-        >
       </fieldset>
       {#if daysError !== undefined}
         <p id="trash-retention-error" role="alert" class="w-full text-sm text-destructive">
@@ -315,26 +319,28 @@
       }}
     >
       <fieldset class="contents" disabled={versionDaysSaving}>
-        <div class="flex flex-col gap-1">
+        <div class="flex min-w-0 flex-col gap-1">
           <Label for="version-retention">{m.trash_version_retention_label()}</Label>
-          <Input
-            id="version-retention"
-            class="w-28"
-            inputmode="numeric"
-            bind:value={versionDays}
-            disabled={!versionDraft.active}
-            oninput={() => (editingVersionDays = true)}
-            aria-invalid={versionDaysError !== undefined}
-            aria-describedby={versionDaysError !== undefined
-              ? 'version-retention-error'
-              : undefined}
-          />
+          <div class="flex flex-wrap items-end gap-2">
+            <Input
+              id="version-retention"
+              class="w-28"
+              inputmode="numeric"
+              bind:value={versionDays}
+              disabled={!versionDraft.active}
+              oninput={() => (editingVersionDays = true)}
+              aria-invalid={versionDaysError !== undefined}
+              aria-describedby={versionDaysError !== undefined
+                ? 'version-retention-error'
+                : undefined}
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={!versionDraft.active || versionDraft.blocked}>{m.trash_change()}</Button
+            >
+          </div>
         </div>
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={!versionDraft.active || versionDraft.blocked}>{m.trash_change()}</Button
-        >
       </fieldset>
       {#if versionDaysError !== undefined}
         <p id="version-retention-error" role="alert" class="w-full text-sm text-destructive">
@@ -404,7 +410,8 @@
   <ul class="flex flex-col gap-2" data-testid="trash-list">
     {#each trash?.entries ?? [] as e (e.id)}
       <li class="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
-        <span class="min-w-0 flex-1">
+        <!-- 좁은 본문에서는 제목이 한 줄 전체를 쓰고, 동작·확인 질문은 그 아래에서 줄바꿈한다(D-110). -->
+        <span class="w-full min-w-0 @xl:w-auto @xl:flex-1">
           {label(e)}
           <span class="block text-xs text-muted-foreground">
             {e.deleted_by_name ?? ''} · {m.trash_deleted_at({ when: when(e.deleted_at) })} ·

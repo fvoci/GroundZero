@@ -47,7 +47,7 @@ for (const narrow of [false, true]) {
       const titles = [
         '좁은 화면에서도 긴 한국어 문서 제목을 넓게 읽으며 주간 회의 자료와 배포 점검표를 정리합니다',
         `https://example.test/${'long-document-title-'.repeat(6)}`,
-      ];
+      ] as const;
       const documents: string[] = [];
       const user = str(await api.get('/api/me'), 'id');
       for (const title of titles) {
