@@ -13,6 +13,13 @@ case "$mode" in rooms|screens) ;; *) exit 2 ;; esac
 case "$count" in 10|100|1000) ;; *) exit 2 ;; esac
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+if [[ "$mode" == screens ]]; then
+  web_inputs=$(git status --porcelain -- apps/web package.json pnpm-lock.yaml pnpm-workspace.yaml)
+  if [[ -n "$web_inputs" ]]; then
+    printf 'web inputs are dirty\n' >&2
+    exit 2
+  fi
+fi
 out=$(mktemp -d "$root/target/perf-${mode}-${count}-XXXXXX")
 project="fvoci-perf-w1-${mode}-${count}-$$"
 overlay="$out/postgres.yaml"

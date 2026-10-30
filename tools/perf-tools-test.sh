@@ -86,4 +86,26 @@ replay_arguments() {
   grep -F 'missing replay argument: today' "$out/replay-error.log"
 }
 check browser-replay-arguments replay_arguments
+dirty_web_inputs() {
+  local status=0
+  bash -euo pipefail -s -- "$root" > "$out/dirty-input-result.log" 2>&1 <<'DIRTY' || status=$?
+  cd "$1"
+  git() {
+    if [[ "$*" == 'status --porcelain -- apps/web package.json pnpm-lock.yaml pnpm-workspace.yaml' ]]; then
+      printf ' M apps/web/src/App.svelte\n'
+    else
+      command git "$@"
+    fi
+  }
+  docker() { printf 'unexpected Docker invocation\n' >&2; return 99; }
+  export -f git docker
+  bash tools/measure-perf.sh screens
+DIRTY
+  if [[ "$status" -ne 2 ]]; then
+    printf 'expected dirty input exit 2, got %s\n' "$status"
+    return 1
+  fi
+  grep -Fx 'web inputs are dirty' "$out/dirty-input-result.log"
+}
+check dirty-web-inputs dirty_web_inputs
 test "$failures" -eq 0
