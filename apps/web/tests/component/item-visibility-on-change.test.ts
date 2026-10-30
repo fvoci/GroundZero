@@ -8,6 +8,7 @@ import { api } from '$lib/api/client';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
+import { openItemInfo } from './fixtures/item-groups';
 
 // 감사 W13: 항목 정보 저장이 연 때의 공개 범위를 늘 보내, 그사이 다른 소유 권한자가 바꾼 공개 범위를 설명만 고친
 // 저장이 되돌렸다. 공개 범위는 체크를 바꿨을 때만 보낸다(서버는 없으면 지금 값 그대로, 0084).
@@ -83,6 +84,7 @@ describe('item info save and visibility', () => {
     setup();
     const update = vi.spyOn(api, 'updateItem').mockResolvedValue({ kind: 'updated', item: loaded });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     const description = await waitFor(() => {
       const el = document.getElementById('item-description');
@@ -102,6 +104,7 @@ describe('item info save and visibility', () => {
     setup();
     const update = vi.spyOn(api, 'updateItem').mockResolvedValue({ kind: 'updated', item: loaded });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     await fireEvent.click(await screen.findByLabelText(/워크스페이스 멤버에게 공개/));
     await submitInfo();

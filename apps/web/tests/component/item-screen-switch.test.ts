@@ -10,7 +10,7 @@ import * as feedback from '$lib/features/feedback/feedback.svelte';
 import ItemScreen from '$lib/features/modules/ItemScreen.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import './fixtures/authenticated';
-import { openItemGroup, resetRoute } from './fixtures/item-groups';
+import { openItemInfo, openItemAction, openItemGroup, resetRoute } from './fixtures/item-groups';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -114,6 +114,7 @@ describe('item screen results after switching items', () => {
     const write = deferred<Awaited<ReturnType<typeof api.updateItem>>>();
     vi.spyOn(api, 'updateItem').mockReturnValue(write.promise);
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
@@ -136,8 +137,9 @@ describe('item screen results after switching items', () => {
     const write = deferred<ItemView>();
     vi.spyOn(api, 'archiveItem').mockReturnValue(write.promise);
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     await screen.findByRole('heading', { name: '항목 A' });
-    await fireEvent.click(screen.getByRole('button', { name: '보관' }));
+    await openItemAction('보관');
 
     await view.rerender({ workspace, itemId: 'B', workspaces: [workspace] });
     await screen.findByRole('heading', { name: '항목 B' });
@@ -160,6 +162,7 @@ describe('item screen results after switching items', () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
     vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     const panel = await screen.findByRole('region', { name: '정보' });
     await fireEvent.click(await within(panel).findByRole('button', { name: '고치기' }));
     await fireEvent.click(within(panel).getByRole('button', { name: '저장' }));
@@ -184,6 +187,7 @@ describe('item screen results after switching items', () => {
     );
     vi.spyOn(api, 'updateItem').mockResolvedValue({ kind: 'updated', item: item('A') });
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
     await waitFor(() => {
@@ -237,6 +241,7 @@ describe('item screen results after leaving and coming back to the same item', (
     const write = deferred<Awaited<ReturnType<typeof api.updateItem>>>();
     vi.spyOn(api, 'updateItem').mockReturnValue(write.promise);
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
@@ -261,6 +266,7 @@ describe('item screen results after leaving and coming back to the same item', (
       }),
     );
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     await screen.findByRole('heading', { name: '항목 A' });
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
@@ -286,6 +292,7 @@ describe('item screen results after leaving and coming back to the same item', (
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
     vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     const panel = await screen.findByRole('region', { name: '정보' });
     await fireEvent.click(await within(panel).findByRole('button', { name: '고치기' }));
     await fireEvent.click(within(panel).getByRole('button', { name: '저장' }));
@@ -299,6 +306,7 @@ describe('item screen results after leaving and coming back to the same item', (
     await settle();
 
     expect(heading()).toHaveTextContent('새 제목 A');
+    await openItemInfo();
     expect(screen.getByRole('textbox', { name: '제목' })).toHaveValue('새 제목 A');
   });
 
@@ -322,6 +330,7 @@ describe('item screen results after leaving and coming back to the same item', (
     // 옮기기가 실패해도 목록은 다시 읽는다. 이 테스트는 그 다시 읽기만 본다.
     vi.spyOn(api, 'setParent').mockRejectedValue(new Error('conflict'));
     const view = render(ItemScreen, { props: { workspace, itemId: 'A', workspaces: [workspace] } });
+    await openItemInfo();
     // 항목 문서 목록은 문서 묶음에 있다(D-121).
     await openItemGroup('문서');
     const rows = await screen.findAllByRole('treeitem');

@@ -57,6 +57,7 @@ export default defineConfig({
         'organizations.spec.ts',
         'server-admin.spec.ts',
         'workspace-limits.spec.ts',
+        'item-primary-work.spec.ts',
       ],
       use: {
         ...devices['Desktop Chrome'],

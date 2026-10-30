@@ -164,7 +164,7 @@ describe('workspace management tabs (D-121, n1)', () => {
       );
       expect(screen.queryByLabelText('이메일')).toBeNull();
       expect(screen.queryByRole('region', { name: '한도·보존' })).toBeNull();
-      expect(screen.queryByRole('button', { name: '워크스페이스 탈퇴' })).toBeNull();
+      expect(screen.getByRole('button', { name: '워크스페이스 탈퇴' })).toBeVisible();
       expect(workspaceLimitsApi.get).not.toHaveBeenCalled();
     },
   );
@@ -219,7 +219,7 @@ describe('workspace management tabs (D-121, n1)', () => {
         vi.spyOn(api, 'leave').mockResolvedValue(undefined),
         vi.spyOn(api, 'removeMember').mockResolvedValue(undefined),
       ];
-      const tab = action === 'member removal' ? 'members' : 'groups';
+      const tab = action === 'group deletion' ? 'groups' : 'members';
       const otherTab = tab === 'groups' ? 'members' : 'groups';
       router.replace(membersPath(id, tab));
       render(MembersRouteHost, { props });
@@ -256,13 +256,44 @@ describe('workspace management tabs (D-121, n1)', () => {
     },
   );
 
-  it.each(['member', 'readonly'] as const)('keeps groups and leaving for %s', async (role) => {
-    vi.mocked(api.members).mockResolvedValue({ ...view, can_manage_members: false, my_role: role });
-    render(MembersScreen, { props: { ...props, tab: 'groups' } });
-    expect(await screen.findByRole('button', { name: '워크스페이스 탈퇴' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: '그룹' })).toBeVisible();
-    expect(screen.queryByLabelText('새 그룹 이름')).toBeNull();
-    expect(screen.queryByTestId('member-list')).toBeNull();
+  describe.each([
+    { label: 'owner', role: 'admin', canManage: true, isOwner: true },
+    { label: 'owner without member management', role: 'readonly', canManage: false, isOwner: true },
+    { label: 'non-owner administrator', role: 'admin', canManage: true, isOwner: false },
+    { label: 'member', role: 'member', canManage: false, isOwner: false },
+    { label: 'readonly member', role: 'readonly', canManage: false, isOwner: false },
+  ] as const)('leaving visibility for $label', ({ role, canManage, isOwner }) => {
+    it.each(['members', 'groups'] as const)(
+      'keeps leaving only below the members list on %s',
+      async (tab) => {
+        vi.mocked(api.members).mockResolvedValue({
+          ...view,
+          can_manage_members: canManage,
+          my_role: role,
+          i_am_owner: isOwner,
+        });
+        render(MembersScreen, { props: { ...props, tab } });
+        await screen.findByRole('tab', { name: '멤버 1명' });
+        const leave = screen.queryByRole('region', { name: '탈퇴' });
+        if (tab === 'members' && !isOwner) {
+          expect(leave).toBeVisible();
+          expect(screen.getByRole('button', { name: '워크스페이스 탈퇴' })).toBeVisible();
+          if (leave === null) throw new Error('missing leave section');
+          expect(
+            screen.getByTestId('member-list').compareDocumentPosition(leave) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+          ).not.toBe(0);
+        } else {
+          expect(leave).toBeNull();
+          expect(screen.queryByRole('button', { name: '워크스페이스 탈퇴' })).toBeNull();
+        }
+        if (tab === 'groups') {
+          expect(screen.getByRole('heading', { name: '그룹' })).toBeVisible();
+          expect(screen.queryByTestId('member-list')).toBeNull();
+          if (!canManage) expect(screen.queryByLabelText('새 그룹 이름')).toBeNull();
+        }
+      },
+    );
   });
 
   it.each(['invitations', 'settings'] as const)(

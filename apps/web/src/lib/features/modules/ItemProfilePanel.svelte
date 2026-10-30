@@ -3,7 +3,7 @@
   // 항목 정보(D-33·D-34·D-36·D-38): 상태·기간·리더·목표·범위와 종류별 정보, 비공개 항목의 멤버(사람·그룹).
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -29,7 +29,13 @@
   import * as Select from '$lib/ui/select';
 
   import ItemProfileSummary from './ItemProfileSummary.svelte';
-  import { detailFields, itemStatusLabel, peopleLabels, toDetails } from './profile';
+  import {
+    detailFields,
+    itemStatusLabel,
+    peopleLabels,
+    toDetails,
+    type ItemProfileRead,
+  } from './profile';
 
   interface Props {
     item: ItemView;
@@ -38,11 +44,24 @@
     onchanged: () => void;
     /** 앱 안 이동의 다음 경로에서도 이 패널이 마운트된 채인지(항목 화면 머리, D-121). 그러면 묻지 않는다. */
     stays?: ((next: string) => boolean) | undefined;
+    onprofile?: (read: ItemProfileRead) => void;
+    refresh?: number;
+    ondirty?: (dirty: boolean) => void;
+    onrestore?: () => void;
   }
 
-  const { item, kind, onchanged, stays }: Props = $props();
-
+  const {
+    item,
+    kind,
+    onchanged,
+    stays,
+    onprofile,
+    refresh = 0,
+    ondirty,
+    onrestore,
+  }: Props = $props();
   let profile = $state<ItemProfileView | undefined>(undefined);
+  let profileRead = $state<ItemProfileRead | undefined>(undefined);
   let people = $state<AssigneeView[]>([]);
   let error = $state<string | undefined>(undefined);
   let editing = $state(false);
@@ -84,6 +103,27 @@
   let groupChoices = $state<{ id: string; name: string }[]>([]);
   let baseline = $state('');
   let busy = $state(false);
+  let membersBaseline = $state('');
+  let membersBusy = $state(false);
+  const memberSnapshot = () => JSON.stringify([[...memberIds].sort(), [...groupIds].sort()]);
+  const membersDirty = $derived(managing && memberSnapshot() !== membersBaseline);
+  const membersDraft = createFormDraft({
+    preserve: false,
+    name: () => `item-members:${item.id}`,
+    snapshot: () => ({ memberIds, groupIds }),
+    parse: () => undefined,
+    restore: () => undefined,
+    reset: () => {
+      managing = false;
+      memberIds = [];
+      groupIds = [];
+      membersBusy = false;
+    },
+    dirty: () => membersDirty,
+    busy: () => membersBusy,
+    stays: (next) => stays?.(next) === true,
+  });
+  onMount(membersDraft.attach);
   const draft = createFormDraft({
     name: () => `item-profile:${item.id}:${kind}`,
     snapshot: () => ({ form, base: editBase, baseline, leader: editLeader }),
@@ -168,6 +208,14 @@
     stays: (next) => stays?.(next) === true,
   });
   onMount(draft.attach);
+  $effect(() => {
+    if (profileRead !== undefined) onprofile?.(profileRead);
+  });
+  $effect(() => {
+    ondirty?.(
+      busy || membersBusy || (editing && JSON.stringify(form) !== baseline) || membersDirty,
+    );
+  });
 
   // 리더 칸은 입력만 보인다. 서버의 리더(409의 최신본 등)를 대신 보이면 "내 입력으로 다시 저장"이 보이지 않게 리더를 지운다.
   const leaderLabel = $derived.by(() => {
@@ -178,17 +226,30 @@
   const fields = $derived(detailFields(kind));
   const labels = $derived(peopleLabels(kind));
 
+  function acceptProfile(id: string, next: ItemProfileView): void {
+    profile = next;
+    profileRead = { status: 'ready', itemId: id, profile: next };
+  }
+
   $effect(() => {
     const id = item.id;
-    if (reloadKey < 0) return;
+    if (reloadKey + refresh < 0) return;
     let cancelled = false;
+    untrack(() => {
+      // 같은 항목의 재조회 중에는 편집 폼을 유지하고, 요약만 로딩으로 바꾼다.
+      if (profileRead?.itemId !== id) profile = undefined;
+      profileRead = { status: 'loading', itemId: id };
+      error = undefined;
+    });
     api
       .itemProfile(id)
       .then((p) => {
-        if (!cancelled) profile = p;
+        if (!cancelled) acceptProfile(id, p);
       })
       .catch((e: unknown) => {
-        if (!cancelled) error = errorText(e, m.modules_profile_load_failed());
+        if (cancelled) return;
+        error = errorText(e, m.modules_profile_load_failed());
+        profileRead = { status: 'failed', itemId: id, error };
       });
     return () => {
       cancelled = true;
@@ -250,7 +311,7 @@
         if (session !== editSession) return;
         // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다.
         conflict = result.current;
-        profile = result.current;
+        acceptProfile(item.id, result.current);
         return;
       }
       // 저장은 새 판을 주지 않으므로(204) 다시 읽은 뒤에 편집을 닫는다. 먼저 닫으면 다시 읽기 전에 연 편집이 옛 판을
@@ -270,8 +331,11 @@
         notifyDone(m.modules_profile_saved());
       }
       // 다시 읽지 못하면 정보를 비우고 다시 읽기를 맡긴다. 옛 판이 남아 있으면 그 판으로 편집을 다시 열 수 있다.
-      profile = fresh;
-      if (fresh === undefined) reloadKey += 1;
+      if (fresh === undefined) {
+        profile = undefined;
+        profileRead = { status: 'loading', itemId: item.id };
+        reloadKey += 1;
+      } else acceptProfile(item.id, fresh);
     } catch (err: unknown) {
       if (session === editSession && draft.isOwner(attempt))
         error = errorText(err, m.modules_save_failed());
@@ -291,6 +355,7 @@
       groupChoices = groups.map((g) => ({ id: g.id, name: g.name }));
       memberIds = p.members.map((x) => x.user_id);
       groupIds = p.groups.map((g) => g.id);
+      membersBaseline = memberSnapshot();
       managing = true;
     } catch (err: unknown) {
       error = errorText(err, m.modules_members_load_failed());
@@ -303,14 +368,20 @@
   }
 
   async function saveMembers(): Promise<void> {
+    if (membersBusy) return;
+    const attempt = membersDraft.capture();
+    if (attempt === undefined) return;
     error = undefined;
+    membersBusy = true;
     try {
       await api.setItemMembers(item.id, memberIds, groupIds);
-      managing = false;
+      if (!membersDraft.complete(attempt)) return;
       notifyDone(m.modules_people_saved({ label: labels.members }));
       reloadKey += 1;
     } catch (err: unknown) {
-      error = errorText(err, m.modules_save_failed());
+      if (membersDraft.isOwner(attempt)) error = errorText(err, m.modules_save_failed());
+    } finally {
+      if (membersDraft.isOwner(attempt)) membersBusy = false;
     }
   }
 </script>
@@ -322,7 +393,10 @@
     <FormDraftOffer
       restorable={profile?.can_edit === true && !accountSwitching()}
       onrestore={() => {
-        if (profile?.can_edit === true && !accountSwitching()) draft.restore(entry);
+        if (profile?.can_edit === true && !accountSwitching()) {
+          draft.restore(entry);
+          onrestore?.();
+        }
       }}
       ondiscard={() => {
         draft.discard(entry);
@@ -334,6 +408,11 @@
   open={draft.leave.open}
   onkeep={draft.leave.keep}
   ondiscard={draft.discardAndLeave}
+/>
+<DiscardChangesConfirm
+  open={membersDraft.leave.open}
+  onkeep={membersDraft.leave.keep}
+  ondiscard={membersDraft.discardAndLeave}
 />
 
 <section class="flex flex-col gap-3" aria-labelledby="item-profile-heading">
@@ -348,7 +427,9 @@
   </div>
   {#if error !== undefined}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
   {#if profile === undefined}
-    <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
+    {#if profileRead?.status !== 'failed'}
+      <p class="text-sm text-muted-foreground">{m.modules_loading()}</p>
+    {/if}
   {:else if editing}
     <fieldset class="flex min-w-0 flex-col gap-3" disabled={busy}>
       {#if conflict !== undefined}
@@ -496,7 +577,7 @@
           : m.modules_members_shared_hint()}
       </p>
       {#if managing}
-        <fieldset class="flex flex-col gap-2 rounded-md border p-2">
+        <fieldset class="flex flex-col gap-2 rounded-md border p-2" disabled={membersBusy}>
           <legend class="px-1">{m.modules_people()}</legend>
           {#each candidates as c (c.id)}
             <div class="flex items-center gap-2">
@@ -512,7 +593,7 @@
           {/each}
         </fieldset>
         {#if groupChoices.length > 0}
-          <fieldset class="flex flex-col gap-2 rounded-md border p-2">
+          <fieldset class="flex flex-col gap-2 rounded-md border p-2" disabled={membersBusy}>
             <legend class="px-1">{m.modules_groups()}</legend>
             {#each groupChoices as g (g.id)}
               <div class="flex items-center gap-2">
@@ -529,9 +610,16 @@
           </fieldset>
         {/if}
         <div class="flex gap-2">
-          <Button size="sm" onclick={() => void saveMembers()}>{m.common_save()}</Button>
-          <Button size="sm" variant="ghost" onclick={() => (managing = false)}
-            >{m.common_cancel()}</Button
+          <Button size="sm" disabled={membersBusy} onclick={() => void saveMembers()}
+            >{m.common_save()}</Button
+          >
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={membersBusy}
+            onclick={() => {
+              membersDraft.leave.request(() => (managing = false));
+            }}>{m.common_cancel()}</Button
           >
         </div>
       {:else if p.members.length === 0 && p.groups.length === 0}

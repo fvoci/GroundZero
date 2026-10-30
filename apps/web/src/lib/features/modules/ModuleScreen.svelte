@@ -17,6 +17,8 @@
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { me } from '$lib/me.svelte';
+  import { org } from '$lib/org.svelte';
+  import { writeSession } from '$lib/storage';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
   import type { ModuleViewName } from '$lib/router.svelte';
@@ -455,7 +457,10 @@
             submitLabel={m.modules_create_item()}
             create={async (requestId: string, title: string, context: CreateFormContext) => {
               const created = await api.createItem(current.id, requestId, title);
-              if (context.saved()) router.navigate(itemPath(workspace.id, created.id));
+              if (context.saved()) {
+                writeSession(org.key('new-item-info'), created.id);
+                router.navigate(itemPath(workspace.id, created.id));
+              }
             }}
           />
           <p class="text-sm text-muted-foreground">{m.modules_new_item_hint()}</p>

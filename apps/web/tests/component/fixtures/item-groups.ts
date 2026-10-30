@@ -3,6 +3,19 @@ import { fireEvent, screen, within } from '@testing-library/svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { router } from '$lib/router.svelte';
 
+/** 보조 정보 편집 시험은 기본으로 접힌 항목 정보를 먼저 연다(나2, D-110). */
+export async function openItemInfo(): Promise<void> {
+  const toggle = await screen.findByRole('button', {
+    name: new RegExp(`^${m.modules_item_info()}`),
+  });
+  if (toggle.getAttribute('aria-expanded') !== 'true') await fireEvent.click(toggle);
+}
+
+export async function openItemAction(label: string): Promise<void> {
+  await fireEvent.click(await screen.findByRole('button', { name: m.modules_more_actions() }));
+  await fireEvent.click(await screen.findByRole('menuitem', { name: label }));
+}
+
 // 항목 화면은 고른 묶음만 마운트한다(D-121). 묶음 안 패널을 보는 시험은 먼저 그 묶음으로 간다.
 export async function openItemGroup(label: string): Promise<void> {
   const nav = await screen.findByRole('navigation', { name: m.modules_item_groups_label() });

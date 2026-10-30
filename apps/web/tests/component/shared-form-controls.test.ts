@@ -114,6 +114,7 @@ describe('comment boxes use the shared Textarea', () => {
 describe('paste boxes stay bounded', () => {
   it('caps the task CSV and checklist paste boxes and scrolls inside them', async () => {
     render(TaskCsvImport, { itemId: 'i1', statuses: [], onimported: () => Promise.resolve() });
+    await fireEvent.click(screen.getByRole('button', { name: '여러 업무 한꺼번에 등록' }));
     expect(screen.getByLabelText(/한 줄에 한 업무/)).toHaveClass('max-h-96', 'overflow-y-auto');
     render(ChecklistForm, {
       idPrefix: 't',

@@ -40,6 +40,9 @@ type Story = StoryObj<typeof meta>;
 export const Reentered: Story = {
   play: async ({ canvasElement }) => {
     const c = within(canvasElement);
+    const toggle = c.getByRole('button', { name: '여러 업무 한꺼번에 등록' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
     await expect(c.getByRole('textbox')).toHaveValue('');
     await userEvent.click(c.getByRole('button', { name: '입력 복원' }));
     await expect(c.getByRole('textbox')).toHaveValue('저장한 업무\n응답을 기다리던 업무');

@@ -13,6 +13,7 @@ import { itemViewPath, itemTaskPath, router } from '$lib/router.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import './fixtures/authenticated';
+import { openItemInfo, openItemAction } from './fixtures/item-groups';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -111,11 +112,13 @@ describe('item info form while the item is read again', () => {
     mockItem(item(), item({ is_template: true, title: '다른 사람이 고친 제목' }));
     vi.spyOn(api, 'setItemTemplate').mockResolvedValue(undefined);
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     await fireEvent.input(await waitFor(description), { target: { value: '쓰는 중인 설명' } });
-    await fireEvent.click(await screen.findByRole('button', { name: '템플릿으로 표시' }));
+    await openItemAction('템플릿으로 표시');
     // 다시 읽은 결과가 화면에 들어온 뒤에 본다.
-    await screen.findByRole('button', { name: '템플릿 해제' });
+    await fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
+    await screen.findByRole('menuitem', { name: '템플릿 해제' });
 
     expect(description().value).toBe('쓰는 중인 설명');
     // 고치지 않은 제목 칸은 다시 읽은 값으로 바뀐다.
@@ -129,6 +132,7 @@ describe('item info form while the item is read again', () => {
     vi.spyOn(api, 'itemProfile').mockResolvedValue(profile);
     const setProfile = vi.spyOn(api, 'setItemProfile').mockResolvedValue({ kind: 'saved' });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     await fireEvent.input(await waitFor(description), { target: { value: '쓰는 중인 설명' } });
     const panel = await screen.findByRole('region', { name: '정보' });
@@ -161,6 +165,7 @@ describe('item info form while the item is read again', () => {
         }),
     );
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     await fireEvent.input(await waitFor(titleInput), { target: { value: '보낸 제목' } });
     const form = screen.getByRole('form', { name: '항목 정보' });
@@ -188,6 +193,7 @@ describe('item info form while the item is read again', () => {
       item: item({ title: '보낸 제목' }),
     });
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     // 앞뒤 공백은 서버가 다듬어 돌려준다. 그대로 보낸 칸이므로 다듬은 값으로 바꾸고 저장된 것으로 본다.
     await fireEvent.input(await waitFor(titleInput), { target: { value: '보낸 제목 ' } });
@@ -218,6 +224,7 @@ describe('item info draft after write access is withdrawn', () => {
 
     mockItem(item({ access: 'read' }));
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
     const offer = await screen.findByTestId('form-draft-offer');
     expect(within(offer).queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
     expect(offer).toHaveTextContent(m.common_draft_read_only());
@@ -258,6 +265,7 @@ describe('item info save while a visibility change is in flight', () => {
         },
       );
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     const sharedBox = await screen.findByLabelText(/워크스페이스 멤버에게 공개/);
     const form = screen.getByRole('form', { name: '항목 정보' });
@@ -360,6 +368,7 @@ describe('item info form when the task board finds the item changed', () => {
       .spyOn(work, 'moveTask')
       .mockRejectedValue(new ApiError(403, 'forbidden', 'no longer allowed'));
     render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
+    await openItemInfo();
 
     await fireEvent.input(await waitFor(description), { target: { value: '쓰는 중인 설명' } });
     await screen.findByRole('button', { name: '문서 검토 옮기기' });
@@ -397,6 +406,7 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
   router.path = itemViewPath(ws.id, current.id, 'gantt');
   window.history.replaceState(null, '', router.path);
   render(ItemScreen, { workspace: ws, itemId: current.id, workspaces: [ws] });
+  await openItemInfo();
   await screen.findByTestId('task-gantt');
   expect(screen.getByRole('button', { name: '간트' })).toHaveAttribute('aria-pressed', 'true');
   await fireEvent.click(screen.getByRole('button', { name: '칸반' }));

@@ -2,6 +2,8 @@
   import { savedViewsApi } from '$lib/features/events/saved-views-api';
   // 항목 하나: 제목·설명·공개 범위, 보관, 항목 아래 문서 (D-14, D-20, D-59).
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
@@ -54,10 +56,13 @@
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
   import { Textarea } from '$lib/ui/textarea';
+  import * as Collapsible from '$lib/ui/collapsible';
+  import * as DropdownMenu from '$lib/ui/dropdown-menu';
 
   import GroupSwitch from './GroupSwitch.svelte';
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
+  import { itemStatusLabel, type ItemProfileRead } from './profile';
   // 활동(D-119). 기록 묶음 안의 항목 활동 섹션.
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
@@ -84,6 +89,13 @@
   let calendarVersion = $state(0);
   let listVersion = $state(0);
   let error = $state<string | undefined>(undefined);
+  let infoOpen = $state(false);
+  let profileRead = $state<ItemProfileRead | undefined>(undefined);
+  let profileRefresh = $state(0);
+  let profileDirty = $state(false);
+  let copy = $state<{ start: () => Promise<void> } | undefined>(undefined);
+  let moreButton = $state<HTMLButtonElement | null>(null);
+  let deleting = $state(false);
 
   // 묶음(D-121, 사용자 R7 A). 주소의 묶음이 이 종류에 있으면 그것, 없으면(뿌리 경로·다른 종류의 묶음) 이 탭의 기억 ›
   // 종류별 기본 묶음으로 주소를 바꾼다(replaceState). 주소가 이 항목 경로가 아닐 때(독립 렌더)는 `chosen`을 쓴다.
@@ -225,6 +237,10 @@
   // 기준 판(D-104)이다: 입력 중에 다시 읽은 항목의 판으로 옮기면 그사이 다른 사람이 고친 것을 덮으므로, 입력란을
   // 서버 값으로 채울 때(또는 내 저장의 응답)만 옮긴다.
   let filled = $state({ title: '', description: '', shared: false, version: 0 });
+  const infoDirty = $derived(
+    item !== undefined &&
+      (title !== filled.title || description !== filled.description || shared !== filled.shared),
+  );
   const infoDraft = createFormDraft({
     name: () => `item-info:${itemId}`,
     snapshot: () => ({ title, description, shared, filled }),
@@ -258,6 +274,7 @@
       };
     },
     restore: (value) => {
+      infoOpen = true;
       title = value.title;
       description = value.description;
       shared = value.shared;
@@ -270,9 +287,7 @@
       filled = { title, description, shared, version: item?.version ?? 0 };
       saving = false;
     },
-    dirty: () =>
-      item !== undefined &&
-      (title !== filled.title || description !== filled.description || shared !== filled.shared),
+    dirty: () => infoDirty,
     busy: () => saving,
     stays: staysOnThisItem,
   });
@@ -326,6 +341,11 @@
     mod = undefined;
     chosen = undefined;
     error = undefined;
+    infoOpen = false;
+    profileRead = undefined;
+    profileRefresh = 0;
+    profileDirty = false;
+    deleting = false;
     // 앞 항목의 오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
     // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
     formError = undefined;
@@ -337,6 +357,10 @@
         const [found, list] = await Promise.all([api.module(it.module_id), api.itemDocuments(id)]);
         if (cancelled) return;
         fill(it);
+        // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
+        const entryKey = org.key('new-item-info');
+        infoOpen = readSession(entryKey) === id && !it.archived && it.access !== 'read';
+        if (readSession(entryKey) === id) writeSession(entryKey, null);
         mod = found;
         workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
         docs = list;
@@ -521,141 +545,235 @@
   {@const current = item}
   {@const view = shownItem ?? current}
   <section class="flex flex-col gap-6" aria-labelledby="item-heading">
-    <div class="flex flex-wrap items-baseline gap-2">
+    <div class="flex min-w-0 flex-wrap items-baseline gap-2" data-item-header>
       <span class="font-mono text-sm text-muted-foreground">{current.reference}</span>
-      <h1 id="item-heading" class="text-xl font-semibold">{current.title}</h1>
+      <h1 id="item-heading" class="min-w-0 text-xl font-semibold [overflow-wrap:anywhere]">
+        {current.title}
+      </h1>
       <Badge variant="outline"
         >{current.visibility === 'private'
           ? m.modules_private()
           : m.modules_shared_workspace()}</Badge
       >
+      <Badge variant="outline">{itemStatusLabel(current.status)}</Badge>
       {#if current.archived || moduleArchived}<Badge variant="secondary"
           >{m.modules_archived_readonly()}</Badge
         >{/if}
       {#if current.is_template}<Badge variant="secondary">{m.modules_template()}</Badge>{/if}
       <div class="ml-auto flex flex-wrap items-center gap-1">
         <MarkButtons kind="item" id={current.id} />
-        {#if isOwner}
-          <DeleteButton
-            what={m.modules_delete_item_what()}
-            remove={() => api.trashItem(current.id)}
-            ondeleted={() => {
-              router.navigate(modulePath(workspace.id, current.module_id));
-            }}
-          />
+        {#if isOwner || workspace.access !== 'read'}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="ghost"
+                  size="icon"
+                  bind:ref={moreButton}
+                  aria-label={m.modules_more_actions()}
+                >
+                  <Ellipsis class="size-4" aria-hidden="true" />
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {#if isOwner && (canEdit || current.archived)}
+                <DropdownMenu.Item onSelect={() => void toggleArchive()}>
+                  {current.archived ? m.modules_unarchive() : m.modules_archive()}
+                </DropdownMenu.Item>
+              {/if}
+              {#if workspace.access !== 'read' && mod !== undefined}
+                <DropdownMenu.Item onSelect={() => void copy?.start()}
+                  >{m.modules_copy()}</DropdownMenu.Item
+                >
+                {#if canEdit}
+                  <DropdownMenu.Item onSelect={() => void toggleTemplate()}>
+                    {current.is_template ? m.modules_template_unset() : m.modules_template_set()}
+                  </DropdownMenu.Item>
+                {/if}
+              {/if}
+              {#if isOwner}
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item variant="destructive" onSelect={() => (deleting = true)}>
+                  {m.trash_delete_what({ what: m.modules_delete_item_what() })}
+                </DropdownMenu.Item>
+              {/if}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         {/if}
       </div>
     </div>
 
-    {#if canEdit}
-      <form
-        class="flex flex-col gap-3"
-        onsubmit={(e) => void save(e)}
-        novalidate
-        aria-label={m.modules_item_info()}
-      >
-        <div class="flex flex-col gap-1">
-          <Label for="item-title">{m.modules_title()}</Label>
-          <Input id="item-title" bind:value={title} maxlength={200} />
-        </div>
-        <div class="flex flex-col gap-1">
-          <Label for="item-description">{m.modules_description()}</Label>
-          <Textarea
-            id="item-description"
-            bind:value={description}
-            maxlength={2000}
-            rows={3}
-            class="min-h-20"
-          />
-        </div>
-        {#if isOwner}
-          <div class="flex items-center gap-2">
-            <Checkbox id="item-shared" bind:checked={shared} />
-            <Label for="item-shared">{m.modules_share_with_members()}</Label>
-          </div>
-        {/if}
-        <div class="flex gap-2">
-          <Button type="submit" disabled={saving}>{m.common_save()}</Button>
-          {#if isOwner}
-            <Button type="button" variant="outline" onclick={() => void toggleArchive()}
-              >{m.modules_archive()}</Button
-            >
-          {/if}
-        </div>
-      </form>
-      {#if conflict !== undefined}
-        {@const latest = conflict}
-        <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 바꾸거나 내 입력으로 다시 저장한다. -->
-        <div class="rounded-md border border-amber-500/50 p-3 text-sm" data-item-conflict>
-          <p role="alert">{m.modules_item_conflict()}</p>
-          <dl class="mt-2 grid gap-1">
-            <dt class="text-muted-foreground">{m.modules_title()}</dt>
-            <dd class="break-words whitespace-pre-wrap" data-latest="title">{latest.title}</dd>
-            <dt class="text-muted-foreground">{m.modules_description()}</dt>
-            <dd class="break-words whitespace-pre-wrap" data-latest="description">
-              {latest.description === '' ? m.modules_item_conflict_empty() : latest.description}
-            </dd>
-            {#if isOwner}
-              <dt class="text-muted-foreground">{m.modules_share_with_members()}</dt>
-              <dd data-latest="visibility">
-                {latest.visibility === 'workspace'
-                  ? m.modules_item_conflict_shared()
-                  : m.modules_item_conflict_not_shared()}
-              </dd>
-            {/if}
-          </dl>
-          <div class="mt-2 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onclick={() => {
-                fill(latest);
-                document.getElementById('item-title')?.focus();
-              }}>{m.modules_item_conflict_load()}</Button
-            >
-            <Button size="sm" disabled={saving} onclick={() => void submit(latest.version)}
-              >{m.modules_item_conflict_save_mine()}</Button
-            >
-          </div>
-        </div>
-      {/if}
-    {:else}
-      {#if current.description !== ''}
-        <p class="whitespace-pre-wrap">{current.description}</p>
-      {/if}
-      {#if current.archived && isOwner}
-        <div>
-          <Button variant="outline" onclick={() => void toggleArchive()}
-            >{m.modules_unarchive()}</Button
-          >
-        </div>
-      {/if}
+    {#if isOwner}
+      <DeleteButton
+        bind:confirming={deleting}
+        trigger={false}
+        oncancel={() => moreButton?.focus()}
+        what={m.modules_delete_item_what()}
+        remove={() => api.trashItem(current.id)}
+        ondeleted={() => {
+          router.navigate(modulePath(workspace.id, current.module_id));
+        }}
+      />
     {/if}
+    {#if mod !== undefined && workspace.access !== 'read'}
+      <ItemCopy
+        bind:this={copy}
+        item={current}
+        module={mod}
+        stays={staysOnThisItem}
+        trigger={false}
+        returnFocus={moreButton}
+      />
+    {/if}
+    <Collapsible.Root bind:open={infoOpen} class="min-w-0">
+      <div class="flex min-w-0 flex-wrap items-start gap-2">
+        <Collapsible.Trigger
+          disabled={infoDirty || profileDirty || saving}
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-describedby={infoDirty || profileDirty ? 'item-info-unsaved' : undefined}
+        >
+          <ChevronDown class={['size-4 shrink-0', infoOpen && 'rotate-180']} aria-hidden="true" />
+          <span
+            class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 [overflow-wrap:anywhere]"
+          >
+            <span class="font-medium">{m.modules_item_info()}</span>
+            <span id="item-info-profile-status" role="status" class="text-sm text-muted-foreground">
+              {itemStatusLabel(current.status)} ·
+              {#if profileRead?.status === 'ready'}
+                {profileRead.profile.leader?.display_name ?? m.modules_none()} · {m.modules_member_count(
+                  { count: profileRead.profile.members.length },
+                )}
+              {:else if profileRead?.status === 'failed'}
+                <span class="text-destructive">{profileRead.error}</span>
+              {:else}
+                {m.modules_loading()}
+              {/if}
+              · {current.visibility === 'private'
+                ? m.modules_private()
+                : m.modules_shared_workspace()}
+            </span>
+          </span>
+        </Collapsible.Trigger>
+        {#if profileRead?.status === 'failed'}
+          <Button
+            size="sm"
+            variant="outline"
+            aria-describedby="item-info-profile-status"
+            onclick={() => (profileRefresh += 1)}>{m.common_retry()}</Button
+          >
+        {/if}
+      </div>
+      <p id="item-info-unsaved" role="status" class="text-sm text-muted-foreground empty:hidden">
+        {#if infoDirty || profileDirty}{m.modules_info_unsaved()}{/if}
+      </p>
+      <!-- 접어도 초안·프로필 조회·이탈 가드를 유지한다. 숨긴 입력은 초점 순서에서 빠진다. -->
+      <Collapsible.Content forceMount>
+        <div hidden={!infoOpen}>
+          <div class="flex min-w-0 flex-col gap-6 pt-3">
+            {#if canEdit}
+              <form
+                class="flex flex-col gap-3"
+                onsubmit={(e) => void save(e)}
+                novalidate
+                aria-label={m.modules_item_info()}
+              >
+                <div class="flex flex-col gap-1">
+                  <Label for="item-title">{m.modules_title()}</Label>
+                  <Input id="item-title" bind:value={title} maxlength={200} />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <Label for="item-description">{m.modules_description()}</Label>
+                  <Textarea
+                    id="item-description"
+                    bind:value={description}
+                    maxlength={2000}
+                    rows={3}
+                    class="min-h-20"
+                  />
+                </div>
+                {#if isOwner}
+                  <div class="flex items-center gap-2">
+                    <Checkbox id="item-shared" bind:checked={shared} />
+                    <Label for="item-shared">{m.modules_share_with_members()}</Label>
+                  </div>
+                {/if}
+                <div class="flex gap-2">
+                  <Button type="submit" disabled={saving}>{m.common_save()}</Button>
+                </div>
+              </form>
+              {#if conflict !== undefined}
+                {@const latest = conflict}
+                <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 바꾸거나 내 입력으로 다시 저장한다. -->
+                <div class="rounded-md border border-amber-500/50 p-3 text-sm" data-item-conflict>
+                  <p role="alert">{m.modules_item_conflict()}</p>
+                  <dl class="mt-2 grid gap-1">
+                    <dt class="text-muted-foreground">{m.modules_title()}</dt>
+                    <dd class="break-words whitespace-pre-wrap" data-latest="title">
+                      {latest.title}
+                    </dd>
+                    <dt class="text-muted-foreground">{m.modules_description()}</dt>
+                    <dd class="break-words whitespace-pre-wrap" data-latest="description">
+                      {latest.description === ''
+                        ? m.modules_item_conflict_empty()
+                        : latest.description}
+                    </dd>
+                    {#if isOwner}
+                      <dt class="text-muted-foreground">{m.modules_share_with_members()}</dt>
+                      <dd data-latest="visibility">
+                        {latest.visibility === 'workspace'
+                          ? m.modules_item_conflict_shared()
+                          : m.modules_item_conflict_not_shared()}
+                      </dd>
+                    {/if}
+                  </dl>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onclick={() => {
+                        fill(latest);
+                        document.getElementById('item-title')?.focus();
+                      }}>{m.modules_item_conflict_load()}</Button
+                    >
+                    <Button size="sm" disabled={saving} onclick={() => void submit(latest.version)}
+                      >{m.modules_item_conflict_save_mine()}</Button
+                    >
+                  </div>
+                </div>
+              {/if}
+            {:else}
+              {#if current.description !== ''}
+                <p class="whitespace-pre-wrap">{current.description}</p>
+              {/if}
+            {/if}
+            {#if mod !== undefined}
+              <!-- 머리: 묶음과 상관없이 늘 보이는 항목 프로필과 복제·템플릿(R7 A가 묶음을 정하지 않은 영역). -->
+              <ItemProfilePanel
+                item={view}
+                onprofile={(next: ItemProfileRead) => {
+                  if (next.itemId === currentItemId) profileRead = next;
+                }}
+                refresh={profileRefresh}
+                ondirty={(next: boolean) => (profileDirty = next)}
+                onrestore={() => (infoOpen = true)}
+                kind={mod.kind}
+                stays={staysOnThisItem}
+                onchanged={() => {
+                  reread(current.id, refresh);
+                }}
+              />
+            {/if}
+          </div>
+        </div>
+      </Collapsible.Content>
+    </Collapsible.Root>
     {#if formError !== undefined}
       <p class="text-sm text-destructive" role="alert">{formError}</p>
     {/if}
 
     {#if mod !== undefined}
-      <!-- 머리: 묶음과 상관없이 늘 보이는 항목 프로필과 복제·템플릿(R7 A가 묶음을 정하지 않은 영역). -->
-      <ItemProfilePanel
-        item={view}
-        kind={mod.kind}
-        stays={staysOnThisItem}
-        onchanged={() => {
-          reread(current.id, refresh);
-        }}
-      />
-      {#if workspace.access !== 'read'}
-        <div class="flex flex-wrap items-start gap-2">
-          <ItemCopy item={current} module={mod} stays={staysOnThisItem} />
-          {#if canEdit}
-            <Button size="sm" variant="outline" onclick={() => void toggleTemplate()}
-              >{current.is_template ? m.modules_template_unset() : m.modules_template_set()}</Button
-            >
-          {/if}
-        </div>
-      {/if}
-
       <!-- 묶음(D-121): 고른 묶음만 마운트한다. 다른 묶음으로 가면 그 묶음의 입력은 이탈 확인(D-125)을 거친다. -->
       <GroupSwitch
         label={m.modules_item_groups_label()}
