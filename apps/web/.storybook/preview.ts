@@ -13,7 +13,7 @@ import '../src/styles/app.css';
 
 // Let the document story provide a synthetic Yjs body in native ESM as well
 // as composeStories; the original functions remain available in other stories.
-sb.mock(import('../src/lib/features/documents/live.ts'), { spy: true });
+sb.mock('../src/lib/features/documents/live.ts', { spy: true });
 
 // 실제 서버로 갈 요청(같은 원점의 /api·/auth·/healthz, 다른 원점 전체)은 보내지 않고 실패시킨다. 데이터가 필요한
 // story는 `api`의 함수를 story 안에서 바꿔 끼운다(stories/fixtures). 막힌 요청은 콘솔 오류로 남겨 찾을 수 있게 한다.
