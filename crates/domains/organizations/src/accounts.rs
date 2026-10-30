@@ -31,6 +31,9 @@ pub struct Me {
     pub id: UserId,
     pub display_name: String,
     pub email: Option<String>,
+    /// 현재 계정의 서버 관리자 여부(D-112). SQL의 기존 판정을 그대로 보여 준다.
+    #[schema(read_only)]
+    pub is_server_admin: bool,
     /// 내 시간대(IANA 이름, D-50). 비었으면 아직 고르지 않음(화면이 브라우저 시간대를 쓴다). 본인에게만 보인다.
     pub time_zone: String,
     /// 표시 언어(D-81): `ko`·`en`, 비었으면 아직 고르지 않음.
@@ -58,6 +61,7 @@ pub async fn me(
     type MeRow = (
         String,
         Option<String>,
+        bool,
         String,
         String,
         String,
@@ -65,21 +69,32 @@ pub async fn me(
         String,
         Option<OrganizationId>,
     );
-    let (display_name, email, time_zone, locale, week_start, hour_cycle, theme, last_organization_id): MeRow =
-        sqlx::query_as(
-            "SELECT u.display_name, u.email, coalesce(s.time_zone, ''), coalesce(s.locale, ''),
-                coalesce(s.week_start, ''), coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system'), s.last_organization_id
+    let (
+        display_name,
+        email,
+        is_server_admin,
+        time_zone,
+        locale,
+        week_start,
+        hour_cycle,
+        theme,
+        last_organization_id,
+    ): MeRow = sqlx::query_as(
+        "SELECT u.display_name, u.email, fvoci.app_is_server_admin(),
+                coalesce(s.time_zone, ''), coalesce(s.locale, ''), coalesce(s.week_start, ''),
+                coalesce(s.hour_cycle, ''), coalesce(s.theme, 'system'), s.last_organization_id
          FROM users u LEFT JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1",
-        )
-        .bind(user)
-        .fetch_optional(tx.conn())
-        .await?
-        .ok_or(AppError::Unauthorized)?;
+    )
+    .bind(user)
+    .fetch_optional(tx.conn())
+    .await?
+    .ok_or(AppError::Unauthorized)?;
     tx.commit().await?;
     Ok(Json(Me {
         id: user,
         display_name,
         email,
+        is_server_admin,
         time_zone,
         locale,
         week_start,

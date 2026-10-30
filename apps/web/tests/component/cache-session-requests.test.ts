@@ -30,6 +30,7 @@ afterEach(() => {
 const signedIn: Me = {
   id: 'user-a',
   display_name: '이전 사용자',
+  is_server_admin: false,
   hour_cycle: '',
   locale: 'ko',
   time_zone: '',

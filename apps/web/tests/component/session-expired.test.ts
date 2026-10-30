@@ -87,7 +87,7 @@ describe('session expired mid-use', () => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id, display_name: '나', email: null, limits })
+          ? json(200, { id, display_name: '나', email: null, is_server_admin: false, limits })
           : json(404, { error: 'not_found' }),
       ),
     );
@@ -125,7 +125,7 @@ describe('session expired mid-use', () => {
     const me = (id: string) => (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id, display_name: '나', email: null, limits })
+          ? json(200, { id, display_name: '나', email: null, is_server_admin: false, limits })
           : json(404, { error: 'not_found' }),
       );
     render(FeedbackHost, { props: { reload } });
