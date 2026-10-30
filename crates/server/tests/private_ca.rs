@@ -55,8 +55,10 @@ async fn probe(url: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[tokio::test]
-async fn private_ca_requires_ssl_cert_file() -> Result<(), Box<dyn Error>> {
+async fn verify_ca_files(
+    test_name: &str,
+    cases: &[(Option<&str>, bool)],
+) -> Result<(), Box<dyn Error>> {
     // Process-local environment avoids changing trust for concurrent tests.
     if let Ok(url) = std::env::var("FVOCI_TLS_TEST_URL") {
         return probe(&url).await;
@@ -82,28 +84,45 @@ async fn private_ca_requires_ssl_cert_file() -> Result<(), Box<dyn Error>> {
         assert!(Instant::now() < deadline, "test TLS server did not listen");
         std::thread::sleep(Duration::from_millis(25));
     }
-    for trusted in [false, true] {
+    for &(certificate_file, trusted) in cases {
         let mut child = Command::new(std::env::current_exe()?);
         child
-            .args([
-                "--exact",
-                "private_ca_requires_ssl_cert_file",
-                "--nocapture",
-            ])
+            .args(["--exact", test_name, "--nocapture"])
             .env("FVOCI_TLS_TEST_URL", format!("https://{address}"))
             .env("FVOCI_TLS_TEST_TRUST", if trusted { "1" } else { "0" })
             .env_remove("SSL_CERT_FILE")
             .env_remove("SSL_CERT_DIR");
-        if trusted {
-            child.env("SSL_CERT_FILE", fixtures.join("ca.pem"));
+        if let Some(file) = certificate_file {
+            child.env("SSL_CERT_FILE", fixtures.join(file));
         }
         let output = child.output()?;
         assert!(
             output.status.success(),
-            "trust={trusted}: stdout={} stderr={}",
+            "certificate_file={certificate_file:?}, trust={trusted}: stdout={} stderr={}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     }
     Ok(())
+}
+
+#[tokio::test]
+async fn private_ca_requires_ssl_cert_file() -> Result<(), Box<dyn Error>> {
+    verify_ca_files(
+        "private_ca_requires_ssl_cert_file",
+        &[(None, false), (Some("ca.pem"), true)],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn private_ca_trusts_combined_bundle() -> Result<(), Box<dyn Error>> {
+    verify_ca_files(
+        "private_ca_trusts_combined_bundle",
+        &[
+            (Some("unrelated-ca.pem"), false),
+            (Some("combined-ca.pem"), true),
+        ],
+    )
+    .await
 }

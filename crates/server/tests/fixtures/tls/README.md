@@ -4,6 +4,8 @@ These certificates and the unencrypted server key are public test data only.
 Never use them outside tests. The CA private key is discarded after generation.
 `private_ca.rs` uses the existing OpenSSL CLI and the default reqwest client;
 each trust configuration runs in a separate process.
+The combined bundle places an unrelated CA before the test CA, checking that
+the client reads the whole PEM bundle. The unrelated CA alone must be rejected.
 
 Generated with the following commands from the repository root. The certificates
 last ten years; regenerate them together before they expire. The `tls-test` DNS
@@ -32,4 +34,14 @@ openssl x509 -req -sha256 -days 3650 -copy_extensions copy \
   -CAserial target/tls-test-fixture/ca.srl \
   -out crates/server/tests/fixtures/tls/server.pem
 rm target/tls-test-fixture/ca.key
+openssl req -x509 -newkey rsa:2048 -noenc -sha256 -days 3650 \
+  -subj '/CN=fvoci unrelated CA test only' \
+  -addext 'basicConstraints=critical,CA:TRUE' \
+  -addext 'keyUsage=critical,keyCertSign,cRLSign' \
+  -keyout target/tls-test-fixture/unrelated-ca.key \
+  -out crates/server/tests/fixtures/tls/unrelated-ca.pem
+cat crates/server/tests/fixtures/tls/unrelated-ca.pem \
+  crates/server/tests/fixtures/tls/ca.pem \
+  > crates/server/tests/fixtures/tls/combined-ca.pem
+rm target/tls-test-fixture/unrelated-ca.key
 ```
