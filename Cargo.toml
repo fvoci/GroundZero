@@ -66,10 +66,6 @@ codegen-units = 1
 # panic 금지는 Clippy 규칙(D-09)이 맡는다.
 panic = "unwind"
 
-# 첨부 PDF 파서의 코드 크기를 줄인다(#209 측정).
-[profile.release.package."lopdf"]
-opt-level = "z"
-
 # 품질 기준 D-09(docs/decisions/delivery.md#d-09). 선택 근거는 O-23 기록.
 [workspace.lints.rust]
 unsafe_code = "forbid"
