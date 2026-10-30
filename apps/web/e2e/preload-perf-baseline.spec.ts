@@ -35,6 +35,7 @@ if (measurementRoot !== undefined) {
       const screen = str(sample, 'screen');
       const requests = listField(sample, 'requests').map((request) => ({
         path: str(request, 'path'),
+        resource: str(request, 'resource'),
         start: num(request, 'start'),
         end: num(request, 'end'),
       }));
@@ -44,7 +45,10 @@ if (measurementRoot !== undefined) {
         if (result === undefined) throw new Error(`missing witness ${screen}: ${String(pattern)}`);
         return result;
       };
-      const root = pick(/^\/api\/me$/, 0);
+      // The HTML hint is an independent 'other' resource. Follow the app fetch,
+      // before later session rechecks, when proving the dependent session gate.
+      const root = requests.find((r) => r.path === '/api/me' && r.resource === 'fetch');
+      if (root === undefined) throw new Error(`missing app session witness: ${screen}`);
       const arms = [
         pick(/^\/api\/workspaces$/, root.end),
         pick(/^\/api\/me\/organizations$/, root.end),
