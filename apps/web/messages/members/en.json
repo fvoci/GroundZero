@@ -17,6 +17,8 @@
   "members_filter": "Search members by name or email",
   "members_filter_name": "Search members by name",
   "members_filter_empty": "No members match your search.",
+  "members_management_heading": "{workspace} · Workspace management",
+  "members_danger_zone": "Danger zone",
   "members_load_failed": "Couldn't load members.",
   "members_request_failed": "Couldn't complete the request.",
   "members_delete_failed": "Couldn't delete the workspace.",

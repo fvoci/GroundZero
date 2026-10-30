@@ -35,7 +35,7 @@
 
 <section class="flex min-w-0 flex-col gap-5" data-testid="management-screen">
   <h1 class="text-2xl font-semibold wrap-anywhere">{title}</h1>
-  <Tabs.Root {value} onValueChange={onchange} activationMode="manual" class="min-w-0">
+  <Tabs.Root bind:value={() => value, onchange} activationMode="manual" class="min-w-0">
     <div class="relative min-w-0">
       <div
         bind:this={scroller}

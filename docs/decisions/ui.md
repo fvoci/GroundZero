@@ -8,7 +8,7 @@
 - 다크 모드는 계정 설정이며 `.dark` 토큰으로만 정한다. 글자 4.5:1·초점 고리 3:1을 시험으로 지킨다(D-109).
 - 입력 칸은 `$lib/ui` 컴포넌트, 본문 열은 컨테이너 쿼리, 같은 줄 확인은 초점 이동 규칙, 상태 알림은 미리 그려 둔다(D-110).
 - 보기·묶음은 하위 경로(`/tasks/board`, `/t/:taskId`, 항목 묶음, 모듈 달력)이고 URL > 저장한 보기 > 세션이다. 항목은 종류별 첫 묶음과 공통 묶음(업무·문서·일정·기록)으로 나누고 고른 묶음만 그리며, 경로 없이 열면 세션 기억 → 종류별 기본 묶음으로 간다(묶음 선택에는 저장한 보기가 없다, D-121). 조직이 하나면 자동 선택하고 마지막 조직은 서버에 저장한다(D-121). 보기 전환은 단추 묶음이며 좁은 화면에서는 줄바꿈한다(D-121).
-- 조직 화면은 `/o/:org/members|invitations|workspaces|settings`, 서버 관리는 `/admin/organizations|admins`다. 서버 관리 경로는 샴 가5에서 구현됨. 각 기본 경로는 `members`·`organizations`로 바꾸며 탭 전환은 pushState여서 주소로 바로 열고 공유하고 탭 단위로 뒤로 갈 수 있다(D-121).
+- 공간 관리는 `/w/:ws/members|invitations|groups|settings`, 조직 화면은 `/o/:org/members|invitations|workspaces|settings`, 서버 관리는 `/admin/organizations|admins`다. 서버 관리 경로는 샴 가5에서 구현됨. 조직·서버 관리의 기본 경로는 `members`·`organizations`로 바꾸며 탭 전환은 pushState여서 주소로 바로 열고 공유하고 탭 단위로 뒤로 갈 수 있다(D-121).
 - 일반 완료는 토스트, 입력 오류는 필드 옆, 저장 실패는 화면 안 메시지, 연결은 닫을 수 있는 배너다(D-82).
 - 한국어·영어, IANA 시간대, 주 시작, 12/24시간은 계정에 보존하고 UTC 저장·사용자 시간대 표시다(D-50, D-81).
 - Storybook은 합성 데이터로 제품 컴포넌트를 보여 주며 Cloudflare Workers에 공개한다. 화면 스토리는 기본 하나와 375px·어두움·200% 글꼴을 합친 하나를 두고 부품 변형은 만들지 않는다(D-108). 접근성 lint 예외는 위치 한정이다(D-98).
@@ -62,6 +62,7 @@
   - 개정 2026-10-30: 조직 화면은 `/o/:org/members|invitations|workspaces|settings`이며 `/o/:org`은 `members`로 바꾼다. 서버 관리는 `/admin/organizations|admins`이며 `/admin`은 `organizations`로 바꾼다. 탭 전환은 pushState다. 주소로 바로 열고 공유할 수 있고 뒤로 가기가 탭 단위로 동작하기 때문이다. 기존 보기·필터 우선순위는 그대로다. 근거: 부조종사(사용자 위임)의 화면 설계(2026-10-30, [#245 issuecomment-6508656085](https://github.com/fvoci/GroundZero/issues/245#issuecomment-6508656085), D-131 (나) 위임).
 
   - 반영 단계: `/admin/*` 경로는 샴 가5에서 구현됨. 위 개정의 경로·기본 이동 규칙은 확정 요구사항이며 구현 단계와 구분한다.
+  - 개정 2026-10-30(나1): 공간 관리 경로는 `/w/:ws/members|invitations|groups|settings`이며 탭 전환은 pushState다. 주소로 바로 열고 탭 단위로 뒤로 갈 수 있으며 조직 화면과 같은 틀을 쓰기 때문이다. 기존 보기·필터 우선순위는 그대로다. 근거: 부조종사(사용자 위임)의 (나) 다듬기 설계(2026-10-30, [#245 issuecomment-6514838939](https://github.com/fvoci/GroundZero/issues/245#issuecomment-6514838939), D-131 (나) 위임).
 
 <a id="d-122"></a>
 

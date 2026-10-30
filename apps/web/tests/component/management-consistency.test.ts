@@ -330,7 +330,7 @@ it('shows the workspace total and filters only the member list without another r
   vi.mocked(api.members).mockResolvedValue({ ...view, can_manage_members: true, members });
   render(MembersScreen, { workspace, meId: me.userId, onchanged: () => undefined });
   const filter = await screen.findByRole('searchbox', { name: '이름·이메일로 멤버 검색' });
-  expect(screen.getByRole('heading', { name: '멤버 11명' })).toBeVisible();
+  expect(screen.getByRole('tab', { name: '멤버 11명' })).toBeVisible();
   const list = screen.getByTestId('member-list');
   await fireEvent.input(filter, { target: { value: '  PERSON8@EXAMPLE.TEST  ' } });
   expect(within(list).getAllByRole('listitem')).toHaveLength(1);
@@ -386,15 +386,19 @@ it.each([
     if (kind === 'organization') organizationView();
     else render(MembersScreen, { workspace, meId: me.userId, onchanged: () => undefined });
     const filter = await screen.findByRole('searchbox');
-    const status = screen.getByRole('status', { hidden: true });
+    const searchStatus = (): HTMLElement =>
+      kind === 'workspace'
+        ? screen.getByTestId('workspace-member-search-status')
+        : screen.getByRole('status', { hidden: true });
+    const status = searchStatus();
     expect(status).not.toHaveAttribute('hidden');
     expect(status.textContent).toBe('');
     await fireEvent.input(filter, { target: { value: '없는 이름' } });
-    expect(screen.getByRole('status', { hidden: true })).toBe(status);
+    expect(searchStatus()).toBe(status);
     expect(status).toHaveTextContent(empty);
     expect(status).toBeVisible();
     await fireEvent.input(filter, { target: { value: '연구자 8' } });
-    expect(screen.getByRole('status', { hidden: true })).toBe(status);
+    expect(searchStatus()).toBe(status);
     expect(status.textContent).toBe('');
   },
 );
@@ -408,6 +412,6 @@ it.each([0, 10])('does not show filters for %s members in either screen', async 
   vi.mocked(api.members).mockResolvedValue({ ...view, members: view.members.slice(0, count) });
   render(MembersScreen, { workspace, meId: me.userId, onchanged: () => undefined });
   await screen.findByTestId('member-list');
-  expect(screen.getByRole('heading', { name: `멤버 ${String(count)}명` })).toBeVisible();
+  expect(screen.getByRole('tab', { name: `멤버 ${String(count)}명` })).toBeVisible();
   expect(screen.queryByRole('searchbox')).toBeNull();
 });

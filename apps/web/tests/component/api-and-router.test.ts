@@ -20,7 +20,11 @@ describe('parseRoute', () => {
     expect(parseRoute('/notes')).toEqual({ name: 'notes' });
     expect(parseRoute('/shared')).toEqual({ name: 'shared' });
     expect(parseRoute(`/d/${id}`)).toEqual({ name: 'standalone-document', documentId: id });
-    expect(parseRoute(`/w/${ws}/members`)).toEqual({ name: 'members', workspaceId: ws });
+    expect(parseRoute(`/w/${ws}/members`)).toEqual({
+      name: 'members',
+      workspaceId: ws,
+      tab: 'members',
+    });
   });
 });
 

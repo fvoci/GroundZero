@@ -151,6 +151,7 @@ for (const [locale, role, cap] of [
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
     render(MembersScreen, { workspace, meId: me.userId, onchanged: () => undefined });
+    await fireEvent.click(screen.getByRole('button', { name: m.members_role_limits() }));
     expect(await screen.findByText(role)).toBeInTheDocument();
     expect(
       screen.getByText(

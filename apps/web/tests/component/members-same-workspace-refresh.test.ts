@@ -63,11 +63,12 @@ afterEach(() => {
 });
 
 /** 앱처럼 `onchanged`에서 같은 id의 새 워크스페이스 객체(이름 바뀜)를 넘긴다. */
-function renderWithAppRefresh(): void {
+function renderWithAppRefresh(tab: 'invitations' | 'groups' = 'invitations'): void {
   let refreshed = 0;
   const view = render(MembersScreen, {
     props: {
       workspace,
+      tab,
       meId: 'u1',
       onchanged: () => {
         refreshed += 1;
@@ -98,14 +99,14 @@ describe('members screen after a refresh of the same workspace', () => {
     expect(
       await screen.findByRole('heading', {
         level: 1,
-        name: m.members_heading({ workspace: '연구실 1' }),
+        name: m.members_management_heading({ workspace: '연구실 1' }),
       }),
     ).toBeInTheDocument();
     // 일반 완료는 토스트 한 번이고 화면 안 완료 문구는 없다(D-82). 같은 id의 갱신으로 다시 띄우지 않는다.
     expect(done).toHaveBeenCalledOnce();
     expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
     expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
-    expect(screen.getByTestId('workspace-member-search-status').textContent).toBe('');
+    expect(screen.getByTestId('workspace-management-loading-status').textContent).toBe('');
     expect(screen.getByLabelText('이메일')).toBe(email);
     // 첫 읽기 + 초대 뒤 다시 읽기. 같은 id의 갱신으로 또 읽지 않는다.
     expect(api.members).toHaveBeenCalledTimes(2);
@@ -117,7 +118,7 @@ describe('members screen after a refresh of the same workspace', () => {
       name: '조교',
       members: [],
     });
-    renderWithAppRefresh();
+    renderWithAppRefresh('groups');
     const name = await screen.findByLabelText(m.members_new_group_name());
     await submit(name, '조교');
     await waitFor(() => {
@@ -125,7 +126,7 @@ describe('members screen after a refresh of the same workspace', () => {
     });
     await screen.findByRole('heading', {
       level: 1,
-      name: m.members_heading({ workspace: '연구실 1' }),
+      name: m.members_management_heading({ workspace: '연구실 1' }),
     });
     expect(screen.getByLabelText(m.members_new_group_name())).toBe(name);
     expect(api.members).toHaveBeenCalledTimes(2);
@@ -134,7 +135,9 @@ describe('members screen after a refresh of the same workspace', () => {
   it('starts over when only the user changes on the same workspace', async () => {
     vi.spyOn(organizationsApi, 'invite').mockResolvedValue(invitation);
     const done = vi.spyOn(feedback, 'notifyDone');
-    render(MembersScreen, { props: { workspace, meId: 'u1', onchanged: () => undefined } });
+    render(MembersScreen, {
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
+    });
     const email = await screen.findByLabelText('이메일');
     await submit(email, 'kim@lab.example');
     await waitFor(() => {
@@ -156,7 +159,7 @@ describe('members screen after a refresh of the same workspace', () => {
     vi.spyOn(organizationsApi, 'invite').mockResolvedValue(invitation);
     const done = vi.spyOn(feedback, 'notifyDone');
     const view = render(MembersScreen, {
-      props: { workspace, meId: 'u1', onchanged: () => undefined },
+      props: { workspace, tab: 'invitations', meId: 'u1', onchanged: () => undefined },
     });
     const email = await screen.findByLabelText('이메일');
     await submit(email, 'kim@lab.example');

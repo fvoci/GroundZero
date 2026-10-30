@@ -751,6 +751,7 @@
             {:else if route.name === 'members'}
               <MembersScreen
                 workspace={currentWorkspace}
+                tab={route.tab}
                 meId={signedIn.me.id}
                 onchanged={() => void reloadWorkspaces()}
               />

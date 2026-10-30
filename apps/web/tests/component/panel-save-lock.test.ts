@@ -508,15 +508,15 @@ describe('members screen', () => {
     vi.spyOn(api, 'groups').mockResolvedValue([]);
     vi.spyOn(api, 'invitations').mockResolvedValue([]);
   });
-  const mount = (): void => {
-    render(MembersScreen, { workspace, meId: 'user-a', onchanged: () => undefined });
+  const mount = (tab: 'invitations' | 'groups'): void => {
+    render(MembersScreen, { workspace, tab, meId: 'user-a', onchanged: () => undefined });
   };
 
   it('locks the invite form and role select without offering old persistent email input', async () => {
     otherTabDraft('members-invite:ws-1', { email: 'other@example.test', role: 'admin' });
     const invite = held<never>();
     vi.spyOn(organizationsApi, 'invite').mockReturnValue(invite.promise);
-    mount();
+    mount('invitations');
     await fireEvent.input(await screen.findByLabelText(m.members_email()), {
       target: { value: 'new@example.test' },
     });
@@ -541,7 +541,7 @@ describe('members screen', () => {
     otherTabDraft('members-group:ws-1', '다른 탭 그룹');
     const create = held<never>();
     vi.spyOn(api, 'createGroup').mockReturnValue(create.promise);
-    mount();
+    mount('groups');
     await fireEvent.input(await screen.findByLabelText(m.members_new_group_name()), {
       target: { value: '새 그룹' },
     });

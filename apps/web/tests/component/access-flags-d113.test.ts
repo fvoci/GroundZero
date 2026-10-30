@@ -58,7 +58,12 @@ describe('permission flags come from app_access (D-113)', () => {
     const members = vi.spyOn(api, 'members').mockResolvedValue(view(false));
     const invitations = vi.spyOn(api, 'invitations').mockResolvedValue([]);
     const { unmount } = render(MembersScreen, {
-      props: { workspace: workspace('read'), meId: 'u1', onchanged: () => undefined },
+      props: {
+        workspace: workspace('read'),
+        tab: 'invitations',
+        meId: 'u1',
+        onchanged: () => undefined,
+      },
     });
     await screen.findByText('나');
     expect(screen.queryByRole('heading', { name: m.members_invite_heading() })).toBeNull();
@@ -67,7 +72,12 @@ describe('permission flags come from app_access (D-113)', () => {
 
     members.mockResolvedValue(view(true));
     render(MembersScreen, {
-      props: { workspace: workspace('owner'), meId: 'u1', onchanged: () => undefined },
+      props: {
+        workspace: workspace('owner'),
+        tab: 'invitations',
+        meId: 'u1',
+        onchanged: () => undefined,
+      },
     });
     expect(
       await screen.findByRole('heading', { name: m.members_invite_heading() }),

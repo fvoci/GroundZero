@@ -10,12 +10,15 @@
   import { invitationEmailError } from '$lib/features/organizations/fields';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
-  import { router } from '$lib/router.svelte';
+  import { membersPath, router, type WorkspaceManagementTab } from '$lib/router.svelte';
+  import ManagementFrame from '$lib/features/common/ManagementFrame.svelte';
+  import * as Collapsible from '$lib/ui/collapsible';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
   import { Input } from '$lib/ui/input';
   import { Label } from '$lib/ui/label';
+  import { Skeleton } from '$lib/ui/skeleton';
   import { me } from '$lib/me.svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -27,12 +30,13 @@
 
   interface Props {
     workspace: Workspace;
+    tab?: WorkspaceManagementTab;
     /** 현재 사용자 id. 인계 수락 버튼 표시에 쓴다. */
     meId: string;
     onchanged: () => void;
   }
 
-  const { workspace, meId, onchanged }: Props = $props();
+  const { workspace, tab = 'members', meId, onchanged }: Props = $props();
 
   let view = $state<MembersView | undefined>(undefined);
   let viewWorkspaceId = $state<string>();
@@ -40,14 +44,6 @@
   let groups = $state<Group[]>([]);
   let memberFilter = $state('');
   const memberQuery = $derived(memberFilter.trim().toLocaleLowerCase());
-  const filteredMembers = $derived(
-    view?.members.filter(
-      (member) =>
-        member.display_name.toLocaleLowerCase().includes(memberQuery) ||
-        (view?.can_manage_members &&
-          (member.email?.toLocaleLowerCase().includes(memberQuery) ?? false)),
-    ) ?? [],
-  );
   let error = $state<string | undefined>(undefined);
   let inviteEmail = $state('');
   let inviteRole = $state<Role>('member');
@@ -61,6 +57,7 @@
   let deleteName = $state('');
   let deleteError = $state<string | undefined>(undefined);
   let deleting = $state(false);
+  let roleLimitsOpen = $state(false);
 
   async function deleteWorkspace(): Promise<void> {
     if (deleting) return;
@@ -86,7 +83,57 @@
   );
 
   // 서버의 권한 판정은 읽어 온 공간에만 쓴다. 전환 직후 reset 효과 전에도 새 공간에 넘기지 않는다(D-113).
-  const isAdmin = $derived(viewWorkspaceId === workspace.id && view?.can_manage_members === true);
+  const currentView = $derived(viewWorkspaceId === workspace.id ? view : undefined);
+  const filteredMembers = $derived(
+    currentView?.members.filter(
+      (member) =>
+        member.display_name.toLocaleLowerCase().includes(memberQuery) ||
+        (currentView.can_manage_members &&
+          (member.email?.toLocaleLowerCase().includes(memberQuery) ?? false)),
+    ) ?? [],
+  );
+  const isAdmin = $derived(currentView?.can_manage_members === true);
+  const tabs = $derived([
+    {
+      value: 'members',
+      label:
+        currentView === undefined
+          ? m.organizations_members()
+          : m.organizations_member_count({ count: currentView.members.length }),
+    },
+    ...(isAdmin ? [{ value: 'invitations', label: m.members_invite_heading() }] : []),
+    { value: 'groups', label: m.members_groups_heading() },
+    ...(isAdmin || currentView?.i_am_owner === true
+      ? [{ value: 'settings', label: m.organizations_settings() }]
+      : []),
+  ]);
+  // 읽기 전에는 주소의 탭을 유지하고, 권한을 읽은 뒤 볼 수 없는 탭만 멤버 탭으로 돌린다.
+  const activeTab = $derived(
+    currentView === undefined || tabs.some((entry) => entry.value === tab) ? tab : 'members',
+  );
+  $effect(() => {
+    if (currentView !== undefined && activeTab !== tab) router.replace(membersPath(workspace.id));
+  });
+  let confirmationTab: WorkspaceManagementTab | undefined;
+  $effect(() => {
+    // 이력 이동으로 탭을 떠나면 확인창과 실행 대상을 함께 버린다(SR-258-1).
+    const nextTab = tab;
+    untrack(() => {
+      if (confirmationTab !== nextTab) {
+        confirmationTab = nextTab;
+        confirm = undefined;
+      }
+    });
+  });
+  function changeTab(value: string): void {
+    if (
+      value === 'members' ||
+      value === 'invitations' ||
+      value === 'groups' ||
+      value === 'settings'
+    )
+      router.navigate(membersPath(workspace.id, value));
+  }
 
   const inviteDraft = createFormDraft<{ email: string; role: Role }>({
     preserve: false,
@@ -298,372 +345,412 @@
     grouping = false;
     error = undefined;
     loadError = undefined;
+    confirm = undefined;
+    roleLimitsOpen = false;
     void load(id);
   }
 </script>
 
-<section class="flex flex-col gap-8" aria-labelledby="members-heading">
-  <h1 id="members-heading" class="text-xl font-semibold">
-    {m.members_heading({ workspace: workspace.name })}
-  </h1>
+<!-- 탭 본문과 뼈대가 바뀌어도 상태 알림 노드는 유지한다(D-110, SR-258-2). -->
+<p
+  role="status"
+  aria-live="polite"
+  data-testid="workspace-management-loading-status"
+  class="sr-only empty:hidden"
+>
+  {#if currentView === undefined && loadError === undefined}{m.app_loading()}{/if}
+</p>
 
-  <section
-    aria-labelledby="role-limits-heading"
-    class="flex flex-col gap-2 rounded border p-3 text-sm"
-  >
-    <h2 id="role-limits-heading" class="font-semibold">{m.members_role_limits()}</h2>
-    <dl class="grid grid-cols-2 gap-2">
-      {#each DISPLAY_ROLES as role (role)}
-        <dt>{roleLabel(role)}</dt>
-        <dd>
-          {role === 'owner' || role === 'admin' || role === 'member'
-            ? m.members_limit_write()
-            : m.members_limit_read()}
-        </dd>
-      {/each}
-    </dl>
-    <p>{m.members_outside_member_hint()}</p>
-  </section>
-
-  {#if loadError !== undefined}
-    <!-- 멤버·그룹·초대 어느 읽기가 실패해도(목록이 이미 있어도) 다시 읽을 수 있다. -->
-    <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
-      {loadError}
-      <Button
-        size="sm"
-        variant="outline"
-        class="ml-2"
-        onclick={() => {
-          loadError = undefined;
-          void load();
-        }}>{m.common_retry()}</Button
-      >
-    </p>
-  {/if}
-  {#if error !== undefined}
-    <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
-      {error}
-    </p>
-  {/if}
-
-  {#if view === undefined}
-    <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->
-    {#if loadError === undefined}
-      <p aria-live="polite">{m.app_loading()}</p>
-    {/if}
-  {:else}
-    {@const v = view}
-    <h2 class="font-semibold">{m.organizations_member_count({ count: v.members.length })}</h2>
-    {#if v.members.length > 10}
-      <div class="flex min-w-0 flex-col gap-1">
-        <Label for="workspace-member-filter"
-          >{v.can_manage_members ? m.members_filter() : m.members_filter_name()}</Label
+<ManagementFrame
+  title={m.members_management_heading({ workspace: workspace.name })}
+  {tabs}
+  value={activeTab}
+  onchange={changeTab}
+>
+  <div class="flex min-w-0 flex-col gap-8">
+    {#if activeTab === 'members'}
+      <Collapsible.Root bind:open={roleLimitsOpen} class="rounded border p-3 text-sm">
+        <Collapsible.Trigger
+          class="rounded font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-        <Input id="workspace-member-filter" type="search" bind:value={memberFilter} />
-      </div>
-    {/if}
-    <p
-      role="status"
-      data-testid="workspace-member-search-status"
-      class="text-sm text-muted-foreground empty:hidden"
-    >
-      {v.members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
-    </p>
-    <ul class="flex flex-col divide-y rounded border" data-testid="member-list">
-      {#each filteredMembers as member (member.user_id)}
-        <li class="flex flex-wrap items-center gap-3 px-3 py-2">
-          <span class="font-medium">{member.display_name}</span>
-          {#if member.is_owner}<Badge variant="secondary">{m.members_owner()}</Badge>{/if}
-          {#if v.pending_owner === member.user_id}<Badge variant="outline"
-              >{m.members_pending_owner()}</Badge
-            >{/if}
-          {#if member.email !== null}
-            <span class="text-sm text-muted-foreground">{member.email}</span>
-          {/if}
-          <span class="ml-auto flex min-w-0 flex-wrap items-center gap-2">
-            {#if isAdmin && !member.is_owner}
-              <RoleSelect
-                value={member.role}
-                label={m.members_role_of({ name: member.display_name })}
-                onchange={(role: Role) =>
-                  void act(
-                    () => api.setRole(workspace.id, member.user_id, role),
-                    m.members_role_changed({ name: member.display_name, role: roleLabel(role) }),
-                  )}
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                onclick={() =>
-                  (confirm = {
-                    title: m.members_remove_title({ name: member.display_name }),
-                    body: m.members_remove_body(),
-                    run: () => act(() => api.removeMember(workspace.id, member.user_id)),
-                  })}>{m.members_remove()}</Button
-              >
-              {#if v.i_am_owner}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() =>
-                    (confirm = {
-                      title: m.members_transfer_title({ name: member.display_name }),
-                      body: m.members_transfer_body(),
-                      run: () => act(() => api.offerOwnership(workspace.id, member.user_id)),
-                    })}>{m.members_transfer()}</Button
-                >
-              {/if}
-            {:else}
-              <span class="text-sm">{roleLabel(member.role)}</span>
-            {/if}
-          </span>
-        </li>
-      {/each}
-    </ul>
-
-    {@const pendingOwner = v.pending_owner ?? null}
-    {#if pendingOwner !== null}
-      <div
-        class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
-        role="region"
-        aria-label={m.members_transfer()}
-      >
-        <span>{m.members_transfer_offered({ name: nameOf(pendingOwner) })}</span>
-        {#if v.i_am_owner}
-          <Button
-            size="sm"
-            variant="ghost"
-            onclick={() => void act(() => api.cancelOwnershipOffer(workspace.id))}
-            >{m.members_cancel_offer()}</Button
-          >
-        {/if}
-        {#if pendingOwner === meId}
-          <Button
-            size="sm"
-            onclick={() =>
-              void act(() => api.acceptOwnership(workspace.id), m.members_became_owner())}
-            >{m.members_accept_ownership()}</Button
-          >
-        {/if}
-      </div>
-    {/if}
-
-    {#if isAdmin}
-      <section class="flex flex-col gap-3" aria-labelledby="invite-heading">
-        <h2 id="invite-heading" class="font-semibold">{m.members_invite_heading()}</h2>
-        <p class="text-sm text-muted-foreground">
-          {m.members_invite_hint()}
-        </p>
-        <!-- 초대·그룹 만들기는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공 안내와 실패 알림을
-             숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
-        <fieldset class="min-w-0" disabled={inviting}>
-          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
-            <div class="flex min-w-0 flex-1 basis-60 flex-col gap-1">
-              <Label for="invite-email">{m.members_email()}</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                bind:value={inviteEmail}
-                autocomplete="off"
-                required
-                aria-invalid={inviteError !== undefined}
-                aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
-              />
-            </div>
-            <RoleSelect
-              value={inviteRole}
-              label={m.members_invite_role()}
-              disabled={inviting}
-              onchange={(r: Role) => (inviteRole = r)}
-            />
-            <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
-              >{m.members_invite()}</Button
-            >
-            {#if inviteError !== undefined}
-              <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
-                {inviteError}
-              </p>
-            {/if}
-          </form>
-        </fieldset>
-        {#if invitations.length > 0}
-          <ul class="flex flex-col gap-1" data-testid="invitation-list">
-            {#each invitations as inv (inv.id)}
-              <li class="flex items-center gap-2 text-sm">
-                <span>{inv.email}</span>
-                <Badge variant="outline">{roleLabel(inv.role)}</Badge>
-                <span class="text-muted-foreground"
-                  >{m.members_invitation_expires({
-                    date: formatInstant(inv.expires_at, { dateStyle: 'medium' }),
-                  })}</span
-                >
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onclick={() => void act(() => api.revokeInvitation(inv.id))}
-                  >{m.members_revoke()}</Button
-                >
-              </li>
+          {m.members_role_limits()}
+        </Collapsible.Trigger>
+        <Collapsible.Content class="flex flex-col gap-2 pt-3">
+          <dl class="grid grid-cols-2 gap-2">
+            {#each DISPLAY_ROLES as role (role)}
+              <dt>{roleLabel(role)}</dt>
+              <dd>
+                {role === 'owner' || role === 'admin' || role === 'member'
+                  ? m.members_limit_write()
+                  : m.members_limit_read()}
+              </dd>
             {/each}
-          </ul>
-        {/if}
-      </section>
+          </dl>
+          <p>{m.members_outside_member_hint()}</p>
+        </Collapsible.Content>
+      </Collapsible.Root>
     {/if}
 
-    <section class="flex flex-col gap-3" aria-labelledby="groups-heading">
-      <h2 id="groups-heading" class="font-semibold">{m.members_groups_heading()}</h2>
-      {#if groups.length === 0}
-        <p class="text-sm text-muted-foreground">{m.members_no_groups()}</p>
+    {#if loadError !== undefined}
+      <!-- 멤버·그룹·초대 어느 읽기가 실패해도(목록이 이미 있어도) 다시 읽을 수 있다. -->
+      <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
+        {loadError}
+        <Button
+          size="sm"
+          variant="outline"
+          class="ml-2"
+          onclick={() => {
+            loadError = undefined;
+            void load();
+          }}>{m.common_retry()}</Button
+        >
+      </p>
+    {/if}
+    {#if error !== undefined}
+      <p role="alert" class="rounded border border-destructive/40 bg-destructive/10 px-3 py-2">
+        {error}
+      </p>
+    {/if}
+
+    {#if currentView === undefined}
+      <!-- 첫 읽기가 실패하면 "불러오는 중"을 남기지 않는다(위 오류에 다시 시도가 있다). -->
+      {#if loadError === undefined}
+        <div aria-label={m.app_loading()} aria-busy="true" class="grid gap-3">
+          <Skeleton class="h-8 w-1/2" />
+          <Skeleton class="h-48 w-full" />
+        </div>
       {/if}
-      {#each groups as group (group.id)}
-        <div class="flex flex-col gap-2 rounded border px-3 py-2">
-          <div class="flex items-center gap-2">
-            <span class="font-medium">{group.name}</span>
-            <span class="text-sm text-muted-foreground"
-              >{m.members_group_size({ count: group.members.length })}</span
+    {:else}
+      {@const v = currentView}
+      {#if activeTab === 'members'}
+        {#if v.members.length > 10}
+          <div class="flex min-w-0 flex-col gap-1">
+            <Label for="workspace-member-filter"
+              >{v.can_manage_members ? m.members_filter() : m.members_filter_name()}</Label
             >
-            {#if isAdmin}
-              <Button
-                size="sm"
-                variant="ghost"
-                class="ml-auto"
-                onclick={() =>
-                  (confirm = {
-                    title: m.members_delete_group_title({ name: group.name }),
-                    body: m.members_delete_group_body(),
-                    run: () => act(() => api.deleteGroup(group.id)),
-                  })}>{m.members_delete_group()}</Button
-              >
-            {/if}
+            <Input id="workspace-member-filter" type="search" bind:value={memberFilter} />
           </div>
-          <ul class="flex flex-wrap gap-2">
-            {#each v.members as member (member.user_id)}
-              {@const inGroup = group.members.includes(member.user_id)}
-              {#if isAdmin || inGroup}
-                <li>
+        {/if}
+        <p
+          role="status"
+          data-testid="workspace-member-search-status"
+          class="text-sm text-muted-foreground empty:hidden"
+        >
+          {v.members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
+        </p>
+        <ul class="flex flex-col divide-y rounded border" data-testid="member-list">
+          {#each filteredMembers as member (member.user_id)}
+            <li class="flex flex-wrap items-center gap-3 px-3 py-2">
+              <span class="font-medium">{member.display_name}</span>
+              {#if member.is_owner}<Badge variant="secondary">{m.members_owner()}</Badge>{/if}
+              {#if v.pending_owner === member.user_id}<Badge variant="outline"
+                  >{m.members_pending_owner()}</Badge
+                >{/if}
+              {#if member.email !== null}
+                <span class="text-sm text-muted-foreground">{member.email}</span>
+              {/if}
+              <span class="ml-auto flex min-w-0 flex-wrap items-center gap-2">
+                {#if isAdmin && !member.is_owner}
+                  <RoleSelect
+                    value={member.role}
+                    label={m.members_role_of({ name: member.display_name })}
+                    onchange={(role: Role) =>
+                      void act(
+                        () => api.setRole(workspace.id, member.user_id, role),
+                        m.members_role_changed({
+                          name: member.display_name,
+                          role: roleLabel(role),
+                        }),
+                      )}
+                  />
                   <Button
                     size="sm"
-                    variant={inGroup ? 'secondary' : 'outline'}
-                    aria-pressed={inGroup}
-                    disabled={!isAdmin}
+                    variant="ghost"
                     onclick={() =>
-                      void act(() => api.setGroupMember(group.id, member.user_id, !inGroup))}
-                    >{member.display_name}</Button
+                      (confirm = {
+                        title: m.members_remove_title({ name: member.display_name }),
+                        body: m.members_remove_body(),
+                        run: () => act(() => api.removeMember(workspace.id, member.user_id)),
+                      })}>{m.members_remove()}</Button
+                  >
+                  {#if v.i_am_owner}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onclick={() =>
+                        (confirm = {
+                          title: m.members_transfer_title({ name: member.display_name }),
+                          body: m.members_transfer_body(),
+                          run: () => act(() => api.offerOwnership(workspace.id, member.user_id)),
+                        })}>{m.members_transfer()}</Button
+                    >
+                  {/if}
+                {:else}
+                  <span class="text-sm">{roleLabel(member.role)}</span>
+                {/if}
+              </span>
+            </li>
+          {/each}
+        </ul>
+
+        {@const pendingOwner = v.pending_owner ?? null}
+        {#if pendingOwner !== null}
+          <div
+            class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+            role="region"
+            aria-label={m.members_transfer()}
+          >
+            <span>{m.members_transfer_offered({ name: nameOf(pendingOwner) })}</span>
+            {#if v.i_am_owner}
+              <Button
+                size="sm"
+                variant="ghost"
+                onclick={() => void act(() => api.cancelOwnershipOffer(workspace.id))}
+                >{m.members_cancel_offer()}</Button
+              >
+            {/if}
+            {#if pendingOwner === meId}
+              <Button
+                size="sm"
+                onclick={() =>
+                  void act(() => api.acceptOwnership(workspace.id), m.members_became_owner())}
+                >{m.members_accept_ownership()}</Button
+              >
+            {/if}
+          </div>
+        {/if}
+      {/if}
+
+      {#if activeTab === 'invitations' && isAdmin}
+        <section class="flex flex-col gap-3" aria-labelledby="invite-heading">
+          <h2 id="invite-heading" class="font-semibold">{m.members_invite_heading()}</h2>
+          <p class="text-sm text-muted-foreground">
+            {m.members_invite_hint()}
+          </p>
+          <!-- 초대·그룹 만들기는 보내는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공 안내와 실패 알림을
+             숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
+          <fieldset class="min-w-0" disabled={inviting}>
+            <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
+              <div class="flex min-w-0 flex-1 basis-60 flex-col gap-1">
+                <Label for="invite-email">{m.members_email()}</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  bind:value={inviteEmail}
+                  autocomplete="off"
+                  required
+                  aria-invalid={inviteError !== undefined}
+                  aria-describedby={inviteError !== undefined ? 'invite-email-error' : undefined}
+                />
+              </div>
+              <RoleSelect
+                value={inviteRole}
+                label={m.members_invite_role()}
+                disabled={inviting}
+                onchange={(r: Role) => (inviteRole = r)}
+              />
+              <Button type="submit" disabled={inviting || inviteEmail.trim() === ''}
+                >{m.members_invite()}</Button
+              >
+              {#if inviteError !== undefined}
+                <p id="invite-email-error" role="alert" class="w-full text-sm text-destructive">
+                  {inviteError}
+                </p>
+              {/if}
+            </form>
+          </fieldset>
+          {#if invitations.length > 0}
+            <ul class="flex flex-col gap-1" data-testid="invitation-list">
+              {#each invitations as inv (inv.id)}
+                <li class="flex items-center gap-2 text-sm">
+                  <span>{inv.email}</span>
+                  <Badge variant="outline">{roleLabel(inv.role)}</Badge>
+                  <span class="text-muted-foreground"
+                    >{m.members_invitation_expires({
+                      date: formatInstant(inv.expires_at, { dateStyle: 'medium' }),
+                    })}</span
+                  >
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => void act(() => api.revokeInvitation(inv.id))}
+                    >{m.members_revoke()}</Button
                   >
                 </li>
-              {/if}
-            {/each}
-          </ul>
-        </div>
-      {/each}
-      {#if isAdmin}
-        {#each groupDraft.offers as offer (offer.key)}
-          <fieldset class="contents" disabled={grouping}>
-            <FormDraftOffer
-              onrestore={() => {
-                groupDraft.restore(offer);
-              }}
-              ondiscard={() => {
-                groupDraft.discard(offer);
-              }}
-            />
-          </fieldset>
-        {/each}
-        <fieldset class="min-w-0" disabled={grouping}>
-          <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void createGroup(e)}>
-            <div class="flex flex-1 flex-col gap-1">
-              <Label for="group-name">{m.members_new_group_name()}</Label>
-              <Input
-                id="group-name"
-                bind:value={groupName}
-                maxlength={200}
-                autocomplete="off"
-                aria-invalid={groupError !== undefined}
-                aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
-              />
-            </div>
-            <Button type="submit" disabled={grouping || groupName.trim() === ''}
-              >{m.members_create_group()}</Button
-            >
-            {#if groupError !== undefined}
-              <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
-                {groupError}
-              </p>
-            {/if}
-          </form>
-        </fieldset>
+              {/each}
+            </ul>
+          {/if}
+        </section>
       {/if}
-    </section>
 
-    {#if !v.i_am_owner}
-      <section class="flex flex-col gap-2" aria-labelledby="leave-heading">
-        <h2 id="leave-heading" class="font-semibold">{m.members_leave_heading()}</h2>
-        <div>
-          <Button
-            variant="outline"
-            onclick={() =>
-              (confirm = {
-                title: m.members_leave_title({ workspace: workspace.name }),
-                body: m.members_leave_body(),
-                run: async () => {
-                  await api.leave(workspace.id);
-                  onchanged();
-                  router.navigate('/');
-                },
-              })}>{m.members_leave()}</Button
-          >
-        </div>
-      </section>
-    {/if}
+      {#if activeTab === 'groups'}
+        <section class="flex flex-col gap-3" aria-labelledby="groups-heading">
+          <h2 id="groups-heading" class="font-semibold">{m.members_groups_heading()}</h2>
+          {#if groups.length === 0}
+            <p class="text-sm text-muted-foreground">{m.members_no_groups()}</p>
+          {/if}
+          {#each groups as group (group.id)}
+            <div class="flex flex-col gap-2 rounded border px-3 py-2">
+              <div class="flex items-center gap-2">
+                <span class="font-medium">{group.name}</span>
+                <span class="text-sm text-muted-foreground"
+                  >{m.members_group_size({ count: group.members.length })}</span
+                >
+                {#if isAdmin}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="ml-auto"
+                    onclick={() =>
+                      (confirm = {
+                        title: m.members_delete_group_title({ name: group.name }),
+                        body: m.members_delete_group_body(),
+                        run: () => act(() => api.deleteGroup(group.id)),
+                      })}>{m.members_delete_group()}</Button
+                  >
+                {/if}
+              </div>
+              <ul class="flex flex-wrap gap-2">
+                {#each v.members as member (member.user_id)}
+                  {@const inGroup = group.members.includes(member.user_id)}
+                  {#if isAdmin || inGroup}
+                    <li class="min-w-0 max-w-full">
+                      <Button
+                        size="sm"
+                        class="h-auto max-w-full whitespace-normal wrap-anywhere"
+                        variant={inGroup ? 'secondary' : 'outline'}
+                        aria-pressed={inGroup}
+                        disabled={!isAdmin}
+                        onclick={() =>
+                          void act(() => api.setGroupMember(group.id, member.user_id, !inGroup))}
+                        >{member.display_name}</Button
+                      >
+                    </li>
+                  {/if}
+                {/each}
+              </ul>
+            </div>
+          {/each}
+          {#if isAdmin}
+            {#each groupDraft.offers as offer (offer.key)}
+              <fieldset class="contents" disabled={grouping}>
+                <FormDraftOffer
+                  onrestore={() => {
+                    groupDraft.restore(offer);
+                  }}
+                  ondiscard={() => {
+                    groupDraft.discard(offer);
+                  }}
+                />
+              </fieldset>
+            {/each}
+            <fieldset class="min-w-0" disabled={grouping}>
+              <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void createGroup(e)}>
+                <div class="flex flex-1 flex-col gap-1">
+                  <Label for="group-name">{m.members_new_group_name()}</Label>
+                  <Input
+                    id="group-name"
+                    bind:value={groupName}
+                    maxlength={200}
+                    autocomplete="off"
+                    aria-invalid={groupError !== undefined}
+                    aria-describedby={groupError !== undefined ? 'group-name-error' : undefined}
+                  />
+                </div>
+                <Button type="submit" disabled={grouping || groupName.trim() === ''}
+                  >{m.members_create_group()}</Button
+                >
+                {#if groupError !== undefined}
+                  <p id="group-name-error" role="alert" class="w-full text-sm text-destructive">
+                    {groupError}
+                  </p>
+                {/if}
+              </form>
+            </fieldset>
+          {/if}
+        </section>
 
-    {#if isAdmin}
-      <WorkspaceLimits workspaceId={workspace.id} organizationId={workspace.organization_id} />
-      <section class="flex flex-col gap-2" aria-labelledby="export-heading">
-        <h2 id="export-heading" class="font-semibold">{m.members_export_heading()}</h2>
-        <p class="text-sm text-muted-foreground">
-          {m.members_export_hint()}
-        </p>
-        <div>
-          <Button
-            variant="outline"
-            href={`/api/workspaces/${encodeURIComponent(workspace.id)}/export`}
-            >{m.members_export_zip()}</Button
-          >
-        </div>
-      </section>
-    {/if}
-
-    {#if v.i_am_owner}
-      <section class="flex flex-col gap-2" aria-labelledby="delete-heading">
-        <h2 id="delete-heading" class="font-semibold">{m.members_delete_heading()}</h2>
-        <p class="text-sm text-muted-foreground">
-          {m.members_delete_hint()}
-        </p>
-        <form
-          class="flex flex-wrap items-end gap-2"
-          onsubmit={(e: SubmitEvent) => {
-            e.preventDefault();
-            void deleteWorkspace();
-          }}
-        >
-          <div class="flex flex-1 flex-col gap-1">
-            <Label for="delete-name">{m.members_delete_name_label({ name: workspace.name })}</Label>
-            <Input id="delete-name" bind:value={deleteName} autocomplete="off" />
-          </div>
-          <Button
-            type="submit"
-            variant="destructive"
-            disabled={deleting || deleteName.trim() !== workspace.name.trim()}
-            >{m.members_delete()}</Button
-          >
-        </form>
-        {#if deleteError !== undefined}
-          <p role="alert" class="text-sm text-destructive">{deleteError}</p>
+        {#if !v.i_am_owner}
+          <section class="flex flex-col gap-2" aria-labelledby="leave-heading">
+            <h2 id="leave-heading" class="font-semibold">{m.members_leave_heading()}</h2>
+            <div>
+              <Button
+                variant="outline"
+                onclick={() =>
+                  (confirm = {
+                    title: m.members_leave_title({ workspace: workspace.name }),
+                    body: m.members_leave_body(),
+                    run: async () => {
+                      await api.leave(workspace.id);
+                      onchanged();
+                      router.navigate('/');
+                    },
+                  })}>{m.members_leave()}</Button
+              >
+            </div>
+          </section>
         {/if}
-      </section>
+      {/if}
+
+      {#if activeTab === 'settings'}
+        {#if isAdmin}
+          <WorkspaceLimits workspaceId={workspace.id} organizationId={workspace.organization_id} />
+          <section class="flex flex-col gap-2" aria-labelledby="export-heading">
+            <h2 id="export-heading" class="font-semibold">{m.members_export_heading()}</h2>
+            <p class="text-sm text-muted-foreground">
+              {m.members_export_hint()}
+            </p>
+            <div>
+              <Button
+                variant="outline"
+                href={`/api/workspaces/${encodeURIComponent(workspace.id)}/export`}
+                >{m.members_export_zip()}</Button
+              >
+            </div>
+          </section>
+        {/if}
+
+        {#if v.i_am_owner}
+          <section
+            class="flex flex-col gap-3 rounded border border-destructive/40 p-3"
+            aria-labelledby="danger-heading"
+          >
+            <h2 id="danger-heading" class="font-semibold">{m.members_danger_zone()}</h2>
+            <section class="flex flex-col gap-2" aria-labelledby="delete-heading">
+              <h3 id="delete-heading" class="font-semibold">{m.members_delete_heading()}</h3>
+              <p class="text-sm text-muted-foreground">
+                {m.members_delete_hint()}
+              </p>
+              <form
+                class="flex flex-wrap items-end gap-2"
+                onsubmit={(e: SubmitEvent) => {
+                  e.preventDefault();
+                  void deleteWorkspace();
+                }}
+              >
+                <div class="flex flex-1 flex-col gap-1">
+                  <Label for="delete-name"
+                    >{m.members_delete_name_label({ name: workspace.name })}</Label
+                  >
+                  <Input id="delete-name" bind:value={deleteName} autocomplete="off" />
+                </div>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deleting || deleteName.trim() !== workspace.name.trim()}
+                  >{m.members_delete()}</Button
+                >
+              </form>
+              {#if deleteError !== undefined}
+                <p role="alert" class="text-sm text-destructive">{deleteError}</p>
+              {/if}
+            </section>
+          </section>
+        {/if}
+      {/if}
     {/if}
-  {/if}
-</section>
+  </div>
+</ManagementFrame>
 
 <Dialog.Root
   open={confirm !== undefined}
