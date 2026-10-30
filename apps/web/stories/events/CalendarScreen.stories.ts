@@ -26,22 +26,27 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function expectMonthTasks(
+  canvasElement: HTMLElement,
+  testId: 'calendar-grid' | 'calendar-agenda',
+): Promise<void> {
+  const calendar = within(await within(canvasElement).findByTestId(testId));
+  // 기준 달에 걸친 업무만 확인한다(다음 달 마감 업무도 같은 seed 응답에 있다).
+  const month = TODAY.slice(0, 7);
+  for (const task of calendarView().tasks.filter(
+    (task) =>
+      task.start_date?.startsWith(month) === true || task.due_date?.startsWith(month) === true,
+  )) {
+    await expect(
+      await calendar.findAllByRole('button', { name: (name) => name.includes(task.title) }),
+    ).not.toHaveLength(0);
+  }
+}
+
 export const Default: Story = {
-  play: async ({ canvasElement }) => {
-    const agenda = within(await within(canvasElement).findByTestId('calendar-agenda'));
-    // 기준 달에 걸친 업무만 확인한다(다음 달 마감 업무도 같은 seed 응답에 있다).
-    const month = TODAY.slice(0, 7);
-    for (const task of calendarView().tasks.filter(
-      (task) =>
-        task.start_date?.startsWith(month) === true || task.due_date?.startsWith(month) === true,
-    )) {
-      await expect(
-        await agenda.findAllByRole('button', { name: (name) => name.includes(task.title) }),
-      ).not.toHaveLength(0);
-    }
-  },
+  play: ({ canvasElement }) => expectMonthTasks(canvasElement, 'calendar-grid'),
 };
 export const NarrowDarkLargeText: Story = {
-  ...Default,
   globals: { theme: 'dark', fontScale: '200', viewport: { value: 'narrow375' } },
+  play: ({ canvasElement }) => expectMonthTasks(canvasElement, 'calendar-agenda'),
 };
