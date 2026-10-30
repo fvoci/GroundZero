@@ -15,11 +15,14 @@ declare global {
 
 interface SampleRequest {
   method: string;
+  url: string;
   path: string;
   query: Record<string, string>;
   resource: string;
   start: number;
   end: number;
+  protocolStart: number;
+  protocolEnd: number;
   requestBytes: number;
   responseBytes: number;
   requestId: string | null;
@@ -139,11 +142,14 @@ if (measurementRoot !== undefined) {
           const url = new URL(request.url());
           requests.push({
             method: request.method(),
+            url: url.href,
             path: url.pathname,
             query: Object.fromEntries(url.searchParams),
             resource: request.resourceType(),
             start: timing.startTime,
             end: timing.startTime + timing.responseEnd,
+            protocolStart: timing.startTime,
+            protocolEnd: timing.startTime + timing.responseEnd,
             requestBytes: sizes.requestHeadersSize + sizes.requestBodySize,
             responseBytes: sizes.responseHeadersSize + sizes.responseBodySize,
             requestId: await response.headerValue('x-request-id'),
@@ -174,6 +180,39 @@ if (measurementRoot !== undefined) {
         await Promise.all(pending);
         expect(failures).toEqual([]);
         expect(requests.filter((request) => request.status >= 400)).toEqual([]);
+        // Use one document's performance clock for API dependency boundaries.
+        // Keep protocol timing separately: it can place a sequential child's start
+        // slightly before its parent's reported responseEnd (observed: 0.593ms).
+        const browserTimings = await page.evaluate(() =>
+          performance
+            .getEntriesByType('resource')
+            .flatMap((entry) =>
+              entry instanceof PerformanceResourceTiming
+                ? [
+                    {
+                      url: entry.name,
+                      start: performance.timeOrigin + entry.startTime,
+                      end: performance.timeOrigin + entry.responseEnd,
+                    },
+                  ]
+                : [],
+            ),
+        );
+        const byUrl = new Map<string, { start: number; end: number }[]>();
+        for (const timing of browserTimings.sort((a, b) => a.start - b.start)) {
+          const entries = byUrl.get(timing.url) ?? [];
+          entries.push(timing);
+          byUrl.set(timing.url, entries);
+        }
+        for (const request of requests
+          .filter((row) => row.path.startsWith('/api/'))
+          .sort((a, b) => a.protocolStart - b.protocolStart)) {
+          const timing = byUrl.get(request.url)?.shift();
+          if (timing === undefined)
+            throw new Error(`missing browser resource timing: ${request.path}`);
+          request.start = timing.start;
+          request.end = timing.end;
+        }
         const meaningfulMs = await page.evaluate(() => window.perfMeaningful);
         const result = {
           screen: screen.name,
