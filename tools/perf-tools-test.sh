@@ -122,18 +122,24 @@ check dirty-tsconfig-base dirty_web_inputs tsconfig.base.json
 sharing_lifecycle() {
   local scenario=$1
   local case_root="$out/sharing-$scenario"
-  mkdir -p "$case_root/tools" "$case_root/crates/server/tests" "$case_root/crates/db/migrations" "$case_root/target/release"
+  mkdir -p "$case_root/tools" "$case_root/crates/server/tests" "$case_root/crates/db/migrations"
   cp tools/measure-240.sh tools/perf240-run.sh tools/perf240-summary.jq "$case_root/tools/"
   cp crates/server/tests/perf240.rs "$case_root/crates/server/tests/"
   cp crates/db/migrations/*.sql "$case_root/crates/db/migrations/"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$case_root/target/release/fvoci-server"
-  chmod +x "$case_root/target/release/fvoci-server"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$case_root/server-stub"
+  if [[ "$scenario" != fresh-target ]]; then
+    mkdir -p "$case_root/target/release"
+    cp "$case_root/server-stub" "$case_root/target/release/fvoci-server"
+    chmod +x "$case_root/target/release/fvoci-server"
+  fi
+  local lock_path="$case_root/measure.lock"
+  if [[ "$scenario" == missing-lock-dir || "$scenario" == lock-error ]]; then lock_path="$case_root/new-cache/measure.lock"; fi
   local status=0
-  bash -euo pipefail -s -- "$case_root" "$scenario" "$(git rev-parse HEAD)" > "$case_root/run.log" 2>&1 <<'SHARING' || status=$?
-  export test_sharing_root=$1 test_sharing_scenario=$2 test_sharing_head=$3
+  bash -euo pipefail -s -- "$case_root" "$scenario" "$(git rev-parse HEAD)" "$lock_path" > "$case_root/run.log" 2>&1 <<'SHARING' || status=$?
+  export test_sharing_root=$1 test_sharing_scenario=$2 test_sharing_head=$3 test_sharing_lock=$4
   # Inject only the lock pathname into an isolated copy; HOME is never changed.
   script_source=$(cat "$test_sharing_root/tools/measure-240.sh")
-  script_source=${script_source/'measure_lock="$HOME/.cache/fvoci-measure.lock"'/'measure_lock="$test_sharing_root/measure.lock"'}
+  script_source=${script_source/'measure_lock="$HOME/.cache/fvoci-measure.lock"'/'measure_lock="$test_sharing_lock"'}
   git() {
     case "$*" in
       'rev-parse --show-toplevel') printf '%s\n' "$test_sharing_root" ;;
@@ -157,7 +163,7 @@ sharing_lifecycle() {
       if [[ -f "$test_sharing_root/wait-observed" ]]; then waits=$(wc -l < "$test_sharing_root/wait-observed"); fi
       if [[ "$builds" -ne "$waits" ]]; then touch "$test_sharing_root/premature-build"; fi
       printf 'wait\n' >> "$test_sharing_root/wait-observed"
-      rm "$test_sharing_root/measure.lock"
+      rm "$test_sharing_lock"
       rm "$test_sharing_root/deferred-build-lock"
     else
       command sleep "$@"
@@ -165,9 +171,20 @@ sharing_lifecycle() {
   }
   cargo() {
     printf '%s\n' "$*" >> "$test_sharing_root/cargo.log"
+    if [[ " $* " == *' build --release '* ]]; then
+      mkdir -p "$test_sharing_root/target/release"
+      cp "$test_sharing_root/server-stub" "$test_sharing_root/target/release/fvoci-server"
+      chmod +x "$test_sharing_root/target/release/fvoci-server"
+    fi
     if [[ "$test_sharing_scenario" == wait && $(wc -l < "$test_sharing_root/cargo.log") -lt 3 ]]; then
-      (set -o noclobber; printf 'another measurement\n' > "$test_sharing_root/measure.lock")
+      (set -o noclobber; printf 'another measurement\n' > "$test_sharing_lock")
       touch "$test_sharing_root/deferred-build-lock"
+    fi
+    if [[ "$test_sharing_scenario" == lock-error && $(wc -l < "$test_sharing_root/cargo.log") -eq 3 ]]; then
+      local lock_dir
+      lock_dir=$(dirname "$test_sharing_lock")
+      if [[ -d "$lock_dir" ]]; then rmdir "$lock_dir"; fi
+      printf 'not a directory\n' > "$lock_dir"
     fi
     if [[ " $* " == *' --test perf240 shares '* ]]; then
       if [[ "$test_sharing_scenario" == contamination ]]; then
@@ -180,6 +197,7 @@ sharing_lifecycle() {
         done
         rm "$test_sharing_root/build-running"
       fi
+      if [[ "$test_sharing_scenario" == missing-owned-lock ]]; then rm "$test_sharing_lock"; fi
       printf '[]\n' > "$FVOCI_MEASURE_DIR/sharing.json"
     fi
   }
@@ -193,10 +211,11 @@ sharing_lifecycle() {
   ps() { return 0; }
   export -f git docker sleep cargo pgrep ps
   if [[ "$test_sharing_scenario" == wait ]]; then
-    (set -o noclobber; printf 'other measurement\n' > "$test_sharing_root/measure.lock")
+    (set -o noclobber; printf 'other measurement\n' > "$test_sharing_lock")
     touch "$test_sharing_root/deferred-build-lock"
   fi
-  bash -c "$script_source"
+  if [[ "$test_sharing_scenario" == invalid-lock ]]; then mkdir "$test_sharing_lock"; fi
+  timeout 10 bash -c "$script_source"
 SHARING
   case "$scenario" in
     cleanup) test "$status" -eq 23 || return 1 ;;
@@ -204,9 +223,15 @@ SHARING
     contamination)
       test "$status" -eq 1 || return 1
       grep -F 'compiler or node build overlapped sharing measurements' "$case_root/run.log" || return 1 ;;
-    clean|wait) test "$status" -eq 0 || return 1 ;;
+    invalid-lock|lock-error) test "$status" -eq 1 || return 1 ;;
+    clean|wait|fresh-target|missing-lock-dir|missing-owned-lock) test "$status" -eq 0 || return 1 ;;
   esac
-  test ! -e "$case_root/measure.lock" || return 1
+  if [[ "$scenario" == invalid-lock ]]; then
+    test -d "$lock_path" || return 1
+  else
+    test ! -e "$lock_path" || return 1
+  fi
+  if [[ "$scenario" == missing-lock-dir ]]; then test -d "$(dirname "$lock_path")" || return 1; fi
   if [[ "$scenario" == wait ]]; then
     test -f "$case_root/wait-observed" && test ! -e "$case_root/premature-build" || return 1
     test "$(wc -l < "$case_root/wait-observed")" -eq 3 || return 1
@@ -217,4 +242,9 @@ check sharing-cleanup-failure sharing_lifecycle cleanup
 check sharing-prior-failure sharing_lifecycle prior-failure
 check sharing-waits-before-build sharing_lifecycle wait
 check sharing-rejects-overlapping-build sharing_lifecycle contamination
+check sharing-fresh-target sharing_lifecycle fresh-target
+check sharing-missing-lock-directory sharing_lifecycle missing-lock-dir
+check sharing-invalid-lock sharing_lifecycle invalid-lock
+check sharing-lock-creation-error sharing_lifecycle lock-error
+check sharing-missing-owned-lock sharing_lifecycle missing-owned-lock
 test "$failures" -eq 0

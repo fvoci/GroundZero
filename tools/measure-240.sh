@@ -8,9 +8,11 @@ for key in "${!FVOCI_@}" "${!DATABASE_@}"; do
 done
 root=$(git rev-parse --show-toplevel)
 cd "$root"
+mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf240-XXXXXX")
 project="fvoci-perf240-$$"
 measure_lock="$HOME/.cache/fvoci-measure.lock"
+mkdir -p "$(dirname "$measure_lock")"
 owns_measure_lock=false
 cat > "$out/postgres.yaml" <<'YAML'
 services:
@@ -31,7 +33,7 @@ cleanup() {
   trap - EXIT
   stop_monitor
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || down_status=$?
-  if "$owns_measure_lock"; then rm "$measure_lock" || unlock_status=$?; fi
+  if "$owns_measure_lock"; then rm -f "$measure_lock" || unlock_status=$?; fi
   if (( down_status != 0 )); then
     printf 'FAIL Compose cleanup (exit %s); see %s/cleanup.log\n' "$down_status" "$out" >&2
     if (( status == 0 )); then status=$down_status; fi
@@ -50,7 +52,13 @@ sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
 # Build the embedded migrations and both test binaries before sampling. This
 # command is sufficient on its own; it never reuses an unverified server binary.
 wait_for_measurement() {
-  while [[ -e "$measure_lock" ]]; do sleep 2; done
+  while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do
+    if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
+      printf 'FAIL invalid measurement lock path: %s\n' "$measure_lock" >&2
+      return 1
+    fi
+    sleep 2
+  done
 }
 wait_for_measurement
 cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
@@ -58,8 +66,20 @@ wait_for_measurement
 cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
 wait_for_measurement
 cargo test --release --locked -p fvoci-server --test perf240 --no-run > "$out/build-shares.log" 2>&1
-until (set -o noclobber; printf '%s\n' "$project" > "$measure_lock") 2>/dev/null; do sleep 2; done
-owns_measure_lock=true
+while true; do
+  wait_for_measurement
+  if (set -o noclobber; : > "$measure_lock") 2> "$out/lock-error.log"; then
+    # Own the marker before writing diagnostics so a write failure still unlocks.
+    owns_measure_lock=true
+    printf '%s\n' "$project" > "$measure_lock"
+    break
+  fi
+  if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
+    cat "$out/lock-error.log" >&2
+    printf 'FAIL measurement lock acquisition: %s\n' "$measure_lock" >&2
+    exit 1
+  fi
+done
 "${compose[@]}" up -d --wait postgres meilisearch > "$out/compose.log" 2>&1
 port=$("${compose[@]}" port postgres 5432)
 search_port=$("${compose[@]}" port meilisearch 7700)
