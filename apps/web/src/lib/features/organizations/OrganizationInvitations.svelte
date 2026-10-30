@@ -33,6 +33,7 @@
   let busy = $state(false);
   let revoking = $state<string>();
   let disposed = false;
+  const current = (): boolean => !disposed;
   let seq = 0;
   const now = new SvelteDate();
   const draft = createFormDraft<{ email: string; role: OrgRole }>({
@@ -65,18 +66,22 @@
     };
   });
 
-  async function load(): Promise<void> {
+  async function load(): Promise<OrganizationInvitation[] | undefined> {
     const mine = ++seq;
     loadError = '';
     try {
       const list = await organizationsApi.invitations(organizationId);
-      if (!disposed && mine === seq) invitations = list;
+      if (!disposed && mine === seq) {
+        invitations = list;
+        return list;
+      }
     } catch (e: unknown) {
       if (!disposed && mine === seq) {
         if (organizationUnavailable(e)) onunavailable();
         else loadError = organizationError(e);
       }
     }
+    return undefined;
   }
   async function invite(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -117,7 +122,17 @@
       document.getElementById('organization-invitations-heading')?.focus();
     } catch (e: unknown) {
       if (!disposed) {
-        if (organizationUnavailable(e)) onunavailable();
+        if (e instanceof ApiError && e.status === 404) {
+          invitations = invitations?.filter((invitation) => invitation.id !== id);
+          await tick();
+          if (!current()) return;
+          document.getElementById('organization-invitations-heading')?.focus();
+          const refreshed = await load();
+          if (refreshed !== undefined && current()) {
+            if (refreshed.some((invitation) => invitation.id === id)) error = organizationError(e);
+            else notifyDone(m.organizations_revoked());
+          }
+        } else if (organizationUnavailable(e)) onunavailable();
         else error = organizationError(e);
       }
     } finally {

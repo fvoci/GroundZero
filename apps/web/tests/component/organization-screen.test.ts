@@ -75,9 +75,62 @@ it('confirms self demotion with the loss of management and joined roles', async 
   await fireEvent.click(screen.getByRole('menuitem', { name: '멤버로 바꾸기' }));
   const dialog = await screen.findByRole('dialog');
   expect(dialog).toHaveTextContent(
-    "관리 탭을 더 볼 수 없습니다. '관리자로 참여'로 받은 공간 역할은 참여 전으로 돌아갑니다(D-112).",
+    "관리 탭을 더 볼 수 없습니다. '관리자로 참여'로 받은 공간 역할은 참여 전으로 돌아갑니다.",
   );
   expect(within(dialog).getByRole('button', { name: '멤버로 바꾸기' })).toBeEnabled();
+});
+
+it.each([
+  {
+    locale: 'ko',
+    actions: '둘째 관리자 동작',
+    demote: '멤버로 바꾸기',
+    body: "둘째 관리자님은 조직 관리 탭을 더 볼 수 없습니다. '관리자로 참여'로 받은 공간 역할은 참여 전으로 돌아갑니다.",
+  },
+  {
+    locale: 'en',
+    actions: 'Actions for 둘째 관리자',
+    demote: 'Change to member',
+    body: "둘째 관리자 will lose access to organization management tabs. Workspace roles received through 'Join as administrator' will revert to their previous roles.",
+  },
+] as const)(
+  'confirms another administrator demotion in $locale before sending',
+  async ({ locale, actions, demote, body }) => {
+    await setLocale(locale, { reload: false });
+    vi.mocked(organizationsApi.members).mockResolvedValue([
+      ...members,
+      { ...firstMember, user_id: 'other', display_name: '둘째 관리자' },
+    ]);
+    const setRole = vi.spyOn(organizationsApi, 'setRole').mockResolvedValue(undefined);
+    view();
+    await fireEvent.click(await screen.findByRole('button', { name: actions }));
+    await fireEvent.click(screen.getByRole('menuitem', { name: demote }));
+    expect(setRole).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(body);
+    await fireEvent.click(within(dialog).getByRole('button', { name: demote }));
+    await waitFor(() => {
+      expect(setRole).toHaveBeenCalledExactlyOnceWith(id, 'other', 'member');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: actions })).toHaveFocus();
+    });
+  },
+);
+
+it('promotes a member directly without a confirmation', async () => {
+  vi.mocked(organizationsApi.members).mockResolvedValue([
+    ...members,
+    { ...firstMember, user_id: 'target', display_name: '조직 멤버', role: 'member' },
+  ]);
+  const setRole = vi.spyOn(organizationsApi, 'setRole').mockResolvedValue(undefined);
+  view();
+  await fireEvent.click(await screen.findByRole('button', { name: '조직 멤버 동작' }));
+  await fireEvent.click(screen.getByRole('menuitem', { name: '관리자로 바꾸기' }));
+  await waitFor(() => {
+    expect(setRole).toHaveBeenCalledExactlyOnceWith(id, 'target', 'admin');
+  });
+  expect(screen.queryByRole('dialog')).toBeNull();
 });
 
 it.each(['취소', '닫기'])(
@@ -135,7 +188,7 @@ it.each([
           ? new Response(
               JSON.stringify({
                 error: 'invalid_state',
-                message: '진행 중인 편집을 마친 뒤 다시 시도하세요',
+                message: 'finish the active edit and retry',
               }),
               { status: 409 },
             )
@@ -152,7 +205,7 @@ it.each([
     await fireEvent.click(within(dialog).getByRole('button', { name: '내보내기' }));
     await waitFor(() =>
       expect(within(dialog).getByRole('alert')).toHaveTextContent(
-        '진행 중인 편집을 마친 뒤 다시 시도하세요',
+        '작업을 마치지 못했습니다. 지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.',
       ),
     );
     expect(within(dialog).getByRole('button', { name: '내보내기' })).toBeEnabled();
@@ -166,7 +219,7 @@ it('keeps invitation input on conflict and maps email errors to the input', asyn
       Promise.resolve(
         init?.method === 'POST'
           ? new Response(
-              JSON.stringify({ error: 'invalid_state', message: '이미 초대를 보냈습니다' }),
+              JSON.stringify({ error: 'invalid_state', message: 'an invitation already exists' }),
               { status: 409 },
             )
           : new Response('[]'),
@@ -177,7 +230,9 @@ it('keeps invitation input on conflict and maps email errors to the input', asyn
   const email = await screen.findByRole('textbox', { name: '이메일' });
   await fireEvent.input(email, { target: { value: 'invite@example.test' } });
   await fireEvent.click(screen.getByRole('button', { name: '초대 보내기' }));
-  await screen.findByText('이미 초대를 보냈습니다');
+  await screen.findByText(
+    '작업을 마치지 못했습니다. 지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.',
+  );
   expect(email).toHaveValue('invite@example.test');
   fetch.mockResolvedValue(
     new Response(
@@ -290,6 +345,38 @@ const workspace = {
   my_role: null,
 };
 
+it.each(['member', 'readonly', 'admin', null] as const)(
+  'shows workspace open and join actions for role %s and retains the member count on promotion',
+  async (role) => {
+    vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([{ ...workspace, my_role: role }]);
+    const join = vi.spyOn(organizationsApi, 'joinAsAdmin').mockResolvedValue(undefined);
+    view('workspaces');
+    const name = await screen.findByText(workspace.name);
+    const row = name.closest('li');
+    if (row === null) throw new Error('missing workspace row');
+    const scope = within(row);
+    if (role === null) expect(scope.queryByRole('link', { name: '열기' })).toBeNull();
+    else expect(scope.getByRole('link', { name: '열기' })).toBeInTheDocument();
+    if (role === 'admin') {
+      expect(scope.queryByRole('button', { name: '관리자로 참여' })).toBeNull();
+      return;
+    }
+    await fireEvent.click(scope.getByRole('button', { name: '관리자로 참여' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('이 공간의 모든 문서와 기록을 볼 수 있게 됩니다.');
+    expect(dialog).toHaveTextContent('참여한 사실은 감사로그에 남습니다.');
+    expect(dialog).toHaveTextContent('조직 관리자에서 내려가면 이 역할은 참여 전으로 돌아갑니다.');
+    expect(join).not.toHaveBeenCalled();
+    await fireEvent.click(within(dialog).getByRole('button', { name: '관리자로 참여' }));
+    await waitFor(() => {
+      expect(scope.queryByRole('button', { name: '관리자로 참여' })).toBeNull();
+    });
+    expect(scope.getByRole('link', { name: '열기' })).toBeInTheDocument();
+    expect(row).toHaveTextContent(role === null ? '멤버 3명' : '멤버 2명');
+    expect(join).toHaveBeenCalledExactlyOnceWith(id, workspace.id);
+  },
+);
+
 it('joins only after confirmation and turns the row into an open link', async () => {
   vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([workspace]);
   const join = vi.spyOn(organizationsApi, 'joinAsAdmin').mockResolvedValue(undefined);
@@ -304,20 +391,24 @@ it('joins only after confirmation and turns the row into an open link', async ()
   expect(screen.queryByRole('button', { name: '관리자로 참여' })).toBeNull();
 });
 
-it('excludes self from ownership recipients and preserves a rejected selection', async () => {
-  vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([workspace]);
+it('excludes self and the owner from ownership recipients, explains eligibility before rejection and preserves a rejected selection', async () => {
+  vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([{ ...workspace, owner_id: 'owner' }]);
   vi.mocked(organizationsApi.members).mockResolvedValue([
     ...members,
     { ...firstMember, user_id: 'target', display_name: '받을 멤버', role: 'member' },
+    { ...firstMember, user_id: 'owner', display_name: '현재 소유자', role: 'member' },
   ]);
   const offer = vi
     .spyOn(organizationsApi, 'offerOwnership')
-    .mockRejectedValue(new ApiError(409, 'invalid_state', 'not a workspace member'));
+    .mockRejectedValue(new ApiError(400, 'bad_request', 'the recipient must be another member'));
   view('workspaces');
   await fireEvent.click(await screen.findByRole('button', { name: '소유권 이전 제안' }));
   await screen.findByRole('option', { name: /받을 멤버/ });
   expect(screen.queryByRole('option', { name: /첫 관리자/ })).toBeNull();
+  expect(screen.queryByRole('option', { name: /현재 소유자/ })).toBeNull();
   const recipient = screen.getByRole('combobox', { name: '받을 사람' });
+  expect(recipient).toHaveAccessibleDescription('이 공간의 멤버에게만 제안할 수 있습니다');
+  expect(recipient).toHaveAttribute('aria-invalid', 'false');
   await fireEvent.change(recipient, { target: { value: 'target' } });
   await fireEvent.click(screen.getByRole('button', { name: '제안 보내기' }));
   await screen.findByText('이 공간의 멤버에게만 제안할 수 있습니다');
@@ -326,16 +417,141 @@ it('excludes self from ownership recipients and preserves a rejected selection',
   expect(offer).toHaveBeenCalledExactlyOnceWith(id, workspace.id, 'target');
 });
 
+it.each([
+  new ApiError(400, 'bad_request', 'unrelated invalid input'),
+  new ApiError(409, 'invalid_state', 'unrelated state conflict'),
+  new ApiError(409, 'account_changed', 'account changed'),
+])('keeps a non-recipient ownership error in the dialog: %s', async (failure) => {
+  vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([{ ...workspace, owner_id: 'owner' }]);
+  vi.mocked(organizationsApi.members).mockResolvedValue([
+    ...members,
+    { ...firstMember, user_id: 'target', display_name: '받을 멤버', role: 'member' },
+  ]);
+  vi.spyOn(organizationsApi, 'offerOwnership').mockRejectedValue(failure);
+  view('workspaces');
+  await fireEvent.click(await screen.findByRole('button', { name: '소유권 이전 제안' }));
+  await screen.findByRole('option', { name: /받을 멤버/ });
+  const recipient = screen.getByRole('combobox', { name: '받을 사람' });
+  await fireEvent.change(recipient, { target: { value: 'target' } });
+  await fireEvent.click(screen.getByRole('button', { name: '제안 보내기' }));
+  const dialog = screen.getByRole('dialog');
+  const expectedReason =
+    failure.code === 'account_changed'
+      ? '이 창을 연 계정이 아닌 다른 계정으로 로그인돼 있어 서버가 받지 않았습니다. 지금 계정으로 다시 읽습니다.'
+      : failure.status === 400
+        ? '입력한 값을 확인해 주세요.'
+        : '지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.';
+  await waitFor(() => {
+    expect(
+      within(dialog)
+        .getAllByRole('alert')
+        .some((alert) => alert.textContent === `작업을 마치지 못했습니다. ${expectedReason}`),
+    ).toBe(true);
+  });
+  expect(recipient).toHaveAttribute('aria-invalid', 'false');
+  expect(recipient).toHaveValue('target');
+});
+
+const pendingInvitation = {
+  id: 'closed-invitation',
+  email: 'closed@example.test',
+  role: 'member' as const,
+  expires_at: '2099-12-31T00:00:00Z',
+};
+
+it('removes an already-closed invitation on 404, refreshes the list and preserves the form', async () => {
+  const invitations = vi
+    .spyOn(organizationsApi, 'invitations')
+    .mockResolvedValueOnce([pendingInvitation])
+    .mockResolvedValue([]);
+  vi.spyOn(api, 'revokeInvitation').mockRejectedValue(
+    new ApiError(404, 'not_found', 'invitation not found'),
+  );
+  view('invitations');
+  const email = await screen.findByRole('textbox', { name: '이메일' });
+  await fireEvent.input(email, { target: { value: 'draft@example.test' } });
+  await fireEvent.click(
+    await screen.findByRole('button', { name: 'closed@example.test 초대 철회' }),
+  );
+  await waitFor(() => {
+    expect(invitations).toHaveBeenCalledTimes(2);
+  });
+  expect(screen.queryByText('closed@example.test')).toBeNull();
+  expect(screen.queryByText('이 조직을 볼 수 없습니다')).toBeNull();
+  expect(screen.getAllByRole('tab')).toHaveLength(4);
+  expect(email).toHaveValue('draft@example.test');
+});
+
+it.each([403, 404])(
+  'only leaves the organization when an invitation 404 is followed by a list %s',
+  async (status) => {
+    const invitations = vi
+      .spyOn(organizationsApi, 'invitations')
+      .mockResolvedValueOnce([pendingInvitation])
+      .mockRejectedValue(
+        new ApiError(status, status === 403 ? 'forbidden' : 'not_found', 'no access'),
+      );
+    vi.spyOn(api, 'revokeInvitation').mockRejectedValue(
+      new ApiError(404, 'not_found', 'invitation not found'),
+    );
+    view('invitations');
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'closed@example.test 초대 철회' }),
+    );
+    await screen.findByText('이 조직을 볼 수 없습니다');
+    expect(invitations).toHaveBeenCalledTimes(2);
+  },
+);
+
+it('keeps the invitation screen and retry when the 404 refresh fails at the server', async () => {
+  const invitations = vi
+    .spyOn(organizationsApi, 'invitations')
+    .mockResolvedValueOnce([pendingInvitation])
+    .mockRejectedValue(new ApiError(500, 'internal', '목록을 다시 읽지 못했습니다'));
+  vi.spyOn(api, 'revokeInvitation').mockRejectedValue(
+    new ApiError(404, 'not_found', 'invitation not found'),
+  );
+  view('invitations');
+  await fireEvent.click(
+    await screen.findByRole('button', { name: 'closed@example.test 초대 철회' }),
+  );
+  await screen.findByText('목록을 다시 읽지 못했습니다');
+  expect(invitations).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText('closed@example.test')).toBeNull();
+  expect(screen.getByRole('button', { name: '다시 시도' })).toBeEnabled();
+  expect(screen.getAllByRole('tab')).toHaveLength(4);
+});
+
+it('keeps a revoke conflict beside its invitation without a refresh', async () => {
+  const invitations = vi
+    .spyOn(organizationsApi, 'invitations')
+    .mockResolvedValue([pendingInvitation]);
+  vi.spyOn(api, 'revokeInvitation').mockRejectedValue(
+    new ApiError(409, 'invalid_state', 'invitation is being changed'),
+  );
+  view('invitations');
+  await fireEvent.click(
+    await screen.findByRole('button', { name: 'closed@example.test 초대 철회' }),
+  );
+  await screen.findByText(
+    '작업을 마치지 못했습니다. 지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.',
+  );
+  expect(screen.getByText('closed@example.test')).toBeInTheDocument();
+  expect(invitations).toHaveBeenCalledOnce();
+});
+
 it('restores directly and keeps a retention conflict beside the list', async () => {
   vi.spyOn(organizationsApi, 'workspaces').mockResolvedValue([
     { ...workspace, deleted_at: organization.created_at },
   ]);
   vi.spyOn(organizationsApi, 'restoreWorkspace').mockRejectedValue(
-    new ApiError(409, 'invalid_state', '보존 기간이 지났습니다'),
+    new ApiError(409, 'invalid_state', 'the retention period has expired'),
   );
   view('workspaces');
   await fireEvent.click(await screen.findByRole('button', { name: '복원' }));
-  await screen.findByText('보존 기간이 지났습니다');
+  await screen.findByText(
+    '작업을 마치지 못했습니다. 지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.',
+  );
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByRole('button', { name: '복원' })).toBeEnabled();
 });
@@ -343,14 +559,16 @@ it('restores directly and keeps a retention conflict beside the list', async () 
 it('converts file units to bytes, preserves input on 409 and guards tab departure', async () => {
   const settings = vi
     .spyOn(organizationsApi, 'settings')
-    .mockRejectedValue(new ApiError(409, 'invalid_state', '설정을 다시 확인하세요'));
+    .mockRejectedValue(new ApiError(409, 'invalid_state', 'settings have changed'));
   view('settings');
   await screen.findByRole('textbox', { name: '이름' });
   await fireEvent.click(screen.getByRole('checkbox', { name: '파일 하나 최대 크기 설정 안 함' }));
   const size = screen.getByRole('textbox', { name: '파일 하나 최대 크기' });
   await fireEvent.input(size, { target: { value: '1.5' } });
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-  await screen.findByText('설정을 다시 확인하세요');
+  await screen.findByText(
+    '작업을 마치지 못했습니다. 지금 상태에서는 할 수 없습니다. 새로고침한 뒤 다시 시도해 주세요.',
+  );
   expect(size).toHaveValue('1.5');
   expect(settings).toHaveBeenCalledExactlyOnceWith(id, { max_file_bytes: 1572864 });
   router.navigate(organizationPath(id));
@@ -364,7 +582,7 @@ it('maps settings 400 fields and rejects a blank name before sending', async () 
   const settings = vi
     .spyOn(organizationsApi, 'settings')
     .mockRejectedValue(
-      new ApiError(400, 'bad_request', '이름이 너무 깁니다', undefined, undefined, 'name'),
+      new ApiError(400, 'bad_request', 'the name is too long', undefined, undefined, 'name'),
     );
   view('settings');
   const name = await screen.findByRole('textbox', { name: '이름' });
@@ -375,7 +593,9 @@ it('maps settings 400 fields and rejects a blank name before sending', async () 
   await fireEvent.input(name, { target: { value: '새 조직' } });
   await fireEvent.click(screen.getByRole('button', { name: '저장' }));
   await waitFor(() => {
-    expect(name).toHaveAccessibleDescription('이름이 너무 깁니다');
+    expect(name).toHaveAccessibleDescription(
+      '작업을 마치지 못했습니다. 입력한 값을 확인해 주세요.',
+    );
   });
   expect(name).toHaveValue('새 조직');
 });

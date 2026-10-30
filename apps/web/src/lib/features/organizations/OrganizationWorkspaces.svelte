@@ -76,13 +76,15 @@
     }
   }
   async function loadCandidates(): Promise<void> {
+    if (dialog?.kind !== 'offer') return;
+    const ownerId = dialog.workspace.owner_id;
     const mine = ++candidateSeq;
     candidateError = '';
     candidates = undefined;
     try {
       const list = await organizationsApi.members(organizationId);
       if (!disposed && mine === candidateSeq)
-        candidates = list.filter((member) => member.user_id !== meId);
+        candidates = list.filter((member) => member.user_id !== meId && member.user_id !== ownerId);
     } catch (e: unknown) {
       if (!disposed && mine === candidateSeq) {
         if (organizationUnavailable(e)) onunavailable();
@@ -131,7 +133,11 @@
       if (pending.kind === 'join') {
         workspaces = workspaces?.map((workspace) =>
           workspace.id === pending.workspace.id
-            ? { ...workspace, my_role: 'admin', member_count: workspace.member_count + 1 }
+            ? {
+                ...workspace,
+                my_role: 'admin',
+                member_count: workspace.member_count + (workspace.my_role ? 0 : 1),
+              }
             : workspace,
         );
         notifyDone(m.organizations_joined_done(), `organization-join:${pending.workspace.id}`, {
@@ -150,7 +156,9 @@
       else if (
         pending.kind === 'offer' &&
         e instanceof ApiError &&
-        (e.status === 400 || e.status === 409)
+        e.status === 400 &&
+        e.code === 'bad_request' &&
+        e.message === 'the recipient must be another member'
       )
         recipientError = m.organizations_recipient_must_be_member();
       else dialogError = organizationError(e);
@@ -257,7 +265,8 @@
                       }
                     }}>{m.organizations_open()}</Button
                   >
-                {:else}
+                {/if}
+                {#if workspace.my_role !== 'admin'}
                   <Button
                     variant="outline"
                     size="sm"
@@ -336,8 +345,11 @@
             >{/each}
         </NativeSelect>
         {#if candidates?.length === 0}<p>{m.organizations_recipients_empty()}</p>{/if}
-        <p id="organization-recipient-error" class="text-sm text-destructive empty:hidden">
-          {recipientError}
+        <p
+          id="organization-recipient-error"
+          class={`text-sm ${recipientError === '' ? 'text-muted-foreground' : 'text-destructive'}`}
+        >
+          {recipientError || m.organizations_recipient_must_be_member()}
         </p>
         <p role="alert" class="text-sm text-destructive empty:hidden">{candidateError}</p>
         {#if candidateError !== ''}<Button variant="outline" onclick={() => void loadCandidates()}

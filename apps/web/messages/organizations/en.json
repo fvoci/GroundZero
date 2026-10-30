@@ -17,13 +17,51 @@
   "organizations_demote": "Change to member",
   "organizations_promote": "Change to administrator",
   "organizations_demote_question": "Change your role to member?",
-  "organizations_demote_body": "You will lose access to management tabs. Workspace roles received through 'Join as administrator' will revert to their previous roles (D-112).",
+  "organizations_demote_body": "You will lose access to management tabs. Workspace roles received through 'Join as administrator' will revert to their previous roles.",
+  "organizations_demote_other_question": "Change {name}'s role to member?",
+  "organizations_demote_other_body": "{name} will lose access to organization management tabs. Workspace roles received through 'Join as administrator' will revert to their previous roles.",
   "organizations_remove": "Remove member",
   "organizations_remove_question": "Remove {name} from the organization?",
-  "organizations_removal_workspaces": "leave {count} workspaces",
-  "organizations_removal_shares": "revoke {count} shares",
-  "organizations_removal_workspaces_end": "leave {count} workspaces",
-  "organizations_removal_shares_end": "revoke {count} shares",
+  "organizations_removal_workspaces": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "leave {count} workspace",
+        "countPlural=other": "leave {count} workspaces"
+      }
+    }
+  ],
+  "organizations_removal_shares": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "revoke {count} share",
+        "countPlural=other": "revoke {count} shares"
+      }
+    }
+  ],
+  "organizations_removal_workspaces_end": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "leave {count} workspace",
+        "countPlural=other": "leave {count} workspaces"
+      }
+    }
+  ],
+  "organizations_removal_shares_end": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "revoke {count} share",
+        "countPlural=other": "revoke {count} shares"
+      }
+    }
+  ],
   "organizations_removal_assignments": "release {count} assignments",
   "organizations_removal_none": "No workspaces, shares or assignments are affected",
   "organizations_removal_body": "Removing {name} from the organization will {impact}.",
@@ -43,7 +81,13 @@
   "organizations_deleted_empty": "There are no deleted workspaces",
   "organizations_workspaces_empty": "There are no workspaces yet. You can create one from home.",
   "organizations_workspace_owner": "Owner: {name}",
-  "organizations_member_count": "{count} members",
+  "organizations_member_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=one": "{count} member", "countPlural=other": "{count} members" }
+    }
+  ],
   "organizations_created": "Created {when}",
   "organizations_deleted": "Deleted {when}",
   "organizations_my_role": "My role: {role}",
@@ -62,7 +106,7 @@
   "organizations_recipients_empty": "There are no other organization members to receive an offer",
   "organizations_recipient_must_be_member": "You can only offer ownership to a member of this workspace",
   "organizations_send_offer": "Send offer",
-  "organizations_ownership_sent": "Offer sent. Ownership transfers when the recipient accepts (D-51).",
+  "organizations_ownership_sent": "Offer sent. Ownership transfers when the recipient accepts.",
   "organizations_restore": "Restore",
   "organizations_restored": "Restored workspace {name}",
   "organizations_name": "Name",

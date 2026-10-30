@@ -54,18 +54,12 @@
 
   async function setRole(member: OrganizationMember): Promise<void> {
     if (busy || !isAdmin || lastAdmin(member)) return;
-    if (member.user_id === meId && member.role === 'admin') {
+    if (member.role === 'admin') {
       confirm = { kind: 'demote', member };
       dialogError = '';
       return;
     }
-    await run(() =>
-      organizationsApi.setRole(
-        organizationId,
-        member.user_id,
-        member.role === 'admin' ? 'member' : 'admin',
-      ),
-    );
+    await run(() => organizationsApi.setRole(organizationId, member.user_id, 'admin'));
   }
 
   async function readPreview(): Promise<void> {
@@ -134,9 +128,10 @@
       await load();
       if (current()) {
         onchanged();
+        busy = false;
         await tick();
-        if (!returnFocus?.isConnected)
-          document.getElementById('organization-members-heading')?.focus();
+        if (returnFocus?.isConnected) returnFocus.focus();
+        else document.getElementById('organization-members-heading')?.focus();
       }
     } catch (e: unknown) {
       if (disposed) return;
@@ -250,13 +245,18 @@
     <Dialog.Header>
       <Dialog.Title
         >{confirm?.kind === 'demote'
-          ? m.organizations_demote_question()
+          ? confirm.member.user_id === meId
+            ? m.organizations_demote_question()
+            : m.organizations_demote_other_question({ name: confirm.member.display_name })
           : m.organizations_remove_question({
               name: confirm?.member.display_name ?? '',
             })}</Dialog.Title
       >
       <Dialog.Description>
-        {#if confirm?.kind === 'demote'}{m.organizations_demote_body()}
+        {#if confirm?.kind === 'demote'}
+          {confirm.member.user_id === meId
+            ? m.organizations_demote_body()
+            : m.organizations_demote_other_body({ name: confirm.member.display_name })}
         {:else if preview !== undefined}{removalText(confirm?.member.display_name ?? '', preview)}
         {:else}{m.app_loading()}{/if}
       </Dialog.Description>
