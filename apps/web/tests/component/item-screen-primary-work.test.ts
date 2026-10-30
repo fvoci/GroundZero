@@ -2,6 +2,7 @@ import './fixtures/task-statuses';
 import type { Module, Workspace } from '@fvoci/api-client';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { tick } from 'svelte';
 
 import { api, type ItemProfileView, type ItemView } from '$lib/api/client';
 import { taskData as work } from '$lib/features/tasks/detail-data';
@@ -89,6 +90,95 @@ async function mount(current = item, space = workspace) {
   await screen.findByRole('heading', { name: current.title });
   return screen.findByRole('button', { name: /^항목 정보/ });
 }
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((accept, fail) => {
+    resolve = accept;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+it('shows loading instead of invented leader and member values until the profile succeeds (SR-259-1)', async () => {
+  const request = deferred<ItemProfileView>();
+  vi.mocked(api.itemProfile).mockReturnValue(request.promise);
+  const toggle = await mount();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(toggle).toHaveTextContent('불러오는 중…');
+  expect(toggle).not.toHaveTextContent('없음');
+  expect(toggle).not.toHaveTextContent('멤버 0명');
+  expect(toggle).toHaveTextContent('진행');
+  expect(toggle).toHaveTextContent('비공개');
+  const status = within(toggle).getByRole('status');
+  request.resolve(profile);
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 김리더 · 멤버 1명 · 비공개'));
+  expect(status).toBeInTheDocument();
+  expect(status).not.toHaveTextContent('불러오는 중…');
+});
+
+it('shows a collapsed profile failure and retries from the summary without opening the form (SR-259-1)', async () => {
+  const retryRequest = deferred<ItemProfileView>();
+  vi.mocked(api.itemProfile)
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockReturnValueOnce(retryRequest.promise);
+  const toggle = await mount();
+  await waitFor(() => expect(toggle).toHaveTextContent('항목 정보를 불러오지 못했습니다.'));
+  expect(toggle).not.toHaveTextContent('없음');
+  expect(toggle).not.toHaveTextContent('멤버 0명');
+  const retry = screen.getByRole('button', { name: '다시 시도' });
+  expect(toggle.parentElement).toContainElement(retry);
+  await fireEvent.click(retry);
+  expect(toggle).toHaveTextContent('불러오는 중…');
+  expect(toggle).not.toHaveTextContent('항목 정보를 불러오지 못했습니다.');
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(api.itemProfile).toHaveBeenCalledTimes(2);
+  retryRequest.resolve(profile);
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 김리더 · 멤버 1명 · 비공개'));
+  expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+it('shows a genuinely empty leader and member list only after a successful read (SR-259-1)', async () => {
+  vi.mocked(api.itemProfile).mockResolvedValue({ ...profile, leader: null, members: [] });
+  const toggle = await mount();
+  await waitFor(() => expect(toggle).toHaveTextContent('진행 · 없음 · 멤버 0명 · 비공개'));
+  expect(toggle).not.toHaveTextContent('불러오는 중…');
+  expect(toggle).not.toHaveTextContent('항목 정보를 불러오지 못했습니다.');
+});
+
+it.each(['success', 'failure'] as const)(
+  'ignores a late profile %s after switching items (SR-259-1)',
+  async (outcome) => {
+    const old = deferred<ItemProfileView>();
+    const next = deferred<ItemProfileView>();
+    const second = { ...item, id: 'item-second', title: '다음 항목' };
+    vi.mocked(api.item).mockImplementation((id) => Promise.resolve(id === item.id ? item : second));
+    vi.mocked(api.itemProfile).mockImplementation((id) =>
+      id === item.id ? old.promise : next.promise,
+    );
+    const view = render(ItemScreen, { workspace, itemId: item.id, workspaces: [workspace] });
+    await waitFor(() => {
+      expect(api.itemProfile).toHaveBeenCalledWith(item.id);
+    });
+    await view.rerender({ itemId: second.id });
+    await screen.findByRole('heading', { name: second.title });
+    const toggle = screen.getByRole('button', { name: /^항목 정보/ });
+    await waitFor(() => {
+      expect(api.itemProfile).toHaveBeenCalledWith(second.id);
+    });
+    if (outcome === 'success') old.resolve(profile);
+    else old.reject(new Error('late failure'));
+    await old.promise.catch(() => undefined);
+    await tick();
+    expect(toggle).toHaveTextContent('불러오는 중…');
+    expect(toggle).not.toHaveTextContent('김리더');
+    expect(toggle).not.toHaveTextContent('항목 정보를 불러오지 못했습니다.');
+    next.resolve({ ...profile, leader: { user_id: 'second-leader', display_name: '다음 리더' } });
+    await waitFor(() => expect(toggle).toHaveTextContent('진행 · 다음 리더 · 멤버 1명 · 비공개'));
+  },
+);
 
 it('starts with a summary and keeps unsaved title edits visible when collapse is requested', async () => {
   const toggle = await mount();

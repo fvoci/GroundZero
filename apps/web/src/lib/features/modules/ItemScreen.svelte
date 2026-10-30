@@ -14,7 +14,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { object } from './draft-values';
 
-  import type { ItemProfileView, ItemView, SummaryView } from '$lib/api/client';
+  import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
   import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
@@ -62,7 +62,7 @@
   import GroupSwitch from './GroupSwitch.svelte';
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
-  import { itemStatusLabel } from './profile';
+  import { itemStatusLabel, type ItemProfileRead } from './profile';
   // 활동(D-119). 기록 묶음 안의 항목 활동 섹션.
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
@@ -90,7 +90,8 @@
   let listVersion = $state(0);
   let error = $state<string | undefined>(undefined);
   let infoOpen = $state(false);
-  let profile = $state<ItemProfileView | undefined>(undefined);
+  let profileRead = $state<ItemProfileRead | undefined>(undefined);
+  let profileRefresh = $state(0);
   let profileDirty = $state(false);
   let copy = $state<{ start: () => Promise<void> } | undefined>(undefined);
   let moreButton = $state<HTMLButtonElement | null>(null);
@@ -341,7 +342,8 @@
     chosen = undefined;
     error = undefined;
     infoOpen = false;
-    profile = undefined;
+    profileRead = undefined;
+    profileRefresh = 0;
     profileDirty = false;
     deleting = false;
     // 앞 항목의 오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
@@ -626,25 +628,43 @@
       />
     {/if}
     <Collapsible.Root bind:open={infoOpen} class="min-w-0">
-      <Collapsible.Trigger
-        disabled={infoDirty || profileDirty || saving}
-        class="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-describedby={infoDirty || profileDirty ? 'item-info-unsaved' : undefined}
-      >
-        <ChevronDown class={['size-4 shrink-0', infoOpen && 'rotate-180']} aria-hidden="true" />
-        <span
-          class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 [overflow-wrap:anywhere]"
+      <div class="flex min-w-0 flex-wrap items-start gap-2">
+        <Collapsible.Trigger
+          disabled={infoDirty || profileDirty || saving}
+          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-describedby={infoDirty || profileDirty ? 'item-info-unsaved' : undefined}
         >
-          <span class="font-medium">{m.modules_item_info()}</span>
-          <span class="text-sm text-muted-foreground">
-            {itemStatusLabel(current.status)} · {profile?.leader?.display_name ?? m.modules_none()} ·
-            {m.modules_member_count({ count: profile?.members.length ?? 0 })} · {current.visibility ===
-            'private'
-              ? m.modules_private()
-              : m.modules_shared_workspace()}
+          <ChevronDown class={['size-4 shrink-0', infoOpen && 'rotate-180']} aria-hidden="true" />
+          <span
+            class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 [overflow-wrap:anywhere]"
+          >
+            <span class="font-medium">{m.modules_item_info()}</span>
+            <span id="item-info-profile-status" role="status" class="text-sm text-muted-foreground">
+              {itemStatusLabel(current.status)} ·
+              {#if profileRead?.status === 'ready'}
+                {profileRead.profile.leader?.display_name ?? m.modules_none()} · {m.modules_member_count(
+                  { count: profileRead.profile.members.length },
+                )}
+              {:else if profileRead?.status === 'failed'}
+                <span class="text-destructive">{profileRead.error}</span>
+              {:else}
+                {m.modules_loading()}
+              {/if}
+              · {current.visibility === 'private'
+                ? m.modules_private()
+                : m.modules_shared_workspace()}
+            </span>
           </span>
-        </span>
-      </Collapsible.Trigger>
+        </Collapsible.Trigger>
+        {#if profileRead?.status === 'failed'}
+          <Button
+            size="sm"
+            variant="outline"
+            aria-describedby="item-info-profile-status"
+            onclick={() => (profileRefresh += 1)}>{m.common_retry()}</Button
+          >
+        {/if}
+      </div>
       <p id="item-info-unsaved" role="status" class="text-sm text-muted-foreground empty:hidden">
         {#if infoDirty || profileDirty}{m.modules_info_unsaved()}{/if}
       </p>
@@ -732,7 +752,10 @@
               <!-- 머리: 묶음과 상관없이 늘 보이는 항목 프로필과 복제·템플릿(R7 A가 묶음을 정하지 않은 영역). -->
               <ItemProfilePanel
                 item={view}
-                onprofile={(next: ItemProfileView | undefined) => (profile = next)}
+                onprofile={(next: ItemProfileRead) => {
+                  if (next.itemId === currentItemId) profileRead = next;
+                }}
+                refresh={profileRefresh}
                 ondirty={(next: boolean) => (profileDirty = next)}
                 onrestore={() => (infoOpen = true)}
                 kind={mod.kind}

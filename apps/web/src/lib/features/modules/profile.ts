@@ -2,9 +2,15 @@
 // 이름은 부를 때마다 만든다(D-81).
 import type { ModuleKind } from '@fvoci/api-client';
 
-import type { ItemDetailsView, ItemStatus } from '$lib/api/client';
+import type { ItemDetailsView, ItemProfileView, ItemStatus } from '$lib/api/client';
 import { formatDay } from '$lib/display';
 import { m } from '$lib/paraglide/messages.js';
+
+/** 요약은 읽기 성공 값과 로딩·실패를 구분하며, 앞 항목의 응답을 새 항목에 쓰지 않는다. */
+export type ItemProfileRead =
+  | { status: 'loading'; itemId: string }
+  | { status: 'failed'; itemId: string; error: string }
+  | { status: 'ready'; itemId: string; profile: ItemProfileView };
 
 export function itemStatusLabel(status: ItemStatus): string {
   switch (status) {

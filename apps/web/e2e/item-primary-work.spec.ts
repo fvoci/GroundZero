@@ -1,5 +1,5 @@
 // 나2: 항목 머리의 보조 편집보다 묶음·업무를 먼저 보이고, 접기·메뉴에서도 입력과 초점을 지킨다(D-110).
-import { expect, str, test, unique } from './fixtures';
+import { expect, listField, str, test, unique } from './fixtures';
 import { expectViewport, pageOverflows } from './layout';
 import { offenders } from './offenders';
 
@@ -12,12 +12,26 @@ test('item primary work precedes collapsed information and auxiliary actions', a
   const ws = await api.createWorkspace(`항목 배치 ${tag}`);
   const item = await api.createProjectItem(ws, tag);
   await api.createTask(item, `업무 ${tag}`);
+  const profileResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      response.url().endsWith(`/api/items/${item}/profile`),
+  );
   await page.goto(`/w/${ws}/i/${item}/tasks/board`);
+  const response = await profileResponse;
+  expect(response.status()).toBe(200);
+  const loadedProfile: unknown = await response.json();
   await expectViewport(page, narrow);
   if (narrow) await page.addStyleTag({ content: 'html { font-size: 200%; }' });
   await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), narrow);
   const info = page.getByRole('button', { name: /^항목 정보/ });
   await expect(info).toHaveAttribute('aria-expanded', 'false');
+  const summaryStatus = info.getByRole('status');
+  await expect(summaryStatus).toContainText(
+    `멤버 ${String(listField(loadedProfile, 'members').length)}명`,
+  );
+  await expect(summaryStatus).not.toContainText('불러오는 중…');
+  await expect(summaryStatus).not.toContainText('항목 정보를 불러오지 못했습니다.');
   await expect(page.locator('#tasks-heading')).toBeVisible();
   await page.evaluate(async () => {
     await document.fonts.ready;
