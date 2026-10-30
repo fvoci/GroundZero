@@ -21,8 +21,8 @@ if (measurementRoot !== undefined) {
   };
 
   test('source-verified parallel API dependency witnesses', () => {
-    // The original jq intentionally describes the old sequential source. Keep it intact.
-    // This auxiliary witness includes the item -> module arm after documents move in parallel.
+    // Independent source witness alongside tools/perf-depth.jq. Both include the
+    // item -> module arm and the document branch after documents move in parallel.
     const source = readFileSync(
       path.resolve(import.meta.dirname, '../src/lib/features/home/HomeDashboard.svelte'),
       'utf8',
@@ -187,46 +187,41 @@ if (measurementRoot !== undefined) {
             // A fixed, reported dwell interval; this is not a performance target.
             await page.waitForTimeout(200);
           }
-          let firstContentMs: number | null = null;
-          {
-            await page.evaluate(({ content, heading, target }) => {
-              let started: number | undefined;
-              document.addEventListener(
-                'click',
-                () => {
-                  started = performance.now();
-                },
-                { capture: true, once: true },
-              );
-              const check = (): void => {
-                if (started === undefined) return;
-                const clicked = started;
-                if (!window.location.pathname.startsWith(target)) return;
-                if (
-                  heading !== '' &&
-                  document.querySelector('main h1')?.textContent.trim() !== heading
-                )
-                  return;
-                const found = document.querySelector(content);
-                if (found === null || found.getBoundingClientRect().height === 0) return;
-                observer.disconnect();
-                requestAnimationFrame(() => {
-                  document.documentElement.dataset.intentFirst = String(
-                    performance.now() - clicked,
-                  );
-                });
-              };
-              const observer = new MutationObserver(check);
-              observer.observe(document, { subtree: true, childList: true, attributes: true });
-            }, flow);
-            await link.click();
-            await expect
-              .poll(() => page.evaluate(() => document.documentElement.dataset.intentFirst))
-              .toBeDefined();
-            firstContentMs = await page.evaluate(() =>
-              Number(document.documentElement.dataset.intentFirst),
+          await page.evaluate(({ content, heading, target }) => {
+            let started: number | undefined;
+            document.addEventListener(
+              'click',
+              () => {
+                started = performance.now();
+              },
+              { capture: true, once: true },
             );
-          }
+            const check = (): void => {
+              if (started === undefined) return;
+              const clicked = started;
+              if (!window.location.pathname.startsWith(target)) return;
+              if (
+                heading !== '' &&
+                document.querySelector('main h1')?.textContent.trim() !== heading
+              )
+                return;
+              const found = document.querySelector(content);
+              if (found === null || found.getBoundingClientRect().height === 0) return;
+              observer.disconnect();
+              requestAnimationFrame(() => {
+                document.documentElement.dataset.intentFirst = String(performance.now() - clicked);
+              });
+            };
+            const observer = new MutationObserver(check);
+            observer.observe(document, { subtree: true, childList: true, attributes: true });
+          }, flow);
+          await link.click();
+          await expect
+            .poll(() => page.evaluate(() => document.documentElement.dataset.intentFirst))
+            .toBeDefined();
+          const firstContentMs = await page.evaluate(() =>
+            Number(document.documentElement.dataset.intentFirst),
+          );
           // SPA moves keep the document lifecycle's old networkidle state.
           await expect
             .poll(() => inFlight.size === 0 && Date.now() - lastNetworkAt >= 500)

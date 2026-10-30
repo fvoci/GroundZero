@@ -2,8 +2,6 @@
 // 엔진을 두지 않는다. 앱은 글꼴을 배포하지 않고(수식은 KaTeX 배치만, D-68 KaTeX 글꼴 미포함) 사용자 기기의 글꼴을 쓰며,
 // PDF에 글꼴을 넣는 것은 브라우저가 그 글꼴의 임베딩 허용 범위 안에서 한다. 인쇄 문서는 스크립트 없이(같은 출처
 // iframe, sandbox: allow-same-origin allow-modals) 그림이 다 불러와진 뒤 인쇄한다.
-import katexCss from '../../../styles/katex-layout.css?inline';
-
 import type { PreparedExport } from './export';
 import { escapeHtml, printBodyHtml } from './export';
 import { m } from '$lib/paraglide/messages.js';
@@ -41,6 +39,7 @@ export async function printDocumentHtml(
   savedAt: string,
 ): Promise<string> {
   const body = await printBodyHtml(prepared);
+  const { default: katexCss } = await import('../../../styles/katex-layout.css?inline');
   const title = escapeHtml(prepared.title);
   return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><title>${title}</title><style>${katexCss}${PRINT_CSS}</style></head><body><h1 class="export-title">${title}</h1><p class="export-meta">${escapeHtml(m.documents_revision_label())} ${String(prepared.revision)} · ${escapeHtml(savedAt)}</p>${body}</body></html>`;
 }

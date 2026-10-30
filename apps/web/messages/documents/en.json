@@ -208,6 +208,7 @@
   "documents_format_toolbar": "Formatting",
   "documents_table": "Table",
   "documents_math": "Math",
+  "documents_math_render_failed": "Could not display the formula. The source is preserved.",
   "documents_insert_file": "File or image",
   "documents_file_input": "File to insert",
   "documents_table_add_row": "Add row",

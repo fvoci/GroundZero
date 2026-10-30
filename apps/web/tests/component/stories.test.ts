@@ -11,14 +11,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as preview from '../../.storybook/preview';
 
+// Vitest disables CSS assets and otherwise gives ?url an empty string. Supply
+// only the asset URL; its load event is modeled below, without mocking KaTeX.
+vi.mock('../../src/styles/katex-layout.css?url', () => ({ default: '/assets/katex-layout.css' }));
+// Match Storybook's spy-only module registration in this standalone Vitest runner.
+vi.mock('$lib/features/documents/live', async (original) => {
+  const real = await original<typeof import('$lib/features/documents/live')>();
+  return { ...real, openLive: vi.fn(real.openLive) };
+});
+
 setProjectAnnotations([preview.default]);
 
 const modules = import.meta.glob<Store_CSFExports<SvelteRenderer> & Record<string, StoryObj>>(
   '../../stories/**/*.stories.ts',
   { eager: true },
 );
+let restoreMathStyles = (): void => undefined;
 
 beforeEach(() => {
+  // jsdom does not fetch stylesheets. Model completion of this asset only;
+  // the real renderer import and the story's math assertions still run.
+  // Network/style success and failure are checked in katex-storybook.spec.ts.
+  const styleAppend = new MutationObserver((records) => {
+    for (const record of records)
+      for (const node of record.addedNodes) {
+        if (
+          node instanceof HTMLLinkElement &&
+          node.rel === 'stylesheet' &&
+          node.href.includes('/katex-layout.css')
+        )
+          node.dispatchEvent(new Event('load'));
+      }
+  });
+  styleAppend.observe(document.head, { childList: true });
+  restoreMathStyles = () => {
+    styleAppend.disconnect();
+  };
   // jsdom에는 matchMedia가 없다(좁은 화면 판정에 쓴다).
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
@@ -38,6 +66,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  restoreMathStyles();
   vi.unstubAllGlobals();
   // 모달이 닫히기 전에 끝난 story가 남긴 body 잠금(pointer-events 등)을 지운다. 다음 story가 앞 story를 정리한다.
   document.body.removeAttribute('style');
