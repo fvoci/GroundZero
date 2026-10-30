@@ -26,6 +26,7 @@ const OTHER = { ...TEST_ORGANIZATION, id: 'org-2', name: '다른 조직' };
 const me: Me = {
   id: 'user-a',
   display_name: '나',
+  is_server_admin: false,
   hour_cycle: '',
   locale: 'ko',
   time_zone: '',

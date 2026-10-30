@@ -44,6 +44,25 @@ async fn me(app: &Router, user: &TestUser) -> Value {
 }
 
 #[tokio::test]
+async fn me_reports_true_for_a_server_admin() {
+    let state = common::state();
+    let admin = common::login(&state, "server admin").await;
+    common::make_server_admin(&admin).await;
+    let app = common::app(&state);
+
+    assert_eq!(me(&app, &admin).await["is_server_admin"], json!(true));
+}
+
+#[tokio::test]
+async fn me_reports_false_for_a_regular_account() {
+    let state = common::state();
+    let regular = common::login(&state, "regular account").await;
+    let app = common::app(&state);
+
+    assert_eq!(me(&app, &regular).await["is_server_admin"], json!(false));
+}
+
+#[tokio::test]
 async fn last_organization_and_display_settings_are_independent_commands() {
     let w = World::new().await;
     let other = World::new().await;

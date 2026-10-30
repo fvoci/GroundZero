@@ -23,6 +23,7 @@ import { TEST_ORGANIZATION } from './fixtures/organization';
 const identity: Me = {
   id: 'user-a',
   display_name: 'A',
+  is_server_admin: false,
   hour_cycle: '',
   locale: 'ko',
   time_zone: '',

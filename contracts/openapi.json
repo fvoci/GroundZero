@@ -18661,6 +18661,7 @@
         "required": [
           "id",
           "display_name",
+          "is_server_admin",
           "time_zone",
           "locale",
           "week_start",
@@ -18684,6 +18685,11 @@
           },
           "id": {
             "$ref": "#/components/schemas/UserId"
+          },
+          "is_server_admin": {
+            "type": "boolean",
+            "description": "현재 계정의 서버 관리자 여부(D-112). SQL의 기존 판정을 그대로 보여 준다.",
+            "readOnly": true
           },
           "last_organization_id": {
             "oneOf": [

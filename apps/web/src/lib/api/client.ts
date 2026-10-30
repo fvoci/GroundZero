@@ -146,6 +146,7 @@ export function parseMe(value: Json): Me {
     id: str(o, 'id'),
     display_name: str(o, 'display_name'),
     email: typeof email === 'string' ? email : null,
+    is_server_admin: bool(o, 'is_server_admin'),
     time_zone: typeof o.time_zone === 'string' ? o.time_zone : '',
     locale: typeof o.locale === 'string' ? o.locale : '',
     week_start: typeof o.week_start === 'string' ? o.week_start : '',
