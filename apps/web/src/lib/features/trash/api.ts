@@ -56,14 +56,16 @@ function parseRetention(value: Json): RetentionSettings {
     version_retention_days: optInt(o, 'version_retention_days'),
   };
 }
-const scopeQuery = (workspaceId: string | null): string =>
-  workspaceId === null ? '' : `?workspace_id=${encodeURIComponent(workspaceId)}`;
 const batch = (value: Json): string => str(rec(value, 'trashed'), 'batch_id');
 
 export const systemApi = {
   batches: (workspaceId: string | null): Promise<TrashEntryView[]> =>
-    expectOk('GET', `/api/trash-batches${scopeQuery(workspaceId)}`, (value) =>
-      parseList(value, parseEntry),
+    expectOk(
+      'GET',
+      workspaceId === null
+        ? '/api/trash-batches'
+        : `/api/trash-batches?workspace_id=${encodeURIComponent(workspaceId)}`,
+      (value) => parseList(value, parseEntry),
     ),
   retention: (workspaceId: string): Promise<RetentionSettings> =>
     expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/retention`, parseRetention),
@@ -76,8 +78,12 @@ export const systemApi = {
   purgeTrash: (id: string) =>
     expectOk('DELETE', `/api/trash-batches/${encodeURIComponent(id)}`, none),
   purgeExpiredTrash: (workspaceId: string | null) =>
-    expectOk('POST', `/api/trash-batches/purge-expired${scopeQuery(workspaceId)}`, (v) =>
-      int(rec(v, 'purged'), 'purged'),
+    expectOk(
+      'POST',
+      workspaceId === null
+        ? '/api/trash-batches/purge-expired'
+        : `/api/trash-batches/purge-expired?workspace_id=${encodeURIComponent(workspaceId)}`,
+      (v) => int(rec(v, 'purged'), 'purged'),
     ),
   setTrashRetention: (workspaceId: string, days: number) =>
     expectOk('PUT', `/api/workspaces/${encodeURIComponent(workspaceId)}/retention/trash`, none, {
