@@ -1,15 +1,25 @@
+// 기존 import 경로의 타입·파서·API 이름을 유지한다. 요청과 응답 검증은 기능별 모듈에서 맡는다(D-09).
 import { courseApi } from '$lib/features/courses/api';
 import { loadCourseView } from '$lib/features/courses/course-data';
 import { studyApi } from '$lib/features/study/api';
 import { loadStudyView } from '$lib/features/study/study-data';
 import { recordsApi } from '$lib/features/records/api';
 import { systemApi, readTrash } from '$lib/features/trash/api';
-export type { TrashEntryView, TrashView } from '$lib/features/trash/api';
 import { filesApi } from '$lib/features/files/api';
+import { timeData } from '$lib/features/time/data';
+import { accountsApi } from './client/accounts';
+import { organizationsApi } from './client/organizations';
+import { workspacesApi } from './client/workspaces';
+import { documentsApi } from './client/documents';
+import { modulesApi } from './client/modules';
+import { referencesApi } from './client/references';
+import { revisionsApi } from './client/revisions';
+import { calendarApi } from './client/calendar';
+import { searchApi } from './client/search';
+
+export type { TrashEntryView, TrashView } from '$lib/features/trash/api';
 export { fileContentUrl } from '$lib/features/files/api';
 export type { FileView, FileVersionView, UploadView, FileTarget } from '$lib/features/files/model';
-import { parseEvent, type EventView } from '$lib/features/events/model';
-import { timeData } from '$lib/features/time/data';
 export { TIME_KINDS, parseTimeEntry } from '$lib/features/time/model';
 export type {
   TimeKind,
@@ -21,641 +31,9 @@ export type {
   TaskTimeView,
   ItemTimeView,
 } from '$lib/features/time/model';
-import { EXPECTED_USER, request, expectOk, fail } from '$lib/shared/api';
 export { ApiError, NetworkError } from '$lib/shared/api';
-import {
-  access,
-  bool,
-  int,
-  isRecord,
-  optInt,
-  optStr,
-  parseList,
-  rec,
-  statusCategory,
-  str,
-  strings,
-  type Json,
-} from '$lib/shared/api/parse';
 export { statusCategory, parseTaskStatusDefinition } from '$lib/shared/api/parse';
-import { type TaskStatus } from '$lib/features/tasks/model';
 export * from '$lib/features/tasks/model';
-// API 클라이언트. 타입은 계약에서 생성한 것(@fvoci/api-client)을 쓰고, 응답은 unknown으로 받아
-// 실제 형태를 확인한다(생성 타입은 런타임 검증을 대신하지 않는다 — D-09 docs/decisions/delivery.md#d-09).
-import type {
-  AuthInfo,
-  Group,
-  Health,
-  Invitation,
-  Item,
-  Me,
-  Member,
-  MembersView,
-  Module,
-  ModuleKind,
-  ReceivedInvitation,
-  Role,
-  Share,
-  SharePermission,
-  ShareRecipient,
-  ShareRecipientRole,
-  Workspace,
-} from '@fvoci/api-client';
-import type {
-  Accepted,
-  Organization,
-  OrganizationLimits,
-  OrganizationSummary,
-  OrgRole,
-  StatusCategory,
-} from '@fvoci/api-client';
-
-/** Tiptap JSON 노드. 본문 최상위는 `type: "doc"`. */
-export interface DocNode {
-  type: string;
-  [key: string]: unknown;
-}
-
-/** 화면에서 쓰는 문서. 본문을 구체화한 것 외에는 계약의 Document와 같다. */
-export type Access = 'owner' | 'write' | 'read';
-
-export interface DocumentView {
-  id: string;
-  /** 워크스페이스 문서면 소유 워크스페이스, 개인 노트는 null. */
-  workspace_id: string | null;
-  placement: 'wiki' | 'module' | 'personal';
-  /** 모듈 항목 아래 문서면 그 항목. */
-  item_id: string | null;
-  /** 트리의 부모. 없거나 볼 수 없으면 null. */
-  parent_id: string | null;
-  /** 사람이 보는 참조(WIKI-3). 개인 노트는 null. */
-  reference: string | null;
-  title: string;
-  body: DocNode;
-  schema_version: number;
-  revision: number;
-  updated_at: string;
-  access: Access;
-  can_edit: boolean;
-  visibility: 'workspace' | 'private';
-  allow_copy: boolean;
-  /** 공유·공개 링크·설정을 바꿀 수 있는지. 보관된 항목의 문서도 워크스페이스 관리자는 참(D-113 ⑯). */
-  can_manage: boolean;
-  /** 휴지통으로 옮길 수 있는지. */
-  can_delete: boolean;
-  /** 템플릿으로 표시됨(D-27). */
-  is_template: boolean;
-  /** 내보낼 수 있는지(D-75). 첨부 내려받기와 같은 규칙. */
-  can_export: boolean;
-  /**
-   * 단건 GET 응답의 강한 ETag(D-77). If-None-Match 재검증에만 쓴다.
-   */
-  etag?: string;
-}
-
-function withEtag(doc: DocumentView, etag: string | null | undefined): DocumentView {
-  return typeof etag === 'string' && etag !== '' ? { ...doc, etag } : doc;
-}
-
-function role(value: string): Role {
-  if (value === 'admin' || value === 'member' || value === 'readonly') return value;
-  throw new TypeError(`unknown role ${value}`);
-}
-
-export function parseDocNode(value: unknown): DocNode {
-  const o = rec(value, 'document body');
-  const type = o.type;
-  if (type !== 'doc') throw new TypeError('document body must have type "doc"');
-  return { ...o, type };
-}
-
-export function parseHealth(value: Json): Health {
-  const o = rec(value, 'health');
-  const build = rec(o.build, 'build');
-  return {
-    status: str(o, 'status'),
-    database: str(o, 'database'),
-    build: { version: str(build, 'version'), source: str(build, 'source') },
-  };
-}
-
-export function parseMe(value: Json): Me {
-  const o = rec(value, 'me');
-  const email = o.email;
-  return {
-    id: str(o, 'id'),
-    display_name: str(o, 'display_name'),
-    email: typeof email === 'string' ? email : null,
-    is_server_admin: bool(o, 'is_server_admin'),
-    time_zone: typeof o.time_zone === 'string' ? o.time_zone : '',
-    locale: typeof o.locale === 'string' ? o.locale : '',
-    week_start: typeof o.week_start === 'string' ? o.week_start : '',
-    hour_cycle: typeof o.hour_cycle === 'string' ? o.hour_cycle : '',
-    theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'system',
-    last_organization_id: optStr(o, 'last_organization_id'),
-    limits: parseInputLimits(rec(o.limits, 'me.limits')),
-  };
-}
-
-/** 서버 입력 한도(#79). 계약상 필수이며 네 칸 모두 정수다. */
-function parseInputLimits(o: Record<string, unknown>): Me['limits'] {
-  return {
-    max_title_chars: int(o, 'max_title_chars'),
-    max_document_bytes: int(o, 'max_document_bytes'),
-    max_references_per_document: int(o, 'max_references_per_document'),
-    max_document_depth: int(o, 'max_document_depth'),
-  };
-}
-
-export function parseWorkspace(value: Json): Workspace {
-  const o = rec(value, 'workspace');
-  return {
-    id: str(o, 'id'),
-    organization_id: str(o, 'organization_id'),
-    name: str(o, 'name'),
-    role: role(str(o, 'role')),
-    is_owner: bool(o, 'is_owner'),
-    access: access(str(o, 'access')),
-  };
-}
-
-// --- 조직 (D-111·D-112·D-124) --------------------------------------------
-
-function orgRole(value: string): OrgRole {
-  if (value === 'admin' || value === 'member') return value;
-  throw new TypeError(`unknown organization role ${value}`);
-}
-
-export function parseOrganizationSummary(value: Json): OrganizationSummary {
-  const o = rec(value, 'organization');
-  return {
-    id: str(o, 'id'),
-    name: str(o, 'name'),
-    role: orgRole(str(o, 'role')),
-    public_links_enabled: bool(o, 'public_links_enabled'),
-    created_at: str(o, 'created_at'),
-  };
-}
-
-export function parseOrganizationLimits(value: Json): OrganizationLimits {
-  const o = rec(value, 'organization limits');
-  return {
-    max_file_bytes: optInt(o, 'max_file_bytes'),
-    max_storage_bytes: optInt(o, 'max_storage_bytes'),
-    max_concurrent_uploads: optInt(o, 'max_concurrent_uploads'),
-    activity_retention_days: optInt(o, 'activity_retention_days'),
-    audit_retention_days: optInt(o, 'audit_retention_days'),
-  };
-}
-
-export function parseOrganization(value: Json): Organization {
-  const o = rec(value, 'organization');
-  return {
-    ...parseOrganizationSummary(value),
-    limits: parseOrganizationLimits(o.limits),
-  };
-}
-
-/** 초대 수락 결과. 조직 초대는 워크스페이스가 없다(D-112·D-118). */
-export function parseAccepted(value: Json): Accepted {
-  const o = rec(value, 'accepted');
-  return {
-    kind: invitationTarget(str(o, 'kind')),
-    organization_id: str(o, 'organization_id'),
-    workspace_id: optStr(o, 'workspace_id'),
-  };
-}
-
-// --- 항목별 업무 상태 정의 (D-116) ----------------------------------------
-
-// --- 내 업무 (D-120) ---------------------------------------------------
-
-export function parseSummary(value: Json): SummaryView {
-  const o = rec(value, 'document summary');
-  return {
-    id: str(o, 'id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    revision: int(o, 'revision'),
-    updated_at: str(o, 'updated_at'),
-    parent_id: optStr(o, 'parent_id'),
-  };
-}
-
-export function parseDocument(value: Json): DocumentView {
-  const o = rec(value, 'document');
-  const placement = str(o, 'placement');
-  if (placement !== 'wiki' && placement !== 'module' && placement !== 'personal') {
-    throw new TypeError('unknown placement');
-  }
-  const workspaceId = o.workspace_id ?? null;
-  const reference = o.reference ?? null;
-  if (workspaceId !== null && typeof workspaceId !== 'string') throw new TypeError('workspace_id');
-  if (reference !== null && typeof reference !== 'string') throw new TypeError('reference');
-  return {
-    id: str(o, 'id'),
-    workspace_id: workspaceId,
-    item_id: optStr(o, 'item_id'),
-    parent_id: optStr(o, 'parent_id'),
-    placement,
-    reference,
-    title: str(o, 'title'),
-    body: parseDocNode(o.body),
-    schema_version: int(o, 'schema_version'),
-    revision: int(o, 'revision'),
-    updated_at: str(o, 'updated_at'),
-    access: access(str(o, 'access')),
-    can_edit: bool(o, 'can_edit'),
-    visibility: visibility(str(o, 'visibility')),
-    allow_copy: bool(o, 'allow_copy'),
-    can_manage: bool(o, 'can_manage'),
-    can_delete: bool(o, 'can_delete'),
-    is_template: bool(o, 'is_template'),
-    can_export: bool(o, 'can_export'),
-  };
-}
-
-export interface SummaryView {
-  id: string;
-  reference: string | null;
-  title: string;
-  revision: number;
-  updated_at: string;
-  /** 트리의 부모. 없거나 볼 수 없으면 null(최상위로 보인다). */
-  parent_id: string | null;
-}
-
-export interface SharedView {
-  id: string;
-  title: string;
-  permission: 'read' | 'write';
-  shared_by: string;
-  updated_at: string;
-}
-
-/** 옵션인 nullable 응답 칸은 런타임 파서가 null로 통일한다. */
-interface ShareIdentity {
-  email: string | null;
-  recipient_role: ShareRecipientRole | null;
-}
-export type ShareView = Pick<Share, 'id' | 'display_name' | 'permission' | 'max_permission'> &
-  ShareIdentity;
-export type ShareRecipientView = Omit<ShareRecipient, 'email' | 'recipient_role'> & ShareIdentity;
-
-/** 이동 전후의 사용자별 접근 등급 변화(D-114). `gain`이면 from_grade가, `lose`면 to_grade가 null이다. */
-export interface MoveAccessChangeView {
-  /** `gain`·`lose`·`change`(서버 `app_move_preview`). */
-  change: string;
-  user_id: string;
-  display_name: string;
-  from_grade: string | null;
-  to_grade: string | null;
-}
-
-export interface MovePreviewView {
-  changes: MoveAccessChangeView[];
-  /** 이전 리비전 기록과 댓글, 첨부 파일(이전 버전 포함)도 함께 옮겨진다. */
-  history_moves_with_document: boolean;
-  /** 대상에서 번호가 새로 매겨지는지(같은 모듈 안 이동이면 유지). */
-  reference_changes: boolean;
-  /** 이동해도 유지되는 활성 공개 링크 수. */
-  active_public_links: number;
-  /** 원래 자리에 남는 하위 문서 수(볼 수 있는 것). */
-  children_left_behind: number;
-}
-
-export interface MoveOutcomeView {
-  workspace_id: string;
-  reference: string;
-  /** 옮긴 뒤 내가 볼 수 없으면 null. */
-  document: DocumentView | null;
-}
-
-function permission(value: string): SharePermission {
-  if (value === 'read' || value === 'write') return value;
-  throw new TypeError('unknown permission');
-}
-
-export function parseSharedView(value: Json): SharedView {
-  const o = rec(value, 'shared document');
-  return {
-    id: str(o, 'id'),
-    title: str(o, 'title'),
-    permission: permission(str(o, 'permission')),
-    shared_by: str(o, 'shared_by'),
-    updated_at: str(o, 'updated_at'),
-  };
-}
-
-export function parseShareView(value: Json): ShareView {
-  const o = rec(value, 'share');
-  return {
-    id: str(o, 'id'),
-    email: optStr(o, 'email'),
-    display_name: str(o, 'display_name'),
-    permission: permission(str(o, 'permission')),
-    recipient_role: recipientRole(optStr(o, 'recipient_role')),
-    max_permission: permission(str(o, 'max_permission')),
-  };
-}
-
-function recipientRole(value: string | null): ShareRecipientRole | null {
-  if (
-    value === null ||
-    value === 'owner' ||
-    value === 'admin' ||
-    value === 'member' ||
-    value === 'readonly' ||
-    value === 'outside_member'
-  )
-    return value;
-  throw new TypeError('unknown share recipient role');
-}
-
-function parseShareRecipient(value: Json): ShareRecipientView {
-  const o = rec(value, 'share recipient');
-  return {
-    user_id: str(o, 'user_id'),
-    email: optStr(o, 'email'),
-    display_name: str(o, 'display_name'),
-    recipient_role: recipientRole(optStr(o, 'recipient_role')),
-    max_permission: permission(str(o, 'max_permission')),
-  };
-}
-
-function parseMoveAccessChange(value: Json): MoveAccessChangeView {
-  const o = rec(value, 'move access change');
-  return {
-    change: str(o, 'change'),
-    user_id: str(o, 'user_id'),
-    display_name: str(o, 'display_name'),
-    from_grade: optStr(o, 'from_grade'),
-    to_grade: optStr(o, 'to_grade'),
-  };
-}
-
-export function parseMovePreview(value: Json): MovePreviewView {
-  const o = rec(value, 'move preview');
-  return {
-    changes: parseList(o.changes, parseMoveAccessChange),
-    history_moves_with_document: bool(o, 'history_moves_with_document'),
-    reference_changes: bool(o, 'reference_changes'),
-    active_public_links: int(o, 'active_public_links'),
-    children_left_behind: int(o, 'children_left_behind'),
-  };
-}
-
-export interface PublicLinkView {
-  id: string;
-  created_at: string;
-  expires_at: string | null;
-  active: boolean;
-}
-
-export interface PublicDocumentView {
-  title: string;
-  body: DocNode;
-  updated_at: string;
-}
-
-export function parsePublicLink(value: Json): PublicLinkView {
-  const o = rec(value, 'public link');
-  return {
-    id: str(o, 'id'),
-    created_at: str(o, 'created_at'),
-    expires_at: optStr(o, 'expires_at'),
-    active: bool(o, 'active'),
-  };
-}
-
-export function parsePublicDocument(value: Json): PublicDocumentView {
-  const o = rec(value, 'public document');
-  return { title: str(o, 'title'), body: parseDocNode(o.body), updated_at: str(o, 'updated_at') };
-}
-
-export function parseMoveOutcome(value: Json): MoveOutcomeView {
-  const o = rec(value, 'move outcome');
-  const doc = o.document ?? null;
-  return {
-    workspace_id: str(o, 'workspace_id'),
-    reference: str(o, 'reference'),
-    document: doc === null ? null : parseDocument(doc),
-  };
-}
-
-export function parseMembersView(value: Json): MembersView {
-  const o = rec(value, 'members view');
-  const members = parseList(o.members, (m): Member => {
-    const r = rec(m, 'member');
-    return {
-      user_id: str(r, 'user_id'),
-      display_name: str(r, 'display_name'),
-      email: optStr(r, 'email'),
-      role: role(str(r, 'role')),
-      is_owner: bool(r, 'is_owner'),
-    };
-  });
-  return {
-    members,
-    my_role: role(str(o, 'my_role')),
-    i_am_owner: bool(o, 'i_am_owner'),
-    can_manage_members: bool(o, 'can_manage_members'),
-    pending_owner: optStr(o, 'pending_owner'),
-  };
-}
-
-export function parseInvitation(value: Json): Invitation {
-  const o = rec(value, 'invitation');
-  return {
-    id: str(o, 'id'),
-    email: str(o, 'email'),
-    role: role(str(o, 'role')),
-    expires_at: str(o, 'expires_at'),
-  };
-}
-
-/** 초대 대상 종류. 조직 초대는 워크스페이스 칸이 null이다(D-112·D-118). */
-function invitationTarget(value: string): ReceivedInvitation['kind'] {
-  if (value === 'organization' || value === 'workspace') return value;
-  throw new TypeError(`unknown invitation kind ${value}`);
-}
-
-export function parseReceivedInvitation(value: Json): ReceivedInvitation {
-  const o = rec(value, 'received invitation');
-  return {
-    kind: invitationTarget(str(o, 'kind')),
-    organization_id: str(o, 'organization_id'),
-    organization_name: str(o, 'organization_name'),
-    id: str(o, 'id'),
-    workspace_id: optStr(o, 'workspace_id'),
-    workspace_name: optStr(o, 'workspace_name'),
-    role: role(str(o, 'role')),
-    invited_by: str(o, 'invited_by'),
-    expires_at: str(o, 'expires_at'),
-  };
-}
-
-export function parseGroup(value: Json): Group {
-  const o = rec(value, 'group');
-  return {
-    id: str(o, 'id'),
-    name: str(o, 'name'),
-    members: parseList(o.members, (m) => {
-      if (typeof m !== 'string') throw new TypeError('expected member id');
-      return m;
-    }),
-  };
-}
-
-export const MODULE_KINDS: readonly ModuleKind[] = [
-  'project',
-  'research',
-  'study',
-  'course',
-  'hobby',
-] as const;
-
-function moduleKind(value: string): ModuleKind {
-  const kind = MODULE_KINDS.find((k) => k === value);
-  if (kind === undefined) throw new TypeError(`unknown module kind ${value}`);
-  return kind;
-}
-
-function visibility(value: string): 'workspace' | 'private' {
-  if (value === 'workspace' || value === 'private') return value;
-  throw new TypeError('unknown visibility');
-}
-
-export function parseModule(value: Json): Module {
-  const o = rec(value, 'module');
-  return {
-    id: str(o, 'id'),
-    workspace_id: str(o, 'workspace_id'),
-    kind: moduleKind(str(o, 'kind')),
-    name: str(o, 'name'),
-    key: str(o, 'key'),
-    previous_keys: strings(o.previous_keys),
-    archived: bool(o, 'archived'),
-    icon: str(o, 'icon'),
-    description: str(o, 'description'),
-    access: access(str(o, 'access')),
-  };
-}
-
-/** 항목 상태(D-33): 계획·진행·보류·완료·취소. */
-export const ITEM_STATUSES = ['planned', 'active', 'on_hold', 'done', 'cancelled'] as const;
-export type ItemStatus = (typeof ITEM_STATUSES)[number];
-
-function itemStatus(value: string): ItemStatus {
-  const found = ITEM_STATUSES.find((s) => s === value);
-  if (found === undefined) throw new TypeError(`unknown item status ${value}`);
-  return found;
-}
-
-/** 화면에서 쓰는 항목. 공개 범위·상태를 좁힌 것 외에는 계약의 Item과 같다. */
-export type ItemView = Item & { visibility: 'workspace' | 'private'; status: ItemStatus };
-
-export function parseItem(value: Json): ItemView {
-  const o = rec(value, 'item');
-  return {
-    id: str(o, 'id'),
-    module_id: str(o, 'module_id'),
-    workspace_id: str(o, 'workspace_id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    description: str(o, 'description'),
-    visibility: visibility(str(o, 'visibility')),
-    access: access(str(o, 'access')),
-    archived: bool(o, 'archived'),
-    updated_at: str(o, 'updated_at'),
-    status: itemStatus(str(o, 'status')),
-    starts_on: optStr(o, 'starts_on'),
-    ends_on: optStr(o, 'ends_on'),
-    is_template: bool(o, 'is_template'),
-    version: int(o, 'version'),
-  };
-}
-
-/** 모듈 종류별 항목 정보(D-34 연구, D-36 스터디, D-38 취미). 종류에 없는 칸은 보내지 않는다. */
-export interface ItemDetailsView {
-  field?: string;
-  keywords?: string[];
-  question?: string;
-  hypothesis?: string;
-  model?: string;
-  method?: string;
-  sample?: string;
-  level?: string;
-  target?: string;
-  activity_type?: string;
-}
-
-export interface PersonRefView {
-  user_id: string;
-  display_name: string;
-}
-
-export interface ItemProfileView {
-  leader: PersonRefView | null;
-  goal: string;
-  scope: string;
-  starts_on: string | null;
-  ends_on: string | null;
-  status: ItemStatus;
-  details: ItemDetailsView;
-  members: PersonRefView[];
-  groups: { id: string; name: string }[];
-  can_edit: boolean;
-  can_manage_members: boolean;
-  /** 항목 정보(리더·목표·범위·기간·상태·종류별 정보)의 판. 고칠 때 연 때의 판을 보낸다(D-104). */
-  version: number;
-}
-
-const DETAIL_TEXT_KEYS = [
-  'field',
-  'question',
-  'hypothesis',
-  'model',
-  'method',
-  'sample',
-  'level',
-  'target',
-  'activity_type',
-] as const;
-
-function parsePerson(value: Json): PersonRefView {
-  const o = rec(value, 'person');
-  return { user_id: str(o, 'user_id'), display_name: str(o, 'display_name') };
-}
-
-export function parseItemProfile(value: Json): ItemProfileView {
-  const o = rec(value, 'item profile');
-  const d = rec(o.details ?? {}, 'item details');
-  const details: ItemDetailsView = {};
-  for (const key of DETAIL_TEXT_KEYS) {
-    const v = optStr(d, key);
-    if (v !== null) details[key] = v;
-  }
-  if (d.keywords !== undefined) details.keywords = strings(d.keywords);
-  return {
-    leader: o.leader === null || o.leader === undefined ? null : parsePerson(o.leader),
-    goal: str(o, 'goal'),
-    scope: str(o, 'scope'),
-    starts_on: optStr(o, 'starts_on'),
-    ends_on: optStr(o, 'ends_on'),
-    status: itemStatus(str(o, 'status')),
-    details,
-    members: parseList(o.members, parsePerson),
-    groups: parseList(o.groups, (g) => {
-      const r = rec(g, 'group');
-      return { id: str(r, 'id'), name: str(r, 'name') };
-    }),
-    can_edit: bool(o, 'can_edit'),
-    can_manage_members: bool(o, 'can_manage_members'),
-    version: int(o, 'version'),
-  };
-}
-
 export type {
   RecordFieldType,
   ChoiceView,
@@ -668,9 +46,6 @@ export type {
   ZoteroLibraryInput,
 } from '$lib/features/records/model';
 export { parseRecordKind, parseRecord } from '$lib/features/records/model';
-
-// --- 저장한 보기 (D-31) ------------------------------------------------------
-
 export type {
   StudyUnitKind,
   StudyUnitView,
@@ -678,263 +53,6 @@ export type {
   StudyParticipantView,
 } from '$lib/features/study/model';
 export { STUDY_UNIT_KINDS } from '$lib/features/study/model';
-
-// --- @ 참조 -------------------------------------------------------------
-
-export type ReferenceKind = 'item' | 'document' | 'task' | 'user';
-
-function referenceKind(value: string): ReferenceKind {
-  if (value === 'item' || value === 'document' || value === 'task' || value === 'user')
-    return value;
-  throw new TypeError(`unknown reference kind ${value}`);
-}
-
-export interface ReferenceCandidateView {
-  kind: ReferenceKind;
-  id: string;
-  title: string;
-  reference: string | null;
-  workspace_id: string | null;
-  workspace_name: string | null;
-}
-
-/** 해석 결과. 볼 수 없거나 없는 대상은 visible=false이고 나머지는 null이다. */
-export interface ResolvedReferenceView {
-  kind: ReferenceKind;
-  id: string;
-  visible: boolean;
-  title: string | null;
-  reference: string | null;
-  workspace_id: string | null;
-  item_id: string | null;
-}
-
-export interface BacklinkView {
-  id: string;
-  reference: string | null;
-  title: string;
-  workspace_id: string | null;
-  item_id: string | null;
-}
-
-export function parseCandidate(value: Json): ReferenceCandidateView {
-  const o = rec(value, 'reference candidate');
-  return {
-    kind: referenceKind(str(o, 'kind')),
-    id: str(o, 'id'),
-    title: str(o, 'title'),
-    reference: optStr(o, 'reference'),
-    workspace_id: optStr(o, 'workspace_id'),
-    workspace_name: optStr(o, 'workspace_name'),
-  };
-}
-
-export function parseResolved(value: Json): ResolvedReferenceView {
-  const o = rec(value, 'resolved reference');
-  return {
-    kind: referenceKind(str(o, 'kind')),
-    id: str(o, 'id'),
-    visible: bool(o, 'visible'),
-    title: optStr(o, 'title'),
-    reference: optStr(o, 'reference'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-  };
-}
-
-export function parseBacklink(value: Json): BacklinkView {
-  const o = rec(value, 'backlink');
-  return {
-    id: str(o, 'id'),
-    reference: optStr(o, 'reference'),
-    title: str(o, 'title'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-  };
-}
-
-// --- 리비전 -------------------------------------------------------------
-
-export interface RevisionSummaryView {
-  revision: number;
-  title: string;
-  author_name: string | null;
-  created_at: string;
-  restored_from: number | null;
-  /**
-   * 저장한 사람이 고친 사람 대신 남긴 리비전(실시간 편집, D-95)이면 실제로 고친 사람. 보통 리비전은 null, 기록이 없으면 빈
-   * 목록. 이름을 볼 수 없는 사람은 null.
-   */
-  edited_by_names: (string | null)[] | null;
-}
-
-export interface RevisionView extends RevisionSummaryView {
-  body: DocNode;
-  schema_version: number;
-}
-
-/** 이름 목록(항목은 이름이나 null). 없으면 null. */
-function optNameList(o: Record<string, unknown>, key: string): (string | null)[] | null {
-  const v = o[key];
-  if (v === null || v === undefined) return null;
-  if (!Array.isArray(v)) throw new TypeError(`expected array or null at ${key}`);
-  return v.map((name: unknown) => {
-    if (name === null || typeof name === 'string') return name;
-    throw new TypeError(`expected string or null in ${key}`);
-  });
-}
-
-export function parseRevisionSummary(value: Json): RevisionSummaryView {
-  const o = rec(value, 'revision');
-  return {
-    revision: int(o, 'revision'),
-    title: str(o, 'title'),
-    author_name: optStr(o, 'author_name'),
-    created_at: str(o, 'created_at'),
-    restored_from: optInt(o, 'restored_from'),
-    edited_by_names: optNameList(o, 'edited_by_names'),
-  };
-}
-
-export function parseRevision(value: Json): RevisionView {
-  const o = rec(value, 'revision');
-  return {
-    ...parseRevisionSummary(o),
-    body: parseDocNode(o.body),
-    schema_version: int(o, 'schema_version'),
-  };
-}
-
-export interface CalendarTaskView {
-  id: string;
-  item_id: string;
-  reference: string | null;
-  title: string;
-  status: TaskStatus;
-  status_category: StatusCategory;
-  milestone: boolean;
-  start_date: string | null;
-  due_date: string | null;
-}
-
-export interface EventOccurrenceView {
-  event_id: string;
-  /** 일정 시간대 기준의 회차 날짜. */
-  occurrence: string;
-  start_date: string | null;
-  end_date: string | null;
-  starts_at: string | null;
-  ends_at: string | null;
-  /** 반복 회차의 현지 시각이 그 시간대에 없어 건너뜀(D-81). */
-  skipped: boolean;
-}
-
-/** 아직 만들지 않은 반복 업무 회차(예정). */
-export interface ProjectedTaskView {
-  series_id: string;
-  root_task_id: string;
-  item_id: string;
-  title: string;
-  milestone: boolean;
-  occurrence: string;
-  start_date: string | null;
-  due_date: string | null;
-}
-
-export const CALENDAR_DATE_KINDS = [
-  'episode',
-  'study_unit',
-  'submission',
-  'revision_due',
-  'deliverable',
-] as const;
-export type CalendarDateKind = (typeof CALENDAR_DATE_KINDS)[number];
-
-/** 업무·일정 밖의 날짜(D-80): 강의·스터디 계획일, 투고·산출물 날짜. */
-export interface CalendarDateView {
-  kind: CalendarDateKind;
-  id: string;
-  item_id: string;
-  title: string;
-  date: string;
-  /** 내 계획일(본인만 봄). */
-  personal: boolean;
-  done: boolean;
-}
-
-export interface CalendarView {
-  tasks: CalendarTaskView[];
-  projected_tasks: ProjectedTaskView[];
-  events: EventView[];
-  occurrences: EventOccurrenceView[];
-  dates: CalendarDateView[];
-  items: { id: string; reference: string | null; title: string }[];
-}
-
-function parseCalendar(value: Json): CalendarView {
-  const o = rec(value, 'calendar');
-  return {
-    tasks: parseList(o.tasks, (v): CalendarTaskView => {
-      const t = rec(v, 'calendar task');
-      return {
-        id: str(t, 'id'),
-        item_id: str(t, 'item_id'),
-        reference: optStr(t, 'reference'),
-        title: str(t, 'title'),
-        status: str(t, 'status'),
-        status_category: statusCategory(str(t, 'status_category')),
-        milestone: bool(t, 'milestone'),
-        start_date: optStr(t, 'start_date'),
-        due_date: optStr(t, 'due_date'),
-      };
-    }),
-    projected_tasks: parseList(o.projected_tasks, (v): ProjectedTaskView => {
-      const p = rec(v, 'projected task');
-      return {
-        series_id: str(p, 'series_id'),
-        root_task_id: str(p, 'root_task_id'),
-        item_id: str(p, 'item_id'),
-        title: str(p, 'title'),
-        milestone: bool(p, 'milestone'),
-        occurrence: str(p, 'occurrence'),
-        start_date: optStr(p, 'start_date'),
-        due_date: optStr(p, 'due_date'),
-      };
-    }),
-    events: parseList(o.events, parseEvent),
-    dates: parseList(o.dates, (v): CalendarDateView => {
-      const d = rec(v, 'calendar date');
-      const kind = CALENDAR_DATE_KINDS.find((k) => k === str(d, 'kind'));
-      if (kind === undefined) throw new TypeError('unknown calendar date kind');
-      return {
-        kind,
-        id: str(d, 'id'),
-        item_id: str(d, 'item_id'),
-        title: str(d, 'title'),
-        date: str(d, 'date'),
-        personal: bool(d, 'personal'),
-        done: bool(d, 'done'),
-      };
-    }),
-    occurrences: parseList(o.occurrences, (v): EventOccurrenceView => {
-      const e = rec(v, 'occurrence');
-      return {
-        event_id: str(e, 'event_id'),
-        occurrence: str(e, 'occurrence'),
-        start_date: optStr(e, 'start_date'),
-        end_date: optStr(e, 'end_date'),
-        starts_at: optStr(e, 'starts_at'),
-        ends_at: optStr(e, 'ends_at'),
-        skipped: e.skipped === true,
-      };
-    }),
-    items: parseList(o.items, (v) => {
-      const i = rec(v, 'calendar item');
-      return { id: str(i, 'id'), reference: optStr(i, 'reference'), title: str(i, 'title') };
-    }),
-  };
-}
-
 export type {
   EpisodeStatus,
   CourseDetailsView,
@@ -943,352 +61,139 @@ export type {
   ParticipantView,
   NewEpisodeInput,
 } from '$lib/features/courses/model';
-
-export interface DeletedWorkspaceView {
-  id: string;
-  name: string;
-  deleted_at: string;
-  expires_at: string;
-  expired: boolean;
-}
-
-function parseDeletedWorkspace(value: Json): DeletedWorkspaceView {
-  const o = rec(value, 'deleted workspace');
-  return {
-    id: str(o, 'id'),
-    name: str(o, 'name'),
-    deleted_at: str(o, 'deleted_at'),
-    expires_at: str(o, 'expires_at'),
-    expired: bool(o, 'expired'),
-  };
-}
-
-export type SearchKind = 'document' | 'task' | 'item' | 'event' | 'file' | 'record';
-
-/** 검색 필터(D-39). 상태·담당자를 주면 업무만 나온다. 날짜는 YYYY-MM-DD(끝 포함). */
-export interface SearchFilters {
-  kind?: SearchKind;
-  moduleId?: string;
-  /** 업무 상태 범주(D-116). 상태 이름이 아니라 범주로 거르며, 주면 업무만 나온다. */
-  statusCategory?: StatusCategory;
-  /** `me` 또는 사용자 id. */
-  assignee?: string;
-  from?: string;
-  to?: string;
-  /** 날짜의 하루를 정하는 IANA 시간대(설정의 시간대). 경계는 서버가 계산한다(D-101). */
-  tz?: string;
-  /** 작성자: `me` 또는 사용자 id(그 사람이 만든 것만). */
-  author?: string;
-  /** 제목에서만 찾기. */
-  titleOnly?: boolean;
-}
-
-export interface SearchResultView {
-  kind: SearchKind;
-  id: string;
-  title: string;
-  reference: string | null;
-  workspace_id: string | null;
-  item_id: string | null;
-  document_id: string | null;
-  snippet: string | null;
-}
-
-function parseSearchResult(value: Json): SearchResultView {
-  const o = rec(value, 'search result');
-  const kind = str(o, 'kind');
-  if (
-    kind !== 'document' &&
-    kind !== 'task' &&
-    kind !== 'item' &&
-    kind !== 'event' &&
-    kind !== 'file' &&
-    kind !== 'record'
-  )
-    throw new TypeError(`unknown search kind ${kind}`);
-  return {
-    kind,
-    id: str(o, 'id'),
-    title: str(o, 'title'),
-    reference: optStr(o, 'reference'),
-    workspace_id: optStr(o, 'workspace_id'),
-    item_id: optStr(o, 'item_id'),
-    document_id: optStr(o, 'document_id'),
-    snippet: optStr(o, 'snippet'),
-  };
-}
-
-/** 이동 대상: 워크스페이스 위키, 또는 그 워크스페이스의 항목. */
-export interface MoveTargetInput {
-  workspaceId: string;
-  itemId: string | null;
-}
-
-const none = (): undefined => undefined;
-
-/**
- * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리. 서버는 세션의 사용자와 비교만 하고
- * 권한은 세션으로만 정한다.
- */
-/** 판 충돌 409가 함께 보낸 서버 최신본(`current`). 판 충돌이 아닌 409(보관 등)와 다른 응답은 undefined다. */
-function versionConflict(status: number, json: Json): unknown {
-  if (status !== 409 || !isRecord(json) || json.current === undefined) return undefined;
-  return json.current;
-}
+export { parseHealth, parseMe, fetchHealth } from './client/accounts';
+export type { HealthResult } from './client/accounts';
+export {
+  parseOrganizationSummary,
+  parseOrganizationLimits,
+  parseOrganization,
+} from './client/organizations';
+export {
+  parseWorkspace,
+  parseAccepted,
+  parseMembersView,
+  parseInvitation,
+  parseReceivedInvitation,
+  parseGroup,
+} from './client/workspaces';
+export type { DeletedWorkspaceView } from './client/workspaces';
+export {
+  parseDocNode,
+  parseSummary,
+  parseDocument,
+  parseSharedView,
+  parseShareView,
+  parseMovePreview,
+  parsePublicLink,
+  parsePublicDocument,
+  parseMoveOutcome,
+} from './client/documents';
+export type {
+  DocNode,
+  Access,
+  DocumentView,
+  SummaryView,
+  SharedView,
+  ShareView,
+  ShareRecipientView,
+  MoveAccessChangeView,
+  MovePreviewView,
+  MoveOutcomeView,
+  PublicLinkView,
+  PublicDocumentView,
+  MoveTargetInput,
+} from './client/documents';
+export {
+  MODULE_KINDS,
+  parseModule,
+  ITEM_STATUSES,
+  parseItem,
+  parseItemProfile,
+} from './client/modules';
+export type {
+  ItemStatus,
+  ItemView,
+  ItemDetailsView,
+  PersonRefView,
+  ItemProfileView,
+} from './client/modules';
+export { parseCandidate, parseResolved, parseBacklink } from './client/references';
+export type {
+  ReferenceKind,
+  ReferenceCandidateView,
+  ResolvedReferenceView,
+  BacklinkView,
+} from './client/references';
+export { parseRevisionSummary, parseRevision } from './client/revisions';
+export type { RevisionSummaryView, RevisionView } from './client/revisions';
+export { CALENDAR_DATE_KINDS } from './client/calendar';
+export type {
+  CalendarTaskView,
+  EventOccurrenceView,
+  ProjectedTaskView,
+  CalendarDateKind,
+  CalendarDateView,
+  CalendarView,
+} from './client/calendar';
+export type { SearchKind, SearchFilters, SearchResultView } from './client/search';
 
 export const api = {
-  // 다른 조각 소유 호출부를 위한 재노출. 구현·계약은 시간 도메인 한 곳에 있다.
   ...timeData,
-  authInfo: () =>
-    expectOk('GET', '/api/auth-info', (v): AuthInfo => ({
-      oidc_enabled: bool(rec(v, 'auth info'), 'oidc_enabled'),
-    })),
-  /** 로그인하지 않았으면 undefined. */
-  async me(): Promise<Me | undefined> {
-    const { status, json } = await request('GET', '/api/me');
-    if (status === 401) return undefined;
-    if (status !== 200) fail(status, json);
-    return parseMe(json);
-  },
-  async logout(): Promise<string> {
-    return expectOk('POST', '/auth/logout', (v) => str(rec(v, 'logout'), 'redirect_to'));
-  },
-  /** 내가 속한 조직(전환기 목록, D-111). 서버는 기본 조직을 정하지 않는다. */
-  myOrganizations: () =>
-    expectOk('GET', '/api/me/organizations', (v) => parseList(v, parseOrganizationSummary)),
-  organization: (id: string) =>
-    expectOk('GET', `/api/organizations/${encodeURIComponent(id)}`, parseOrganization),
-  workspaces: () => expectOk('GET', '/api/workspaces', (v) => parseList(v, parseWorkspace)),
-  /** 조직 안 워크스페이스는 조직 멤버 누구나 만든다(D-112). */
-  createWorkspace: (requestId: string, organizationId: string, name: string) =>
-    expectOk('POST', '/api/workspaces', parseWorkspace, {
-      request_id: requestId,
-      organization_id: organizationId,
-      name,
-    }),
-  wikiDocuments: (workspaceId: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`, (v) =>
-      parseList(v, parseSummary),
-    ),
-  createWikiDocument: (
-    workspaceId: string,
-    requestId: string,
-    title: string,
-    parentId: string | null = null,
-    templateId: string | null = null,
-  ) =>
-    expectOk(
-      'POST',
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/wiki/documents`,
-      parseDocument,
-      { request_id: requestId, title, parent_id: parentId, template_id: templateId },
-    ),
-  /** 트리에서 부모·순서를 바꾼다. parentId가 null이면 최상위, beforeId가 있으면 그 형제 바로 앞. */
-  setParent: (id: string, parentId: string | null, beforeId: string | null) =>
-    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/parent`, parseDocument, {
-      parent_id: parentId,
-      before_id: beforeId,
-    }),
-  /** 문서 한 건. 브라우저 캐시가 ETag로 서버에 재검증하고(304면 저장본), 응답의 ETag를 문서에 붙인다(D-77). */
-  async document(id: string): Promise<DocumentView> {
-    const { status, json, etag } = await request('GET', `/api/documents/${encodeURIComponent(id)}`);
-    if (status !== 200) fail(status, json);
-    return withEtag(parseDocument(json), etag);
-  },
-  members: (ws: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/members`, parseMembersView),
-  setRole: (ws: string, userId: string, newRole: Role) =>
-    expectOk(
-      'PUT',
-      `/api/workspaces/${encodeURIComponent(ws)}/members/${encodeURIComponent(userId)}`,
-      none,
-      { role: newRole },
-    ),
-  removeMember: (ws: string, userId: string) =>
-    expectOk(
-      'DELETE',
-      `/api/workspaces/${encodeURIComponent(ws)}/members/${encodeURIComponent(userId)}`,
-      none,
-    ),
-  leave: (ws: string) => expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/leave`, none),
-  /** 워크스페이스 지우기(소유자, 이름 확인). 영구 삭제되는 때를 돌려준다. */
-  deleteWorkspace: (ws: string, name: string) =>
-    expectOk(
-      'DELETE',
-      `/api/workspaces/${encodeURIComponent(ws)}`,
-      (v) => str(rec(v, 'workspace deleted'), 'expires_at'),
-      { name },
-    ),
+  authInfo: accountsApi.authInfo,
+  me: accountsApi.me,
+  logout: accountsApi.logout,
+  myOrganizations: organizationsApi.myOrganizations,
+  organization: organizationsApi.organization,
+  workspaces: workspacesApi.workspaces,
+  createWorkspace: workspacesApi.createWorkspace,
+  wikiDocuments: documentsApi.wikiDocuments,
+  createWikiDocument: documentsApi.createWikiDocument,
+  setParent: documentsApi.setParent,
+  document: documentsApi.document,
+  members: workspacesApi.members,
+  setRole: workspacesApi.setRole,
+  removeMember: workspacesApi.removeMember,
+  leave: workspacesApi.leave,
+  deleteWorkspace: workspacesApi.deleteWorkspace,
   ...filesApi,
   ...courseApi,
   course: loadCourseView,
   ...studyApi,
   studyPlan: loadStudyView,
-  deletedWorkspaces: () =>
-    expectOk('GET', '/api/me/deleted-workspaces', (v) => parseList(v, parseDeletedWorkspace)),
-  restoreWorkspace: (ws: string) =>
-    expectOk('POST', `/api/me/deleted-workspaces/${encodeURIComponent(ws)}/restore`, none),
-  purgeWorkspace: (ws: string) =>
-    expectOk('DELETE', `/api/me/deleted-workspaces/${encodeURIComponent(ws)}`, none),
-  invitations: (ws: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/invitations`, (v) =>
-      parseList(v, parseInvitation),
-    ),
-  revokeInvitation: (id: string) =>
-    expectOk('DELETE', `/api/invitations/${encodeURIComponent(id)}`, none),
-  myInvitations: () =>
-    expectOk('GET', '/api/invitations', (v) => parseList(v, parseReceivedInvitation)),
-  /** 수락 결과의 `kind`로 조직 초대(워크스페이스 없음)와 워크스페이스 초대를 가른다(D-118). */
-  acceptInvitation: (id: string) =>
-    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/accept`, parseAccepted),
-  declineInvitation: (id: string) =>
-    expectOk('POST', `/api/invitations/${encodeURIComponent(id)}/decline`, none),
-  offerOwnership: (ws: string, toUser: string) =>
-    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/ownership`, none, {
-      to_user: toUser,
-    }),
-  cancelOwnershipOffer: (ws: string) =>
-    expectOk('DELETE', `/api/workspaces/${encodeURIComponent(ws)}/ownership`, none),
-  acceptOwnership: (ws: string) =>
-    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/ownership/accept`, none),
-  groups: (ws: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/groups`, (v) =>
-      parseList(v, parseGroup),
-    ),
-  createGroup: (ws: string, name: string) =>
-    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/groups`, parseGroup, { name }),
-  deleteGroup: (id: string) => expectOk('DELETE', `/api/groups/${encodeURIComponent(id)}`, none),
-  setGroupMember: (groupId: string, userId: string, present: boolean) =>
-    expectOk(
-      present ? 'PUT' : 'DELETE',
-      `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
-      none,
-    ),
-  myNotes: () => expectOk('GET', '/api/me/notes', (v) => parseList(v, parseSummary)),
-  /** 내 노트 만들기. `expectedUser`는 이 만들기를 시작한 화면의 사용자 id(서버가 세션과 다르면 409 `account_changed`). */
-  async createNote(
-    expectedUser: string,
-    requestId: string,
-    title: string,
-    parentId: string | null = null,
-    templateId: string | null = null,
-  ): Promise<DocumentView> {
-    const { status, json } = await request(
-      'POST',
-      '/api/me/notes',
-      { request_id: requestId, title, parent_id: parentId, template_id: templateId },
-      { [EXPECTED_USER]: expectedUser },
-    );
-    if (status < 200 || status >= 300) fail(status, json);
-    return parseDocument(json);
-  },
-  /** 공유받은 문서는 현재 조직에서 받은 것만(D-111). */
-  sharedWithMe: (organizationId: string) =>
-    expectOk('GET', `/api/me/shared?organization_id=${encodeURIComponent(organizationId)}`, (v) =>
-      parseList(v, parseSharedView),
-    ),
-  shares: (id: string) =>
-    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/shares`, (v) =>
-      parseList(v, parseShareView),
-    ),
-  shareRecipient: (id: string, email: string, organizationId: string) => {
-    const query = new URLSearchParams({ email, organization_id: organizationId });
-    return expectOk(
-      'GET',
-      `/api/documents/${encodeURIComponent(id)}/share-recipient?${query.toString()}`,
-      parseShareRecipient,
-    );
-  },
-  share: (id: string, email: string, perm: SharePermission, organizationId: string) =>
-    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/shares`, parseShareView, {
-      email,
-      permission: perm,
-      organization_id: organizationId,
-    }),
-  unshare: (shareId: string) =>
-    expectOk('DELETE', `/api/document-shares/${encodeURIComponent(shareId)}`, none),
-  copyDocument: (id: string, requestId: string, targetWorkspaceId: string | null, title: string) =>
-    expectOk('POST', `/api/documents/${encodeURIComponent(id)}/copy`, parseDocument, {
-      request_id: requestId,
-      target_workspace_id: targetWorkspaceId,
-      title,
-    }),
-  /** 쓸 수 있는 문서 템플릿(D-27): 그 워크스페이스의 것과 내 개인 노트 템플릿. */
-  documentTemplates: (workspaceId: string | null) =>
-    expectOk(
-      'GET',
-      workspaceId === null
-        ? '/api/document-templates'
-        : `/api/document-templates?workspace_id=${encodeURIComponent(workspaceId)}`,
-      (v) =>
-        parseList(v, (t) => {
-          const o = rec(t, 'document template');
-          return {
-            id: str(o, 'id'),
-            title: str(o, 'title'),
-            reference: optStr(o, 'reference'),
-            personal: bool(o, 'personal'),
-          };
-        }),
-    ),
-  setDocumentTemplate: (id: string, template: boolean) =>
-    expectOk('PUT', `/api/documents/${encodeURIComponent(id)}/template`, none, { template }),
+  deletedWorkspaces: workspacesApi.deletedWorkspaces,
+  restoreWorkspace: workspacesApi.restoreWorkspace,
+  purgeWorkspace: workspacesApi.purgeWorkspace,
+  invitations: workspacesApi.invitations,
+  revokeInvitation: workspacesApi.revokeInvitation,
+  myInvitations: workspacesApi.myInvitations,
+  acceptInvitation: workspacesApi.acceptInvitation,
+  declineInvitation: workspacesApi.declineInvitation,
+  offerOwnership: workspacesApi.offerOwnership,
+  cancelOwnershipOffer: workspacesApi.cancelOwnershipOffer,
+  acceptOwnership: workspacesApi.acceptOwnership,
+  groups: workspacesApi.groups,
+  createGroup: workspacesApi.createGroup,
+  deleteGroup: workspacesApi.deleteGroup,
+  setGroupMember: workspacesApi.setGroupMember,
+  myNotes: documentsApi.myNotes,
+  createNote: documentsApi.createNote,
+  sharedWithMe: documentsApi.sharedWithMe,
+  shares: documentsApi.shares,
+  shareRecipient: documentsApi.shareRecipient,
+  share: documentsApi.share,
+  unshare: documentsApi.unshare,
+  copyDocument: documentsApi.copyDocument,
+  documentTemplates: documentsApi.documentTemplates,
+  setDocumentTemplate: documentsApi.setDocumentTemplate,
   ...recordsApi,
-  itemProfile: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
-  /** 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
-  async setItemProfile(
-    itemId: string,
-    baseVersion: number,
-    profile: {
-      leader_id: string | null;
-      goal: string;
-      scope: string;
-      starts_on: string | null;
-      ends_on: string | null;
-      status: ItemStatus;
-      details: ItemDetailsView;
-    },
-  ): Promise<{ kind: 'saved' } | { kind: 'conflict'; current: ItemProfileView }> {
-    const { status, json } = await request(
-      'PUT',
-      `/api/items/${encodeURIComponent(itemId)}/profile`,
-      { base_version: baseVersion, ...profile, details: { ...profile.details } },
-    );
-    const current = versionConflict(status, json);
-    if (current !== undefined) return { kind: 'conflict', current: parseItemProfile(current) };
-    if (status < 200 || status >= 300) fail(status, json);
-    return { kind: 'saved' };
-  },
-  setItemMembers: (itemId: string, userIds: string[], groupIds: string[]) =>
-    expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/members`, none, {
-      user_ids: userIds,
-      group_ids: groupIds,
-    }),
-  /** 항목 복제. reset이면 업무 상태·날짜·체크와 항목 상태·기간을 비운다(템플릿 사용). */
-  copyItem: (itemId: string, requestId: string, moduleId: string, title: string, reset: boolean) =>
-    expectOk(
-      'POST',
-      `/api/items/${encodeURIComponent(itemId)}/copy`,
-      (v) => {
-        const o = rec(v, 'copied item');
-        return { item_id: str(o, 'item_id'), skipped_documents: int(o, 'skipped_documents') };
-      },
-      { request_id: requestId, module_id: moduleId, title, reset },
-    ),
-  setItemTemplate: (itemId: string, template: boolean) =>
-    expectOk('PUT', `/api/items/${encodeURIComponent(itemId)}/template`, none, { template }),
-  setModuleIcon: (moduleId: string, icon: string) =>
-    expectOk('PUT', `/api/modules/${encodeURIComponent(moduleId)}/icon`, none, { icon }),
-  /** 모듈 설명(관리자, D-78). 빈 문자열이면 지운다. */
-  setModuleDescription: (moduleId: string, description: string) =>
-    expectOk('PUT', `/api/modules/${encodeURIComponent(moduleId)}/description`, parseModule, {
-      description,
-    }),
-  taskBacklinks: (id: string) =>
-    expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/backlinks`, (v) =>
-      parseList(v, parseBacklink),
-    ),
+  itemProfile: modulesApi.itemProfile,
+  setItemProfile: modulesApi.setItemProfile,
+  setItemMembers: modulesApi.setItemMembers,
+  copyItem: modulesApi.copyItem,
+  setItemTemplate: modulesApi.setItemTemplate,
+  setModuleIcon: modulesApi.setModuleIcon,
+  setModuleDescription: modulesApi.setModuleDescription,
+  taskBacklinks: referencesApi.taskBacklinks,
   trashDocument: systemApi.trashDocument,
   trashItem: systemApi.trashItem,
   trashModule: systemApi.trashModule,
@@ -1298,205 +203,34 @@ export const api = {
   purgeExpiredTrash: systemApi.purgeExpiredTrash,
   setVersionRetention: systemApi.setVersionRetention,
   setTrashRetention: systemApi.setTrashRetention,
-  /** 달력(D-80). `scope`로 모듈·항목 범위로 좁힌다(같은 데이터, 사본 없음). */
-  calendar: (
-    workspaceId: string,
-    from: string,
-    to: string,
-    tz: string,
-    scope: { moduleId?: string | undefined; itemId?: string | undefined } = {},
-  ) => {
-    const params = new URLSearchParams({ from, to, tz });
-    if (scope.moduleId !== undefined) params.set('module_id', scope.moduleId);
-    if (scope.itemId !== undefined) params.set('item_id', scope.itemId);
-    return expectOk(
-      'GET',
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/calendar?${params.toString()}`,
-      parseCalendar,
-    );
-  },
-  revisions: (id: string, before: number | null) =>
-    expectOk(
-      'GET',
-      `/api/documents/${encodeURIComponent(id)}/revisions${before === null ? '' : `?before=${String(before)}`}`,
-      (v) => parseList(v, parseRevisionSummary),
-    ),
-  revision: (id: string, revision: number) =>
-    expectOk(
-      'GET',
-      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}`,
-      parseRevision,
-    ),
-  /** 저장된 리비전 하나를 내보낸다(D-75). 서버가 내보내기 권한을 확인하고 기록을 남긴 뒤 그 리비전을 준다. */
-  exportRevision: (
-    id: string,
-    revision: number,
-    format: 'markdown' | 'zip' | 'pdf',
-    signal?: AbortSignal,
-  ) =>
-    expectOk(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/revisions/${String(revision)}/export`,
-      parseRevision,
-      { format },
-      signal,
-    ),
-  /** 통합 검색. 볼 수 있는 것만, 최대 20건. */
-  /** 검색은 현재 조직 범위다(D-111). `workspaceId`는 그 안의 좁힘이지 조직을 대신하지 않는다. */
-  search: (
-    organizationId: string,
-    q: string,
-    workspaceId: string | null,
-    filters: SearchFilters = {},
-  ) => {
-    const params = new URLSearchParams({ organization_id: organizationId, q });
-    if (workspaceId !== null) params.set('workspace_id', workspaceId);
-    if (filters.kind !== undefined) params.set('kinds', filters.kind);
-    if (filters.moduleId !== undefined) params.set('module_id', filters.moduleId);
-    if (filters.statusCategory !== undefined) params.set('status_category', filters.statusCategory);
-    if (filters.assignee !== undefined) params.set('assignee', filters.assignee);
-    if (filters.from !== undefined) params.set('from', filters.from);
-    if (filters.to !== undefined) params.set('to', filters.to);
-    if (filters.tz !== undefined) params.set('tz', filters.tz);
-    if (filters.author !== undefined) params.set('author', filters.author);
-    if (filters.titleOnly === true) params.set('title_only', 'true');
-    return expectOk('GET', `/api/search?${params.toString()}`, (v) =>
-      parseList(v, parseSearchResult),
-    );
-  },
-  referenceCandidates: (q: string, workspaceId: string | null) => {
-    const params = new URLSearchParams({ q });
-    if (workspaceId !== null) params.set('workspace_id', workspaceId);
-    return expectOk('GET', `/api/reference-candidates?${params.toString()}`, (v) =>
-      parseList(v, parseCandidate),
-    );
-  },
-  resolveReferences: (refs: { kind: ReferenceKind; id: string }[], signal?: AbortSignal) =>
-    expectOk(
-      'POST',
-      '/api/references/resolve',
-      (v) => parseList(v, parseResolved),
-      { refs },
-      signal,
-    ),
-  documentBacklinks: (id: string) =>
-    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/backlinks`, (v) =>
-      parseList(v, parseBacklink),
-    ),
-  itemBacklinks: (id: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(id)}/backlinks`, (v) =>
-      parseList(v, parseBacklink),
-    ),
-  modules: (ws: string) =>
-    expectOk('GET', `/api/workspaces/${encodeURIComponent(ws)}/modules`, (v) =>
-      parseList(v, parseModule),
-    ),
-  module: (id: string) => expectOk('GET', `/api/modules/${encodeURIComponent(id)}`, parseModule),
-  createModule: (
-    ws: string,
-    input: { requestId: string; kind: ModuleKind; name: string; key: string },
-  ) =>
-    expectOk('POST', `/api/workspaces/${encodeURIComponent(ws)}/modules`, parseModule, {
-      request_id: input.requestId,
-      kind: input.kind,
-      name: input.name,
-      key: input.key,
-    }),
-  updateModule: (id: string, name: string, key: string) =>
-    expectOk('PUT', `/api/modules/${encodeURIComponent(id)}`, parseModule, { name, key }),
-  archiveModule: (id: string, archived: boolean) =>
-    expectOk('PUT', `/api/modules/${encodeURIComponent(id)}/archived`, parseModule, { archived }),
-  items: (moduleId: string) =>
-    expectOk('GET', `/api/modules/${encodeURIComponent(moduleId)}/items`, (v) =>
-      parseList(v, parseItem),
-    ),
-  createItem: (moduleId: string, requestId: string, title: string) =>
-    expectOk('POST', `/api/modules/${encodeURIComponent(moduleId)}/items`, parseItem, {
-      request_id: requestId,
-      title,
-    }),
-  item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
-  /** 항목 정보(제목·설명·공개 범위) 고치기. 읽은 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
-  async updateItem(
-    id: string,
-    baseVersion: number,
-    /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
-    input: { title: string; description: string; visibility?: 'workspace' | 'private' },
-  ): Promise<{ kind: 'updated'; item: ItemView } | { kind: 'conflict'; current: ItemView }> {
-    const { status, json } = await request('PUT', `/api/items/${encodeURIComponent(id)}`, {
-      base_version: baseVersion,
-      ...input,
-    });
-    const current = versionConflict(status, json);
-    if (current !== undefined) return { kind: 'conflict', current: parseItem(current) };
-    if (status !== 200) fail(status, json);
-    return { kind: 'updated', item: parseItem(json) };
-  },
-  archiveItem: (id: string, archived: boolean) =>
-    expectOk('PUT', `/api/items/${encodeURIComponent(id)}/archived`, parseItem, { archived }),
-  itemDocuments: (itemId: string) =>
-    expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/documents`, (v) =>
-      parseList(v, parseSummary),
-    ),
-  createItemDocument: (
-    itemId: string,
-    requestId: string,
-    title: string,
-    parentId: string | null = null,
-    templateId: string | null = null,
-  ) =>
-    expectOk('POST', `/api/items/${encodeURIComponent(itemId)}/documents`, parseDocument, {
-      request_id: requestId,
-      title,
-      parent_id: parentId,
-      template_id: templateId,
-    }),
-  publicLinks: (id: string) =>
-    expectOk('GET', `/api/documents/${encodeURIComponent(id)}/public-links`, (v) =>
-      parseList(v, parsePublicLink),
-    ),
-  /** 링크 주소는 이때 한 번만 받는다. */
-  createPublicLink: (id: string, expiresAt: string | null) =>
-    expectOk(
-      'POST',
-      `/api/documents/${encodeURIComponent(id)}/public-links`,
-      (v) => {
-        const o = rec(v, 'created link');
-        return { id: str(o, 'id'), url: str(o, 'url') };
-      },
-      expiresAt === null ? {} : { expires_at: expiresAt },
-    ),
-  revokePublicLink: (linkId: string) =>
-    expectOk('DELETE', `/api/public-links/${encodeURIComponent(linkId)}`, none),
-  publicDocument: (token: string) =>
-    expectOk('GET', `/api/public/${encodeURIComponent(token)}`, parsePublicDocument),
+  calendar: calendarApi.calendar,
+  revisions: revisionsApi.revisions,
+  revision: revisionsApi.revision,
+  exportRevision: revisionsApi.exportRevision,
+  search: searchApi.search,
+  referenceCandidates: referencesApi.referenceCandidates,
+  resolveReferences: referencesApi.resolveReferences,
+  documentBacklinks: referencesApi.documentBacklinks,
+  itemBacklinks: referencesApi.itemBacklinks,
+  modules: modulesApi.modules,
+  module: modulesApi.module,
+  createModule: modulesApi.createModule,
+  updateModule: modulesApi.updateModule,
+  archiveModule: modulesApi.archiveModule,
+  items: modulesApi.items,
+  createItem: modulesApi.createItem,
+  item: modulesApi.item,
+  updateItem: modulesApi.updateItem,
+  archiveItem: modulesApi.archiveItem,
+  itemDocuments: documentsApi.itemDocuments,
+  createItemDocument: documentsApi.createItemDocument,
+  publicLinks: documentsApi.publicLinks,
+  createPublicLink: documentsApi.createPublicLink,
+  revokePublicLink: documentsApi.revokePublicLink,
+  publicDocument: documentsApi.publicDocument,
 };
 
 /** 요청 ID. 재시도 때 같은 값을 다시 보내면 서버가 중복을 막는다. */
 export function newRequestId(): string {
   return crypto.randomUUID();
-}
-
-export type HealthResult =
-  | { kind: 'ok'; health: Health }
-  | { kind: 'degraded'; health: Health }
-  | { kind: 'unreachable'; message: string };
-
-/** 상태 확인. 503도 형태가 맞으면 degraded로 본다. */
-export async function fetchHealth(fetchImpl: typeof fetch = fetch): Promise<HealthResult> {
-  let response: Response;
-  try {
-    response = await fetchImpl('/healthz');
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'network error';
-    return { kind: 'unreachable', message };
-  }
-  const body: unknown = await response.json().catch(() => undefined);
-  let health: Health;
-  try {
-    health = parseHealth(body);
-  } catch {
-    return { kind: 'unreachable', message: `unexpected response (${String(response.status)})` };
-  }
-  return response.ok ? { kind: 'ok', health } : { kind: 'degraded', health };
 }
