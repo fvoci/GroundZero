@@ -38,7 +38,14 @@ for (const scale of [100, 200] as const) {
     const activity = panel.getByLabel('활동 보존 일수', { exact: true });
     await expect(activity).toHaveValue('30');
     await expect(
-      panel.getByText('실제로 쓰는 값은 서버 기본값·조직·공간 가운데 가장 작은 값입니다'),
+      panel.getByText(
+        '파일 크기·저장량·동시 업로드 수에 실제로 쓰는 값은 서버 기본값·조직·공간 가운데 가장 작은 값입니다.',
+      ),
+    ).toBeVisible();
+    await expect(
+      panel.getByText(
+        '보존 기간은 조직 값과 공간 값이 모두 있으면 두 값의 최솟값, 한쪽만 있으면 그 값을 씁니다. 둘 다 없으면 서버 기본값(활동 365일·감사로그 730일)을 씁니다.',
+      ),
     ).toBeVisible();
     expect(await offenders(panel), 'limits stay within the panel').toEqual([]);
     const clippedSelections = await panel.locator('select').evaluateAll((selects) => {

@@ -35,6 +35,7 @@
   const { workspace, meId, onchanged }: Props = $props();
 
   let view = $state<MembersView | undefined>(undefined);
+  let viewWorkspaceId = $state<string>();
   let invitations = $state<Invitation[]>([]);
   let groups = $state<Group[]>([]);
   let error = $state<string | undefined>(undefined);
@@ -74,8 +75,8 @@
     undefined,
   );
 
-  // 관리 가능 여부는 서버가 접근 등급으로 계산한 칸이다(D-113). 역할은 표시에만 쓴다.
-  const isAdmin = $derived(view?.can_manage_members === true);
+  // 서버의 권한 판정은 읽어 온 공간에만 쓴다. 전환 직후 reset 효과 전에도 새 공간에 넘기지 않는다(D-113).
+  const isAdmin = $derived(viewWorkspaceId === workspace.id && view?.can_manage_members === true);
 
   const inviteDraft = createFormDraft<{ email: string; role: Role }>({
     preserve: false,
@@ -221,6 +222,7 @@
     try {
       const v = await api.members(wsId);
       if (!current()) return;
+      viewWorkspaceId = wsId;
       view = v;
       const loadedGroups = await api.groups(wsId);
       if (!current()) return;
@@ -276,6 +278,7 @@
     });
   });
   function reset(id: string): void {
+    viewWorkspaceId = undefined;
     view = undefined;
     groups = [];
     invitations = [];

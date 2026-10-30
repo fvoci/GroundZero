@@ -1,7 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "organizations_limits_heading": "Limits and retention",
-  "organizations_limits_effective_hint": "The effective value is the smallest of the server default, organization and workspace values.",
+  "organizations_limits_effective_hint": "For file size, storage and concurrent uploads, the effective value is the smallest of the server default, organization and workspace values.",
+  "organizations_retention_effective_hint": "For retention periods, use the smaller of the organization and workspace values when both are set, or the set value when only one is set. When neither is set, use the server defaults: 365 days for activity and 730 days for audit logs.",
   "organizations_max_file_bytes": "Maximum file size",
   "organizations_workspace_storage": "Total workspace storage",
   "organizations_max_concurrent_uploads": "Concurrent uploads",

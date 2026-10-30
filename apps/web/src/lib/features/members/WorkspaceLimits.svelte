@@ -160,6 +160,7 @@
 <section class="flex min-w-0 flex-col gap-3" aria-labelledby="workspace-limits-heading">
   <h2 id="workspace-limits-heading" class="font-semibold">{m.organizations_limits_heading()}</h2>
   <p class="text-sm text-muted-foreground">{m.organizations_limits_effective_hint()}</p>
+  <p class="text-sm text-muted-foreground">{m.organizations_retention_effective_hint()}</p>
   {#if loading}
     <div aria-label={m.app_loading()} aria-busy="true" class="grid gap-3">
       {#each LIMIT_FIELDS as field (field.key)}<Skeleton class="h-16 w-full" />{/each}
