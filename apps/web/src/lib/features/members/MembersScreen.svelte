@@ -22,6 +22,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import RoleSelect from './RoleSelect.svelte';
+  import WorkspaceLimits from './WorkspaceLimits.svelte';
   import { DISPLAY_ROLES, roleLabel } from './roles';
 
   interface Props {
@@ -348,7 +349,7 @@
           {#if member.email !== null}
             <span class="text-sm text-muted-foreground">{member.email}</span>
           {/if}
-          <span class="ml-auto flex items-center gap-2">
+          <span class="ml-auto flex min-w-0 flex-wrap items-center gap-2">
             {#if isAdmin && !member.is_owner}
               <RoleSelect
                 value={member.role}
@@ -426,7 +427,7 @@
              숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
         <fieldset class="min-w-0" disabled={inviting}>
           <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
-            <div class="flex min-w-60 flex-1 flex-col gap-1">
+            <div class="flex min-w-0 flex-1 basis-60 flex-col gap-1">
               <Label for="invite-email">{m.members_email()}</Label>
               <Input
                 id="invite-email"
@@ -585,6 +586,7 @@
     {/if}
 
     {#if isAdmin}
+      <WorkspaceLimits workspaceId={workspace.id} organizationId={workspace.organization_id} />
       <section class="flex flex-col gap-2" aria-labelledby="export-heading">
         <h2 id="export-heading" class="font-semibold">{m.members_export_heading()}</h2>
         <p class="text-sm text-muted-foreground">
