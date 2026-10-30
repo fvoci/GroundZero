@@ -44,7 +44,7 @@ for (const scale of [100, 200] as const) {
     ).toBeVisible();
     await expect(
       panel.getByText(
-        '보존 기간은 조직 값과 공간 값이 모두 있으면 두 값의 최솟값, 한쪽만 있으면 그 값을 씁니다. 둘 다 없으면 서버 기본값(활동 365일·감사로그 730일)을 씁니다.',
+        '보존 기간은 조직 값과 공간 값이 모두 있으면 두 값의 최솟값, 한쪽만 있으면 그 값을 씁니다. 둘 다 없으면 서버 설정값(따로 정하지 않았으면 활동 365일·감사 730일)을 씁니다.',
       ),
     ).toBeVisible();
     expect(await offenders(panel), 'limits stay within the panel').toEqual([]);

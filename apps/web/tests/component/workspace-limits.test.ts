@@ -118,7 +118,7 @@ describe('workspace limits in workspace administration', () => {
       sizeHint:
         '파일 크기·저장량·동시 업로드 수에 실제로 쓰는 값은 서버 기본값·조직·공간 가운데 가장 작은 값입니다.',
       retentionHint:
-        '보존 기간은 조직 값과 공간 값이 모두 있으면 두 값의 최솟값, 한쪽만 있으면 그 값을 씁니다. 둘 다 없으면 서버 기본값(활동 365일·감사로그 730일)을 씁니다.',
+        '보존 기간은 조직 값과 공간 값이 모두 있으면 두 값의 최솟값, 한쪽만 있으면 그 값을 씁니다. 둘 다 없으면 서버 설정값(따로 정하지 않았으면 활동 365일·감사 730일)을 씁니다.',
     },
     {
       locale: 'en',
@@ -128,7 +128,7 @@ describe('workspace limits in workspace administration', () => {
       sizeHint:
         'For file size, storage and concurrent uploads, the effective value is the smallest of the server default, organization and workspace values.',
       retentionHint:
-        'For retention periods, use the smaller of the organization and workspace values when both are set, or the set value when only one is set. When neither is set, use the server defaults: 365 days for activity and 730 days for audit logs.',
+        'For retention periods, use the smaller of the organization and workspace values when both are set, or the set value when only one is set. When neither is set, use the server settings (365 days for activity and 730 days for audit logs unless configured otherwise).',
     },
   ] as const)(
     'shows five fields, organization caps and the separate D-124 explanations in $locale',
