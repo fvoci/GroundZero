@@ -82,15 +82,29 @@ for (const kind of ['mouse', 'touch'] as const) {
             y: point.y,
           });
           // 이 사이에는 포인터를 더 움직이지 않는다. pointermove 한 번에 몇 px만 옮기는 구현도 실패한다.
-          const scroll = () => board.evaluate((el) => el.scrollLeft);
-          if (right)
-            await expect.poll(scroll, { intervals: [50] }).toBeGreaterThan(bounds.width * 0.65);
-          else await expect.poll(scroll, { intervals: [50] }).toBeLessThan(bounds.width * 0.35);
-          await expect(board).toHaveCSS('scroll-snap-type', 'none');
-          await expect(
-            lane,
-            'drop target updates after scrolling without another pointer move',
-          ).toHaveClass(/\bring-2\b/);
+          await expect
+            .poll(
+              () =>
+                lane.evaluate(
+                  (el, { width, right }) => {
+                    const board = el.closest<HTMLElement>('[data-testid="task-board"]');
+                    if (board === null) throw new Error('missing board');
+                    const scroll = board.scrollLeft;
+                    return {
+                      scrolled: right ? scroll > width * 0.65 : scroll < width * 0.35,
+                      snap: getComputedStyle(board).scrollSnapType,
+                      target: el.classList.contains('ring-2'),
+                    };
+                  },
+                  { width: bounds.width, right },
+                ),
+              {
+                intervals: [20],
+                message:
+                  'scroll position, snap and drop target update without another pointer move',
+              },
+            )
+            .toEqual({ scrolled: true, snap: 'none', target: true });
           // 가운데로 옮겨 자동 스크롤을 멈춘 뒤 놓는다. 두 번째 열은 아직 일부만 보이는 상태다.
           await input.move({ x: bounds.x + bounds.width / 2, y: point.y });
           await input.end();
