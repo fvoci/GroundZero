@@ -194,7 +194,11 @@
     </div>
   {/if}
   {#if members.length === 0}<p>{m.organizations_members_empty()}</p>{/if}
-  <p role="status" class="text-sm text-muted-foreground empty:hidden">
+  <p
+    role="status"
+    hidden={members.length === 0 || filteredMembers.length > 0}
+    class="text-sm text-muted-foreground empty:hidden"
+  >
     {members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
   </p>
   <ul class="divide-y" aria-label={m.organizations_members()}>

@@ -359,7 +359,11 @@
         <Input id="workspace-member-filter" type="search" bind:value={memberFilter} />
       </div>
     {/if}
-    <p role="status" class="text-sm text-muted-foreground empty:hidden">
+    <p
+      role="status"
+      hidden={v.members.length === 0 || filteredMembers.length > 0}
+      class="text-sm text-muted-foreground empty:hidden"
+    >
       {v.members.length > 0 && filteredMembers.length === 0 ? m.members_filter_empty() : ''}
     </p>
     <ul class="flex flex-col divide-y rounded border" data-testid="member-list">
