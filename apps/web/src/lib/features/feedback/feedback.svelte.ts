@@ -5,7 +5,6 @@
 import { toast } from 'svelte-sonner';
 import { flushSync } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
-import { clearIntentData } from '$lib/features/common/intent-data';
 
 /** 완료 토스트의 동작 단추 하나(복제한 새 항목 열기 등). */
 export interface DoneAction {
@@ -89,7 +88,6 @@ let expiries = 0;
 
 /** 세션이 필요한 API가 401을 돌려줬을 때 부른다(처음 로그인 확인 `/api/me`는 제외). */
 export function reportSessionExpired(): void {
-  clearIntentData();
   expiries += 1;
   auth.expired = true;
 }
@@ -157,7 +155,6 @@ export const accountSafety = $state<{
 
 /** 세션을 확인하거나 끝내는 동안 portal까지 즉시 가린다. */
 export function hideSession(reason: SafetyReason): void {
-  clearIntentData();
   flushSync(() => {
     accountSafety.generation += 1;
     accountSafety.reason = reason;

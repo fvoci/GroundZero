@@ -108,9 +108,7 @@ if (measurementRoot !== undefined) {
     );
   });
 
-  test('intent reads: click, hover then click, and unused hover, three times', async ({
-    browser,
-  }) => {
+  test('navigation reads: click and hover then click, three times', async ({ browser }) => {
     test.setTimeout(180_000);
     const results = [];
     const ws = str(fixture, 'workspace');
@@ -127,7 +125,6 @@ if (measurementRoot !== undefined) {
         source: '/',
         link: 'main a[href="/tasks"]',
         api: '/api/me/tasks',
-        gate: '',
         target: '/tasks',
         content: 'main [data-testid="my-tasks-counts"]',
         heading: '내 업무',
@@ -137,14 +134,13 @@ if (measurementRoot !== undefined) {
         source: `/w/${ws}/m/${moduleId}`,
         link: `main a[href="/w/${ws}/i/${item}"]`,
         api: `/api/items/${item}`,
-        gate: `/api/modules/${moduleId}`,
         target: `/w/${ws}/i/${item}`,
         content: '#item-heading',
         heading: '',
       },
     ];
     for (const flow of flows) {
-      for (const action of ['click', 'hover-click', 'hover-away', 'save-data-hover-click']) {
+      for (const action of ['click', 'hover-click']) {
         for (let repeat = 1; repeat <= 3; repeat += 1) {
           const context = await browser.newContext({
             baseURL: origin,
@@ -152,33 +148,18 @@ if (measurementRoot !== undefined) {
             viewport: { width: 1280, height: 800 },
           });
           await context.addCookies([cookie]);
-          if (action === 'save-data-hover-click') {
-            await context.addInitScript(() => {
-              Object.defineProperty(navigator, 'connection', {
-                configurable: true,
-                value: { saveData: true },
-              });
-            });
-          }
           const page = await context.newPage();
           await page.goto(flow.source);
           const link = page.locator(flow.link).first();
           await expect(link).toBeVisible();
           await page.waitForLoadState('networkidle');
           const requests: { request: Request; start: number; end?: number; status?: number }[] = [];
-          const gateRequests: Request[] = [];
           const inFlight = new Set<Request>();
           let lastNetworkAt = Date.now();
           page.on('request', (request) => {
             if (!request.url().startsWith('http')) return;
             inFlight.add(request);
             lastNetworkAt = Date.now();
-            if (
-              request.method() === 'GET' &&
-              new URL(request.url()).pathname === flow.gate &&
-              gateRequests.length === 0
-            )
-              gateRequests.push(request);
             if (request.method() === 'GET' && new URL(request.url()).pathname === flow.api)
               requests.push({ request, start: request.timing().startTime });
           });
@@ -206,24 +187,14 @@ if (measurementRoot !== undefined) {
             // A fixed, reported dwell interval; this is not a performance target.
             await page.waitForTimeout(200);
           }
-          const beforeClick = requests.length;
-          const finishedBeforeClick = requests.filter(
-            (row) => row.status === 200 && row.end !== undefined,
-          ).length;
           let firstContentMs: number | null = null;
-          let clickedAt: number | null = null;
-          if (action === 'hover-away') {
-            await page.mouse.move(0, 0);
-          } else {
+          {
             await page.evaluate(({ content, heading, target }) => {
               let started: number | undefined;
               document.addEventListener(
                 'click',
                 () => {
                   started = performance.now();
-                  document.documentElement.dataset.intentClickAt = String(
-                    performance.timeOrigin + started,
-                  );
                 },
                 { capture: true, once: true },
               );
@@ -255,43 +226,18 @@ if (measurementRoot !== undefined) {
             firstContentMs = await page.evaluate(() =>
               Number(document.documentElement.dataset.intentFirst),
             );
-            clickedAt = await page.evaluate(() =>
-              Number(document.documentElement.dataset.intentClickAt),
-            );
           }
           // SPA moves keep the document lifecycle's old networkidle state.
           await expect
             .poll(() => inFlight.size === 0 && Date.now() - lastNetworkAt >= 500)
             .toBe(true);
           expect(requests.map((row) => row.status)).toEqual(requests.map(() => 200));
-          const firstModule = gateRequests[0]?.timing().startTime;
-          const prefetchedReads = await page.evaluate(
-            ({ api, clickedAt }) =>
-              performance
-                .getEntriesByType('resource')
-                .filter(
-                  (entry) =>
-                    new URL(entry.name).pathname === api &&
-                    (clickedAt === null || performance.timeOrigin + entry.startTime < clickedAt),
-                ).length,
-            { api: flow.api, clickedAt },
-          );
-          if (action === 'save-data-hover-click') expect(prefetchedReads).toBe(0);
-          // A board's later grade read is independent of the prefetched entry read.
-          const initialReads = requests.filter(
-            (row) => firstModule === undefined || row.start < firstModule,
-          ).length;
           results.push({
             flow: flow.name,
             action,
             repeat,
             dwellMs: action === 'click' ? 0 : 200,
-            beforeClick,
-            finishedBeforeClick,
             totalReads: requests.length,
-            initialReads,
-            prefetchedReads,
-            consumed: action !== 'hover-away' && prefetchedReads === 1 && initialReads === 1,
             firstContentMs,
           });
           writeFileSync(
