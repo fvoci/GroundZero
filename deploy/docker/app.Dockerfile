@@ -57,7 +57,7 @@ RUN --mount=type=cache,id=fvoci-pnpm-store,target=/pnpm/store \
       -exec gzip -9 -k -n {} + -exec brotli -q 11 -k {} +
 
 FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 --create-home fvoci \
  # 파일 저장소·백업 볼륨이 앱 사용자 소유로 만들어지도록 미리 둔다(이름 있는 볼륨은 처음에 이 소유를 따른다).
