@@ -49,8 +49,8 @@ printf '%s\n' "$out"
 git rev-parse HEAD > "$out/sha.txt"
 sha256sum tools/measure-240.sh tools/perf240* crates/server/tests/perf240.rs > "$out/tool-sha256.txt"
 sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
-# Build the embedded migrations and both test binaries before sampling. This
-# command is sufficient on its own; it never reuses an unverified server binary.
+# Hold the measurement marker from before the first build through cleanup so
+# another measurement cannot start between a lock check and a release build.
 wait_for_measurement() {
   while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do
     if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
@@ -60,12 +60,6 @@ wait_for_measurement() {
     sleep 2
   done
 }
-wait_for_measurement
-cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
-wait_for_measurement
-cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
-wait_for_measurement
-cargo test --release --locked -p fvoci-server --test perf240 --no-run > "$out/build-shares.log" 2>&1
 while true; do
   wait_for_measurement
   if (set -o noclobber; : > "$measure_lock") 2> "$out/lock-error.log"; then
@@ -80,6 +74,11 @@ while true; do
     exit 1
   fi
 done
+# Build the embedded migrations and both test binaries before sampling. This
+# command is sufficient on its own; it never reuses an unverified server binary.
+cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
+cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
+cargo test --release --locked -p fvoci-server --test perf240 --no-run > "$out/build-shares.log" 2>&1
 "${compose[@]}" up -d --wait postgres meilisearch > "$out/compose.log" 2>&1
 port=$("${compose[@]}" port postgres 5432)
 search_port=$("${compose[@]}" port meilisearch 7700)
