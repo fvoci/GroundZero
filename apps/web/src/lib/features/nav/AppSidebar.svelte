@@ -38,6 +38,7 @@
     calendarPath,
     membersPath,
     modulePath,
+    organizationPath,
     router,
     trashPath,
     workspacePath,
@@ -286,6 +287,21 @@
                   >
                 </DropdownMenu.Item>
               {/each}
+              {#if org.current !== undefined}
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    if (org.currentId !== undefined) {
+                      sidebar.setOpenMobile(false);
+                      router.navigate(organizationPath(org.currentId));
+                    }
+                  }}
+                >
+                  {org.current.role === 'admin'
+                    ? m.organizations_manage()
+                    : m.organizations_member_entry()}
+                </DropdownMenu.Item>
+              {/if}
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         </Sidebar.MenuItem>

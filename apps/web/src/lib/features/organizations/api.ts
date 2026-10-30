@@ -2,12 +2,18 @@ import type { components, Role } from '@fvoci/api-client';
 
 import { parseInvitation } from '$lib/api/client';
 import { expectOk } from '$lib/shared/api';
+import { parseList } from '$lib/shared/api/parse';
+import { parseOrganizationMember } from './model';
 
 type SetLastOrganization = components['schemas']['SetLastOrganization'];
 type DisplaySettings = components['schemas']['MySettings'];
 
 // #178·D-105: 마지막 조직 선택은 표시 설정과 독립된 명령이다.
 export const organizationsApi = {
+  members: (organizationId: string) =>
+    expectOk('GET', `/api/organizations/${encodeURIComponent(organizationId)}/members`, (v) =>
+      parseList(v, parseOrganizationMember),
+    ),
   setLastOrganization: (body: SetLastOrganization) =>
     expectOk('PUT', '/api/me/last-organization', () => undefined, body),
   setDisplaySettings: (body: DisplaySettings) =>

@@ -1,0 +1,13 @@
+{
+  "organizations_manage": "조직 관리",
+  "organizations_members": "멤버",
+  "organizations_member_entry": "조직 멤버",
+  "organizations_invitations": "초대",
+  "organizations_workspaces": "공간",
+  "organizations_settings": "설정",
+  "organizations_load_failed": "조직을 불러오지 못했습니다.",
+  "organizations_unavailable": "이 조직을 볼 수 없습니다",
+  "organizations_go_home": "홈으로 가기",
+  "organizations_members_empty": "아직 멤버가 없습니다",
+  "organizations_joined": "가입일 {when}"
+}

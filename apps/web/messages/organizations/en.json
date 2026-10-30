@@ -1,0 +1,13 @@
+{
+  "organizations_manage": "Manage organization",
+  "organizations_members": "Members",
+  "organizations_member_entry": "Organization members",
+  "organizations_invitations": "Invitations",
+  "organizations_workspaces": "Workspaces",
+  "organizations_settings": "Settings",
+  "organizations_load_failed": "Could not load the organization.",
+  "organizations_unavailable": "You cannot view this organization",
+  "organizations_go_home": "Go home",
+  "organizations_members_empty": "There are no members yet",
+  "organizations_joined": "Joined {when}"
+}
