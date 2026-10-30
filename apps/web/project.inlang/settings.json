@@ -19,6 +19,7 @@
       "./messages/members/{locale}.json",
       "./messages/modules/{locale}.json",
       "./messages/notes/{locale}.json",
+      "./messages/organizations/{locale}.json",
       "./messages/public/{locale}.json",
       "./messages/records/{locale}.json",
       "./messages/references/{locale}.json",

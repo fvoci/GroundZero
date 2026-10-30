@@ -22,6 +22,7 @@
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
 
   import RoleSelect from './RoleSelect.svelte';
+  import WorkspaceLimits from './WorkspaceLimits.svelte';
   import { DISPLAY_ROLES, roleLabel } from './roles';
 
   interface Props {
@@ -34,6 +35,7 @@
   const { workspace, meId, onchanged }: Props = $props();
 
   let view = $state<MembersView | undefined>(undefined);
+  let viewWorkspaceId = $state<string>();
   let invitations = $state<Invitation[]>([]);
   let groups = $state<Group[]>([]);
   let error = $state<string | undefined>(undefined);
@@ -73,8 +75,8 @@
     undefined,
   );
 
-  // 관리 가능 여부는 서버가 접근 등급으로 계산한 칸이다(D-113). 역할은 표시에만 쓴다.
-  const isAdmin = $derived(view?.can_manage_members === true);
+  // 서버의 권한 판정은 읽어 온 공간에만 쓴다. 전환 직후 reset 효과 전에도 새 공간에 넘기지 않는다(D-113).
+  const isAdmin = $derived(viewWorkspaceId === workspace.id && view?.can_manage_members === true);
 
   const inviteDraft = createFormDraft<{ email: string; role: Role }>({
     preserve: false,
@@ -220,6 +222,7 @@
     try {
       const v = await api.members(wsId);
       if (!current()) return;
+      viewWorkspaceId = wsId;
       view = v;
       const loadedGroups = await api.groups(wsId);
       if (!current()) return;
@@ -275,6 +278,7 @@
     });
   });
   function reset(id: string): void {
+    viewWorkspaceId = undefined;
     view = undefined;
     groups = [];
     invitations = [];
@@ -348,7 +352,7 @@
           {#if member.email !== null}
             <span class="text-sm text-muted-foreground">{member.email}</span>
           {/if}
-          <span class="ml-auto flex items-center gap-2">
+          <span class="ml-auto flex min-w-0 flex-wrap items-center gap-2">
             {#if isAdmin && !member.is_owner}
               <RoleSelect
                 value={member.role}
@@ -426,7 +430,7 @@
              숨긴다. 역할 선택(bits-ui Select)은 조상 fieldset의 disabled를 보지 않으므로 따로 잠근다. -->
         <fieldset class="min-w-0" disabled={inviting}>
           <form class="flex flex-wrap items-end gap-2" onsubmit={(e) => void invite(e)}>
-            <div class="flex min-w-60 flex-1 flex-col gap-1">
+            <div class="flex min-w-0 flex-1 basis-60 flex-col gap-1">
               <Label for="invite-email">{m.members_email()}</Label>
               <Input
                 id="invite-email"
@@ -585,6 +589,7 @@
     {/if}
 
     {#if isAdmin}
+      <WorkspaceLimits workspaceId={workspace.id} organizationId={workspace.organization_id} />
       <section class="flex flex-col gap-2" aria-labelledby="export-heading">
         <h2 id="export-heading" class="font-semibold">{m.members_export_heading()}</h2>
         <p class="text-sm text-muted-foreground">
