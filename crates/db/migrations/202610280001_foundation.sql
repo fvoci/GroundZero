@@ -169,20 +169,15 @@ CREATE FUNCTION fvoci.app_server_admins() RETURNS TABLE(user_id uuid, display_na
 
 ALTER FUNCTION fvoci.app_server_admins() OWNER TO fvoci_migrator;
 
--- #240 A-stage decision candidate: parser validation accepts a broader input set.
 CREATE FUNCTION fvoci.app_check_timezone(p_tz text) RETURNS void
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'fvoci', 'pg_temp'
     AS $$
   BEGIN
-    IF p_tz IS NULL OR p_tz ~ '^(posix|right|SystemV)/' OR p_tz IN ('Factory', 'localtime', 'posixrules') THEN
+    IF p_tz IS NULL OR p_tz ~ '^(posix|right|SystemV)/' OR p_tz IN ('Factory', 'localtime', 'posixrules')
+       OR NOT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = p_tz) THEN
       RAISE EXCEPTION 'unknown time zone' USING ERRCODE = '22023';
     END IF;
-    BEGIN
-      PERFORM timestamp '2000-01-01 00:00:00' AT TIME ZONE p_tz;
-    EXCEPTION WHEN invalid_parameter_value OR invalid_time_zone_displacement_value THEN
-      RAISE EXCEPTION 'unknown time zone' USING ERRCODE = '22023';
-    END;
   END
   $$;
 
