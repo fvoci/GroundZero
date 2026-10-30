@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run a named integration test against the stack held by measure-240.sh hold.
-# Invoke under fvoci-slot.sh; that measurement already owns the host DB lock.
+# Run a named integration test against a prepared isolated measurement stack.
+# Invoke under fvoci-slot.sh with the host DB lock held by its lifecycle runner.
 set -euo pipefail
 for key in "${!FVOCI_@}" "${!DATABASE_@}"; do
   if [[ -n "$key" ]]; then unset "$key"; fi
