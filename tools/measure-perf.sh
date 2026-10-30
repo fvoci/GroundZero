@@ -13,12 +13,17 @@ case "$mode" in rooms|screens) ;; *) exit 2 ;; esac
 case "$count" in 10|100|1000) ;; *) exit 2 ;; esac
 root=$(git rev-parse --show-toplevel)
 cd "$root"
-if [[ "$mode" == screens ]]; then
-  web_inputs=$(git status --porcelain -- apps/web package.json pnpm-lock.yaml pnpm-workspace.yaml)
-  if [[ -n "$web_inputs" ]]; then
+check_web_inputs() {
+  local current_inputs
+  current_inputs=$(git status --porcelain -- apps/web package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json) || return
+  if [[ -n "$current_inputs" || "$current_inputs" != "${1:-}" ]]; then
     printf 'web inputs are dirty\n' >&2
     exit 2
   fi
+  printf '%s' "$current_inputs"
+}
+if [[ "$mode" == screens ]]; then
+  check_web_inputs
 fi
 out=$(mktemp -d "$root/target/perf-${mode}-${count}-XXXXXX")
 project="fvoci-perf-w1-${mode}-${count}-$$"
@@ -61,7 +66,9 @@ target/release/fvoci-server db bootstrap > "$out/bootstrap.log" 2>&1
 target/release/fvoci-server db migrate > "$out/migrate.log" 2>&1
 cargo test --release --locked -p fvoci-server --test it restore_measure::restore_measure_generate -- --ignored --exact --nocapture > "$out/generate.log" 2>&1
 if [[ "$mode" == screens ]]; then
+  web_inputs_before=$(check_web_inputs)
   pnpm --filter @fvoci/web run build > "$out/web-build.log" 2>&1
+  check_web_inputs "$web_inputs_before"
   test -s "$root/apps/web/dist/index.html"
   test "$(git rev-parse HEAD)" = "$(cat "$out/sha.txt")"
   cp "$out/sha.txt" "$root/apps/web/dist/.perf-head"

@@ -87,12 +87,22 @@ replay_arguments() {
 }
 check browser-replay-arguments replay_arguments
 dirty_web_inputs() {
+  local dirty_input=${1:-apps/web/src/App.svelte}
   local status=0
-  bash -euo pipefail -s -- "$root" > "$out/dirty-input-result.log" 2>&1 <<'DIRTY' || status=$?
+  bash -euo pipefail -s -- "$root" "$dirty_input" > "$out/dirty-input-result.log" 2>&1 <<'DIRTY' || status=$?
   cd "$1"
+  export test_dirty_input=$2
   git() {
-    if [[ "$*" == 'status --porcelain -- apps/web package.json pnpm-lock.yaml pnpm-workspace.yaml' ]]; then
-      printf ' M apps/web/src/App.svelte\n'
+    if [[ "${1:-}" == status ]]; then
+      [[ "${2:-}" == --porcelain && "${3:-}" == -- ]] || return 1
+      shift 3
+      local pathspec
+      for pathspec in "$@"; do
+        if [[ "$test_dirty_input" == "$pathspec" || "$test_dirty_input" == "$pathspec/"* ]]; then
+          printf ' M %s\n' "$test_dirty_input"
+          return 0
+        fi
+      done
     else
       command git "$@"
     fi
@@ -108,4 +118,5 @@ DIRTY
   grep -Fx 'web inputs are dirty' "$out/dirty-input-result.log"
 }
 check dirty-web-inputs dirty_web_inputs
+check dirty-tsconfig-base dirty_web_inputs tsconfig.base.json
 test "$failures" -eq 0
