@@ -101,7 +101,13 @@ describe('account switch reload and the unsaved-edit warning', () => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id: 'u2', display_name: '다른 사람', email: null, limits })
+          ? json(200, {
+              id: 'u2',
+              display_name: '다른 사람',
+              email: null,
+              is_server_admin: false,
+              limits,
+            })
           : json(404, { error: 'not_found' }),
       ),
     );
@@ -147,7 +153,13 @@ describe('account switch reload and the unsaved-edit warning', () => {
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       Promise.resolve(
         input === '/api/me'
-          ? json(200, { id: 'u2', display_name: '다른 사람', email: null, limits })
+          ? json(200, {
+              id: 'u2',
+              display_name: '다른 사람',
+              email: null,
+              is_server_admin: false,
+              limits,
+            })
           : json(404, { error: 'not_found' }),
       ),
     );

@@ -19,6 +19,7 @@ import App from '../../src/app/App.svelte';
 const me: Me = {
   id: 'user-a',
   display_name: '나',
+  is_server_admin: false,
   hour_cycle: '',
   locale: 'ko',
   time_zone: '',

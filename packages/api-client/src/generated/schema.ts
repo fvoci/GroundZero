@@ -4028,6 +4028,8 @@ export interface components {
             /** @description 시각 표시(D-81): `h12`·`h23`, 비었으면 아직 고르지 않음. */
             hour_cycle: string;
             id: components["schemas"]["UserId"];
+            /** @description 현재 계정의 서버 관리자 여부(D-112). SQL의 기존 판정을 그대로 보여 준다. */
+            readonly is_server_admin: boolean;
             last_organization_id?: null | components["schemas"]["OrganizationId"];
             /** @description 서버 입력 상한. 강의 회차 제목의 고정 한도(300자)는 이 설정과 별개다. */
             limits: components["schemas"]["InputLimits"];

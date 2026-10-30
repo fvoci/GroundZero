@@ -14,6 +14,7 @@ function meResponse(): Response {
       id: 'user-a',
       email: 'a@example.com',
       display_name: 'A',
+      is_server_admin: false,
       time_zone: '',
       locale: '',
       week_start: '',

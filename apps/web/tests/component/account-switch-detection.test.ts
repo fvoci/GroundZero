@@ -15,6 +15,7 @@ import { setLocale } from '$lib/paraglide/runtime.js';
 const other: Me = {
   id: 'u2',
   display_name: '다른 사람',
+  is_server_admin: false,
   hour_cycle: '',
   locale: 'ko',
   time_zone: '',
