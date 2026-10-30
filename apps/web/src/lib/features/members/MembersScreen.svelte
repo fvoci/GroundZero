@@ -333,6 +333,11 @@
   }
 </script>
 
+<!-- 탭 본문과 뼈대가 바뀌어도 상태 알림 노드는 유지한다(D-110, SR-258-2). -->
+<p role="status" aria-live="polite" class="sr-only empty:hidden">
+  {#if currentView === undefined && loadError === undefined}{m.app_loading()}{/if}
+</p>
+
 <ManagementFrame
   title={m.members_management_heading({ workspace: workspace.name })}
   {tabs}

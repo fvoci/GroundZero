@@ -65,6 +65,37 @@ describe('workspace management tabs (D-121, n1)', () => {
     },
   );
 
+  it.each(['members', 'invitations', 'groups', 'settings'] as const)(
+    'keeps a polite status node from the first render of %s through loading (SR-258-2)',
+    async (tab) => {
+      let finish: ((value: MembersView) => void) | undefined;
+      vi.mocked(api.members).mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      router.replace(membersPath(id, tab));
+      render(MembersScreen, { props: { ...props, tab } });
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveAttribute('aria-live', 'polite');
+      expect(status).toHaveTextContent('불러오는 중…');
+      const skeleton = screen.getByLabelText('불러오는 중…');
+      expect(skeleton).toHaveAttribute('aria-busy', 'true');
+      expect(skeleton).not.toContainElement(status);
+      if (finish === undefined) throw new Error('missing permissions read');
+      finish(view);
+      if (tab === 'members') await screen.findByTestId('member-list');
+      else if (tab === 'invitations') await screen.findByLabelText('이메일');
+      else if (tab === 'groups') await screen.findByRole('heading', { name: '그룹' });
+      else await screen.findByRole('region', { name: '한도·보존' });
+
+      expect(status).toBeInTheDocument();
+      expect(status).toHaveAttribute('role', 'status');
+      expect(status).toBeEmptyDOMElement();
+    },
+  );
+
   it.each([
     { tab: 'invitations', label: '초대', allowed: true },
     { tab: 'settings', label: '설정', allowed: true },

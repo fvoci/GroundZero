@@ -134,7 +134,7 @@ describe('members screen', () => {
       expect(done).toHaveBeenCalledOnce();
     });
     expect(done).toHaveBeenCalledWith(m.members_invited({ email: 'kim@lab.example' }));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status', { hidden: true })).toBeEmptyDOMElement();
     expect(screen.queryByText(m.members_invited({ email: 'kim@lab.example' }))).toBeNull();
   });
 
@@ -157,7 +157,7 @@ describe('members screen', () => {
       expect(done).toHaveBeenCalledOnce();
     });
     expect(done).toHaveBeenCalledWith(m.members_became_owner());
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status', { hidden: true })).toBeEmptyDOMElement();
     expect(screen.queryByText(m.members_became_owner())).toBeNull();
   });
 });
