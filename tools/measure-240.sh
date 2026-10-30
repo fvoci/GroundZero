@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# #240 / #245, experimental measurements only. Run under DB lock and fvoci-slot.sh.
+# #240 / #245 sharing measurements. Run under DB lock and fvoci-slot.sh.
 # The original T6 generator is used without changing its shape or implementation.
 set -euo pipefail
 umask 077
@@ -10,6 +10,8 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 out=$(mktemp -d "$root/target/perf240-XXXXXX")
 project="fvoci-perf240-$$"
+measure_lock="$HOME/.cache/fvoci-measure.lock"
+owns_measure_lock=false
 cat > "$out/postgres.yaml" <<'YAML'
 services:
   postgres:
@@ -20,11 +22,20 @@ monitor_pid=
 cleanup() {
   if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1
+  if "$owns_measure_lock"; then rm "$measure_lock"; fi
 }
 trap cleanup EXIT
 printf '%s\n' "$out"
 git rev-parse HEAD > "$out/sha.txt"
 sha256sum tools/measure-240.sh tools/perf240* crates/server/tests/perf240.rs > "$out/tool-sha256.txt"
+sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
+# Build the embedded migrations and both test binaries before sampling. This
+# command is sufficient on its own; it never reuses an unverified server binary.
+cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
+cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
+cargo test --release --locked -p fvoci-server --test perf240 --no-run > "$out/build-shares.log" 2>&1
+until (set -o noclobber; printf '%s\n' "$project" > "$measure_lock") 2>/dev/null; do sleep 2; done
+owns_measure_lock=true
 "${compose[@]}" up -d --wait postgres meilisearch > "$out/compose.log" 2>&1
 port=$("${compose[@]}" port postgres 5432)
 search_port=$("${compose[@]}" port meilisearch 7700)
@@ -58,6 +69,8 @@ cargo test --release --locked -p fvoci-server --test perf240 shares -- --ignored
 jq -Rn '[inputs | fromjson? | select(.event == "http.request")]' "$out/shares.log" > "$out/access.json"
 jq -Ren '[inputs | fromjson? | select(.event == "search.unavailable" or .event == "search.paging_failed")] | length == 0' "$out/shares.log" > "$out/search-health.json"
 jq -s -f tools/perf240-summary.jq "$out/sharing.json" "$out/access.json" > "$out/sharing-summary.json"
+sha256sum -c "$out/sql-sha256.txt" > "$out/sql-unchanged.log"
+sha256sum -c "$out/tool-sha256.txt" > "$out/tools-unchanged.log"
 printf 'PASS #240 sharing measurements: %s\n' "$out"
 if [[ ${1:-} == hold ]]; then
   jq -n --arg project "$project" --arg out "$out" '{project:$project,out:$out}' > "$out/runtime.json"
