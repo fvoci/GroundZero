@@ -186,6 +186,25 @@ for (const scale of [100, 200] as const) {
     await expect(rejectedRecipient).toHaveAccessibleDescription(
       '이 공간의 멤버에게만 제안할 수 있습니다',
     );
+    // The announcement stays available to assistive technology while only the description is drawn.
+    await expect
+      .poll(() =>
+        rejectedOffer
+          .getByText('이 공간의 멤버에게만 제안할 수 있습니다', { exact: true })
+          .evaluateAll(
+            (elements) =>
+              elements.filter((element) => {
+                const style = getComputedStyle(element);
+                return (
+                  style.display !== 'none' &&
+                  style.visibility === 'visible' &&
+                  style.getPropertyValue('clip') === 'auto' &&
+                  style.clipPath === 'none'
+                );
+              }).length,
+          ),
+      )
+      .toBe(1);
     expect(await offenders(rejectedOffer)).toEqual([]);
     await rejectedRecipient.selectOption('');
     await page.keyboard.press('Escape');

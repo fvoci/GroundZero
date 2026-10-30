@@ -351,7 +351,7 @@
         >
           {recipientError || m.organizations_recipient_must_be_member()}
         </p>
-        <p role="alert" class="text-sm text-destructive empty:hidden">{recipientError}</p>
+        <p role="alert" class="sr-only empty:hidden">{recipientError}</p>
         <p role="alert" class="text-sm text-destructive empty:hidden">{candidateError}</p>
         {#if candidateError !== ''}<Button variant="outline" onclick={() => void loadCandidates()}
             >{m.common_retry()}</Button
