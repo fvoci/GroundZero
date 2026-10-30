@@ -56,8 +56,8 @@ valid_depth() {
   jq -f tools/perf-depth.jq "$fixture" > "$out/depth.json" || return 1
   jq -e 'group_by(.screen) |
     map({key: .[0].screen, value: (map(.depth) | unique)}) | from_entries == {
-      home: [6], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [7],
-      "document-tree": [5], "document-open": [4], calendar: [3], activity: [6]
+      home: [4], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [7],
+      "document-tree": [5], "document-open": [4], calendar: [3], activity: [4]
     }' "$out/depth.json"
 }
 check valid-depth valid_depth
@@ -65,6 +65,45 @@ check missing-workspaces reject_gate missing /api/workspaces
 check missing-organizations reject_gate missing /api/me/organizations
 check early-workspaces reject_gate early /api/workspaces
 check early-organizations reject_gate early /api/me/organizations
+reject_branch() {
+  local screen=$1 pattern=$2 kind=$3
+  jq --arg screen "$screen" --arg pattern "$pattern" --arg kind "$kind" '
+    map(if .screen == $screen then
+      .requests |= (if $kind == "missing" then map(select(.path | test($pattern) | not))
+        else map(if .path | test($pattern) then .start = 0 else . end) end)
+    else . end)' "$fixture" > "$out/branch-input.json"
+  if jq -f tools/perf-depth.jq "$out/branch-input.json" > /dev/null 2> "$out/branch-error.log"; then
+    return 1
+  fi
+  grep -F 'dependency witness' "$out/branch-error.log"
+}
+reject_join() {
+  local screen=$1 pattern=$2
+  jq --arg screen "$screen" --arg pattern "$pattern" '
+    map(if .screen == $screen then
+      .requests |= map(if .path | test($pattern) then .end = 999999999999999 else . end)
+    else . end)' "$fixture" > "$out/join-input.json"
+  if jq -f tools/perf-depth.jq "$out/join-input.json" > /dev/null 2> "$out/join-error.log"; then
+    return 1
+  fi
+  grep -F 'dependency witness' "$out/join-error.log"
+}
+for kind in missing early; do
+  for screen in home activity; do
+    check "$kind-$screen-calendar" reject_branch "$screen" '/calendar$' "$kind"
+    check "$kind-$screen-notifications" reject_branch "$screen" '^/api/me/notifications$' "$kind"
+    check "$kind-$screen-activity" reject_branch "$screen" '^/api/me/activity$' "$kind"
+  done
+  for screen in board gantt task-detail document-tree; do
+    check "$kind-$screen-item" reject_branch "$screen" '^/api/items/[^/]+$' "$kind"
+    check "$kind-$screen-documents" reject_branch "$screen" '^/api/items/[^/]+/documents$' "$kind"
+    check "$kind-$screen-module" reject_branch "$screen" '^/api/modules/[^/]+$' "$kind"
+  done
+done
+for screen in board gantt task-detail document-tree; do
+  check "unfinished-$screen-documents" reject_join "$screen" '^/api/items/[^/]+/documents$'
+  check "unfinished-$screen-module" reject_join "$screen" '^/api/modules/[^/]+$'
+done
 check cleanup-dead-monitor cleanup_dead_monitor
 replay_arguments() {
   jq -n '[
