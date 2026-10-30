@@ -95,3 +95,16 @@ else
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
   printf 'PASS screens: %s\n' "$out"
 fi
+
+# Replay additional pg_stat_statements hotspots after the final room measurement.
+# This runs after all RSS/time snapshots, in that run's untouched T6 database.
+if [[ "$mode" == rooms && "$count" == 1000 ]]; then
+  database=$(jq -r .source_db "$out/state.json")
+  room_psql() { "${compose[@]}" exec -T postgres psql -X -v ON_ERROR_STOP=1 -U fvoci -d "$database" "$@"; }
+  actor=$(room_psql -At -c 'SELECT id FROM fvoci.users ORDER BY created_at, id LIMIT 1')
+  item=$(jq -r '.task_items[0]' "$out/state.json")
+  document=$(jq -r '.documents[5]' "$out/state.json")
+  for repeat in 1 2 3; do
+    room_psql -v actor="$actor" -v item="$item" -v document="$document" < tools/perf-slow.sql > "$out/slow-$repeat.log"
+  done
+fi
