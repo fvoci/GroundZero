@@ -203,8 +203,22 @@ test('workspace tabs preserve administrator, member and readonly visibility', as
       await member.page.goto(`/w/${ws}/invitations`);
       await expect(member.page).toHaveURL(`/w/${ws}/members`);
     }
-    await member.page.getByRole('tab', { name: '그룹', exact: true }).click();
+    await member.page.getByRole('tab', { name: '멤버 2명', exact: true }).click();
+    const leave = member.page.getByRole('region', { name: '탈퇴', exact: true });
+    await expect(leave).toBeVisible();
     await expect(member.page.getByRole('button', { name: '워크스페이스 탈퇴' })).toBeVisible();
+    expect(
+      await member.page.getByTestId('member-list').evaluate((list) => {
+        const leave = document.getElementById('leave-heading');
+        return (
+          leave !== null &&
+          (list.compareDocumentPosition(leave) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+        );
+      }),
+    ).toBe(true);
+    await member.page.getByRole('tab', { name: '그룹', exact: true }).click();
+    await expect(leave).toHaveCount(0);
+    await expect(member.page.getByRole('button', { name: '워크스페이스 탈퇴' })).toHaveCount(0);
     await expect(member.page.getByRole('textbox', { name: '새 그룹 이름' })).toHaveCount(
       role === 'admin' ? 1 : 0,
     );
@@ -212,6 +226,11 @@ test('workspace tabs preserve administrator, member and readonly visibility', as
   await owner.page.goto(`/w/${ws}/settings`);
   await expect(owner.page.getByRole('region', { name: '한도·보존' })).toBeVisible();
   await expect(owner.page.getByRole('heading', { name: '위험 구역' })).toBeVisible();
+  for (const tab of ['멤버 2명', '그룹']) {
+    await owner.page.getByRole('tab', { name: tab, exact: true }).click();
+    await expect(owner.page.getByRole('region', { name: '탈퇴', exact: true })).toHaveCount(0);
+    await expect(owner.page.getByRole('button', { name: '워크스페이스 탈퇴' })).toHaveCount(0);
+  }
 });
 
 for (const scale of [100, 200] as const) {
@@ -332,10 +351,10 @@ test('history tab changes clear destructive workspace confirmations (SR-258-1)',
     },
     {
       page: member.page,
-      source: 'groups',
-      sourceLabel: '그룹',
-      other: 'members',
-      otherLabel: '멤버 2명',
+      source: 'members',
+      sourceLabel: '멤버 2명',
+      other: 'groups',
+      otherLabel: '그룹',
       trigger: member.page.getByRole('button', { name: '워크스페이스 탈퇴', exact: true }),
       title: `${workspaceName}에서 탈퇴할까요?`,
     },

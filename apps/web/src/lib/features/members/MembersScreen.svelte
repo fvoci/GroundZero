@@ -519,6 +519,27 @@
             {/if}
           </div>
         {/if}
+
+        {#if !v.i_am_owner}
+          <section class="flex flex-col gap-2" aria-labelledby="leave-heading">
+            <h2 id="leave-heading" class="font-semibold">{m.members_leave_heading()}</h2>
+            <div>
+              <Button
+                variant="outline"
+                onclick={() =>
+                  (confirm = {
+                    title: m.members_leave_title({ workspace: workspace.name }),
+                    body: m.members_leave_body(),
+                    run: async () => {
+                      await api.leave(workspace.id);
+                      onchanged();
+                      router.navigate('/');
+                    },
+                  })}>{m.members_leave()}</Button
+              >
+            </div>
+          </section>
+        {/if}
       {/if}
 
       {#if activeTab === 'invitations' && isAdmin}
@@ -669,27 +690,6 @@
             </fieldset>
           {/if}
         </section>
-
-        {#if !v.i_am_owner}
-          <section class="flex flex-col gap-2" aria-labelledby="leave-heading">
-            <h2 id="leave-heading" class="font-semibold">{m.members_leave_heading()}</h2>
-            <div>
-              <Button
-                variant="outline"
-                onclick={() =>
-                  (confirm = {
-                    title: m.members_leave_title({ workspace: workspace.name }),
-                    body: m.members_leave_body(),
-                    run: async () => {
-                      await api.leave(workspace.id);
-                      onchanged();
-                      router.navigate('/');
-                    },
-                  })}>{m.members_leave()}</Button
-              >
-            </div>
-          </section>
-        {/if}
       {/if}
 
       {#if activeTab === 'settings'}
