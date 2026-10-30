@@ -488,8 +488,8 @@ CREATE FUNCTION fvoci.app_recent_activity(p_organization uuid, p_limit integer) 
     v_count integer := 0;
     v_limit integer := greatest(1, least(coalesce(p_limit, 20), 100));
   BEGIN
-    -- #240 A-stage experiment: filter workspace membership before target access.
-    -- The cursor preserves the complete order and continues past denied rows.
+    -- #240: filter workspace membership before target access. STABLE keeps one
+    -- snapshot while the ordered cursor continues past denied rows to fill LIMIT.
     FOR v_row IN
       SELECT a.* FROM activity a
       WHERE a.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
