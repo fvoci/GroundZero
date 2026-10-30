@@ -64,6 +64,8 @@ fetch 기본값도 호출 지점에서 다른 구현으로 덮어쓰지 않았�
 | SR-250-10               | 동적 encodeURIComponent 값의 `.`·`..` (현재 값은 서버가 발급한 UUID)                     |
 | SR-250-11               | WebSocket 원점 (현재는 같은 원점)                                                        |
 | SR-250-12               | 호출 인자를 따라가도 끝까지 풀리지 않는 링크·location의 런타임 값(앱 경로·사용자 콘텐츠) |
+| SR-250-13               | 링크·location 도우미를 불변 별칭(`const move = go`)으로 부른 호출 지점                   |
+| SR-250-14               | 정적 `undefined` 인자에 매개변수 기본값을 적용하지 않음                                  |
 | 현재 웹 사용 0건인 출구 | XMLHttpRequest·EventSource·navigator.sendBeacon·new Request                              |
 
 이 종류를 새로 사용하면 검사 범위를 먼저 결정한다. 특히 XMLHttpRequest·sendBeacon·
