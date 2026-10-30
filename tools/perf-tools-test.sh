@@ -119,4 +119,102 @@ DIRTY
 }
 check dirty-web-inputs dirty_web_inputs
 check dirty-tsconfig-base dirty_web_inputs tsconfig.base.json
+sharing_lifecycle() {
+  local scenario=$1
+  local case_root="$out/sharing-$scenario"
+  mkdir -p "$case_root/tools" "$case_root/crates/server/tests" "$case_root/crates/db/migrations" "$case_root/target/release"
+  cp tools/measure-240.sh tools/perf240-run.sh tools/perf240-summary.jq "$case_root/tools/"
+  cp crates/server/tests/perf240.rs "$case_root/crates/server/tests/"
+  cp crates/db/migrations/*.sql "$case_root/crates/db/migrations/"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$case_root/target/release/fvoci-server"
+  chmod +x "$case_root/target/release/fvoci-server"
+  local status=0
+  bash -euo pipefail -s -- "$case_root" "$scenario" "$(git rev-parse HEAD)" > "$case_root/run.log" 2>&1 <<'SHARING' || status=$?
+  export test_sharing_root=$1 test_sharing_scenario=$2 test_sharing_head=$3
+  # Inject only the lock pathname into an isolated copy; HOME is never changed.
+  script_source=$(cat "$test_sharing_root/tools/measure-240.sh")
+  script_source=${script_source/'measure_lock="$HOME/.cache/fvoci-measure.lock"'/'measure_lock="$test_sharing_root/measure.lock"'}
+  git() {
+    case "$*" in
+      'rev-parse --show-toplevel') printf '%s\n' "$test_sharing_root" ;;
+      'rev-parse HEAD') printf '%s\n' "$test_sharing_head" ;;
+      *) return 99 ;;
+    esac
+  }
+  docker() {
+    case " $* " in
+      *' down '*)
+        if [[ "$test_sharing_scenario" == cleanup || "$test_sharing_scenario" == prior-failure ]]; then return 23; fi ;;
+      *' up '*) if [[ "$test_sharing_scenario" == prior-failure ]]; then return 17; fi ;;
+      *' port postgres '*) printf '127.0.0.1:1\n' ;;
+      *' port meilisearch '*) printf '127.0.0.1:2\n' ;;
+    esac
+  }
+  sleep() {
+    if [[ "$test_sharing_scenario" == wait && "$1" == 2 && -e "$test_sharing_root/deferred-build-lock" ]]; then
+      local builds=0 waits=0
+      if [[ -f "$test_sharing_root/cargo.log" ]]; then builds=$(wc -l < "$test_sharing_root/cargo.log"); fi
+      if [[ -f "$test_sharing_root/wait-observed" ]]; then waits=$(wc -l < "$test_sharing_root/wait-observed"); fi
+      if [[ "$builds" -ne "$waits" ]]; then touch "$test_sharing_root/premature-build"; fi
+      printf 'wait\n' >> "$test_sharing_root/wait-observed"
+      rm "$test_sharing_root/measure.lock"
+      rm "$test_sharing_root/deferred-build-lock"
+    else
+      command sleep "$@"
+    fi
+  }
+  cargo() {
+    printf '%s\n' "$*" >> "$test_sharing_root/cargo.log"
+    if [[ "$test_sharing_scenario" == wait && $(wc -l < "$test_sharing_root/cargo.log") -lt 3 ]]; then
+      (set -o noclobber; printf 'another measurement\n' > "$test_sharing_root/measure.lock")
+      touch "$test_sharing_root/deferred-build-lock"
+    fi
+    if [[ " $* " == *' --test perf240 shares '* ]]; then
+      if [[ "$test_sharing_scenario" == contamination ]]; then
+        touch "$test_sharing_root/build-running"
+        local deadline=$((SECONDS + 10))
+        until [[ -e "$test_sharing_root/build-observed" ]] &&
+          grep -q 'compiler_or_node_build=true' "$FVOCI_MEASURE_DIR/concurrency.log"; do
+          if (( SECONDS >= deadline )); then return 98; fi
+          command sleep 0.01
+        done
+        rm "$test_sharing_root/build-running"
+      fi
+      printf '[]\n' > "$FVOCI_MEASURE_DIR/sharing.json"
+    fi
+  }
+  pgrep() {
+    if [[ -e "$test_sharing_root/build-running" ]]; then
+      touch "$test_sharing_root/build-observed"
+      return 0
+    fi
+    return 1
+  }
+  ps() { return 0; }
+  export -f git docker sleep cargo pgrep ps
+  if [[ "$test_sharing_scenario" == wait ]]; then
+    (set -o noclobber; printf 'other measurement\n' > "$test_sharing_root/measure.lock")
+    touch "$test_sharing_root/deferred-build-lock"
+  fi
+  bash -c "$script_source"
+SHARING
+  case "$scenario" in
+    cleanup) test "$status" -eq 23 || return 1 ;;
+    prior-failure) test "$status" -eq 17 || return 1 ;;
+    contamination)
+      test "$status" -eq 1 || return 1
+      grep -F 'compiler or node build overlapped sharing measurements' "$case_root/run.log" || return 1 ;;
+    clean|wait) test "$status" -eq 0 || return 1 ;;
+  esac
+  test ! -e "$case_root/measure.lock" || return 1
+  if [[ "$scenario" == wait ]]; then
+    test -f "$case_root/wait-observed" && test ! -e "$case_root/premature-build" || return 1
+    test "$(wc -l < "$case_root/wait-observed")" -eq 3 || return 1
+  fi
+}
+check sharing-clean sharing_lifecycle clean
+check sharing-cleanup-failure sharing_lifecycle cleanup
+check sharing-prior-failure sharing_lifecycle prior-failure
+check sharing-waits-before-build sharing_lifecycle wait
+check sharing-rejects-overlapping-build sharing_lifecycle contamination
 test "$failures" -eq 0

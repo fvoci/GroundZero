@@ -19,10 +19,28 @@ services:
 YAML
 compose=(docker compose -p "$project" -f deploy/compose.test.yaml -f "$out/postgres.yaml")
 monitor_pid=
+stop_monitor() {
+  if [[ -n "$monitor_pid" ]]; then
+    kill "$monitor_pid" 2>/dev/null || true
+    wait "$monitor_pid" || true
+    monitor_pid=
+  fi
+}
 cleanup() {
-  if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
-  "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1
-  if "$owns_measure_lock"; then rm "$measure_lock"; fi
+  local status=$? down_status=0 unlock_status=0
+  trap - EXIT
+  stop_monitor
+  "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || down_status=$?
+  if "$owns_measure_lock"; then rm "$measure_lock" || unlock_status=$?; fi
+  if (( down_status != 0 )); then
+    printf 'FAIL Compose cleanup (exit %s); see %s/cleanup.log\n' "$down_status" "$out" >&2
+    if (( status == 0 )); then status=$down_status; fi
+  fi
+  if (( unlock_status != 0 )); then
+    printf 'FAIL measurement lock removal (exit %s)\n' "$unlock_status" >&2
+    if (( status == 0 )); then status=$unlock_status; fi
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 printf '%s\n' "$out"
@@ -31,8 +49,14 @@ sha256sum tools/measure-240.sh tools/perf240* crates/server/tests/perf240.rs > "
 sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
 # Build the embedded migrations and both test binaries before sampling. This
 # command is sufficient on its own; it never reuses an unverified server binary.
+wait_for_measurement() {
+  while [[ -e "$measure_lock" ]]; do sleep 2; done
+}
+wait_for_measurement
 cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
+wait_for_measurement
 cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
+wait_for_measurement
 cargo test --release --locked -p fvoci-server --test perf240 --no-run > "$out/build-shares.log" 2>&1
 until (set -o noclobber; printf '%s\n' "$project" > "$measure_lock") 2>/dev/null; do sleep 2; done
 owns_measure_lock=true
@@ -59,13 +83,23 @@ busy_build() {
 while busy_build; do sleep 2; done
 (
   while true; do
-    if busy_build; then busy=true; else busy=false; fi
+    if busy_build; then
+      touch "$out/build-overlap"
+      busy=true
+    else
+      busy=false
+    fi
     printf '%s compiler_or_node_build=%s\n' "$(date -u +%FT%TZ)" "$busy"
     sleep 1
   done
 ) > "$out/concurrency.log" &
 monitor_pid=$!
 cargo test --release --locked -p fvoci-server --test perf240 shares -- --ignored --exact --nocapture > "$out/shares.log" 2>&1
+stop_monitor
+if [[ -e "$out/build-overlap" ]]; then
+  printf 'FAIL compiler or node build overlapped sharing measurements; see %s/concurrency.log\n' "$out" >&2
+  exit 1
+fi
 jq -Rn '[inputs | fromjson? | select(.event == "http.request")]' "$out/shares.log" > "$out/access.json"
 jq -Ren '[inputs | fromjson? | select(.event == "search.unavailable" or .event == "search.paging_failed")] | length == 0' "$out/shares.log" > "$out/search-health.json"
 jq -s -f tools/perf240-summary.jq "$out/sharing.json" "$out/access.json" > "$out/sharing-summary.json"
