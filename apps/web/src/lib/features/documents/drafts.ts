@@ -3,6 +3,7 @@
 // 개인 편의용이며 서버 저장을 대신하지 않는다. 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 조용히 생략한다.
 import type { DocNode } from '$lib/api/client';
 import { parseDocNode } from '$lib/api/client';
+import { readDraftAt, writeDraftAt } from '$lib/features/common/draft-storage';
 import { me } from '$lib/me.svelte';
 import { scopedKey } from '$lib/storage';
 
@@ -66,7 +67,7 @@ function pushOffer(documentId: string, draft: Draft): boolean {
   if (prefix === undefined) return false;
   pushed += 1;
   const order = `${String(Date.now()).padStart(15, '0')}.${String(pushed).padStart(9, '0')}`;
-  return write(`${prefix}${order}.${crypto.randomUUID()}`, draft);
+  return writeDraftAt(`${prefix}${order}.${crypto.randomUUID()}`, draft);
 }
 
 /** 줄의 초안과 그 키(더한 순). */
@@ -83,7 +84,7 @@ function offerEntries(documentId: string): { key: string; draft: Draft }[] {
     return [];
   }
   return keys
-    .map((k) => ({ key: k, draft: parseDraft(read(k)) }))
+    .map((k) => ({ key: k, draft: readDraftAt(k, parseDraft) }))
     .filter((e): e is { key: string; draft: Draft } => e.draft !== undefined)
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
@@ -164,9 +165,9 @@ export async function adoptOrphans(documentId: string): Promise<number> {
   }
   let adopted = 0;
   for (const k of candidates) {
-    const d = parseDraft(read(k));
+    const d = readDraftAt(k, parseDraft);
     if (d !== undefined && !pushOffer(documentId, d)) continue;
-    write(k, undefined);
+    writeDraftAt(k, undefined);
     if (d !== undefined) adopted += 1;
   }
   return adopted;
@@ -197,42 +198,17 @@ function parseDraft(value: unknown): Draft | undefined {
   }
 }
 
-function read(k: string | undefined): unknown {
-  if (k === undefined) return undefined;
-  try {
-    const raw = window.localStorage.getItem(k);
-    if (raw === null) return undefined;
-    const value: unknown = JSON.parse(raw);
-    return value;
-  } catch {
-    return undefined;
-  }
-}
-
-/** 쓰기에 성공했는지. 저장소가 가득 찼거나 쓸 수 없으면 거짓(옮기는 쪽은 그때 원본을 지우지 않는다). */
-function write(k: string | undefined, value: unknown): boolean {
-  if (k === undefined) return false;
-  try {
-    if (value === undefined) window.localStorage.removeItem(k);
-    else window.localStorage.setItem(k, JSON.stringify(value));
-    return true;
-  } catch {
-    // 저장소를 쓸 수 없으면 초안 보관만 생략한다. 서버 저장 흐름은 영향받지 않는다.
-    return false;
-  }
-}
-
 export function loadDraft(documentId: string): Draft | undefined {
-  return parseDraft(read(key(documentId)));
+  return readDraftAt(key(documentId), parseDraft);
 }
 
 export function storeDraft(documentId: string, draft: Draft): boolean {
   holdTabLock();
-  return write(key(documentId), draft);
+  return writeDraftAt(key(documentId), draft);
 }
 
 export function clearDraft(documentId: string): void {
-  write(key(documentId), undefined);
+  writeDraftAt(key(documentId), undefined);
 }
 
 /** 고르게 할 지난 초안들(먼저 남은 것부터). */
@@ -243,7 +219,7 @@ export function loadOffers(documentId: string): Draft[] {
 /** 고르게 할 줄에서 이 초안을 뺀다(보존했거나 버렸거나 이미 반영됐다). 다른 초안의 키는 건드리지 않는다. */
 export function removeOffer(documentId: string, done: Draft): void {
   for (const { key: k, draft: d } of offerEntries(documentId)) {
-    if (d.savedAt === done.savedAt && sameContent(d, done)) write(k, undefined);
+    if (d.savedAt === done.savedAt && sameContent(d, done)) writeDraftAt(k, undefined);
   }
 }
 
