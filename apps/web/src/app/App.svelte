@@ -578,6 +578,11 @@
   const headerTitle = $derived.by(() => {
     if (currentWorkspace !== undefined) return currentWorkspace.name;
     switch (route.name) {
+      case 'organization':
+        return (
+          org.organizations.find((organization) => organization.id === route.organizationId)
+            ?.name ?? m.organizations_member_entry()
+        );
       case 'notes':
         return m.app_nav_notes();
       case 'shared':

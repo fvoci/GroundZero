@@ -1,0 +1,18 @@
+import { errorText } from '$lib/api/errors';
+import { ApiError } from '$lib/shared/api';
+import { m } from '$lib/paraglide/messages.js';
+
+export function organizationUnavailable(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 403 || error.status === 404);
+}
+
+// D-82 and #245: keep state conflicts beside the action, including the server's guidance.
+export function organizationError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409 && error.message === 'the organization needs at least one admin')
+      return m.organizations_last_admin();
+    if (error.status === 400 || (error.status === 409 && error.code !== 'account_changed'))
+      return error.message;
+  }
+  return errorText(error, m.organizations_action_failed());
+}

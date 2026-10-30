@@ -8,6 +8,10 @@
   import { organizationPath, router, type OrganizationTab } from '$lib/router.svelte';
   import { Button } from '$lib/ui/button';
   import OrganizationMembers from './OrganizationMembers.svelte';
+  import OrganizationInvitations from './OrganizationInvitations.svelte';
+  import OrganizationWorkspaces from './OrganizationWorkspaces.svelte';
+  import OrganizationSettings from './OrganizationSettings.svelte';
+  import { org } from '$lib/org.svelte';
 
   interface Props {
     organizationId: string;
@@ -15,7 +19,7 @@
     meId: string;
     onchanged: () => void;
   }
-  const { organizationId, tab }: Props = $props();
+  const { organizationId, tab, meId, onchanged }: Props = $props();
   let organization = $state<Organization>();
   let error = $state('');
   let unavailable = $state(false);
@@ -69,13 +73,28 @@
     )
       router.navigate(organizationPath(organizationId, value));
   }
+  function noAccess(): void {
+    unavailable = true;
+    error = m.organizations_unavailable();
+  }
+  function changed(): void {
+    onchanged();
+    void load();
+  }
+  function settingsChanged(saved: Organization): void {
+    organization = saved;
+    org.organizations = org.organizations.map((current) =>
+      current.id === saved.id ? saved : current,
+    );
+    onchanged();
+  }
 </script>
 
 <p role="alert" class="text-destructive empty:hidden">{error}</p>
 {#if unavailable}
   <Button
     href="/"
-    onclick={(event) => {
+    onclick={(event: MouseEvent) => {
       event.preventDefault();
       router.navigate('/');
     }}>{m.organizations_go_home()}</Button
@@ -95,7 +114,19 @@
     onchange={change}
   >
     {#if tab === 'members' || !isAdmin}
-      <OrganizationMembers {organizationId} {isAdmin} />
+      <OrganizationMembers
+        {organizationId}
+        {isAdmin}
+        {meId}
+        onchanged={changed}
+        onunavailable={noAccess}
+      />
+    {:else if tab === 'invitations'}
+      <OrganizationInvitations {organizationId} onunavailable={noAccess} />
+    {:else if tab === 'workspaces'}
+      <OrganizationWorkspaces {organizationId} {meId} {onchanged} onunavailable={noAccess} />
+    {:else}
+      <OrganizationSettings {organization} onchanged={settingsChanged} onunavailable={noAccess} />
     {/if}
   </ManagementFrame>
 {/if}

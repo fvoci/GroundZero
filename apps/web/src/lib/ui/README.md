@@ -13,6 +13,7 @@ pnpm dlx shadcn-svelte@1.7.0 add button input checkbox label dialog dropdown-men
 수정 기록
 
 - 추가(2026-10-30, D-121): `tabs/index.ts`는 이미 설치한 Bits UI 2.19.5의 Tabs를 그대로 내보낸다. 조직·서버 관리 틀의 탭 키보드 탐색과 ARIA 연결을 맡고 색은 기존 토큰을 쓴다. 새 의존성·자체 초점 관리자는 없다.
+- 추가(2026-10-30, #245): `switch/index.ts`도 Bits UI 2.19.5의 Switch를 그대로 내보낸다. 조직 공개 링크 설정에 쓰며 기존 입력 테두리·초점·바탕 토큰을 쓴다.
 
 - `dropdown-menu/`: `RadioGroup`·`RadioItem`을 제거(2026-10-17). 현재 미사용이고 `dropdown-menu-radio-group.svelte`가 `exactOptionalPropertyTypes`와 충돌한다(bits-ui `value?: string`에 `undefined` 전달). 필요해지면 `add dropdown-menu --overwrite` 후 타입을 맞춘다.
 - `select/select-item.svelte`: `label`을 값이 있을 때만 넘기도록 수정(2026-10-17). 같은 `exactOptionalPropertyTypes` 충돌.
