@@ -47,6 +47,14 @@ pub fn run(root: &Path, skip_licenses: bool, docs_only: bool) -> Result<()> {
             Box::new(|_| crate::openapi::run(root, true)),
         ),
         (
+            "web API paths and methods match OpenAPI",
+            Box::new(|sh| {
+                cmd!(sh, "node --test xtask/web-api/check.test.mts").run()?;
+                cmd!(sh, "pnpm exec tsc -p xtask/web-api/tsconfig.json").run()?;
+                Ok(cmd!(sh, "node xtask/web-api/check.mts").run()?)
+            }),
+        ),
+        (
             DOCS_STEP,
             Box::new(|sh| Ok(cmd!(sh, "pnpm run format:check").run()?)),
         ),
