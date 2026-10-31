@@ -465,6 +465,33 @@ async fn item_summaries_match_original_for_visibility_trash_moves_and_keys() -> 
             None => assert_eq!(list.json[0]["reference"], Value::Null),
         }
         if expected_prefix.is_none() {
+            let other = common::send(
+                &common::app(&f.state),
+                Method::POST,
+                &uri,
+                Some(&f.users[2]),
+                Some(json!({"request_id":Uuid::now_v7(),"title":"다른 사람의 개인 노트"})),
+            )
+            .await;
+            assert_eq!(other.status, StatusCode::CREATED, "{}", other.json);
+            let hidden = common::send(
+                &common::app(&f.state),
+                Method::GET,
+                &format!(
+                    "/api/documents/{}",
+                    other.json["id"].as_str().ok_or("private note id")?
+                ),
+                Some(&f.users[0]),
+                None,
+            )
+            .await;
+            assert_eq!(
+                hidden.status,
+                StatusCode::NOT_FOUND,
+                "workspace ownership never exposes another user's private note"
+            );
+            f.compare("private notes stay outside item summaries", &[], None)
+                .await?;
             let note = Uuid::parse_str(created.json["id"].as_str().ok_or("note id")?)?;
             sql_support::rows(
                 &f.state,
