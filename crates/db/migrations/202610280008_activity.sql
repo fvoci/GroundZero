@@ -302,7 +302,7 @@ BEGIN
     WITH my_workspaces AS MATERIALIZED (
       SELECT app_my_workspace_ids(p_organization) AS id
     ), mine AS MATERIALIZED (
-      SELECT t.id, t.item_id, t.workspace_id,
+      SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id) AS reference,
              t.title, s.name AS status, s.category AS status_category, t.due_date,
              CASE WHEN t.due_date < v_today THEN 'overdue'
                   WHEN t.due_date = v_today THEN 'today' ELSE 'upcoming' END AS bucket,
@@ -316,7 +316,7 @@ BEGIN
     ), ranked AS (
       SELECT mine.*, row_number() OVER (PARTITION BY bucket ORDER BY due_date, number, id) AS rn FROM mine
     ), upcoming AS (
-      SELECT id, item_id, workspace_id, app_task_reference(id) AS reference, title, status, status_category, due_date, bucket
+      SELECT id, item_id, workspace_id, reference, title, status, status_category, due_date, bucket
       FROM ranked WHERE rn <= 50 ORDER BY due_date, number, id
     ), recent_tasks AS (
       SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id) AS reference,
