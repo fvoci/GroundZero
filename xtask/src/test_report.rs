@@ -90,10 +90,10 @@ struct Report {
 }
 
 impl Report {
-    fn parse(log: &str) -> Result<Self> {
+    fn parse(stdout: &str, stderr: &str) -> Result<Self> {
         let mut report = Self::default();
-        for line in log.lines() {
-            report.coverage.observe(line)?;
+        for line in stdout.lines() {
+            report.coverage.observe_stdout(line)?;
             if line.starts_with("test result:") {
                 report.counts.add(Counts::parse(line)?)?;
                 report.rows.push(line.to_owned());
@@ -114,6 +114,9 @@ impl Report {
             report.seed |= line == SEED_PASSED;
             report.ownership |= line.starts_with(OWNERSHIP_PASSED);
             report.resources |= line.starts_with(RESOURCES_PASSED);
+        }
+        for line in stderr.lines() {
+            report.coverage.observe_stderr(line)?;
         }
         Ok(report)
     }
@@ -198,18 +201,22 @@ impl Report {
     }
 }
 
-/// CI는 GITHUB_STEP_SUMMARY에 추가하며 로컬 호출은 같은 요약과 수락 판정을 표준 출력으로 받는다.
-pub fn run(root: &Path, log: &Path, outcome: Outcome) -> Result<()> {
-    let log = match std::fs::read_to_string(log) {
-        Ok(log) => log,
+fn read_log(path: &Path, outcome: Outcome) -> Result<String> {
+    match std::fs::read_to_string(path) {
         Err(error)
             if error.kind() == std::io::ErrorKind::NotFound && outcome != Outcome::Success =>
         {
-            String::new()
+            Ok(String::new())
         }
-        Err(error) => return Err(error).context("read default Compose test log"),
-    };
-    let report = Report::parse(&log)?;
+        result => result.with_context(|| format!("read test log {}", path.display())),
+    }
+}
+
+/// CI는 GITHUB_STEP_SUMMARY에 추가하며 로컬 호출은 같은 요약과 수락 판정을 표준 출력으로 받는다.
+pub fn run(root: &Path, stdout: &Path, stderr: &Path, outcome: Outcome) -> Result<()> {
+    let stdout = read_log(stdout, outcome)?;
+    let stderr = read_log(stderr, outcome)?;
+    let report = Report::parse(&stdout, &stderr)?;
     let sh = Shell::new()?;
     sh.change_dir(root);
     let sha = cmd!(sh, "git rev-parse HEAD").quiet().read()?;
@@ -231,11 +238,33 @@ pub fn run(root: &Path, log: &Path, outcome: Outcome) -> Result<()> {
 mod tests {
     use super::*;
 
+    fn parse_fixture(log: &str) -> Result<Report> {
+        let (stderr, stdout): (Vec<_>, Vec<_>) = log.lines().partition(|line| {
+            line.trim_start().starts_with("Running ") || line.trim_start().starts_with("Doc-tests ")
+        });
+        Report::parse(&stdout.join("\n"), &stderr.join("\n"))
+    }
+
     fn complete_log() -> String {
-        let mut log = "==> expected test executable: unit-a\n==> expected test executable: storage-b\n==> test executable inventory complete: 2\n     Running unittests src/lib.rs (/work/target/debug/deps/unit-a)\nrunning 14 tests\ntest result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 5 filtered out; finished in 0.01s\n     Running tests/files.rs (/work/target/debug/deps/storage-b)\nrunning 3 tests\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n".to_owned();
+        let unit_names: Vec<_> = (0..14).map(|i| format!("unit_{i}")).collect();
+        let mut log = format!(
+            "==> expected test executable: unit-a\n==> expected test executable: storage-b\n==> expected test names: {}\n==> expected test names: {}\n==> test executable inventory complete: 2\n     Running unittests src/lib.rs (/work/target/debug/deps/unit-a)\nrunning 14 tests\n",
+            serde_json::json!({"executable":"unit-a", "tests":unit_names}),
+            serde_json::json!({"executable":"storage-b", "tests":STORAGE_TESTS})
+        );
+        for (i, name) in unit_names.iter().enumerate() {
+            writeln!(
+                log,
+                "test {name} ... {}",
+                if i < 12 { "ok" } else { "ignored" }
+            )
+            .expect("write test fixture");
+        }
+        log.push_str("test result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 5 filtered out; finished in 0.01s\n     Running tests/files.rs (/work/target/debug/deps/storage-b)\nrunning 3 tests\n");
         for name in STORAGE_TESTS {
             writeln!(log, "test {name} ... ok").expect("write test fixture");
         }
+        log.push_str("test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n");
         writeln!(
             log,
             "{SEED_PASSED}\n{OWNERSHIP_PASSED} (UID 1000, 0.1s)\n{RESOURCES_PASSED} (project)"
@@ -251,7 +280,7 @@ mod tests {
             complete_log()
         )
         .replace("inventory complete: 2", "inventory complete: 3");
-        let report = Report::parse(&log)?;
+        let report = parse_fixture(&log)?;
         let error = report
             .validate(Outcome::Success)
             .expect_err("a whole executable missing from the log must fail");
@@ -261,7 +290,7 @@ mod tests {
 
     #[test]
     fn complete_results_count_ignored_filtered_and_extra_checks_separately() -> Result<()> {
-        let report = Report::parse(&complete_log())?;
+        let report = parse_fixture(&complete_log())?;
         report.validate(Outcome::Success)?;
         let markdown = report.markdown("target-sha", Outcome::Success)?;
         assert!(markdown.contains("Commit: target-sha"));
@@ -285,21 +314,21 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n");
             assert!(
-                Report::parse(&incomplete)?
+                parse_fixture(&incomplete)?
                     .validate(Outcome::Success)
                     .is_err(),
                 "{marker}"
             );
         }
         let failed = log.replace("0 failed;", "1 failed;");
-        assert!(Report::parse(&failed)?.validate(Outcome::Success).is_err());
+        assert!(parse_fixture(&failed)?.validate(Outcome::Success).is_err());
         for outcome in [Outcome::Failure, Outcome::Cancelled, Outcome::Skipped] {
             assert!(
-                Report::parse(&log)?.validate(outcome).is_err(),
+                parse_fixture(&log)?.validate(outcome).is_err(),
                 "{outcome:?}"
             );
         }
-        let empty = Report::parse("Error: setup failed")?;
+        let empty = Report::parse("", "Error: setup failed")?;
         assert!(empty.validate(Outcome::Success).is_err());
         assert!(
             empty
@@ -318,7 +347,7 @@ mod tests {
             "test result: ok. 18446744073709551615 passed; 0 failed; 0 ignored; 0 filtered out;\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 filtered out;",
         ] {
             let framed = log.replace("test result:", "running 1 test\ntest result:");
-            assert!(Report::parse(&framed).is_err(), "{log}");
+            assert!(Report::parse(&framed, "").is_err(), "{log}");
         }
     }
 }

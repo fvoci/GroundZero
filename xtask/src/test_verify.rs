@@ -83,8 +83,15 @@ pub fn ownership(root: &Path, sh: &Shell) -> Result<()> {
         .read()?
         .parse()
         .context("parse host GID")?;
+    let groups: Vec<u32> = cmd!(sh, "id -G")
+        .quiet()
+        .read()?
+        .split_whitespace()
+        .map(str::parse)
+        .collect::<std::result::Result<_, _>>()
+        .context("parse host group membership")?;
     let started = Instant::now();
-    check_ownership(root, uid, gid)?;
+    check_ownership(root, uid, gid, &groups)?;
     println!(
         "{OWNERSHIP_PASSED} (UID/GID {uid}:{gid}, {:.3}s)",
         started.elapsed().as_secs_f64()
@@ -94,15 +101,24 @@ pub fn ownership(root: &Path, sh: &Shell) -> Result<()> {
 
 /// symlink는 그 자체만 검사한다. target을 포함한 작업 트리를 훑되 밖의 경로는 따라가지 않는다.
 #[cfg(unix)]
-fn check_ownership(root: &Path, uid: u32, gid: u32) -> Result<()> {
+fn check_ownership(root: &Path, uid: u32, gid: u32, groups: &[u32]) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
 
-    let mut pending = vec![root.to_path_buf()];
+    let inherited = root
+        .parent()
+        .map(std::fs::metadata)
+        .transpose()
+        .context("inspect ownership root's parent")?
+        .filter(|parent| parent.mode() & 0o2000 != 0)
+        .map(|parent| parent.gid());
+    let mut pending = vec![(root.to_path_buf(), inherited)];
     let mut foreign = Vec::new();
-    while let Some(path) = pending.pop() {
+    while let Some((path, inherited)) = pending.pop() {
         let metadata = std::fs::symlink_metadata(&path)
             .with_context(|| format!("inspect ownership of {}", path.display()))?;
-        if metadata.uid() != uid || !allowed_gid(gid, metadata.gid(), None) {
+        let setgid_dir = metadata.is_dir() && metadata.mode() & 0o2000 != 0;
+        if metadata.uid() != uid || !allowed_gid(gid, groups, metadata.gid(), inherited, setgid_dir)
+        {
             foreign.push(format!(
                 "{} (UID/GID {}:{})",
                 path.display(),
@@ -117,24 +133,33 @@ fn check_ownership(root: &Path, uid: u32, gid: u32) -> Result<()> {
             for entry in std::fs::read_dir(&path)
                 .with_context(|| format!("read ownership directory {}", path.display()))?
             {
-                pending.push(entry?.path());
+                pending.push((entry?.path(), setgid_dir.then_some(metadata.gid())));
             }
         }
     }
     ensure!(
         foreign.is_empty(),
-        "paths not owned by host UID/GID {uid}:{gid} (first up to 5):\n{}",
+        "paths violate host UID/GID {uid}:{gid} or permitted setgid inheritance (first up to 5):\n{}",
         foreign.join("\n")
     );
     Ok(())
 }
 
-fn allowed_gid(primary: u32, actual: u32, _setgid_parent: Option<u32>) -> bool {
+#[cfg(unix)]
+fn allowed_gid(
+    primary: u32,
+    groups: &[u32],
+    actual: u32,
+    setgid_parent: Option<u32>,
+    setgid_dir: bool,
+) -> bool {
     actual == primary
+        // 공유 디렉터리 자체도 허용하되 root/subordinate setgid로 검사를 우회할 수는 없다.
+        || (actual != 0 && groups.contains(&actual) && (setgid_dir || setgid_parent == Some(actual)))
 }
 
 #[cfg(not(unix))]
-fn check_ownership(_root: &Path, _uid: u32, _gid: u32) -> Result<()> {
+fn check_ownership(_root: &Path, _uid: u32, _gid: u32, _groups: &[u32]) -> Result<()> {
     anyhow::bail!("host ownership verification requires Unix metadata")
 }
 
@@ -173,9 +198,39 @@ mod tests {
 
     #[test]
     fn review_regression_setgid_inheritance_is_allowed_but_root_is_not() {
-        assert!(allowed_gid(1000, 2000, Some(2000)), "setgid inheritance");
-        assert!(!allowed_gid(1000, 0, Some(2000)), "root GID");
-        assert!(!allowed_gid(1000, 100000, Some(2000)), "subordinate GID");
+        let groups = [1000, 2000, 0];
+        assert!(
+            allowed_gid(1000, &groups, 2000, Some(2000), false),
+            "setgid inheritance"
+        );
+        assert!(
+            !allowed_gid(1000, &groups, 0, Some(2000), false),
+            "root GID"
+        );
+        assert!(
+            !allowed_gid(1000, &groups, 100000, Some(2000), false),
+            "subordinate GID"
+        );
+        assert!(
+            allowed_gid(1000, &groups, 2000, None, true),
+            "shared directory itself"
+        );
+        assert!(
+            !allowed_gid(1000, &groups, 0, Some(0), true),
+            "root setgid cannot bless root GID"
+        );
+        assert!(
+            !allowed_gid(1000, &groups, 100000, Some(100000), true),
+            "unmapped setgid GID"
+        );
+        assert!(
+            !allowed_gid(1000, &groups, 2000, None, false),
+            "no setgid parent"
+        );
+        assert!(
+            allowed_gid(1000, &groups, 1000, None, false),
+            "primary group"
+        );
     }
 
     #[test]
@@ -189,7 +244,7 @@ mod tests {
         std::fs::write(
             &id,
             format!(
-                "#!/bin/sh\ncase \"$1\" in -u) echo {uid};; -g) echo {gid};; *) exit 42;; esac\n"
+                "#!/bin/sh\ncase \"$1\" in -u) echo {uid};; -g|-G) echo {gid};; *) exit 42;; esac\n"
             ),
         )?;
         std::fs::set_permissions(&id, std::fs::Permissions::from_mode(0o755))?;
@@ -214,7 +269,7 @@ mod tests {
         std::fs::write(root.join("target/test-container/file"), "owned")?;
         symlink(&root, root.join("loop"))?;
         let owner = std::fs::metadata(&root)?;
-        check_ownership(&root, owner.uid(), owner.gid())?;
+        check_ownership(&root, owner.uid(), owner.gid(), &[owner.gid()])?;
         std::fs::remove_dir_all(root)?;
         Ok(())
     }
@@ -226,8 +281,8 @@ mod tests {
         std::fs::write(&path, "fixture")?;
         let owner = std::fs::metadata(&path)?;
         let other = owner.uid().wrapping_add(1);
-        let error =
-            check_ownership(&root, other, owner.gid()).expect_err("a different owner must fail");
+        let error = check_ownership(&root, other, owner.gid(), &[owner.gid()])
+            .expect_err("a different owner must fail");
         assert!(format!("{error:#}").contains(&path.display().to_string()));
         std::fs::remove_dir_all(root)?;
         Ok(())

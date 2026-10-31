@@ -110,12 +110,22 @@ jobs:
       # 기본 컨테이너 경로를 검증한다. 소유권·정리는 로컬과 같은 xtask가 판정한다.
       - name: cargo xtask test (default Compose runner)
         id: tests
-        run: cargo xtask test 2>&1 | tee "$RUNNER_TEMP/rootless-test.log"
+        run: |
+          exec 3> >(tee "$RUNNER_TEMP/rootless-test.stdout.log")
+          stdout_tee=$!
+          exec 4> >(tee "$RUNNER_TEMP/rootless-test.stderr.log" >&2 3>&-)
+          stderr_tee=$!
+          test_status=0
+          cargo xtask test >&3 2>&4 3>&- 4>&- || test_status=$?
+          exec 3>&- 4>&-
+          wait "$stdout_tee"
+          wait "$stderr_tee"
+          exit "$test_status"
       - name: Test counts and exact difference from integration
         if: always()
         env:
           TEST_OUTCOME: ${{ steps.tests.outcome }}
-        run: cargo xtask test-report --log "$RUNNER_TEMP/rootless-test.log" --outcome "$TEST_OUTCOME"
+        run: cargo xtask test-report --stdout-log "$RUNNER_TEMP/rootless-test.stdout.log" --stderr-log "$RUNNER_TEMP/rootless-test.stderr.log" --outcome "$TEST_OUTCOME"
       - name: Recover this checkout after failure
         if: ${{ failure() && steps.tests.outcome != 'skipped' }}
         run: cargo xtask down

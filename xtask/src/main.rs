@@ -60,8 +60,12 @@ enum Command {
     },
     /// 기본 Compose 시험 로그를 집계하고 소유권·정리·추가 시험의 PASS 증거를 검증한다.
     TestReport {
+        /// cargo xtask test의 stdout 전용 파일(시험 이름·그룹·결과).
         #[arg(long)]
-        log: PathBuf,
+        stdout_log: PathBuf,
+        /// 같은 실행의 stderr 전용 파일(Cargo Running·Doc-tests 헤더).
+        #[arg(long)]
+        stderr_log: PathBuf,
         #[arg(long, value_enum)]
         outcome: test_report::Outcome,
     },
@@ -178,7 +182,11 @@ fn main() -> Result<()> {
                 test_verify::Requirement::Any
             },
         ),
-        Command::TestReport { log, outcome } => test_report::run(&root, &log, outcome),
+        Command::TestReport {
+            stdout_log,
+            stderr_log,
+            outcome,
+        } => test_report::run(&root, &stdout_log, &stderr_log, outcome),
         Command::Test {
             keep,
             oidc,
@@ -239,10 +247,27 @@ test result: ok. 1 passed;\n\
 running 1 test\n\
 test documents::round_trip ... ok\n\
 test result: ok. 1 passed;\n";
+        let admin_header = "Running unittests src/lib.rs (/work/admin-a)\n";
+        let documents_header = "     Running unittests src/lib.rs (/work/documents-b)\n";
+        // tee로 합치기 전 각 스트림의 바이트. stdout에는 중간 개행 없이 "... ok"가 남는다.
+        let stdout = log.replace(admin_header, "").replace(documents_header, "");
+        let stderr = format!("{admin_header}{documents_header}");
         let mut coverage = test_executables::Coverage::default();
-        for line in log.lines() {
-            coverage.observe(line)?;
+        for line in stdout.lines() {
+            coverage.observe_stdout(line)?;
         }
-        coverage.validate()
+        for line in stderr.lines() {
+            coverage.observe_stderr(line)?;
+        }
+        coverage.validate()?;
+        let mut mixed = test_executables::Coverage::default();
+        assert!(
+            log.lines()
+                .try_for_each(|line| mixed.observe(line))
+                .and_then(|()| mixed.validate())
+                .is_err(),
+            "combined bytes cannot prove the executable header"
+        );
+        Ok(())
     }
 }
