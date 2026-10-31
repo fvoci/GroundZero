@@ -9,6 +9,7 @@ mod settings;
 mod cache;
 mod expected_user;
 mod first_flow;
+mod item_list;
 mod public_links;
 mod references;
 mod revisions;
