@@ -547,6 +547,15 @@ mod tests {
     use crate::compose::tests::{assert_held, scratch_root};
 
     #[test]
+    fn rootless_amd64_uses_the_container() {
+        let remapped = user_is_remapped(&["name=rootless".to_owned()]);
+        assert_eq!(
+            select_execution("amd64", remapped),
+            ExecutionChoice::Container
+        );
+    }
+
+    #[test]
     fn amd64_unmapped_uses_the_container() {
         for architecture in ["amd64", "x86_64"] {
             assert_eq!(
