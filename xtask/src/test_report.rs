@@ -232,7 +232,7 @@ mod tests {
     use super::*;
 
     fn complete_log() -> String {
-        let mut log = "==> expected test executable: unit-a\n==> expected test executable: storage-b\n==> test executable inventory complete: 2\n     Running unittests src/lib.rs (/work/target/debug/deps/unit-a)\ntest result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 5 filtered out; finished in 0.01s\n     Running tests/files.rs (/work/target/debug/deps/storage-b)\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n".to_owned();
+        let mut log = "==> expected test executable: unit-a\n==> expected test executable: storage-b\n==> test executable inventory complete: 2\n     Running unittests src/lib.rs (/work/target/debug/deps/unit-a)\nrunning 14 tests\ntest result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 5 filtered out; finished in 0.01s\n     Running tests/files.rs (/work/target/debug/deps/storage-b)\nrunning 3 tests\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n".to_owned();
         for name in STORAGE_TESTS {
             writeln!(log, "test {name} ... ok").expect("write test fixture");
         }
@@ -317,7 +317,8 @@ mod tests {
             "test result: ok. 1 passed; 1 passed; 0 failed; 0 ignored; 0 filtered out;",
             "test result: ok. 18446744073709551615 passed; 0 failed; 0 ignored; 0 filtered out;\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 filtered out;",
         ] {
-            assert!(Report::parse(log).is_err(), "{log}");
+            let framed = log.replace("test result:", "running 1 test\ntest result:");
+            assert!(Report::parse(&framed).is_err(), "{log}");
         }
     }
 }

@@ -80,18 +80,36 @@ fn from_cargo(messages: &str) -> Result<BTreeSet<String>> {
 }
 
 #[derive(Debug)]
-enum Active {
+enum TestGroup {
     Executable(String),
     DocTests,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum StdoutGroup {
+    Started,
+    Complete,
 }
 
 #[derive(Debug, Default)]
 pub struct Coverage {
     expected: BTreeSet<String>,
-    completed: BTreeSet<String>,
     declared: Option<usize>,
-    active: Option<Active>,
+    groups: Vec<TestGroup>,
+    stdout_groups: Vec<StdoutGroup>,
+    result_rows: usize,
     unassigned_rows: usize,
+}
+
+fn starts_test_group(line: &str) -> bool {
+    let mut words = line.split_whitespace();
+    words.next() == Some("running")
+        && words
+            .next()
+            .and_then(|word| word.parse::<usize>().ok())
+            .is_some()
+        && matches!(words.next(), Some("test" | "tests"))
+        && words.next().is_none()
 }
 
 impl Coverage {
@@ -116,22 +134,36 @@ impl Coverage {
             let path = path
                 .strip_suffix(')')
                 .context("unterminated Cargo executable path")?;
-            self.active = Some(Active::Executable(executable_name(path)?));
+            self.groups
+                .push(TestGroup::Executable(executable_name(path)?));
         } else if line.trim_start().starts_with("Doc-tests ") {
-            self.active = Some(Active::DocTests);
+            self.groups.push(TestGroup::DocTests);
+        } else if starts_test_group(line) {
+            self.stdout_groups.push(StdoutGroup::Started);
         } else if line.starts_with("test result:") {
-            match self.active.take() {
-                Some(Active::Executable(name)) => {
-                    ensure!(
-                        self.completed.insert(name.clone()),
-                        "duplicate result for test executable: {name}"
-                    );
-                }
-                Some(Active::DocTests) => {}
-                None => self.unassigned_rows += 1,
+            match self.stdout_groups.last_mut() {
+                Some(group @ StdoutGroup::Started) => *group = StdoutGroup::Complete,
+                _ => self.unassigned_rows += 1,
             }
+            self.result_rows = self
+                .result_rows
+                .checked_add(1)
+                .context("test group count overflow")?;
         }
         Ok(())
+    }
+
+    // Cargo는 순차 실행한다. stderr 헤더와 stdout 그룹의 각 스트림 내 순서는 유지되지만
+    // Docker/tee가 두 스트림을 합친 도착 순서는 달라질 수 있어, 전부 읽은 뒤 N번째끼리 대응한다.
+    fn completed(&self) -> BTreeSet<&str> {
+        self.groups
+            .iter()
+            .zip(&self.stdout_groups)
+            .filter_map(|(group, result)| match (group, result) {
+                (TestGroup::Executable(name), StdoutGroup::Complete) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect()
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -139,48 +171,64 @@ impl Coverage {
             !self.expected.is_empty() && self.declared == Some(self.expected.len()),
             "missing or incomplete Cargo test executable inventory"
         );
+        let completed = self.completed();
         let missing: Vec<&str> = self
             .expected
-            .difference(&self.completed)
+            .iter()
             .map(String::as_str)
+            .filter(|name| !completed.contains(name))
             .collect();
         ensure!(
             missing.is_empty(),
             "test executables missing results: {}",
             missing.join(", ")
         );
-        let unknown: Vec<&str> = self
-            .completed
-            .difference(&self.expected)
-            .map(String::as_str)
-            .collect();
+        let mut seen = BTreeSet::new();
+        for group in &self.groups {
+            if let TestGroup::Executable(name) = group {
+                ensure!(
+                    seen.insert(name),
+                    "duplicate test executable header: {name}"
+                );
+                ensure!(
+                    self.expected.contains(name),
+                    "test result without build artifact: {name}"
+                );
+            }
+        }
         ensure!(
-            unknown.is_empty(),
-            "test results without build artifacts: {}",
-            unknown.join(", ")
+            self.result_rows == self.groups.len() && self.stdout_groups.len() == self.groups.len(),
+            "Cargo executable/doc-test groups and stdout groups/results differ: {} headers, {} stdout groups, {} results",
+            self.groups.len(),
+            self.stdout_groups.len(),
+            self.result_rows
         );
         ensure!(
-            self.unassigned_rows == 0,
-            "test result rows without a Cargo executable/doc-test header"
-        );
-        ensure!(
-            self.active.is_none(),
-            "last Cargo test group has no result row"
+            self.unassigned_rows == 0
+                && self
+                    .stdout_groups
+                    .iter()
+                    .all(|group| *group == StdoutGroup::Complete),
+            "stdout test groups must each have exactly one result row"
         );
         Ok(())
     }
 
     pub fn summary(&self) -> String {
+        let completed = self.completed();
         let missing: Vec<&str> = self
             .expected
-            .difference(&self.completed)
+            .iter()
             .map(String::as_str)
+            .filter(|name| !completed.contains(name))
             .collect();
         format!(
-            "Test executable results: {}/{}; inventory declared: {:?}; missing: {}",
-            self.completed.len(),
+            "Test executable results: {}/{}; inventory declared: {:?}; Cargo groups/results: {}/{}; missing: {}",
+            completed.len(),
             self.expected.len(),
             self.declared,
+            self.groups.len(),
+            self.result_rows,
             if missing.is_empty() {
                 "none".to_owned()
             } else {
@@ -287,7 +335,7 @@ printf '%s\n' '{"reason":"compiler-artifact","profile":{"test":true},"executable
 
     #[test]
     fn missing_duplicate_unknown_and_unassigned_results_fail() -> Result<()> {
-        let complete = "==> expected test executable: unit-a\n==> test executable inventory complete: 1\n     Running unittests src/lib.rs (/work with spaces/target/debug/deps/unit-a)\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n   Doc-tests example\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;";
+        let complete = "==> expected test executable: unit-a\n==> test executable inventory complete: 1\n     Running unittests src/lib.rs (/work with spaces/target/debug/deps/unit-a)\nrunning 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;\n   Doc-tests example\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;";
         let mut coverage = Coverage::default();
         for line in complete.lines() {
             coverage.observe(line)?;
@@ -304,13 +352,100 @@ printf '%s\n' '{"reason":"compiler-artifact","profile":{"test":true},"executable
             ),
             complete.replace("/deps/unit-a)", "/deps/unknown-b)"),
             format!(
-                "{complete}\nRunning unittests src/lib.rs (/work/target/debug/deps/unit-a)\ntest result: ok. 1 passed;"
+                "{complete}\nRunning unittests src/lib.rs (/work/target/debug/deps/unit-a)\nrunning 1 test\ntest result: ok. 1 passed;"
             ),
         ] {
             let mut coverage = Coverage::default();
             let parsed = log.lines().try_for_each(|line| coverage.observe(line));
             assert!(parsed.is_err() || coverage.validate().is_err(), "{log}");
         }
+        Ok(())
+    }
+
+    fn stream_merges(stderr: &[&str], stdout: &[&str]) -> Vec<String> {
+        if stderr.is_empty() {
+            return vec![stdout.join("\n")];
+        }
+        if stdout.is_empty() {
+            return vec![stderr.join("\n")];
+        }
+        let mut merged = Vec::new();
+        for tail in stream_merges(&stderr[1..], stdout) {
+            merged.push(format!("{}\n{tail}", stderr[0]));
+        }
+        for tail in stream_merges(stderr, &stdout[1..]) {
+            merged.push(format!("{}\n{tail}", stdout[0]));
+        }
+        merged
+    }
+
+    #[test]
+    fn every_order_preserving_stream_merge_has_the_same_coverage() -> Result<()> {
+        let stderr = [
+            "Running unittests src/lib.rs (/work/unit-a)",
+            "Running tests/b.rs (/work/unit-b)",
+            "Doc-tests example",
+        ];
+        let stdout = [
+            "==> expected test executable: unit-a",
+            "==> expected test executable: unit-b",
+            "==> test executable inventory complete: 2",
+            "running 1 test",
+            "test result: ok. 1 passed;",
+            "running 0 tests",
+            "test result: ok. 0 passed;",
+            "running 0 tests",
+            "test result: ok. 0 passed;",
+        ];
+        let merges = stream_merges(&stderr, &stdout);
+        assert_eq!(merges.len(), 220);
+        for log in merges {
+            let mut coverage = Coverage::default();
+            for line in log.lines() {
+                coverage.observe(line)?;
+            }
+            coverage
+                .validate()
+                .with_context(|| format!("stream merge failed:\n{log}"))?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn missing_or_duplicate_stdout_results_cannot_shift_pairing_silently() {
+        let inventory = "==> expected test executable: unit-a\n==> expected test executable: unit-b\n==> test executable inventory complete: 2\nRunning unittests src/lib.rs (/work/unit-a)\nRunning tests/b.rs (/work/unit-b)\n";
+        for stdout in [
+            "running 1 test\nrunning 1 test\ntest result: ok. 1 passed;",
+            "running 1 test\ntest result: ok. 1 passed;\ntest result: ok. 1 passed;",
+            "test result: ok. 1 passed;",
+            "running 1 test\nrunning 1 test\ntest result: ok. 1 passed;\ntest result: ok. 1 passed;",
+        ] {
+            let mut coverage = Coverage::default();
+            let log = format!("{inventory}{stdout}");
+            assert!(
+                log.lines()
+                    .try_for_each(|line| coverage.observe(line))
+                    .and_then(|()| coverage.validate())
+                    .is_err(),
+                "{stdout}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_duplicate_result_cannot_cover_another_executables_missing_row() -> Result<()> {
+        let log = "==> expected test executable: unit-a\n==> expected test executable: unit-b\n==> test executable inventory complete: 2\nRunning unittests src/lib.rs (/work/unit-a)\nRunning tests/b.rs (/work/unit-b)\nrunning 1 test\nrunning 1 test\ntest result: ok. 1 passed;\ntest result: ok. 1 passed;";
+        let mut coverage = Coverage::default();
+        for line in log.lines() {
+            coverage.observe(line)?;
+        }
+        let error = coverage
+            .validate()
+            .expect_err("unit-a did not produce a result row");
+        assert!(
+            error.to_string().contains("missing results: unit-a"),
+            "{error:#}"
+        );
         Ok(())
     }
 }
