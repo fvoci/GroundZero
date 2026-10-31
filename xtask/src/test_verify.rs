@@ -158,6 +158,35 @@ mod tests {
     use crate::compose::tests::scratch_root;
 
     #[test]
+    fn review_regression_gid_only_mismatch_is_rejected() -> Result<()> {
+        let root = scratch_root()?;
+        std::fs::write(root.join("group-only-file"), "fixture")?;
+        let metadata = std::fs::metadata(&root)?;
+        let uid = metadata.uid();
+        let gid = metadata.gid().wrapping_add(1);
+        let id = root.join("id");
+        std::fs::write(
+            &id,
+            format!(
+                "#!/bin/sh\ncase \"$1\" in -u) echo {uid};; -g) echo {gid};; *) exit 42;; esac\n"
+            ),
+        )?;
+        std::fs::set_permissions(&id, std::fs::Permissions::from_mode(0o755))?;
+        let sh = Shell::new()?;
+        let _path = sh.push_env("PATH", &root);
+        let result = ownership(&root, &sh);
+        std::fs::remove_dir_all(&root)?;
+        let error = result.expect_err("correct UID with a different GID must fail");
+        let message = format!("{error:#}");
+        assert!(
+            message.contains(&format!("UID/GID {uid}:{gid}")),
+            "{message}"
+        );
+        assert!(message.contains("group-only-file"), "{message}");
+        Ok(())
+    }
+
+    #[test]
     fn owned_tree_passes_without_following_a_symlink_loop() -> Result<()> {
         let root = scratch_root()?;
         std::fs::create_dir_all(root.join("target/test-container"))?;
