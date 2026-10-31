@@ -194,6 +194,41 @@ impl Coverage {
 mod tests {
     use super::*;
 
+    #[test]
+    fn ci_interleaving_keeps_worker_and_workspace_results() -> Result<()> {
+        // 41206300523의 순서: 다음 stderr Running이 이전 stdout 결과보다 먼저 도착한다.
+        let log = "==> expected test executable: worker-d23f2f3e1008d35c\n\
+==> expected test executable: worker_isolation-e03adb3e3835618a\n\
+==> expected test executable: workspace_delete-13e2e563cfc8d2f8\n\
+==> expected test executable: fvoci_storage-3f640a1697b6fa11\n\
+==> test executable inventory complete: 4\n\
+     Running tests/worker.rs (target/test-container/build/debug/deps/worker-d23f2f3e1008d35c)\n\
+running 3 tests\n\
+test indexing_rechecks_the_claim_and_generation_before_sending ... ok\n\
+test storage_cleanup_deletes_every_object_queued_together ... ok\n\
+     Running tests/worker_isolation.rs (target/test-container/build/debug/deps/worker_isolation-e03adb3e3835618a)\n\
+test the_worker_purges_only_expired_trash_and_fills_repeating_tasks ... ok\n\
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.83s\n\
+running 4 tests\n\
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\
+     Running tests/workspace_delete.rs (target/test-container/build/debug/deps/workspace_delete-13e2e563cfc8d2f8)\n\
+running 3 tests\n\
+test purge_succeeds_with_a_trashed_module ... ok\n\
+test only_the_owner_deletes_and_everyone_loses_access_until_restored ... ok\n\
+     Running unittests src/lib.rs (target/test-container/build/debug/deps/fvoci_storage-3f640a1697b6fa11)\n\
+test purge_removes_everything_but_personal_time_and_expiry_purges_in_the_worker ... ok\n\
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\
+running 4 tests\n\
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n";
+        let mut coverage = Coverage::default();
+        for line in log.lines() {
+            coverage.observe(line)?;
+        }
+        coverage.validate()?;
+        assert!(coverage.summary().contains("4/4"));
+        Ok(())
+    }
+
     #[cfg(unix)]
     #[test]
     fn inventory_build_preserves_shell_context_and_all_test_build_arguments() -> Result<()> {
