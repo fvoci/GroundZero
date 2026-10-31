@@ -331,6 +331,7 @@
     <p
       id={assignableStatusId}
       role="status"
+      aria-hidden={!expanded}
       class="text-sm empty:hidden"
       class:text-destructive={assignableError !== undefined && !assignableLoading}
     >
