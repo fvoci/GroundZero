@@ -15,6 +15,26 @@ use crate::documents::{
 };
 use crate::state::DocumentsState;
 
+/// 항목 문서 목록 질의. 정규 통합 시험이 제품의 실제 질의를 비교하도록 시험용으로 공개한다.
+#[doc(hidden)]
+pub const ITEM_DOCUMENTS_SQL: &str = r"-- item_id implies module placement (documents_module_shape). The scalar
+-- subquery reads the shared item key once, retaining items/module_keys RLS
+-- and NULL when the item or current key is not visible.
+-- documents_tree_check keeps parents in the same item. Reuse this statement's
+-- RLS-visible rows to mask hidden parents without evaluating their access twice.
+WITH visible AS MATERIALIZED (
+    SELECT id, title, revision, updated_at, parent_id, number, position, created_at
+    FROM documents WHERE item_id = $1
+)
+SELECT d.id,
+       (SELECT k.key FROM fvoci.items i
+        JOIN fvoci.module_keys k ON k.module_id = i.module_id AND k.retired_at IS NULL
+        WHERE i.id = $1) || '-' || d.number AS reference,
+       d.title, d.revision, d.updated_at, p.id AS parent_id
+FROM visible d LEFT JOIN visible p ON p.id = d.parent_id
+ORDER BY d.position, d.number NULLS LAST, d.created_at, d.id
+";
+
 /// 항목 아래 문서 목록. 볼 수 있는 문서만 나온다.
 #[utoipa::path(get, path = "/api/items/{item_id}/documents",
     params(("item_id" = String, Path, format = Uuid)),
@@ -26,7 +46,7 @@ pub async fn list_item_documents(
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Item, id).await?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(include_str!("item_documents.sql"))
+    let rows: Vec<SummaryRow> = sqlx::query_as(ITEM_DOCUMENTS_SQL)
         .bind(id)
         .fetch_all(tx.conn())
         .await?;

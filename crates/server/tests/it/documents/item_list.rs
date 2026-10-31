@@ -5,6 +5,7 @@ use crate::sql_support;
 use axum::http::{Method, StatusCode};
 use fvoci_core::ids::DocumentId;
 use fvoci_documents::documents::DocumentSummary;
+use fvoci_documents::items::ITEM_DOCUMENTS_SQL;
 use fvoci_server::http::AppState;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
@@ -17,11 +18,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 const REFERENCE: &str = "SELECT id, app_document_reference(id) AS reference, title, revision,
  updated_at, CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id
  FROM documents WHERE item_id = $1 ORDER BY position, number NULLS LAST, created_at, id";
-
-const CANDIDATE: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../domains/documents/src/item_documents.sql"
-));
 
 struct Fixture {
     admin: PgConnection,
@@ -201,7 +197,7 @@ impl Fixture {
             .bind(item)
             .fetch_all(tx.conn())
             .await?;
-        let actual: Vec<Row> = sqlx::query_as(CANDIDATE)
+        let actual: Vec<Row> = sqlx::query_as(ITEM_DOCUMENTS_SQL)
             .bind(item)
             .fetch_all(tx.conn())
             .await?;
