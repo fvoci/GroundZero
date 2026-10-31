@@ -13,6 +13,9 @@ mod rhwp;
 mod supabase;
 mod supabase_cloud_precheck;
 mod test;
+mod test_executables;
+mod test_report;
+mod test_verify;
 
 use std::path::PathBuf;
 
@@ -49,6 +52,18 @@ enum Command {
         /// `$GITHUB_EVENT_NAME`. `pull_request`만 변경 경로로 좁히고 나머지는 전체를 돈다.
         #[arg(long)]
         event: String,
+    },
+    /// 시험 데몬 요구 사항·호스트 소유권·이 체크아웃의 Compose 자원 부재를 검증한다.
+    TestVerify {
+        #[arg(long)]
+        require_rootless: bool,
+    },
+    /// 기본 Compose 시험 로그를 집계하고 소유권·정리·추가 시험의 PASS 증거를 검증한다.
+    TestReport {
+        #[arg(long)]
+        log: PathBuf,
+        #[arg(long, value_enum)]
+        outcome: test_report::Outcome,
     },
     /// 테스트용 Compose를 띄우고 통합 테스트까지 실행한 뒤 정리한다.
     Test {
@@ -155,6 +170,15 @@ fn main() -> Result<()> {
             docs_only,
         } => check::run(&root, skip_licenses, docs_only),
         Command::CiPlan { event } => ci_plan::run(&root, &event),
+        Command::TestVerify { require_rootless } => test_verify::run(
+            &root,
+            if require_rootless {
+                test_verify::Requirement::Rootless
+            } else {
+                test_verify::Requirement::Any
+            },
+        ),
+        Command::TestReport { log, outcome } => test_report::run(&root, &log, outcome),
         Command::Test {
             keep,
             oidc,
