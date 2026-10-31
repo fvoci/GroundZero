@@ -60,6 +60,7 @@
   ],
   "tasks_csv_resume_restart": "To start a new import instead, clear the text first.",
   "tasks_csv_summary": "Add multiple tasks at once",
+  "tasks_csv_assignees_load_failed": "Could not load assignee candidates. Retry before checking rows with assignees.",
   "tasks_csv_label": "One task per line: title, description, status ({statuses}; leave blank for the item's default), priority (none, low, medium, high, urgent), start date, due date (YYYY-MM-DD), estimate (minutes), assignees (names, separated by ;), tags (separated by ;)",
   "tasks_csv_read": [
     {

@@ -7,7 +7,7 @@
   // 않는 글자로 누르면 새 묶음이다.
   import type { AssigneeView } from '$lib/api/client';
   import type { TaskStatusDefinition } from '@fvoci/api-client';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
   import { org } from '$lib/org.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -48,6 +48,13 @@
 
   let text = $state('');
   let assignable = $state<AssigneeView[]>([]);
+  let assignableRequestedFor = $state<string | undefined>();
+  let assignableLoading = $state(false);
+  let assignableError = $state<string | undefined>();
+  let retryButton = $state<HTMLButtonElement | null>(null);
+  let csvInput = $state<HTMLTextAreaElement | null>(null);
+  let csvToggle = $state<HTMLButtonElement | null>(null);
+  const assignableStatusId = $props.id();
   let status = $state('');
   let error = $state<string | undefined>(undefined);
   let busy = $state(false);
@@ -68,35 +75,76 @@
   // 마지막 저장이 이 탭에 남았는지. 계정 전환으로 다시 읽을 때 남았으면 막지 않는다(D-96).
   let kept = $state(true);
   let expanded = $state(false);
+  const statusText = $derived(
+    expanded
+      ? [assignableLoading ? m.modules_loading() : (assignableError ?? ''), status]
+          .filter(Boolean)
+          .join(' ')
+      : '',
+  );
 
   $effect(() => {
-    const key = storageKey;
-    const id = itemId;
-    const selected = org.currentId;
-    const mine = ++generation;
+    // 키가 비어 있어도 항목·조직이 바뀌면 기존처럼 진행 상태를 비운다.
+    const context = { key: storageKey, itemId, organizationId: org.currentId };
+    generation += 1;
     untrack(() => {
-      offers = listImportDrafts(key).map((entry) => holdImportDraft(key, entry));
+      offers = listImportDrafts(context.key).map((entry) => holdImportDraft(context.key, entry));
       restoredSource = undefined;
       text = '';
       progress = [];
-      loadedKey = key;
+      loadedKey = context.key;
       busy = false;
       status = '';
       error = undefined;
       assignable = [];
+      assignableRequestedFor = undefined;
+      assignableLoading = false;
+      assignableError = undefined;
     });
-    if (selected !== undefined) {
-      void work
-        .assignable(id)
-        .then((a) => {
-          if (mine === generation) assignable = a;
-        })
-        .catch(() => undefined);
-    }
     return () => {
       generation += 1;
       controller?.abort();
     };
+  });
+
+  async function readAssignable(id: string): Promise<void> {
+    if (assignableLoading) return;
+    const mine = generation;
+    const restoreFocus = retryButton !== null && document.activeElement === retryButton;
+    assignableLoading = true;
+    try {
+      const candidates = await work.assignable(id);
+      if (mine !== generation) return;
+      assignable = candidates;
+      assignableError = undefined;
+    } catch (e: unknown) {
+      if (mine === generation) assignableError = errorText(e, m.tasks_csv_assignees_load_failed());
+    } finally {
+      if (mine === generation) {
+        assignableLoading = false;
+        if (restoreFocus) {
+          await tick();
+          if (mine === generation && expanded && document.activeElement === document.body)
+            (assignableError !== undefined
+              ? retryButton
+              : csvInput?.disabled === true
+                ? csvToggle
+                : csvInput
+            )?.focus();
+        }
+      }
+    }
+  }
+
+  $effect(() => {
+    const key = storageKey;
+    const id = itemId;
+    if (!expanded || org.currentId === undefined || me.userId !== editingUser) return;
+    untrack(() => {
+      if (assignableRequestedFor === key) return;
+      assignableRequestedFor = key;
+      void readAssignable(id);
+    });
   });
 
   $effect(() => {
@@ -270,9 +318,35 @@
 />
 
 {#if me.userId === editingUser}
-  <Collapsible.Root bind:open={expanded} class="text-sm">
-    <Collapsible.Trigger>{m.tasks_csv_summary()}</Collapsible.Trigger>
+  <Collapsible.Root
+    bind:open={
+      () => expanded,
+      (open: boolean) => {
+        expanded = open;
+      }
+    }
+    class="text-sm"
+  >
+    <Collapsible.Trigger bind:ref={csvToggle}>{m.tasks_csv_summary()}</Collapsible.Trigger>
+    <p
+      id={assignableStatusId}
+      role="status"
+      aria-hidden={!expanded}
+      class="text-sm empty:hidden"
+      class:text-destructive={assignableError !== undefined && !assignableLoading}
+    >
+      {#if statusText !== ''}{statusText}{/if}
+    </p>
     <Collapsible.Content class="flex flex-col gap-2 pt-2">
+      {#if assignableError !== undefined}
+        <Button
+          bind:ref={retryButton}
+          variant="outline"
+          disabled={assignableLoading}
+          aria-describedby={assignableStatusId}
+          onclick={() => void readAssignable(itemId)}>{m.common_retry()}</Button
+        >
+      {/if}
       {#each offers as entry (entry.key)}
         <div role="region" aria-label={m.tasks_draft_region()} data-testid="task-csv-draft-offer">
           <p>{m.tasks_draft_region()}</p>
@@ -299,7 +373,9 @@
         })}</Label
       >
       <Textarea
+        bind:ref={csvInput}
         id={`tasks-csv-${itemId}`}
+        aria-describedby={assignableStatusId}
         class="max-h-96 min-h-32 overflow-y-auto font-code"
         bind:value={text}
         disabled={busy || reserved || me.userId !== editingUser}
@@ -307,11 +383,10 @@
           if (e.currentTarget instanceof HTMLTextAreaElement) edited(e.currentTarget.value);
         }}
       />
-      <p role="status" hidden={status === ''}>{status}</p>
       <p aria-live="polite">
         {#if error !== undefined}
           <span class="text-destructive">{error}</span>
-        {:else if parsed !== undefined}
+        {:else if parsed !== undefined && !assignableLoading}
           {m.tasks_csv_read({ count: parsed.rows.length })}
           {#if parsed.errors.length > 0}
             <span class="text-destructive">

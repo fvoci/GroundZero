@@ -418,6 +418,6 @@ it('ItemScreen follows direct gantt URLs, view navigation and task detail URLs (
   router.navigate(itemTaskPath(ws.id, current.id, entry.id));
   await screen.findByRole('dialog');
   await waitFor(() => {
-    expect(work.task).toHaveBeenCalledWith(entry.id);
+    expect(work.task).toHaveBeenCalledWith(entry.id, current.id);
   });
 });
