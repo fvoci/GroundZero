@@ -61,7 +61,12 @@
       { "path": "/api/items/sample-item/documents", "start": 30, "end": 50 },
       { "path": "/api/modules/sample-module", "start": 40, "end": 50 },
       { "path": "/api/tasks/sample-task", "start": 50, "end": 60 },
-      { "path": "/api/items/sample-item/tasks", "start": 60, "end": 70 },
+      { "path": "/api/items/sample-item/tasks", "start": 50, "end": 70 },
+      { "path": "/api/items/sample-item", "start": 50, "end": 65 },
+      { "path": "/api/task-assignees", "start": 50, "end": 65 },
+      { "path": "/api/task-dependencies", "start": 50, "end": 65 },
+      { "path": "/api/task-series", "start": 50, "end": 65 },
+      { "path": "/api/checklist-items", "start": 50, "end": 65 },
       { "path": "/api/tasks/sample-task/comments", "start": 70, "end": 80 }
     ]
   },

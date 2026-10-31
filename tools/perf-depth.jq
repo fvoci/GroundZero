@@ -4,6 +4,7 @@
 # detail-data.loadDetail and DocumentScreen. Each observed edge must finish before its child.
 # Every parallel arm is checked. Session/home fan-outs contribute one level;
 # ItemScreen joins documents with item -> module before rendering the selected view.
+# Task detail joins its task resource with six item-scope reads sharing an overlap.
 def pick($requests; $pattern; $after; $last):
   [$requests[] | select(.path | test($pattern)) | select(.start >= $after)] |
   if length == 0 then error("missing dependency witness: " + $pattern)
@@ -27,8 +28,6 @@ def item_screen($screen):
 def patterns($screen):
   if $screen == "board" or $screen == "gantt" then
     ["^/api/items/[^/]+/recurrences/sync$", "^/api/items/[^/]+/tasks$"]
-  elif $screen == "task-detail" then
-    ["^/api/tasks/[^/]+$", "^/api/items/[^/]+/tasks$", "^/api/tasks/[^/]+/comments$"]
   elif $screen == "document-tree" then
     ["^/api/items/[^/]+/backlinks$"]
   elif $screen == "document-open" then
@@ -65,9 +64,24 @@ map(
       {chain: [$root, $gate, $item, $module],
        after: ([$documents[].end, $module.end] | max), parallel: ($documents + [$module])}
     else {chain: [$root, $gate], after: $gate.end, parallel: []} end) as $initial |
-    reduce patterns(.screen)[] as $pattern ($initial;
-      pick($requests; $pattern; .after; $sample.screen == "task-detail" and ($pattern | endswith("/tasks$"))) as $child |
-      .chain += [$child] | .after = $child.end)
+    if $sample.screen == "task-detail" then
+      pick($requests; "^/api/tasks/[^/]+$"; $initial.after; false) as $task |
+      (["^/api/items/[^/]+/tasks$", "^/api/items/[^/]+$", "^/api/task-assignees$",
+        "^/api/task-dependencies$", "^/api/task-series$", "^/api/checklist-items$"] |
+        map(pick($requests; .; $task.start; false))) as $scope |
+      if any($scope[]; .start >= $task.end or .end <= $task.start)
+      then error("non-overlapping dependency witness: task detail scope") else . end |
+      if ($scope | map(.start) | max) >= ($scope | map(.end) | min)
+      then error("non-overlapping dependency witness: task detail scope arms") else . end |
+      ([$task] + $scope | max_by(.end)) as $join |
+      pick($requests; "^/api/tasks/[^/]+/comments$"; $join.end; false) as $comments |
+      $initial + {chain: ($initial.chain + [$join, $comments]),
+        parallel: ($initial.parallel + [$task] + $scope)}
+    else
+      reduce patterns(.screen)[] as $pattern ($initial;
+        pick($requests; $pattern; .after; false) as $child |
+        .chain += [$child] | .after = $child.end)
+    end
   end) |
   {screen: $sample.screen, repeat: $sample.repeat, depth: (.chain | length),
    chain: (.chain | map({path, start, end})), parallel: (.parallel | map({path, start, end}))}

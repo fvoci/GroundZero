@@ -60,6 +60,8 @@
   interface Props {
     readOnly?: boolean;
     taskId: string;
+    /** 부모 항목의 읽기 힌트. 실제 업무의 item_id가 다르면 조합층이 다시 읽는다. */
+    itemId?: string | undefined;
     /** 같은 항목의 업무 전체(하위 업무·선행 후보·후속 확인용). */
     tasks: TaskView[];
     workspaces: Workspace[];
@@ -78,6 +80,7 @@
 
   const {
     taskId,
+    itemId,
     tasks,
     workspaces,
     onchanged,
@@ -347,6 +350,7 @@
 
   $effect(() => {
     const id = taskId;
+    const parentItemId = untrack(() => itemId);
     let cancelled = false;
     detailForm.task = undefined;
     latestRule = undefined;
@@ -354,7 +358,7 @@
     clashAsk = undefined;
     error = undefined;
     void work
-      .task(id)
+      .task(id, parentItemId)
       .then((detail) => {
         if (cancelled) return;
         // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
