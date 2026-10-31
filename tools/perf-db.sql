@@ -44,3 +44,50 @@ SET LOCAL ROLE fvoci_app;
 SELECT set_config('app.user_id', :'actor', true);
 EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM fvoci.documents WHERE item_id=:'item'::uuid;
 ROLLBACK;
+\echo document list components: RLS, reference, parent visibility, tree order
+BEGIN;
+SET LOCAL ROLE fvoci_app;
+SET LOCAL search_path = fvoci, pg_temp;
+SELECT set_config('app.user_id', :'actor', true);
+\echo document list: RLS only
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, title, revision, updated_at FROM documents WHERE item_id=:'item'::uuid;
+\echo document list: RLS + reference
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, app_document_reference(id) AS reference, title, revision, updated_at
+FROM documents WHERE item_id=:'item'::uuid;
+\echo document list: RLS + reference + parent visibility
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, app_document_reference(id) AS reference, title, revision, updated_at,
+       CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id
+FROM documents WHERE item_id=:'item'::uuid;
+\echo document list: original full query (a81cab4d)
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, app_document_reference(id) AS reference, title, revision, updated_at,
+       CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id
+FROM documents WHERE item_id=:'item'::uuid
+ORDER BY position, number NULLS LAST, created_at, id;
+\echo document list candidate C1: one item key lookup
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT d.id,
+       (SELECT k.key FROM fvoci.items i
+        JOIN fvoci.module_keys k ON k.module_id=i.module_id AND k.retired_at IS NULL
+        WHERE i.id=:'item'::uuid) || '-' || d.number AS reference,
+       d.title, d.revision, d.updated_at,
+       CASE WHEN app_access('document', d.parent_id) <> 'none' THEN d.parent_id END AS parent_id
+FROM documents d WHERE d.item_id=:'item'::uuid
+ORDER BY d.position, d.number NULLS LAST, d.created_at, d.id;
+\echo document list candidate C2: C1 + reuse RLS-visible parents
+EXPLAIN (ANALYZE, BUFFERS)
+WITH visible AS MATERIALIZED (
+    SELECT id, title, revision, updated_at, parent_id, number, position, created_at
+    FROM documents WHERE item_id=:'item'::uuid
+)
+SELECT d.id,
+       (SELECT k.key FROM fvoci.items i
+        JOIN fvoci.module_keys k ON k.module_id=i.module_id AND k.retired_at IS NULL
+        WHERE i.id=:'item'::uuid) || '-' || d.number AS reference,
+       d.title, d.revision, d.updated_at, p.id AS parent_id
+FROM visible d LEFT JOIN visible p ON p.id=d.parent_id
+ORDER BY d.position, d.number NULLS LAST, d.created_at, d.id;
+ROLLBACK;
