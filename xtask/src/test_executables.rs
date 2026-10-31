@@ -243,6 +243,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn review_regression_two_groups_cannot_cover_a_silent_executable() -> Result<()> {
+        let log = "==> expected test executable: unit-a\n\
+==> expected test executable: unit-b\n\
+==> expected test names: {\"executable\":\"unit-a\",\"tests\":[\"a::one\"]}\n\
+==> expected test names: {\"executable\":\"unit-b\",\"tests\":[\"b::one\"]}\n\
+==> test executable inventory complete: 2\n\
+Running unittests src/lib.rs (/work/unit-a)\n\
+running 1 test\n\
+test a::one ... ok\n\
+test result: ok. 1 passed;\n\
+running 1 test\n\
+test a::one ... ok\n\
+test result: ok. 1 passed;\n\
+Running tests/b.rs (/work/unit-b)\n";
+        let mut coverage = Coverage::default();
+        for line in log.lines() {
+            coverage.observe(line)?;
+        }
+        let error = coverage.validate().expect_err("unit-b produced no stdout");
+        assert!(error.to_string().contains("unit-b"), "{error:#}");
+        Ok(())
+    }
+
+    #[test]
     fn ci_interleaving_keeps_worker_and_workspace_results() -> Result<()> {
         // 41206300523의 순서: 다음 stderr Running이 이전 stdout 결과보다 먼저 도착한다.
         let log = "==> expected test executable: worker-d23f2f3e1008d35c\n\

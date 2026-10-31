@@ -102,7 +102,7 @@ fn check_ownership(root: &Path, uid: u32, gid: u32) -> Result<()> {
     while let Some(path) = pending.pop() {
         let metadata = std::fs::symlink_metadata(&path)
             .with_context(|| format!("inspect ownership of {}", path.display()))?;
-        if metadata.uid() != uid || metadata.gid() != gid {
+        if metadata.uid() != uid || !allowed_gid(gid, metadata.gid(), None) {
             foreign.push(format!(
                 "{} (UID/GID {}:{})",
                 path.display(),
@@ -127,6 +127,10 @@ fn check_ownership(root: &Path, uid: u32, gid: u32) -> Result<()> {
         foreign.join("\n")
     );
     Ok(())
+}
+
+fn allowed_gid(primary: u32, actual: u32, _setgid_parent: Option<u32>) -> bool {
+    actual == primary
 }
 
 #[cfg(not(unix))]
@@ -166,6 +170,13 @@ mod tests {
 
     use super::*;
     use crate::compose::tests::scratch_root;
+
+    #[test]
+    fn review_regression_setgid_inheritance_is_allowed_but_root_is_not() {
+        assert!(allowed_gid(1000, 2000, Some(2000)), "setgid inheritance");
+        assert!(!allowed_gid(1000, 0, Some(2000)), "root GID");
+        assert!(!allowed_gid(1000, 100000, Some(2000)), "subordinate GID");
+    }
 
     #[test]
     fn review_regression_gid_only_mismatch_is_rejected() -> Result<()> {
