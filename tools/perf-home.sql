@@ -34,7 +34,7 @@ SELECT statement IS NOT NULL AND strpos(statement, E'    SELECT jsonb_build_obje
 FROM body \gset
 \if :valid
 \else
-  \quit 3
+  DO $$ BEGIN RAISE EXCEPTION 'unexpected app_home body framing'; END $$;
 \endif
 WITH body AS (
   SELECT replace(replace(substring(prosrc FROM E'  RETURN \\(\n(.*)\n  \\);'),
