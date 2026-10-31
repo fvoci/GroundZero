@@ -56,7 +56,7 @@ valid_depth() {
   jq -f tools/perf-depth.jq "$fixture" > "$out/depth.json" || return 1
   jq -e 'group_by(.screen) |
     map({key: .[0].screen, value: (map(.depth) | unique)}) | from_entries == {
-      home: [4], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [7],
+      home: [4], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [6],
       "document-tree": [5], "document-open": [4], calendar: [3], activity: [4]
     }' "$out/depth.json"
 }
@@ -171,6 +171,36 @@ for screen in home activity; do
 done
 for screen in board gantt task-detail document-tree; do
   check "serialized-$screen-documents" reject_serialized "$screen" documents
+done
+reject_detail_arm() {
+  local pattern=$1 kind=$2
+  jq --arg pattern "$pattern" --arg kind "$kind" '
+    map(if .screen != "task-detail" then . else
+      (.requests | map(select(.path | test("^/api/tasks/[^/]+$"))) | min_by(.start)) as $task |
+      (.requests | to_entries | map(select((.value.path | test($pattern)) and .value.start >= $task.start)) | min_by(.value.start)) as $arm |
+      if $kind == "missing" then .requests |= del(.[$arm.key])
+      elif $kind == "early" then .requests[$arm.key].start = 0
+      elif $kind == "unfinished" then .requests[$arm.key].end = 999999999999999
+      else
+        ($arm.value.end - $arm.value.start) as $duration |
+        .requests[$arm.key].start = $task.end |
+        .requests[$arm.key].end = ($task.end + $duration) |
+        # Keep downstream order valid so only the lost overlap can reject this.
+        .requests |= map(if .path | endswith("/comments") then
+          .start += $duration | .end += $duration else . end)
+      end
+    end)' "$fixture" > "$out/detail-arm-input.json"
+  if jq -f tools/perf-depth.jq "$out/detail-arm-input.json" > /dev/null 2> "$out/detail-arm-error.log"; then
+    return 1
+  fi
+  grep -F 'dependency witness' "$out/detail-arm-error.log"
+}
+arm_number=0
+for pattern in '^/api/items/[^/]+/tasks$' '^/api/items/[^/]+$' '^/api/task-assignees$' '^/api/task-dependencies$' '^/api/task-series$' '^/api/checklist-items$'; do
+  arm_number=$((arm_number + 1))
+  for kind in missing early unfinished serialized; do
+    check "detail-arm-$arm_number-$kind" reject_detail_arm "$pattern" "$kind"
+  done
 done
 check cleanup-dead-monitor cleanup_dead_monitor
 replay_arguments() {
