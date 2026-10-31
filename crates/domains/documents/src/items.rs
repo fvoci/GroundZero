@@ -10,8 +10,8 @@ use fvoci_db::{is_unique_violation, new_ids};
 use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 use crate::documents::{
-    CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION, SUMMARY_COLUMNS,
-    SummaryRow, TREE_ORDER, initial_body, load_with_access, max_depth, to_document, to_summaries,
+    CreateDocument, Document, DocumentSummary, NewDocumentPlace, SCHEMA_VERSION, SummaryRow,
+    initial_body, load_with_access, max_depth, to_document, to_summaries,
 };
 use crate::state::DocumentsState;
 
@@ -26,12 +26,10 @@ pub async fn list_item_documents(
 ) -> Result<Json<Vec<DocumentSummary>>, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     fvoci_db::access::require_visible(&mut tx, fvoci_db::access::Kind::Item, id).await?;
-    let rows: Vec<SummaryRow> = sqlx::query_as(&format!(
-        "SELECT {SUMMARY_COLUMNS} FROM documents WHERE item_id = $1 ORDER BY {TREE_ORDER}"
-    ))
-    .bind(id)
-    .fetch_all(tx.conn())
-    .await?;
+    let rows: Vec<SummaryRow> = sqlx::query_as(include_str!("item_documents.sql"))
+        .bind(id)
+        .fetch_all(tx.conn())
+        .await?;
     tx.commit().await?;
     Ok(Json(to_summaries(rows)))
 }
