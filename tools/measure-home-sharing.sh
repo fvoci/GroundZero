@@ -3,6 +3,7 @@
 # Prebuild release server, it, perf240. The caller reserves the measurement
 # marker before fvoci-db-test.lock + fvoci-slot.sh and holds it through cleanup.
 set -euo pipefail
+set +m
 umask 077
 for key in "${!FVOCI_@}" "${!DATABASE_@}"; do
   if [[ -n "$key" ]]; then unset "$key"; fi
@@ -17,7 +18,15 @@ monitor=
 cleanup() {
   local status=$? down_status=0
   trap - EXIT
-  if [[ -n "$worker" ]]; then kill "$worker" 2>/dev/null || true; wait "$worker" || true; fi
+  if [[ -n "$worker" ]]; then
+    kill -TERM -- "-$worker" 2>/dev/null || true
+    for ((attempt=0; attempt<10; attempt++)); do
+      if ! kill -0 -- "-$worker" 2>/dev/null; then break; fi
+      sleep 0.1
+    done
+    kill -KILL -- "-$worker" 2>/dev/null || true
+    wait "$worker" || true
+  fi
   if [[ -n "$monitor" ]]; then kill "$monitor" 2>/dev/null || true; wait "$monitor" || true; fi
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || down_status=$?
   if (( status == 0 )); then status=$down_status; fi
@@ -81,7 +90,7 @@ done < <(ps -eo pid,ppid,comm,args | awk '$2 == 1 && $3 ~ /^(node|MainThread)$/ 
 monitor=$!
 database=$(jq -r .source_db "$out/state.json")
 psql_test() { "${compose[@]}" exec -T postgres psql -X -v ON_ERROR_STOP=1 -U fvoci -d "$database" "$@"; }
-FVOCI_PERF240_MAX_SHARES=1000 FVOCI_PERF240_HOME_PROBE=1 cargo test --release --locked -p fvoci-server --test perf240 shares -- --ignored --exact --nocapture > "$out/shares.log" 2>&1 &
+FVOCI_PERF240_MAX_SHARES=1000 FVOCI_PERF240_HOME_PROBE=1 setsid cargo test --release --locked -p fvoci-server --test perf240 shares -- --ignored --exact --nocapture > "$out/shares.log" 2>&1 &
 worker=$!
 for n in 100 1000; do
   for ((attempt=0; attempt<3600; attempt++)); do
@@ -95,15 +104,14 @@ for n in 100 1000; do
   today=$(psql_test -At -c "SELECT (now() AT TIME ZONE 'Asia/Seoul')::date")
   psql_test -v actor="$actor" -v home_org="$org" -v home_tz=Asia/Seoul -v today="$today" < tools/perf-home.sql > "$out/home-$n.log"
   psql_test -At -c "SELECT json_agg(s) FROM (SELECT funcname,calls,total_time,self_time FROM pg_stat_user_functions WHERE schemaname='fvoci' ORDER BY total_time DESC) s" > "$out/functions-$n.json"
-  if (( n == 1000 )); then
-    workspace=$(jq -r .workspace "$out/state.json")
-    owner=$(psql_test -At -c "SELECT created_by FROM fvoci.workspaces WHERE id='$workspace'::uuid")
-    psql_test -v actor="$owner" -v home_org="$org" < tools/perf-home-index.sql > "$out/index.log"
-  fi
   touch "$out/home-$n-continue"
 done
 wait "$worker"
 worker=
+workspace=$(jq -r .workspace "$out/state.json")
+owner=$(psql_test -At -c "SELECT created_by FROM fvoci.workspaces WHERE id='$workspace'::uuid")
+psql_test -v actor="$owner" -v home_org="$org" < tools/perf-home-index.sql > "$out/index.log"
+bash tools/perf-home-index-writes.sh "$owner" "$database" "$out" "${compose[@]}"
 kill "$monitor"
 wait "$monitor" || true
 monitor=

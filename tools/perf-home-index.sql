@@ -38,20 +38,4 @@ WITH paths(label, statement) AS (VALUES
 SELECT format('SELECT %L AS component; EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) %s;', 'after_'||label||'_'||n,statement)
 FROM paths CROSS JOIN generate_series(1,3) n \gexec
 SELECT :'home_before'::jsonb = fvoci.app_home(:'home_org'::uuid,'Asia/Seoul') AS same_home_json;
--- Finish every read comparison before any rolled-back heap update.
-SET LOCAL ROLE fvoci_migrator;
-DROP INDEX home_recent_tasks_probe;
-\echo index component: before_update_rollback
-SAVEPOINT write_probe;
-EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON)
-UPDATE tasks SET updated_at=updated_at+interval '1 microsecond' WHERE updated_by=:'actor'::uuid;
-ROLLBACK TO SAVEPOINT write_probe;
-RELEASE SAVEPOINT write_probe;
-CREATE INDEX home_recent_tasks_probe ON tasks(updated_by,updated_at DESC,id);
-\echo index component: after_update_rollback
-SAVEPOINT write_probe;
-EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON)
-UPDATE tasks SET updated_at=updated_at+interval '1 microsecond' WHERE updated_by=:'actor'::uuid;
-ROLLBACK TO SAVEPOINT write_probe;
-RELEASE SAVEPOINT write_probe;
 ROLLBACK;
