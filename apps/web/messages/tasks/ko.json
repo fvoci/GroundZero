@@ -58,6 +58,7 @@
   ],
   "tasks_csv_resume_restart": "처음부터 새로 넣으려면 글자를 모두 지우세요.",
   "tasks_csv_summary": "여러 업무 한꺼번에 등록",
+  "tasks_csv_assignees_load_failed": "담당자 후보를 불러오지 못했습니다. 담당자를 지정한 줄은 다시 시도한 뒤 확인하세요.",
   "tasks_csv_label": "한 줄에 한 업무: 제목, 설명, 상태({statuses}; 비우면 항목의 기본 상태), 우선순위(없음·낮음·보통·높음·긴급), 시작일, 기한(YYYY-MM-DD), 예상(분), 담당자(이름, ;로 여럿), 태그(;로 여럿)",
   "tasks_csv_read": [
     {
