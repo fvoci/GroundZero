@@ -13,6 +13,9 @@ mod rhwp;
 mod supabase;
 mod supabase_cloud_precheck;
 mod test;
+mod test_executables;
+mod test_report;
+mod test_verify;
 
 use std::path::PathBuf;
 
@@ -49,6 +52,22 @@ enum Command {
         /// `$GITHUB_EVENT_NAME`. `pull_request`만 변경 경로로 좁히고 나머지는 전체를 돈다.
         #[arg(long)]
         event: String,
+    },
+    /// 시험 데몬 요구 사항·호스트 소유권·이 체크아웃의 Compose 자원 부재를 검증한다.
+    TestVerify {
+        #[arg(long)]
+        require_rootless: bool,
+    },
+    /// 기본 Compose 시험 로그를 집계하고 소유권·정리·추가 시험의 PASS 증거를 검증한다.
+    TestReport {
+        /// cargo xtask test의 stdout 전용 파일(시험 이름·그룹·결과).
+        #[arg(long)]
+        stdout_log: PathBuf,
+        /// 같은 실행의 stderr 전용 파일(Cargo Running·Doc-tests 헤더).
+        #[arg(long)]
+        stderr_log: PathBuf,
+        #[arg(long, value_enum)]
+        outcome: test_report::Outcome,
     },
     /// 테스트용 Compose를 띄우고 통합 테스트까지 실행한 뒤 정리한다.
     Test {
@@ -155,6 +174,19 @@ fn main() -> Result<()> {
             docs_only,
         } => check::run(&root, skip_licenses, docs_only),
         Command::CiPlan { event } => ci_plan::run(&root, &event),
+        Command::TestVerify { require_rootless } => test_verify::run(
+            &root,
+            if require_rootless {
+                test_verify::Requirement::Rootless
+            } else {
+                test_verify::Requirement::Any
+            },
+        ),
+        Command::TestReport {
+            stdout_log,
+            stderr_log,
+            outcome,
+        } => test_report::run(&root, &stdout_log, &stderr_log, outcome),
         Command::Test {
             keep,
             oidc,
@@ -192,5 +224,50 @@ fn main() -> Result<()> {
                 rhwp::run(&root, force)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test_report_stream_tests {
+    use super::*;
+
+    #[test]
+    fn review_regression_header_inserted_inside_a_test_line() -> Result<()> {
+        // 41208793159: stderr 헤더가 stdout의 "... "와 "ok" 사이에 끼어든다.
+        let log = "==> expected test executable: admin-a\n\
+==> expected test executable: documents-b\n\
+==> expected test names: {\"executable\":\"admin-a\",\"tests\":[\"admin::tests::minimum_postgres_version_has_no_upper_bound\"]}\n\
+==> expected test names: {\"executable\":\"documents-b\",\"tests\":[\"documents::round_trip\"]}\n\
+==> test executable inventory complete: 2\n\
+Running unittests src/lib.rs (/work/admin-a)\n\
+running 1 test\n\
+test admin::tests::minimum_postgres_version_has_no_upper_bound ...      Running unittests src/lib.rs (/work/documents-b)\n\
+ok\n\
+test result: ok. 1 passed;\n\
+running 1 test\n\
+test documents::round_trip ... ok\n\
+test result: ok. 1 passed;\n";
+        let admin_header = "Running unittests src/lib.rs (/work/admin-a)\n";
+        let documents_header = "     Running unittests src/lib.rs (/work/documents-b)\n";
+        // tee로 합치기 전 각 스트림의 바이트. stdout에는 중간 개행 없이 "... ok"가 남는다.
+        let stdout = log.replace(admin_header, "").replace(documents_header, "");
+        let stderr = format!("{admin_header}{documents_header}");
+        let mut coverage = test_executables::Coverage::default();
+        for line in stdout.lines() {
+            coverage.observe_stdout(line)?;
+        }
+        for line in stderr.lines() {
+            coverage.observe_stderr(line)?;
+        }
+        coverage.validate()?;
+        let mut mixed = test_executables::Coverage::default();
+        assert!(
+            log.lines()
+                .try_for_each(|line| mixed.observe(line))
+                .and_then(|()| mixed.validate())
+                .is_err(),
+            "combined bytes cannot prove the executable header"
+        );
+        Ok(())
     }
 }

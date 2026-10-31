@@ -1,0 +1,131 @@
+# 고정한 rootless Docker에서 기본 Compose 시험과 xtask 검증을 실행한다(#245·#281).
+# 일반 integration/check와 독립이며 필수 검사로 등록하지 않는다.
+name: rootless
+
+on:
+  pull_request:
+    paths:
+      - 'xtask/**'
+      - 'deploy/**'
+      - '.github/workflows/rootless.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rootless-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rootless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_BUILD_JOBS: '2'
+      FVOCI_TEST_CI_BASE_IMAGE_DIGEST: ${{ vars.CI_BASE_IMAGE_DIGEST }}
+      # #281 comment 6543462112: Docker 공식 stable 배포본, 2026-10-31 HTTPS 다운로드 후 직접 계산한 SHA-256.
+      # https://download.docker.com/linux/static/stable/x86_64/ (공식 .sha256 파일 없음)
+      DOCKER_VERSION: '29.9.2'
+      DOCKER_TGZ_SHA256: '9ac225999fd5e863f7694c728ef23d480616b1e5639328fa309befd4243d69eb'
+      DOCKER_ROOTLESS_EXTRAS_SHA256: 'f2663b230a7afc13dea88fc589685331d01f5f3fc458b92ab40e2388db452ed2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
+      # 다운로드·압축 해제·설치·systemd 설정은 일회용 GitHub 러너 안에서만 한다(Apache-2.0, #281).
+      # 두 배포본을 검증한 뒤 홈 아래에서 실행한다. apt 저장소 추가와 curl | sh는 쓰지 않는다.
+      # https://docs.docker.com/engine/security/rootless/troubleshoot/
+      - name: Install rootless Docker on the runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes uidmap dbus-user-session slirp4netns
+          download_dir="$RUNNER_TEMP/fvoci-docker-download"
+          docker_dir="$HOME/.local/share/fvoci-rootless-docker/$DOCKER_VERSION"
+          mkdir -p "$download_dir" "$docker_dir/bin"
+          for archive in "docker-$DOCKER_VERSION.tgz" "docker-rootless-extras-$DOCKER_VERSION.tgz"; do
+            curl --fail --location --silent --show-error --retry 3 \
+              --output "$download_dir/$archive" "https://download.docker.com/linux/static/stable/x86_64/$archive"
+          done
+          printf '%s  %s\n' \
+            "$DOCKER_TGZ_SHA256" "$download_dir/docker-$DOCKER_VERSION.tgz" \
+            "$DOCKER_ROOTLESS_EXTRAS_SHA256" "$download_dir/docker-rootless-extras-$DOCKER_VERSION.tgz" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$download_dir/docker-$DOCKER_VERSION.tgz" --strip-components=1 --directory "$docker_dir/bin"
+          tar --extract --gzip --file "$download_dir/docker-rootless-extras-$DOCKER_VERSION.tgz" --strip-components=1 --directory "$docker_dir/bin"
+          export PATH="$docker_dir/bin:$PATH"
+          echo "$docker_dir/bin" >> "$GITHUB_PATH"
+          dockerd --version
+          rootlesskit --version
+          sudo systemctl disable --now docker.service docker.socket
+          sudo rm -f /var/run/docker.sock
+          range_start=$(awk -F: 'BEGIN { end = 100000 } $2+$3 > end { end = $2+$3 } END { print end }' /etc/subuid /etc/subgid)
+          for mapping in subuid subgid; do
+            if ! awk -F: -v user="$(id -un)" '$1 == user && $3 >= 65536 { found = 1 } END { exit !found }' "/etc/$mapping"; then
+              sudo usermod "--add-${mapping}s" "$range_start-$((range_start+65535))" "$(id -un)"
+            fi
+          done
+          sudo mkdir -p /etc/systemd/system/user@.service.d
+          printf '[Service]\nDelegate=cpu cpuset io memory pids\n' | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+          sudo systemctl daemon-reload
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl restart "user@$(id -u).service"
+          XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export XDG_RUNTIME_DIR
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          export DOCKER_HOST="unix://$XDG_RUNTIME_DIR/docker.sock"
+          # Ubuntu 24.04의 userns 제한에는 이 실행 파일에 한정한 AppArmor 프로필을 쓴다.
+          printf 'abi <abi/4.0>,\ninclude <tunables/global>\n"%s" flags=(unconfined) {\n  userns,\n}\n' \
+            "$docker_dir/bin/rootlesskit" | sudo tee /etc/apparmor.d/fvoci-rootlesskit
+          sudo apparmor_parser --replace /etc/apparmor.d/fvoci-rootlesskit
+          mkdir -p "$HOME/.config/systemd/user"
+          printf '%s\n' '[Unit]' 'Description=Fixed Docker rootless CI daemon' '[Service]' \
+            'Type=notify' 'NotifyAccess=all' \
+            "Environment=PATH=$docker_dir/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+            "Environment=XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" \
+            "ExecStart=$docker_dir/bin/dockerd-rootless.sh --host=$DOCKER_HOST --data-root=$docker_dir/data --exec-opt native.cgroupdriver=systemd" \
+            'Delegate=yes' 'KillMode=mixed' 'TasksMax=infinity' 'TimeoutStartSec=120' \
+            > "$HOME/.config/systemd/user/fvoci-rootless-docker.service"
+          systemctl --user daemon-reload
+          if ! systemctl --user start fvoci-rootless-docker.service; then
+            journalctl --user --unit fvoci-rootless-docker.service --no-pager
+            exit 1
+          fi
+          docker version
+          {
+            echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+            echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
+            echo "DOCKER_HOST=$DOCKER_HOST"
+          } >> "$GITHUB_ENV"
+      - name: Verify rootless daemon and this checkout
+        run: cargo xtask test-verify --require-rootless
+      # 기본 컨테이너 경로를 검증한다. 소유권·정리는 로컬과 같은 xtask가 판정한다.
+      - name: cargo xtask test (default Compose runner)
+        id: tests
+        run: |
+          exec 3> >(tee "$RUNNER_TEMP/rootless-test.stdout.log")
+          stdout_tee=$!
+          exec 4> >(tee "$RUNNER_TEMP/rootless-test.stderr.log" >&2 3>&-)
+          stderr_tee=$!
+          test_status=0
+          cargo xtask test >&3 2>&4 3>&- 4>&- || test_status=$?
+          exec 3>&- 4>&-
+          wait "$stdout_tee"
+          wait "$stderr_tee"
+          exit "$test_status"
+      - name: Test counts and exact difference from integration
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: cargo xtask test-report --stdout-log "$RUNNER_TEMP/rootless-test.stdout.log" --stderr-log "$RUNNER_TEMP/rootless-test.stderr.log" --outcome "$TEST_OUTCOME"
+      - name: Recover this checkout after failure
+        if: ${{ failure() && steps.tests.outcome != 'skipped' }}
+        run: cargo xtask down

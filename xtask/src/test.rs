@@ -14,7 +14,7 @@
 //! 쓰지 않으므로 잠그지 않는다.
 //!
 //! UID 매핑이 없는 amd64 Docker의 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다.
-//! UID 매핑이 없는 비amd64는 이유를 출력하고 호스트 경로로 실행한다. 매핑이 있으면 기본 실행을 거절하고 `--host`를 안내한다.
+//! rootless amd64는 0:0으로 실행한다. 비amd64는 호스트 경로를 쓰고 userns-remap은 `--host`를 안내하며 거절한다.
 //! 컨테이너 빌드의 HOME·Cargo 캐시·target·임시 파일은 `target/test-container` 안에서 호스트 빌드와 분리한다.
 
 use std::ffi::OsString;
@@ -25,6 +25,11 @@ use xshell::{Shell, cmd};
 
 use crate::compose::{self, Compose, DbUrls, Env};
 use crate::supabase::Supabase;
+use crate::test_verify::{self, DockerMode};
+
+#[cfg(all(test, unix))]
+#[path = "test_rootful.rs"]
+mod rootful_tests;
 
 fn ci_base_image(digest: &str) -> Result<String> {
     let hash = digest.strip_prefix("sha256:").unwrap_or_default();
@@ -88,7 +93,7 @@ struct TestContainer {
 }
 
 impl TestContainer {
-    fn new(root: &Path, compose: &Compose, sh: &Shell) -> Result<Self> {
+    fn new(root: &Path, compose: &Compose, sh: &Shell, identity: ContainerUser) -> Result<Self> {
         let digest = match std::env::var("FVOCI_TEST_CI_BASE_IMAGE_DIGEST") {
             Ok(digest) => digest,
             Err(std::env::VarError::NotPresent) => cmd!(
@@ -106,7 +111,8 @@ impl TestContainer {
         println!("==> test runner image: {image}");
         let uid = cmd!(sh, "id -u").quiet().read()?;
         let gid = cmd!(sh, "id -g").quiet().read()?;
-        let user = format!("{}:{}", uid.trim(), gid.trim());
+        let user = identity.user(&uid, &gid);
+        println!("==> test runner container user: {user}");
         for dir in ["home", "cargo", "build", "tmp"] {
             std::fs::create_dir_all(root.join("target/test-container").join(dir))?;
         }
@@ -176,6 +182,8 @@ impl TestContainer {
 }
 
 fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
+    // 실행 인자·프로필·기능·Shell 환경을 목록 빌드와 공유한다. doctest도 기존 cargo test가 그대로 실행한다.
+    let cargo_args = ["test", "--workspace", "--locked", "--color", "never"];
     let mut skip: Vec<&str> = Vec::new();
     if !oidc {
         skip.extend(["--skip", "oidc_"]);
@@ -186,10 +194,11 @@ fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
     if !supabase {
         skip.extend(["--skip", "supabase_"]);
     }
+    crate::test_executables::emit_inventory(sh, &cargo_args, &skip)?;
     if skip.is_empty() {
-        cmd!(sh, "cargo test --workspace --locked").run()?;
+        cmd!(sh, "cargo {cargo_args...}").run()?;
     } else {
-        cmd!(sh, "cargo test --workspace --locked -- {skip...}").run()?;
+        cmd!(sh, "cargo {cargo_args...} -- {skip...}").run()?;
     }
     if !oidc {
         println!("NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.");
@@ -215,27 +224,40 @@ pub enum Execution {
 
 #[derive(Debug, PartialEq, Eq)]
 enum ExecutionChoice {
-    Container,
+    Container(ContainerUser),
     Host(&'static str),
     Unsupported(&'static str),
 }
 
-fn select_execution(architecture: &str, remapped: bool) -> ExecutionChoice {
-    if remapped {
-        ExecutionChoice::Unsupported(
-            "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요",
-        )
-    } else if matches!(architecture, "amd64" | "x86_64") {
-        ExecutionChoice::Container
-    } else {
-        ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ContainerUser {
+    Host,
+    Rootless,
+}
+
+impl ContainerUser {
+    fn user(self, uid: &str, gid: &str) -> String {
+        match self {
+            Self::Host => format!("{}:{}", uid.trim(), gid.trim()),
+            Self::Rootless => "0:0".to_owned(),
+        }
     }
 }
 
-fn user_is_remapped(options: &[String]) -> bool {
-    options
-        .iter()
-        .any(|option| matches!(option.as_str(), "name=rootless" | "name=userns"))
+fn select_execution(architecture: &str, mode: DockerMode) -> ExecutionChoice {
+    if mode == DockerMode::UsernsRemap {
+        ExecutionChoice::Unsupported(
+            "userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요",
+        )
+    } else if matches!(architecture, "amd64" | "x86_64") {
+        ExecutionChoice::Container(if mode == DockerMode::Rootless {
+            ContainerUser::Rootless
+        } else {
+            ContainerUser::Host
+        })
+    } else {
+        ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다")
+    }
 }
 
 fn prepare_test_container(
@@ -247,16 +269,10 @@ fn prepare_test_container(
     if let Execution::Host = execution {
         return Ok(None);
     }
-    let format = "{{json .SecurityOptions}}";
-    let options = cmd!(sh, "docker info --format {format}")
-        .quiet()
-        .read()
-        .context("read Docker security options before selecting the test runner")?;
-    let options: Option<Vec<String>> =
-        serde_json::from_str(&options).context("parse Docker security options")?;
-    let remapped = user_is_remapped(&options.unwrap_or_default());
-    match select_execution(std::env::consts::ARCH, remapped) {
-        ExecutionChoice::Container => Ok(Some(TestContainer::new(root, compose, sh)?)),
+    match select_execution(std::env::consts::ARCH, test_verify::docker_mode(sh)?) {
+        ExecutionChoice::Container(identity) => {
+            Ok(Some(TestContainer::new(root, compose, sh, identity)?))
+        }
         ExecutionChoice::Host(reason) => {
             println!("==> {reason}");
             Ok(None)
@@ -330,6 +346,16 @@ pub fn run(
             run_tests(&sh, oidc, true, false)
         });
 
+    finish_run(root, &compose, &sh, keep, result)
+}
+
+fn finish_run(
+    root: &Path,
+    compose: &Compose,
+    sh: &Shell,
+    keep: bool,
+    result: Result<()>,
+) -> Result<()> {
     let cleanup = if keep {
         println!(
             "==> containers kept (project {}); run `cargo xtask down` later",
@@ -338,13 +364,25 @@ pub fn run(
         Ok(())
     } else {
         println!("==> compose down");
-        compose.down(&sh)
+        compose.down(sh)
     };
-    // 원래 기동·시험 오류를 먼저 돌려주고, 정리 실패도 버리지 않고 알린다(supabase_stack·browser와 같은 방식).
-    if let Err(err) = &cleanup {
-        eprintln!("cleanup of {} failed: {err:#}", compose.project());
+    // 실패·중단 뒤에도 두 검사를 모두 실행한다. 원래 오류를 우선하되 추가 실패는 로그에 남긴다.
+    let ownership = test_verify::ownership(root, sh);
+    let resources = if keep {
+        Ok(())
+    } else {
+        test_verify::resources_absent(sh, compose.project())
+    };
+    for error in [&cleanup, &ownership, &resources]
+        .into_iter()
+        .filter_map(|r| r.as_ref().err())
+    {
+        eprintln!(
+            "verification/cleanup of {} failed: {error:#}",
+            compose.project()
+        );
     }
-    compose::with_interrupt(result.and(cleanup))
+    compose::with_interrupt(result.and(cleanup).and(ownership).and(resources))
 }
 
 fn print_recovery(compose: &Compose) {
@@ -547,78 +585,76 @@ mod tests {
     use crate::compose::tests::{assert_held, scratch_root};
 
     #[test]
-    fn amd64_unmapped_uses_the_container() {
-        for architecture in ["amd64", "x86_64"] {
-            assert_eq!(
-                select_execution(architecture, false),
-                ExecutionChoice::Container,
-                "{architecture}"
-            );
-        }
+    fn rootless_amd64_uses_the_container() {
+        let mode = DockerMode::from_options(&["name=rootless".to_owned()]);
+        assert_eq!(
+            select_execution("amd64", mode),
+            ExecutionChoice::Container(ContainerUser::Rootless)
+        );
     }
 
     #[test]
-    fn arm64_unmapped_uses_the_host_with_a_reason() {
-        for architecture in ["arm64", "aarch64"] {
-            assert_eq!(
-                select_execution(architecture, false),
-                ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다"),
-                "{architecture}"
-            );
-        }
-    }
-
-    #[test]
-    fn amd64_remapped_fails_with_the_host_instruction() {
-        for architecture in ["amd64", "x86_64"] {
-            assert_eq!(
-                select_execution(architecture, true),
-                ExecutionChoice::Unsupported(
-                    "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
-                ),
-                "{architecture}"
-            );
-        }
-    }
-
-    #[test]
-    fn arm64_remapped_fails_before_the_host_fallback() {
-        for architecture in ["arm64", "aarch64"] {
-            assert_eq!(
-                select_execution(architecture, true),
-                ExecutionChoice::Unsupported(
-                    "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
-                ),
-                "{architecture}"
-            );
-        }
-    }
-
-    #[test]
-    fn security_options_detect_rootless_and_userns_mapping() {
-        let mut options = vec![
-            "name=seccomp,profile=builtin".to_owned(),
-            "name=cgroupns".to_owned(),
-        ];
-        assert!(!user_is_remapped(&options));
-        for mapping in ["name=rootless", "name=userns"] {
-            options.push(mapping.to_owned());
-            assert!(user_is_remapped(&options), "{mapping}");
-            options.pop();
-        }
-    }
-
-    #[test]
-    fn userns_mapping_is_rejected_on_both_architectures() {
-        let remapped = user_is_remapped(&["name=userns".to_owned()]);
+    fn architecture_and_docker_mode_select_the_runner_and_identity() {
         for architecture in ["amd64", "x86_64", "arm64", "aarch64"] {
+            for mode in [DockerMode::Rootful, DockerMode::Rootless] {
+                let choice = select_execution(architecture, mode);
+                if matches!(architecture, "amd64" | "x86_64") {
+                    let ExecutionChoice::Container(identity) = choice else {
+                        panic!("{architecture} {mode:?}: {choice:?}");
+                    };
+                    let expected = if mode == DockerMode::Rootless {
+                        "0:0"
+                    } else {
+                        "1234:5678"
+                    };
+                    let args = container_args(
+                        Path::new("/work"),
+                        "example",
+                        &identity.user("1234\n", "5678\n"),
+                    );
+                    assert!(
+                        args.windows(2)
+                            .any(|pair| pair[0] == "--user" && pair[1] == expected),
+                        "{architecture} {mode:?}"
+                    );
+                } else {
+                    assert_eq!(
+                        choice,
+                        ExecutionChoice::Host(
+                            "ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다"
+                        )
+                    );
+                }
+            }
             assert_eq!(
-                select_execution(architecture, remapped),
+                select_execution(architecture, DockerMode::UsernsRemap),
                 ExecutionChoice::Unsupported(
-                    "rootless 또는 userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
+                    "userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요"
                 ),
                 "{architecture}"
             );
+        }
+    }
+
+    #[test]
+    fn security_options_distinguish_rootless_userns_and_both_orders() {
+        for (options, expected) in [
+            (vec![], DockerMode::Rootful),
+            (
+                vec!["name=seccomp,profile=builtin", "name=cgroupns"],
+                DockerMode::Rootful,
+            ),
+            (vec!["name=rootless"], DockerMode::Rootless),
+            (vec!["name=userns"], DockerMode::UsernsRemap),
+            (vec!["name=rootless", "name=userns"], DockerMode::Rootless),
+            (vec!["name=userns", "name=rootless"], DockerMode::Rootless),
+            (
+                vec!["name=rootless-extra", "name=userns-extra"],
+                DockerMode::Rootful,
+            ),
+        ] {
+            let options: Vec<String> = options.into_iter().map(str::to_owned).collect();
+            assert_eq!(DockerMode::from_options(&options), expected, "{options:?}");
         }
     }
 
