@@ -299,7 +299,9 @@ BEGIN
   PERFORM app_check_timezone(v_tz);
   v_today := (now() AT TIME ZONE v_tz)::date;
   RETURN (
-    WITH mine AS MATERIALIZED (
+    WITH my_workspaces AS MATERIALIZED (
+      SELECT app_my_workspace_ids(p_organization) AS id
+    ), mine AS MATERIALIZED (
       SELECT t.id, t.item_id, t.workspace_id, app_task_reference(t.id) AS reference,
              t.title, s.name AS status, s.category AS status_category, t.due_date,
              CASE WHEN t.due_date < v_today THEN 'overdue'
@@ -309,7 +311,7 @@ BEGIN
       JOIN items i ON i.id = t.item_id JOIN modules m ON m.id = i.module_id
       WHERE s.category <> 'done' AND t.due_date IS NOT NULL AND t.due_date <= v_today + 7
         AND i.archived_at IS NULL AND m.archived_at IS NULL
-        AND t.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+        AND t.workspace_id = ANY (ARRAY(SELECT id FROM my_workspaces))
         AND EXISTS (SELECT 1 FROM task_assignees a WHERE a.task_id = t.id AND a.user_id = app_user_id())
     ), ranked AS (
       SELECT mine.*, row_number() OVER (PARTITION BY bucket ORDER BY due_date, number, id) AS rn FROM mine
@@ -321,12 +323,12 @@ BEGIN
              t.title, s.name AS status, s.category AS status_category, t.due_date, NULL::text AS bucket
       FROM tasks t JOIN task_statuses s ON s.id = t.status_id
       WHERE t.updated_by = app_user_id()
-        AND t.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+        AND t.workspace_id = ANY (ARRAY(SELECT id FROM my_workspaces))
       ORDER BY t.updated_at DESC, t.id LIMIT 8
     ), recent_documents AS (
       SELECT d.id, d.title, app_document_reference(d.id) AS reference, d.workspace_id, d.item_id, d.updated_at
       FROM documents d WHERE d.updated_by = app_user_id()
-        AND (d.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+        AND (d.workspace_id = ANY (ARRAY(SELECT id FROM my_workspaces))
              OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id()))
       ORDER BY d.updated_at DESC, d.id LIMIT 8
     ), active AS (
@@ -354,7 +356,7 @@ BEGIN
         FROM tasks t JOIN task_statuses s ON s.id = t.status_id WHERE t.item_id = i.id
       ) c
       WHERE i.status = 'active' AND i.archived_at IS NULL AND m.archived_at IS NULL
-        AND i.workspace_id IN (SELECT app_my_workspace_ids(p_organization))
+        AND i.workspace_id = ANY (ARRAY(SELECT id FROM my_workspaces))
       ORDER BY greatest(i.updated_at, c.active) DESC, i.id LIMIT 8
     ), my_tasks AS MATERIALIZED (
       SELECT * FROM app_my_tasks(p_organization, v_today) WITH ORDINALITY
