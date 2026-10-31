@@ -41,6 +41,12 @@ jobs:
       # https://docs.docker.com/engine/security/rootless/troubleshoot/
       - name: Install rootless Docker on the runner
         run: |
+          command -v dockerd docker rootlesskit dockerd-rootless.sh dockerd-rootless-setuptool.sh || true
+          dpkg -S "$(readlink -f "$(command -v dockerd)")" || true
+          dpkg -l | grep -E "docker|moby|containerd|rootless" || true
+          apt-cache policy docker-ce-rootless-extras moby-engine docker.io rootlesskit || true
+          ls -l /usr/bin/*rootless* /usr/share/docker*/contrib 2>/dev/null || true
+          cat /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null | grep -v "^#" || true
           sudo apt-get update
           sudo apt-get install --yes uidmap dbus-user-session slirp4netns
           command -v dockerd-rootless-setuptool.sh rootlesskit
