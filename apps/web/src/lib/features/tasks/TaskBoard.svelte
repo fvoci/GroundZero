@@ -1656,6 +1656,7 @@
 
 <TaskBoardDetailDialog
   {openTaskId}
+  itemId={item.id}
   readOnly={item.archived || locked}
   {tasks}
   {workspaces}
