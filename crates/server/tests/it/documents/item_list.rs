@@ -18,6 +18,11 @@ const REFERENCE: &str = "SELECT id, app_document_reference(id) AS reference, tit
  updated_at, CASE WHEN app_access('document', parent_id) <> 'none' THEN parent_id END AS parent_id
  FROM documents WHERE item_id = $1 ORDER BY position, number NULLS LAST, created_at, id";
 
+const CANDIDATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../domains/documents/src/item_documents.sql"
+));
+
 struct Fixture {
     admin: PgConnection,
     ddl: PgConnection,
@@ -131,7 +136,7 @@ impl Fixture {
             .bind(items[2])
             .execute(&mut ddl)
             .await?;
-        // Same positions and timestamps exercise number/id tie breakers. NULL numbers
+        // Same positions and timestamps exercise number ordering. NULL numbers
         // belong to personal notes; module numbers cannot be NULL (table CHECK).
         sqlx::query("UPDATE fvoci.documents SET position=0, created_at='2026-10-01T00:00:00Z', updated_at='2026-10-02T00:00:00.123456Z' WHERE item_id=ANY($1)")
             .bind(&items).execute(&mut ddl).await?;
@@ -196,6 +201,15 @@ impl Fixture {
             .bind(item)
             .fetch_all(tx.conn())
             .await?;
+        let actual: Vec<Row> = sqlx::query_as(CANDIDATE)
+            .bind(item)
+            .fetch_all(tx.conn())
+            .await?;
+        assert_eq!(
+            actual, rows,
+            "raw app-role SQL, actor={:?}, item={item}",
+            user.id
+        );
         tx.commit().await?;
         let summaries: Vec<_> = rows
             .into_iter()
@@ -449,6 +463,37 @@ async fn item_summaries_match_original_for_visibility_trash_moves_and_keys() -> 
                     .is_some_and(|s| s.starts_with(prefix))
             ),
             None => assert_eq!(list.json[0]["reference"], Value::Null),
+        }
+        if expected_prefix.is_none() {
+            let note = Uuid::parse_str(created.json["id"].as_str().ok_or("note id")?)?;
+            sql_support::rows(
+                &f.state,
+                &f.users[0],
+                "SELECT * FROM app_move_document($1,$2,$3,@ids)",
+                &[note, f.workspace, f.items[0]],
+            )
+            .await;
+            f.compare("personal note moved into item", &[], None)
+                .await?;
+            let before = f.reference(&f.users[0], f.items[0]).await?;
+            let denied = sql_support::attempt(
+                &f.state,
+                &f.users[0],
+                "SELECT * FROM app_move_document($1,NULL,NULL,@ids)",
+                &[note],
+            )
+            .await;
+            let error = denied
+                .err()
+                .ok_or("team-to-personal moves must stay rejected")?;
+            sql_support::code(&error, "55000");
+            assert_eq!(
+                f.reference(&f.users[0], f.items[0]).await?,
+                before,
+                "a rejected reverse move must preserve every summary"
+            );
+            f.compare("rejected team-to-personal move", &[], None)
+                .await?;
         }
     }
     f.finish().await
