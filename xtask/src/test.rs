@@ -182,6 +182,9 @@ impl TestContainer {
 }
 
 fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
+    // 실행 인자·프로필·기능·Shell 환경을 목록 빌드와 공유한다. doctest도 기존 cargo test가 그대로 실행한다.
+    let cargo_args = ["test", "--workspace", "--locked", "--color", "never"];
+    crate::test_executables::emit_inventory(sh, &cargo_args)?;
     let mut skip: Vec<&str> = Vec::new();
     if !oidc {
         skip.extend(["--skip", "oidc_"]);
@@ -193,9 +196,9 @@ fn run_tests(sh: &Shell, oidc: bool, s3: bool, supabase: bool) -> Result<()> {
         skip.extend(["--skip", "supabase_"]);
     }
     if skip.is_empty() {
-        cmd!(sh, "cargo test --workspace --locked").run()?;
+        cmd!(sh, "cargo {cargo_args...}").run()?;
     } else {
-        cmd!(sh, "cargo test --workspace --locked -- {skip...}").run()?;
+        cmd!(sh, "cargo {cargo_args...} -- {skip...}").run()?;
     }
     if !oidc {
         println!("NOT RUN: OIDC integration tests (oidc_*). Use `cargo xtask test --oidc`.");

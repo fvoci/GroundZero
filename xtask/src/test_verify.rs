@@ -78,10 +78,15 @@ pub fn ownership(root: &Path, sh: &Shell) -> Result<()> {
         .read()?
         .parse()
         .context("parse host UID")?;
+    let gid: u32 = cmd!(sh, "id -g")
+        .quiet()
+        .read()?
+        .parse()
+        .context("parse host GID")?;
     let started = Instant::now();
-    check_ownership(root, uid)?;
+    check_ownership(root, uid, gid)?;
     println!(
-        "{OWNERSHIP_PASSED} (UID {uid}, {:.3}s)",
+        "{OWNERSHIP_PASSED} (UID/GID {uid}:{gid}, {:.3}s)",
         started.elapsed().as_secs_f64()
     );
     Ok(())
@@ -89,7 +94,7 @@ pub fn ownership(root: &Path, sh: &Shell) -> Result<()> {
 
 /// symlink는 그 자체만 검사한다. target을 포함한 작업 트리를 훑되 밖의 경로는 따라가지 않는다.
 #[cfg(unix)]
-fn check_ownership(root: &Path, uid: u32) -> Result<()> {
+fn check_ownership(root: &Path, uid: u32, gid: u32) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
 
     let mut pending = vec![root.to_path_buf()];
@@ -97,8 +102,13 @@ fn check_ownership(root: &Path, uid: u32) -> Result<()> {
     while let Some(path) = pending.pop() {
         let metadata = std::fs::symlink_metadata(&path)
             .with_context(|| format!("inspect ownership of {}", path.display()))?;
-        if metadata.uid() != uid {
-            foreign.push(path.display().to_string());
+        if metadata.uid() != uid || metadata.gid() != gid {
+            foreign.push(format!(
+                "{} (UID/GID {}:{})",
+                path.display(),
+                metadata.uid(),
+                metadata.gid()
+            ));
             if foreign.len() == 5 {
                 break;
             }
@@ -113,14 +123,14 @@ fn check_ownership(root: &Path, uid: u32) -> Result<()> {
     }
     ensure!(
         foreign.is_empty(),
-        "paths not owned by host UID {uid} (first up to 5):\n{}",
+        "paths not owned by host UID/GID {uid}:{gid} (first up to 5):\n{}",
         foreign.join("\n")
     );
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn check_ownership(_root: &Path, _uid: u32) -> Result<()> {
+fn check_ownership(_root: &Path, _uid: u32, _gid: u32) -> Result<()> {
     anyhow::bail!("host ownership verification requires Unix metadata")
 }
 
@@ -192,7 +202,8 @@ mod tests {
         std::fs::create_dir_all(root.join("target/test-container"))?;
         std::fs::write(root.join("target/test-container/file"), "owned")?;
         symlink(&root, root.join("loop"))?;
-        check_ownership(&root, std::fs::metadata(&root)?.uid())?;
+        let owner = std::fs::metadata(&root)?;
+        check_ownership(&root, owner.uid(), owner.gid())?;
         std::fs::remove_dir_all(root)?;
         Ok(())
     }
@@ -202,8 +213,10 @@ mod tests {
         let root = scratch_root()?;
         let path = root.join("foreign-file");
         std::fs::write(&path, "fixture")?;
-        let other = std::fs::metadata(&path)?.uid().wrapping_add(1);
-        let error = check_ownership(&root, other).expect_err("a different owner must fail");
+        let owner = std::fs::metadata(&path)?;
+        let other = owner.uid().wrapping_add(1);
+        let error =
+            check_ownership(&root, other, owner.gid()).expect_err("a different owner must fail");
         assert!(format!("{error:#}").contains(&path.display().to_string()));
         std::fs::remove_dir_all(root)?;
         Ok(())

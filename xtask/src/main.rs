@@ -13,6 +13,7 @@ mod rhwp;
 mod supabase;
 mod supabase_cloud_precheck;
 mod test;
+mod test_executables;
 mod test_report;
 mod test_verify;
 

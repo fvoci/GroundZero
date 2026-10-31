@@ -9,6 +9,7 @@ use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use xshell::{Shell, cmd};
 
+use crate::test_executables::Coverage;
 use crate::test_verify::{OWNERSHIP_PASSED, RESOURCES_PASSED};
 
 const STORAGE_TESTS: [&str; 3] = [
@@ -79,6 +80,7 @@ impl Counts {
 
 #[derive(Debug, Default)]
 struct Report {
+    coverage: Coverage,
     counts: Counts,
     rows: Vec<String>,
     storage: BTreeMap<String, String>,
@@ -91,6 +93,7 @@ impl Report {
     fn parse(log: &str) -> Result<Self> {
         let mut report = Self::default();
         for line in log.lines() {
+            report.coverage.observe(line)?;
             if line.starts_with("test result:") {
                 report.counts.add(Counts::parse(line)?)?;
                 report.rows.push(line.to_owned());
@@ -125,6 +128,7 @@ impl Report {
             "no completed Rust test results"
         );
         ensure!(self.counts.failed == 0, "Rust tests failed");
+        self.coverage.validate()?;
         for name in STORAGE_TESTS {
             ensure!(
                 self.storage.get(name).is_some_and(|status| status == "ok"),
@@ -139,6 +143,7 @@ impl Report {
 
     fn markdown(&self, sha: &str, outcome: Outcome) -> Result<String> {
         let mut text = format!("Commit: {sha}\n\nDefault Compose test outcome: {outcome:?}\n\n");
+        writeln!(text, "{}\n", self.coverage.summary())?;
         if self.rows.is_empty() {
             text.push_str("Rust PASS/FAIL/NOT RUN counts: unknown (no completed result rows). This is not a passing suite.\n\n");
         } else {
@@ -227,7 +232,7 @@ mod tests {
     use super::*;
 
     fn complete_log() -> String {
-        let mut log = "==> expected test executable: unit-a\n==> expected test executable: storage-b\n     Running unittests src/lib.rs (/work/target/debug/deps/unit-a)\ntest result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 5 filtered out; finished in 0.01s\n     Running tests/files.rs (/work/target/debug/deps/storage-b)\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n".to_owned();
+        let mut log = "==> expected test executable: unit-a\n==> expected test executable: storage-b\n==> test executable inventory complete: 2\n     Running unittests src/lib.rs (/work/target/debug/deps/unit-a)\ntest result: ok. 12 passed; 0 failed; 2 ignored; 0 measured; 5 filtered out; finished in 0.01s\n     Running tests/files.rs (/work/target/debug/deps/storage-b)\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n".to_owned();
         for name in STORAGE_TESTS {
             writeln!(log, "test {name} ... ok").expect("write test fixture");
         }
@@ -244,7 +249,8 @@ mod tests {
         let log = format!(
             "==> expected test executable: missing-suite-c\n{}",
             complete_log()
-        );
+        )
+        .replace("inventory complete: 2", "inventory complete: 3");
         let report = Report::parse(&log)?;
         let error = report
             .validate(Outcome::Success)
