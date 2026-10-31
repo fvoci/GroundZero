@@ -1,4 +1,4 @@
--- Frozen app_home from a81cab4d5824d30092bb334683bf3beb8bc4ac18; only the name differs.
+-- a81cab4d의 `202610280008_activity.sql` `app_home` 본문 복제, 이름·시험 ACL만 다름.
 CREATE FUNCTION fvoci.home_reference(p_organization uuid, p_tz text) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY INVOKER
     SET search_path TO 'fvoci', 'pg_temp'

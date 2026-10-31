@@ -148,7 +148,7 @@ impl Fixture {
             .bind(&items)
             .execute(&mut ddl)
             .await?;
-        sqlx::raw_sql(include_str!("reference.sql"))
+        sqlx::raw_sql(include_str!("../../fixtures/home/app_home_reference.sql"))
             .execute(&mut ddl)
             .await?;
         sqlx::raw_sql(OUTCOME).execute(&mut ddl).await?;
