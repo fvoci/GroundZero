@@ -4,7 +4,7 @@ import type { Extensions } from '@tiptap/core';
 import type { Node as PmNode } from '@tiptap/pm/model';
 import Image from '@tiptap/extension-image';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
-import Mathematics from '@tiptap/extension-mathematics';
+import { BlockMath, InlineMath } from '@tiptap/extension-mathematics';
 import { TableKit } from '@tiptap/extension-table';
 import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
@@ -79,17 +79,16 @@ export function schemaExtensions(options: SchemaOptions = {}): Extensions {
         };
       },
     }).configure({ inline: false, allowBase64: false }),
-    Mathematics.configure({
-      katexOptions: { throwOnError: false },
-      inlineOptions: {
-        onClick: (node, pos) => {
-          onMathClick?.('inline', node, pos);
-        },
+    BlockMath.configure({
+      katexOptions: { throwOnError: false, displayMode: true },
+      onClick: (node, pos) => {
+        onMathClick?.('block', node, pos);
       },
-      blockOptions: {
-        onClick: (node, pos) => {
-          onMathClick?.('block', node, pos);
-        },
+    }),
+    InlineMath.configure({
+      katexOptions: { throwOnError: false },
+      onClick: (node, pos) => {
+        onMathClick?.('inline', node, pos);
       },
     }),
   ];

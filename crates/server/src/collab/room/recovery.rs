@@ -105,15 +105,15 @@ impl Drop for Room {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, test))]
 #[derive(Debug, Clone, Copy)]
 pub enum Registry {
     Rooms,
     Held,
 }
 
-/// 격리 통합 시험에서 실제 목록 잠금을 쥔 패닉을 재현한다. 배포 빌드에는 포함하지 않는다.
-#[cfg(debug_assertions)]
+/// 단위·격리 통합 시험에서 실제 목록 잠금을 쥔 패닉을 재현한다. 배포 빌드에는 포함하지 않는다.
+#[cfg(any(debug_assertions, test))]
 pub fn poison(rooms: &super::Rooms, registry: Registry) {
     let _panicked = std::panic::catch_unwind(|| match registry {
         Registry::Rooms => {
@@ -135,6 +135,26 @@ pub fn poison(rooms: &super::Rooms, registry: Registry) {
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn a_poisoned_room_registry_discards_holds_and_invalidates_old_rooms() {
+        let rooms = Rooms::default();
+        let doc = DocumentId(Uuid::now_v7());
+        let (_hold, _) = rooms.hold(doc, &[], &[]).unwrap();
+        let epoch = rooms.recovery.current();
+        let receiver = rooms.recovery.subscribe();
+
+        poison(&rooms, Registry::Rooms);
+        assert!(rooms.inner.is_poisoned());
+        {
+            let registry = rooms.lock();
+            assert!(registry.is_empty());
+            assert!(rooms.held_set().is_empty());
+            assert!(!rooms.inner.is_poisoned());
+        }
+        assert_eq!(rooms.recovery.current(), epoch + 1);
+        assert!(receiver.has_changed().unwrap());
+    }
 
     #[test]
     fn an_old_hold_guard_cannot_release_a_new_barrier_after_recovery() {

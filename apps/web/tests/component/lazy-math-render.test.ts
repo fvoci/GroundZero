@@ -54,6 +54,33 @@ it('does not load math for detached serialization-only editors', async () => {
   expect(loadKatex).not.toHaveBeenCalled();
 });
 
+it('round-trips existing math JSON and HTML without changing node names or attributes', () => {
+  const html =
+    '<p><span data-latex="x^2 + y^2" data-type="inline-math"></span></p>' +
+    '<div data-latex="\\sum_{i=1}^n i" data-type="block-math"></div>';
+  const fromJson = new Editor({ content: formula, extensions: schemaExtensions() });
+  const fromHtml = new Editor({ content: html, extensions: schemaExtensions() });
+  editors.push(fromJson, fromHtml);
+  expect(fromJson.getJSON()).toEqual(formula);
+  expect(fromJson.getHTML()).toBe(html);
+  expect(fromHtml.getJSON()).toEqual(formula);
+  expect(fromHtml.getHTML()).toBe(html);
+});
+
+it('preserves inline and block math click kinds, nodes, and positions', async () => {
+  vi.mocked(loadKatex).mockReturnValue(new Promise<MathRenderer>(() => undefined));
+  const clicked = vi.fn();
+  const instance = editor(formula, clicked);
+  const inlineMath = document.querySelector('[data-type="inline-math"]');
+  const blockMath = document.querySelector('[data-type="block-math"]');
+  if (inlineMath === null || blockMath === null) throw new Error('math nodes');
+  await fireEvent.click(inlineMath);
+  await fireEvent.click(blockMath);
+  expect(clicked).toHaveBeenCalledTimes(2);
+  expect(clicked).toHaveBeenNthCalledWith(1, 'inline', instance.state.doc.nodeAt(1), 1);
+  expect(clicked).toHaveBeenNthCalledWith(2, 'block', instance.state.doc.nodeAt(3), 3);
+});
+
 it('keeps TeX while loading, renders both node kinds, and preserves serialized formulas', async () => {
   let finish: (renderer: MathRenderer) => void = () => undefined;
   const pending = new Promise<MathRenderer>((resolve) => {
@@ -78,6 +105,10 @@ it('keeps TeX while loading, renders both node kinds, and preserves serialized f
   expect(instance.getJSON()).toEqual(before);
   expect(instance.getHTML()).toEqual(htmlBefore);
   expect(changed).not.toHaveBeenCalled();
+  expect(document.querySelectorAll('[data-type="block-math"] .katex-display .katex')).toHaveLength(
+    1,
+  );
+  expect(document.querySelector('[data-type="inline-math"] .katex-display')).toBeNull();
 });
 
 it('keeps source on load failure and retries without opening the math edit command', async () => {
