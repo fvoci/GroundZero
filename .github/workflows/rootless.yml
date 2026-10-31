@@ -1,0 +1,148 @@
+# 다9 실패를 먼저 보이는 워크플로. 첫 커밋은 xtask를 바꾸지 않는다(#245).
+# 일반 integration/check와 독립이며 필수 검사로 등록하지 않는다.
+name: rootless
+
+on:
+  pull_request:
+    paths:
+      - 'xtask/**'
+      - 'deploy/**'
+      - '.github/workflows/rootless.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rootless-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rootless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_BUILD_JOBS: '2'
+      FVOCI_TEST_CI_BASE_IMAGE_DIGEST: ${{ vars.CI_BASE_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
+      # 설치·systemd 설정은 이 일회용 GitHub 러너 안에서만 한다. 내려받은 스크립트는 실행하지 않는다.
+      # Ubuntu 패키지의 /usr/bin/rootlesskit에는 AppArmor userns 프로필이 제공된다.
+      # https://docs.docker.com/engine/security/rootless/troubleshoot/
+      - name: Install rootless Docker on the runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes uidmap dbus-user-session slirp4netns
+          command -v dockerd-rootless-setuptool.sh rootlesskit
+          sudo systemctl disable --now docker.service docker.socket
+          sudo rm -f /var/run/docker.sock
+          range_start=$(awk -F: 'BEGIN { end = 100000 } $2+$3 > end { end = $2+$3 } END { print end }' /etc/subuid /etc/subgid)
+          for mapping in subuid subgid; do
+            if ! awk -F: -v user="$(id -un)" '$1 == user && $3 >= 65536 { found = 1 } END { exit !found }' "/etc/$mapping"; then
+              sudo usermod "--add-${mapping}s" "$range_start-$((range_start+65535))" "$(id -un)"
+            fi
+          done
+          sudo mkdir -p /etc/systemd/system/user@.service.d
+          printf '[Service]\nDelegate=cpu cpuset io memory pids\n' | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+          sudo systemctl daemon-reload
+          sudo loginctl enable-linger "$(id -un)"
+          sudo systemctl restart "user@$(id -u).service"
+          XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export XDG_RUNTIME_DIR
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+          dockerd-rootless-setuptool.sh install
+          {
+            echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+            echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
+            echo "DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock"
+          } >> "$GITHUB_ENV"
+      - name: Assert rootless security options and an empty Compose daemon
+        id: daemon
+        run: |
+          docker info --format '{{json .SecurityOptions}}' | tee "$RUNNER_TEMP/rootless-security.json"
+          jq --exit-status 'index("name=rootless") != null' "$RUNNER_TEMP/rootless-security.json"
+          for kind in container network volume; do
+            all=()
+            if [ "$kind" = container ]; then all=(--all); fi
+            docker "$kind" ls "${all[@]}" --quiet --filter label=com.docker.compose.project > "$RUNNER_TEMP/rootless-before-$kind"
+            test ! -s "$RUNNER_TEMP/rootless-before-$kind"
+          done
+      # --host나--external-services를 붙이지 않는다. 수정 전에는 rootless 미지원 오류로 실패해야 한다.
+      - name: cargo xtask test (default Compose runner)
+        id: tests
+        run: cargo xtask test 2>&1 | tee "$RUNNER_TEMP/rootless-test.log"
+      - name: Assert host ownership after execution
+        if: ${{ always() && steps.tests.outcome != 'skipped' }}
+        run: |
+          find target "$GITHUB_WORKSPACE" ! -user "$(id -u)" -print > "$RUNNER_TEMP/rootless-ownership.txt"
+          head -n 20 "$RUNNER_TEMP/rootless-ownership.txt"
+          test ! -s "$RUNNER_TEMP/rootless-ownership.txt"
+      # 이 잡의 새 rootless 데몬은 시작 때 Compose 자원이 없었다. 정리 전에 잔여 자원을 판정한다.
+      - name: Assert all Compose resources were removed
+        if: ${{ always() && steps.daemon.outcome == 'success' }}
+        run: |
+          for kind in container network volume; do
+            all=()
+            if [ "$kind" = container ]; then all=(--all); fi
+            docker "$kind" ls "${all[@]}" --quiet --filter label=com.docker.compose.project > "$RUNNER_TEMP/rootless-after-$kind"
+            cat "$RUNNER_TEMP/rootless-after-$kind"
+            test ! -s "$RUNNER_TEMP/rootless-after-$kind"
+          done
+      # 실패 관문 커밋은 워크플로만 추가하라는 지시로 요약을 여기에 둔다. 구현 때 판정은 xtask로 옮긴다(D-64).
+      - name: Test counts and exact difference from integration
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          {
+            printf 'Commit: %s (PR head: %s)\n\n' "$(git rev-parse HEAD)" "$PR_HEAD"
+            printf 'Default rootless Compose result: **%s**\n\n' "$TEST_OUTCOME"
+            if [ -f "$RUNNER_TEMP/rootless-test.log" ]; then
+              awk '
+                /^test result:/ {
+                  suites++
+                  for (i = 1; i <= NF; i++) {
+                    if ($i == "passed;") passed += $(i-1)
+                    if ($i == "failed;") failed += $(i-1)
+                    if ($i == "ignored;") ignored += $(i-1)
+                    if ($i == "filtered") filtered += $(i-1)
+                  }
+                }
+                END {
+                  if (suites) {
+                    printf "Rust result rows: %d; PASS: %d; FAIL: %d; NOT RUN: %d (ignored: %d, filtered: %d).\n\n", suites, passed, failed, ignored+filtered, ignored, filtered
+                  } else {
+                    print "PASS: 0; FAIL: 0 Rust results; NOT RUN: suite did not produce results (count unknown). Setup/runner failure is not a test pass.\n"
+                  }
+                }' "$RUNNER_TEMP/rootless-test.log"
+              printf '\nPer-binary result rows (same-commit ci/integration log comparison):\n\n~~~text\n'
+              grep '^test result:' "$RUNNER_TEMP/rootless-test.log" || test "$TEST_OUTCOME" != success
+              printf '~~~\n\nCompose-only tests (integration marks these NOT RUN):\n\n~~~text\n'
+              grep -E '^test .*s3_.* \.\.\.' "$RUNNER_TEMP/rootless-test.log" || test "$TEST_OUTCOME" != success
+              printf '~~~\n\n'
+              if grep -Fq '==> dev seed check passed (second apply changed nothing)' "$RUNNER_TEMP/rootless-test.log"; then
+                printf 'Dev seed check: PASS (1 additional check; NOT RUN in integration).\n\n'
+              else
+                printf 'Dev seed check: NOT RUN or failed; inspect the log.\n\n'
+                test "$TEST_OUTCOME" != success
+              fi
+            else
+              printf 'Tests NOT RUN: setup did not reach cargo xtask test; count unknown.\n\n'
+            fi
+            printf 'Execution set difference: default Compose adds s3_files_round_trip_and_purge_with_the_document, files::storage::s3_storage_round_trip, files::storage::s3_rejects_a_wrong_secret, and the dev seed check. OIDC (oidc_*), Supabase (supabase_*), and ignored tests remain NOT RUN in both paths. Compare Rust totals with integration after accounting for these three S3 tests; the dev seed check is reported separately.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      # 정리 검사의 실패를 감추지 않고, 그 뒤에 이 체크아웃의 자원만 복구 정리한다(D-10).
+      - name: Recover this checkout after failure
+        if: ${{ failure() && steps.daemon.outcome == 'success' }}
+        run: cargo xtask down
