@@ -4,7 +4,7 @@
 # detail-data.loadDetail and DocumentScreen. Each observed edge must finish before its child.
 # Every parallel arm is checked. Session/home fan-outs contribute one level;
 # ItemScreen joins documents with item -> module before rendering the selected view.
-# Task detail joins its task resource with all six reads in the hinted item scope.
+# Task detail joins its task resource with six item-scope reads sharing an overlap.
 def pick($requests; $pattern; $after; $last):
   [$requests[] | select(.path | test($pattern)) | select(.start >= $after)] |
   if length == 0 then error("missing dependency witness: " + $pattern)
@@ -71,6 +71,8 @@ map(
         map(pick($requests; .; $task.start; false))) as $scope |
       if any($scope[]; .start >= $task.end or .end <= $task.start)
       then error("non-overlapping dependency witness: task detail scope") else . end |
+      if ($scope | map(.start) | max) >= ($scope | map(.end) | min)
+      then error("non-overlapping dependency witness: task detail scope arms") else . end |
       ([$task] + $scope | max_by(.end)) as $join |
       pick($requests; "^/api/tasks/[^/]+/comments$"; $join.end; false) as $comments |
       $initial + {chain: ($initial.chain + [$join, $comments]),

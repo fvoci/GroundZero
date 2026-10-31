@@ -86,6 +86,9 @@ if (measurementRoot !== undefined) {
             expect(arm.start).toBeLessThan(task.end);
             expect(task.start).toBeLessThan(arm.end);
           }
+          expect(Math.max(...scope.map((arm) => arm.start))).toBeLessThan(
+            Math.min(...scope.map((arm) => arm.end)),
+          );
           const join = [task, ...scope].reduce((a, b) => (a.end > b.end ? a : b));
           chain.push(join, pick(/^\/api\/tasks\/[^/]+\/comments$/, join.end));
           return { screen, repeat: num(sample, 'repeat'), depth: chain.length, chain };

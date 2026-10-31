@@ -202,6 +202,17 @@ for pattern in '^/api/items/[^/]+/tasks$' '^/api/items/[^/]+$' '^/api/task-assig
     check "detail-arm-$arm_number-$kind" reject_detail_arm "$pattern" "$kind"
   done
 done
+reject_serialized_detail_scope() {
+  # The long task overlaps every arm, while the six arms run one by one inside it.
+  # All parent/join edges remain valid, so rejection must come from sibling overlap.
+  if jq -f tools/perf-depth.jq tools/fixtures/perf-detail-scope-serialized.json \
+    > "$out/detail-scope-serialized.json" 2> "$out/detail-scope-serialized-error.log"; then
+    printf 'accepted serialized task detail scope\n'
+    return 1
+  fi
+  grep -F 'non-overlapping dependency witness: task detail scope arms' "$out/detail-scope-serialized-error.log"
+}
+check serialized-detail-scope reject_serialized_detail_scope
 check cleanup-dead-monitor cleanup_dead_monitor
 replay_arguments() {
   jq -n '[
