@@ -99,7 +99,9 @@ it('keeps the detail loading until every parallel arm completes', async () => {
   const checklist = held<Awaited<ReturnType<typeof workApi.checklist>>>();
   vi.mocked(workApi.checklist).mockReturnValue(checklist.promise);
   mount();
-  await waitFor(() => expect(workApi.checklist).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(workApi.checklist).toHaveBeenCalledOnce();
+  });
   expect(screen.queryByLabelText('제목')).toBeNull();
   expect(activityApi.comments).not.toHaveBeenCalled();
   checklist.resolve([]);
@@ -114,7 +116,9 @@ it.each(['tasks', 'assignees', 'dependencies', 'series', 'checklist', 'item'] as
     const failed = arm === 'item' ? vi.mocked(api.item) : vi.mocked(workApi[arm]);
     failed.mockRejectedValueOnce(new NetworkError('scope failed'));
     const view = mount();
-    await waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(failed).toHaveBeenCalledOnce();
+    });
     await tick();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByLabelText('제목')).toBeNull();
@@ -133,7 +137,9 @@ it('keeps task 404 ahead of an early scope failure', async () => {
   vi.mocked(workApi.task).mockReturnValueOnce(task.promise);
   vi.mocked(workApi.tasks).mockRejectedValueOnce(new NetworkError('scope failed'));
   mount();
-  await waitFor(() => expect(workApi.tasks).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(workApi.tasks).toHaveBeenCalledOnce();
+  });
   task.reject(new ApiError(404, 'not_found', 'missing'));
   expect(await screen.findByRole('alert')).toHaveTextContent('업무가 없거나 볼 권한이 없습니다.');
 });
@@ -170,7 +176,9 @@ it('ignores an old task response after the detail is replaced', async () => {
   const old = held<TaskResource>();
   vi.mocked(workApi.task).mockReturnValueOnce(old.promise);
   const view = mount();
-  await waitFor(() => expect(workApi.tasks).toHaveBeenCalledOnce());
+  await waitFor(() => {
+    expect(workApi.tasks).toHaveBeenCalledOnce();
+  });
   vi.mocked(workApi.task).mockResolvedValue({ ...resource, id: 'next-task', title: '다음 상세' });
   await view.rerender({ taskId: 'next-task' });
   expect(await screen.findByLabelText('제목')).toHaveValue('다음 상세');
