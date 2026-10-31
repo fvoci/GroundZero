@@ -72,22 +72,30 @@ if (measurementRoot !== undefined) {
         expect(documents.start).toBeLessThan(item.end);
         chain.push(item, module);
         let after = Math.max(documents.end, module.end);
+        if (screen === 'task-detail') {
+          const task = pick(/^\/api\/tasks\/[^/]+$/, after);
+          const scope = [
+            /^\/api\/items\/[^/]+\/tasks$/,
+            /^\/api\/items\/[^/]+$/,
+            /^\/api\/task-assignees$/,
+            /^\/api\/task-dependencies$/,
+            /^\/api\/task-series$/,
+            /^\/api\/checklist-items$/,
+          ].map((pattern) => pick(pattern, task.start));
+          for (const arm of scope) {
+            expect(arm.start).toBeLessThan(task.end);
+            expect(task.start).toBeLessThan(arm.end);
+          }
+          const join = [task, ...scope].reduce((a, b) => (a.end > b.end ? a : b));
+          chain.push(join, pick(/^\/api\/tasks\/[^/]+\/comments$/, join.end));
+          return { screen, repeat: num(sample, 'repeat'), depth: chain.length, chain };
+        }
         const patterns =
           screen === 'document-tree'
             ? [/^\/api\/items\/[^/]+\/backlinks$/]
-            : screen === 'task-detail'
-              ? [
-                  /^\/api\/tasks\/[^/]+$/,
-                  /^\/api\/items\/[^/]+\/tasks$/,
-                  /^\/api\/tasks\/[^/]+\/comments$/,
-                ]
-              : [/^\/api\/items\/[^/]+\/recurrences\/sync$/, /^\/api\/items\/[^/]+\/tasks$/];
+            : [/^\/api\/items\/[^/]+\/recurrences\/sync$/, /^\/api\/items\/[^/]+\/tasks$/];
         for (const pattern of patterns) {
-          const next = pick(
-            pattern,
-            after,
-            screen === 'task-detail' && pattern.source.endsWith('/tasks$'),
-          );
+          const next = pick(pattern, after);
           chain.push(next);
           after = next.end;
         }

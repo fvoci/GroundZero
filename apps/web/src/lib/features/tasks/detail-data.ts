@@ -18,21 +18,44 @@ type LinkResult =
   | { kind: 'link_conflict'; current: TaskDetailView }
   | { kind: 'shift_conflict'; current: TaskDetailView };
 
-/** 상세의 관계는 항목 범위에서 조합해 상위·선행 업무도 현재 목록에 있는지 확인한다. */
-async function detailOf(resource: TaskResource): Promise<TaskDetailView> {
+async function readDetailScope(itemId: string) {
   const [others, relations, item] = await Promise.all([
-    workApi.tasks(resource.item_id),
-    loadRelations({ item: resource.item_id }),
-    api.item(resource.item_id),
+    workApi.tasks(itemId),
+    loadRelations({ item: itemId }),
+    api.item(itemId),
   ]);
+  return { others, relations, item };
+}
+
+/** 상세의 관계는 항목 범위에서 조합해 상위·선행 업무도 현재 목록에 있는지 확인한다. */
+function composeDetail(
+  resource: TaskResource,
+  { others, relations, item }: Awaited<ReturnType<typeof readDetailScope>>,
+): TaskDetailView {
   const resources = [resource, ...others.filter((row) => row.id !== resource.id)];
   const task = composeTasks(resources, relations, item.archived ? 'read' : item.access)[0];
   if (task === undefined) throw new TypeError('missing task');
   return { ...task, checklist: relations.checklist.filter((row) => row.task_id === resource.id) };
 }
 
-export async function loadDetail(id: string): Promise<TaskDetailView> {
-  return detailOf(await workApi.task(id));
+async function detailOf(resource: TaskResource): Promise<TaskDetailView> {
+  return composeDetail(resource, await readDetailScope(resource.item_id));
+}
+
+export async function loadDetail(id: string, itemId?: string): Promise<TaskDetailView> {
+  const task = workApi.task(id);
+  if (itemId === undefined) return detailOf(await task);
+  // 부모 항목은 힌트다. 단건 실패가 우선이며, 먼저 실패한 범위 읽기도 즉시 처리해 둔다.
+  const scope = readDetailScope(itemId).then(
+    (value) => ({ kind: 'loaded' as const, value }),
+    (error: unknown) => ({ kind: 'failed' as const, error }),
+  );
+  const resource = await task;
+  // 다른 항목의 업무를 가리킨 URL도 기존처럼 실제 업무의 범위로 조합한다.
+  if (resource.item_id !== itemId) return detailOf(resource);
+  const result = await scope;
+  if (result.kind === 'failed') throw result.error;
+  return composeDetail(resource, result.value);
 }
 
 /** 화면 조합층. 명령은 하나만 보내고, 응답 뒤 필요한 관계를 새 자원 읽기로 조합한다. */

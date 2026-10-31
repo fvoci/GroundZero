@@ -6,6 +6,7 @@
   import { m } from '$lib/paraglide/messages.js';
   interface Props {
     openTaskId: string | undefined;
+    itemId: string;
     readOnly: boolean;
     tasks: TaskView[];
     workspaces: Workspace[];
@@ -24,6 +25,7 @@
   }
   let {
     openTaskId,
+    itemId,
     readOnly,
     tasks,
     workspaces,
@@ -78,6 +80,7 @@
           {readOnly}
           bind:this={detailEditor}
           taskId={openTaskId}
+          {itemId}
           {tasks}
           {workspaces}
           {onchanged}
