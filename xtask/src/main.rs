@@ -218,3 +218,31 @@ fn main() -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod test_report_stream_tests {
+    use super::*;
+
+    #[test]
+    fn review_regression_header_inserted_inside_a_test_line() -> Result<()> {
+        // 41208793159: stderr 헤더가 stdout의 "... "와 "ok" 사이에 끼어든다.
+        let log = "==> expected test executable: admin-a\n\
+==> expected test executable: documents-b\n\
+==> expected test names: {\"executable\":\"admin-a\",\"tests\":[\"admin::tests::minimum_postgres_version_has_no_upper_bound\"]}\n\
+==> expected test names: {\"executable\":\"documents-b\",\"tests\":[\"documents::round_trip\"]}\n\
+==> test executable inventory complete: 2\n\
+Running unittests src/lib.rs (/work/admin-a)\n\
+running 1 test\n\
+test admin::tests::minimum_postgres_version_has_no_upper_bound ...      Running unittests src/lib.rs (/work/documents-b)\n\
+ok\n\
+test result: ok. 1 passed;\n\
+running 1 test\n\
+test documents::round_trip ... ok\n\
+test result: ok. 1 passed;\n";
+        let mut coverage = test_executables::Coverage::default();
+        for line in log.lines() {
+            coverage.observe(line)?;
+        }
+        coverage.validate()
+    }
+}
