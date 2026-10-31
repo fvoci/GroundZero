@@ -208,17 +208,7 @@ async fn shares() -> Result<()> {
     fvoci_server::search::prepare(&state.db, search).await?;
     let mut docs = Vec::new();
     let mut measurements = Vec::new();
-    // #245 home decomposition can stop after a requested scale. The default
-    // remains the original three-scale sharing experiment.
-    let max_shares =
-        std::env::var("FVOCI_PERF240_MAX_SHARES").map_or(Ok(10000usize), |value| value.parse())?;
-    if ![100, 1000, 10000].contains(&max_shares) {
-        return Err("FVOCI_PERF240_MAX_SHARES must be 100, 1000 or 10000".into());
-    }
-    for count in [100usize, 1000, 10000]
-        .into_iter()
-        .filter(|n| *n <= max_shares)
-    {
+    for count in [100usize, 1000, 10000] {
         // Product SQL functions create both documents and shares, including audit/activity.
         // One transaction per document keeps setup bounded; no direct INSERT is used.
         while docs.len() < count {
@@ -385,21 +375,6 @@ async fn shares() -> Result<()> {
                 root.join("sharing.json"),
                 serde_json::to_vec_pretty(&measurements)?,
             )?;
-        }
-        if std::env::var_os("FVOCI_PERF240_HOME_PROBE").is_some() {
-            std::fs::write(
-                root.join(format!("home-{count}-ready.json")),
-                serde_json::to_vec_pretty(
-                    &json!({"organization":organization,"actor":recipient.id,"n":count}),
-                )?,
-            )?;
-            let started = Instant::now();
-            while !root.join(format!("home-{count}-continue")).exists() {
-                if started.elapsed().as_secs() >= 600 {
-                    return Err("home probe did not complete in 10 minutes".into());
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            }
         }
     }
     std::fs::write(

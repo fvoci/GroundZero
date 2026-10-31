@@ -115,11 +115,9 @@ else
     psql_test -v actor="$actor" -v item="$item" -v workspace="$workspace" "${sql_variables[@]}" < tools/perf-db.sql > "$out/db-$repeat.log"
     psql_test -v actor="$actor" "${sql_variables[@]}" < tools/perf-home.sql > "$out/home-$repeat.log"
   done
-  psql_test -v actor="$actor" "${sql_variables[@]}" < tools/perf-home-index.sql > "$out/index.log"
   touch "$out/STOP"
   wait "$server_pid"
   server_pid=
-  bash tools/perf-home-index-writes.sh "$actor" "$database" "$out" "${compose[@]}"
   jq -Rn '[inputs | fromjson? | select(.event == "http.request")]' "$out/server.log" > "$out/access.json"
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
   jq -f tools/perf-depth.jq "$out/screens.json" > "$out/depth.json"
