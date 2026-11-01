@@ -9,6 +9,7 @@ import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { permissionState } from './fixtures/permission-state.svelte';
+import { router } from '$lib/router.svelte';
 import './fixtures/authenticated';
 
 afterEach(() => {
@@ -44,9 +45,136 @@ function field(id: string): HTMLInputElement | HTMLTextAreaElement {
   throw new Error(id);
 }
 
+async function revokeAndRegain(current: Workspace): Promise<void> {
+  current.access = 'write';
+  await waitFor(() => {
+    expect(screen.queryByRole('form', { name: m.modules_settings() })).toBeNull();
+  });
+  current.access = 'owner';
+  await screen.findByRole('form', { name: m.modules_settings() });
+}
+
+function expectSettingsInput(expected: Module): void {
+  expect(field('module-edit-name')).toHaveValue(expected.name);
+  expect(field('module-edit-key')).toHaveValue(expected.key);
+  expect(field('module-edit-icon')).toHaveValue(expected.icon);
+  expect(field('module-edit-description')).toHaveValue(expected.description);
+}
+
+function expectLeaveWarning(warn: boolean): void {
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(warn);
+  expect(router.guard?.(vi.fn(), '/')).toBe(!warn);
+}
+
 // 감사 W20: 모듈 설정 저장은 아이콘·설명·이름과 키를 따로 보낸다. 키가 이미 쓰여 마지막 요청이 409로 막히면 아이콘과
 // 설명은 이미 저장됐는데 화면 머리는 옛 값을 그대로 보였다. 저장된 부분은 화면에 넣고 모듈 목록도 다시 읽는다.
 describe('module settings partial save', () => {
+  it.each([true, false])(
+    'uses saved input after success only when permission loss cleared the attempt (revoked: %s)',
+    async (revoked) => {
+      await setLocale('ko', { reload: false });
+      vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+      vi.spyOn(api, 'module').mockResolvedValue(before);
+      vi.spyOn(api, 'items').mockResolvedValue([]);
+      vi.spyOn(workspaceNav, 'refreshModules').mockReturnValue(undefined);
+      const saved = { ...before, name: '저장한 이름', key: 'OPS' };
+      let finish: (() => void) | undefined;
+      const update = vi
+        .spyOn(api, 'updateModule')
+        .mockImplementationOnce(
+          () =>
+            new Promise<Module>((resolve) => {
+              finish = () => {
+                resolve(saved);
+              };
+            }),
+        )
+        .mockResolvedValue(saved);
+      const currentWorkspace = permissionState({ ...workspace });
+      render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'A' });
+      await screen.findByRole('heading', { name: before.name });
+      await fireEvent.input(field('module-edit-name'), { target: { value: saved.name } });
+      await fireEvent.input(field('module-edit-key'), { target: { value: saved.key } });
+      await fireEvent.submit(screen.getByRole('form', { name: m.modules_settings() }));
+      expect(update).toHaveBeenCalledTimes(1);
+      if (revoked) await revokeAndRegain(currentWorkspace);
+      else {
+        // A changed snapshot during an ordinary save must retain its existing protection.
+        await fireEvent.input(field('module-edit-name'), { target: { value: '계속 편집한 이름' } });
+      }
+      if (finish === undefined) throw new Error('missing pending save');
+      finish();
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(saved.name);
+        expect(field('module-edit-name')).toBeEnabled();
+      });
+      expectSettingsInput(revoked ? saved : { ...saved, name: '계속 편집한 이름' });
+      expectLeaveWarning(!revoked);
+      if (revoked) {
+        await fireEvent.submit(screen.getByRole('form', { name: m.modules_settings() }));
+        expect(update).toHaveBeenCalledTimes(2);
+        expect(update).toHaveBeenLastCalledWith('A', saved.name, saved.key);
+      }
+    },
+  );
+
+  it.each([true, false])(
+    'uses partial server input after a 409 only when permission loss cleared the attempt (revoked: %s)',
+    async (revoked) => {
+      await setLocale('ko', { reload: false });
+      vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+      vi.spyOn(api, 'module').mockResolvedValue(before);
+      vi.spyOn(api, 'items').mockResolvedValue([]);
+      vi.spyOn(workspaceNav, 'refreshModules').mockReturnValue(undefined);
+      const partial = { ...before, icon: '📚', description: '저장한 설명' };
+      const icon = vi.spyOn(api, 'setModuleIcon').mockResolvedValue(undefined);
+      const description = vi.spyOn(api, 'setModuleDescription').mockResolvedValue(partial);
+      let fail: (() => void) | undefined;
+      const update = vi
+        .spyOn(api, 'updateModule')
+        .mockImplementationOnce(
+          () =>
+            new Promise<Module>((_resolve, reject) => {
+              fail = () => {
+                reject(new ApiError(409, 'conflict', 'the key is taken'));
+              };
+            }),
+        )
+        .mockResolvedValue(partial);
+      const currentWorkspace = permissionState({ ...workspace });
+      render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'A' });
+      await screen.findByRole('heading', { name: before.name });
+      await fireEvent.input(field('module-edit-name'), { target: { value: '거절된 이름' } });
+      await fireEvent.input(field('module-edit-key'), { target: { value: 'OPS' } });
+      await fireEvent.input(field('module-edit-icon'), { target: { value: partial.icon } });
+      await fireEvent.input(field('module-edit-description'), {
+        target: { value: partial.description },
+      });
+      await fireEvent.submit(screen.getByRole('form', { name: m.modules_settings() }));
+      await waitFor(() => {
+        expect(update).toHaveBeenCalledTimes(1);
+      });
+      if (revoked) await revokeAndRegain(currentWorkspace);
+      else
+        await fireEvent.input(field('module-edit-name'), { target: { value: '계속 편집한 이름' } });
+      if (fail === undefined) throw new Error('missing pending save');
+      fail();
+      expect(await screen.findByRole('alert')).toHaveTextContent('이미 쓰고 있거나');
+      expect(field('module-edit-name')).toBeEnabled();
+      expectSettingsInput(revoked ? partial : { ...partial, name: '계속 편집한 이름', key: 'OPS' });
+      expectLeaveWarning(!revoked);
+      if (revoked) {
+        await fireEvent.submit(screen.getByRole('form', { name: m.modules_settings() }));
+        expect(update).toHaveBeenCalledTimes(2);
+        expect(update).toHaveBeenLastCalledWith('A', partial.name, partial.key);
+      }
+      expect(icon).toHaveBeenCalledTimes(1);
+      expect(description).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('shows the saved icon and description when the key update is refused', async () => {
     await setLocale('ko', { reload: false });
     vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
