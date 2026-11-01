@@ -20,7 +20,7 @@ SELECT set_config('app.user_id', :'actor', true);
 EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM fvoci.documents;
 EXPLAIN (ANALYZE, BUFFERS) SELECT sum(length(fvoci.app_access('document', id))) FROM fvoci.documents;
 EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM fvoci.documents WHERE item_id=:'item'::uuid;
-\echo recent activity function body, same effective role as its SECURITY DEFINER
+\echo historical recent activity query (4ab54392), definer role; current function is measured below
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT a.id, a.kind, a.actor, CASE WHEN fvoci.app_shares_organization(a.actor) THEN u.display_name END,
        a.workspace_id, a.target_kind, a.target_id, a.item_id, a.detail, a.created_at
