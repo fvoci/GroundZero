@@ -142,6 +142,79 @@ describe('keepFocusAcrossLocks', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  describe.each(['touch', 'pen'])('%s gestures during the lock', (pointerType) => {
+    const start = { pointerId: 1, pointerType, clientX: 100, clientY: 100 };
+
+    it('returns focus after moving beyond the tap threshold, even if the pointer comes back', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await lock(fieldset, input);
+      await fireEvent.pointerDown(document.body, start);
+      await fireEvent.pointerMove(document.body, { ...start, clientY: 111 });
+      await fireEvent.pointerUp(document.body, start);
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(input);
+    });
+
+    it('returns focus when the browser cancels the gesture', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await lock(fieldset, input);
+      await fireEvent.pointerDown(document.body, start);
+      await fireEvent.pointerCancel(document.body, start);
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(input);
+    });
+
+    it('does not return focus after a tap within 10 CSS pixels', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await lock(fieldset, input);
+      await fireEvent.pointerDown(document.body, start);
+      await fireEvent.pointerMove(document.body, { ...start, clientX: 106, clientY: 108 });
+      await fireEvent.pointerUp(document.body, { ...start, clientX: 106, clientY: 108 });
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('checks the final distance even without a pointermove', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await lock(fieldset, input);
+      await fireEvent.pointerDown(document.body, start);
+      await fireEvent.pointerUp(document.body, { ...start, clientX: 111 });
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(input);
+    });
+
+    // C-2(a)의 기존 동작 유지: 아직 탭인지 스크롤인지 모를 때 풀리면 사용자가 누르는 중이므로 되돌리지 않는다.
+    it('does not return focus when the lock ends before the gesture is decided', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await lock(fieldset, input);
+      await fireEvent.pointerDown(document.body, start);
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+      await fireEvent.pointerUp(document.body, start);
+      expect(document.activeElement).toBe(document.body);
+    });
+  });
+
+  it('does not return focus after a mouse pointerdown without waiting for pointerup', async () => {
+    const { fieldset, input } = form();
+    input.focus();
+    await lock(fieldset, input);
+    await fireEvent.pointerDown(document.body, { pointerId: 1, pointerType: 'mouse' });
+    fieldset.disabled = false;
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   // R5 B 최종 C-2(b): bits-ui의 닫힌 Select·Popover·Tooltip 트리거도 `data-state="closed"`다. 닫히는 대화상자가 아니므로
   // 저장 중 잠긴 Select 트리거에는 초점이 돌아와야 한다.
   it('returns focus to a closed Select trigger', async () => {
