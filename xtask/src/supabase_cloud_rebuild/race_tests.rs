@@ -6,6 +6,7 @@ use sqlx::{Connection, PgConnection};
 
 pub(super) async fn run(target: &Target) -> Result<()> {
     during_scan(target).await?;
+    super::deletion_tests::run(target).await?;
     let mut owner = PgConnection::connect_with(&target.admin).await?;
     let mut peer = PgConnection::connect_with(&target.admin).await?;
     for statement in [

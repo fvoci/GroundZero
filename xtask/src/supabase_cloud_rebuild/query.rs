@@ -1,6 +1,6 @@
 //! SQL fragments composed into one statement; every inventory field shares its command snapshot.
 
-use super::{allowed, catalog, consumers};
+use super::{allowed, catalog, consumers, deletion_guard};
 
 pub(super) const AUTHORITY: &str = "SELECT jsonb_build_object(
         'version', current_setting('server_version_num')::int,
@@ -221,6 +221,10 @@ pub(super) fn snapshot() -> String {
     .map(|(k, v)| (k.to_owned(), v.to_owned()))
     .collect::<Vec<_>>();
     fields.push(("objects".to_owned(), objects()));
+    fields.push((
+        "drop_targets".to_owned(),
+        deletion_guard::TARGETS_SQL.to_owned(),
+    ));
     fields.push(("consumers".to_owned(), consumers::SQL.to_owned()));
     object(fields)
 }

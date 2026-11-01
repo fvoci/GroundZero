@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 
-use super::{allowed::Binding, approve, catalog, consumers, fingerprint, query};
+use super::{allowed::Binding, approve, catalog, consumers, deletion_guard, fingerprint, query};
 
 // Same cooperative lock as crates/db/src/admin.rs::MIGRATOR_LOCK. Cloud targets only postgres.
 const MIGRATOR_LOCK: i64 = 0x6676_6f63_696d_6967;
@@ -17,6 +17,7 @@ pub(super) struct Inventory {
     drops: Vec<(String, String)>,
     roles: Vec<String>,
     role_digest: String,
+    targets: deletion_guard::Addresses,
 }
 
 pub(super) struct RolePlan {
@@ -85,6 +86,7 @@ impl Inventory {
         raw["drops"] = json!(drops);
         let digest = fingerprint(&raw);
         let role_digest = fingerprint(&raw["role_state"]);
+        let targets = serde_json::from_value(raw["drop_targets"].clone())?;
         let candidates: Vec<Value> = drops
             .iter()
             .map(|(owner, sql)| {
@@ -122,6 +124,7 @@ impl Inventory {
             drops,
             roles,
             role_digest,
+            targets,
         })
     }
 
@@ -157,7 +160,7 @@ impl Inventory {
             binding,
             approved,
             after_locks,
-            None,
+            (None, std::future::ready(Ok(()))),
             std::future::ready(Ok(())),
         )
         .await
@@ -176,8 +179,26 @@ impl Inventory {
             binding,
             approved,
             std::future::ready(Ok(())),
-            Some(gate),
-            during,
+            (Some(gate), during),
+            std::future::ready(Ok(())),
+        )
+        .await
+    }
+
+    pub async fn delete_schema_after_recheck(
+        &self,
+        conn: &mut PgConnection,
+        binding: &Binding,
+        approved: &str,
+        after_recheck: impl Future<Output = Result<()>>,
+    ) -> Result<RolePlan> {
+        self.delete_schema_hooks(
+            conn,
+            binding,
+            approved,
+            std::future::ready(Ok(())),
+            (None, std::future::ready(Ok(()))),
+            after_recheck,
         )
         .await
     }
@@ -188,8 +209,8 @@ impl Inventory {
         binding: &Binding,
         approved: &str,
         after_locks: impl Future<Output = Result<()>>,
-        gate: Option<i64>,
-        during: impl Future<Output = Result<()>>,
+        scan: (Option<i64>, impl Future<Output = Result<()>>),
+        after_recheck: impl Future<Output = Result<()>>,
     ) -> Result<RolePlan> {
         approve(&self.digest, approved, self.blocked)?;
         catalog::write_authority(conn).await?;
@@ -200,12 +221,22 @@ impl Inventory {
             .await?;
         lock_relations(&mut tx).await?;
         after_locks.await?;
-        let current = Self::snapshot_with_probe(&mut tx, binding, gate, during).await?;
+        let current = Self::snapshot_with_probe(&mut tx, binding, scan.0, scan.1).await?;
         if let Err(error) = approve(&current.digest, approved, current.blocked) {
             tx.rollback().await?;
             return Err(error);
         }
-        delete_objects(&mut tx, current.drops).await?;
+        after_recheck.await?;
+        let checked = async {
+            let guard = deletion_guard::Guard::capture(&mut tx, current.targets).await?;
+            delete_objects(&mut tx, current.drops).await?;
+            guard.verify(&mut tx).await
+        }
+        .await;
+        if let Err(error) = checked {
+            tx.rollback().await?;
+            return Err(error);
+        }
         tx.commit().await?;
         Ok(RolePlan {
             roles: self.roles.clone(),

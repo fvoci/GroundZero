@@ -6,6 +6,8 @@ mod catalog;
 mod catalog_tests;
 mod consumer_tests;
 mod consumers;
+mod deletion_guard;
+mod deletion_tests;
 pub mod fixture;
 mod inventory;
 mod query;
