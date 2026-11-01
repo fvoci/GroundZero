@@ -120,6 +120,14 @@
    * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
    */
   let savingSettings = $state(false);
+  // 저장 시도마다 별도로 두어 다른 모듈·세션의 입력을 늦은 응답으로 초기화하지 않는다.
+  let pendingSettingsSave: { inputCleared: boolean } | undefined;
+  function resetSettingsInput(): void {
+    editName = mod?.name ?? '';
+    editKey = mod?.key ?? '';
+    editIcon = mod?.icon ?? '';
+    editDescription = mod?.description ?? '';
+  }
   const settingsDraft = createFormDraft({
     name: () => `module-settings:${moduleId}`,
     snapshot: () => ({
@@ -146,10 +154,7 @@
       editDescription = value.description;
     },
     reset: () => {
-      editName = mod?.name ?? '';
-      editKey = mod?.key ?? '';
-      editIcon = mod?.icon ?? '';
-      editDescription = mod?.description ?? '';
+      resetSettingsInput();
       savingSettings = false;
     },
     dirty: () =>
@@ -162,6 +167,15 @@
     stays: staysOnThisModule,
   });
   onMount(settingsDraft.attach);
+  $effect(() => {
+    if (!isAdmin) {
+      // 이미 보낸 저장의 중복 전송 잠금은 응답까지 유지한다(SR-288-1).
+      if (pendingSettingsSave !== undefined) pendingSettingsSave.inputCleared = true;
+      resetSettingsInput();
+      settingsError = undefined;
+      settingsDraft.leave.keep();
+    }
+  });
 
   async function saveSettings(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -185,6 +199,8 @@
     const stillHere = (): boolean => moduleId === target.id && settingsDraft.isOwner(attempt);
     // 아이콘·설명·이름과 키는 따로 저장된다. 뒤 요청이 막혀도(키 409 등) 이미 저장된 앞 부분은 화면에 넣는다.
     let partial: Module | undefined;
+    const save = { inputCleared: false };
+    pendingSettingsSave = save;
     savingSettings = true;
     try {
       const before = target.key;
@@ -203,6 +219,7 @@
       forgetReferences();
       if (!stillHere()) return;
       mod = saved;
+      if (save.inputCleared) resetSettingsInput();
       const completed = settingsDraft.complete(attempt);
       const list = await api.items(saved.id);
       if (!stillHere()) return;
@@ -218,7 +235,10 @@
     } catch (e: unknown) {
       if (partial !== undefined) {
         workspaceNav.refreshModules();
-        if (stillHere()) mod = partial;
+        if (stillHere()) {
+          mod = partial;
+          if (save.inputCleared) resetSettingsInput();
+        }
       }
       if (!stillHere()) return;
       settingsError =
@@ -227,6 +247,7 @@
           : errorText(e, m.modules_change_failed());
     } finally {
       if (settingsDraft.isOwner(attempt)) savingSettings = false;
+      if (pendingSettingsSave === save) pendingSettingsSave = undefined;
     }
   }
 

@@ -7,6 +7,8 @@ import { me } from '$lib/me.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { router } from '$lib/router.svelte';
+import { permissionState } from './fixtures/permission-state.svelte';
 
 const workspace: Workspace = {
   id: 'ws-restore',
@@ -83,6 +85,42 @@ function warnsBeforeUnload(): void {
   window.dispatchEvent(unload);
   expect(unload.defaultPrevented).toBe(true);
 }
+
+it('drops hidden settings after an owner downgrade while guarding the visible new item title', async () => {
+  const update = vi.spyOn(api, 'updateModule');
+  const icon = vi.spyOn(api, 'setModuleIcon');
+  const description = vi.spyOn(api, 'setModuleDescription');
+  const currentWorkspace = permissionState({ ...workspace });
+  render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'DEV' });
+  await screen.findByRole('heading', { name: '모듈 DEV' });
+  await fireEvent.input(screen.getByLabelText(m.modules_name()), {
+    target: { value: '미저장 설정' },
+  });
+  await fireEvent.input(screen.getByLabelText(m.modules_new_item_title()), {
+    target: { value: '보호할 새 항목' },
+  });
+  warnsBeforeUnload();
+  currentWorkspace.access = 'write';
+  await waitFor(() => {
+    expect(screen.queryByRole('form', { name: m.modules_settings() })).toBeNull();
+  });
+  expect(screen.getByLabelText(m.modules_new_item_title())).toHaveValue('보호할 새 항목');
+  warnsBeforeUnload();
+  expect(router.guard?.(vi.fn(), '/')).toBe(false);
+  await fireEvent.click(await screen.findByRole('button', { name: '계속 편집' }));
+  await fireEvent.input(screen.getByLabelText(m.modules_new_item_title()), {
+    target: { value: '' },
+  });
+  const unload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(false);
+  expect(router.guard?.(vi.fn(), '/')).toBe(true);
+  currentWorkspace.access = 'owner';
+  expect(await screen.findByLabelText(m.modules_name())).toHaveValue('모듈 DEV');
+  expect(update).not.toHaveBeenCalled();
+  expect(icon).not.toHaveBeenCalled();
+  expect(description).not.toHaveBeenCalled();
+});
 
 it('restores a failed module item title only on request and retries its original creation ID', async () => {
   const create = vi.spyOn(api, 'createItem').mockRejectedValue(new NetworkError('lost response'));
