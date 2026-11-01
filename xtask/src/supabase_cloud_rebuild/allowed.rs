@@ -33,6 +33,7 @@ impl Binding {
                 "schema fvoci",
                 "table fvoci.legacy",
                 "table fvoci.child",
+                "table fvoci.a_child",
                 "table fvoci._sqlx_migrations",
                 "view fvoci.legacy_view",
                 "sequence fvoci.legacy_sequence",
@@ -42,6 +43,7 @@ impl Binding {
                 "column fvoci.legacy.id",
                 "column fvoci.legacy.secret",
                 "column fvoci.child.id",
+                "column fvoci.a_child.id",
                 "column fvoci.legacy_view.id",
                 "column fvoci.legacy_sequence.last_value",
                 "column fvoci.legacy_sequence.log_cnt",
@@ -50,6 +52,7 @@ impl Binding {
                 "column fvoci.legacy_pkey.id",
                 "constraint fvoci.legacy.legacy_pkey",
                 "constraint fvoci.child.child_id_fkey",
+                "constraint fvoci.a_child.child_id_fkey",
             ]
             .into_iter()
             .map(str::to_owned)

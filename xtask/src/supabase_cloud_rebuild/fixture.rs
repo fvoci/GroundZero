@@ -23,8 +23,11 @@ const OLD: &str = "CREATE ROLE fvoci_app LOGIN NOSUPERUSER NOCREATEROLE NOBYPASS
     CREATE TABLE fvoci.legacy(id int PRIMARY KEY, secret text);
     ALTER TABLE fvoci.legacy OWNER TO fvoci_migrator;
     INSERT INTO fvoci.legacy VALUES(1,'synthetic old row');
-    CREATE TABLE fvoci.child(id int REFERENCES fvoci.legacy(id));
+    CREATE TABLE fvoci.child(id int REFERENCES fvoci.legacy(id)) PARTITION BY RANGE(id);
     ALTER TABLE fvoci.child OWNER TO fvoci_migrator;
+    CREATE TABLE fvoci.a_child PARTITION OF fvoci.child FOR VALUES FROM (0) TO (10);
+    ALTER TABLE fvoci.a_child OWNER TO fvoci_migrator;
+    INSERT INTO fvoci.child VALUES(1);
     CREATE VIEW fvoci.legacy_view AS SELECT id FROM fvoci.legacy;
     ALTER VIEW fvoci.legacy_view OWNER TO fvoci_migrator;
     CREATE SEQUENCE fvoci.legacy_sequence;
@@ -268,9 +271,25 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
         "fixture blockers: {}",
         inventory.report["blockers"]
     );
+    let inherited: i64=sqlx::query_scalar("SELECT count(*) FROM pg_constraint WHERE conrelid='fvoci.a_child'::regclass AND contype='f' AND conparentid<>0")
+        .fetch_one(&mut admin).await?;
+    ensure!(
+        inherited > 0,
+        "partition fixture has no inherited foreign key"
+    );
     let roles = inventory
         .delete_schema(&mut operator, &target.binding, &inventory.digest)
-        .await?;
+        .await
+        .map_err(|error| {
+            let state = error
+                .downcast_ref::<sqlx::Error>()
+                .and_then(|e| e.as_database_error())
+                .and_then(|e| e.code());
+            anyhow::anyhow!(
+                "partition fixture deletion failed, SQLSTATE {}: {error}",
+                state.as_deref().unwrap_or("unknown")
+            )
+        })?;
     sql(&mut admin, "ALTER ROLE fvoci_app CREATEDB").await?;
     ensure!(
         roles.delete(&mut operator).await.is_err(),
@@ -388,6 +407,7 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
         .fetch_one(&mut admin)
         .await?;
     ensure!(users == 0, "synthetic users persisted");
+    rebuild_installed(root, &restricted, &mut admin, &product).await?;
     println!(
         "PASS cloud-rebuild: non-superuser deletion/bootstrap, outside objects preserved, checksums 10/10, app login CRUD/RLS/denial, rollback cleanup"
     );
@@ -413,6 +433,56 @@ fn proof() -> super::receipt::Proof {
         source_sha: "1".repeat(40),
         fingerprint: "2".repeat(64),
     }
+}
+
+async fn rebuild_installed(
+    root: &Path,
+    target: &Target,
+    admin: &mut PgConnection,
+    binding: &Binding,
+) -> Result<()> {
+    // Bootstrap restores temporary SET membership; prepare the documented rebuild account
+    // for the new roles before collecting a new approval inventory.
+    sql(admin,"GRANT fvoci_app, fvoci_migrator TO cloud_fixture_admin WITH ADMIN TRUE, SET TRUE, INHERIT FALSE").await?;
+    let (partitioned,inherited):(i64,i64)=sqlx::query_as("SELECT
+        (SELECT count(*) FROM pg_class WHERE relnamespace=to_regnamespace('fvoci') AND relkind='p'),
+        (SELECT count(*) FROM pg_constraint WHERE connamespace=to_regnamespace('fvoci') AND contype='f' AND conparentid<>0)")
+        .fetch_one(&mut *admin).await?;
+    let mut operator = PgConnection::connect_with(&target.admin).await?;
+    let inventory = Inventory::read(&mut operator, binding).await?;
+    ensure!(
+        !inventory.blocked,
+        "installed baseline deletion blocked: {}",
+        inventory.report["blockers"]
+    );
+    inventory
+        .delete(&mut operator, binding, &inventory.digest)
+        .await?;
+    operator.close().await?;
+    let gone: bool = sqlx::query_scalar(
+        "SELECT to_regnamespace('fvoci') IS NULL AND NOT EXISTS
+        (SELECT FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))",
+    )
+    .fetch_one(&mut *admin)
+    .await?;
+    ensure!(gone, "installed baseline deletion was incomplete");
+    for schema in ["auth", "storage", "other_app"] {
+        let rows: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {schema}.preserved"))
+            .fetch_one(&mut *admin)
+            .await?;
+        ensure!(rows == 1, "baseline deletion removed an outside object");
+    }
+    install(root, target, &mut serde_json::json!({})).await?;
+    receipt::record(target, &proof()).await?;
+    let verified = verify::run(target, &proof()).await?;
+    ensure!(
+        verified["checksums"] == "10/10" && verified["rls"] == "PASS",
+        "reinstalled baseline verification failed"
+    );
+    println!(
+        "PASS cloud-rebuild installed baseline: delete/reinstall, checksums 10/10, CRUD/RLS, outside objects preserved; partitioned tables={partitioned}, inherited FKs={inherited}"
+    );
+    Ok(())
 }
 
 async fn restricted_admin(conn: &mut PgConnection, target: &Target) -> Result<Target> {

@@ -72,7 +72,7 @@ pub(super) const DROPS: &str = "SELECT owner, statement FROM (
         SELECT pg_get_userbyid(c.relowner)::text owner,
           format('ALTER TABLE %I.%I DROP CONSTRAINT %I RESTRICT', n.nspname,c.relname,k.conname) statement
           FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
-          WHERE n.nspname='fvoci' AND k.contype='f'
+          WHERE n.nspname='fvoci' AND k.contype='f' AND k.conparentid=0
         UNION ALL SELECT pg_get_userbyid(c.relowner)::text,
           format('DROP %s IF EXISTS %I.%I RESTRICT', CASE c.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'S' THEN 'SEQUENCE' ELSE 'TABLE' END,n.nspname,c.relname)
           FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='fvoci' AND c.relkind IN ('r','p','v','m','S')
