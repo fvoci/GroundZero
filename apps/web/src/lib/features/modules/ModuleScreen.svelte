@@ -120,12 +120,11 @@
    * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
    */
   let savingSettings = $state(false);
-  function resetSettings(): void {
+  function resetSettingsInput(): void {
     editName = mod?.name ?? '';
     editKey = mod?.key ?? '';
     editIcon = mod?.icon ?? '';
     editDescription = mod?.description ?? '';
-    savingSettings = false;
   }
   const settingsDraft = createFormDraft({
     name: () => `module-settings:${moduleId}`,
@@ -152,7 +151,10 @@
       editIcon = value.icon;
       editDescription = value.description;
     },
-    reset: resetSettings,
+    reset: () => {
+      resetSettingsInput();
+      savingSettings = false;
+    },
     dirty: () =>
       mod !== undefined &&
       (editName !== mod.name ||
@@ -165,7 +167,8 @@
   onMount(settingsDraft.attach);
   $effect(() => {
     if (!isAdmin) {
-      resetSettings();
+      // 이미 보낸 저장의 중복 전송 잠금은 응답까지 유지한다(SR-288-1).
+      resetSettingsInput();
       settingsError = undefined;
       settingsDraft.leave.keep();
     }

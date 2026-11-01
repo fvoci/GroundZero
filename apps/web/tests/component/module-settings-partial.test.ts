@@ -8,6 +8,7 @@ import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
 import { m } from '$lib/paraglide/messages.js';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { permissionState } from './fixtures/permission-state.svelte';
 import './fixtures/authenticated';
 
 afterEach(() => {
@@ -166,5 +167,54 @@ describe('module settings partial save', () => {
     await waitFor(() => {
       expect(save).toBeDisabled();
     });
+  });
+
+  it('keeps a pending save locked across permission loss and regain until its response', async () => {
+    await setLocale('ko', { reload: false });
+    vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined));
+    vi.spyOn(api, 'module').mockResolvedValue(before);
+    vi.spyOn(api, 'items').mockResolvedValue([]);
+    vi.spyOn(workspaceNav, 'refreshModules').mockReturnValue(undefined);
+    let finishFirst: (() => void) | undefined;
+    const update = vi
+      .spyOn(api, 'updateModule')
+      .mockImplementationOnce(
+        (id, name, key) =>
+          new Promise<Module>((resolve) => {
+            finishFirst = () => {
+              resolve({ ...before, id, name, key });
+            };
+          }),
+      )
+      .mockImplementation((id, name, key) => Promise.resolve({ ...before, id, name, key }));
+    const currentWorkspace = permissionState({ ...workspace });
+    render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'A' });
+    await screen.findByRole('heading', { name: '개발' });
+    await fireEvent.input(field('module-edit-name'), { target: { value: '첫 저장' } });
+    await fireEvent.submit(screen.getByRole('form', { name: m.modules_settings() }));
+    expect(update).toHaveBeenCalledTimes(1);
+
+    currentWorkspace.access = 'write';
+    await waitFor(() => {
+      expect(screen.queryByRole('form', { name: m.modules_settings() })).toBeNull();
+    });
+    currentWorkspace.access = 'owner';
+    const form = await screen.findByRole('form', { name: m.modules_settings() });
+    expect(field('module-edit-name')).toHaveValue(before.name);
+    await fireEvent.submit(form);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(within(form).getByRole('button', { name: m.common_save() })).toBeDisabled();
+
+    if (finishFirst === undefined) throw new Error('missing pending save');
+    finishFirst();
+    await waitFor(() => {
+      expect(within(form).getByRole('button', { name: m.common_save() })).toBeEnabled();
+    });
+    await fireEvent.input(field('module-edit-name'), { target: { value: '응답 뒤 저장' } });
+    await fireEvent.submit(form);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+    expect(update).toHaveBeenLastCalledWith('A', '응답 뒤 저장', before.key);
   });
 });
