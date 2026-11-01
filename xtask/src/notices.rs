@@ -295,18 +295,19 @@ fn check_font_sources(root: &Path) -> Result<()> {
             fs::read(&path)?
         } else {
             let object = format!("{FONT_SOURCE_COMMIT}:{FONT_DIR}/{}", font.file);
+            let url = format!(
+                "https://raw.githubusercontent.com/fvoci/GroundZero/{FONT_SOURCE_COMMIT}/{FONT_DIR}/{}",
+                font.file
+            );
             let git = Command::new("git")
                 .current_dir(root)
                 .args(["show", &object])
-                .output()?;
+                .output()
+                .with_context(|| format!("git show {object}; input URL {url}"))?;
             let bytes = if git.status.success() {
                 git.stdout
             } else {
                 // CI's shallow checkout may not contain the generation input commit.
-                let url = format!(
-                    "https://raw.githubusercontent.com/fvoci/GroundZero/{FONT_SOURCE_COMMIT}/{FONT_DIR}/{}",
-                    font.file
-                );
                 let download = Command::new("curl")
                     .args([
                         "--fail",
@@ -317,9 +318,16 @@ fn check_font_sources(root: &Path) -> Result<()> {
                         "60",
                         &url,
                     ])
-                    .output()?;
+                    .output()
+                    .with_context(|| {
+                        format!(
+                            "start curl {url}; git status {}; git stderr: {}",
+                            git.status,
+                            String::from_utf8_lossy(&git.stderr).trim()
+                        )
+                    })?;
                 if !download.status.success() {
-                    bail!("cannot retrieve pinned font input {}", font.file);
+                    return Err(font_source_failure(font.file, &url, &git, &download));
                 }
                 download.stdout
             };
@@ -334,6 +342,21 @@ fn check_font_sources(root: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn font_source_failure(
+    file: &str,
+    url: &str,
+    git: &std::process::Output,
+    curl: &std::process::Output,
+) -> anyhow::Error {
+    anyhow::anyhow!(
+        "cannot retrieve pinned font input {file} from {url}; git status {}; git stderr: {}; curl status {}; curl stderr: {}",
+        git.status,
+        String::from_utf8_lossy(&git.stderr).trim(),
+        curl.status,
+        String::from_utf8_lossy(&curl.stderr).trim()
+    )
 }
 
 fn check_font_bundle(root: &Path) -> Result<()> {
@@ -668,6 +691,28 @@ fn normalize(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{FONTS, check_font_digest, crate_archive, npm_archive};
+
+    #[test]
+    fn font_source_failure_keeps_both_statuses_stderr_and_url() -> anyhow::Result<()> {
+        let git = std::process::Command::new("sh")
+            .args(["-c", "printf 'shallow input missing' >&2; exit 128"])
+            .output()?;
+        let curl = std::process::Command::new("sh")
+            .args(["-c", "printf 'HTTP fixture denied' >&2; exit 22"])
+            .output()?;
+        let url = "https://example.test/pinned/font.otf";
+        let message = super::font_source_failure("font.otf", url, &git, &curl).to_string();
+        for expected in [
+            url,
+            "128",
+            "22",
+            "shallow input missing",
+            "HTTP fixture denied",
+        ] {
+            assert!(message.contains(expected), "missing {expected}: {message}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn font_asset_digests_reject_corruption() -> anyhow::Result<()> {
