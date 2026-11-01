@@ -143,6 +143,34 @@ describe('user feedback (D-82)', () => {
     expect(revived).toHaveAttribute('data-removed', 'false');
   });
 
+  it('releases a focus pause when another key arrives while the focused toast exits', async () => {
+    const { action, item } = showAction();
+    action.focus();
+    flushSync();
+    flushSync(() => {
+      dismissDone('timed-action');
+    });
+    await advance(100);
+    // 초점이 있던 토스트가 퇴장하는 동안 다른 key의 동작이 온다. 퇴장한 요소가 지워지며 초점이 영역 밖으로 빠진다.
+    flushSync(() => {
+      notifyDone('다른 일을 했습니다.', 'other-action', {
+        action: { label: '그 일 되돌리기', onClick: vi.fn() },
+      });
+    });
+    const other = screen
+      .getByRole('button', { name: '그 일 되돌리기' })
+      .closest('[data-sonner-toast]');
+    if (!(other instanceof HTMLElement)) throw new Error('toast');
+    await advance(200);
+    expect(item).not.toBeInTheDocument();
+    expect(other.contains(document.activeElement)).toBe(false);
+    // 재확인(닫힌 뒤 250ms)까지는 머무는 초점으로 멈춰 있었고, 그때부터 10초를 센다(지금은 그 뒤 50ms).
+    await advance(9_949);
+    expect(other).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(other).toHaveAttribute('data-removed', 'true');
+  });
+
   it('measures the remaining time with a monotonic clock', async () => {
     const { item, region } = showAction();
     await advance(4_000);

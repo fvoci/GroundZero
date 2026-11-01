@@ -55,21 +55,23 @@
     typeof document !== 'undefined' && document.visibilityState === 'hidden',
   );
   watchDoneTimeouts(() => toastHovered || toastFocused || documentHidden);
-  // 마지막 토스트가 닫히면 토스트 영역이 사라져 mouseleave·focusout이 오지 않을 수 있다. 퇴장 애니메이션(200ms) 뒤에도
-  // 토스트가 없으면 남은 영역의 실제 상태로 머무름을 다시 정한다. 그사이 새 토스트가 오면(같은 key는 기존 요소를 되살려
-  // focusin이 다시 오지 않는다) 이 확인을 취소해 머무름을 그대로 둔다.
+  // 마지막 토스트가 닫히면 토스트 요소가 사라져 mouseleave·focusout이 오지 않을 수 있다. 그래서 활성 토스트가 0이 될
+  // 때마다 퇴장 애니메이션(200ms) 뒤 실제 영역 상태로 머무름을 다시 정한다. 그사이 새 토스트가 와도 취소하지 않는다:
+  // 같은 key가 되살린 요소에 초점이 남았으면 그대로 멈추고, 다른 key라 초점이 영역 밖으로 빠졌으면 풀린다.
   // 목록 자체가 바뀔 때(퇴장한 토스트를 지울 때 등)마다 다시 세지 않도록 개수만 본다.
   const activeToasts = $derived(toast.getActiveToasts().length);
+  let pauseRecheck: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
     if (activeToasts > 0) return;
-    const recheck = setTimeout(() => {
+    clearTimeout(pauseRecheck);
+    pauseRecheck = setTimeout(() => {
       const region = document.querySelector('[data-sonner-toaster]');
       toastHovered = region?.matches(':hover') ?? false;
       toastFocused = region?.contains(document.activeElement) ?? false;
     }, 250);
-    return () => {
-      clearTimeout(recheck);
-    };
+  });
+  $effect(() => () => {
+    clearTimeout(pauseRecheck);
   });
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.
