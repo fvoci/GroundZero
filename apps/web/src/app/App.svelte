@@ -183,6 +183,7 @@
       const capture = (): ContextCapture => ({
         userId: currentUser.userId,
         sequence: sessionSequence,
+        navigationGeneration: router.navigationGeneration,
         sessionGeneration: readSessionGeneration(),
         safetyGeneration: accountSafety.generation,
         path: router.path,

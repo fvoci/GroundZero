@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me, OrganizationSummary, Workspace } from '@fvoci/api-client';
 import App from '../../src/app/App.svelte';
@@ -147,3 +148,49 @@ it('leaves a discarded early result out of the next screen state', async () => {
   expect(taskData.syncRecurrences).not.toHaveBeenCalled();
   expect(taskScreenApi.board).not.toHaveBeenCalled();
 });
+
+it.each(['pending', 'resolved'] as const)(
+  'discards the first context after actual A → B → A navigation while it is %s',
+  async (timing) => {
+    const spaces = held<Workspace[]>();
+    const organizations = held<OrganizationSummary[]>();
+    const early = held<TaskContext>();
+    const latest = held<TaskContext>();
+    const workspaceList = [WORKSPACE];
+    const organizationList = [{ ...TEST_ORGANIZATION, id: WORKSPACE.organization_id }];
+    vi.spyOn(api, 'workspaces')
+      .mockReturnValueOnce(spaces.promise)
+      .mockResolvedValue(workspaceList);
+    vi.spyOn(api, 'myOrganizations')
+      .mockReturnValueOnce(organizations.promise)
+      .mockResolvedValue(organizationList);
+    vi.spyOn(taskScreenApi, 'context')
+      .mockReturnValueOnce(early.promise)
+      .mockReturnValueOnce(latest.promise);
+    render(App);
+    await waitFor(() => {
+      expect(taskScreenApi.context).toHaveBeenCalledOnce();
+    });
+    if (timing === 'resolved') {
+      early.resolve(context);
+      await tick();
+    }
+    // Both changes happen before Svelte's next effect flush.
+    router.navigate('/notes');
+    router.navigate(itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board'));
+    if (timing === 'pending') early.resolve(context);
+    spaces.resolve(workspaceList);
+    organizations.resolve(organizationList);
+    await waitFor(() => {
+      expect(taskScreenApi.context).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText(context.item.title)).toBeNull();
+    expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+    expect(taskScreenApi.board).not.toHaveBeenCalled();
+    expect(api.itemProfile).not.toHaveBeenCalled();
+    latest.resolve({ ...context, item: { ...context.item, title: 'fresh navigation context' } });
+    await screen.findByTestId('task-board');
+    expect(screen.queryByText(context.item.title)).toBeNull();
+    expect(api.me).toHaveBeenCalledTimes(2);
+  },
+);

@@ -2,6 +2,7 @@
 export interface ContextCapture {
   userId: string;
   sequence: number;
+  navigationGeneration: number;
   sessionGeneration: number;
   safetyGeneration: number;
   path: string;
@@ -20,6 +21,7 @@ export async function createContextRead<T extends { viewer_id: string }>(
     return (
       captured.userId === now.userId &&
       captured.sequence === now.sequence &&
+      captured.navigationGeneration === now.navigationGeneration &&
       captured.sessionGeneration === now.sessionGeneration &&
       captured.safetyGeneration === now.safetyGeneration &&
       captured.path === now.path

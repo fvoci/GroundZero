@@ -4,6 +4,7 @@ import { createContextRead, type ContextCapture } from '$lib/features/tasks/cont
 const capture = (userId = 'A', sequence = 1): ContextCapture => ({
   userId,
   sequence,
+  navigationGeneration: 0,
   sessionGeneration: 10,
   safetyGeneration: 20,
   path: '/w/w/i/i/tasks/board',
@@ -16,19 +17,23 @@ function held<T>() {
 }
 
 describe('D-96 task context ownership', () => {
-  it.each(['userId', 'sequence', 'sessionGeneration', 'safetyGeneration', 'path'] as const)(
-    'discards a response when %s changes',
-    async (field) => {
-      const first = capture();
-      const next = { ...first, [field]: typeof first[field] === 'number' ? 99 : 'changed' };
-      const pending = held<{ viewer_id: string }>();
-      let current = first;
-      const read = createContextRead(first, () => current, pending.promise);
-      current = next;
-      pending.resolve({ viewer_id: 'A' });
-      expect(await read).toEqual({ kind: 'discarded' });
-    },
-  );
+  it.each([
+    'userId',
+    'sequence',
+    'navigationGeneration',
+    'sessionGeneration',
+    'safetyGeneration',
+    'path',
+  ] as const)('discards a response when %s changes', async (field) => {
+    const first = capture();
+    const next = { ...first, [field]: typeof first[field] === 'number' ? 99 : 'changed' };
+    const pending = held<{ viewer_id: string }>();
+    let current = first;
+    const read = createContextRead(first, () => current, pending.promise);
+    current = next;
+    pending.resolve({ viewer_id: 'A' });
+    expect(await read).toEqual({ kind: 'discarded' });
+  });
 
   it('checks the authenticated response viewer independently of the browser capture', async () => {
     const first = capture();

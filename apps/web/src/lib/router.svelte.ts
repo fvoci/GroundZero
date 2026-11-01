@@ -336,7 +336,17 @@ export function pathFor(
 }
 
 class Router {
-  path = $state(window.location.pathname);
+  private currentPath = $state(window.location.pathname);
+  /** Accepted path changes are synchronous, including A → B → A within one render tick. */
+  navigationGeneration = 0;
+  get path(): string {
+    return this.currentPath;
+  }
+  set path(next: string) {
+    if (next === this.currentPath) return;
+    this.navigationGeneration += 1;
+    this.currentPath = next;
+  }
   /** 주소의 `#` 부분(백링크가 원문 문서 안의 참조 자리를 가리킬 때). 경로 해석에는 쓰지 않는다. */
   hash = $state(window.location.hash);
   route = $derived(parseRoute(this.path));
