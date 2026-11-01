@@ -32,11 +32,11 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   let leaving: HTMLElement | undefined;
   // 잠기며 초점을 잃은 요소. 초점은 한 곳뿐이라 하나만 기억한다.
   let lost: HTMLElement | undefined;
+  // 잠금 전에 시작한 접촉도 잠금 중 탭으로 끝날 수 있다. 초점 기억과 독립적으로 up·cancel·이동 초과까지 추적한다.
   const pendingTaps = new Map<number, { x: number; y: number }>();
 
   const forgetLost = (): void => {
     lost = undefined;
-    pendingTaps.clear();
   };
 
   const bodyFocused = (): boolean => doc.activeElement === null || doc.activeElement === doc.body;
@@ -56,7 +56,7 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     // 초점이 없는 빈 곳·글을 눌러 focusin이 없어도 즉시 복귀를 취소한다.
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
       forgetLost();
-    } else if (lost !== undefined) {
+    } else {
       pendingTaps.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }
   };
@@ -69,7 +69,7 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   const onPointerUp = (event: PointerEvent): void => {
     const start = pendingTaps.get(event.pointerId);
     pendingTaps.delete(event.pointerId);
-    if (start !== undefined && withinTapSlop(event, start)) forgetLost();
+    if (lost !== undefined && start !== undefined && withinTapSlop(event, start)) forgetLost();
   };
 
   const onPointerCancel = (event: PointerEvent): void => {
@@ -97,7 +97,6 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
           last.matches(':disabled') &&
           (doc.activeElement === last || (bodyFocused() && leaving === last))
         ) {
-          if (lost !== last) pendingTaps.clear();
           lost = last;
         }
       } else if (lost !== undefined && el.contains(lost)) released = true;
@@ -141,5 +140,6 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     doc.removeEventListener('pointerup', onPointerUp, true);
     doc.removeEventListener('pointercancel', onPointerCancel, true);
     observer.disconnect();
+    pendingTaps.clear();
   };
 }

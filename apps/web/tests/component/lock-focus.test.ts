@@ -215,6 +215,48 @@ describe('keepFocusAcrossLocks', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  describe.each(['touch', 'pen'])('%s gestures starting before the lock', (pointerType) => {
+    const start = { pointerId: 1, pointerType, clientX: 100, clientY: 100 };
+
+    // SR-290-1 / C-2(a): 시작이 잠금 전이어도 잠금 중 끝난 탭은 사용자가 손을 댄 것이다.
+    it('does not return focus after a tap that ends during the lock', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await fireEvent.pointerDown(document.body, start);
+      await lock(fieldset, input);
+      await fireEvent.pointerUp(document.body, { ...start, clientX: 106, clientY: 108 });
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('returns focus after moving beyond the threshold during the lock', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await fireEvent.pointerDown(document.body, start);
+      await lock(fieldset, input);
+      await fireEvent.pointerMove(document.body, { ...start, clientY: 111 });
+      await fireEvent.pointerUp(document.body, start);
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(input);
+    });
+
+    it.each(['pointerUp', 'pointerCancel'] as const)(
+      'does not keep a gesture that ended with %s before the lock',
+      async (end) => {
+        const { fieldset, input } = form();
+        input.focus();
+        await fireEvent.pointerDown(document.body, start);
+        await fireEvent[end](document.body, start);
+        await lock(fieldset, input);
+        fieldset.disabled = false;
+        await settle();
+        expect(document.activeElement).toBe(input);
+      },
+    );
+  });
+
   // R5 B 최종 C-2(b): bits-ui의 닫힌 Select·Popover·Tooltip 트리거도 `data-state="closed"`다. 닫히는 대화상자가 아니므로
   // 저장 중 잠긴 Select 트리거에는 초점이 돌아와야 한다.
   it('returns focus to a closed Select trigger', async () => {
