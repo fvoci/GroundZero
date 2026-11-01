@@ -257,6 +257,22 @@ describe('keepFocusAcrossLocks', () => {
     );
   });
 
+  it('does not return focus after a touch is interrupted by window blur during the lock', async () => {
+    const { fieldset, input } = form();
+    input.focus();
+    await lock(fieldset, input);
+    await fireEvent.pointerDown(document.body, {
+      pointerId: 1,
+      pointerType: 'touch',
+      clientX: 100,
+      clientY: 100,
+    });
+    await fireEvent(window, new Event('blur'));
+    fieldset.disabled = false;
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   describe.each(['touch', 'pen'])('%s gestures interrupted outside the document', (pointerType) => {
     const start = { pointerId: 1, pointerType, clientX: 100, clientY: 100 };
 

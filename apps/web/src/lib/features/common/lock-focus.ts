@@ -36,16 +36,21 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   const pendingTaps = new Map<number, { x: number; y: number }>();
   const view = doc.defaultView;
 
+  const forgetLost = (): void => {
+    lost = undefined;
+  };
+
   // 문서 밖에서 손을 떼면 up·cancel을 놓칠 수 있다. 창·페이지를 떠날 때 이전 접촉을 버려 이후 저장의 복귀를 막지 않는다.
   const clearPendingTaps = (): void => {
     pendingTaps.clear();
   };
-  const onVisibilityChange = (): void => {
-    if (doc.visibilityState === 'hidden') clearPendingTaps();
+  const onBoundary = (): void => {
+    // 잠금 중 진행하던 접촉을 판별하지 못하고 떠났으면 초점 복귀도 취소한다(SR-290-3 부조종사 결정 (가)).
+    if (pendingTaps.size > 0 && lost !== undefined) forgetLost();
+    clearPendingTaps();
   };
-
-  const forgetLost = (): void => {
-    lost = undefined;
+  const onVisibilityChange = (): void => {
+    if (doc.visibilityState === 'hidden') onBoundary();
   };
 
   const bodyFocused = (): boolean => doc.activeElement === null || doc.activeElement === doc.body;
@@ -137,8 +142,8 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   doc.addEventListener('pointerup', onPointerUp, true);
   doc.addEventListener('pointercancel', onPointerCancel, true);
   doc.addEventListener('visibilitychange', onVisibilityChange);
-  view?.addEventListener('blur', clearPendingTaps);
-  view?.addEventListener('pagehide', clearPendingTaps);
+  view?.addEventListener('blur', onBoundary);
+  view?.addEventListener('pagehide', onBoundary);
   observer.observe(doc.documentElement, {
     attributes: true,
     attributeFilter: ['disabled'],
@@ -152,8 +157,8 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     doc.removeEventListener('pointerup', onPointerUp, true);
     doc.removeEventListener('pointercancel', onPointerCancel, true);
     doc.removeEventListener('visibilitychange', onVisibilityChange);
-    view?.removeEventListener('blur', clearPendingTaps);
-    view?.removeEventListener('pagehide', clearPendingTaps);
+    view?.removeEventListener('blur', onBoundary);
+    view?.removeEventListener('pagehide', onBoundary);
     observer.disconnect();
     clearPendingTaps();
   };
