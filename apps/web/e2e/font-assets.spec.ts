@@ -181,49 +181,48 @@ test('rare Hangul and Hanja add one request per used weight and reuse it', async
   }
 });
 
-const storybook = process.env.FVOCI_FONT_STORYBOOK_URL;
-if (storybook !== undefined) {
-  test('200 percent font story covers common, rare, bold and code text without overflow', async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 375, height: 812 });
-    const traffic = fontTraffic(page);
-    const requests = traffic.names;
-    await page.goto(
-      `${storybook}/iframe.html?id=documents-documentscreen--narrow-dark-large-text&viewMode=story&globals=fontScale:200;theme:dark`,
-    );
-    const editor = page.locator('.tiptap');
-    await expect(editor).toContainText('옛한글');
-    await expect(editor.locator('strong')).toContainText('漢字 龍');
-    await expect(editor.locator('pre')).toContainText('KS X 1001');
-    await page.evaluate(async () => {
-      await document.fonts.ready;
-    });
-    await page.waitForLoadState('networkidle');
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
-      '32px',
-    );
-    const wrap = await measureWrap(editor.locator('p').first());
-    expect(wrap.words).toBeGreaterThan(30);
-    expect(wrap.broken).toEqual([]);
-    expect(wrap.overflow).toBe(false);
-    expect(await pageOverflows(page)).toBe(false);
-    for (const weight of ['Regular', 'Bold']) {
-      expect(
-        requests.filter((name) => name.startsWith(`NotoSansKR-${weight}-common-`)),
-      ).toHaveLength(1);
-      expect(requests.filter((name) => name.startsWith(`NotoSansKR-${weight}-rest-`))).toHaveLength(
-        1,
-      );
-    }
-    expect(requests.filter((name) => name.startsWith('D2Coding-Regular-'))).toHaveLength(1);
-    await assertFontDelivery(page, traffic, [
-      { font: '400 16px "Noto Sans KR"', text: '한글 龍 ᄀᆞ', faces: 2 },
-      { font: '700 16px "Noto Sans KR"', text: '한글 龍 ᄀᆞ', faces: 2 },
-      { font: '400 16px D2Coding', text: 'KS X 1001', faces: 1 },
-    ]);
-    const screenshot = test.info().outputPath('font-200-percent.png');
-    await editor.screenshot({ path: screenshot });
-    await test.info().attach('font-200-percent', { path: screenshot, contentType: 'image/png' });
+test('200 percent font story covers common, rare, bold and code text without overflow', async ({
+  page,
+}) => {
+  const storybook = process.env.FVOCI_FONT_STORYBOOK_URL;
+  if (!storybook) throw new Error('Run cargo xtask browser to build and serve Storybook');
+  await page.setViewportSize({ width: 375, height: 812 });
+  const traffic = fontTraffic(page);
+  const requests = traffic.names;
+  await page.goto(
+    `${storybook}/iframe.html?id=documents-documentscreen--narrow-dark-large-text&viewMode=story&globals=fontScale:200;theme:dark`,
+  );
+  const editor = page.locator('.tiptap');
+  await expect(editor).toContainText('옛한글');
+  await expect(editor.locator('strong')).toContainText('漢字 龍');
+  await expect(editor.locator('pre')).toContainText('KS X 1001');
+  await page.evaluate(async () => {
+    await document.fonts.ready;
   });
-}
+  await page.waitForLoadState('networkidle');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(
+    '32px',
+  );
+  const wrap = await measureWrap(editor.locator('p').first());
+  expect(wrap.words).toBeGreaterThan(30);
+  expect(wrap.broken).toEqual([]);
+  expect(wrap.overflow).toBe(false);
+  expect(await pageOverflows(page)).toBe(false);
+  for (const weight of ['Regular', 'Bold']) {
+    expect(requests.filter((name) => name.startsWith(`NotoSansKR-${weight}-common-`))).toHaveLength(
+      1,
+    );
+    expect(requests.filter((name) => name.startsWith(`NotoSansKR-${weight}-rest-`))).toHaveLength(
+      1,
+    );
+  }
+  expect(requests.filter((name) => name.startsWith('D2Coding-Regular-'))).toHaveLength(1);
+  await assertFontDelivery(page, traffic, [
+    { font: '400 16px "Noto Sans KR"', text: '한글 龍 ᄀᆞ', faces: 2 },
+    { font: '700 16px "Noto Sans KR"', text: '한글 龍 ᄀᆞ', faces: 2 },
+    { font: '400 16px D2Coding', text: 'KS X 1001', faces: 1 },
+  ]);
+  const screenshot = test.info().outputPath('font-200-percent.png');
+  await editor.screenshot({ path: screenshot });
+  await test.info().attach('font-200-percent', { path: screenshot, contentType: 'image/png' });
+});
