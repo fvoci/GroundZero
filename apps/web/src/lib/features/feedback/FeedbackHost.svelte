@@ -291,8 +291,12 @@
   onmouseenter={() => (toastHovered = true)}
   onmouseleave={() => (toastHovered = false)}
   onfocusin={() => (toastFocused = true)}
-  onfocusout={(event) =>
-    (toastFocused = event.currentTarget.contains(event.relatedTarget as Node | null))}
+  onfocusout={(event: FocusEvent) => {
+    toastFocused =
+      event.currentTarget instanceof Node &&
+      event.relatedTarget instanceof Node &&
+      event.currentTarget.contains(event.relatedTarget);
+  }}
 />
 
 <svelte:document

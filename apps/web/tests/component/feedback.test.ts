@@ -192,7 +192,9 @@ describe('user feedback (D-82)', () => {
     await fireEvent.mouseLeave(region, { clientX: 100, clientY: 100 });
     await advance(9_999);
     expect(item).toHaveAttribute('data-removed', 'false');
-    flushSync(() => dismissDone('timed-action'));
+    flushSync(() => {
+      dismissDone('timed-action');
+    });
     await advance(200);
     expect(item).not.toBeInTheDocument();
     flushSync(() => {
@@ -207,7 +209,9 @@ describe('user feedback (D-82)', () => {
 
   it('keeps the library default duration for a completion without an action', async () => {
     showAction();
-    flushSync(() => notifyDone('되돌렸습니다.', 'timed-action'));
+    flushSync(() => {
+      notifyDone('되돌렸습니다.', 'timed-action');
+    });
     const item = screen.getByText('되돌렸습니다.').closest('[data-sonner-toast]');
     await advance(3_999);
     expect(item).toHaveAttribute('data-removed', 'false');

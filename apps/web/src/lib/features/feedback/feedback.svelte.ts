@@ -4,7 +4,7 @@
 // 문구는 부르는 쪽이 i18n 메시지로 넘긴다(D-81).
 import { toast } from 'svelte-sonner';
 import { flushSync, untrack } from 'svelte';
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 /** 완료 토스트의 동작 단추 하나(복제한 새 항목 열기 등). */
 export interface DoneAction {
@@ -23,7 +23,7 @@ const ACTION_DONE_DURATION_MS = 10_000;
  * 따라서 이 토스트만 라이브러리 타이머를 끄고, 마우스·초점·창 숨김을 한 타이머에서 처리한다.
  */
 export function watchDoneTimeouts(isPaused: () => boolean): void {
-  const timers = new Map<
+  const timers = new SvelteMap<
     string | number,
     { toast: object; remaining: number; started?: number; timeout?: ReturnType<typeof setTimeout> }
   >();

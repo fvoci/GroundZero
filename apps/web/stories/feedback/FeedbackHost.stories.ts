@@ -42,7 +42,12 @@ export const DoneToast: Story = {
 export const DoneWithAction: Story = {
   play: async () => {
     notifyDone('업무를 진행 중으로 옮겼습니다.', 'story-move', {
-      action: { label: '되돌리기', onClick: () => notifyDone('되돌렸습니다.', 'story-move') },
+      action: {
+        label: '되돌리기',
+        onClick: () => {
+          notifyDone('되돌렸습니다.', 'story-move');
+        },
+      },
     });
     await expect(await screen.findByRole('button', { name: '되돌리기' })).toBeVisible();
   },
