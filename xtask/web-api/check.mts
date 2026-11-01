@@ -281,25 +281,31 @@ export function checkUsage(
         : checker.getSymbolAtLocation(node);
     return found ? unalias(found) : undefined;
   }
-  function parameterWrites(
-    fn: ts.FunctionLikeDeclaration,
-    parameters: readonly ts.ParameterDeclaration[] = fn.parameters,
-  ): string[] {
-    const watched = new Set(
-      parameters.flatMap((parameter) => {
-        const found = symbol(parameter.name);
-        return found ? [found] : [];
-      }),
+  function globalIdentifier(node: ts.Node, name: string): boolean {
+    if (!ts.isIdentifier(node) || node.text !== name) return false;
+    const found = checker.getSymbolAtLocation(node);
+    if (!found) return true; // Browser globals have no declarations in the virtual program.
+    return (
+      (found.flags & ts.SymbolFlags.Alias) === 0 &&
+      !found.valueDeclaration &&
+      found === checker.resolveName(name, undefined, ts.SymbolFlags.Value, false)
     );
-    const writes: string[] = [];
+  }
+  function symbolWrites(root: ts.Node): Set<ts.Symbol> {
+    const writes = new Set<ts.Symbol>();
     function assigned(node: ts.Node): void {
       if (ts.isIdentifier(node)) {
-        const found = symbol(node);
-        if (found && watched.has(found)) writes.push(node.text);
+        // A var redeclaration can have a distinct declaration symbol while
+        // reads still resolve to the function/parameter it overwrites.
+        const found = checker.resolveName(node.text, node, ts.SymbolFlags.Value, false);
+        if (found) writes.add(unalias(found));
       } else if (ts.isShorthandPropertyAssignment(node)) {
         const found = checker.getShorthandAssignmentValueSymbol(node);
-        if (found && watched.has(unalias(found))) writes.push(node.name.text);
-      } else if (ts.isPropertyAssignment(node)) assigned(node.initializer);
+        if (found) writes.add(unalias(found));
+      } else if (ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
+        node.elements.forEach(assigned);
+      } else if (ts.isBindingElement(node)) assigned(node.name);
+      else if (ts.isPropertyAssignment(node)) assigned(node.initializer);
       else if (ts.isArrayLiteralExpression(node)) node.elements.forEach(assigned);
       else if (ts.isObjectLiteralExpression(node)) node.properties.forEach(assigned);
       else if (
@@ -310,27 +316,39 @@ export function checkUsage(
         assigned(node.expression);
       else if (ts.isBinaryExpression(node)) assigned(node.left); // Destructuring defaults.
     }
-    if (fn.body)
-      walk(fn.body, (node) => {
-        if (
-          ts.isBinaryExpression(node) &&
-          node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-          node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-        )
-          assigned(node.left);
-        if (
-          (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-          (node.operator === ts.SyntaxKind.PlusPlusToken ||
-            node.operator === ts.SyntaxKind.MinusMinusToken)
-        )
-          assigned(node.operand);
-        if (
-          (ts.isForOfStatement(node) || ts.isForInStatement(node)) &&
-          !ts.isVariableDeclarationList(node.initializer)
-        )
-          assigned(node.initializer);
-      });
-    return [...new Set(writes)];
+    walk(root, (node) => {
+      if (ts.isVariableDeclaration(node) && node.initializer) assigned(node.name);
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+      )
+        assigned(node.left);
+      if (
+        (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken)
+      )
+        assigned(node.operand);
+      if (ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+        if (ts.isVariableDeclarationList(node.initializer))
+          node.initializer.declarations.forEach((declaration) => {
+            assigned(declaration.name);
+          });
+        else assigned(node.initializer);
+      }
+    });
+    return writes;
+  }
+  function parameterWrites(
+    fn: ts.FunctionLikeDeclaration,
+    parameters: readonly ts.ParameterDeclaration[] = fn.parameters,
+  ): string[] {
+    const writes = fn.body ? symbolWrites(fn.body) : new Set<ts.Symbol>();
+    return parameters.flatMap((parameter) => {
+      const found = symbol(parameter.name);
+      return found && writes.has(found) ? [found.name] : [];
+    });
   }
   // Only the entry kinds accepted in the #250 scope decision are traced.
   function capability(node: ts.Node, seen = new Set<ts.Symbol>()): string | undefined {
@@ -405,26 +423,39 @@ export function checkUsage(
   }
   function callable(
     node: ts.Node,
-    seen = new Set<ts.Node>(),
   ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | undefined {
-    if (seen.has(node)) return undefined;
-    seen = new Set(seen).add(node);
-    if (
-      ts.isParenthesizedExpression(node) ||
-      ts.isAsExpression(node) ||
-      ts.isSatisfiesExpression(node)
-    )
-      return callable(node.expression, seen);
-    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return node;
-    const declaration = symbol(node)?.valueDeclaration;
-    if (declaration && ts.isVariableDeclaration(declaration)) {
-      return declaration.initializer &&
-        ts.isVariableDeclarationList(declaration.parent) &&
-        (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-        ? callable(declaration.initializer, seen)
-        : undefined;
+    const seen = new Set<ts.Node>();
+    for (let hops = 0; hops < 64; hops++) {
+      if (seen.has(node)) return undefined;
+      seen.add(node);
+      if (
+        ts.isParenthesizedExpression(node) ||
+        ts.isAsExpression(node) ||
+        ts.isSatisfiesExpression(node)
+      ) {
+        node = node.expression;
+        continue;
+      }
+      if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return node;
+      const found = symbol(node);
+      const declaration = found?.valueDeclaration;
+      if (declaration && ts.isVariableDeclaration(declaration)) {
+        if (
+          !declaration.initializer ||
+          !ts.isVariableDeclarationList(declaration.parent) ||
+          (declaration.parent.flags & ts.NodeFlags.Const) === 0
+        )
+          return undefined;
+        node = declaration.initializer;
+        continue;
+      }
+      if (declaration && ts.isFunctionDeclaration(declaration)) {
+        if (writes.has(found)) throw new Error(`URL/navigation function is written: ${found.name}`);
+        return declaration;
+      }
+      return undefined;
     }
-    return declaration && ts.isFunctionDeclaration(declaration) ? declaration : undefined;
+    throw new Error('callable alias chain exceeds 64 hops: not statically resolvable');
   }
   function exitAt(node: ts.Node): Exit | undefined {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
@@ -497,6 +528,7 @@ export function checkUsage(
     return undefined;
   }
   const sources = program.getSourceFiles();
+  const writes = new Set(sources.flatMap((file) => [...symbolWrites(file)]));
   const callers = new Map<ts.FunctionLikeDeclaration, ts.CallExpression[]>();
   for (const file of sources) {
     walk(file, (node) => {
@@ -590,20 +622,9 @@ export function checkUsage(
     const evaluate = (expression: ts.Expression | undefined): string[] =>
       values(expression, seen, bindings);
     if (ts.isStringLiteralLike(node)) return [node.text];
-    if (
-      node.kind === ts.SyntaxKind.NullKeyword ||
-      (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0
-    )
-      return [''];
-    if (
-      [
-        'window.location.host',
-        'location.host',
-        'window.location.origin',
-        'location.origin',
-      ].includes(node.getText())
-    )
-      return [node.getText().endsWith('origin') ? 'https://fvoci.invalid' : 'fvoci.invalid'];
+    if (node.kind === ts.SyntaxKind.NullKeyword || isUndefined(node, bindings)) return [''];
+    if (browserLocationProperty(node, 'host')) return ['fvoci.invalid'];
+    if (browserLocationProperty(node, 'origin')) return ['https://fvoci.invalid'];
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -748,7 +769,7 @@ export function checkUsage(
       (declaration.parent.flags & ts.NodeFlags.Const) !== 0
     )
       return isUndefined(declaration.initializer, bindings, seen);
-    return (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0;
+    return globalIdentifier(node, 'undefined');
   }
   function fetchMethods(
     node: ts.Expression | undefined,
@@ -856,14 +877,13 @@ export function checkUsage(
   function browserLocationProperty(node: ts.Node, name: string): boolean {
     if (!ts.isPropertyAccessExpression(node) || node.name.text !== name) return false;
     const location = node.expression;
-    if (ts.isIdentifier(location)) return location.text === 'location' && !symbol(location);
+    if (ts.isIdentifier(location)) return globalIdentifier(location, 'location');
     if (!ts.isPropertyAccessExpression(location) || location.name.text !== 'location') return false;
     const owner = location.expression;
     return (
       ts.isIdentifier(owner) &&
       ['window', 'globalThis', 'self', 'document'].includes(owner.text) &&
-      (!checker.getSymbolAtLocation(owner) ||
-        (owner.text === 'globalThis' && !symbol(owner)?.valueDeclaration))
+      globalIdentifier(owner, owner.text)
     );
   }
   function socketParts(node: ts.Expression, seen = new Set<ts.Node>()): (string | symbol)[] {

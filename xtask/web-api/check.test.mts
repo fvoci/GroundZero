@@ -903,6 +903,144 @@ const socketList: Allowlist = {
   },
 };
 const socketScheme = "const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';";
+for (const argument of ['verb', 'captured']) {
+  await test(`SR-295-1: a flow-narrowed mutable method cannot select a default: ${argument}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`
+      function method(m = 'GET') { return m; }
+      let verb: 'DELETE' | undefined = undefined;
+      function change() { verb = 'DELETE'; }
+      change(); const captured = verb;
+      request(method(${argument}), '/api/tasks/42');
+    `),
+          contract,
+          empty,
+        ),
+      /not statically resolvable|not in OpenAPI/,
+    );
+  });
+}
+await test('SR-295-1: a flow-narrowed mutable URL cannot select a default', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+    function endpoint(p = '/api/tasks/42') { return p; }
+    let path: string | undefined = undefined;
+    function change() { path = '/api/typo'; }
+    change(); fetch(endpoint(path));
+  `),
+        contract,
+        empty,
+      ),
+    /not statically resolvable/,
+  );
+});
+for (const write of [
+  "endpoint = () => '/api/typo';",
+  "[endpoint] = [() => '/api/typo'];",
+  "for (endpoint of [() => '/api/typo']) {}",
+  "var endpoint = () => '/api/typo';",
+  "for (var endpoint of [() => '/api/typo']) {}",
+]) {
+  await test(`SR-295-2: an alias of a written function declaration fails: ${write}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`
+      function endpoint() { return '/api/tasks/42'; }
+      ${write}
+      const url = endpoint; fetch(url());
+    `),
+          contract,
+          empty,
+        ),
+      /function.*written|not statically resolvable/,
+    );
+  });
+}
+await test('SR-295-2: an imported method helper cannot hide declaration writes', () => {
+  const input = files(`import { method } from './method';
+    const verb = method; request(verb(), '/api/tasks/42');`);
+  input.set(
+    'apps/web/src/lib/method.ts',
+    `
+    export function method() { return 'GET'; }
+    method = () => 'DELETE';
+  `,
+  );
+  assert.throws(
+    () => checkUsage(input, contract, empty),
+    /function.*written|not statically resolvable/,
+  );
+});
+for (const imported of [
+  "import { browser as globalThis } from 'pkg';",
+  "import * as globalThis from 'pkg';",
+]) {
+  await test(`SR-295-3: an imported globalThis cannot prove a browser scheme: ${imported}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`
+      ${imported}
+      const scheme = globalThis.location.protocol === 'https:' ? 'wss' : 'ws';
+      new WebSocket(\`\${scheme}://\${location.host}/api/tasks/42/collab\`);
+    `),
+          { paths: {} },
+          socketList,
+        ),
+      /WebSocket origin/,
+    );
+  });
+}
+for (const owner of [
+  'location',
+  'window.location',
+  'self.location',
+  'document.location',
+  'globalThis.location',
+]) {
+  await test(`SR-295-4: browser origin and path use the same owner: ${owner}`, () => {
+    const input = files(`
+      const scheme = ${owner}.protocol === 'https:' ? 'wss' : 'ws';
+      new WebSocket(\`\${scheme}://\${${owner}.host}/api/tasks/42/collab\`);
+    `);
+    assert.deepEqual(checkUsage(input, { paths: {} }, socketList).unused, []);
+  });
+}
+for (const length of [32, 1000]) {
+  await test(`SR-295-5: a helper alias chain is bounded: ${String(length)}`, () => {
+    const aliases = Array.from(
+      { length },
+      (_, i) => `const a${String(i + 1)} = a${String(i)};`,
+    ).join('\n');
+    const input = files(`function a0() { return '/api/tasks/42'; }
+      ${aliases}
+      fetch(a${String(length)}());`);
+    if (length === 32) assert.equal(checkUsage(input, contract, empty).calls, 1);
+    else {
+      // A regression must fail the test rather than hang the whole test runner.
+      const script = `
+        import { checkUsage } from ${JSON.stringify(new URL('./check.mts', import.meta.url).href)};
+        try {
+          checkUsage(new Map(${JSON.stringify([...input])}), ${JSON.stringify(contract)}, ${JSON.stringify(empty)});
+        } catch (error) {
+          if (/alias.*(?:limit|hops).*not statically resolvable/.test(error.message)) process.exit(0);
+          throw error;
+        }
+        process.exit(1);
+      `;
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+      assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    }
+  });
+}
 for (const base of [
   "'wss://example.org/api/tasks/42'",
   "'wss://fvoci.invalid/api/tasks/42'",
