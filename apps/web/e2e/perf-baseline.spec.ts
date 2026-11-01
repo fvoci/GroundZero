@@ -86,8 +86,13 @@ if (measurementRoot !== undefined) {
         text: '',
       },
     ];
+    const wanted = process.env.FVOCI_MEASURE_SCREENS?.split(',');
+    if (wanted?.some((name) => !screens.some((screen) => screen.name === name)))
+      throw new Error('unknown measurement screen');
+    const selected =
+      wanted === undefined ? screens : screens.filter((screen) => wanted.includes(screen.name));
     const results = [];
-    for (const screen of screens) {
+    for (const screen of selected) {
       for (let repeat = 1; repeat <= 3; repeat += 1) {
         const context = await browser.newContext({
           baseURL: origin,
@@ -171,6 +176,7 @@ if (measurementRoot !== undefined) {
             socketSentBytes += Buffer.byteLength(payload);
           });
         });
+        const sampleStart = Date.now();
         await page.goto(screen.route, { waitUntil: 'load' });
         await expect
           .poll(() => page.evaluate(() => window.perfMeaningful), { timeout: 60_000 })
@@ -212,6 +218,8 @@ if (measurementRoot !== undefined) {
         const result = {
           screen: screen.name,
           repeat,
+          sampleStart,
+          sampleEnd: Date.now(),
           meaningfulMs,
           sockets,
           socketReceivedBytes,

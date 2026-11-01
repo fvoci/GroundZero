@@ -109,16 +109,30 @@ busy_build() {
     ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'
 }
 while busy_build; do sleep 15; done
-(
-  while true; do
-    if pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null; then busy=true; else busy=false; fi
-    if ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'; then node_busy=true; else node_busy=false; fi
-    if "$busy" || "$node_busy"; then touch "$out/build-overlap"; fi
-    printf '%s other_compiler=%s other_node_build=%s\n' "$(date -u +%FT%TZ)" "$busy" "$node_busy"
-    sleep 1
-  done
-) > "$out/concurrency.log" &
-monitor_pid=$!
+monitor_phase=screen
+start_monitor() {
+  (
+    while true; do
+      if pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null; then busy=true; else busy=false; fi
+      if ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'; then node_busy=true; else node_busy=false; fi
+      if "$busy" || "$node_busy"; then
+        touch "$out/build-overlap"
+        if [[ "$monitor_phase" == db ]]; then touch "$out/db-build-overlap"; fi
+      fi
+      printf '{"epochMs":%s,"compiler":%s,"nodeBuild":%s}\n' "$(date -u +%s%3N)" "$busy" "$node_busy"
+      sleep 1
+    done
+  ) >> "$out/concurrency.log" &
+  monitor_pid=$!
+}
+stop_monitor() {
+  if [[ -n "$monitor_pid" ]]; then
+    kill "$monitor_pid" 2>/dev/null || true
+    wait "$monitor_pid" || true
+    monitor_pid=
+  fi
+}
+start_monitor
 if [[ "$mode" == rooms ]]; then
   FVOCI_MEASURE_ROOMS="$count" cargo test --release --locked -p fvoci-server --test it room_memory_measure::room_memory_measure -- --ignored --exact --nocapture > "$out/rooms.log" 2>&1
   cat "$out/room-memory.json"
@@ -138,6 +152,34 @@ else
   FVOCI_BROWSER_BASE_URL=$(jq -r .origin "$out/browser.json")
   export FVOCI_BROWSER_RAW="$out"
   pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts --project desktop > "$out/playwright.log" 2>&1
+  stop_monitor
+  mkdir -p "$out/screen-attempts"
+  cp "$out/screens.json" "$out/screen-attempts/1.json"
+  cp "$out/screens.json" "$out/current-screens.json"
+  printf '[]\n' > "$out/discarded-screens.json"
+  screen_attempt=1
+  while true; do
+    jq -s . "$out/concurrency.log" > "$out/screen-attempts/$screen_attempt-builds.json"
+    jq -s -f tools/perf-screen-overlap.jq "$out/current-screens.json" "$out/screen-attempts/$screen_attempt-builds.json" > "$out/screen-attempts/$screen_attempt-discarded.json"
+    replay_screens=$(jq -r 'map(.screen)|unique|join(",")' "$out/screen-attempts/$screen_attempt-discarded.json")
+    if [[ -z "$replay_screens" ]]; then break; fi
+    jq --argjson attempt "$screen_attempt" 'map(.+{attempt:$attempt})' "$out/screen-attempts/$screen_attempt-discarded.json" > "$out/discarded-new.json"
+    jq -s 'add' "$out/discarded-screens.json" "$out/discarded-new.json" > "$out/discarded-next.json"
+    mv "$out/discarded-next.json" "$out/discarded-screens.json"
+    printf 'RERUN contaminated screens (fresh triplets): %s\n' "$replay_screens"
+    while busy_build; do sleep 15; done
+    screen_attempt=$((screen_attempt+1))
+    start_monitor
+    FVOCI_MEASURE_SCREENS="$replay_screens" pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts --project desktop > "$out/playwright-$screen_attempt.log" 2>&1
+    stop_monitor
+    cp "$out/screens.json" "$out/screen-attempts/$screen_attempt.json"
+    jq -s '.[1] as $new | [.[0][] | select(.screen as $name | all($new[]; .screen!=$name))] + $new | sort_by(.screen,.repeat)' "$out/current-screens.json" "$out/screens.json" > "$out/next-screens.json"
+    mv "$out/next-screens.json" "$out/current-screens.json"
+  done
+  cp "$out/current-screens.json" "$out/screens.json"
+  jq -n --argjson attempts "$screen_attempt" --slurpfile discarded "$out/discarded-screens.json" '{attempts:$attempts,discarded:$discarded[0]}' > "$out/replay-summary.json"
+  monitor_phase=db
+  start_monitor
   jq -e -f tools/perf-arguments.jq "$out/screens.json" > "$out/db-arguments.json"
   sql_variables=()
   while IFS= read -r binding; do
@@ -160,8 +202,9 @@ else
   printf 'PASS screens: %s\n' "$out"
 fi
 
-# A sample with concurrent compilation cannot be accepted as measurement evidence.
-if [[ -e "$out/build-overlap" ]]; then
+stop_monitor
+# Screen overlaps are preserved and replaced above. Other measurement phases still fail.
+if [[ ( "$mode" == rooms && -e "$out/build-overlap" ) || -e "$out/db-build-overlap" ]]; then
   printf 'FAIL concurrent build during measurement: %s\n' "$out" >&2
   exit 1
 fi
