@@ -325,24 +325,12 @@ BEGIN
       WHERE t.updated_by = app_user_id()
         AND t.workspace_id = ANY (ARRAY(SELECT id FROM my_workspaces))
       ORDER BY t.updated_at DESC, t.id LIMIT 8
-    ), recent_document_rows AS MATERIALIZED (
-      -- RLS and the original scope/order apply before fixing the eight rows.
-      SELECT d.id, d.title, d.placement, d.number, d.workspace_id, d.item_id, d.updated_at
+    ), recent_documents AS (
+      SELECT d.id, d.title, app_document_reference(d.id) AS reference, d.workspace_id, d.item_id, d.updated_at
       FROM documents d WHERE d.updated_by = app_user_id()
         AND (d.workspace_id = ANY (ARRAY(SELECT id FROM my_workspaces))
              OR (d.workspace_id IS NULL AND d.owner_user_id = app_user_id()))
       ORDER BY d.updated_at DESC, d.id LIMIT 8
-    ), recent_document_keys AS MATERIALIZED (
-      SELECT i.id, k.key FROM items i
-      JOIN module_keys k ON k.module_id = i.module_id AND k.retired_at IS NULL
-      WHERE i.id IN (SELECT item_id FROM recent_document_rows WHERE placement = 'module')
-    ), recent_documents AS (
-      SELECT d.id, d.title,
-             CASE d.placement WHEN 'wiki' THEN 'WIKI-' || d.number
-                  WHEN 'module' THEN k.key || '-' || d.number END AS reference,
-             d.workspace_id, d.item_id, d.updated_at
-      FROM recent_document_rows d LEFT JOIN recent_document_keys k ON k.id = d.item_id
-      ORDER BY d.updated_at DESC, d.id
     ), active AS (
       SELECT i.id, i.workspace_id, m.kind AS module_kind, app_item_reference(i.id) AS reference,
              i.title, app_access('item', i.id) IN ('write', 'owner') AS can_write,

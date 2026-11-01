@@ -2484,17 +2484,22 @@ BEGIN
             SELECT o.* FROM app_projected_occurrences(p_workspace, NULL, p_from, p_to) o
             JOIN scope ON scope.id = o.item_id
         ),
+        occurrence_source AS MATERIALIZED (
+            SELECT * FROM app_event_occurrences(p_workspace, v_from_at, v_to_at, p_from, p_to)
+        ),
+        occurrence_events AS MATERIALIZED (
+            -- Read each visible event once, retaining its RLS and scope checks.
+            SELECT e.* FROM events e JOIN scope ON scope.id = e.item_id
+            WHERE e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM occurrence_source o WHERE o.event_id = e.id)
+        ),
         occurrence_rows AS MATERIALIZED (
-            SELECT o.* FROM app_event_occurrences(p_workspace, v_from_at, v_to_at, p_from, p_to) o
-            JOIN events e ON e.id = o.event_id AND e.deleted_at IS NULL
-            JOIN scope ON scope.id = e.item_id
+            SELECT o.* FROM occurrence_source o JOIN occurrence_events e ON e.id = o.event_id
         ),
         event_rows AS MATERIALIZED (
             SELECT e.id, e.item_id, e.workspace_id, e.kind, e.title, e.description, e.all_day,
                    e.start_date, e.end_date, e.starts_at, e.ends_at, e.timezone, e.recurrence,
                    e.excluded_dates, e.version, app_access('event', e.id) AS access
-            FROM events e JOIN scope ON scope.id = e.item_id
-            WHERE e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM occurrence_rows o WHERE o.event_id = e.id)
+            FROM occurrence_events e
         ),
         date_rows AS MATERIALIZED (
             SELECT 'episode'::text AS kind, e.id, e.item_id, e.number::text || '. ' || e.title AS title,
