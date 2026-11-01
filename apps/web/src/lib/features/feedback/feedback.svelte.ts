@@ -34,7 +34,10 @@ export function watchDoneTimeouts(isPaused: () => boolean): void {
     const paused = isPaused();
     untrack(() => {
       for (const id of timers.keys()) {
-        if (!active.some((item) => item.id === id)) timers.delete(id);
+        if (active.some((item) => item.id === id)) continue;
+        // 저절로·닫기 단추·동작 실행으로 내려간 토스트의 key도 버린다(긴 세션에서 쌓이지 않게).
+        timers.delete(id);
+        if (typeof id === 'string') actionKeys.delete(id);
       }
       for (const item of active) {
         let timer = timers.get(item.id);
@@ -44,7 +47,8 @@ export function watchDoneTimeouts(isPaused: () => boolean): void {
           timers.set(item.id, timer);
         }
         if (!paused) {
-          timer.started = Date.now();
+          // 벽시계 조정에 흔들리지 않도록 단조 시계로 잰다.
+          timer.started = performance.now();
           timer.timeout = setTimeout(() => toast.dismiss(item.id), timer.remaining);
         }
       }
@@ -53,7 +57,7 @@ export function watchDoneTimeouts(isPaused: () => boolean): void {
       for (const timer of timers.values()) {
         clearTimeout(timer.timeout);
         if (timer.started !== undefined) {
-          timer.remaining -= Date.now() - timer.started;
+          timer.remaining -= performance.now() - timer.started;
           delete timer.started;
         }
       }

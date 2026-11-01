@@ -97,6 +97,30 @@ describe('user feedback (D-82)', () => {
     await expectRemainingSixSeconds(item);
   });
 
+  it('does not stay paused after the hovered toaster disappears without mouseleave', async () => {
+    const { item, region } = showAction();
+    await fireEvent.mouseEnter(region, { clientX: 20, clientY: 20 });
+    // 마우스가 올라간 채 마지막 토스트가 닫혀 영역이 사라진다(mouseleave 없음).
+    flushSync(() => {
+      dismissDone('timed-action');
+    });
+    await advance(200);
+    expect(item).not.toBeInTheDocument();
+    flushSync(() => {
+      notifyDone('또 옮겼습니다.', 'next-action', {
+        action: { label: '다시 되돌리기', onClick: vi.fn() },
+      });
+    });
+    const next = screen
+      .getByRole('button', { name: '다시 되돌리기' })
+      .closest('[data-sonner-toast]');
+    if (!(next instanceof HTMLElement)) throw new Error('toast');
+    await advance(9_999);
+    expect(next).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(next).toHaveAttribute('data-removed', 'true');
+  });
+
   it.each(['button', 'Alt+T'])(
     'pauses with %s focus and resumes the remaining time',
     async (via) => {

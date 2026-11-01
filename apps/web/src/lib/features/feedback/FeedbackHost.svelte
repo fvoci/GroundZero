@@ -11,6 +11,7 @@
   import { me as currentUser } from '$lib/me.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
+  import { toast } from 'svelte-sonner';
   import { Toaster } from '$lib/ui/sonner';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -54,6 +55,12 @@
     typeof document !== 'undefined' && document.visibilityState === 'hidden',
   );
   watchDoneTimeouts(() => toastHovered || toastFocused || documentHidden);
+  // 마지막 토스트가 닫히면 토스트 영역이 사라져 mouseleave·focusout이 오지 않을 수 있다. 영역이 비면 머무름을 푼다.
+  $effect(() => {
+    if (toast.getActiveToasts().length > 0) return;
+    toastHovered = false;
+    toastFocused = false;
+  });
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.
   $effect(() => {
