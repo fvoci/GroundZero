@@ -29,6 +29,9 @@ use crate::compose::{self, Compose, DbUrls, Env};
 use crate::supabase::Supabase;
 use crate::test_verify::{self, DockerMode};
 
+#[path = "test_platform.rs"]
+mod platform;
+
 #[cfg(all(test, unix))]
 #[path = "test_rootful.rs"]
 mod rootful_tests;
@@ -95,7 +98,13 @@ struct TestContainer {
 }
 
 impl TestContainer {
-    fn new(root: &Path, compose: &Compose, sh: &Shell, identity: ContainerUser) -> Result<Self> {
+    fn new(
+        root: &Path,
+        compose: &Compose,
+        sh: &Shell,
+        identity: ContainerUser,
+        platform: &str,
+    ) -> Result<Self> {
         let digest = match std::env::var("FVOCI_TEST_CI_BASE_IMAGE_DIGEST") {
             Ok(digest) => digest,
             Err(std::env::VarError::NotPresent) => cmd!(
@@ -111,6 +120,7 @@ impl TestContainer {
         };
         let image = ci_base_image(digest.trim())?;
         println!("==> test runner image: {image}");
+        platform::require_image(sh, &image, platform)?;
         let uid = cmd!(sh, "id -u").quiet().read()?;
         let gid = cmd!(sh, "id -g").quiet().read()?;
         let user = identity.user(&uid, &gid);
@@ -119,6 +129,7 @@ impl TestContainer {
             std::fs::create_dir_all(root.join("target/test-container").join(dir))?;
         }
         let mut args = container_args(root, compose.project(), &user);
+        args.extend(["--platform".into(), platform.into()]);
         // 빌드 자원 제한과 사용자가 명시한 시험 동시성만 전달한다. 호스트의 경로·빌드 래퍼는 전달하지 않는다.
         for key in ["CARGO_BUILD_JOBS", "RUST_TEST_THREADS"] {
             if let Ok(value) = sh.var(key) {
@@ -271,10 +282,14 @@ fn prepare_test_container(
     if let Execution::Host = execution {
         return Ok(None);
     }
-    match select_execution(std::env::consts::ARCH, test_verify::docker_mode(sh)?) {
-        ExecutionChoice::Container(identity) => {
-            Ok(Some(TestContainer::new(root, compose, sh, identity)?))
-        }
+    let platform = platform::daemon(sh)?;
+    let architecture = platform
+        .strip_prefix("linux/")
+        .context("Docker must report a Linux platform")?;
+    match select_execution(architecture, test_verify::docker_mode(sh)?) {
+        ExecutionChoice::Container(identity) => Ok(Some(TestContainer::new(
+            root, compose, sh, identity, &platform,
+        )?)),
         ExecutionChoice::Host(reason) => {
             println!("==> {reason}");
             Ok(None)
