@@ -231,6 +231,7 @@ else
   cp "$out/screens.json" "$out/current-screens.json"
   printf '[]\n' > "$out/discarded-screens.json"
   screen_attempt=1
+  max_screen_attempts=5
   while true; do
     jq -s . "$out/concurrency.log" > "$out/screen-attempts/$screen_attempt-builds.json"
     jq -s -f tools/perf-screen-overlap.jq "$out/current-screens.json" "$out/screen-attempts/$screen_attempt-builds.json" > "$out/screen-attempts/$screen_attempt-discarded.json"
@@ -239,6 +240,10 @@ else
     jq --argjson attempt "$screen_attempt" 'map(.+{attempt:$attempt})' "$out/screen-attempts/$screen_attempt-discarded.json" > "$out/discarded-new.json"
     jq -s 'add' "$out/discarded-screens.json" "$out/discarded-new.json" > "$out/discarded-next.json"
     mv "$out/discarded-next.json" "$out/discarded-screens.json"
+    if (( screen_attempt >= max_screen_attempts )); then
+      printf 'FAIL screens still contaminated after %s attempts: %s\n' "$screen_attempt" "$replay_screens" >&2
+      exit 1
+    fi
     printf 'RERUN contaminated screens (fresh triplets): %s\n' "$replay_screens"
     wait_for_builds
     screen_attempt=$((screen_attempt+1))

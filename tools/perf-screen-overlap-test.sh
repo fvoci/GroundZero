@@ -42,8 +42,9 @@ for screen_invalid in missing reversed; do
     exit 1
   fi
 done
-for screen_replay_case in clean once twice heavy; do
-  bash -euo pipefail -s -- "$screen_test_out/$screen_replay_case" "$screen_replay_case" <<'REPLAY'
+for screen_replay_case in clean once twice heavy last limit; do
+  screen_replay_status=0
+  bash -euo pipefail -s -- "$screen_test_out/$screen_replay_case" "$screen_replay_case" <<'REPLAY' > "$screen_test_out/replay-$screen_replay_case.log" 2>&1 || screen_replay_status=$?
 out=$1
 scenario=$2
 mkdir -p "$out"
@@ -62,7 +63,7 @@ stop_monitor() { return 0; }
 start_monitor() {
   local calls busy=false
   calls=$(cat "$out/calls")
-  if [[ "$scenario" == twice && "$calls" == 0 ]]; then busy=true; fi
+  if [[ "$scenario" == limit || ( "$scenario" == twice && "$calls" == 0 ) || ( "$scenario" == last && "$calls" -lt 3 ) ]]; then busy=true; fi
   printf '{"epochMs":%s,"compiler":false,"nodeBuild":%s}\n' "$(( (calls+1)*10000+250 ))" "$busy" >> "$out/concurrency.log"
 }
 pnpm() {
@@ -70,6 +71,10 @@ pnpm() {
   local calls
   calls=$(( $(cat "$out/calls")+1 ))
   printf '%s\n' "$calls" > "$out/calls"
+  if [[ "$scenario" == limit && "$calls" -gt 4 ]]; then
+    printf 'FAIL replay exceeded the allowed four replacements\n' >&2
+    return 73
+  fi
   jq -n --argjson call "$calls" '[range(1;4) as $repeat |
     {screen:"board",repeat:$repeat,origin:("replacement-"+($call|tostring)),
      sampleStart:($call*10000+$repeat*200)} | .+{sampleEnd:(.sampleStart+100)} ]' > "$out/screens.json"
@@ -78,7 +83,7 @@ pnpm() {
 replay_source=$(awk '/^  mkdir -p .*screen-attempts/ {copy=1} copy && /^  monitor_phase=db$/ {exit} copy {print}' tools/measure-perf.sh)
 test -n "$replay_source"
 eval "$replay_source"
-case "$scenario" in clean) expected=0 ;; once|heavy) expected=1 ;; twice) expected=2 ;; esac
+case "$scenario" in clean) expected=0 ;; once|heavy) expected=1 ;; twice) expected=2 ;; last) expected=4 ;; esac
 test "$(cat "$out/calls")" -eq "$expected"
 jq -e --argjson calls "$expected" '
   length==6 and (group_by(.screen)|all(.[]; length==3 and map(.repeat)==[1,2,3])) and
@@ -88,5 +93,19 @@ jq -e --argjson calls "$expected" '
 jq -e 'length==6 and all(.[]; .origin=="original")' "$out/screen-attempts/1.json" > /dev/null
 jq -e --argjson calls "$expected" '.attempts==$calls+1 and (.discarded|length)==$calls and all(.discarded[]; .screen=="board" and .repeat==1 and (.buildSamples|length)>0)' "$out/replay-summary.json" > /dev/null
 REPLAY
+  if [[ "$screen_replay_case" == limit ]]; then
+    printf 'replay limit: exit=%s replacements=%s\n' "$screen_replay_status" "$(cat "$screen_test_out/limit/calls")"
+    test "$screen_replay_status" -eq 1
+    test "$(cat "$screen_test_out/limit/calls")" -eq 4
+    grep -F 'FAIL screens still contaminated after 5 attempts: board' "$screen_test_out/replay-limit.log"
+    test -f "$screen_test_out/limit/screen-attempts/5.json"
+    test -f "$screen_test_out/limit/screen-attempts/5-discarded.json"
+    jq -e 'length==5 and all(.[]; .screen=="board" and .repeat==1)' "$screen_test_out/limit/discarded-screens.json" > /dev/null
+    test ! -e "$screen_test_out/limit/screen-attempts/6.json"
+    test ! -e "$screen_test_out/limit/replay-summary.json"
+  else
+    cat "$screen_test_out/replay-$screen_replay_case.log"
+    test "$screen_replay_status" -eq 0
+  fi
 done
 printf 'PASS screen build overlap: attribution, invalid windows, quiet, selective replay and repeated contamination\n'

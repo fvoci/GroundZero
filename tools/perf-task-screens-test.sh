@@ -4,6 +4,7 @@ set -euo pipefail
 task_root=$(git rev-parse --show-toplevel)
 cd "$task_root"
 task_fixture=tools/fixtures/perf-task-screens-aggregate.json
+mkdir -p "$task_root/target"
 task_out=$(mktemp -d "$task_root/target/perf-task-screens-test-XXXXXX")
 jq -f tools/perf-depth.jq "$task_fixture" > "$task_out/valid.json"
 jq -e 'length==3 and all(.[]; .depth==4)' "$task_out/valid.json" > /dev/null
