@@ -62,7 +62,7 @@ if (measurementRoot !== undefined) {
         chain.push(home, slowest);
       } else if (
         ['board', 'gantt', 'task-detail'].includes(screen) &&
-        requests.some((r) => /\/task-context$/.test(r.path))
+        requests.some((r) => r.path.endsWith('/task-context'))
       ) {
         const once = (pattern: RegExp, after: number) => {
           const matches = requests.filter((r) => pattern.test(r.path));
@@ -88,6 +88,7 @@ if (measurementRoot !== undefined) {
           const detail = once(/^\/api\/tasks\/[^/]+\/detail-read$/, joined.end);
           expect(Math.max(sync.start, detail.start)).toBeLessThan(Math.min(sync.end, detail.end));
           const id = detail.path.split('/')[3];
+          if (id === undefined) throw new Error('missing detail task ID');
           const panels = [
             `/api/tasks/${id}/comments`,
             `/api/tasks/${id}/time`,

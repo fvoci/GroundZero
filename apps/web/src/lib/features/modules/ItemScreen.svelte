@@ -398,9 +398,13 @@
       const value = seed.result.value;
       // The App already joined session lists and context. Adopt within this flush.
       try {
-        untrack(() => adopt({ it: value.item, found: value.module }, value.documents));
+        untrack(() => {
+          adopt({ it: value.item, found: value.module }, value.documents);
+        });
       } catch (cause: unknown) {
-        untrack(() => fail(cause));
+        untrack(() => {
+          fail(cause);
+        });
       }
     } else {
       const pending = untrack(() => aggregate)
@@ -412,7 +416,11 @@
             api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
             api.itemDocuments(id),
           ]);
-      void pending.then(([resource, list]) => adopt(resource, list)).catch(fail);
+      void pending
+        .then(([resource, list]) => {
+          adopt(resource, list);
+        })
+        .catch(fail);
     }
     return () => {
       cancelled = true;

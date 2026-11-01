@@ -79,7 +79,9 @@ it('fetches a fresh detail when the startup task is closed and reopened', async 
   expect(await screen.findByLabelText('제목')).toHaveValue(task.title);
   expect(detail).toHaveBeenCalledOnce();
   await view.rerender({ ...props, openTaskId: undefined });
-  await waitFor(() => expect(screen.queryByLabelText('제목')).toBeNull());
+  await waitFor(() => {
+    expect(screen.queryByLabelText('제목')).toBeNull();
+  });
   await view.rerender({ ...props, openTaskId: task.id });
   expect(await screen.findByLabelText('제목')).toHaveValue('재열기 최신 업무');
   expect(detail).toHaveBeenCalledTimes(2);
