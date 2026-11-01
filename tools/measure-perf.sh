@@ -94,8 +94,10 @@ sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
 # Complete every build before opening the measurement window (#291).
 wait_for_measurement
 cargo build --release --locked -p fvoci-server > "$out/build-server.log" 2>&1
+wait_for_measurement
 cargo test --release --locked -p fvoci-server --test it --test screen_measure --no-run > "$out/build-tests.log" 2>&1
 if [[ "$mode" == screens ]]; then
+  wait_for_measurement
   web_inputs_before=$(check_web_inputs)
   pnpm --filter @fvoci/web run build > "$out/web-build.log" 2>&1
   check_web_inputs "$web_inputs_before"
