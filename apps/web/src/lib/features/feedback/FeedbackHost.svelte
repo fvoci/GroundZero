@@ -55,11 +55,21 @@
     typeof document !== 'undefined' && document.visibilityState === 'hidden',
   );
   watchDoneTimeouts(() => toastHovered || toastFocused || documentHidden);
-  // 마지막 토스트가 닫히면 토스트 영역이 사라져 mouseleave·focusout이 오지 않을 수 있다. 영역이 비면 머무름을 푼다.
+  // 마지막 토스트가 닫히면 토스트 영역이 사라져 mouseleave·focusout이 오지 않을 수 있다. 퇴장 애니메이션(200ms) 뒤에도
+  // 토스트가 없으면 남은 영역의 실제 상태로 머무름을 다시 정한다. 그사이 새 토스트가 오면(같은 key는 기존 요소를 되살려
+  // focusin이 다시 오지 않는다) 이 확인을 취소해 머무름을 그대로 둔다.
+  // 목록 자체가 바뀔 때(퇴장한 토스트를 지울 때 등)마다 다시 세지 않도록 개수만 본다.
+  const activeToasts = $derived(toast.getActiveToasts().length);
   $effect(() => {
-    if (toast.getActiveToasts().length > 0) return;
-    toastHovered = false;
-    toastFocused = false;
+    if (activeToasts > 0) return;
+    const recheck = setTimeout(() => {
+      const region = document.querySelector('[data-sonner-toaster]');
+      toastHovered = region?.matches(':hover') ?? false;
+      toastFocused = region?.contains(document.activeElement) ?? false;
+    }, 250);
+    return () => {
+      clearTimeout(recheck);
+    };
   });
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.

@@ -104,7 +104,8 @@ describe('user feedback (D-82)', () => {
     flushSync(() => {
       dismissDone('timed-action');
     });
-    await advance(200);
+    // 퇴장 애니메이션(200ms) 뒤 영역이 사라지고, 다시 확인(250ms)이 머무름을 푼다.
+    await advance(300);
     expect(item).not.toBeInTheDocument();
     flushSync(() => {
       notifyDone('또 옮겼습니다.', 'next-action', {
@@ -119,6 +120,36 @@ describe('user feedback (D-82)', () => {
     expect(next).toHaveAttribute('data-removed', 'false');
     await advance(1);
     expect(next).toHaveAttribute('data-removed', 'true');
+  });
+
+  it('keeps the pause while a same-key action revives the toast during its exit', async () => {
+    const { action, region } = showAction();
+    action.focus();
+    flushSync();
+    // 닫힌 직후 퇴장 애니메이션 안에 같은 key의 새 동작이 오면 같은 요소가 되살아나 초점이 그대로다(focusin 없음).
+    flushSync(() => {
+      dismissDone('timed-action');
+    });
+    await advance(100);
+    flushSync(() => {
+      notifyDone('옮겼습니다.', 'timed-action', { action: { label: '되돌리기', onClick: vi.fn() } });
+    });
+    const revived = screen.getByRole('button', { name: '되돌리기' }).closest('[data-sonner-toast]');
+    if (!(revived instanceof HTMLElement)) throw new Error('toast');
+    expect(region.contains(document.activeElement)).toBe(true);
+    await advance(20_000);
+    expect(revived).toHaveAttribute('data-removed', 'false');
+  });
+
+  it('measures the remaining time with a monotonic clock', async () => {
+    const { item, region } = showAction();
+    await advance(4_000);
+    // 벽시계가 크게 바뀌어도(시간대·NTP 조정) 남은 시간은 실제 흐른 시간으로만 줄어든다.
+    vi.setSystemTime(new Date('2026-11-01T01:00:00Z'));
+    await fireEvent.mouseEnter(region, { clientX: 20, clientY: 20 });
+    await advance(1_000);
+    await fireEvent.mouseLeave(region, { clientX: 100, clientY: 100 });
+    await expectRemainingSixSeconds(item);
   });
 
   it.each(['button', 'Alt+T'])(
