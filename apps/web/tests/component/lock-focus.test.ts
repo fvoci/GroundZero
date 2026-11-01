@@ -257,6 +257,45 @@ describe('keepFocusAcrossLocks', () => {
     );
   });
 
+  describe.each(['touch', 'pen'])('%s gestures interrupted outside the document', (pointerType) => {
+    const start = { pointerId: 1, pointerType, clientX: 100, clientY: 100 };
+
+    it.each(['blur', 'hidden', 'pagehide'])(
+      'returns focus on a later keyboard save after %s without a pointer end event',
+      async (boundary) => {
+        const { fieldset, input } = form();
+        input.focus();
+        await fireEvent.pointerDown(document.body, start);
+        if (boundary === 'hidden') {
+          const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+          await fireEvent(document, new Event('visibilitychange'));
+          visibility.mockReturnValue('visible');
+          await fireEvent(document, new Event('visibilitychange'));
+        } else {
+          await fireEvent(window, new Event(boundary));
+        }
+        // up·cancel이 이 문서에 오지 않은 뒤, 키보드로 저장해도 이전 접촉이 복귀를 막지 않는다(SR-290-2 / D-66).
+        await lock(fieldset, input);
+        fieldset.disabled = false;
+        await settle();
+        expect(document.activeElement).toBe(input);
+      },
+    );
+
+    it('keeps an active tap on a visibilitychange that leaves the document visible', async () => {
+      const { fieldset, input } = form();
+      input.focus();
+      await fireEvent.pointerDown(document.body, start);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+      await fireEvent(document, new Event('visibilitychange'));
+      await lock(fieldset, input);
+      await fireEvent.pointerUp(document.body, start);
+      fieldset.disabled = false;
+      await settle();
+      expect(document.activeElement).toBe(document.body);
+    });
+  });
+
   // R5 B 최종 C-2(b): bits-ui의 닫힌 Select·Popover·Tooltip 트리거도 `data-state="closed"`다. 닫히는 대화상자가 아니므로
   // 저장 중 잠긴 Select 트리거에는 초점이 돌아와야 한다.
   it('returns focus to a closed Select trigger', async () => {

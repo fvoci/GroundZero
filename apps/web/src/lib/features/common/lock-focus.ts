@@ -34,6 +34,15 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   let lost: HTMLElement | undefined;
   // 잠금 전에 시작한 접촉도 잠금 중 탭으로 끝날 수 있다. 초점 기억과 독립적으로 up·cancel·이동 초과까지 추적한다.
   const pendingTaps = new Map<number, { x: number; y: number }>();
+  const view = doc.defaultView;
+
+  // 문서 밖에서 손을 떼면 up·cancel을 놓칠 수 있다. 창·페이지를 떠날 때 이전 접촉을 버려 이후 저장의 복귀를 막지 않는다.
+  const clearPendingTaps = (): void => {
+    pendingTaps.clear();
+  };
+  const onVisibilityChange = (): void => {
+    if (doc.visibilityState === 'hidden') clearPendingTaps();
+  };
 
   const forgetLost = (): void => {
     lost = undefined;
@@ -127,6 +136,9 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   doc.addEventListener('pointermove', onPointerMove, true);
   doc.addEventListener('pointerup', onPointerUp, true);
   doc.addEventListener('pointercancel', onPointerCancel, true);
+  doc.addEventListener('visibilitychange', onVisibilityChange);
+  view?.addEventListener('blur', clearPendingTaps);
+  view?.addEventListener('pagehide', clearPendingTaps);
   observer.observe(doc.documentElement, {
     attributes: true,
     attributeFilter: ['disabled'],
@@ -139,7 +151,10 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     doc.removeEventListener('pointermove', onPointerMove, true);
     doc.removeEventListener('pointerup', onPointerUp, true);
     doc.removeEventListener('pointercancel', onPointerCancel, true);
+    doc.removeEventListener('visibilitychange', onVisibilityChange);
+    view?.removeEventListener('blur', clearPendingTaps);
+    view?.removeEventListener('pagehide', clearPendingTaps);
     observer.disconnect();
-    pendingTaps.clear();
+    clearPendingTaps();
   };
 }
