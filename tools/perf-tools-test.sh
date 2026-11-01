@@ -42,6 +42,7 @@ cleanup_dead_monitor() {
   cleanup_source=$(awk '/^cleanup\(\) \{$/ {copy=1} copy {print} copy && /^}$/ {exit}' tools/measure-perf.sh)
   test -n "$cleanup_source"
   server_pid=
+  owns_measure_lock=false
   sleep 0 &
   monitor_pid=$!
   wait "$monitor_pid"
@@ -428,4 +429,5 @@ check sharing-invalid-lock sharing_lifecycle invalid-lock
 check sharing-lock-creation-error sharing_lifecycle lock-error
 check sharing-missing-owned-lock sharing_lifecycle missing-owned-lock
 check sharing-rejects-lock-injection-mismatch sharing_lifecycle injection-mismatch
+check measurement-window bash tools/perf-window-test.sh
 test "$failures" -eq 0

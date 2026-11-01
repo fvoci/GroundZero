@@ -77,7 +77,7 @@ SELECT d.id,
        CASE WHEN app_access('document', d.parent_id) <> 'none' THEN d.parent_id END AS parent_id
 FROM documents d WHERE d.item_id=:'item'::uuid
 ORDER BY d.position, d.number NULLS LAST, d.created_at, d.id;
-\echo document list candidate C2: C1 + reuse RLS-visible parents
+\echo current product document list: C2, reuse RLS-visible parents (items.rs ITEM_DOCUMENTS_SQL)
 EXPLAIN (ANALYZE, BUFFERS)
 WITH visible AS MATERIALIZED (
     SELECT id, title, revision, updated_at, parent_id, number, position, created_at
@@ -90,4 +90,31 @@ SELECT d.id,
        d.title, d.revision, d.updated_at, p.id AS parent_id
 FROM visible d LEFT JOIN visible p ON p.id=d.parent_id
 ORDER BY d.position, d.number NULLS LAST, d.created_at, d.id;
+ROLLBACK;
+\echo timezone validation and current task resource reads (tasks/resource.rs TASK_SELECT)
+BEGIN;
+SET LOCAL ROLE fvoci_app;
+SET LOCAL search_path = fvoci, pg_temp;
+SELECT set_config('app.user_id', :'actor', true);
+EXPLAIN (ANALYZE, BUFFERS) SELECT fvoci.app_check_timezone(:'home_tz');
+\echo task list item visibility gate
+EXPLAIN (ANALYZE, BUFFERS) SELECT app_access('item', :'item'::uuid) <> 'none';
+\echo task list, same columns and ordering as load_tasks
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT t.id, t.item_id, i.module_id, t.workspace_id, t.parent_id,
+       app_task_reference(t.id) AS reference, t.title, t.description, s.name AS status,
+       s.category AS status_category, t.priority, t.start_date, t.due_date, t.estimate_minutes,
+       t.tags, t.milestone, t.series_id, t.occurrence_date, t.version, t.move_version,
+       t.completed_at, t.updated_at
+FROM tasks t JOIN items i ON i.id = t.item_id JOIN task_statuses s ON s.id = t.status_id
+WHERE t.item_id = :'item'::uuid ORDER BY s.position, t.position, t.number;
+\echo task detail, same columns as load_task
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT t.id, t.item_id, i.module_id, t.workspace_id, t.parent_id,
+       app_task_reference(t.id) AS reference, t.title, t.description, s.name AS status,
+       s.category AS status_category, t.priority, t.start_date, t.due_date, t.estimate_minutes,
+       t.tags, t.milestone, t.series_id, t.occurrence_date, t.version, t.move_version,
+       t.completed_at, t.updated_at
+FROM tasks t JOIN items i ON i.id = t.item_id JOIN task_statuses s ON s.id = t.status_id
+WHERE t.id = :'task'::uuid;
 ROLLBACK;
