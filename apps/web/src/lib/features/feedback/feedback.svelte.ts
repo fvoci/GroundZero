@@ -3,8 +3,8 @@
 // 보인다).
 // 문구는 부르는 쪽이 i18n 메시지로 넘긴다(D-81).
 import { toast } from 'svelte-sonner';
-import { flushSync } from 'svelte';
-import { SvelteSet } from 'svelte/reactivity';
+import { flushSync, untrack } from 'svelte';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 /** 완료 토스트의 동작 단추 하나(복제한 새 항목 열기 등). */
 export interface DoneAction {
@@ -13,13 +13,61 @@ export interface DoneAction {
 }
 
 // 동작 단추를 붙여 띄운 완료 토스트의 key. 토스트 라이브러리는 같은 id를 고칠 때 앞 값에 덮어 합치므로, 단추 없는 완료로
-// 고치면 앞 단추와 "닫을 때까지 둔다"가 남는다. 그때는 앞 토스트를 내리고 새로 띄운다.
+// 고치면 앞 단추와 라이브러리 타이머 비활성화가 남는다. 그때는 앞 토스트를 내리고 새로 띄운다.
 const actionKeys = new SvelteSet<string>();
+const ACTION_DONE_DURATION_MS = 10_000;
+
+/**
+ * FeedbackHost 수명 동안 동작 단추 토스트의 남은 시간을 센다(D-82).
+ * svelte-sonner 1.2.1은 일반 초점을 멈춤 조건에 넣지 않고 Alt+T 뒤 초점 이탈로 expanded를 풀지도 않는다.
+ * 따라서 이 토스트만 라이브러리 타이머를 끄고, 마우스·초점·창 숨김을 한 타이머에서 처리한다.
+ */
+export function watchDoneTimeouts(isPaused: () => boolean): void {
+  const timers = new SvelteMap<
+    string | number,
+    { toast: object; remaining: number; started?: number; timeout?: ReturnType<typeof setTimeout> }
+  >();
+  $effect(() => {
+    const active = toast
+      .getActiveToasts()
+      .filter((item) => typeof item.id === 'string' && actionKeys.has(item.id));
+    const paused = isPaused();
+    untrack(() => {
+      for (const id of timers.keys()) {
+        if (active.some((item) => item.id === id)) continue;
+        // 저절로·닫기 단추·동작 실행으로 내려간 토스트의 key도 버린다(긴 세션에서 쌓이지 않게).
+        timers.delete(id);
+        if (typeof id === 'string') actionKeys.delete(id);
+      }
+      for (const item of active) {
+        let timer = timers.get(item.id);
+        // 같은 key의 새 완료는 새 동작이므로 10초를 다시 준다.
+        if (timer?.toast !== item) {
+          timer = { toast: item, remaining: ACTION_DONE_DURATION_MS };
+          timers.set(item.id, timer);
+        }
+        if (!paused) {
+          // 벽시계 조정에 흔들리지 않도록 단조 시계로 잰다.
+          timer.started = performance.now();
+          timer.timeout = setTimeout(() => toast.dismiss(item.id), timer.remaining);
+        }
+      }
+    });
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer.timeout);
+        if (timer.started !== undefined) {
+          timer.remaining -= performance.now() - timer.started;
+          delete timer.started;
+        }
+      }
+    };
+  });
+}
 
 /**
  * 완료 알림. 같은 `key`(없으면 문구)는 쌓지 않고 하나를 새로 고친다. 화면 낭독기는 토스트 영역(aria-live)으로 읽는다.
- * `action`이 있으면 그 단추를 붙이고, 사용자가 닿을 수 있게 닫을 때까지 둔다(D-82: 닫기 단추와 Alt+T로 키보드로 닿고
- * 닫는다).
+ * `action`이 있으면 10초 뒤 닫되 마우스·키보드 초점·창 숨김 동안 남은 시간을 멈춘다(D-82).
  */
 export function notifyDone(
   message: string,
