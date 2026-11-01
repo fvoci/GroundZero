@@ -10,6 +10,15 @@ use super::target::Target;
 
 static MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!("../crates/db/migrations");
 
+pub(super) fn source_fingerprint() -> String {
+    super::fingerprint(&json!(
+        MIGRATIONS
+            .iter()
+            .map(|m| (m.version, m.checksum.as_ref()))
+            .collect::<Vec<_>>()
+    ))
+}
+
 pub(super) async fn checksums(conn: &mut PgConnection) -> Result<()> {
     let rows: Vec<(i64, bool, Vec<u8>)> = sqlx::query_as(
         "SELECT version, success, checksum FROM fvoci._sqlx_migrations ORDER BY version",
@@ -198,8 +207,9 @@ async fn check_deleted_and_history_denied(conn: &mut PgConnection, doc_a: Uuid) 
     Ok(())
 }
 
-pub(super) async fn run(target: &Target) -> Result<Value> {
+pub(super) async fn run(target: &Target, proof: &super::receipt::Proof) -> Result<Value> {
     let mut migrator = PgConnection::connect_with(&target.migrator).await?;
+    super::receipt::check(&mut migrator, proof).await?;
     checksums(&mut migrator).await?;
     data_api_privileges(&mut migrator).await?;
     migrator.close().await?;
@@ -218,6 +228,7 @@ pub(super) async fn run(target: &Target) -> Result<Value> {
     Ok(
         json!({"phase": "verify", "status": "PASS", "checksums": "10/10", "app_login": "PASS",
         "crud": "PASS", "rls": "PASS", "denied": "PASS", "context_reuse": "PASS",
-        "data_api_roles": "PASS", "synthetic_cleanup": "ROLLBACK"}),
+        "data_api_roles": "PASS", "synthetic_cleanup": "ROLLBACK", "rebuild_proof":"PASS",
+        "source_sha":proof.source_sha,"approved_fingerprint":proof.fingerprint}),
     )
 }

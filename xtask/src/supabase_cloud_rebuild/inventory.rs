@@ -4,7 +4,10 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 
-use super::{approve, catalog, fingerprint};
+use super::{
+    allowed::{self, Binding},
+    approve, catalog, fingerprint,
+};
 
 // Same cooperative lock as crates/db/src/admin.rs::MIGRATOR_LOCK. Cloud targets only postgres.
 const MIGRATOR_LOCK: i64 = 0x6676_6f63_696d_6967;
@@ -16,10 +19,16 @@ pub(super) struct Inventory {
     // All identifiers are quoted by PostgreSQL format(%I). Never print SQL or errors.
     drops: Vec<(String, String)>,
     roles: Vec<String>,
+    role_digest: String,
+}
+
+pub(super) struct RolePlan {
+    roles: Vec<String>,
+    digest: String,
 }
 
 impl Inventory {
-    pub async fn read(conn: &mut PgConnection, binding: &str) -> Result<Self> {
+    pub async fn read(conn: &mut PgConnection, binding: &Binding) -> Result<Self> {
         let mut tx = conn
             .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .await?;
@@ -28,9 +37,15 @@ impl Inventory {
         result
     }
 
-    async fn snapshot(conn: &mut PgConnection, binding: &str) -> Result<Self> {
+    async fn snapshot(conn: &mut PgConnection, binding: &Binding) -> Result<Self> {
+        sqlx::query("SET LOCAL search_path=pg_catalog")
+            .execute(&mut *conn)
+            .await?;
         let mut raw = catalog::snapshot(conn).await?;
-        let blockers = catalog::blockers(conn, &raw).await?;
+        let mut blockers = catalog::blockers(conn, &raw).await?;
+        let objects = allowed::objects(conn).await?;
+        let unexpected: Vec<_> = objects.difference(&binding.allowed).collect();
+        blockers["unlisted_objects"] = json!(unexpected.len());
         let blocked = blockers
             .as_object()
             .context("invalid_blockers")?
@@ -40,10 +55,18 @@ impl Inventory {
         let roles: Vec<String> = sqlx::query_scalar("SELECT rolname::text FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator') ORDER BY rolname")
             .fetch_all(&mut *conn).await?;
         raw["format"] = json!(1);
-        raw["binding"] = json!(binding);
+        let authority = raw
+            .as_object_mut()
+            .context("invalid_catalog")?
+            .remove("authority")
+            .context("missing_authority")?;
+        raw["binding"] = json!(binding.target);
+        raw["server_version"] = authority["version"].clone();
+        raw["allowlist"] = json!(binding.digest());
         raw["blockers"] = blockers;
         raw["drops"] = json!(drops);
         let digest = fingerprint(&raw);
+        let role_digest = fingerprint(&raw["role_state"]);
         let candidates: Vec<Value> = drops
             .iter()
             .map(|(owner, sql)| {
@@ -61,12 +84,15 @@ impl Inventory {
                 "inside_product_schema": r["schema"] == "fvoci", "included": !blocked})
             })
             .collect();
-        let authority = &raw["authority"];
+        let named: Vec<_> = objects.iter().map(|o| {
+            let (kind, name) = o.split_once(' ').unwrap_or(("unsupported", o));
+            json!({"kind":kind,"name":name,"allowed":binding.allowed.contains(o),"included":!blocked})
+        }).collect();
         let report = json!({"format": 1, "phase": "inspect", "status": "PASS", "fingerprint": digest,
             "postgres_version": authority["version"], "authority": {
                 "create": authority["create"], "connect": authority["connect"], "grant_connect": authority["grant_connect"], "set_role": authority["set_role"],
                 "createrole": authority["createrole"], "manageable": authority["manageable"]},
-            "blockers": raw["blockers"], "can_rebuild": !blocked, "candidates": candidates,
+            "blockers": raw["blockers"], "can_rebuild": !blocked, "write_authority":"CHECKED_AT_REBUILD", "candidates": candidates, "schema_objects": named,
             "role_candidates": roles.iter().map(|r| json!({"object": fingerprint(&json!(r)), "included": !blocked})).collect::<Vec<_>>(),
             "roles": redacted_roles(&raw), "memberships": redacted_memberships(&raw),
             "current_user": fingerprint(&authority["user"]),
@@ -77,25 +103,83 @@ impl Inventory {
             blocked,
             drops,
             roles,
+            role_digest,
         })
     }
 
     pub async fn delete(
         &self,
         conn: &mut PgConnection,
-        binding: &str,
+        binding: &Binding,
         approved: &str,
     ) -> Result<()> {
+        let plan = self.delete_schema(conn, binding, approved).await?;
+        plan.delete(conn).await
+    }
+
+    pub async fn delete_schema(
+        &self,
+        conn: &mut PgConnection,
+        binding: &Binding,
+        approved: &str,
+    ) -> Result<RolePlan> {
+        self.delete_schema_after_locks(conn, binding, approved, std::future::ready(Ok(())))
+            .await
+    }
+
+    pub async fn delete_schema_after_locks(
+        &self,
+        conn: &mut PgConnection,
+        binding: &Binding,
+        approved: &str,
+        after_locks: impl Future<Output = Result<()>>,
+    ) -> Result<RolePlan> {
         approve(&self.digest, approved, self.blocked)?;
+        catalog::write_authority(conn).await?;
         let mut tx = conn.begin().await?;
         sqlx::query("SELECT pg_advisory_xact_lock($1)")
             .bind(MIGRATOR_LOCK)
             .execute(&mut *tx)
             .await?;
         lock_relations(&mut tx).await?;
+        after_locks.await?;
         let current = Self::snapshot(&mut tx, binding).await?;
-        approve(&current.digest, approved, current.blocked)?;
+        if let Err(error) = approve(&current.digest, approved, current.blocked) {
+            tx.rollback().await?;
+            return Err(error);
+        }
         delete_objects(&mut tx, current.drops).await?;
+        tx.commit().await?;
+        Ok(RolePlan {
+            roles: self.roles.clone(),
+            digest: self.role_digest.clone(),
+        })
+    }
+}
+
+impl RolePlan {
+    pub async fn delete(&self, conn: &mut PgConnection) -> Result<()> {
+        let mut tx = conn.begin().await?;
+        sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(MIGRATOR_LOCK)
+            .execute(&mut *tx)
+            .await?;
+        let before = catalog::role_state(&mut tx).await?;
+        if fingerprint(&before) != self.digest {
+            tx.rollback().await?;
+            anyhow::bail!("role_fingerprint_mismatch");
+        }
+        let owned: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_shdepend WHERE deptype='o'
+            AND refclassid='pg_authid'::regclass AND refobjid IN
+            (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))",
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if owned != 0 {
+            tx.rollback().await?;
+            anyhow::bail!("role_still_owns_objects");
+        }
         for role in &self.roles {
             let revoke: String = sqlx::query_scalar("SELECT format('REVOKE ALL ON DATABASE %I FROM %I RESTRICT', current_database(), $1::text)")
                 .bind(role).fetch_one(&mut *tx).await?;

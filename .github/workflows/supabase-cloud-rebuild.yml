@@ -13,7 +13,11 @@ on:
           - rebuild
           - verify
       approved_fingerprint:
-        description: Exact fingerprint from inspect at this SHA (required for rebuild)
+        description: Exact fingerprint from inspect at this SHA (required for rebuild and verify)
+        required: false
+        type: string
+      safety_confirmation:
+        description: Dedicated test project, no other apps/writers/work; approved SHA and fingerprint match. Copy confirmation from docs.
         required: false
         type: string
 
@@ -25,12 +29,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  database:
+  inspect:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
-          github.repository == 'fvoci/GroundZero' && github.ref == 'refs/heads/main' }}
+          github.repository == 'fvoci/GroundZero' && github.ref == 'refs/heads/main' && inputs.phase == 'inspect' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Build reviewed inspector before injecting read-only credentials
+        timeout-minutes: 15
+        env:
+          FVOCI_CLOUD_BUILD_SHA: ${{ github.sha }}
+        run: cargo build --locked --package xtask
+      - name: Inspect with the catalog reader
+        timeout-minutes: 4
+        env:
+          SUPABASE_REBUILD_HOST: ${{ secrets.SUPABASE_REBUILD_HOST }}
+          SUPABASE_REBUILD_SSL_ROOT_CERT: ${{ secrets.SUPABASE_REBUILD_SSL_ROOT_CERT }}
+          SUPABASE_INSPECT_USER: ${{ secrets.SUPABASE_INSPECT_USER }}
+          SUPABASE_INSPECT_PASSWORD: ${{ secrets.SUPABASE_INSPECT_PASSWORD }}
+        run: target/debug/xtask supabase-cloud-rebuild inspect --connect
+
+  write:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+          github.repository == 'fvoci/GroundZero' && github.ref == 'refs/heads/main' &&
+          (inputs.phase == 'rebuild' || inputs.phase == 'verify') }}
     # The owner must configure required reviewers and main-only deployment before dispatch.
-    # Verify also makes synthetic writes (rolled back), so every phase uses this Environment.
+    # Verify also makes synthetic writes (rolled back).
     environment: supabase-cloud-rebuild
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -50,10 +81,11 @@ jobs:
         env:
           SUPABASE_REBUILD_PHASE: ${{ inputs.phase }}
           SUPABASE_REBUILD_APPROVED_FINGERPRINT: ${{ inputs.approved_fingerprint }}
+          SUPABASE_REBUILD_SAFETY_CONFIRMATION: ${{ inputs.safety_confirmation }}
           SUPABASE_REBUILD_HOST: ${{ secrets.SUPABASE_REBUILD_HOST }}
-          SUPABASE_REBUILD_ADMIN_USER: ${{ inputs.phase != 'verify' && secrets.SUPABASE_REBUILD_ADMIN_USER || '' }}
-          SUPABASE_REBUILD_ADMIN_PASSWORD: ${{ inputs.phase != 'verify' && secrets.SUPABASE_REBUILD_ADMIN_PASSWORD || '' }}
+          SUPABASE_REBUILD_ADMIN_USER: ${{ inputs.phase == 'rebuild' && secrets.SUPABASE_REBUILD_ADMIN_USER || '' }}
+          SUPABASE_REBUILD_ADMIN_PASSWORD: ${{ inputs.phase == 'rebuild' && secrets.SUPABASE_REBUILD_ADMIN_PASSWORD || '' }}
           SUPABASE_REBUILD_SSL_ROOT_CERT: ${{ secrets.SUPABASE_REBUILD_SSL_ROOT_CERT }}
-          SUPABASE_REBUILD_MIGRATOR_PASSWORD: ${{ inputs.phase != 'inspect' && secrets.SUPABASE_REBUILD_MIGRATOR_PASSWORD || '' }}
-          SUPABASE_REBUILD_APP_PASSWORD: ${{ inputs.phase != 'inspect' && secrets.SUPABASE_REBUILD_APP_PASSWORD || '' }}
+          SUPABASE_REBUILD_MIGRATOR_PASSWORD: ${{ secrets.SUPABASE_REBUILD_MIGRATOR_PASSWORD }}
+          SUPABASE_REBUILD_APP_PASSWORD: ${{ secrets.SUPABASE_REBUILD_APP_PASSWORD }}
         run: target/debug/xtask supabase-cloud-rebuild "$SUPABASE_REBUILD_PHASE" --connect

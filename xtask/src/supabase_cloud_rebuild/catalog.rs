@@ -1,6 +1,6 @@
 //! Only catalog data is read here. The raw snapshot never leaves the process.
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 use sqlx::PgConnection;
 
@@ -10,6 +10,11 @@ pub(super) const SCOPE: &str = "WITH RECURSIVE scope(classid, objid) AS (
     SELECT d.classid, d.objid FROM pg_depend d JOIN scope s
       ON (d.refclassid, d.refobjid) = (s.classid, s.objid)
     WHERE d.deptype IN ('a', 'i') OR s.classid = 'pg_namespace'::regclass
+), principals AS (
+    SELECT r.oid FROM pg_roles r WHERE r.rolname IN ('fvoci_app','fvoci_migrator') OR (
+      (r.rolsuper OR r.rolcreaterole) AND NOT EXISTS (SELECT FROM pg_roles p
+        WHERE p.rolname IN ('fvoci_app','fvoci_migrator') AND NOT (r.rolsuper OR (
+          pg_has_role(r.oid,p.oid,'MEMBER WITH ADMIN OPTION') AND pg_has_role(r.oid,p.oid,'SET')))))
 ) ";
 
 pub(super) async fn scalar(conn: &mut PgConnection, query: &str) -> Result<Value> {
@@ -29,6 +34,57 @@ async fn authority(conn: &mut PgConnection) -> Result<Value> {
             OR pg_has_role(current_user, oid, 'MEMBER WITH ADMIN OPTION'))),
         'set_role', NOT EXISTS (SELECT FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator')
           AND NOT pg_has_role(current_user, oid, 'SET')))").await
+}
+
+pub(super) async fn write_authority(conn: &mut PgConnection) -> Result<()> {
+    let a = authority(conn).await?;
+    ensure!(
+        [
+            "create",
+            "connect",
+            "grant_connect",
+            "createrole",
+            "manageable",
+            "set_role"
+        ]
+        .iter()
+        .all(|k| a[k] == true),
+        "authority_missing"
+    );
+    Ok(())
+}
+
+pub(super) async fn inspect_authority(conn: &mut PgConnection) -> Result<()> {
+    let minimal: bool = sqlx::query_scalar("SELECT NOT (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication)
+        AND rolcanlogin AND NOT has_database_privilege(current_user,current_database(),'CREATE')
+        AND NOT EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles me ON me.oid=m.member WHERE me.rolname=current_user)
+        AND NOT EXISTS (SELECT FROM pg_roles p WHERE p.rolname IN ('fvoci_app','fvoci_migrator')
+          AND (pg_has_role(current_user,p.oid,'MEMBER') OR pg_has_role(current_user,p.oid,'SET')))
+        AND NOT EXISTS (SELECT FROM pg_namespace n WHERE n.nspname='fvoci'
+          AND (has_schema_privilege(current_user,n.oid,'USAGE') OR has_schema_privilege(current_user,n.oid,'CREATE')))
+        FROM pg_roles WHERE rolname=current_user").fetch_one(conn).await?;
+    ensure!(minimal, "inspection_requires_minimal_catalog_reader");
+    Ok(())
+}
+
+pub(super) async fn role_state(conn: &mut PgConnection) -> Result<Value> {
+    scalar(conn, &format!("{SCOPE} SELECT jsonb_build_object(
+        'attributes',(SELECT coalesce(jsonb_agg(to_jsonb(r)-'rolpassword' ORDER BY oid),'[]') FROM pg_roles r WHERE rolname IN ('fvoci_app','fvoci_migrator')),
+        'memberships',(SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY roleid,member,grantor),'[]') FROM pg_auth_members m
+          WHERE roleid IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))
+          OR member IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))
+          OR grantor IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))),
+        'comments',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY objoid),'[]') FROM pg_shdescription c WHERE classoid='pg_authid'::regclass
+          AND objoid IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))),
+        'labels',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY to_jsonb(c)::text),'[]') FROM pg_shseclabel c WHERE classoid='pg_authid'::regclass
+          AND objoid IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))),
+        'settings',(SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY setdatabase,setrole),'[]') FROM pg_db_role_setting c
+          WHERE setrole IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))),
+        'database_acl',(SELECT jsonb_build_object('owner',datdba,'acl',datacl) FROM pg_database WHERE datname=current_database()),
+        'external_dependencies',(SELECT coalesce(jsonb_agg(to_jsonb(d) ORDER BY to_jsonb(d)::text),'[]') FROM pg_shdepend d
+          WHERE refclassid='pg_authid'::regclass AND refobjid IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))
+          AND NOT (d.dbid=(SELECT oid FROM pg_database WHERE datname=current_database())
+            AND EXISTS (SELECT FROM scope s WHERE (s.classid,s.objid)=(d.classid,d.objid)))))")).await
 }
 
 // Omit only planner statistics and freeze horizons. Derive lazy existence flags from
@@ -78,6 +134,47 @@ async fn objects(conn: &mut PgConnection) -> Result<Value> {
         .await?;
         objects.insert(catalog.to_owned(), rows);
     }
+    // These definitions are attached to scoped objects rather than namespace members.
+    for (catalog, predicate) in [
+        (
+            "pg_enum",
+            "s.classid='pg_type'::regclass AND s.objid=c.enumtypid",
+        ),
+        (
+            "pg_range",
+            "s.classid='pg_type'::regclass AND s.objid=c.rngtypid",
+        ),
+        (
+            "pg_index",
+            "s.classid='pg_class'::regclass AND s.objid=c.indexrelid",
+        ),
+        (
+            "pg_sequence",
+            "s.classid='pg_class'::regclass AND s.objid=c.seqrelid",
+        ),
+        (
+            "pg_inherits",
+            "s.classid='pg_class'::regclass AND s.objid IN (c.inhrelid,c.inhparent)",
+        ),
+        (
+            "pg_description",
+            "s.classid=c.classoid AND s.objid=c.objoid",
+        ),
+        ("pg_seclabel", "s.classid=c.classoid AND s.objid=c.objoid"),
+    ] {
+        objects.insert(
+            catalog.to_owned(),
+            scalar(
+                conn,
+                &format!(
+                    "{SCOPE}
+            SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY to_jsonb(c)::text),'[]')
+            FROM {catalog} c WHERE EXISTS (SELECT FROM scope s WHERE {predicate})"
+                ),
+            )
+            .await?,
+        );
+    }
     Ok(Value::Object(objects))
 }
 
@@ -85,11 +182,16 @@ pub(super) async fn snapshot(conn: &mut PgConnection) -> Result<Value> {
     let authority = authority(conn).await?;
     let roles = scalar(
         conn,
-        "SELECT coalesce(jsonb_agg(jsonb_build_object(
+        &format!("{SCOPE} SELECT coalesce(jsonb_agg(jsonb_build_object(
         'oid', oid, 'name', rolname, 'super', rolsuper, 'bypass', rolbypassrls,
         'create_role', rolcreaterole, 'create_db', rolcreatedb, 'login', rolcanlogin,
-        'inherit', rolinherit, 'config', rolconfig) ORDER BY oid), '[]') FROM pg_roles
-        WHERE rolname IN ('fvoci_app','fvoci_migrator') OR rolname = current_user",
+        'inherit', rolinherit, 'config', rolconfig, 'connections',rolconnlimit,
+        'valid_until',rolvaliduntil, 'replication',rolreplication) ORDER BY oid), '[]') FROM pg_roles
+        WHERE rolname IN ('fvoci_app','fvoci_migrator') OR oid IN
+          (SELECT member FROM pg_auth_members WHERE roleid IN
+            (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator')))
+          OR oid IN (SELECT d.refobjid FROM pg_shdepend d JOIN scope s ON (s.classid,s.objid)=(d.classid,d.objid)
+            WHERE d.refclassid='pg_authid'::regclass AND d.dbid=(SELECT oid FROM pg_database WHERE datname=current_database()))"),
     )
     .await?;
     let memberships = scalar(conn, "SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY roleid, member, grantor), '[]')
@@ -106,9 +208,10 @@ pub(super) async fn snapshot(conn: &mut PgConnection) -> Result<Value> {
         'schema', n.nspname, 'owner', c.relowner) ORDER BY c.oid), '[]')
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '_sqlx_migrations'").await?;
     let database = scalar(conn, "SELECT to_jsonb(d) - 'datfrozenxid' - 'datminmxid' FROM pg_database d WHERE datname = current_database()").await?;
+    let role_state = role_state(conn).await?;
     Ok(
         json!({"authority": authority, "roles": roles, "memberships": memberships, "shared": shared,
-        "dependencies": dependencies, "objects": objects(conn).await?, "ledgers": ledgers, "database": database}),
+        "dependencies": dependencies, "objects": objects(conn).await?, "ledgers": ledgers, "database": database,"role_state":role_state}),
     )
 }
 
@@ -129,13 +232,14 @@ const COUNTS: &[(&str, &str)] = &[
           AND d.objid = (SELECT oid FROM pg_database WHERE datname = current_database()) AND d.deptype = 'a')"),
     ("shared_memberships", "SELECT count(*) FROM pg_auth_members m
         WHERE (roleid IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))
-            AND member <> (SELECT oid FROM pg_roles WHERE rolname = current_user))
-        OR member IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))"),
+            AND NOT (m.admin_option AND EXISTS (SELECT FROM pg_roles a WHERE a.oid=m.member AND (a.rolsuper OR a.rolcreaterole))))
+        OR member IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))
+        OR grantor IN (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))"),
     ("foreign_owners", "SELECT count(*) FROM pg_shdepend d JOIN scope s
         ON (s.classid,s.objid) = (d.classid,d.objid)
         WHERE d.dbid = (SELECT oid FROM pg_database WHERE datname=current_database())
         AND d.deptype = 'o' AND d.refobjid NOT IN
-          (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator') OR rolname = current_user)"),
+          (SELECT oid FROM principals)"),
     ("extension_members", "SELECT count(*) FROM pg_depend d
         JOIN scope s ON (s.classid,s.objid) = (d.classid,d.objid) WHERE d.deptype = 'e'"),
     ("outside_automatic_objects", "SELECT count(*) FROM scope s WHERE
@@ -149,7 +253,7 @@ const COUNTS: &[(&str, &str)] = &[
         ON (s.classid,s.objid) = (d.classid,d.objid)
         WHERE d.dbid = (SELECT oid FROM pg_database WHERE datname=current_database()) AND d.deptype IN ('a','r')
         AND d.refclassid = 'pg_authid'::regclass AND d.refobjid NOT IN
-          (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator') OR rolname=current_user)"),
+          (SELECT oid FROM principals)"),
     ("unsupported_objects", "SELECT
         (SELECT count(*) FROM pg_class WHERE relnamespace = to_regnamespace('fvoci') AND relkind NOT IN ('r','p','v','m','S','i','I','t')) +
         (SELECT count(*) FROM pg_proc WHERE pronamespace = to_regnamespace('fvoci') AND prokind NOT IN ('f','p')) +
@@ -182,21 +286,6 @@ pub(super) async fn blockers(conn: &mut PgConnection, raw: &Value) -> Result<Val
             raw["ledgers"]
                 .as_array()
                 .is_none_or(|rows| rows.iter().any(|r| r["schema"] != "fvoci"))
-        ),
-    );
-    blockers.insert(
-        "authority_missing".into(),
-        json!(
-            [
-                "create",
-                "connect",
-                "grant_connect",
-                "createrole",
-                "manageable",
-                "set_role"
-            ]
-            .iter()
-            .any(|k| raw["authority"][k] != true)
         ),
     );
     blockers.insert(

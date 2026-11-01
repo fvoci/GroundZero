@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use serde_json::Value;
 use sqlx::PgConnection;
 
-use super::{Inventory, approve, catalog};
+use super::{Inventory, allowed::Binding, approve, catalog};
 
 async fn sql(conn: &mut PgConnection, statement: &str) -> Result<()> {
     sqlx::raw_sql(statement).execute(conn).await?;
@@ -19,7 +19,7 @@ async fn relation(conn: &mut PgConnection) -> Result<Value> {
     .await?)
 }
 
-async fn maintenance(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn maintenance(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     sql(
         conn,
         "CREATE TABLE fvoci.maintenance_probe(id int);
@@ -68,7 +68,7 @@ async fn maintenance(conn: &mut PgConnection, binding: &str) -> Result<()> {
     Ok(())
 }
 
-async fn columns_present(conn: &mut PgConnection, _binding: &str) -> Result<()> {
+async fn columns_present(conn: &mut PgConnection, _binding: &Binding) -> Result<()> {
     let raw = catalog::snapshot(conn).await?;
     let columns = raw["objects"]["pg_attribute"]
         .as_array()
@@ -81,7 +81,7 @@ async fn columns_present(conn: &mut PgConnection, _binding: &str) -> Result<()> 
     Ok(())
 }
 
-async fn rename(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn rename(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     let before = Inventory::read(conn, binding).await?;
     sql(
         conn,
@@ -102,7 +102,7 @@ async fn rename(conn: &mut PgConnection, binding: &str) -> Result<()> {
     Ok(())
 }
 
-async fn column_type(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn column_type(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     let before = Inventory::read(conn, binding).await?;
     sql(
         conn,
@@ -122,7 +122,7 @@ async fn column_type(conn: &mut PgConnection, binding: &str) -> Result<()> {
     Ok(())
 }
 
-async fn type_modifier(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn type_modifier(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     sql(
         conn,
         "ALTER TABLE fvoci.legacy ALTER COLUMN secret TYPE varchar(80)",
@@ -147,7 +147,7 @@ async fn type_modifier(conn: &mut PgConnection, binding: &str) -> Result<()> {
     Ok(())
 }
 
-pub(super) async fn run(conn: &mut PgConnection, binding: &str) -> Result<()> {
+pub(super) async fn run(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     let results = [
         maintenance(conn, binding).await,
         columns_present(conn, binding).await,
@@ -169,4 +169,65 @@ pub(super) async fn run(conn: &mut PgConnection, binding: &str) -> Result<()> {
         "PASS cloud-rebuild catalog: maintenance preserves approval; index and column presence/name/type/modifier changes are detected"
     );
     Ok(())
+}
+
+pub(super) async fn review_failures(
+    conn: &mut PgConnection,
+    binding: &Binding,
+) -> Result<Vec<String>> {
+    let mut failures = Vec::new();
+    let first = Inventory::read(conn, binding).await?;
+    if !first.report.to_string().contains("fvoci.legacy") {
+        failures.push("inspection hides schema object names".to_owned());
+    }
+    sql(conn, "CREATE TABLE fvoci.other_app_data(id int); ALTER TABLE fvoci.other_app_data OWNER TO fvoci_migrator; INSERT INTO fvoci.other_app_data VALUES(1)").await?;
+    let unlisted = Inventory::read(conn, binding).await?;
+    if !unlisted.blocked {
+        failures.push("unlisted same-schema table is accepted".to_owned());
+    }
+    ensure!(
+        unlisted
+            .delete(conn, binding, &unlisted.digest)
+            .await
+            .is_err(),
+        "unlisted object deletion accepted"
+    );
+    let retained: i64 = sqlx::query_scalar("SELECT count(*) FROM fvoci.other_app_data")
+        .fetch_one(&mut *conn)
+        .await?;
+    ensure!(retained == 1, "unlisted object lost data");
+    sql(conn, "DROP TABLE fvoci.other_app_data RESTRICT").await?;
+    let first = Inventory::read(conn, binding).await?;
+    sql(conn, "ALTER TYPE fvoci.legacy_state ADD VALUE 'unapproved'").await?;
+    if first.digest == Inventory::read(conn, binding).await?.digest {
+        failures.push("enum label change is absent from fingerprint".to_owned());
+    }
+    let first = Inventory::read(conn, binding).await?;
+    sql(
+        conn,
+        "COMMENT ON SCHEMA fvoci IS 'changed legacy definition'",
+    )
+    .await?;
+    if first.digest == Inventory::read(conn, binding).await?.digest {
+        failures.push("schema comment change is absent from fingerprint".to_owned());
+    }
+    for statement in [
+        "COMMENT ON COLUMN fvoci.legacy.secret IS 'reviewed column comment'",
+        "COMMENT ON FUNCTION fvoci.legacy_function() IS 'reviewed routine comment'",
+        "COMMENT ON TYPE fvoci.legacy_state IS 'reviewed type comment'",
+        "ALTER SEQUENCE fvoci.legacy_sequence INCREMENT BY 2",
+        "ALTER ROLE fvoci_app SET statement_timeout='14s'",
+    ] {
+        let before = Inventory::read(conn, binding).await?;
+        sql(conn, statement).await?;
+        ensure!(
+            before.digest != Inventory::read(conn, binding).await?.digest,
+            "associated definition change missing: {statement}"
+        );
+    }
+    sql(conn, "ALTER ROLE fvoci_app RESET statement_timeout").await?;
+    println!(
+        "PASS cloud-rebuild definitions: names exposed, unlisted table blocked, enum/schema/column/routine/type comments/sequence/role settings change approval"
+    );
+    Ok(failures)
 }

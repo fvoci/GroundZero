@@ -1,9 +1,12 @@
-//! 승인 목록 지문을 사용하는 일회성 Cloud 시험 DB 재설치. 원시 오류·식별자는 출력하지 않는다.
+//! 승인 목록 지문을 사용하는 Cloud 시험 DB 재설치. 연결값·사용자명·원시 오류는 출력하지 않는다.
 
+mod allowed;
 mod catalog;
 mod catalog_tests;
 pub mod fixture;
 mod inventory;
+mod race_tests;
+mod receipt;
 mod target;
 mod verify;
 
@@ -41,6 +44,19 @@ fn approve(actual: &str, approved: &str, blocked: bool) -> Result<()> {
         approved.len() == 64 && approved == actual,
         "inventory_mismatch"
     );
+    Ok(())
+}
+
+fn confirm_writes(phase: Phase, confirmation: Option<&str>) -> Result<()> {
+    if matches!(phase, Phase::Rebuild | Phase::Verify) {
+        ensure!(
+            confirmation
+                == Some(
+                    "TEST_ONLY_NO_OTHER_APPS_OR_WRITERS_NO_OTHER_WORK_MATCHED_SHA_AND_FINGERPRINT"
+                ),
+            "execution_checklist_required"
+        );
+    }
     Ok(())
 }
 
@@ -87,24 +103,47 @@ async fn execute(
         Phase::Inspect | Phase::Rebuild => {
             report["stage"] = json!("inventory");
             let mut admin = PgConnection::connect_with(&target.admin).await?;
+            if matches!(phase, Phase::Inspect) {
+                catalog::inspect_authority(&mut admin).await?;
+            }
             let inventory = Inventory::read(&mut admin, &target.binding).await?;
             if matches!(phase, Phase::Inspect) {
                 *report = inventory.report;
             } else {
                 report["stage"] = json!("approval_and_delete");
-                inventory
-                    .delete(&mut admin, &target.binding, approved)
+                let roles = inventory
+                    .delete_schema(&mut admin, &target.binding, approved)
                     .await?;
+                report["schema_deletion"] = json!("COMMITTED");
+                report["deletion"] = json!("PARTIAL");
+                report["roles_deletion"] = json!("NOT DELETED");
+                report["stage"] = json!("roles_recheck_and_delete");
+                roles.delete(&mut admin).await?;
+                report["roles_deletion"] = json!("COMMITTED");
                 report["deletion"] = json!("COMMITTED");
                 admin.close().await?;
                 install(root, target, report).await?;
+                report["stage"] = json!("record_rebuild_proof");
+                receipt::record(
+                    target,
+                    &receipt::Proof {
+                        source_sha: report["source_sha"].as_str().unwrap_or_default().to_owned(),
+                        fingerprint: approved.to_owned(),
+                    },
+                )
+                .await?;
+                report["rebuild_proof"] = json!("RECORDED");
                 return Ok(());
             }
             admin.close().await?;
         }
         Phase::Verify => {
             report["stage"] = json!("verify");
-            *report = verify::run(target).await?;
+            let proof = receipt::Proof {
+                source_sha: report["source_sha"].as_str().unwrap_or_default().to_owned(),
+                fingerprint: approved.to_owned(),
+            };
+            *report = verify::run(target, &proof).await?;
         }
     }
     Ok(())
@@ -124,8 +163,12 @@ fn run_with(
     }
     let result = (|| -> Result<()> {
         let sha = target::actions_guard(&mut lookup)?;
+        confirm_writes(
+            phase,
+            lookup("SUPABASE_REBUILD_SAFETY_CONFIRMATION").as_deref(),
+        )?;
         let approved = lookup("SUPABASE_REBUILD_APPROVED_FINGERPRINT").unwrap_or_default();
-        if matches!(phase, Phase::Rebuild) {
+        if matches!(phase, Phase::Rebuild | Phase::Verify) {
             ensure!(
                 approved.len() == 64 && approved.bytes().all(|b| b.is_ascii_hexdigit()),
                 "approval_required"
@@ -233,6 +276,16 @@ mod tests {
         assert!(approve(&digest, &digest, true).is_err());
         assert!(approve(&digest, &"0".repeat(64), false).is_err());
         assert!(approve(&digest, "", false).is_err());
+    }
+
+    #[test]
+    fn writes_require_the_complete_execution_checklist() {
+        assert!(confirm_writes(Phase::Inspect, None).is_ok());
+        for phase in [Phase::Rebuild, Phase::Verify] {
+            assert!(confirm_writes(phase, None).is_err());
+            assert!(confirm_writes(phase, Some("yes")).is_err());
+            assert!(confirm_writes(phase, Some("TEST_ONLY_NO_OTHER_APPS_OR_WRITERS_NO_OTHER_WORK_MATCHED_SHA_AND_FINGERPRINT")).is_ok());
+        }
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 
-use super::Phase;
+use super::{Phase, allowed::Binding};
 
 pub(super) const AMBIENT_SETTINGS: &[&str] = &[
     "PGHOSTADDR",
@@ -34,7 +34,7 @@ pub(super) struct Target {
     pub admin: PgConnectOptions,
     pub migrator: PgConnectOptions,
     pub app: PgConnectOptions,
-    pub binding: String,
+    pub binding: Binding,
     pub migrator_password: String,
     pub app_password: String,
     pub certificate: Option<Certificate>,
@@ -82,6 +82,17 @@ fn required(lookup: &mut impl FnMut(&str) -> Option<String>, name: &str) -> Resu
         "missing_or_invalid_secret"
     );
     Ok(value)
+}
+
+fn account_names(phase: Phase) -> Option<(&'static str, &'static str)> {
+    match phase {
+        Phase::Inspect => Some(("SUPABASE_INSPECT_USER", "SUPABASE_INSPECT_PASSWORD")),
+        Phase::Rebuild => Some((
+            "SUPABASE_REBUILD_ADMIN_USER",
+            "SUPABASE_REBUILD_ADMIN_PASSWORD",
+        )),
+        Phase::Verify => None,
+    }
 }
 
 pub(super) fn actions_guard(lookup: &mut impl FnMut(&str) -> Option<String>) -> Result<String> {
@@ -152,12 +163,9 @@ impl Target {
                     .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())),
             "direct_cloud_endpoint_required"
         );
-        let (admin_user, password) = match phase {
-            Phase::Verify => ("postgres".to_owned(), String::new()),
-            Phase::Inspect | Phase::Rebuild => (
-                required(lookup, "SUPABASE_REBUILD_ADMIN_USER")?,
-                required(lookup, "SUPABASE_REBUILD_ADMIN_PASSWORD")?,
-            ),
+        let (admin_user, password) = match account_names(phase) {
+            None => ("postgres".to_owned(), String::new()),
+            Some((user, password)) => (required(lookup, user)?, required(lookup, password)?),
         };
         ensure!(
             admin_user.len() <= 63
@@ -209,7 +217,9 @@ impl Target {
                 .username("fvoci_migrator")
                 .password(&migrator_password),
             app: admin.clone().username("fvoci_app").password(&app_password),
-            binding: super::fingerprint(&serde_json::json!([host, admin_user, sha])),
+            binding: Binding::product(super::fingerprint(&serde_json::json!([
+                host, "postgres", sha
+            ])))?,
             admin,
             migrator_password,
             app_password,
@@ -223,6 +233,14 @@ mod tests {
     use super::*;
     use anyhow::Context;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn inspection_never_selects_the_write_admin_credentials() {
+        assert_eq!(
+            account_names(Phase::Inspect),
+            Some(("SUPABASE_INSPECT_USER", "SUPABASE_INSPECT_PASSWORD"))
+        );
+    }
 
     #[test]
     fn runner_certificate_is_private_temporary_and_url_is_parseable() -> Result<()> {
@@ -242,7 +260,7 @@ mod tests {
             admin: options.clone(),
             migrator: options.clone(),
             app: options.clone(),
-            binding: String::new(),
+            binding: Binding::fixture(),
             migrator_password: String::new(),
             app_password: String::new(),
             certificate: Some(cert),

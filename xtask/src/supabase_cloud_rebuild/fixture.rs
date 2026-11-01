@@ -5,12 +5,20 @@ use sqlx::postgres::PgConnectOptions;
 use sqlx::{ConnectOptions, Connection, PgConnection};
 use xshell::cmd;
 
-use super::{Inventory, Target, catalog_tests, install, verify};
+use super::{
+    Inventory, Target,
+    allowed::{self, Binding},
+    catalog, catalog_tests, install, receipt, verify,
+};
 use crate::compose::{self, Compose, DbUrls, Env};
 
 const OLD: &str = "CREATE ROLE fvoci_app LOGIN NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
     CREATE ROLE fvoci_migrator LOGIN NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
     CREATE SCHEMA fvoci AUTHORIZATION fvoci_migrator;
+    CREATE TYPE fvoci.legacy_state AS ENUM ('approved');
+    ALTER TYPE fvoci.legacy_state OWNER TO fvoci_migrator;
+    CREATE FUNCTION fvoci.legacy_function() RETURNS int LANGUAGE sql AS 'SELECT 1';
+    ALTER FUNCTION fvoci.legacy_function() OWNER TO fvoci_migrator;
     CREATE TABLE fvoci.legacy(id int PRIMARY KEY, secret text);
     ALTER TABLE fvoci.legacy OWNER TO fvoci_migrator;
     INSERT INTO fvoci.legacy VALUES(1,'synthetic old row');
@@ -57,7 +65,7 @@ async fn legacy_preserved(conn: &mut PgConnection) -> Result<()> {
     Ok(())
 }
 
-async fn failure_tests(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn failure_tests(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     let first = Inventory::read(conn, binding).await?;
     ensure!(
         !first.blocked,
@@ -74,7 +82,6 @@ async fn failure_tests(conn: &mut PgConnection, binding: &str) -> Result<()> {
     for secret in [
         "fvoci_migrator",
         "fvoci_app",
-        "legacy",
         "other_app",
         "synthetic old row",
     ] {
@@ -140,7 +147,10 @@ async fn failure_tests(conn: &mut PgConnection, binding: &str) -> Result<()> {
     .await?;
     let restricted = Inventory::read(conn, binding).await?;
     ensure!(
-        restricted.blocked && restricted.report["blockers"]["authority_missing"] == true,
+        restricted
+            .delete(conn, binding, &restricted.digest)
+            .await
+            .is_err(),
         "missing authority accepted"
     );
     sql(conn, "RESET ROLE").await?;
@@ -153,7 +163,7 @@ async fn failure_tests(conn: &mut PgConnection, binding: &str) -> Result<()> {
     Ok(())
 }
 
-async fn unsupported_object_test(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn unsupported_object_test(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     sql(
         conn,
         "CREATE COLLATION fvoci.unsupported FROM pg_catalog.\"C\"",
@@ -172,7 +182,7 @@ async fn unsupported_object_test(conn: &mut PgConnection, binding: &str) -> Resu
     Ok(())
 }
 
-async fn automatic_dependency_test(conn: &mut PgConnection, binding: &str) -> Result<()> {
+async fn automatic_dependency_test(conn: &mut PgConnection, binding: &Binding) -> Result<()> {
     sql(conn, "CREATE TABLE fvoci.partitioned(id int) PARTITION BY RANGE(id);
         ALTER TABLE fvoci.partitioned OWNER TO fvoci_migrator;
         CREATE TABLE other_app.shared_partition PARTITION OF fvoci.partitioned FOR VALUES FROM(0) TO(10)").await?;
@@ -209,18 +219,89 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
         "cloud fixture requires a fresh isolated test PostgreSQL cluster"
     );
     sql(&mut admin, OLD).await?;
+    let mut review_failures = catalog_tests::review_failures(&mut admin, &target.binding).await?;
     catalog_tests::run(&mut admin, &target.binding).await?;
+    super::race_tests::run(target).await?;
     failure_tests(&mut admin, &target.binding).await?;
     let restricted = restricted_admin(&mut admin, target).await?;
+    sql(
+        &mut admin,
+        "ALTER TABLE fvoci.legacy OWNER TO cloud_fixture_admin; GRANT USAGE ON SCHEMA fvoci TO cloud_fixture_admin",
+    )
+    .await?;
     let mut operator = PgConnection::connect_with(&restricted.admin).await?;
+    let create_reader: String = sqlx::query_scalar("SELECT format('CREATE ROLE cloud_fixture_reader LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD %L',$1::text)")
+        .bind(compose::TEST_APP_PASSWORD).fetch_one(&mut admin).await?;
+    sql(&mut admin, &create_reader).await?;
+    let mut reader = PgConnection::connect_with(
+        &target
+            .admin
+            .clone()
+            .username("cloud_fixture_reader")
+            .password(compose::TEST_APP_PASSWORD),
+    )
+    .await?;
+    catalog::inspect_authority(&mut reader).await?;
+    sql(&mut admin, "ALTER ROLE cloud_fixture_reader REPLICATION").await?;
+    ensure!(
+        catalog::inspect_authority(&mut reader).await.is_err(),
+        "replication reader accepted"
+    );
+    sql(&mut admin, "ALTER ROLE cloud_fixture_reader NOREPLICATION").await?;
+    let inspected = Inventory::read(&mut reader, &target.binding).await?;
     let inventory = Inventory::read(&mut operator, &target.binding).await?;
+    ensure!(
+        inspected.digest == inventory.digest,
+        "reader/admin fingerprints differ"
+    );
+    ensure!(
+        inspected
+            .delete(&mut reader, &target.binding, &inspected.digest)
+            .await
+            .is_err(),
+        "reader can delete"
+    );
+    reader.close().await?;
     ensure!(
         !inventory.blocked,
         "fixture blockers: {}",
         inventory.report["blockers"]
     );
-    inventory
-        .delete(&mut operator, &target.binding, &inventory.digest)
+    let roles = inventory
+        .delete_schema(&mut operator, &target.binding, &inventory.digest)
+        .await?;
+    sql(&mut admin, "ALTER ROLE fvoci_app CREATEDB").await?;
+    ensure!(
+        roles.delete(&mut operator).await.is_err(),
+        "changed role was deleted after schema commit"
+    );
+    let retained: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator')",
+    )
+    .fetch_one(&mut admin)
+    .await?;
+    ensure!(retained == 2, "role refusal did not retain both roles");
+    sql(&mut admin, "ALTER ROLE fvoci_app NOCREATEDB").await?;
+    sql(&mut admin, "GRANT fvoci_app TO other_app").await?;
+    ensure!(
+        roles.delete(&mut operator).await.is_err(),
+        "changed membership accepted"
+    );
+    sql(&mut admin, "REVOKE fvoci_app FROM other_app; CREATE TABLE other_app.role_owned(id int); ALTER TABLE other_app.role_owned OWNER TO fvoci_app").await?;
+    ensure!(
+        roles.delete(&mut operator).await.is_err(),
+        "role ownership was not rechecked"
+    );
+    sql(&mut admin, "DROP TABLE other_app.role_owned RESTRICT").await?;
+    sql(&mut admin, "GRANT CREATE ON DATABASE fvoci TO fvoci_app").await?;
+    ensure!(
+        roles.delete(&mut operator).await.is_err(),
+        "changed role database grant accepted"
+    );
+    sql(&mut admin, "REVOKE CREATE ON DATABASE fvoci FROM fvoci_app").await?;
+    let retry = Inventory::read(&mut operator, &target.binding).await?;
+    retry
+        .delete(&mut operator, &target.binding, &retry.digest)
         .await?;
     operator.close().await?;
     let gone: bool = sqlx::query_scalar(
@@ -254,8 +335,47 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
     sql(&mut admin, "ALTER ROLE cloud_fixture_admin CREATEROLE").await?;
     report = serde_json::json!({});
     install(root, &restricted, &mut report).await?;
+    let mut catalog_tx = admin.begin_with("BEGIN READ ONLY").await?;
+    sqlx::query("SET LOCAL search_path=pg_catalog")
+        .execute(&mut *catalog_tx)
+        .await?;
+    let manifest = serde_json::json!({"sql_fingerprint":verify::source_fingerprint(),"objects":allowed::objects(&mut catalog_tx).await?});
+    catalog_tx.rollback().await?;
+    let reviewed: serde_json::Value = serde_json::from_str(include_str!("allowed-objects.json"))?;
+    ensure!(
+        manifest == reviewed,
+        "source installation differs from reviewed object manifest"
+    );
+    if verify::run(target, &proof()).await.is_ok() {
+        review_failures
+            .push("verify accepted a database without rebuild SHA/fingerprint proof".to_owned());
+    }
+    receipt::record(target, &proof()).await?;
+    let product = Binding::product(target.binding.target.clone())?;
+    let installed = Inventory::read(&mut admin, &product).await?;
+    ensure!(
+        !installed.blocked,
+        "installed product inventory blocked: {}; unexpected objects: {:?}",
+        installed.report["blockers"],
+        installed.report["schema_objects"].as_array().map(|o| o
+            .iter()
+            .filter(|v| v["allowed"] == false)
+            .collect::<Vec<_>>())
+    );
+    let mut changed = proof();
+    changed.source_sha = "3".repeat(40);
+    ensure!(
+        verify::run(target, &changed).await.is_err(),
+        "advanced SHA accepted without rebuild"
+    );
+    changed = proof();
+    changed.fingerprint = "4".repeat(64);
+    ensure!(
+        verify::run(target, &changed).await.is_err(),
+        "different rebuild fingerprint accepted"
+    );
     verification_failures(&mut admin, target).await?;
-    let verified = verify::run(target).await?;
+    let verified = verify::run(target, &proof()).await?;
     ensure!(
         verified["checksums"] == "10/10" && verified["rls"] == "PASS",
         "verification failed"
@@ -274,9 +394,21 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
         DROP ROLE other_app; DROP ROLE anon; DROP ROLE authenticated; DROP ROLE service_role; DROP ROLE authenticator;
         SET ROLE cloud_fixture_admin; REVOKE CONNECT ON DATABASE fvoci FROM fvoci_app, fvoci_migrator RESTRICT;
         RESET ROLE; GRANT CONNECT ON DATABASE fvoci TO fvoci_app, fvoci_migrator;
-        REVOKE ALL ON DATABASE fvoci FROM cloud_fixture_admin RESTRICT; DROP ROLE cloud_fixture_admin").await?;
+        REVOKE ALL ON DATABASE fvoci FROM cloud_fixture_admin RESTRICT; DROP ROLE cloud_fixture_admin; DROP ROLE cloud_fixture_reader").await?;
     admin.close().await?;
+    ensure!(
+        review_failures.is_empty(),
+        "review regression failures: {}",
+        review_failures.join("; ")
+    );
     Ok(())
+}
+
+fn proof() -> super::receipt::Proof {
+    super::receipt::Proof {
+        source_sha: "1".repeat(40),
+        fingerprint: "2".repeat(64),
+    }
 }
 
 async fn restricted_admin(conn: &mut PgConnection, target: &Target) -> Result<Target> {
@@ -318,7 +450,10 @@ async fn verification_failures(admin: &mut PgConnection, target: &Target) -> Res
         "UPDATE fvoci._sqlx_migrations SET checksum=decode('00','hex') WHERE version=202610280001",
     )
     .await?;
-    ensure!(verify::run(target).await.is_err(), "bad checksum accepted");
+    ensure!(
+        verify::run(target, &proof()).await.is_err(),
+        "bad checksum accepted"
+    );
     sqlx::query("UPDATE fvoci._sqlx_migrations SET checksum=$1 WHERE version=202610280001")
         .bind(checksum)
         .execute(&mut *admin)
@@ -326,18 +461,21 @@ async fn verification_failures(admin: &mut PgConnection, target: &Target) -> Res
     verify::checksums(admin).await?;
     sql(admin, "GRANT USAGE ON SCHEMA fvoci TO anon").await?;
     ensure!(
-        verify::run(target).await.is_err(),
+        verify::run(target, &proof()).await.is_err(),
         "Data API grant accepted"
     );
     sql(admin, "REVOKE USAGE ON SCHEMA fvoci FROM anon; ALTER TABLE fvoci.documents DISABLE ROW LEVEL SECURITY").await?;
-    ensure!(verify::run(target).await.is_err(), "disabled RLS accepted");
+    ensure!(
+        verify::run(target, &proof()).await.is_err(),
+        "disabled RLS accepted"
+    );
     sql(
         admin,
         "ALTER TABLE fvoci.documents ENABLE ROW LEVEL SECURITY; ALTER ROLE fvoci_app BYPASSRLS",
     )
     .await?;
     ensure!(
-        verify::run(target).await.is_err(),
+        verify::run(target, &proof()).await.is_err(),
         "BYPASSRLS login accepted"
     );
     sql(admin, "ALTER ROLE fvoci_app NOBYPASSRLS").await?;
@@ -374,7 +512,7 @@ pub fn external(root: &Path, host_port: &str) -> Result<()> {
             .disable_statement_logging(),
         migrator_password: compose::TEST_MIGRATOR_PASSWORD.to_owned(),
         app_password: compose::TEST_APP_PASSWORD.to_owned(),
-        binding: "isolated-compose-fixture".to_owned(),
+        binding: Binding::fixture(),
         certificate: None,
     };
     tokio::runtime::Builder::new_current_thread()
