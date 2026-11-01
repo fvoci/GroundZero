@@ -195,6 +195,31 @@ describe('watchPreloadErrors', () => {
     expect(preloadError()).toBe(false);
   });
 
+  it('undoes a reload on the second stall timer even when both timers wake late', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const storage = memoryStorage();
+    const reload = vi.fn();
+    const onStale = vi.fn();
+    const cancelReload = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload, onStale, cancelReload });
+    expect(preloadError()).toBe(true);
+
+    const delayedInterval = PRELOAD_RELOAD_STALL_MS + 1_001;
+    now.mockReturnValue(delayedInterval);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+
+    // 배경 탭 타이머 조절 등으로 두 번 연속 늦게 깨도 다시 기다리기는 한 번뿐이다.
+    now.mockReturnValue(delayedInterval * 2);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).toHaveBeenCalledTimes(1);
+    expect(onStale).toHaveBeenCalledTimes(1);
+    expect(preloadError()).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
   it('does not undo a reload when pagehide follows a delayed stall timer', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const now = vi.spyOn(performance, 'now').mockReturnValue(0);
