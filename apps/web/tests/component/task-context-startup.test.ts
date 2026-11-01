@@ -12,6 +12,10 @@ import { itemPath, itemViewPath, router } from '$lib/router.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { PROJECT_MODULE, TASK_ITEM, WORKSPACE } from '../../stories/fixtures/synthetic';
 import { TEST_ORGANIZATION } from './fixtures/organization';
+import { readSessionGeneration } from '$lib/features/auth/session-signal';
+import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
+
+let originalLocks: PropertyDescriptor | undefined;
 
 function held<T>() {
   let resolve!: (value: T) => void;
@@ -42,6 +46,11 @@ const context: TaskContext = {
 };
 
 beforeEach(async () => {
+  originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: { request: (_name: string, update: () => unknown) => Promise.resolve(update()) },
+  });
   await setLocale('ko', { reload: false });
   router.guard = undefined;
   router.navigate(itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board'));
@@ -93,9 +102,90 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
+  if (originalLocks === undefined) Reflect.deleteProperty(navigator, 'locks');
+  else Object.defineProperty(navigator, 'locks', originalLocks);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   router.guard = undefined;
+});
+
+it('SR-298-1 retries /me before starting task reads when publication sees a newer session', async () => {
+  const publication = held<boolean>();
+  const recheck = held<Me | undefined>();
+  let publish: (() => boolean) | undefined;
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: {
+      request: (_name: string, update: () => boolean) => {
+        if (publish !== undefined) return Promise.resolve(update());
+        publish = update;
+        return publication.promise;
+      },
+    },
+  });
+  vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValueOnce(recheck.promise);
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+  render(App);
+  await waitFor(() => {
+    expect(publish).toBeDefined();
+  });
+  localStorage.setItem(
+    'fvoci:auth-session',
+    JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+  );
+  window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+  if (publish === undefined) throw new Error('publication did not start');
+  const accepted = publish();
+  expect(accepted).toBe(false);
+  publication.resolve(accepted);
+  await waitFor(() => {
+    expect(
+      vi.mocked(api.me).mock.calls.length >= 2 || vi.mocked(api.workspaces).mock.calls.length > 0,
+    ).toBe(true);
+  });
+  expect(api.workspaces).not.toHaveBeenCalled();
+  expect(api.myOrganizations).not.toHaveBeenCalled();
+  expect(taskScreenApi.context).not.toHaveBeenCalled();
+  expect(taskScreenApi.board).not.toHaveBeenCalled();
+  expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+  expect(screen.queryByText(context.item.title)).toBeNull();
+  recheck.resolve(identity);
+  await screen.findByTestId('task-board');
+});
+
+it('SR-298-1 bounds repeated stale publication retries without starting task reads', async () => {
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: {
+      request: (_name: string, update: () => boolean) => {
+        localStorage.setItem(
+          'fvoci:auth-session',
+          JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+        );
+        return Promise.resolve(update());
+      },
+    },
+  });
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([]);
+  vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+  render(App);
+  await waitFor(() => {
+    expect(
+      vi.mocked(api.me).mock.calls.length === SESSION_CHECK_MAX_ATTEMPTS ||
+        vi.mocked(api.workspaces).mock.calls.length > 0,
+    ).toBe(true);
+  });
+  expect(api.workspaces).not.toHaveBeenCalled();
+  expect(taskScreenApi.context).not.toHaveBeenCalled();
+  expect(taskScreenApi.board).not.toHaveBeenCalled();
+  expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+  await screen.findByRole('alert');
+  expect(api.me).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS);
 });
 
 it('starts context with the session lists, then displays and synchronizes only after both gates', async () => {

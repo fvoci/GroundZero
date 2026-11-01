@@ -150,7 +150,7 @@
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
         if (router.route.name === 'item' && router.route.group === 'tasks') {
-          await publishSessionCheck(generation);
+          if (!(await publishSessionCheck(generation))) return await retryLoad();
         } else void publishSessionCheck(generation);
       }
       if (me === undefined) {
