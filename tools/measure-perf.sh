@@ -104,22 +104,20 @@ while true; do
     exit 1
   fi
 done
-busy_build() {
-  pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null ||
-    ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'
-}
+build_state() { ps -eo comm,args | awk -f tools/perf-build-state.awk; }
+busy_build() { build_state | jq -e '.compiler or .nodeBuild or .heavyCommand' > /dev/null; }
 while busy_build; do sleep 15; done
 monitor_phase=screen
 start_monitor() {
   (
+    local state
     while true; do
-      if pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null; then busy=true; else busy=false; fi
-      if ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'; then node_busy=true; else node_busy=false; fi
-      if "$busy" || "$node_busy"; then
+      state=$(build_state)
+      if jq -e '.compiler or .nodeBuild or .heavyCommand' <<< "$state" > /dev/null; then
         touch "$out/build-overlap"
         if [[ "$monitor_phase" == db ]]; then touch "$out/db-build-overlap"; fi
       fi
-      printf '{"epochMs":%s,"compiler":%s,"nodeBuild":%s}\n' "$(date -u +%s%3N)" "$busy" "$node_busy"
+      jq -c --argjson epochMs "$(date -u +%s%3N)" '.+{epochMs:$epochMs}' <<< "$state"
       sleep 1
     done
   ) >> "$out/concurrency.log" &

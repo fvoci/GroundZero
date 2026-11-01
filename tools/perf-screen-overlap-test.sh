@@ -26,6 +26,14 @@ jq -e 'map({screen,repeat,count:(.buildSamples|length)}) == [
 ]' "$screen_test_out/result.json" > /dev/null
 jq -n '[]' > "$screen_test_out/quiet.json"
 jq -s -f tools/perf-screen-overlap.jq "$screen_test_out/screens.json" "$screen_test_out/quiet.json" | jq -e 'length==0' > /dev/null
+printf '[{"epochMs":2200,"compiler":false,"nodeBuild":false,"heavyCommand":true}]\n' > "$screen_test_out/heavy.json"
+jq -s -f tools/perf-screen-overlap.jq "$screen_test_out/screens.json" "$screen_test_out/heavy.json" |
+  jq -e 'map({screen,repeat})==[{screen:"board",repeat:2}]' > /dev/null
+printf '[{"epochMs":2200,"compiler":false,"nodeBuild":false,"heavyCommand":"false"}]\n' > "$screen_test_out/invalid-heavy.json"
+if jq -s -f tools/perf-screen-overlap.jq "$screen_test_out/screens.json" "$screen_test_out/invalid-heavy.json" > /dev/null 2>&1; then
+  printf 'FAIL invalid heavy-command monitor value accepted\n' >&2
+  exit 1
+fi
 for screen_invalid in missing reversed; do
   jq --arg kind "$screen_invalid" '.[0] |= (if $kind=="missing" then del(.sampleStart) else .sampleEnd=0 end)' \
     "$screen_test_out/screens.json" > "$screen_test_out/invalid.json"
@@ -34,7 +42,7 @@ for screen_invalid in missing reversed; do
     exit 1
   fi
 done
-for screen_replay_case in clean once twice; do
+for screen_replay_case in clean once twice heavy; do
   bash -euo pipefail -s -- "$screen_test_out/$screen_replay_case" "$screen_replay_case" <<'REPLAY'
 out=$1
 scenario=$2
@@ -43,8 +51,10 @@ jq -n '[ ["board","gantt"][] as $name | range(1;4) as $repeat |
   {screen:$name,repeat:$repeat,origin:"original",
    sampleStart:($repeat*200 + (if $name=="gantt" then 2000 else 0 end))} |
   .+{sampleEnd:(.sampleStart+100)} ]' > "$out/screens.json"
-if [[ "$scenario" == clean ]]; then initial_busy=false; else initial_busy=true; fi
-printf '{"epochMs":250,"compiler":%s,"nodeBuild":false}\n' "$initial_busy" > "$out/concurrency.log"
+initial_busy=false
+initial_heavy=false
+case "$scenario" in heavy) initial_heavy=true ;; clean) ;; *) initial_busy=true ;; esac
+printf '{"epochMs":250,"compiler":%s,"nodeBuild":false,"heavyCommand":%s}\n' "$initial_busy" "$initial_heavy" > "$out/concurrency.log"
 printf '0\n' > "$out/calls"
 busy_build() { return 1; }
 stop_monitor() { return 0; }
@@ -67,7 +77,7 @@ pnpm() {
 replay_source=$(awk '/^  mkdir -p .*screen-attempts/ {copy=1} copy && /^  monitor_phase=db$/ {exit} copy {print}' tools/measure-perf.sh)
 test -n "$replay_source"
 eval "$replay_source"
-case "$scenario" in clean) expected=0 ;; once) expected=1 ;; twice) expected=2 ;; esac
+case "$scenario" in clean) expected=0 ;; once|heavy) expected=1 ;; twice) expected=2 ;; esac
 test "$(cat "$out/calls")" -eq "$expected"
 jq -e --argjson calls "$expected" '
   length==6 and (group_by(.screen)|all(.[]; length==3 and map(.repeat)==[1,2,3])) and

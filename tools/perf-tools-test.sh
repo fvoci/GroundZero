@@ -431,4 +431,5 @@ check sharing-missing-owned-lock sharing_lifecycle missing-owned-lock
 check sharing-rejects-lock-injection-mismatch sharing_lifecycle injection-mismatch
 check task-screen-aggregate-witnesses bash tools/perf-task-screens-test.sh
 check screen-build-overlap bash tools/perf-screen-overlap-test.sh
+check full-build-command-state bash tools/perf-build-state-test.sh
 test "$failures" -eq 0
