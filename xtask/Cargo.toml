@@ -11,7 +11,7 @@ clap.workspace = true
 native-tls = "0.2"
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["tls-native-tls"] }
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "process"] }
 tracing.workspace = true
 sha2 = "0.11"
 spdx = { version = "0.13", features = ["text"] }

@@ -4,7 +4,8 @@
 //! "NOT RUN"을 출력한다. S3 저장소 테스트(`s3_`)도 시험용 SeaweedFS가 없으면(외부 서비스 모드에서 주소를 주지 않음)
 //! 같은 방식으로 제외한다. 제외는 명령 선택이며 통과로 간주하지 않는다.
 //!
-//! 통합 테스트 앞에 개발 준비 SQL 시험([`crate::dev::check_seeds`])을 같은 PostgreSQL 서버의 새 DB에서 돈다(#168).
+//! 통합 테스트 실행 때 개발 준비 SQL 시험([`crate::dev::check_seeds`])을 같은 PostgreSQL 서버의 새 DB에서 돈다(#168).
+//! 기본 PostgreSQL 경로는 역할 설치 전에 Cloud 재생성 fixture를 검증한다. 컨테이너 경로의 개발 seed 검사는 그 뒤에 돈다.
 //! `--external-services`는 그 시험을 돌 수 없어(컨테이너 안 psql이 필요) "NOT RUN"을 출력한다.
 //!
 //! 시험 Compose 프로젝트는 체크아웃마다 하나라서(`--supabase`도 검색·S3에 같은 프로젝트를 쓴다) 같은 체크아웃의 실행은
@@ -307,15 +308,20 @@ pub fn run(
         .and_then(|()| compose.up(&sh))
         .and_then(|()| {
             if let Some(runner) = &runner {
+                runner.test(&sh, oidc)?;
                 crate::dev::check_seeds_with(root, &compose, &sh, |database| {
                     runner.prepare_database(&sh, &DbUrls::at_database("postgres:5432", database))
                 })?;
-                return runner.test(&sh, oidc);
+                return Ok(());
             }
             let pg_port = compose.host_port(&sh, "postgres", 5432)?;
             println!("==> postgres on 127.0.0.1:{pg_port}");
             let urls = DbUrls::local(pg_port);
             compose::check_interrupt()?;
+            crate::supabase_cloud_rebuild::fixture::external(
+                root,
+                &format!("127.0.0.1:{pg_port}"),
+            )?;
             compose::prepare_database(&sh, &urls)?;
             compose::check_interrupt()?;
             crate::dev::check_seeds(root, &compose, &sh, pg_port)?;
@@ -555,6 +561,7 @@ fn run_external(root: &Path, oidc: bool) -> Result<()> {
     }
     println!("==> using external services at {host_port}");
     let urls = DbUrls::at(&host_port);
+    crate::supabase_cloud_rebuild::fixture::external(root, &host_port)?;
     compose::prepare_database(&sh, &urls)?;
     let _env = sh.push_env("DATABASE_URL", &urls.app);
     let _fixture = sh.push_env("FVOCI_TEST_MIGRATION_URL", &urls.migration);

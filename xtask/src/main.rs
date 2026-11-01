@@ -12,6 +12,7 @@ mod openapi;
 mod rhwp;
 mod supabase;
 mod supabase_cloud_precheck;
+mod supabase_cloud_rebuild;
 mod test;
 mod test_executables;
 mod test_report;
@@ -32,6 +33,15 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// 승인된 Cloud 시험 DB의 조사·재설치·확인. 실제 연결은 Actions main에서만 허용한다.
+    SupabaseCloudRebuild {
+        #[arg(value_enum)]
+        phase: supabase_cloud_rebuild::Phase,
+        #[arg(long)]
+        connect: bool,
+    },
+    /// 시험 Compose의 PostgreSQL 하나로 Cloud 재생성의 실패·성공 경로를 검증한다.
+    SupabaseCloudRebuildTest,
     /// 전용 Supabase Cloud 대상의 읽기 전용 사전 점검. 기본값은 연결하지 않는다.
     SupabaseCloudPrecheck {
         /// 승인된 대상에 한 번 연결한다. 수동 workflow는 검토된 main에서만 실행한다.
@@ -149,23 +159,32 @@ fn repo_root() -> Result<PathBuf> {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::try_parse().unwrap_or_else(|error| {
-        // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
-        // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
-        if std::env::args_os()
-            .nth(1)
-            .is_some_and(|arg| arg == "supabase-cloud-precheck")
-            && !matches!(
+    let cli =
+        Cli::try_parse().unwrap_or_else(|error| {
+            // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
+            // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
+            if std::env::args_os().nth(1).is_some_and(|arg| {
+                arg == "supabase-cloud-precheck" || arg == "supabase-cloud-rebuild"
+            }) && !matches!(
                 error.kind(),
                 clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-            )
-        {
-            std::process::exit(supabase_cloud_precheck::rejected_arguments());
-        }
-        error.exit()
-    });
+            ) {
+                if std::env::args_os()
+                    .nth(1)
+                    .is_some_and(|arg| arg == "supabase-cloud-rebuild")
+                {
+                    std::process::exit(supabase_cloud_rebuild::rejected_arguments());
+                }
+                std::process::exit(supabase_cloud_precheck::rejected_arguments());
+            }
+            error.exit()
+        });
     let root = repo_root()?;
     match cli.command {
+        Command::SupabaseCloudRebuild { phase, connect } => {
+            std::process::exit(supabase_cloud_rebuild::run(&root, phase, connect))
+        }
+        Command::SupabaseCloudRebuildTest => supabase_cloud_rebuild::fixture::local(&root),
         Command::SupabaseCloudPrecheck { connect } => {
             std::process::exit(supabase_cloud_precheck::run(connect))
         }
