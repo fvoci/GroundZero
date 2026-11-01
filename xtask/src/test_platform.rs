@@ -97,7 +97,7 @@ fn provides(manifest: &Value, platform: &str) -> bool {
         })
 }
 
-fn matches_platform(
+pub(crate) fn matches_platform(
     os: Option<&str>,
     arch: Option<&str>,
     variant: Option<&Value>,

@@ -2,6 +2,7 @@
 
 mod browser;
 mod check;
+mod ci_base_manifest;
 mod ci_plan;
 mod compose;
 mod dev;
@@ -24,6 +25,26 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
+#[cfg(test)]
+mod manifest_cli_tests {
+    use super::*;
+
+    #[test]
+    fn manifest_publication_is_an_xtask_command() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "ci-base-manifest",
+            "--image",
+            "ghcr.io/fvoci/groundzero-ci-base",
+            "--tag",
+            "source-sha",
+            "--digests-dir",
+            "digests",
+        ]);
+        assert!(cli.is_ok(), "{cli:?}");
+    }
+}
+
 /// fvoci 개발 작업 명령.
 #[derive(Debug, Parser)]
 #[command(name = "xtask", version, about)]
@@ -34,6 +55,15 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// 두 플랫폼 digest를 검증해 ci-base manifest를 게시하고 최종 digest만 출력한다.
+    CiBaseManifest {
+        #[arg(long)]
+        image: String,
+        #[arg(long)]
+        tag: String,
+        #[arg(long)]
+        digests_dir: PathBuf,
+    },
     /// 승인된 Cloud 시험 DB의 조사·재설치·확인. 실제 연결은 Actions main에서만 허용한다.
     SupabaseCloudRebuild {
         #[arg(value_enum)]
@@ -161,29 +191,39 @@ fn repo_root() -> Result<PathBuf> {
         .context("xtask manifest has no parent directory")
 }
 
-fn main() -> Result<()> {
-    let cli =
-        Cli::try_parse().unwrap_or_else(|error| {
-            // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
-            // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
-            if std::env::args_os().nth(1).is_some_and(|arg| {
-                arg == "supabase-cloud-precheck" || arg == "supabase-cloud-rebuild"
-            }) && !matches!(
+fn parse_cli() -> Cli {
+    Cli::try_parse().unwrap_or_else(|error| {
+        // clap의 일반 오류에는 사용자가 잘못 붙인 URI가 포함될 수 있다.
+        // 이 명령의 잘못된 입력은 고정 코드만 보고하고 환경도 읽지 않는다.
+        if std::env::args_os()
+            .nth(1)
+            .is_some_and(|arg| arg == "supabase-cloud-precheck" || arg == "supabase-cloud-rebuild")
+            && !matches!(
                 error.kind(),
                 clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-            ) {
-                if std::env::args_os()
-                    .nth(1)
-                    .is_some_and(|arg| arg == "supabase-cloud-rebuild")
-                {
-                    std::process::exit(supabase_cloud_rebuild::rejected_arguments());
-                }
-                std::process::exit(supabase_cloud_precheck::rejected_arguments());
+            )
+        {
+            if std::env::args_os()
+                .nth(1)
+                .is_some_and(|arg| arg == "supabase-cloud-rebuild")
+            {
+                std::process::exit(supabase_cloud_rebuild::rejected_arguments());
             }
-            error.exit()
-        });
+            std::process::exit(supabase_cloud_precheck::rejected_arguments());
+        }
+        error.exit()
+    })
+}
+
+fn main() -> Result<()> {
+    let cli = parse_cli();
     let root = repo_root()?;
     match cli.command {
+        Command::CiBaseManifest {
+            image,
+            tag,
+            digests_dir,
+        } => ci_base_manifest::run(&image, &tag, &digests_dir),
         Command::SupabaseCloudRebuild { phase, connect } => {
             std::process::exit(supabase_cloud_rebuild::run(&root, phase, connect))
         }

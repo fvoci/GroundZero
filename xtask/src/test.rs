@@ -30,7 +30,7 @@ use crate::supabase::Supabase;
 use crate::test_verify::{self, DockerMode};
 
 #[path = "test_platform.rs"]
-mod platform;
+pub(crate) mod platform;
 
 #[cfg(all(test, unix))]
 #[path = "test_rootful.rs"]

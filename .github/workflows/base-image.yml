@@ -84,6 +84,15 @@ jobs:
       # CI_BASE_IMAGE_DIGEST에 쓸 값은 플랫폼별 digest가 아니라 이 manifest list digest다.
       digest: ${{ steps.manifest.outputs.digest }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # 기존 호스트 job처럼 rust-toolchain.toml을 정본으로 쓰고 그 판·구성요소를 명시적으로 설치한다.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: digests
@@ -101,13 +110,6 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: |
-          set -euo pipefail
-          sources=()
-          for digest in digests/*; do sources+=("$IMAGE@sha256:${digest##*/}"); done
-          [ "${#sources[@]}" -eq 2 ] || { echo '::error::expected two platform digests'; exit 1; }
-          docker buildx imagetools create --tag "$IMAGE:$SOURCE_SHA" "${sources[@]}"
-          manifest=$(docker buildx imagetools inspect "$IMAGE:$SOURCE_SHA" --format '{{json .Manifest}}')
-          jq -e '[.manifests[].platform | select(.os == "linux") | .architecture] | sort == ["amd64", "arm64"]' <<<"$manifest"
-          digest=$(jq -er '.digest' <<<"$manifest")
+          digest=$(cargo xtask ci-base-manifest --image "$IMAGE" --tag "$SOURCE_SHA" --digests-dir digests)
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "image=$IMAGE@$digest (linux/amd64, linux/arm64; CI_BASE_IMAGE_DIGEST=$digest)" >> "$GITHUB_STEP_SUMMARY"
