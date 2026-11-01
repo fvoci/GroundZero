@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf-window-test-XXXXXX")
-for name in wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup; do
+for name in wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup; do
   source_text=$(awk -v name="$name" '$0 == name "() {" {copy=1} copy {print} copy && /^}$/ {exit}' tools/measure-perf.sh)
   test -n "$source_text"
   eval "$source_text"
@@ -65,7 +65,7 @@ fi
 signal_after_write() {
   local signal=$1 expected=$2 status=0
   local signal_lock="$out/signal-$signal.lock"
-  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup
+  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
   bash -euo pipefail -s -- "$out" "$signal_lock" "$signal" <<'SIGNAL' || status=$?
   out=$1
   measure_lock=$2
@@ -97,7 +97,7 @@ done
 signal_before_write() {
   local signal=$1 expected=$2 status=0
   local signal_lock="$out/before-write-$signal.lock"
-  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup
+  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
   bash -euo pipefail -s -- "$out" "$signal_lock" "$signal" "$expected" <<'BEFORE' || status=$?
   out=$1
   measure_lock=$2
@@ -223,6 +223,37 @@ for signal in TERM INT; do
     printf 'PASS %s after publication releases guard and marker\n' "$signal"
   else
     printf 'FAIL %s after publication releases guard and marker\n' "$signal"
+    failures=$((failures + 1))
+  fi
+done
+cleanup_process_status() {
+  local body_status=$1 teardown_status=$2 expected=$3 actual=0
+  local process_lock="$out/process-$body_status-$teardown_status.lock"
+  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
+  # Without errexit masking the trap's return value, require an explicit exit.
+  bash -uo pipefail -s -- "$out" "$process_lock" "$body_status" "$teardown_status" <<'EXIT_STATUS' || actual=$?
+    out=$1
+    measure_lock=$2
+    body_status=$3
+    teardown_status=$4
+    measure_token="process-test-$$-$RANDOM"
+    measure_token_file="$measure_lock.token"
+    server_pid=
+    monitor_pid=
+    fake_compose() { return "$teardown_status"; }
+    compose=(fake_compose)
+    eval "$trap_source"
+    acquire_measure_lock || exit 99
+    exit "$body_status"
+EXIT_STATUS
+  test "$actual" -eq "$expected" && test ! -e "$process_lock" && test ! -e "$process_lock.token"
+}
+for scenario in '0 7 7' '23 7 23' '0 0 0' '23 0 23'; do
+  read -r body_status teardown_status expected <<< "$scenario"
+  if cleanup_process_status "$body_status" "$teardown_status" "$expected"; then
+    printf 'PASS process exit: body=%s cleanup=%s expected=%s\n' "$body_status" "$teardown_status" "$expected"
+  else
+    printf 'FAIL process exit: body=%s cleanup=%s expected=%s\n' "$body_status" "$teardown_status" "$expected"
     failures=$((failures + 1))
   fi
 done

@@ -102,7 +102,14 @@ cleanup() {
   if (( status != 0 )); then return "$status"; fi
   return "$cleanup_status"
 }
-trap cleanup EXIT
+exit_cleanup() {
+  local original_status=$? cleanup_status=0
+  trap - EXIT
+  cleanup || cleanup_status=$?
+  if (( original_status != 0 )); then exit "$original_status"; fi
+  exit "$cleanup_status"
+}
+trap exit_cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 printf '%s\n' "$out"
