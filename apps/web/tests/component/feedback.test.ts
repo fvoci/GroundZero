@@ -171,6 +171,34 @@ describe('user feedback (D-82)', () => {
     expect(other).toHaveAttribute('data-removed', 'true');
   });
 
+  it('releases a focus pause when the focused toast closes while another remains', async () => {
+    const { action, item } = showAction();
+    flushSync(() => {
+      notifyDone('또 옮겼습니다.', 'second-action', {
+        action: { label: '두 번째 되돌리기', onClick: vi.fn() },
+      });
+    });
+    const second = screen
+      .getByRole('button', { name: '두 번째 되돌리기' })
+      .closest('[data-sonner-toast]');
+    if (!(second instanceof HTMLElement)) throw new Error('toast');
+    action.focus();
+    flushSync();
+    await advance(1_000);
+    // 활성 토스트가 둘에서 하나로 준다. 초점이 있던 요소가 지워지며 focusout 없이 영역 밖으로 빠질 수 있다.
+    flushSync(() => {
+      dismissDone('timed-action');
+    });
+    await advance(200);
+    expect(item).not.toBeInTheDocument();
+    expect(second.contains(document.activeElement)).toBe(false);
+    // 초점이 들어온 뒤로 둘 다 멈춰 있었다. 닫힌 뒤 250ms의 재확인(지금부터 50ms 뒤)부터 10초를 센다.
+    await advance(10_049);
+    expect(second).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(second).toHaveAttribute('data-removed', 'true');
+  });
+
   it('measures the remaining time with a monotonic clock', async () => {
     const { item, region } = showAction();
     await advance(4_000);

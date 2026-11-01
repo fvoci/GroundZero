@@ -12,6 +12,7 @@
   import { m } from '$lib/paraglide/messages.js';
   import { router } from '$lib/router.svelte';
   import { toast } from 'svelte-sonner';
+  import { SvelteSet } from 'svelte/reactivity';
   import { Toaster } from '$lib/ui/sonner';
   import { Button } from '$lib/ui/button';
   import * as Dialog from '$lib/ui/dialog';
@@ -55,23 +56,29 @@
     typeof document !== 'undefined' && document.visibilityState === 'hidden',
   );
   watchDoneTimeouts(() => toastHovered || toastFocused || documentHidden);
-  // 마지막 토스트가 닫히면 토스트 요소가 사라져 mouseleave·focusout이 오지 않을 수 있다. 그래서 활성 토스트가 0이 될
-  // 때마다 퇴장 애니메이션(200ms) 뒤 실제 영역 상태로 머무름을 다시 정한다. 그사이 새 토스트가 와도 취소하지 않는다:
-  // 같은 key가 되살린 요소에 초점이 남았으면 그대로 멈추고, 다른 key라 초점이 영역 밖으로 빠졌으면 풀린다.
-  // 목록 자체가 바뀔 때(퇴장한 토스트를 지울 때 등)마다 다시 세지 않도록 개수만 본다.
+  // 토스트가 닫히면 그 요소가 사라져 mouseleave·focusout이 오지 않을 수 있다. 그래서 활성 토스트가 줄 때마다 퇴장
+  // 애니메이션(200ms) 뒤 실제 영역 상태로 머무름을 다시 정한다. 확인은 서로 취소하지 않는다(연달아 닫혀도 밀리지 않고,
+  // 그사이 새 토스트가 와도 그대로 본다): 같은 key가 되살린 요소에 초점이 남았으면 그대로 멈추고, 초점이 영역 밖으로
+  // 빠졌으면 풀린다. 목록 자체가 바뀔 때(퇴장한 토스트를 지울 때 등)마다 다시 세지 않도록 개수만 본다.
   const activeToasts = $derived(toast.getActiveToasts().length);
-  let pauseRecheck: ReturnType<typeof setTimeout> | undefined;
+  const pauseRechecks = new SvelteSet<ReturnType<typeof setTimeout>>();
+  let previousActive = 0;
   $effect(() => {
-    if (activeToasts > 0) return;
-    clearTimeout(pauseRecheck);
-    pauseRecheck = setTimeout(() => {
+    const count = activeToasts;
+    const dropped = count < previousActive;
+    previousActive = count;
+    if (!dropped) return;
+    const recheck = setTimeout(() => {
+      pauseRechecks.delete(recheck);
       const region = document.querySelector('[data-sonner-toaster]');
       toastHovered = region?.matches(':hover') ?? false;
       toastFocused = region?.contains(document.activeElement) ?? false;
     }, 250);
+    pauseRechecks.add(recheck);
   });
   $effect(() => () => {
-    clearTimeout(pauseRecheck);
+    for (const recheck of pauseRechecks) clearTimeout(recheck);
+    pauseRechecks.clear();
   });
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.
