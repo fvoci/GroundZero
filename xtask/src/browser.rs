@@ -116,6 +116,7 @@ fn run_against(
     compose::check_interrupt()?;
     println!("==> build web and server");
     cmd!(sh, "pnpm --filter @fvoci/web run build").run()?;
+    cmd!(sh, "pnpm --filter @fvoci/web run build-storybook").run()?;
     cmd!(sh, "cargo build --package fvoci-server --locked").run()?;
 
     compose::check_interrupt()?;
@@ -126,15 +127,26 @@ fn run_against(
     let log = raw.join("server.log");
     let mut server = Server::start(root, files, &log, port, &origin, &issuer, &urls.app)?;
     with_server(&mut server, port, || {
-        println!("==> playwright (Chromium)");
-        let _base = sh.push_env("FVOCI_BROWSER_BASE_URL", &origin);
-        let _raw = sh.push_env("FVOCI_BROWSER_RAW", raw);
-        cmd!(
-            sh,
-            "pnpm --filter @fvoci/web exec playwright test {args...}"
-        )
-        .run()
-        .context("browser tests failed (first result; no retries)")
+        let story_port = free_port()?;
+        let mut story = Server::storybook(root, &raw.join("storybook.log"), story_port)?;
+        let result = story
+            .wait_ready_path(story_port, "/iframe.html")
+            .and_then(|()| {
+                println!("==> playwright (Chromium)");
+                let _base = sh.push_env("FVOCI_BROWSER_BASE_URL", &origin);
+                let _raw = sh.push_env("FVOCI_BROWSER_RAW", raw);
+                let _story = sh.push_env(
+                    "FVOCI_FONT_STORYBOOK_URL",
+                    format!("http://127.0.0.1:{story_port}"),
+                );
+                cmd!(
+                    sh,
+                    "pnpm --filter @fvoci/web exec playwright test {args...}"
+                )
+                .run()
+                .context("browser tests failed (first result; no retries)")
+            });
+        with_shutdown(result, story.stop().context("stop Storybook preview"))
     })
 }
 
@@ -165,6 +177,31 @@ fn free_port() -> Result<u16> {
 struct Server(Child);
 
 impl Server {
+    fn storybook(root: &Path, log: &Path, port: u16) -> Result<Self> {
+        let out = File::create(log).with_context(|| format!("create {}", log.display()))?;
+        let err = out.try_clone()?;
+        // Launch Node directly so shutdown reaps the serving process, not a pnpm parent.
+        let child = Command::new("node")
+            .arg(root.join("apps/web/node_modules/vite/bin/vite.js"))
+            .args([
+                "preview",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                &port.to_string(),
+                "--strictPort",
+                "--outDir",
+            ])
+            .arg(root.join("target/storybook-static"))
+            .current_dir(root.join("apps/web"))
+            .stdin(Stdio::null())
+            .stdout(out)
+            .stderr(err)
+            .spawn()
+            .context("serve built Storybook")?;
+        Ok(Self(child))
+    }
+
     fn start(
         root: &Path,
         files: &Path,
@@ -206,19 +243,28 @@ impl Server {
 
     /// `/healthz`가 200을 돌려줄 때까지 기다린다. 서버가 먼저 끝나면 기다리지 않고 실패한다.
     fn wait_ready(&mut self, port: u16) -> Result<()> {
+        self.wait_ready_path(port, "/healthz")
+    }
+
+    fn wait_ready_path(&mut self, port: u16, path: &str) -> Result<()> {
+        let (service, log) = if path == "/iframe.html" {
+            ("Storybook preview", "storybook.log")
+        } else {
+            ("fvoci-server", "server.log")
+        };
         let deadline = Instant::now() + Duration::from_secs(60);
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
         loop {
             if let Some(status) = self.0.try_wait()? {
                 bail!(
-                    "fvoci-server exited before it was ready ({status}); see server.log in the raw output"
+                    "{service} exited before it was ready ({status}); see {log} in the raw output"
                 );
             }
-            if healthz(addr).unwrap_or(false) {
+            if ready_at(addr, path).unwrap_or(false) {
                 return Ok(());
             }
             if Instant::now() > deadline {
-                bail!("fvoci-server was not ready within 60s; see server.log in the raw output");
+                bail!("{service} was not ready within 60s; see {log} in the raw output");
             }
             std::thread::sleep(Duration::from_millis(250));
         }
@@ -243,10 +289,11 @@ impl Drop for Server {
     }
 }
 
-fn healthz(addr: SocketAddr) -> std::io::Result<bool> {
+fn ready_at(addr: SocketAddr, path: &str) -> std::io::Result<bool> {
     let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(1))?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-    stream.write_all(b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")?;
+    let request = format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
+    stream.write_all(request.as_bytes())?;
     let mut head = [0_u8; 12];
     stream.read_exact(&mut head)?;
     Ok(head.starts_with(b"HTTP/1.1 200") || head.starts_with(b"HTTP/1.0 200"))
@@ -318,6 +365,39 @@ mod tests {
             .is_ok_and(|status| status.success())
     }
 
+    fn read_http_request(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
+        let mut request = Vec::new();
+        // TCP can split even a single write. Consume the headers before replying/closing.
+        while request.len() < 1024 {
+            let mut byte = [0];
+            reader.read_exact(&mut byte)?;
+            request.push(byte[0]);
+            if request.ends_with(b"\r\n\r\n") {
+                return Ok(request);
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "health request exceeds 1024 bytes",
+        ))
+    }
+
+    #[test]
+    fn health_fixture_reads_a_request_split_across_tcp_reads() -> Result<()> {
+        struct Fragments(std::io::Cursor<Vec<u8>>);
+        impl Read for Fragments {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                let length = buffer.len().min(3);
+                self.0.read(&mut buffer[..length])
+            }
+        }
+        let expected = b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+        let mut fragments = Fragments(std::io::Cursor::new(expected.to_vec()));
+        assert_eq!(read_http_request(&mut fragments)?, expected);
+        assert!(read_http_request(&mut &b"GET /healthz"[..]).is_err());
+        Ok(())
+    }
+
     /// 시험 실패 경로에서도 실제 자식 프로세스를 죽이고 거둔다. 다시 멈추거나 Drop해도 문제가 없다.
     #[cfg(unix)]
     #[test]
@@ -326,11 +406,18 @@ mod tests {
         let port = listener.local_addr()?.port();
         let health = std::thread::spawn(move || -> std::io::Result<()> {
             let (mut stream, _) = listener.accept()?;
-            let mut request = [0_u8; 64];
-            let _read = stream.read(&mut request)?;
+            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+            let request = read_http_request(&mut stream)?;
+            assert_eq!(request, b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
             stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n")
         });
-        let mut server = Server(Command::new("sleep").arg("30").spawn()?);
+        // Stay alive until the tested shutdown kills us; elapsed wall time is not the lifecycle.
+        let mut server = Server(
+            Command::new("sh")
+                .args(["-c", "read marker"])
+                .stdin(Stdio::piped())
+                .spawn()?,
+        );
         let pid = server.0.id();
         assert!(pid_alive(pid));
 
