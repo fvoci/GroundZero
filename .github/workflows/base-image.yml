@@ -93,6 +93,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: v1-rust
+      # build.rs・proc macro 실행을 GHCR 자격 증명 주입 전에 끝낸다.
+      - name: Build xtask before registry login
+        run: cargo build --locked --package xtask
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: digests
@@ -110,6 +113,6 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: |
-          digest=$(cargo xtask ci-base-manifest --image "$IMAGE" --tag "$SOURCE_SHA" --digests-dir digests)
+          digest=$(target/debug/xtask ci-base-manifest --image "$IMAGE" --tag "$SOURCE_SHA" --digests-dir digests)
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "image=$IMAGE@$digest (linux/amd64, linux/arm64; CI_BASE_IMAGE_DIGEST=$digest)" >> "$GITHUB_STEP_SUMMARY"
