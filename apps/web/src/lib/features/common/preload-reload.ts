@@ -34,8 +34,13 @@ export const PRELOAD_RELOAD_SETTLE_MS = 30_000;
  * 다시 읽기를 부른 뒤 페이지가 내려가기(`pagehide`)를 기다리는 시간. 그 안에 내려가지 않으면 다시 읽기가 일어나지 않은
  * 것으로 보고(바깥 beforeunload가 막아 사용자가 머무름 등) 되돌린다. 응답이 늦어 이 시간 뒤에 내려가도 되돌린 쪽이 더
  * 보수적이다(그사이의 실패는 취소하지 않고 배너를 띄울 뿐이다).
+ * 다만 첫 타이머가 늦게 깨면 beforeunload 대화상자 등으로 주 스레드가 멈췄다고 보고 한 번 더 기다린다.
+ * 두 번째 타이머는 늦게 깨도 되돌려, 배경 탭 타이머 조절 등으로 다시 읽는 중 상태가 계속 남지 않게 한다.
  */
 export const PRELOAD_RELOAD_STALL_MS = 5_000;
+
+/** 이보다 더 늦게 깬 stall 타이머는 주 스레드가 막혔던 것으로 본다. */
+const PRELOAD_RELOAD_STALL_DELAY_MS = 1_000;
 
 export interface PreloadReloadOptions {
   /**
@@ -108,14 +113,25 @@ export function watchPreloadErrors(options: PreloadReloadOptions = {}): () => vo
   };
   const watchReload = (): void => {
     window.addEventListener('pagehide', onPageHide, { once: true });
-    stall = setTimeout(() => {
-      stall = undefined;
-      window.removeEventListener('pagehide', onPageHide);
-      reloading = false;
-      options.cancelReload?.();
-      options.onStale?.();
-      settleLater();
-    }, PRELOAD_RELOAD_STALL_MS);
+    let waitedAgain = false;
+    const waitForPageHide = (): void => {
+      const expectedAt = performance.now() + PRELOAD_RELOAD_STALL_MS;
+      stall = setTimeout(() => {
+        stall = undefined;
+        if (!waitedAgain && performance.now() - expectedAt > PRELOAD_RELOAD_STALL_DELAY_MS) {
+          // 대화상자에서 떠나기를 골랐어도 pagehide보다 밀린 타이머가 먼저 돌 수 있다(C-1·#164).
+          waitedAgain = true;
+          waitForPageHide();
+          return;
+        }
+        window.removeEventListener('pagehide', onPageHide);
+        reloading = false;
+        options.cancelReload?.();
+        options.onStale?.();
+        settleLater();
+      }, PRELOAD_RELOAD_STALL_MS);
+    };
+    waitForPageHide();
   };
 
   const onError = (event: Event): void => {
