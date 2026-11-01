@@ -1,0 +1,3 @@
+# Generation tools only (D-60); both MIT. No product runtime dependency.
+fonttools==4.60.1
+Brotli==1.2.0

@@ -537,7 +537,13 @@ fn normalize(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{crate_archive, npm_archive};
+    use super::{FONTS, crate_archive, npm_archive};
+
+    #[test]
+    fn font_notices_require_eight_woff2_derivatives() {
+        assert_eq!(FONTS.len(), 8, "D-86 requires two Sans pieces per weight");
+        assert!(FONTS.iter().all(|font| font.file.ends_with(".woff2")));
+    }
 
     #[test]
     fn source_archives_point_at_the_exact_version() {
