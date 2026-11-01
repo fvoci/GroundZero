@@ -169,8 +169,6 @@ mod tests {
 
     #[cfg(unix)]
     fn publication_fixture(planned: &Value) -> Result<std::path::PathBuf> {
-        use std::os::unix::fs::PermissionsExt;
-
         let root = crate::compose::tests::scratch_root()?;
         std::fs::create_dir(root.join("digests"))?;
         for name in ["a".repeat(64), "b".repeat(64)] {
@@ -181,7 +179,7 @@ mod tests {
         published["digest"] = json!(format!("sha256:{}", "c".repeat(64)));
         std::fs::write(root.join("published.json"), published.to_string())?;
         let docker = root.join("docker");
-        std::fs::write(
+        crate::test_fixture::write_executable(
             &docker,
             r#"#!/bin/sh
 echo "$*" >> calls
@@ -193,7 +191,6 @@ case "$1 $2 $3 $4" in
 esac
 "#,
         )?;
-        std::fs::set_permissions(docker, std::fs::Permissions::from_mode(0o755))?;
         Ok(root)
     }
 

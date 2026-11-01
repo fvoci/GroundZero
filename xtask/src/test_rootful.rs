@@ -8,8 +8,6 @@ use anyhow::{Context, Result};
 use xshell::cmd;
 
 fn platform_fixture(daemon: &str, manifest: &str) -> Result<std::path::PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-
     let root = scratch_root()?;
     std::fs::write(root.join("daemon-platform"), daemon)?;
     std::fs::write(root.join("manifest.json"), manifest)?;
@@ -37,8 +35,7 @@ esac
         ("gh", "#!/bin/sh\nprintf 'sha256:%064d\\n' 0\n"),
     ] {
         let path = root.join(name);
-        std::fs::write(&path, script)?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+        crate::test_fixture::write_executable(&path, script)?;
     }
     Ok(root)
 }
@@ -230,15 +227,12 @@ fn unverifiable_manifest_fails_before_preparing_the_runner() -> Result<()> {
 
 #[test]
 fn failed_tests_keep_the_original_error_and_still_verify_cleanup() -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
     let root = scratch_root()?;
     let docker = root.join("docker");
-    std::fs::write(
+    crate::test_fixture::write_executable(
         &docker,
         "#!/bin/sh\necho \"$*\" >> calls\ncase \"$1\" in compose) exit 19;; esac\n",
     )?;
-    std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o755))?;
     let compose = Compose::new(&root, Env::Test);
     let sh = compose.shell()?;
     let path = format!("{}:{}", root.display(), sh.var("PATH")?);

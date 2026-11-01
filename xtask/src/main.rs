@@ -17,6 +17,8 @@ mod supabase_cloud_precheck;
 mod supabase_cloud_rebuild;
 mod test;
 mod test_executables;
+#[cfg(all(test, unix))]
+mod test_fixture;
 mod test_report;
 mod test_verify;
 
