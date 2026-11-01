@@ -1,10 +1,21 @@
 # D-86 서체 생성·검증과 원래 차단 조건 재현 (#214)
 
+`--verify`는 Python·uv 없이 `cargo xtask fonts-verify`를 실행한다. 같은 검사가 `cargo xtask check`와 CI check의 필수 단계이며 원본 해시·Serif 원시 표 경계·Sans cmap 분할/글리프 CID·이체자·name ID 0/13/14·WOFF2 처리 셋·CSS 범위를 독립적으로 검증한다. 생성 시 Python 검증도 유지한다. CI 이미지나 시스템 패키지를 바꾸지 않으며 다음 Rust 의존성은 xtask에서만 쓴다.
+
+| 검증 도구                      | 판            | 직접 확인한 라이선스                           | 출처                                                                                                                                                                 |
+| ------------------------------ | ------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| brotli-decompressor            | 6.0.1         | BSD-3-Clause (원문), manifest BSD-3-Clause/MIT | [LICENSE](https://github.com/dropbox/rust-brotli-decompressor/blob/e4f3bf3326256a5dc23e5fa9276d803f6a4ad527/LICENSE)                                                 |
+| alloc-no-stdlib / alloc-stdlib | 3.0.0 / 0.3.0 | BSD-3-Clause                                   | [LICENSE](https://github.com/dropbox/rust-alloc-no-stdlib/blob/0a81fd6928ea3b33c8cd484aa4575d50ffb98012/LICENSE)                                                     |
+| ttf-parser                     | 0.25.1        | MIT OR Apache-2.0                              | [LICENSE-MIT](https://github.com/harfbuzz/ttf-parser/blob/v0.25.1/LICENSE-MIT), [LICENSE-APACHE](https://github.com/harfbuzz/ttf-parser/blob/v0.25.1/LICENSE-APACHE) |
+| encoding_rs                    | 0.8.42        | (Apache-2.0 OR MIT) AND BSD-3-Clause           | [라이선스 원문](https://github.com/hsivonen/encoding_rs/tree/v0.8.42)                                                                                                |
+
+모두 D-60 허용 목록 안이다. WOFF2 검증기는 승인 파일이 쓰는 CFF·무변환 표만 해독하며 다른 변환은 실패시킨다. `cargo xtask licenses`로 Cargo·pnpm 의존성도 검사한다.
+
 제품 산출물은 `generate-fonts.sh`로만 만든다. 기준 커밋과 O-37의 승인 여섯 원본 SHA-256은 `font_assets.py`와 notices 검사에 고정한다. 원본이 없는 얕은 체크아웃은 같은 Git 커밋의 raw 주소에서 입력을 받아 해시를 대조한다. Noto 원본은 생성 입력으로만 사용하며 D2Coding은 원본 TTF 그대로다.
 
 ```sh
 sh tools/generate-fonts.sh           # Noto WOFF2·unicode-range CSS·해시 목록 생성
-sh tools/generate-fonts.sh --verify  # 실제 파일의 D-86 경계와 변조 거부 시험
+sh tools/generate-fonts.sh --verify  # Rust로 실제 파일의 D-86 경계 검증(Python·uv 불필요)
 sh tools/generate-fonts.sh --check   # 재생성한 파일과 커밋한 산출물의 바이트 동일성
 pnpm --filter @fvoci/web run test tests/font-assets.test.ts
 ```

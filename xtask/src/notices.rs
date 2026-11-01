@@ -8,7 +8,7 @@
 //!
 //! 각 패키지가 함께 배포하는 LICENSE·NOTICE·COPYING 파일을 그대로 싣고, 그런 파일이 없으면 SPDX 원문을 부록에 싣는다.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -286,9 +286,10 @@ fn check_font_files(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn check_font_sources(root: &Path) -> Result<()> {
+pub(crate) fn font_sources(root: &Path) -> Result<BTreeMap<&'static str, Vec<u8>>> {
     let cache = root.join("target/font-tools-sources");
     fs::create_dir_all(&cache)?;
+    let mut sources = BTreeMap::new();
     for font in FONT_SOURCES {
         let path = cache.join(font.file);
         let bytes = if path.exists() {
@@ -334,14 +335,18 @@ fn check_font_sources(root: &Path) -> Result<()> {
             if sha256_hex(&bytes) != font.sha256 {
                 bail!("{} does not match the O-37 source hash", font.file);
             }
-            fs::write(&path, &bytes)?;
+            // Unit tests and the mandatory checker can fetch the same pinned input concurrently.
+            let temporary = cache.join(format!("{}.{}", font.file, uuid::Uuid::now_v7()));
+            fs::write(&temporary, &bytes)?;
+            fs::rename(&temporary, &path)?;
             bytes
         };
         if sha256_hex(&bytes) != font.sha256 {
             bail!("{} does not match the O-37 source hash", font.file);
         }
+        sources.insert(font.file, bytes);
     }
-    Ok(())
+    Ok(sources)
 }
 
 fn font_source_failure(
@@ -399,7 +404,7 @@ fn check_font_bundle(root: &Path) -> Result<()> {
 fn fonts(root: &Path, out: &mut String) -> Result<()> {
     let dir = root.join(FONT_DIR);
     check_font_files(&dir)?;
-    check_font_sources(root)?;
+    font_sources(root)?;
     check_font_bundle(root)?;
     let _ignored = write!(
         out,
