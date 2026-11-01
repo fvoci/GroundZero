@@ -63,6 +63,43 @@ test('moves a kanban card, undoes the move, and both reach the server', async ({
   await expect(card(lane(page, '할 일'), title)).toHaveCount(0);
 });
 
+for (const focused of [false, true]) {
+  test(`keyboard move toast ${focused ? 'pauses with Alt+T focus' : 'closes after ten seconds'}`, async ({
+    signIn,
+  }) => {
+    const { page, api } = await signIn('test-user');
+    const tag = unique();
+    const ws = await api.createWorkspace(`토스트 시간 시험 ${tag}`);
+    const item = await api.createProjectItem(ws, tag);
+    const title = `키보드 이동 ${tag}`;
+    const task = str(await api.createTask(item, title), 'id');
+    await openBoard(page, ws, item);
+    // 저장 응답과 토스트가 도착하는 동안에도 시계는 고정한다.
+    await page.clock.install({ time: new Date('2026-11-01T00:00:00Z') });
+    await page.clock.pauseAt(new Date('2026-11-01T00:00:01Z'));
+    await card(page, title).focus();
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(card(lane(page, '진행 중'), title)).toBeVisible();
+    await expect.poll(() => serverStatus(api, task)).toBe('진행 중');
+    const completion = page.locator('[data-sonner-toast]').filter({ hasText: title });
+    await expect(completion.getByRole('button', { name: '되돌리기' })).toBeVisible();
+    await page.clock.runFor(4_000);
+    if (focused) {
+      await page.keyboard.press('Alt+t');
+      await expect(page.locator('[data-sonner-toaster]')).toBeFocused();
+      await page.clock.runFor(20_000);
+      await expect(completion).toHaveAttribute('data-removed', 'false');
+      await card(page, title).focus();
+    }
+    await page.clock.runFor(5_999);
+    await expect(completion).toHaveAttribute('data-removed', 'false');
+    await page.clock.runFor(1);
+    await expect(completion).toHaveAttribute('data-removed', 'true');
+    await page.clock.runFor(200);
+    await expect(completion).toHaveCount(0);
+  });
+}
+
 test('keeps unsaved task input when closing is cancelled, and returns focus', async ({
   signIn,
 }) => {
