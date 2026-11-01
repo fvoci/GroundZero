@@ -28,6 +28,7 @@ case "$1 $2" in
   'manifest inspect')
     [ ! -f manifest-failure ] || exit 19
     cat manifest.json ;;
+  'image inspect') cat cached-image.json ;;
   'run --rm') exit 0 ;;
   *) exit 97 ;;
 esac
@@ -109,28 +110,120 @@ fn available_daemon_platform_is_pinned_for_rootful_and_rootless() -> Result<()> 
 }
 
 #[test]
+fn cached_digest_platform_allows_the_runner_when_remote_verification_fails() -> Result<()> {
+    for (arch, variant) in [
+        ("amd64", None),
+        ("amd64", Some("")),
+        ("arm64", None),
+        ("arm64", Some("")),
+        ("arm64", Some("v8")),
+    ] {
+        for registry_failure in [false, true] {
+            let root = platform_fixture(&format!("linux/{arch}"), "not JSON")?;
+            if registry_failure {
+                std::fs::write(root.join("manifest-failure"), "")?;
+            }
+            let mut cached = serde_json::json!({"Os": "linux", "Architecture": arch});
+            if let Some(variant) = variant {
+                cached["Variant"] = serde_json::json!(variant);
+            }
+            std::fs::write(
+                root.join("cached-image.json"),
+                serde_json::json!([cached]).to_string(),
+            )?;
+            let compose = Compose::new(&root, Env::Test);
+            let sh = compose.shell()?;
+            let _path = sh.push_env("PATH", format!("{}:{}", root.display(), sh.var("PATH")?));
+            let runner = prepare_test_container(&root, &compose, &sh, Execution::Container)?
+                .context("the same cached digest with a compatible platform must remain usable")?;
+            runner.run(&sh, &[], &["true"])?;
+            let calls = std::fs::read_to_string(root.join("calls"))?;
+            let inspect = calls
+                .lines()
+                .find(|line| line.starts_with("image inspect "))
+                .context("the daemon must inspect the cached digest")?;
+            assert!(inspect.ends_with(&runner.image), "{inspect}");
+            assert!(
+                calls.contains(&format!("--platform linux/{arch} ")),
+                "{calls}"
+            );
+            std::fs::remove_dir_all(root)?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn nonbaseline_variants_are_rejected_from_remote_and_cached_images() -> Result<()> {
+    for (arch, variant) in [("amd64", "v3"), ("arm64", "v9"), ("arm64", "v8.1")] {
+        for registry_failure in [false, true] {
+            let manifest = serde_json::json!([{"Descriptor": {"platform": {"os": "linux", "architecture": arch, "variant": variant}}}]);
+            let root = platform_fixture(&format!("linux/{arch}"), &manifest.to_string())?;
+            if registry_failure {
+                std::fs::write(root.join("manifest-failure"), "")?;
+            }
+            // 원격 불일치를 캐시로 덮지 않는다. 원격 조회 실패 때에는 비호환 캐시 자체를 거부한다.
+            let cached_variant = if registry_failure { variant } else { "" };
+            let cached = serde_json::json!([{"Os": "linux", "Architecture": arch, "Variant": cached_variant}]);
+            std::fs::write(root.join("cached-image.json"), cached.to_string())?;
+            let compose = Compose::new(&root, Env::Test);
+            let sh = compose.shell()?;
+            let _path = sh.push_env("PATH", format!("{}:{}", root.display(), sh.var("PATH")?));
+            let error = prepare_test_container(&root, &compose, &sh, Execution::Container)
+                .expect_err("a nonbaseline variant must not be accepted");
+            assert!(format!("{error:#}").contains("--host"), "{error:#}");
+            assert!(!root.join("target/test-container").exists());
+            let calls = std::fs::read_to_string(root.join("calls"))?;
+            assert!(
+                !calls.lines().any(|line| line.starts_with("run ")),
+                "{calls}"
+            );
+            assert_eq!(
+                calls.lines().any(|line| line.starts_with("image inspect ")),
+                registry_failure,
+                "{calls}"
+            );
+            std::fs::remove_dir_all(root)?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn unverifiable_manifest_fails_before_preparing_the_runner() -> Result<()> {
-    for registry_failure in [false, true] {
-        let root = platform_fixture("linux/x86_64", "not JSON")?;
-        if registry_failure {
-            std::fs::write(root.join("manifest-failure"), "")?;
+    for cache in [
+        None,
+        Some("not JSON"),
+        Some(r#"[{"Os":"windows","Architecture":"amd64"}]"#),
+        Some(r#"[{"Os":"linux","Architecture":"arm64"}]"#),
+        Some(r#"[{"Os":"linux","Architecture":"amd64","Variant":null}]"#),
+        Some(r#"[{"Os":"linux"}]"#),
+    ] {
+        for registry_failure in [false, true] {
+            let root = platform_fixture("linux/x86_64", "not JSON")?;
+            if registry_failure {
+                std::fs::write(root.join("manifest-failure"), "")?;
+            }
+            if let Some(cache) = cache {
+                std::fs::write(root.join("cached-image.json"), cache)?;
+            }
+            let compose = Compose::new(&root, Env::Test);
+            let sh = compose.shell()?;
+            let _path = sh.push_env("PATH", format!("{}:{}", root.display(), sh.var("PATH")?));
+            let error = prepare_test_container(&root, &compose, &sh, Execution::Container)
+                .expect_err("registry or JSON failure must not fall back to another runner");
+            let message = format!("{error:#}");
+            for expected in ["linux/amd64", "CI_BASE_IMAGE_DIGEST", "--host"] {
+                assert!(message.contains(expected), "missing {expected}: {message}");
+            }
+            assert!(!root.join("target/test-container").exists());
+            let calls = std::fs::read_to_string(root.join("calls"))?;
+            assert!(
+                !calls.lines().any(|line| line.starts_with("run ")),
+                "{calls}"
+            );
+            std::fs::remove_dir_all(root)?;
         }
-        let compose = Compose::new(&root, Env::Test);
-        let sh = compose.shell()?;
-        let _path = sh.push_env("PATH", format!("{}:{}", root.display(), sh.var("PATH")?));
-        let error = prepare_test_container(&root, &compose, &sh, Execution::Container)
-            .expect_err("registry or JSON failure must not fall back to another runner");
-        let message = format!("{error:#}");
-        for expected in ["linux/amd64", "CI_BASE_IMAGE_DIGEST", "--host"] {
-            assert!(message.contains(expected), "missing {expected}: {message}");
-        }
-        assert!(!root.join("target/test-container").exists());
-        let calls = std::fs::read_to_string(root.join("calls"))?;
-        assert!(
-            !calls.lines().any(|line| line.starts_with("run ")),
-            "{calls}"
-        );
-        std::fs::remove_dir_all(root)?;
     }
     Ok(())
 }

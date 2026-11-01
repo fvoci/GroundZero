@@ -33,16 +33,48 @@ pub(super) fn require_image(sh: &Shell, image: &str, platform: &str) -> Result<(
         )
     };
     // --verbose는 단일 manifest에도 config에서 얻은 OS·아키텍처를 붙인다.
-    let raw = cmd!(sh, "docker manifest inspect --verbose {image}")
+    let remote = cmd!(sh, "docker manifest inspect --verbose {image}")
         .quiet()
         .read()
-        .with_context(guidance)?;
-    let manifest: Value = serde_json::from_str(&raw).with_context(guidance)?;
+        .context("inspect published manifest")
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).context("parse published manifest"));
+    match remote {
+        Ok(manifest) => anyhow::ensure!(
+            provides(&manifest, platform),
+            "published image does not include {platform}; {}",
+            guidance()
+        ),
+        Err(remote_error) => require_cached_image(sh, image, platform).with_context(|| {
+            format!(
+                "{}; remote verification failed: {remote_error:#}",
+                guidance()
+            )
+        })?,
+    }
+    Ok(())
+}
+
+fn require_cached_image(sh: &Shell, image: &str, platform: &str) -> Result<()> {
+    // 실행에도 쓰는 같은 repository@digest를 daemon에 조회한다.
+    let raw = cmd!(sh, "docker image inspect {image}")
+        .quiet()
+        .read()
+        .context("inspect cached ci-base digest")?;
+    let images: Value = serde_json::from_str(&raw).context("parse cached image metadata")?;
+    let image = images
+        .as_array()
+        .filter(|images| images.len() == 1)
+        .and_then(|images| images.first());
     anyhow::ensure!(
-        provides(&manifest, platform),
-        "published image does not include {platform}; {}",
-        guidance()
+        image.is_some_and(|image| matches_platform(
+            image.get("Os").and_then(Value::as_str),
+            image.get("Architecture").and_then(Value::as_str),
+            image.get("Variant"),
+            platform,
+        )),
+        "cached digest does not provide {platform} with a compatible variant"
     );
+    println!("==> verified cached ci-base digest for {platform} (remote metadata unavailable)");
     Ok(())
 }
 
@@ -52,15 +84,36 @@ fn provides(manifest: &Value, platform: &str) -> bool {
         Value::Object(_) => std::slice::from_ref(manifest),
         _ => return false,
     };
-    entries.iter().any(|entry| {
-        let os = entry
-            .pointer("/Descriptor/platform/os")
-            .and_then(Value::as_str);
-        let arch = entry
-            .pointer("/Descriptor/platform/architecture")
-            .and_then(Value::as_str);
-        matches!((os, arch), (Some(os), Some(arch)) if format!("{os}/{arch}") == platform)
-    })
+    entries
+        .iter()
+        .filter_map(|entry| entry.pointer("/Descriptor/platform"))
+        .any(|candidate| {
+            matches_platform(
+                candidate.get("os").and_then(Value::as_str),
+                candidate.get("architecture").and_then(Value::as_str),
+                candidate.get("variant"),
+                platform,
+            )
+        })
+}
+
+fn matches_platform(
+    os: Option<&str>,
+    arch: Option<&str>,
+    variant: Option<&Value>,
+    platform: &str,
+) -> bool {
+    let (Some(os), Some(arch)) = (os, arch) else {
+        return false;
+    };
+    let variant = match variant {
+        None => "",
+        Some(Value::String(variant)) => variant.as_str(),
+        Some(_) => return false,
+    };
+    // daemon이 CPU variant를 보고하지 않으므로 기본 arm64 v8만 빈 값으로 정규화한다.
+    let baseline = variant.is_empty() || (arch == "arm64" && variant == "v8");
+    baseline && format!("{os}/{arch}") == platform
 }
 
 #[cfg(test)]
