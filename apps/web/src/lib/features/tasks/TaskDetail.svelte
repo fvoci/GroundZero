@@ -61,7 +61,7 @@
 
   interface Props {
     aggregate?: boolean;
-    initialRead?: { taskId: string; read: CapturedRead<DetailRead> } | undefined;
+    initialRead?: ((taskId: string) => CapturedRead<DetailRead> | undefined) | undefined;
     readOnly?: boolean;
     taskId: string;
     /** 부모 항목의 읽기 힌트. 실제 업무의 item_id가 다르면 조합층이 다시 읽는다. */
@@ -356,7 +356,6 @@
     if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
   }
 
-  let consumedRead: CapturedRead<DetailRead> | undefined;
   $effect(() => {
     const id = taskId;
     const navigation = untrack(() => aggregate) ? router.navigationGeneration : undefined;
@@ -371,12 +370,7 @@
     error = undefined;
     screenArchived = undefined;
     let aggregateRead: DetailRead | undefined;
-    const seed = untrack(() => initialRead);
-    let read: Promise<DetailRead> | undefined;
-    if (aggregate && seed?.taskId === id && seed.read !== consumedRead) {
-      consumedRead = seed.read;
-      read = seed.read.take();
-    }
+    const read = untrack(() => (aggregate ? initialRead?.(id)?.take() : undefined));
     const pending = aggregate
       ? (read ?? taskScreenApi.detail(id)).then((read) => {
           aggregateRead = read;

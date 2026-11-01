@@ -8,7 +8,7 @@
   import { m } from '$lib/paraglide/messages.js';
   interface Props {
     aggregate?: boolean;
-    initialDetail?: { taskId: string; read: CapturedRead<DetailRead> } | undefined;
+    takeInitialRead?: ((taskId: string) => CapturedRead<DetailRead> | undefined) | undefined;
     initialReady?: boolean;
     openTaskId: string | undefined;
     itemId: string;
@@ -30,7 +30,7 @@
   }
   let {
     aggregate = false,
-    initialDetail,
+    takeInitialRead,
     initialReady = false,
     openTaskId,
     itemId,
@@ -86,7 +86,7 @@
       {#key openTaskId}
         <TaskDetail
           {aggregate}
-          initialRead={initialDetail}
+          initialRead={takeInitialRead}
           {readOnly}
           bind:this={detailEditor}
           taskId={openTaskId}

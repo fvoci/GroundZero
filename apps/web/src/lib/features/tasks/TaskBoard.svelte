@@ -453,6 +453,11 @@
   let initialDetail = $state<{ taskId: string; read: CapturedRead<DetailRead> } | undefined>();
   let preparedDetail = $state(false);
   let detailReadSequence = 0;
+  function takeInitialRead(taskId: string): CapturedRead<DetailRead> | undefined {
+    const seed = initialDetail;
+    initialDetail = undefined;
+    return seed?.taskId === taskId ? seed.read : undefined;
+  }
   function prepareDetail(): void {
     if (preparedDetail) return;
     preparedDetail = true;
@@ -1728,7 +1733,7 @@
 
 <TaskBoardDetailDialog
   {aggregate}
-  {initialDetail}
+  {takeInitialRead}
   initialReady={preparedDetail}
   {openTaskId}
   itemId={item.id}
