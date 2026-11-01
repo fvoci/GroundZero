@@ -132,7 +132,9 @@ describe('user feedback (D-82)', () => {
     });
     await advance(100);
     flushSync(() => {
-      notifyDone('옮겼습니다.', 'timed-action', { action: { label: '되돌리기', onClick: vi.fn() } });
+      notifyDone('옮겼습니다.', 'timed-action', {
+        action: { label: '되돌리기', onClick: vi.fn() },
+      });
     });
     const revived = screen.getByRole('button', { name: '되돌리기' }).closest('[data-sonner-toast]');
     if (!(revived instanceof HTMLElement)) throw new Error('toast');
