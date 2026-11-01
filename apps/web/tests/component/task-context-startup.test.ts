@@ -134,13 +134,13 @@ it('starts authorized task reads before constructing the item information', asyn
   ]);
   vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
   const profile = await api.itemProfile(TASK_ITEM.id);
-  vi.mocked(api.itemProfile).mockImplementation(async () => {
+  vi.mocked(api.itemProfile).mockImplementation(() => {
     order.push('profile');
-    return profile;
+    return Promise.resolve(profile);
   });
-  vi.mocked(taskData.syncRecurrences).mockImplementation(async () => {
+  vi.mocked(taskData.syncRecurrences).mockImplementation(() => {
     order.push('sync');
-    return 0;
+    return Promise.resolve(0);
   });
   render(App);
   await screen.findByTestId('task-board');

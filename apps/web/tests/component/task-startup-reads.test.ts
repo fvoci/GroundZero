@@ -51,9 +51,9 @@ it('starts detail and sync immediately, then waits for sync before the board', a
     order.push('sync');
     return sync.promise;
   });
-  vi.spyOn(taskScreenApi, 'board').mockImplementation(async () => {
+  vi.spyOn(taskScreenApi, 'board').mockImplementation(() => {
     order.push('board');
-    return board;
+    return Promise.resolve(board);
   });
   const current = capture();
   const reads = startTaskReads(current, () => current, TASK_ITEM.id, context, 'task');
