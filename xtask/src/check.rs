@@ -79,6 +79,10 @@ pub fn run(root: &Path, skip_licenses: bool, docs_only: bool) -> Result<()> {
             Box::new(|_| crate::notices::run(root, true)),
         ),
         (
+            "font structure and coverage (D-86)",
+            Box::new(|_| crate::fonts::run(root)),
+        ),
+        (
             "pnpm test",
             Box::new(|sh| Ok(cmd!(sh, "pnpm run test").run()?)),
         ),

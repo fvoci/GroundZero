@@ -5,6 +5,7 @@ mod check;
 mod ci_plan;
 mod compose;
 mod dev;
+mod fonts;
 mod i18n;
 mod licenses;
 mod notices;
@@ -122,6 +123,8 @@ enum Command {
     },
     /// Cargo·pnpm 의존성 라이선스를 허용 목록과 비교한다.
     Licenses,
+    /// D-86: 실제 서체의 표·cmap·이체자·저작권·CSS 범위를 검사한다.
+    FontsVerify,
     /// HWP·HWPX 미리보기용 rhwp WASM을 만든다(D-76). 입력이 같으면 앞서 만든 결과를 다시 쓴다.
     Rhwp {
         /// 입력이 같아도 다시 빌드한다.
@@ -216,6 +219,7 @@ fn main() -> Result<()> {
         Command::Down => compose::down_all(&root),
         Command::Openapi { check } => openapi::run(&root, check),
         Command::Licenses => licenses::run(&root),
+        Command::FontsVerify => fonts::run(&root),
         Command::Notices { check } => notices::run(&root, check),
         Command::Rhwp { force, audit } => {
             if audit {

@@ -7,8 +7,11 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+brotli-decompressor = "6.0.1"
 clap.workspace = true
+encoding_rs = "0.8.42"
 native-tls = "0.2"
+read-fonts = "0.41.0"
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["tls-native-tls"] }
 tokio = { workspace = true, features = ["time"] }

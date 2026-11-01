@@ -5,34 +5,23 @@
    그 외는 원문 그대로 유지해 업데이트 시 비교한다. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './font-ranges.css';
 @custom-variant dark (&:is(.dark *));
 
-/* 서체 파일(D-86): 받은 그대로의 배포본(OFL-1.1, 고지는 THIRD_PARTY_NOTICES와 assets/fonts의 라이선스 파일).
-   서체마다 굵기 둘, 글자별 조각 없음. 미리 받지 않고 그 서체로 그릴 글자가 처음 나올 때 브라우저가 받으며,
-   받는 동안에는 시스템 서체로 먼저 보인다(swap). 명조·고정폭은 그 글자가 있는 화면에서만 받는다. */
-@font-face {
-  font-family: 'Noto Sans KR';
-  font-weight: 400;
-  font-display: swap;
-  src: url('../assets/fonts/NotoSansKR-Regular.otf') format('opentype');
-}
-@font-face {
-  font-family: 'Noto Sans KR';
-  font-weight: 700;
-  font-display: swap;
-  src: url('../assets/fonts/NotoSansKR-Bold.otf') format('opentype');
-}
+/* D-86: Sans는 생성한 font-ranges.css의 굵기별 두 조각이며 첫 조각만 preload한다.
+   Serif는 WOFF2 수정본, D2Coding은 RFN을 지키는 원본 TTF다(OFL-1.1 고지: THIRD_PARTY_NOTICES).
+   swap을 유지하고 명조·코드는 그 글자가 있는 화면에서만 받는다. */
 @font-face {
   font-family: 'Noto Serif KR';
   font-weight: 400;
   font-display: swap;
-  src: url('../assets/fonts/NotoSerifKR-Regular.otf') format('opentype');
+  src: url('../assets/fonts/NotoSerifKR-Regular.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Noto Serif KR';
   font-weight: 700;
   font-display: swap;
-  src: url('../assets/fonts/NotoSerifKR-Bold.otf') format('opentype');
+  src: url('../assets/fonts/NotoSerifKR-Bold.woff2') format('woff2');
 }
 @font-face {
   font-family: 'D2Coding';
