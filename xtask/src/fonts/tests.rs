@@ -7,6 +7,36 @@ fn root() -> &'static Path {
 }
 
 #[test]
+fn font_tool_dependencies_do_not_expand_the_d73_exception() -> Result<()> {
+    let output = std::process::Command::new("cargo")
+        .current_dir(root())
+        .args(["metadata", "--no-deps", "--locked", "--format-version", "1"])
+        .output()?;
+    assert!(
+        output.status.success(),
+        "cargo metadata: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let package = metadata["packages"]
+        .as_array()
+        .context("workspace packages")?
+        .iter()
+        .find(|package| package["name"] == "xtask")
+        .context("xtask package")?;
+    // Metadata reports package names even if a direct dependency is renamed in TOML.
+    assert!(
+        !package["dependencies"]
+            .as_array()
+            .context("xtask dependencies")?
+            .iter()
+            .any(|dependency| dependency["name"] == "ttf-parser"),
+        "D-73 only approves ttf-parser indirectly via lopdf, not as a font verification tool"
+    );
+    Ok(())
+}
+
+#[test]
 fn approved_assets_pass_structural_verification() -> Result<()> {
     run(root())
 }
@@ -111,13 +141,54 @@ fn woff2_rejects_truncation_transforms_metadata_and_checksum_changes() -> Result
     }
     let mut sfnt = asset(root(), "NotoSerifKR-Regular.woff2")?;
     woff2::verify_checksum(&sfnt)?;
-    let head = ttf_parser::RawFace::parse(&sfnt, 0)?
-        .table_records
-        .into_iter()
-        .find(|record| record.tag == ttf_parser::Tag::from_bytes(b"head"))
-        .context("head record")?
-        .offset as usize;
+    let head = super::parser::table_offset(&sfnt, b"head")?;
     sfnt[head + 8] ^= 1;
     assert!(woff2::verify_checksum(&sfnt).is_err());
+    Ok(())
+}
+
+#[test]
+fn replacement_parser_preserves_raw_name_and_cmap_corruption_detection() -> Result<()> {
+    use read_fonts::{FontRef, TableProvider, tables::cmap::CmapSubtable};
+
+    let sources = crate::notices::font_sources(root())?;
+    let source = coverage::read(&sources["NotoSansKR-Regular.otf"])?;
+    let sfnt = asset(root(), "NotoSansKR-Regular-common.woff2")?;
+    let rest = coverage::read(&asset(root(), "NotoSansKR-Regular-rest.woff2")?)?;
+    let font = FontRef::new(&sfnt)?;
+    let name = font.name()?;
+    let name_offset = super::parser::table_offset(&sfnt, b"name")?;
+    for id in [0, 13, 14] {
+        let record = name
+            .name_record()
+            .iter()
+            .find(|record| record.name_id().to_u16() == id)
+            .context("license name record")?;
+        let offset = name_offset
+            + usize::from(name.storage_offset())
+            + record.string_offset().to_u32() as usize;
+        let mut changed = sfnt.clone();
+        changed[offset] ^= 1;
+        let common = coverage::read(&changed)?;
+        assert!(
+            coverage::verify(&source, &common, &rest).is_err(),
+            "raw name ID {id}"
+        );
+    }
+    let cmap = font.cmap()?;
+    let record = cmap.encoding_records().first().context("Unicode record")?;
+    let CmapSubtable::Format4(table) = record.subtable(cmap.offset_data())? else {
+        anyhow::bail!("approved common font must start with cmap4")
+    };
+    let offset = super::parser::table_offset(&sfnt, b"cmap")?
+        + record.subtable_offset().to_u32() as usize
+        + table.id_delta_byte_range().start;
+    let mut changed = sfnt;
+    changed[offset] ^= 1;
+    assert!(
+        coverage::read(&changed)
+            .and_then(|common| coverage::verify(&source, &common, &rest))
+            .is_err()
+    );
     Ok(())
 }

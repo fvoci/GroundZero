@@ -11,11 +11,11 @@ brotli-decompressor = "6.0.1"
 clap.workspace = true
 encoding_rs = "0.8.42"
 native-tls = "0.2"
+read-fonts = "0.41.0"
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["tls-native-tls"] }
 tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true
-ttf-parser = "0.25.1"
 sha2 = "0.11"
 spdx = { version = "0.13", features = ["text"] }
 xshell.workspace = true

@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
-use ttf_parser::{Face, GlyphId};
 
 use super::woff2::{bytes, u16_at, u32_at};
 
-type Names = Vec<(u16, u16, u16, u16, Vec<u8>)>;
+pub(super) type Names = Vec<(u16, u16, u16, u16, Vec<u8>)>;
 type Variations = BTreeMap<(u32, u32), Option<u16>>;
 
 #[derive(Clone)]
@@ -15,63 +14,8 @@ pub(super) struct Coverage {
     pub names: Names,
 }
 
-fn cid(face: &Face<'_>, glyph: GlyphId) -> Result<u16> {
-    face.tables()
-        .cff
-        .context("CFF table")?
-        .glyph_cid(glyph)
-        .context("CFF glyph CID")
-}
-
 pub(super) fn read(data: &[u8]) -> Result<Coverage> {
-    let face = Face::parse(data, 0).context("parse CFF font")?;
-    let cmap = face.tables().cmap.context("cmap table")?;
-    let mut points = BTreeSet::new();
-    for subtable in cmap.subtables {
-        if subtable.is_unicode() {
-            subtable.codepoints(|point| {
-                points.insert(point);
-            });
-        }
-    }
-    let points = points
-        .into_iter()
-        .map(|point| {
-            let character = char::from_u32(point).context("invalid Unicode scalar in cmap")?;
-            let glyph = face.glyph_index(character).context("missing cmap glyph")?;
-            Ok((point, cid(&face, glyph)?))
-        })
-        .collect::<Result<_>>()?;
-    let mut names: Names = face
-        .names()
-        .into_iter()
-        .filter(|name| [0, 13, 14].contains(&name.name_id))
-        .map(|name| {
-            (
-                name.name_id,
-                name.platform_id as u16,
-                name.encoding_id,
-                name.language_id,
-                name.name.to_vec(),
-            )
-        })
-        .collect();
-    names.sort();
-    for id in [0, 13, 14] {
-        ensure!(
-            names.iter().any(|name| name.0 == id),
-            "missing name ID {id}"
-        );
-    }
-    let cmap_data = face
-        .raw_face()
-        .table(ttf_parser::Tag::from_bytes(b"cmap"))
-        .context("raw cmap")?;
-    Ok(Coverage {
-        points,
-        names,
-        variations: variations(&face, cmap_data)?,
-    })
+    super::parser::read(data)
 }
 
 fn u24_at(data: &[u8], offset: usize) -> Result<u32> {
@@ -79,7 +23,7 @@ fn u24_at(data: &[u8], offset: usize) -> Result<u32> {
     Ok(u32::from_be_bytes([0, value[0], value[1], value[2]]))
 }
 
-fn variations(face: &Face<'_>, cmap: &[u8]) -> Result<Variations> {
+pub(super) fn variations(cids: &[u16], cmap: &[u8]) -> Result<Variations> {
     let mut result = Variations::new();
     for index in 0..usize::from(u16_at(cmap, 2)?) {
         let offset = u32_at(cmap, 4 + index * 8 + 4)? as usize;
@@ -127,11 +71,10 @@ fn variations(face: &Face<'_>, cmap: &[u8]) -> Result<Variations> {
                 for index in 0..count {
                     let start = nondefaults + 4 + index * 5;
                     let point = u24_at(table, start)?;
-                    let glyph = GlyphId(u16_at(table, start + 3)?);
+                    let glyph = usize::from(u16_at(table, start + 3)?);
+                    let cid = *cids.get(glyph).context("UVS glyph CID")?;
                     ensure!(
-                        result
-                            .insert((point, selector), Some(cid(face, glyph)?))
-                            .is_none(),
+                        result.insert((point, selector), Some(cid)).is_none(),
                         "duplicate UVS"
                     );
                 }

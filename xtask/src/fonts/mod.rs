@@ -1,6 +1,7 @@
 //! Mandatory D-86 verification, independent of the derivative hash manifest.
 mod coverage;
 mod css;
+mod parser;
 #[cfg(test)]
 mod tests;
 mod woff2;

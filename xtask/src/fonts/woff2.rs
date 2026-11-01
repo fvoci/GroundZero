@@ -163,12 +163,5 @@ fn encode(tables: &Tables) -> Result<Vec<u8>> {
 }
 
 pub(super) fn raw_tables(data: &[u8]) -> Result<Tables> {
-    let face = ttf_parser::RawFace::parse(data, 0).context("parse SFNT table directory")?;
-    face.table_records
-        .into_iter()
-        .map(|record| {
-            let table = face.table(record.tag).context("SFNT table bounds")?;
-            Ok((record.tag.to_bytes(), table.to_vec()))
-        })
-        .collect()
+    super::parser::tables(data)
 }
