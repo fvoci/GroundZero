@@ -165,6 +165,85 @@ describe('watchPreloadErrors', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('waits another stall interval after a blocked main thread before undoing a reload', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const storage = memoryStorage();
+    const reload = vi.fn();
+    const onStale = vi.fn();
+    const cancelReload = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload, onStale, cancelReload });
+    expect(preloadError()).toBe(true);
+
+    // 대화상자 동안 주 스레드가 멈춰, 예정 시각보다 1초 넘게 늦게 깬다.
+    const resumedAt = PRELOAD_RELOAD_STALL_MS + 1_001;
+    now.mockReturnValue(resumedAt);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+    expect(preloadError()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    now.mockReturnValue(resumedAt + PRELOAD_RELOAD_STALL_MS - 1);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS - 1);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+    now.mockReturnValue(resumedAt + PRELOAD_RELOAD_STALL_MS);
+    vi.advanceTimersByTime(1);
+    expect(cancelReload).toHaveBeenCalledTimes(1);
+    expect(onStale).toHaveBeenCalledTimes(1);
+    expect(preloadError()).toBe(false);
+  });
+
+  it('does not undo a reload when pagehide follows a delayed stall timer', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const storage = memoryStorage();
+    const onStale = vi.fn();
+    const cancelReload = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload: vi.fn(), onStale, cancelReload });
+    expect(preloadError()).toBe(true);
+    const resumedAt = PRELOAD_RELOAD_STALL_MS + 1_001;
+    now.mockReturnValue(resumedAt);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event('pagehide'));
+    now.mockReturnValue(resumedAt + PRELOAD_RELOAD_STALL_MS);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cleans up the stall timer and pagehide listener after waiting again', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const removeListener = vi.spyOn(window, 'removeEventListener');
+    const storage = memoryStorage();
+    const onStale = vi.fn();
+    const cancelReload = vi.fn();
+    stop = watchPreloadErrors({ storage: () => storage, reload: vi.fn(), onStale, cancelReload });
+    expect(preloadError()).toBe(true);
+    const resumedAt = PRELOAD_RELOAD_STALL_MS + 1_001;
+    now.mockReturnValue(resumedAt);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(1);
+    removeListener.mockClear();
+
+    stop();
+    stop = undefined;
+    expect(removeListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+    now.mockReturnValue(resumedAt + PRELOAD_RELOAD_STALL_MS);
+    vi.advanceTimersByTime(PRELOAD_RELOAD_STALL_MS);
+    expect(cancelReload).not.toHaveBeenCalled();
+    expect(onStale).not.toHaveBeenCalled();
+  });
+
   it('leaves a reload that is unloading the page alone', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const storage = memoryStorage();
