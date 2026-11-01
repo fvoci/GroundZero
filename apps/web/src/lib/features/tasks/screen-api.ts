@@ -43,6 +43,10 @@ export interface BoardRead extends Bundle {
 export interface DetailRead extends Bundle {
   task: TaskResource;
   item: ItemView;
+}
+export interface DetailOptionsRead {
+  viewer_id: string;
+  item_id: string;
   statuses: Section<TaskStatusDefinition[]>;
   assignable: Section<ReturnType<typeof parseAssignee>[]>;
 }
@@ -116,10 +120,27 @@ export const taskScreenApi = {
           ...bundle(value),
           task: parseTaskResource(o.task),
           item: parseItem(o.item),
-          statuses: section(o.statuses, (v) => parseList(v, parseTaskStatusDefinition)),
-          assignable: section(o.assignable, (v) => parseList(v, parseAssignee)),
         };
       }),
+    ),
+  options: (id: string) =>
+    owned(
+      me.userId,
+      expectOk(
+        'GET',
+        `/api/items/${encodeURIComponent(id)}/task-detail-options`,
+        (value): DetailOptionsRead => {
+          const o = rec(value, 'task detail options');
+          const item_id = str(o, 'item_id');
+          if (item_id !== id) throw new TypeError('invalid task options scope');
+          return {
+            viewer_id: str(o, 'viewer_id'),
+            item_id,
+            statuses: section(o.statuses, (v) => parseList(v, parseTaskStatusDefinition)),
+            assignable: section(o.assignable, (v) => parseList(v, parseAssignee)),
+          };
+        },
+      ),
     ),
 };
 

@@ -6486,6 +6486,67 @@
         }
       }
     },
+    "/api/items/{item_id}/task-detail-options": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "read_task_detail_options",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetailOptionsRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/tasks": {
       "get": {
         "tags": [
@@ -24249,6 +24310,29 @@
           }
         }
       },
+      "TaskDetailOptionsRead": {
+        "type": "object",
+        "required": [
+          "viewer_id",
+          "item_id",
+          "statuses",
+          "assignable"
+        ],
+        "properties": {
+          "assignable": {
+            "$ref": "#/components/schemas/ReadSection_Vec_ScreenAssignable"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "statuses": {
+            "$ref": "#/components/schemas/ReadSection_Vec_ScreenStatus"
+          },
+          "viewer_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "TaskDetailRead": {
         "type": "object",
         "required": [
@@ -24257,19 +24341,14 @@
           "item",
           "archived",
           "tasks",
-          "statuses",
           "assignees",
           "dependencies",
           "series",
-          "checklist",
-          "assignable"
+          "checklist"
         ],
         "properties": {
           "archived": {
             "type": "boolean"
-          },
-          "assignable": {
-            "$ref": "#/components/schemas/ReadSection_Vec_ScreenAssignable"
           },
           "assignees": {
             "type": "array",
@@ -24297,9 +24376,6 @@
             "items": {
               "$ref": "#/components/schemas/ScreenSeries"
             }
-          },
-          "statuses": {
-            "$ref": "#/components/schemas/ReadSection_Vec_ScreenStatus"
           },
           "task": {
             "$ref": "#/components/schemas/ScreenTask"

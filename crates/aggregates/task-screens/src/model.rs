@@ -205,10 +205,16 @@ pub struct TaskDetailRead {
     pub item: ScreenItem,
     pub archived: bool,
     pub tasks: Vec<ScreenTask>,
-    pub statuses: ReadSection<Vec<ScreenStatus>>,
     pub assignees: Vec<ScreenAssignee>,
     pub dependencies: Vec<ScreenDependency>,
     pub series: Vec<ScreenSeries>,
     pub checklist: Vec<ScreenChecklistItem>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct TaskDetailOptionsRead {
+    pub viewer_id: UserId,
+    pub item_id: ItemId,
+    pub statuses: ReadSection<Vec<ScreenStatus>>,
     pub assignable: ReadSection<Vec<ScreenAssignable>>,
 }

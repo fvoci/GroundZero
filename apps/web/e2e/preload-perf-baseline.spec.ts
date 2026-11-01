@@ -23,11 +23,6 @@ if (measurementRoot !== undefined) {
   test('source-verified parallel API dependency witnesses', () => {
     // Independent source witness alongside tools/perf-depth.jq. Both include the
     // item -> module arm and the document branch after documents move in parallel.
-    const source = readFileSync(
-      path.resolve(import.meta.dirname, '../src/lib/features/home/HomeDashboard.svelte'),
-      'utf8',
-    );
-    if (!source.includes('initialActivity')) return;
     const samples: unknown = JSON.parse(
       readFileSync(path.join(measurementRoot, 'screens.json'), 'utf8'),
     );
@@ -65,6 +60,56 @@ if (measurementRoot !== undefined) {
         const slowest = parallel.reduce((a, b) => (a.end > b.end ? a : b));
         expect(parallel.every((r) => r.start < slowest.end)).toBe(true);
         chain.push(home, slowest);
+      } else if (
+        ['board', 'gantt', 'task-detail'].includes(screen) &&
+        requests.some((r) => /\/task-context$/.test(r.path))
+      ) {
+        const once = (pattern: RegExp, after: number) => {
+          const matches = requests.filter((r) => pattern.test(r.path));
+          expect(matches).toHaveLength(1);
+          const found = matches[0];
+          if (found === undefined) throw new Error('missing task screen witness');
+          expect(found.start).toBeGreaterThanOrEqual(after);
+          expect(found.end).toBeGreaterThanOrEqual(found.start);
+          return found;
+        };
+        const context = once(/^\/api\/items\/[^/]+\/task-context$/, root.end);
+        const gateArms = [...arms, context];
+        expect(Math.max(...gateArms.map((r) => r.start))).toBeLessThan(
+          Math.min(...gateArms.map((r) => r.end)),
+        );
+        const joined = gateArms.reduce((a, b) => (a.end > b.end ? a : b));
+        chain[1] = joined;
+        const sync = once(/^\/api\/items\/[^/]+\/recurrences\/sync$/, joined.end);
+        const board = once(/^\/api\/items\/[^/]+\/task-board$/, sync.end);
+        expect(sync.path).toBe(context.path.replace(/\/task-context$/, '/recurrences/sync'));
+        expect(board.path).toBe(context.path.replace(/\/task-context$/, '/task-board'));
+        if (screen === 'task-detail') {
+          const detail = once(/^\/api\/tasks\/[^/]+\/detail-read$/, joined.end);
+          expect(Math.max(sync.start, detail.start)).toBeLessThan(Math.min(sync.end, detail.end));
+          const id = detail.path.split('/')[3];
+          const panels = [
+            `/api/tasks/${id}/comments`,
+            `/api/tasks/${id}/time`,
+            `/api/tasks/${id}/backlinks`,
+            `/api/me/marks/task/${id}`,
+          ].map((path) => once(new RegExp(`^${path}$`), detail.end));
+          for (const panel of panels)
+            expect(
+              panels.some(
+                (other) => other !== panel && panel.start < other.end && other.start < panel.end,
+              ),
+            ).toBe(true);
+          const options = once(/^\/api\/items\/[^/]+\/task-detail-options$/, detail.end);
+          expect(options.path).toBe(
+            context.path.replace(/\/task-context$/, '/task-detail-options'),
+          );
+          expect(options.start).toBeLessThan(Math.max(...panels.map((r) => r.end)));
+          chain.push(
+            detail,
+            [...panels, options].reduce((a, b) => (a.end > b.end ? a : b)),
+          );
+        } else chain.push(sync, board);
       } else if (['board', 'gantt', 'task-detail', 'document-tree'].includes(screen)) {
         const item = pick(/^\/api\/items\/[^/]+$/, gate.end);
         const documents = pick(/^\/api\/items\/[^/]+\/documents$/, gate.end);

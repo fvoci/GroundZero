@@ -1375,6 +1375,8 @@ REVOKE ALL ON FUNCTION fvoci.app_task_board_read(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fvoci.app_task_board_read(uuid) TO fvoci_app;
 REVOKE ALL ON FUNCTION fvoci.app_task_detail_read(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fvoci.app_task_detail_read(uuid) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_task_detail_options_read(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_task_detail_options_read(uuid) TO fvoci_app;
 
 SET LOCAL search_path = fvoci;
 

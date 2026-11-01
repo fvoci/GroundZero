@@ -11,6 +11,37 @@ export interface ContextCapture {
 export type ContextResult<T> =
   { kind: 'loaded'; value: T } | { kind: 'failed'; error: Error } | { kind: 'discarded' };
 
+export interface CapturedRead<T> {
+  take(): Promise<T>;
+}
+
+/** Start now, handle rejection immediately, and recheck ownership when consumed once. */
+export function startCapturedRead<T extends { viewer_id: string }>(
+  captured: ContextCapture,
+  current: () => ContextCapture,
+  pending: Promise<T>,
+): CapturedRead<T> {
+  const snapshot = { ...captured };
+  const settled = createContextRead(snapshot, current, pending);
+  let consumed = false;
+  return {
+    async take() {
+      if (consumed) throw new Error('Task screen read already consumed');
+      consumed = true;
+      const first = await settled;
+      if (first.kind === 'discarded') throw new Error('Task screen read no longer current');
+      const checked = await createContextRead(
+        snapshot,
+        current,
+        first.kind === 'loaded' ? Promise.resolve(first.value) : Promise.reject<T>(first.error),
+      );
+      if (checked.kind === 'loaded') return checked.value;
+      if (checked.kind === 'failed') throw checked.error;
+      throw new Error('Task screen read no longer current');
+    },
+  };
+}
+
 export async function createContextRead<T extends { viewer_id: string }>(
   captured: ContextCapture,
   current: () => ContextCapture,

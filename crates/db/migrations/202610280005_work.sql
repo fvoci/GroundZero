@@ -2638,7 +2638,7 @@ CREATE FUNCTION fvoci.app_task_detail_read(p_task uuid) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY INVOKER
     SET search_path TO 'fvoci', 'pg_temp'
 AS $$
-DECLARE v_task jsonb; v_item uuid; v_bundle jsonb; v_statuses jsonb; v_assignable jsonb; v_item_json jsonb;
+DECLARE v_task jsonb; v_item uuid; v_bundle jsonb; v_item_json jsonb;
 BEGIN
   SELECT to_jsonb(r),r.item_id INTO v_task,v_item FROM (
     SELECT t.id,t.item_id,i.module_id,t.workspace_id,t.parent_id,
@@ -2655,23 +2655,37 @@ BEGIN
     'updated_at',i.updated_at,'status',i.status,'starts_on',i.starts_on,'ends_on',i.ends_on,
     'is_template',i.is_template,'version',i.version)
     INTO v_item_json FROM items i WHERE i.id=v_item;
+  RETURN v_bundle || jsonb_build_object('task',v_task,'item',v_item_json);
+END $$;
+ALTER FUNCTION fvoci.app_task_detail_read(uuid) OWNER TO fvoci_migrator;
+
+-- Approved fallback: keep optional subtransactions off the primary detail response.
+CREATE FUNCTION fvoci.app_task_detail_options_read(p_item uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+AS $$
+DECLARE v_statuses jsonb; v_assignable jsonb;
+BEGIN
+  IF app_access('item',p_item)='none' THEN
+    RAISE EXCEPTION 'item not found' USING ERRCODE='P0002';
+  END IF;
   BEGIN
     SELECT jsonb_build_object('state','ready','value',coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb))
-      INTO v_statuses FROM app_task_statuses(v_item) s;
+      INTO v_statuses FROM app_task_statuses(p_item) s;
   EXCEPTION WHEN OTHERS THEN
     IF SQLSTATE IN ('42501','P0002') OR left(SQLSTATE,2)='28' THEN RAISE; END IF;
     v_statuses := jsonb_build_object('state','failed','error','unavailable');
   END;
   BEGIN
     SELECT jsonb_build_object('state','ready','value',coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb))
-      INTO v_assignable FROM app_item_assignable(v_item) a;
+      INTO v_assignable FROM app_item_assignable(p_item) a;
   EXCEPTION WHEN OTHERS THEN
     IF SQLSTATE IN ('42501','P0002') OR left(SQLSTATE,2)='28' THEN RAISE; END IF;
     v_assignable := jsonb_build_object('state','failed','error','unavailable');
   END;
-  RETURN v_bundle || jsonb_build_object('task',v_task,'item',v_item_json,'statuses',v_statuses,'assignable',v_assignable);
+  RETURN jsonb_build_object('viewer_id',app_user_id(),'item_id',p_item,'statuses',v_statuses,'assignable',v_assignable);
 END $$;
-ALTER FUNCTION fvoci.app_task_detail_read(uuid) OWNER TO fvoci_migrator;
+ALTER FUNCTION fvoci.app_task_detail_options_read(uuid) OWNER TO fvoci_migrator;
 
 -- SQLx는 본문 실행 뒤 같은 트랜잭션에서 스키마 없는 _sqlx_migrations 이름에 기록한다.
 -- bootstrap의 스키마를 다시 보이게 해 새 버전·체크섬도 이 원장에 남긴다.

@@ -8,6 +8,7 @@
   import { parseTaskDraft, type TaskDraft } from './detail-draft';
   import { taskData as work } from '$lib/features/tasks/detail-data';
   import { taskScreenApi, composeScreenDetail, type DetailRead } from './screen-api';
+  import type { CapturedRead } from './context-read';
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
   import { onDestroy, tick, untrack } from 'svelte';
@@ -60,6 +61,7 @@
 
   interface Props {
     aggregate?: boolean;
+    initialRead?: { taskId: string; read: CapturedRead<DetailRead> } | undefined;
     readOnly?: boolean;
     taskId: string;
     /** 부모 항목의 읽기 힌트. 실제 업무의 item_id가 다르면 조합층이 다시 읽는다. */
@@ -82,6 +84,7 @@
 
   const {
     aggregate = false,
+    initialRead,
     taskId,
     itemId,
     tasks,
@@ -353,10 +356,14 @@
     if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
   }
 
+  let consumedRead: CapturedRead<DetailRead> | undefined;
   $effect(() => {
     const id = taskId;
+    const navigation = untrack(() => aggregate) ? router.navigationGeneration : undefined;
     const parentItemId = untrack(() => itemId);
     let cancelled = false;
+    const isCurrent = (): boolean =>
+      !cancelled && (navigation === undefined || navigation === router.navigationGeneration);
     detailForm.task = undefined;
     latestRule = undefined;
     conflict = undefined;
@@ -364,31 +371,48 @@
     error = undefined;
     screenArchived = undefined;
     let aggregateRead: DetailRead | undefined;
+    const seed = untrack(() => initialRead);
+    let read: Promise<DetailRead> | undefined;
+    if (aggregate && seed?.taskId === id && seed.read !== consumedRead) {
+      consumedRead = seed.read;
+      read = seed.read.take();
+    }
     const pending = aggregate
-      ? taskScreenApi.detail(id).then((read) => {
+      ? (read ?? taskScreenApi.detail(id)).then((read) => {
           aggregateRead = read;
           return composeScreenDetail(read);
         })
       : work.task(id, parentItemId);
     void pending
       .then((detail) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
         offerDraft(detail);
         fill(detail);
         peopleError = undefined;
         if (aggregateRead !== undefined) {
           screenArchived = aggregateRead.archived;
-          if (aggregateRead.statuses.state === 'ready') definitions = aggregateRead.statuses.value;
-          else {
-            definitions = [];
-            error = m.tasks_load_failed();
-          }
-          if (aggregateRead.assignable.state === 'ready') people = aggregateRead.assignable.value;
-          else {
-            people = undefined;
-            peopleError = m.tasks_assignable_load_failed();
-          }
+          definitions = [];
+          people = undefined;
+          void taskScreenApi
+            .options(detail.item_id)
+            .then((options) => {
+              if (!isCurrent()) return;
+              if (options.statuses.state === 'ready') definitions = options.statuses.value;
+              else error = m.tasks_load_failed();
+              if (options.assignable.state === 'ready') people = options.assignable.value;
+              else peopleError = m.tasks_assignable_load_failed();
+            })
+            .catch((cause: unknown) => {
+              if (!isCurrent()) return;
+              if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
+                detailForm.task = undefined;
+                error = errorText(cause, m.tasks_task_load_failed());
+              } else {
+                error = m.tasks_load_failed();
+                peopleError = m.tasks_assignable_load_failed();
+              }
+            });
           return;
         }
         void work.assignable(detail.item_id).then(
@@ -403,7 +427,7 @@
         );
       })
       .catch((e: unknown) => {
-        if (!cancelled)
+        if (isCurrent())
           error =
             e instanceof ApiError && e.status === 404
               ? m.tasks_not_found()

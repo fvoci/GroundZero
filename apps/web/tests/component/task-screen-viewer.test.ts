@@ -14,7 +14,7 @@ afterEach(() => {
   accountSafety.switching = false;
 });
 
-it.each(['context', 'board', 'detail'] as const)(
+it.each(['context', 'board', 'detail', 'options'] as const)(
   'rejects another viewer before adopting a %s read, including SPA fallback',
   async (kind) => {
     const bundle = {
@@ -34,13 +34,20 @@ it.each(['context', 'board', 'detail'] as const)(
         ? { viewer_id: 'viewer-b', item: TASK_ITEM, module: PROJECT_MODULE, documents: [] }
         : kind === 'board'
           ? bundle
-          : {
-              ...bundle,
-              task: taskViews()[0],
-              item: TASK_ITEM,
-              statuses: { state: 'ready', value: [] },
-              assignable: { state: 'ready', value: [] },
-            };
+          : kind === 'detail'
+            ? {
+                ...bundle,
+                task: taskViews()[0],
+                item: TASK_ITEM,
+                statuses: { state: 'ready', value: [] },
+                assignable: { state: 'ready', value: [] },
+              }
+            : {
+                viewer_id: 'viewer-b',
+                item_id: 'id',
+                statuses: { state: 'ready', value: [] },
+                assignable: { state: 'ready', value: [] },
+              };
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify(body), {
         status: 200,

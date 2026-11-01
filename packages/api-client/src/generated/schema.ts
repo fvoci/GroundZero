@@ -1194,6 +1194,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/task-detail-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read_task_detail_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/tasks": {
         parameters: {
             query?: never;
@@ -5860,15 +5876,19 @@ export interface components {
             /** Format: uuid */
             successor_id: string;
         };
+        TaskDetailOptionsRead: {
+            assignable: components["schemas"]["ReadSection_Vec_ScreenAssignable"];
+            item_id: components["schemas"]["ItemId"];
+            statuses: components["schemas"]["ReadSection_Vec_ScreenStatus"];
+            viewer_id: components["schemas"]["UserId"];
+        };
         TaskDetailRead: {
             archived: boolean;
-            assignable: components["schemas"]["ReadSection_Vec_ScreenAssignable"];
             assignees: components["schemas"]["ScreenAssignee"][];
             checklist: components["schemas"]["ScreenChecklistItem"][];
             dependencies: components["schemas"]["ScreenDependency"][];
             item: components["schemas"]["ScreenItem"];
             series: components["schemas"]["ScreenSeries"][];
-            statuses: components["schemas"]["ReadSection_Vec_ScreenStatus"];
             task: components["schemas"]["ScreenTask"];
             tasks: components["schemas"]["ScreenTask"][];
             viewer_id: components["schemas"]["UserId"];
@@ -10461,6 +10481,51 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_task_detail_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetailOptionsRead"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

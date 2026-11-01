@@ -27,7 +27,7 @@ for task_screen in board gantt task-detail; do
     done
   done < <(jq -r --arg screen "$task_screen" '.[] | select(.screen==$screen) | .requests[].path' "$task_fixture")
 done
-for task_pattern in 'task-context$' 'detail-read$' '/comments$' '/time$' '/backlinks$' '/marks/task/task$'; do
+for task_pattern in 'task-context$' 'detail-read$' '/comments$' '/time$' '/backlinks$' '/marks/task/task$' 'task-detail-options$'; do
   jq --arg pattern "$task_pattern" '
     map(if .screen=="task-detail" then .requests |= map(if (.path | test($pattern)) then
       if ($pattern=="task-context$") then .start=30

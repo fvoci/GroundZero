@@ -52,9 +52,13 @@ def task_screen_chain($sample; $requests; $root; $arms):
     (["^/api/tasks/" + $id + "/comments$", "^/api/tasks/" + $id + "/time$",
       "^/api/tasks/" + $id + "/backlinks$", "^/api/me/marks/task/" + $id + "$"] |
       map(once($requests; .; $detail.end))) as $panels |
+    once($requests; "^/api/items/[^/]+/task-detail-options$"; $detail.end) as $options |
+    if $options.path != ($context.path | sub("/task-context$"; "/task-detail-options"))
+      or $options.start >= ($panels | map(.end) | max)
+    then error("wrong or serialized detail options witness") else . end |
     require_overlap($panels) |
-    {chain: [$root, $join, $detail, ($panels | max_by(.end))],
-     parallel: ($arms + [$context, $sync, $board, $detail] + $panels)}
+    {chain: [$root, $join, $detail, ([$options] + $panels | max_by(.end))],
+     parallel: ($arms + [$context, $sync, $board, $detail, $options] + $panels)}
   else {chain: [$root, $join, $sync, $board], parallel: ($arms + [$context])} end;
 def patterns($screen):
   if $screen == "board" or $screen == "gantt" then

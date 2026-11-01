@@ -4,7 +4,9 @@
   import BoardFilters from './BoardFilters.svelte';
   import { handleCardKey } from './board-keyboard';
   import { taskData as work } from '$lib/features/tasks/detail-data';
-  import { taskScreenApi } from './screen-api';
+  import { taskScreenApi, type DetailRead } from './screen-api';
+  import { startCapturedRead, type CapturedRead, type ContextCapture } from './context-read';
+  import { readSessionGeneration } from '$lib/features/auth/session-signal';
   import { composeTasks } from './board-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
@@ -49,7 +51,7 @@
   } from '$lib/features/tasks/drafts';
   import { createLeaveGuard, leavingWithDrafts } from '$lib/features/common/leave-guard.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { dismissDone, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import { accountSafety, dismissDone, notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { formatDay, formatInstant } from '$lib/display';
 
   import type { BoardAction, BoardMove, CardBox, DropSlot } from './board';
@@ -448,7 +450,30 @@
   }
 
   // 쓰기 권한으로 항목을 열면 반복 업무의 회차를 먼저 맞춘다(독자는 만들지 않는다, O-19 전까지의 방식).
+  let initialDetail = $state<{ taskId: string; read: CapturedRead<DetailRead> } | undefined>();
+  let preparedDetail = $state(false);
+  let detailReadSequence = 0;
+  function prepareDetail(): void {
+    if (preparedDetail) return;
+    preparedDetail = true;
+    if (!aggregate || openTaskId === undefined) return;
+    const sequence = ++detailReadSequence;
+    const capture = (): ContextCapture => ({
+      userId: me.userId,
+      sequence: detailReadSequence,
+      navigationGeneration: router.navigationGeneration,
+      sessionGeneration: readSessionGeneration(),
+      safetyGeneration: accountSafety.generation,
+      path: router.path,
+    });
+    const snapshot = { ...capture(), sequence };
+    initialDetail = {
+      taskId: openTaskId,
+      read: startCapturedRead(snapshot, capture, taskScreenApi.detail(openTaskId)),
+    };
+  }
   async function loadItem(itemId: string, write: boolean): Promise<void> {
+    untrack(prepareDetail);
     if (write) await work.syncRecurrences(editingUser, itemId).catch(() => 0);
     await reload(itemId);
   }
@@ -1703,6 +1728,8 @@
 
 <TaskBoardDetailDialog
   {aggregate}
+  {initialDetail}
+  initialReady={preparedDetail}
   {openTaskId}
   itemId={item.id}
   readOnly={item.archived || locked}

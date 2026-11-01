@@ -1,4 +1,5 @@
 use super::{Result, fixture::Fixture, matrix, reference};
+use crate::common;
 use serde_json::{Value, json};
 
 /// The same assertions run normally and with exactly one injected aggregate defect.
@@ -27,7 +28,35 @@ async fn aggregate_scope_equivalence() -> Result<()> {
 }
 
 async fn install(f: &mut Fixture, name: &str) -> Result<()> {
+    let other_statuses = format!("app_task_statuses('{}'::uuid)", f.other);
+    let other_assignable = format!("app_item_assignable('{}'::uuid)", f.other);
+    if name == "options-assignable-scope" {
+        let candidate = common::login(&f.state, "screen-option-candidate").await;
+        sqlx::query("INSERT INTO fvoci.organization_members(organization_id,user_id,role) VALUES($1,$2,'member')")
+            .bind(f.org).bind(candidate.id.0).execute(&mut f.ddl).await?;
+        sqlx::query(
+            "INSERT INTO fvoci.workspace_members(workspace_id,user_id,role) VALUES($1,$2,'member')",
+        )
+        .bind(f.ws)
+        .bind(candidate.id.0)
+        .execute(&mut f.ddl)
+        .await?;
+        sqlx::query("UPDATE fvoci.items SET visibility='private' WHERE id=$1")
+            .bind(f.item)
+            .execute(&mut f.ddl)
+            .await?;
+    }
     let (function, before, after) = match name {
+        "options-status-scope" => (
+            "app_task_detail_options_read",
+            "app_task_statuses(p_item)",
+            other_statuses.as_str(),
+        ),
+        "options-assignable-scope" => (
+            "app_task_detail_options_read",
+            "app_item_assignable(p_item)",
+            other_assignable.as_str(),
+        ),
         "entry" => (
             "app_task_bundle_read",
             "IF v_grade = 'none' THEN",

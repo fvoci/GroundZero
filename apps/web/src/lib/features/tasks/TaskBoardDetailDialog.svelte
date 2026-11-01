@@ -2,10 +2,14 @@
   import type { Workspace } from '@fvoci/api-client';
   import type { TaskView } from './model';
   import TaskDetail from './TaskDetail.svelte';
+  import type { CapturedRead } from './context-read';
+  import type { DetailRead } from './screen-api';
   import * as Dialog from '$lib/ui/dialog';
   import { m } from '$lib/paraglide/messages.js';
   interface Props {
     aggregate?: boolean;
+    initialDetail?: { taskId: string; read: CapturedRead<DetailRead> } | undefined;
+    initialReady?: boolean;
     openTaskId: string | undefined;
     itemId: string;
     readOnly: boolean;
@@ -26,6 +30,8 @@
   }
   let {
     aggregate = false,
+    initialDetail,
+    initialReady = false,
     openTaskId,
     itemId,
     readOnly,
@@ -76,10 +82,11 @@
       <Dialog.Title>{openTaskId === undefined ? '' : title || m.tasks_task()}</Dialog.Title>
       <Dialog.Description>{m.tasks_dialog_description()}</Dialog.Description>
     </Dialog.Header>
-    {#if openTaskId !== undefined}
+    {#if openTaskId !== undefined && (!aggregate || initialReady)}
       {#key openTaskId}
         <TaskDetail
           {aggregate}
+          initialRead={initialDetail}
           {readOnly}
           bind:this={detailEditor}
           taskId={openTaskId}

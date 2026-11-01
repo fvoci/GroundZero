@@ -67,6 +67,7 @@ pub(super) async fn compare(f: &Fixture, item: Uuid, task: Uuid) -> Result<()> {
     );
     let board = get(f, &format!("/api/items/{item}/task-board")).await?;
     let detail = get(f, &format!("/api/tasks/{task}/detail-read")).await?;
+    let options = get(f, &format!("/api/items/{item}/task-detail-options")).await?;
     assert_eq!(detail["task"], get(f, &format!("/api/tasks/{task}")).await?);
     assert_eq!(detail["item"], source_item);
     let tasks = get(f, &format!("/api/items/{item}/tasks")).await?;
@@ -84,9 +85,9 @@ pub(super) async fn compare(f: &Fixture, item: Uuid, task: Uuid) -> Result<()> {
     }
     let statuses = get(f, &format!("/api/items/{item}/statuses")).await?;
     assert_eq!(board["statuses"], statuses);
-    assert_eq!(detail["statuses"]["value"], statuses);
+    assert_eq!(options["statuses"]["value"], statuses);
     assert_eq!(
-        detail["assignable"]["value"],
+        options["assignable"]["value"],
         get(f, &format!("/api/items/{item}/assignable")).await?
     );
     Ok(())

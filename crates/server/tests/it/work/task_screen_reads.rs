@@ -17,9 +17,11 @@ async fn task_screen_functions_keep_the_application_role_and_rls() -> Result<()>
     let fresh = common::fresh_database(&mut admin, "task_screen_permissions").await;
     let mut read = sqlx::PgConnection::connect(&fresh.app_url).await?;
     for name in [
+        "app_task_bundle_read",
         "app_task_context_read",
         "app_task_board_read",
         "app_task_detail_read",
+        "app_task_detail_options_read",
     ] {
         let invoker: bool =
             sqlx::query_scalar("SELECT NOT prosecdef FROM pg_proc WHERE oid = to_regprocedure($1)")

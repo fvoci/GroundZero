@@ -18,6 +18,7 @@ BEGIN
     WHEN 'context' THEN RETURN app_task_context_read(target);
     WHEN 'board' THEN RETURN app_task_board_read(target);
     WHEN 'detail' THEN RETURN app_task_detail_read(target);
+    WHEN 'options' THEN RETURN app_task_detail_options_read(target);
     WHEN 'time' THEN RETURN to_jsonb(app_task_time(target));
   END CASE;
 EXCEPTION WHEN OTHERS THEN RETURN jsonb_build_object('code', SQLSTATE);
@@ -238,10 +239,10 @@ async fn compare(f: &Fixture, expected_scope: &Expected, case: &str) -> Result<(
         archived,
     } = *expected_scope;
     let mut tx = f.state.db.begin_as(f.actor.id).await?;
-    let (single, listed, context, board, detail): (bool, Vec<uuid::Uuid>, Value, Value, Value) = sqlx::query_as(
+    let (single, listed, context, board, detail, options): (bool, Vec<uuid::Uuid>, Value, Value, Value, Value) = sqlx::query_as(
         "SELECT EXISTS(SELECT 1 FROM fvoci.tasks WHERE id=$2),
         ARRAY(SELECT id FROM fvoci.tasks WHERE item_id=$1 ORDER BY number),
-        fvoci.screen_outcome('context',$1),fvoci.screen_outcome('board',$1),fvoci.screen_outcome('detail',$2)",
+        fvoci.screen_outcome('context',$1),fvoci.screen_outcome('board',$1),fvoci.screen_outcome('detail',$2),fvoci.screen_outcome('options',$1)",
     ).bind(f.item).bind(f.tasks[0]).fetch_one(tx.conn()).await?;
     assert_eq!(single, task_visible, "single RLS: {case}");
     let expected: Vec<_> = [(f.tasks[0], task_visible), (f.roots[0], root_visible)]
@@ -249,6 +250,28 @@ async fn compare(f: &Fixture, expected_scope: &Expected, case: &str) -> Result<(
         .filter_map(|(id, visible)| visible.then_some(id))
         .collect();
     assert_eq!(listed, expected, "list RLS: {case}");
+    if item_visible {
+        let (statuses,assignable):(Value,Value) = sqlx::query_as("SELECT (SELECT coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM fvoci.app_task_statuses($1) s),(SELECT coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb) FROM fvoci.app_item_assignable($1) a)")
+            .bind(f.item).fetch_one(tx.conn()).await?;
+        assert_eq!(
+            options["viewer_id"],
+            json!(f.actor.id.0),
+            "options viewer: {case}"
+        );
+        assert_eq!(options["item_id"], json!(f.item), "options scope: {case}");
+        assert_eq!(
+            options["statuses"],
+            json!({"state":"ready","value":statuses}),
+            "options statuses: {case}"
+        );
+        assert_eq!(
+            options["assignable"],
+            json!({"state":"ready","value":assignable}),
+            "options assignable: {case}"
+        );
+    } else {
+        assert_eq!(options["code"], json!("P0002"), "options denial: {case}");
+    }
     for (name, value, visible) in [
         ("context", context, item_visible),
         ("board", board, item_visible),
@@ -272,22 +295,19 @@ async fn compare(f: &Fixture, expected_scope: &Expected, case: &str) -> Result<(
                     expected.iter().map(|id| json!(id)).collect::<Vec<_>>(),
                     "{name}: {case}"
                 );
-                let statuses = if name == "board" {
-                    &value["statuses"]
-                } else {
-                    &value["statuses"]["value"]
-                };
-                let count: i64 = statuses
-                    .as_array()
-                    .ok_or("statuses")?
-                    .iter()
-                    .filter_map(|row| row["task_count"].as_i64())
-                    .sum();
-                assert_eq!(
-                    count,
-                    i64::from(task_visible) + i64::from(root_visible),
-                    "status count: {case}"
-                );
+                if name == "board" {
+                    let count: i64 = value["statuses"]
+                        .as_array()
+                        .ok_or("statuses")?
+                        .iter()
+                        .filter_map(|row| row["task_count"].as_i64())
+                        .sum();
+                    assert_eq!(
+                        count,
+                        i64::from(task_visible) + i64::from(root_visible),
+                        "status count: {case}"
+                    );
+                }
                 assert_eq!(
                     value["assignees"].as_array().ok_or("assignees")?.len(),
                     usize::from(task_visible),

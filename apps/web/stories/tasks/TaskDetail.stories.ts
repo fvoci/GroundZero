@@ -5,7 +5,11 @@ import { api } from '$lib/api/client';
 import { fn, spyOn } from 'storybook/test';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { taskData } from '$lib/features/tasks/detail-data';
-import { taskScreenApi, type DetailRead } from '$lib/features/tasks/screen-api';
+import {
+  taskScreenApi,
+  type DetailRead,
+  type DetailOptionsRead,
+} from '$lib/features/tasks/screen-api';
 import { me } from '$lib/me.svelte';
 import { itemPath } from '$lib/router.svelte';
 import { setUpScreen } from '../fixtures/screens';
@@ -45,14 +49,6 @@ function aggregate(section: 'ready' | 'statuses' | 'assignable') {
       item: TASK_ITEM,
       archived: false,
       tasks,
-      statuses:
-        section === 'statuses'
-          ? { state: 'failed', error: 'unavailable' }
-          : { state: 'ready', value: statuses },
-      assignable:
-        section === 'assignable'
-          ? { state: 'failed', error: 'unavailable' }
-          : { state: 'ready', value: assignable },
       assignees: tasks.flatMap((task) =>
         task.assignees.map((person) => ({ task_id: task.id, ...person })),
       ),
@@ -67,9 +63,23 @@ function aggregate(section: 'ready' | 'statuses' | 'assignable') {
       series: tasks.flatMap((task) => (task.series === null ? [] : [task.series])),
       checklist: current.checklist.map((row) => ({ ...row, task_id: current.id })),
     };
+    const options: DetailOptionsRead = {
+      viewer_id: me.userId,
+      item_id: TASK_ITEM.id,
+      statuses:
+        section === 'statuses'
+          ? { state: 'failed', error: 'unavailable' }
+          : { state: 'ready', value: statuses },
+      assignable:
+        section === 'assignable'
+          ? { state: 'failed', error: 'unavailable' }
+          : { state: 'ready', value: assignable },
+    };
     const mock = spyOn(taskScreenApi, 'detail').mockResolvedValue(read);
+    const optionMock = spyOn(taskScreenApi, 'options').mockResolvedValue(options);
     return () => {
       mock.mockRestore();
+      optionMock.mockRestore();
       restore();
     };
   };

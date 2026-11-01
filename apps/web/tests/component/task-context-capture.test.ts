@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createContextRead, type ContextCapture } from '$lib/features/tasks/context-read';
+import {
+  createContextRead,
+  startCapturedRead,
+  type ContextCapture,
+} from '$lib/features/tasks/context-read';
 
 const capture = (userId = 'A', sequence = 1): ContextCapture => ({
   userId,
@@ -17,6 +21,16 @@ function held<T>() {
 }
 
 describe('D-96 task context ownership', () => {
+  it('starts a captured read immediately but rechecks ownership at one-time consumption', async () => {
+    let current = capture();
+    const read = startCapturedRead(current, () => current, Promise.resolve({ viewer_id: 'A' }));
+    await Promise.resolve();
+    current = { ...current, navigationGeneration: 2 };
+    await expect(read.take()).rejects.toThrow();
+    const latest = startCapturedRead(current, () => current, Promise.resolve({ viewer_id: 'A' }));
+    expect(await latest.take()).toEqual({ viewer_id: 'A' });
+    await expect(latest.take()).rejects.toThrow();
+  });
   it.each([
     'userId',
     'sequence',

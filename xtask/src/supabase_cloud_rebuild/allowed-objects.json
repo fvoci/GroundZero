@@ -1830,6 +1830,7 @@
     "routine fvoci.app_task_bundle_read(p_item uuid)",
     "routine fvoci.app_task_checklist_counts(p_task uuid)",
     "routine fvoci.app_task_context_read(p_item uuid)",
+    "routine fvoci.app_task_detail_options_read(p_item uuid)",
     "routine fvoci.app_task_detail_read(p_task uuid)",
     "routine fvoci.app_task_lane_end(p_status uuid)",
     "routine fvoci.app_task_reference(p_task uuid)",
@@ -1967,5 +1968,5 @@
     "trigger fvoci.tasks.tasks_search",
     "trigger fvoci.tasks.tasks_series_root_guard"
   ],
-  "sql_fingerprint": "ebd1b197edb8aea5d999ddfd562d7cce7331c8336a077ab46ba0c635dd2ba987"
+  "sql_fingerprint": "abe7be52081b6f22f1a55bfb999946990f2dc18223829121c76e1d355f450f58"
 }

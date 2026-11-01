@@ -376,36 +376,44 @@
         : undefined,
     );
     consumedContext = true;
-    const pending = untrack(() => aggregate)
-      ? (seed?.result.kind === 'loaded'
-          ? Promise.resolve(seed.result.value)
-          : seed?.result.kind === 'failed'
+    const adopt = ({ it, found }: { it: ItemView; found: Module }, list: SummaryView[]) => {
+      if (!isCurrent()) return;
+      fill(it);
+      // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
+      const entryKey = org.key('new-item-info');
+      infoOpen = readSession(entryKey) === id && !it.archived && it.access !== 'read';
+      if (readSession(entryKey) === id) writeSession(entryKey, null);
+      mod = found;
+      workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
+      docs = list;
+    };
+    const fail = (e: unknown) => {
+      if (!isCurrent()) return;
+      error =
+        e instanceof ApiError && e.status === 404
+          ? m.modules_item_not_found()
+          : m.modules_item_load_failed();
+    };
+    if (untrack(() => aggregate) && seed?.result.kind === 'loaded') {
+      const value = seed.result.value;
+      // The App already joined session lists and context. Adopt within this flush.
+      try {
+        untrack(() => adopt({ it: value.item, found: value.module }, value.documents));
+      } catch (cause: unknown) {
+        untrack(() => fail(cause));
+      }
+    } else {
+      const pending = untrack(() => aggregate)
+        ? (seed?.result.kind === 'failed'
             ? Promise.reject(seed.result.error)
             : taskScreenApi.context(id)
-        ).then((read) => [{ it: read.item, found: read.module }, read.documents] as const)
-      : Promise.all([
-          api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
-          api.itemDocuments(id),
-        ]);
-    pending
-      .then(([{ it, found }, list]) => {
-        if (!isCurrent()) return;
-        fill(it);
-        // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
-        const entryKey = org.key('new-item-info');
-        infoOpen = readSession(entryKey) === id && !it.archived && it.access !== 'read';
-        if (readSession(entryKey) === id) writeSession(entryKey, null);
-        mod = found;
-        workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
-        docs = list;
-      })
-      .catch((e: unknown) => {
-        if (!isCurrent()) return;
-        error =
-          e instanceof ApiError && e.status === 404
-            ? m.modules_item_not_found()
-            : m.modules_item_load_failed();
-      });
+          ).then((read) => [{ it: read.item, found: read.module }, read.documents] as const)
+        : Promise.all([
+            api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+            api.itemDocuments(id),
+          ]);
+      void pending.then(([resource, list]) => adopt(resource, list)).catch(fail);
+    }
     return () => {
       cancelled = true;
     };

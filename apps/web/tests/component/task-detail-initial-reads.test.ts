@@ -6,7 +6,11 @@ import { api, ApiError, NetworkError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { workApi } from '$lib/features/tasks/api';
 import { taskData } from '$lib/features/tasks/detail-data';
-import { taskScreenApi, type DetailRead } from '$lib/features/tasks/screen-api';
+import {
+  taskScreenApi,
+  type DetailRead,
+  type DetailOptionsRead,
+} from '$lib/features/tasks/screen-api';
 import type { TaskResource } from '$lib/features/tasks/model';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { timeData } from '$lib/features/time/data';
@@ -39,6 +43,20 @@ const resource: TaskResource = {
   move_version: 0,
   updated_at: '2026-10-31T00:00:00Z',
 };
+
+function aggregateRead(): DetailRead {
+  return {
+    viewer_id: 'viewer',
+    task: resource,
+    item: TASK_ITEM,
+    archived: false,
+    tasks: [resource],
+    assignees: [],
+    dependencies: [],
+    series: [],
+    checklist: [],
+  };
+}
 
 beforeEach(async () => {
   await setLocale('ko', { reload: false });
@@ -76,6 +94,28 @@ function mount(itemId = resource.item_id) {
   };
   return render(TaskDetail, props);
 }
+
+it.each([401, 403, 404])(
+  'clears the entire detail on an options permission error %s',
+  async (status) => {
+    vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(aggregateRead());
+    vi.spyOn(taskScreenApi, 'options').mockRejectedValue(
+      new ApiError(status, 'not_found', 'denied'),
+    );
+    render(TaskDetail, {
+      taskId: resource.id,
+      tasks: [],
+      workspaces: [],
+      aggregate: true,
+      onchanged: () => undefined,
+      onopen: () => undefined,
+    });
+    await screen.findByRole('alert');
+    expect(screen.queryByLabelText('제목')).toBeNull();
+    expect(taskData.taskStatuses).not.toHaveBeenCalled();
+    expect(taskData.assignable).not.toHaveBeenCalled();
+  },
+);
 
 it('starts every item-scope read while the task is pending, then composes an empty collection', async () => {
   const task = held<TaskResource>();
@@ -199,6 +239,10 @@ it('does not keep another task scope status choices when the aggregate section f
     dependencies: [],
     series: [],
     checklist: [],
+  };
+  const options: DetailOptionsRead = {
+    viewer_id: 'viewer',
+    item_id: TASK_ITEM.id,
     statuses: {
       state: 'ready',
       value: [
@@ -212,9 +256,10 @@ it('does not keep another task scope status choices when the aggregate section f
         },
       ],
     },
-    assignable: { state: 'ready', value: [] },
+    assignable: { state: 'ready' as const, value: [] },
   };
   vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(read);
+  const optional = vi.spyOn(taskScreenApi, 'options').mockResolvedValue(options);
   const view = render(TaskDetail, {
     taskId: resource.id,
     tasks: [],
@@ -230,8 +275,8 @@ it('does not keep another task scope status choices when the aggregate section f
   vi.mocked(taskScreenApi.detail).mockResolvedValue({
     ...read,
     task: { ...resource, id: 'next-task', title: '다음 집계 상세' },
-    statuses: { state: 'failed', error: 'unavailable' },
   });
+  optional.mockResolvedValue({ ...options, statuses: { state: 'failed', error: 'unavailable' } });
   await view.rerender({ taskId: 'next-task' });
   await waitFor(() => {
     expect(screen.getByLabelText('제목')).toHaveValue('다음 집계 상세');

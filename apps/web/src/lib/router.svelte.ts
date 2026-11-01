@@ -344,7 +344,7 @@ function itemIdentity(path: string): string | undefined {
 class Router {
   private currentPath = $state(window.location.pathname);
   /** Accepted path changes are synchronous, including A → B → A within one render tick. */
-  navigationGeneration = 0;
+  navigationGeneration = $state(0);
   /** Keep same-item forms mounted, but invalidate even coalesced exits and reentries. */
   itemGeneration = $state(0);
   get path(): string {
@@ -352,7 +352,7 @@ class Router {
   }
   set path(next: string) {
     if (next === this.currentPath) return;
-    this.navigationGeneration += 1;
+    this.navigationGeneration = untrack(() => this.navigationGeneration) + 1;
     if (itemIdentity(next) !== itemIdentity(this.currentPath))
       this.itemGeneration = untrack(() => this.itemGeneration) + 1;
     this.currentPath = next;

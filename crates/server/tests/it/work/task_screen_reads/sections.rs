@@ -22,10 +22,11 @@ async fn read_sections_propagate_privilege_not_found_and_authentication_errors()
             );
             sqlx::raw_sql(&replacement).execute(&mut f.ddl).await?;
             let mut tx = f.state.db.begin_as(f.owner.id).await?;
-            let result = sqlx::query_scalar::<_, Value>("SELECT fvoci.app_task_detail_read($1)")
-                .bind(f.tasks[0])
-                .fetch_one(tx.conn())
-                .await;
+            let result =
+                sqlx::query_scalar::<_, Value>("SELECT fvoci.app_task_detail_options_read($1)")
+                    .bind(f.item)
+                    .fetch_one(tx.conn())
+                    .await;
             if code == "22012" {
                 let value = result?;
                 let section = if function == "app_task_statuses" {
@@ -53,7 +54,7 @@ async fn read_sections_propagate_privilege_not_found_and_authentication_errors()
             let reply = common::send(
                 &common::app(&f.state),
                 Method::GET,
-                &format!("/api/tasks/{}/detail-read", f.tasks[0]),
+                &format!("/api/items/{}/task-detail-options", f.item),
                 Some(&f.owner),
                 None,
             )

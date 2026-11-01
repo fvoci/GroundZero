@@ -41,6 +41,7 @@ async fn private_notes_time_history_and_public_links_cross_every_role() -> Resul
         format!("/api/items/{}/task-context?token=public-link", f.item),
         format!("/api/items/{}/task-board", f.item),
         format!("/api/tasks/{}/detail-read", f.tasks[0]),
+        format!("/api/items/{}/task-detail-options", f.item),
     ] {
         assert_eq!(
             common::send(&app, Method::GET, &path, None, None)

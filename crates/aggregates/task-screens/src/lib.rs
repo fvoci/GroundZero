@@ -10,7 +10,7 @@ use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::UserId;
 use fvoci_db::Db;
 use fvoci_http::session::{CurrentUser, SessionState};
-use model::{TaskBoardRead, TaskContextRead, TaskDetailRead};
+use model::{TaskBoardRead, TaskContextRead, TaskDetailOptionsRead, TaskDetailRead};
 use serde::de::DeserializeOwned;
 use utoipa::OpenApi;
 use uuid::Uuid;
@@ -21,8 +21,8 @@ pub struct TaskScreensState {
 }
 
 #[derive(Debug, OpenApi)]
-#[openapi(paths(context, board, detail), components(schemas(
-    TaskContextRead, TaskBoardRead, TaskDetailRead,
+#[openapi(paths(context, board, detail, options), components(schemas(
+    TaskContextRead, TaskBoardRead, TaskDetailRead, TaskDetailOptionsRead,
     model::ScreenItem, model::ScreenModule, model::ScreenDocument, model::ScreenTask,
     model::ScreenStatus, model::ScreenAssignee, model::ScreenDependency,
     model::ScreenSeries, model::ScreenChecklistItem, model::ScreenAssignable,
@@ -41,6 +41,7 @@ where
         .route("/items/{item_id}/task-context", get(context))
         .route("/items/{item_id}/task-board", get(board))
         .route("/tasks/{task_id}/detail-read", get(detail))
+        .route("/items/{item_id}/task-detail-options", get(options))
 }
 
 async fn read<T: DeserializeOwned>(
@@ -104,4 +105,21 @@ pub async fn detail(
     Path(id): Path<Uuid>,
 ) -> Result<Json<TaskDetailRead>, AppError> {
     read(&state, user, id, "SELECT fvoci.app_task_detail_read($1)").await
+}
+
+#[utoipa::path(get, path="/api/items/{item_id}/task-detail-options", operation_id="read_task_detail_options",
+    params(("item_id"=String,Path,format=Uuid)),
+    responses((status=200,body=TaskDetailOptionsRead),(status=401,body=ErrorBody),(status=403,body=ErrorBody),(status=404,body=ErrorBody)),tag="tasks")]
+pub async fn options(
+    State(state): State<TaskScreensState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<TaskDetailOptionsRead>, AppError> {
+    read(
+        &state,
+        user,
+        id,
+        "SELECT fvoci.app_task_detail_options_read($1)",
+    )
+    .await
 }
