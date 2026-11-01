@@ -20,6 +20,10 @@ const CLOSING = [
   '[inert]',
 ].join(', ');
 
+// 탭의 손 떨림을 허용하되 짧은 끌기도 구분하도록 이 앱에서는 10 CSS px를 쓴다. OS의 스크롤 문턱을 흉내 내는 값은
+// 아니며, 브라우저가 스크롤을 가져가 pointercancel을 보내면 거리와 무관하게 탭에서 제외한다.
+const TAP_SLOP_PX = 10;
+
 export function keepFocusAcrossLocks(doc: Document = document): () => void {
   // 마지막으로 초점을 받은 요소. 브라우저가 비활성이 된 요소에서 초점을 뺄 때 blur를 내는지는 엔진마다 다르므로
   // focusin으로 따라간다.
@@ -28,6 +32,26 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
   let leaving: HTMLElement | undefined;
   // 잠기며 초점을 잃은 요소. 초점은 한 곳뿐이라 하나만 기억한다.
   let lost: HTMLElement | undefined;
+  // 잠금 전에 시작한 접촉도 잠금 중 탭으로 끝날 수 있다. 초점 기억과 독립적으로 up·cancel·이동 초과까지 추적한다.
+  const pendingTaps = new Map<number, { x: number; y: number }>();
+  const view = doc.defaultView;
+
+  const forgetLost = (): void => {
+    lost = undefined;
+  };
+
+  // 문서 밖에서 손을 떼면 up·cancel을 놓칠 수 있다. 창·페이지를 떠날 때 이전 접촉을 버려 이후 저장의 복귀를 막지 않는다.
+  const clearPendingTaps = (): void => {
+    pendingTaps.clear();
+  };
+  const onBoundary = (): void => {
+    // 잠금 중 진행하던 접촉을 판별하지 못하고 떠났으면 초점 복귀도 취소한다(SR-290-3 부조종사 결정 (가)).
+    if (pendingTaps.size > 0 && lost !== undefined) forgetLost();
+    clearPendingTaps();
+  };
+  const onVisibilityChange = (): void => {
+    if (doc.visibilityState === 'hidden') onBoundary();
+  };
 
   const bodyFocused = (): boolean => doc.activeElement === null || doc.activeElement === doc.body;
 
@@ -35,12 +59,35 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     if (!(event.target instanceof HTMLElement)) return;
     last = event.target;
     // 다른 곳에 초점을 두었으면 되돌리지 않는다(되돌린 초점 자신은 같은 요소라 지우지 않는다).
-    if (lost !== undefined && lost !== event.target) lost = undefined;
+    if (lost !== undefined && lost !== event.target) forgetLost();
   };
 
-  // 잠긴 동안 누르면(초점이 없는 빈 곳·글을 눌러 focusin이 없어도) 사용자가 손을 댄 것이다. 되돌리지 않는다(R5 B 최종 C-2).
-  const onPointerDown = (): void => {
-    lost = undefined;
+  const withinTapSlop = (event: PointerEvent, start: { x: number; y: number }): boolean =>
+    Math.hypot(event.clientX - start.x, event.clientY - start.y) <= TAP_SLOP_PX;
+
+  const onPointerDown = (event: PointerEvent): void => {
+    // 펜도 화면 접촉 후 끌 수 있으므로 터치처럼 완료·이동·취소로 판별한다. 마우스(또는 유형 미상)는 기존 C-2(a)대로
+    // 초점이 없는 빈 곳·글을 눌러 focusin이 없어도 즉시 복귀를 취소한다.
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+      forgetLost();
+    } else {
+      pendingTaps.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+  };
+
+  const onPointerMove = (event: PointerEvent): void => {
+    const start = pendingTaps.get(event.pointerId);
+    if (start !== undefined && !withinTapSlop(event, start)) pendingTaps.delete(event.pointerId);
+  };
+
+  const onPointerUp = (event: PointerEvent): void => {
+    const start = pendingTaps.get(event.pointerId);
+    pendingTaps.delete(event.pointerId);
+    if (lost !== undefined && start !== undefined && withinTapSlop(event, start)) forgetLost();
+  };
+
+  const onPointerCancel = (event: PointerEvent): void => {
+    pendingTaps.delete(event.pointerId);
   };
 
   const onFocusOut = (event: FocusEvent): void => {
@@ -63,27 +110,40 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
           el.contains(last) &&
           last.matches(':disabled') &&
           (doc.activeElement === last || (bodyFocused() && leaving === last))
-        )
+        ) {
           lost = last;
+        }
       } else if (lost !== undefined && el.contains(lost)) released = true;
     }
     if (!released || lost === undefined) return;
     // 사라졌거나 닫히는 중인 대화상자(성공하면 닫히는 대화상자는 잠금이 풀릴 때 `data-state="closed"`로 닫히는 중이다)
     // 안으로는 되돌리지 않는다. 닫힌 Select·Popover·Tooltip 트리거도 `data-state="closed"`라 대화상자로 좁힌다(C-2).
     if (!lost.isConnected || lost.closest(CLOSING) !== null) {
-      lost = undefined;
+      forgetLost();
       return;
     }
     // 겹친 잠금(fieldset 안의 비활성 단추 등)이 아직 남았으면 마지막 잠금이 풀릴 때까지 기다린다.
     if (lost.matches(':disabled')) return;
+    // 탭/스크롤이 판별되기 전에 풀리면 사용자가 누르는 중이다. 기존 C-2(a)처럼 되돌리지 않고, 뒤늦은 pointerup에도
+    // 복귀하지 않는다. 잠금 중 이동 초과·취소가 확인된 스크롤만 초점을 보존한다.
+    if (pendingTaps.size > 0) {
+      forgetLost();
+      return;
+    }
     const target = lost;
-    lost = undefined;
+    forgetLost();
     if (bodyFocused()) target.focus({ preventScroll: true });
   });
 
   doc.addEventListener('focusin', onFocusIn, true);
   doc.addEventListener('focusout', onFocusOut, true);
   doc.addEventListener('pointerdown', onPointerDown, true);
+  doc.addEventListener('pointermove', onPointerMove, true);
+  doc.addEventListener('pointerup', onPointerUp, true);
+  doc.addEventListener('pointercancel', onPointerCancel, true);
+  doc.addEventListener('visibilitychange', onVisibilityChange);
+  view?.addEventListener('blur', onBoundary);
+  view?.addEventListener('pagehide', onBoundary);
   observer.observe(doc.documentElement, {
     attributes: true,
     attributeFilter: ['disabled'],
@@ -93,6 +153,13 @@ export function keepFocusAcrossLocks(doc: Document = document): () => void {
     doc.removeEventListener('focusin', onFocusIn, true);
     doc.removeEventListener('focusout', onFocusOut, true);
     doc.removeEventListener('pointerdown', onPointerDown, true);
+    doc.removeEventListener('pointermove', onPointerMove, true);
+    doc.removeEventListener('pointerup', onPointerUp, true);
+    doc.removeEventListener('pointercancel', onPointerCancel, true);
+    doc.removeEventListener('visibilitychange', onVisibilityChange);
+    view?.removeEventListener('blur', onBoundary);
+    view?.removeEventListener('pagehide', onBoundary);
     observer.disconnect();
+    clearPendingTaps();
   };
 }
