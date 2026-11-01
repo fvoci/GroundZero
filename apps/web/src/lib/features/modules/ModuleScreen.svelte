@@ -120,6 +120,13 @@
    * 든 옛 모듈을 화면에 넣어, 뒤 저장이 넣은 이름·키를 되돌려 보였다. 끝날 때까지 다시 보내지 않는다.
    */
   let savingSettings = $state(false);
+  function resetSettings(): void {
+    editName = mod?.name ?? '';
+    editKey = mod?.key ?? '';
+    editIcon = mod?.icon ?? '';
+    editDescription = mod?.description ?? '';
+    savingSettings = false;
+  }
   const settingsDraft = createFormDraft({
     name: () => `module-settings:${moduleId}`,
     snapshot: () => ({
@@ -145,13 +152,7 @@
       editIcon = value.icon;
       editDescription = value.description;
     },
-    reset: () => {
-      editName = mod?.name ?? '';
-      editKey = mod?.key ?? '';
-      editIcon = mod?.icon ?? '';
-      editDescription = mod?.description ?? '';
-      savingSettings = false;
-    },
+    reset: resetSettings,
     dirty: () =>
       mod !== undefined &&
       (editName !== mod.name ||
@@ -162,6 +163,13 @@
     stays: staysOnThisModule,
   });
   onMount(settingsDraft.attach);
+  $effect(() => {
+    if (!isAdmin) {
+      resetSettings();
+      settingsError = undefined;
+      settingsDraft.leave.keep();
+    }
+  });
 
   async function saveSettings(event: SubmitEvent): Promise<void> {
     event.preventDefault();

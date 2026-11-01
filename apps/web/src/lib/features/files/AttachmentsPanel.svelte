@@ -102,6 +102,14 @@
     dirty: () => renaming !== undefined && renaming.name !== renaming.baseline,
   });
   onMount(renameDraft.attach);
+  $effect(() => {
+    const id = renaming?.id;
+    if (id !== undefined && !files.some((file) => file.id === id && file.can_write)) {
+      renaming = undefined;
+      renameError = undefined;
+      renameDraft.leave.keep();
+    }
+  });
   let renameIdentity: string | undefined;
   $effect(() => {
     const identity = JSON.stringify([me.userId, target.kind, target.id]);

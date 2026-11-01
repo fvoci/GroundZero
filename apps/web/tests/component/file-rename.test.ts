@@ -7,6 +7,9 @@ import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
 import { notifyDone } from '$lib/features/feedback/feedback.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { me } from '$lib/me.svelte';
+import { router } from '$lib/router.svelte';
+import CreateForm from '$lib/features/workspaces/CreateForm.svelte';
+import { permissionState } from './fixtures/permission-state.svelte';
 
 vi.mock('$lib/features/feedback/feedback.svelte', async (importOriginal) => ({
   ...(await importOriginal<typeof import('$lib/features/feedback/feedback.svelte')>()),
@@ -88,6 +91,42 @@ describe('file rename', () => {
     expect(id === null ? null : document.getElementById(id)?.textContent.trim()).toBe(
       '처리하지 못했습니다. 입력한 값을 확인해 주세요.',
     );
+  });
+
+  it('drops a hidden rename after file permission loss and still guards another unsaved input', async () => {
+    const files = permissionState([{ ...file }]);
+    vi.spyOn(api, 'itemFiles').mockResolvedValue(files);
+    const rename = vi.spyOn(api, 'renameFile');
+    await openRename();
+    const sibling = render(CreateForm, {
+      id: 'other-input',
+      label: '다른 입력',
+      placeholder: '',
+      draftName: 'permission-sibling',
+      submitLabel: '만들기',
+      create: vi.fn(),
+    });
+    await fireEvent.input(screen.getByLabelText('다른 입력'), { target: { value: '미저장' } });
+    const current = files[0];
+    if (current === undefined) throw new Error('missing file');
+    current.can_write = false;
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '새 이름' })).toBeNull();
+    });
+    let unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    sibling.unmount();
+    unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+    expect(router.guard?.(vi.fn(), '/')).toBe(true);
+
+    current.name = 'server.pdf';
+    current.can_write = true;
+    await fireEvent.click(await screen.findByRole('button', { name: 'server.pdf 이름 바꾸기' }));
+    expect(screen.getByRole('textbox', { name: '새 이름' })).toHaveValue('server.pdf');
+    expect(rename).not.toHaveBeenCalled();
   });
 
   // 리뷰 지적: 실패 응답이 늦게 오면 그사이 연 다른 파일의 칸에 붙거나(닫았으면) 아무 데도 보이지 않았다.
