@@ -138,20 +138,21 @@ await test('SR-250-12: forwarded links still use GET', () => {
     /GET \/api\/tasks\/42.*not in OpenAPI/,
   );
 });
-await test('SR-250-12: defaults and nested arguments resolve used operations', () => {
-  const result = checkUsage(
-    files(`
+await test('SR-250-12: nonliteral default arguments remain statically unresolved', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
       declare const userContent: string;
       const link = (p: string) => { anchor.setAttribute('href', p); };
       function go(p = '/api/tasks/42') { link(p); }
       go(); go(userContent); go('/rhwp/viewer');
     `),
-    contract,
-    empty,
+        contract,
+        empty,
+      ),
+    /default argument.*not statically resolvable/,
   );
-  assert.equal(result.calls, 1);
-  assert.deepEqual(result.used, ['GET /api/tasks/{task_id}']);
-  assert.deepEqual(result.unused, []);
 });
 await test('SR-250-12: runtime-only callers remain outside the check', () => {
   assert.equal(
@@ -957,10 +958,11 @@ for (const kind of ['method', 'path']) {
     });
   }
 }
-await test('SR-295-6: declaration types and immutable values can prove a defined argument', () => {
-  assert.equal(
-    checkUsage(
-      files(`
+await test('SR-295-6: inferred default arguments remain statically unresolved', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
     function method(p = 'DELETE') { return p; }
     let verb: 'GET' = 'GET';
     request(method(verb), '/api/tasks/42');
@@ -968,10 +970,36 @@ await test('SR-295-6: declaration types and immutable values can prove a defined
     const path = '/api/tasks/42';
     fetch(endpoint(path));
   `),
-      contract,
-      empty,
-    ).calls,
-    2,
+        contract,
+        empty,
+      ),
+    /default argument.*not statically resolvable/,
+  );
+});
+await test('SR-295-10: a 64-hop captured default method remains statically unresolved', () => {
+  const aliases = Array.from(
+    { length: 64 },
+    (_, i) => `const a${String(i + 1)} = a${String(i)};`,
+  ).join('\n');
+  const input = files(`
+    function a0(method = 'GET') { return method; }
+    let value: 'DELETE' | undefined = 'DELETE';
+    function change() { value = undefined; }
+    change(); const o = { value };
+    ${aliases}
+    request(a64(o.value), '/api/tasks/42');
+  `);
+  assert.throws(
+    () =>
+      checkUsage(
+        input,
+        { paths: { '/api/tasks/{id}': { get: {}, delete: {} } } },
+        {
+          forwarders: [],
+          unused: [{ method: 'GET', path: '/api/tasks/{id}', reason: '샴 가3~가5 조립 예정' }],
+        },
+      ),
+    /default argument.*not statically resolvable/,
   );
 });
 await test('SR-295-6: encoding cannot hide an uncertain default argument', () => {
@@ -1113,7 +1141,7 @@ for (const argument of ['verb', 'captured']) {
           contract,
           empty,
         ),
-      /not statically resolvable|not in OpenAPI/,
+      /default argument.*not statically resolvable/,
     );
   });
 }
@@ -1130,7 +1158,7 @@ await test('SR-295-1: a flow-narrowed mutable URL cannot select a default', () =
         contract,
         empty,
       ),
-    /not statically resolvable/,
+    /default argument.*not statically resolvable/,
   );
 });
 for (const write of [
@@ -1373,19 +1401,19 @@ await test('SR-250-13: cyclic aliases terminate without hiding independent liter
 
 for (const argument of ['undefined', '(undefined)', 'void 0', 'absent']) {
   for (const mode of ['navigation', 'url']) {
-    await test(`SR-250-14: ${mode} applies the wrong path default to ${argument}`, () => {
+    await test(`SR-250-14: ${mode} leaves ${argument} defaults statically unresolved`, () => {
       const code =
         mode === 'navigation'
           ? `function go(p = '/api/typo') { location.assign(p); } go(${argument});`
           : `function url(p = '/api/typo') { return p; } fetch(url(${argument}));`;
       assert.throws(
         () => checkUsage(files(`const absent = undefined; ${code}`), contract, listedTask),
-        /GET \/api\/typo.*not in OpenAPI/,
+        /default argument.*not statically resolvable/,
       );
     });
   }
 }
-await test('SR-250-14: navigation defaults still use GET', () => {
+await test('SR-250-14: navigation undefined defaults remain statically unresolved', () => {
   assert.throws(
     () =>
       checkUsage(
@@ -1398,10 +1426,10 @@ await test('SR-250-14: navigation defaults still use GET', () => {
           unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '샴 가3~가5 조립 예정' }],
         },
       ),
-    /GET \/api\/tasks\/42.*not in OpenAPI/,
+    /default argument.*not statically resolvable/,
   );
 });
-await test('SR-250-14: a method helper reports the actual default method', () => {
+await test('SR-250-14: a method helper undefined default remains statically unresolved', () => {
   assert.throws(
     () =>
       checkUsage(
@@ -1412,12 +1440,14 @@ await test('SR-250-14: a method helper reports the actual default method', () =>
         contract,
         listedTask,
       ),
-    /DELETE \/api\/tasks\/42.*not in OpenAPI/,
+    /default argument.*not statically resolvable/,
   );
 });
-await test('SR-250-14: valid defaults, omitted, null and optional arguments keep their meaning', () => {
-  const result = checkUsage(
-    files(`
+await test('SR-250-14: undefined defaults fail while parent omitted and optional arguments keep their meaning', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
     function go(p = '/api/tasks/42') { location.assign(p); }
     go(undefined); go(); go(null);
     function url(p = '/api/tasks/42') { return p; }
@@ -1427,12 +1457,27 @@ await test('SR-250-14: valid defaults, omitted, null and optional arguments keep
     }
     anchor.href = optional('42', undefined, true);
   `),
+        contract,
+        empty,
+      ),
+    /default argument.*not statically resolvable/,
+  );
+  const result = checkUsage(
+    files(`
+    function go(p = '/api/tasks/42') { location.assign(p); }
+    go(); go(null); go('/api/tasks/42');
+    function optional(id: string, version?: number, inline = false) {
+      return \`/api/tasks/\${encodeURIComponent(id)}?inline=\${inline}\`;
+    }
+    anchor.href = optional('42', undefined, true);
+    fetch(optional('42'));
+  `),
     contract,
     empty,
   );
   assert.equal(result.calls, 3);
 });
-await test('SR-250-14: an outer undefined binding applies the inner default', () => {
+await test('SR-250-14: an outer undefined binding remains statically unresolved', () => {
   assert.throws(
     () =>
       checkUsage(
@@ -1443,20 +1488,21 @@ await test('SR-250-14: an outer undefined binding applies the inner default', ()
         contract,
         listedTask,
       ),
-    /GET \/api\/typo.*not in OpenAPI/,
+    /default argument.*not statically resolvable/,
   );
 });
-await test('SR-250-14: a shadowed undefined value does not select the default', () => {
-  assert.equal(
-    checkUsage(
-      files(`
+await test('SR-250-14: a shadowed default argument remains statically unresolved', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
     function go(p = '/api/typo') { location.assign(p); }
     function outer(undefined: string) { go(undefined); } outer('/app');
   `),
-      contract,
-      listedTask,
-    ).calls,
-    0,
+        contract,
+        listedTask,
+      ),
+    /default argument.*not statically resolvable/,
   );
 });
 

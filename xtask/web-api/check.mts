@@ -193,7 +193,6 @@ function sourceProgram(files: Map<string, string>): ts.Program {
   const options: ts.CompilerOptions = {
     noLib: true,
     allowJs: true,
-    strictNullChecks: true,
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     paths: {
@@ -578,97 +577,32 @@ export function checkUsage(
     if (!forwarded.has(row)) problems.push(`stale forwarder: ${row.file}:${row.name}`);
   }
 
-  type Binding =
-    ts.Expression | string[] | { argument: ts.Expression; defaultValue: ts.Expression };
+  const unresolvedDefaultArgument = Symbol('unresolved default argument');
+  type Binding = ts.Expression | string[] | typeof unresolvedDefaultArgument;
   type Bindings = Map<ts.Symbol, Binding>;
-  class UncertainDefaultArgument extends Error {}
-  function bindingValue(
-    binding: Binding,
-    bindings: Bindings,
-    seen: Set<ts.Node>,
-  ): ts.Expression | string[] {
-    if (Array.isArray(binding) || !('defaultValue' in binding)) return binding;
-    if (isUndefined(binding.argument, bindings, seen)) return binding.defaultValue;
-    if (!definitelyDefined(binding.argument, bindings, seen))
-      throw new UncertainDefaultArgument(
-        `default argument is not statically resolvable: ${binding.argument.getText()}`,
-      );
-    return binding.argument;
-  }
-  function definedType(type: ts.Type): boolean {
-    if (type.isUnion()) return type.types.every(definedType);
-    return (
-      (type.flags &
-        (ts.TypeFlags.Any |
-          ts.TypeFlags.Unknown |
-          ts.TypeFlags.Undefined |
-          ts.TypeFlags.Void |
-          ts.TypeFlags.TypeParameter |
-          ts.TypeFlags.Never)) ===
-      0
-    );
-  }
-  function definitelyDefined(node: ts.Expression, bindings: Bindings, seen: Set<ts.Node>): boolean {
-    if (seen.has(node)) return false;
-    seen = new Set(seen).add(node);
-    if (
-      ts.isParenthesizedExpression(node) ||
-      ts.isAsExpression(node) ||
-      ts.isSatisfiesExpression(node)
-    )
-      return definitelyDefined(node.expression, bindings, seen);
-    const found = symbol(node);
-    const binding = found ? bindings.get(found) : undefined;
-    if (binding) {
-      const value = bindingValue(binding, bindings, seen);
-      return Array.isArray(value) || definitelyDefined(value, bindings, seen);
-    }
-    const declaration = found?.valueDeclaration;
-    if (
-      declaration &&
-      ts.isVariableDeclaration(declaration) &&
-      declaration.initializer &&
-      ts.isVariableDeclarationList(declaration.parent) &&
-      (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-    )
-      return definitelyDefined(declaration.initializer, bindings, seen);
-    if (declaration) return definedType(checker.getTypeAtLocation(declaration));
-    if (
-      ts.isIdentifier(node) ||
-      ts.isPropertyAccessExpression(node) ||
-      ts.isElementAccessExpression(node)
-    )
-      return false;
-    if (ts.isConditionalExpression(node))
-      return (
-        definitelyDefined(node.whenTrue, bindings, seen) &&
-        definitelyDefined(node.whenFalse, bindings, seen)
-      );
-    if (ts.isBinaryExpression(node)) {
-      if (
-        [ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken].includes(
-          node.operatorToken.kind,
-        )
-      )
-        return definitelyDefined(node.right, bindings, seen);
-      if (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
-        return (
-          definitelyDefined(node.left, bindings, seen) &&
-          definitelyDefined(node.right, bindings, seen)
-        );
-    }
-    // Calls use their declared return type; mutable references above use their
-    // declaration type, never the flow type at the argument's use site.
-    return definedType(checker.getTypeAtLocation(node));
+  class UnsupportedDefaultArgument extends Error {}
+  function bindingValue(binding: Binding): ts.Expression | string[] {
+    if (binding === unresolvedDefaultArgument)
+      throw new UnsupportedDefaultArgument('default argument is not statically resolvable');
+    return binding;
   }
   function parameterArgument(
     parameter: ts.ParameterDeclaration,
     argument: ts.Expression | undefined,
   ): Binding | undefined {
-    // Resolve only when used by method/path evaluation: query-only arguments
-    // do not change the operation and must not make its path opaque.
-    if (!parameter.initializer) return argument;
-    return argument ? { argument, defaultValue: parameter.initializer } : parameter.initializer;
+    // Keep the parent's omitted-argument handling. Never infer whether an
+    // explicit nonliteral selects a default; only pass plain literal values.
+    // A query-only parameter is never read by operation-path evaluation.
+    if (!parameter.initializer || !argument) return argument ?? parameter.initializer;
+    if (
+      ts.isStringLiteralLike(argument) ||
+      ts.isNumericLiteral(argument) ||
+      [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(
+        argument.kind,
+      )
+    )
+      return argument;
+    return unresolvedDefaultArgument;
   }
   function* navigationBindings(node: ts.Node, seen = new Set<ts.Node>()): Generator<Bindings> {
     for (let parent = node.parent; !ts.isSourceFile(parent); parent = parent.parent) {
@@ -717,7 +651,7 @@ export function checkUsage(
     const found = symbol(node);
     const binding = found ? bindings.get(found) : undefined;
     if (binding) {
-      const value = bindingValue(binding, bindings, seen);
+      const value = bindingValue(binding);
       return Array.isArray(value) ? value : values(value, seen, bindings);
     }
     const evaluate = (expression: ts.Expression | undefined): string[] =>
@@ -771,7 +705,7 @@ export function checkUsage(
         return evaluate(node.arguments[0]).map((value) => encodeURIComponent(value));
       } catch (error: unknown) {
         if (
-          error instanceof UncertainDefaultArgument ||
+          error instanceof UnsupportedDefaultArgument ||
           (error instanceof Error &&
             /URL helper must be const|URL function parameter is written/.test(error.message))
         )
@@ -861,7 +795,7 @@ export function checkUsage(
     const found = symbol(node);
     const binding = found ? bindings.get(found) : undefined;
     if (binding) {
-      const value = bindingValue(binding, bindings, seen);
+      const value = bindingValue(binding);
       return !Array.isArray(value) && isUndefined(value, bindings, seen);
     }
     if (ts.isVoidExpression(node)) return true;
@@ -1071,7 +1005,7 @@ export function checkUsage(
         } catch (error: unknown) {
           if (
             strict ||
-            error instanceof UncertainDefaultArgument ||
+            error instanceof UnsupportedDefaultArgument ||
             exit.kind === 'fetch' ||
             exit.kind === 'WebSocket' ||
             apiHint(exit.url)
