@@ -11,7 +11,7 @@
 
 모두 D-60 허용 목록 안이다. WOFF2 검증기는 승인 파일이 쓰는 CFF·무변환 표만 해독하며 다른 변환은 실패시킨다. `cargo xtask licenses`로 Cargo·pnpm 의존성도 검사한다.
 
-제품 산출물은 `generate-fonts.sh`로만 만든다. 기준 커밋과 O-37의 승인 여섯 원본 SHA-256은 `font_assets.py`와 notices 검사에 고정한다. 원본이 없는 얕은 체크아웃은 같은 Git 커밋의 raw 주소에서 입력을 받아 해시를 대조한다. Noto 원본은 생성 입력으로만 사용하며 D2Coding은 원본 TTF 그대로다.
+제품 산출물은 `generate-fonts.sh`로만 만든다. 기준 커밋과 O-37의 승인 여섯 원본 SHA-256은 `font_assets.py`와 notices 검사에 고정한다. 원본이 없는 얕은 체크아웃은 같은 Git 커밋의 raw 주소에서 입력을 받아 해시를 대조한다. Noto 원본은 생성 및 검증 입력으로만 사용하며 제품에는 배포하지 않는다. D2Coding은 원본 TTF 그대로다.
 
 ```sh
 sh tools/generate-fonts.sh           # Noto WOFF2·unicode-range CSS·해시 목록 생성

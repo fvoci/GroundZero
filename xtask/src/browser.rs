@@ -292,7 +292,8 @@ impl Drop for Server {
 fn ready_at(addr: SocketAddr, path: &str) -> std::io::Result<bool> {
     let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(1))?;
     stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-    write!(stream, "GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")?;
+    let request = format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
+    stream.write_all(request.as_bytes())?;
     let mut head = [0_u8; 12];
     stream.read_exact(&mut head)?;
     Ok(head.starts_with(b"HTTP/1.1 200") || head.starts_with(b"HTTP/1.0 200"))
@@ -364,6 +365,39 @@ mod tests {
             .is_ok_and(|status| status.success())
     }
 
+    fn read_http_request(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
+        let mut request = Vec::new();
+        // TCP can split even a single write. Consume the headers before replying/closing.
+        while request.len() < 1024 {
+            let mut byte = [0];
+            reader.read_exact(&mut byte)?;
+            request.push(byte[0]);
+            if request.ends_with(b"\r\n\r\n") {
+                return Ok(request);
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "health request exceeds 1024 bytes",
+        ))
+    }
+
+    #[test]
+    fn health_fixture_reads_a_request_split_across_tcp_reads() -> Result<()> {
+        struct Fragments(std::io::Cursor<Vec<u8>>);
+        impl Read for Fragments {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                let length = buffer.len().min(3);
+                self.0.read(&mut buffer[..length])
+            }
+        }
+        let expected = b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+        let mut fragments = Fragments(std::io::Cursor::new(expected.to_vec()));
+        assert_eq!(read_http_request(&mut fragments)?, expected);
+        assert!(read_http_request(&mut &b"GET /healthz"[..]).is_err());
+        Ok(())
+    }
+
     /// 시험 실패 경로에서도 실제 자식 프로세스를 죽이고 거둔다. 다시 멈추거나 Drop해도 문제가 없다.
     #[cfg(unix)]
     #[test]
@@ -372,11 +406,18 @@ mod tests {
         let port = listener.local_addr()?.port();
         let health = std::thread::spawn(move || -> std::io::Result<()> {
             let (mut stream, _) = listener.accept()?;
-            let mut request = [0_u8; 64];
-            let _read = stream.read(&mut request)?;
+            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+            let request = read_http_request(&mut stream)?;
+            assert_eq!(request, b"GET /healthz HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
             stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n")
         });
-        let mut server = Server(Command::new("sleep").arg("30").spawn()?);
+        // Stay alive until the tested shutdown kills us; elapsed wall time is not the lifecycle.
+        let mut server = Server(
+            Command::new("sh")
+                .args(["-c", "read marker"])
+                .stdin(Stdio::piped())
+                .spawn()?,
+        );
         let pid = server.0.id();
         assert!(pid_alive(pid));
 
