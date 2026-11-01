@@ -199,6 +199,36 @@ describe('user feedback (D-82)', () => {
     expect(second).toHaveAttribute('data-removed', 'true');
   });
 
+  it('does not let a second close within the recheck window postpone the first recheck', async () => {
+    const { action } = showAction();
+    const show = (key: string, label: string) => {
+      flushSync(() => {
+        notifyDone('옮겼습니다.', key, { action: { label, onClick: vi.fn() } });
+      });
+      const found = screen.getByRole('button', { name: label }).closest('[data-sonner-toast]');
+      if (!(found instanceof HTMLElement)) throw new Error('toast');
+      return found;
+    };
+    show('second-action', '둘째 되돌리기');
+    const third = show('third-action', '셋째 되돌리기');
+    action.focus();
+    flushSync();
+    await advance(1_000);
+    // 3→2(초점이 있던 것) 뒤 100ms 만에 2→1. 첫 확인(닫힌 뒤 250ms)이 두 번째 감소로 밀리면 안 된다.
+    flushSync(() => {
+      dismissDone('timed-action');
+    });
+    await advance(100);
+    flushSync(() => {
+      dismissDone('second-action');
+    });
+    // 첫 확인은 첫 닫힘 뒤 250ms(지금부터 150ms 뒤)이고 그때부터 셋째의 10초를 센다.
+    await advance(10_149);
+    expect(third).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(third).toHaveAttribute('data-removed', 'true');
+  });
+
   it('measures the remaining time with a monotonic clock', async () => {
     const { item, region } = showAction();
     await advance(4_000);
