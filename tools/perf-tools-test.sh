@@ -42,7 +42,8 @@ cleanup_dead_monitor() {
   cleanup_source=$(awk '/^cleanup\(\) \{$/ {copy=1} copy {print} copy && /^}$/ {exit}' tools/measure-perf.sh)
   test -n "$cleanup_source"
   server_pid=
-  owns_measure_lock=false
+  measure_lock="$out/dead-monitor.lock"
+  measure_token="cleanup-test-$$-$RANDOM"
   sleep 0 &
   monitor_pid=$!
   wait "$monitor_pid"

@@ -29,7 +29,8 @@ mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf-${mode}-${count}-XXXXXX")
 project="fvoci-perf-w1-${mode}-${count}-$$"
 measure_lock="$HOME/.cache/fvoci-measure.lock"
-owns_measure_lock=false
+# Initialize ownership before acquisition: EXIT can run as soon as the write ends.
+measure_token="$$-$(date -u +%Y%m%dT%H%M%S)-$RANDOM-$RANDOM"
 wait_for_measurement() {
   while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do
     if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
@@ -43,8 +44,7 @@ acquire_measure_lock() {
   mkdir -p "$(dirname "$measure_lock")"
   while true; do
     wait_for_measurement || return
-    if (set -C; : > "$measure_lock") 2> "$out/lock-error.log"; then
-      owns_measure_lock=true
+    if (set -C; printf '%s\n' "$measure_token" > "$measure_lock") 2> "$out/lock-error.log"; then
       return 0
     fi
     if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
@@ -81,7 +81,9 @@ cleanup() {
   fi
   if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || cleanup_status=$?
-  if "$owns_measure_lock"; then rm -f "$measure_lock" || cleanup_status=$?; fi
+  if [[ -f "$measure_lock" && ! -L "$measure_lock" ]] && [[ "$(cat "$measure_lock")" == "$measure_token" ]]; then
+    rm -f "$measure_lock" || cleanup_status=$?
+  fi
   if (( status != 0 )); then return "$status"; fi
   return "$cleanup_status"
 }
