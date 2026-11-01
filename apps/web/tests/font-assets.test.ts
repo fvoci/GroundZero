@@ -1,14 +1,15 @@
 // D-86 / #214: deployment contracts, independent of the generator.
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { test } from 'node:test';
+import path from 'node:path';
+import { test } from 'vitest';
 
-const root = new URL('../', import.meta.url);
-const css = readFileSync(new URL('apps/web/src/styles/app.css', root), 'utf8');
-const html = readFileSync(new URL('apps/web/index.html', root), 'utf8');
+const root = path.resolve(import.meta.dirname, '../../..');
+const css = readFileSync(path.join(root, 'apps/web/src/styles/app.css'), 'utf8');
+const html = readFileSync(path.join(root, 'apps/web/index.html'), 'utf8');
 
-test('only eight WOFF2 derivatives and the two original licenses ship', () => {
-  const files = readdirSync(new URL('apps/web/src/assets/fonts/', root)).sort();
+test('only six Noto WOFF2 derivatives, two original D2Coding TTFs and licenses ship', () => {
+  const files = readdirSync(path.join(root, 'apps/web/src/assets/fonts')).sort();
   assert.deepEqual(
     files,
     [
@@ -18,7 +19,7 @@ test('only eight WOFF2 derivatives and the two original licenses ship', () => {
         `NotoSansKR-${weight}-common.woff2`,
         `NotoSansKR-${weight}-rest.woff2`,
         `NotoSerifKR-${weight}.woff2`,
-        `D2Coding-${weight}.woff2`,
+        `D2Coding-${weight}.ttf`,
       ]),
     ].sort(),
   );
@@ -38,5 +39,8 @@ test('first screen preloads only the common piece of each Sans weight', () => {
     assert.match(tag, /type="font\/woff2"/);
     assert.match(tag, /crossorigin/);
   }
-  assert.doesNotMatch(css, /\.(otf|ttf)['"]/);
+  assert.doesNotMatch(css, /\.otf['"]/);
+  for (const weight of ['Regular', 'Bold']) {
+    assert.match(css, new RegExp(`D2Coding-${weight}\\.ttf`));
+  }
 });

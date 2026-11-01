@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
@@ -119,9 +120,9 @@ fn section(out: &mut String, title: &str, packages: &[Package], missing: &mut BT
     }
 }
 
-/// 제품에 든 서체 파일(D-86, OFL-1.1 예외는 이 여섯 파일·판에만). 받은 그대로 두므로 SHA-256이 결정 기록과 같아야
-/// 한다. 폴더에 다른 서체가 생기거나 파일이 바뀌면 실패한다(새 서체는 따로 승인).
+/// D-86의 승인 여섯 원본과 파생 파일. 원본은 고정 Git 입력과 O-37 해시로 검증한다.
 const FONT_DIR: &str = "apps/web/src/assets/fonts";
+const FONT_SOURCE_COMMIT: &str = "d7b8f67b1d6dad63f10ce0f94803dc0e9f5e984c";
 
 struct Font {
     file: &'static str,
@@ -139,7 +140,7 @@ const NOTO_SERIF_NOTICE: &str =
 const D2_REGULAR_NOTICE: &str = "Copyright (c) 2015-2016 NAVER Corporation. All rights reserved. Font designed by FONTRIX Inc.\nD2Coding is a registered trademark of NAVER Corporation.";
 const D2_BOLD_NOTICE: &str = "Copyright (c) 2015-2016 NAVER Corporation. All rights reserved. Font designed by FONTRIX Inc.\nD2Coding Bold is a registered trademark of NAVER Corporation.";
 
-const FONTS: &[Font] = &[
+const FONT_SOURCES: &[Font] = &[
     Font {
         file: "NotoSansKR-Regular.otf",
         sha256: "69975a0ac8472717870aefeab0a4d52739308d90856b9955313b2ad5e0148d68",
@@ -190,6 +191,55 @@ const FONTS: &[Font] = &[
     },
 ];
 
+struct FontAsset {
+    file: &'static str,
+    sha256: &'static str,
+    original: &'static Font,
+}
+
+const FONTS: &[FontAsset] = &[
+    FontAsset {
+        file: "NotoSansKR-Regular-common.woff2",
+        sha256: "f0b98f5b76386c2424b9af53bce7f03188409c9b200e8b06e1db076ea711e007",
+        original: &FONT_SOURCES[0],
+    },
+    FontAsset {
+        file: "NotoSansKR-Regular-rest.woff2",
+        sha256: "3713d1b3cfa8859ad0fdeb017181325b4fc7f5e1b558eb33484764f25b430c1f",
+        original: &FONT_SOURCES[0],
+    },
+    FontAsset {
+        file: "NotoSansKR-Bold-common.woff2",
+        sha256: "8fadc9a29fe81b90983686def04a651a7653be7f37c401afc921c75416b91698",
+        original: &FONT_SOURCES[1],
+    },
+    FontAsset {
+        file: "NotoSansKR-Bold-rest.woff2",
+        sha256: "0edc31bd406975703875c41b8f34c3820d2d7e38afe36799b23b0bd4612491a4",
+        original: &FONT_SOURCES[1],
+    },
+    FontAsset {
+        file: "NotoSerifKR-Regular.woff2",
+        sha256: "df3078cf1e7b40b0480954399e146e0360e5f58844591836e9056c69c1c56bbc",
+        original: &FONT_SOURCES[2],
+    },
+    FontAsset {
+        file: "NotoSerifKR-Bold.woff2",
+        sha256: "dc5d9bd948b7f5dd909914edb364a17eae7b5d6a264d18948286ed649241dd6a",
+        original: &FONT_SOURCES[3],
+    },
+    FontAsset {
+        file: "D2Coding-Regular.ttf",
+        sha256: "d5f2b6bf5b1826cfbf3734c70582f0cd42ea2e1d6c2636ae681b612bc9c5682f",
+        original: &FONT_SOURCES[4],
+    },
+    FontAsset {
+        file: "D2Coding-Bold.ttf",
+        sha256: "14a0cfa4d96fbd976bc4b1a6ef81e51df353a1689d5273ebcd908c857a4f2752",
+        original: &FONT_SOURCES[5],
+    },
+];
+
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     Sha256::digest(bytes)
@@ -198,12 +248,21 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// 서체 파일을 확인하고 고지를 더한다.
-fn fonts(root: &Path, out: &mut String) -> Result<()> {
-    let dir = root.join(FONT_DIR);
-    let licenses: BTreeSet<&str> = FONTS.iter().map(|f| f.license_file).collect();
+fn check_font_digest(font: &FontAsset, bytes: &[u8]) -> Result<()> {
+    let digest = sha256_hex(bytes);
+    if digest != font.sha256 {
+        bail!(
+            "{} changed (sha256 {digest}); expected the approved D-86 asset",
+            font.file
+        );
+    }
+    Ok(())
+}
+
+fn check_font_files(dir: &Path) -> Result<()> {
+    let licenses: BTreeSet<&str> = FONT_SOURCES.iter().map(|f| f.license_file).collect();
     let mut present: BTreeSet<String> = BTreeSet::new();
-    for entry in fs::read_dir(&dir).with_context(|| format!("read {FONT_DIR}"))? {
+    for entry in fs::read_dir(dir).with_context(|| format!("read {FONT_DIR}"))? {
         let name = entry?.file_name().to_string_lossy().into_owned();
         // 운영체제가 만드는 숨김 파일(.DS_Store 등)은 배포물에 들지 않는다.
         if !name.starts_with('.') {
@@ -222,19 +281,66 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
     }
     for font in FONTS {
         let bytes = fs::read(dir.join(font.file)).with_context(|| format!("read {}", font.file))?;
-        let digest = sha256_hex(&bytes);
-        if digest != font.sha256 {
-            bail!(
-                "{} changed (sha256 {digest}); fonts ship unmodified (D-86)",
-                font.file
-            );
+        check_font_digest(font, &bytes)?;
+    }
+    Ok(())
+}
+
+fn check_font_sources(root: &Path) -> Result<()> {
+    let cache = root.join("target/font-tools-sources");
+    fs::create_dir_all(&cache)?;
+    for font in FONT_SOURCES {
+        let path = cache.join(font.file);
+        let bytes = if path.exists() {
+            fs::read(&path)?
+        } else {
+            let object = format!("{FONT_SOURCE_COMMIT}:{FONT_DIR}/{}", font.file);
+            let git = Command::new("git")
+                .current_dir(root)
+                .args(["show", &object])
+                .output()?;
+            let bytes = if git.status.success() {
+                git.stdout
+            } else {
+                // CI's shallow checkout may not contain the generation input commit.
+                let url = format!(
+                    "https://raw.githubusercontent.com/fvoci/GroundZero/{FONT_SOURCE_COMMIT}/{FONT_DIR}/{}",
+                    font.file
+                );
+                let download = Command::new("curl")
+                    .args([
+                        "--fail",
+                        "--silent",
+                        "--show-error",
+                        "--location",
+                        "--max-time",
+                        "60",
+                        &url,
+                    ])
+                    .output()?;
+                if !download.status.success() {
+                    bail!("cannot retrieve pinned font input {}", font.file);
+                }
+                download.stdout
+            };
+            if sha256_hex(&bytes) != font.sha256 {
+                bail!("{} does not match the O-37 source hash", font.file);
+            }
+            fs::write(&path, &bytes)?;
+            bytes
+        };
+        if sha256_hex(&bytes) != font.sha256 {
+            bail!("{} does not match the O-37 source hash", font.file);
         }
     }
-    // 실제로 나가는 번들(위 npm 단계가 만든 `target/notices-web`)의 서체도 확인한다: 다른 패키지의 CSS가 서체를
-    // 끌어오면(예: KaTeX) 고지 없이 나가지 않게, 번들의 서체 파일은 정확히 승인한 여섯이어야 한다.
+    Ok(())
+}
+
+fn check_font_bundle(root: &Path) -> Result<()> {
     let bundle = root.join("target/notices-web/assets");
     let approved: BTreeSet<&str> = FONTS.iter().map(|f| f.sha256).collect();
     let mut shipped: BTreeSet<String> = BTreeSet::new();
+    let mut count = 0;
     for entry in fs::read_dir(&bundle).context("web build assets")? {
         let path = entry?.path();
         let is_font = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
@@ -246,6 +352,7 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
         if !is_font {
             continue;
         }
+        count += 1;
         let digest = sha256_hex(&fs::read(&path)?);
         if !approved.contains(digest.as_str()) {
             bail!(
@@ -255,25 +362,48 @@ fn fonts(root: &Path, out: &mut String) -> Result<()> {
         }
         shipped.insert(digest);
     }
-    if shipped.len() != FONTS.len() {
+    if shipped.len() != FONTS.len() || count != FONTS.len() {
         bail!(
             "web bundle ships {} of the {} approved fonts (D-86)",
             shipped.len(),
             FONTS.len()
         );
     }
+    Ok(())
+}
+
+/// Validate exact source/asset/bundle hashes before rendering notices.
+fn fonts(root: &Path, out: &mut String) -> Result<()> {
+    let dir = root.join(FONT_DIR);
+    check_font_files(&dir)?;
+    check_font_sources(root)?;
+    check_font_bundle(root)?;
     let _ignored = write!(
         out,
         "==================== Fonts (web bundle): {} ====================\n\n",
         FONTS.len()
     );
     for font in FONTS {
+        let original = font.original;
+        let generation = if font.file.ends_with(".woff2") {
+            "FontTools 4.60.1 (subset/ttLib.woff2), Brotli 1.2.0; tools/generate-fonts.sh; OFL-1.1 derivative"
+        } else {
+            "Unmodified approved TTF; existing br/gzip delivery retained"
+        };
         let _ignored = write!(
             out,
-            "---- {} ({}) ----\nLicense: OFL-1.1\nSource: {}\nSHA-256: {}\n{}\nLicense text: [{}] below\n\n",
-            font.name, font.file, font.source, font.sha256, font.notice, font.license_file
+            "---- {} ({}) ----\nLicense: OFL-1.1\nSource: {}\nSHA-256: {}\nOriginal file: {}\nOriginal SHA-256 (O-37): {}\nInput commit: {FONT_SOURCE_COMMIT}\nGeneration: {generation}\n{}\nLicense text: [{}] below\n\n",
+            original.name,
+            font.file,
+            original.source,
+            font.sha256,
+            original.file,
+            original.sha256,
+            original.notice,
+            original.license_file
         );
     }
+    let licenses: BTreeSet<&str> = FONT_SOURCES.iter().map(|f| f.license_file).collect();
     for license in &licenses {
         let text =
             fs::read_to_string(dir.join(license)).with_context(|| format!("read {license}"))?;
@@ -537,12 +667,42 @@ fn normalize(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{FONTS, crate_archive, npm_archive};
+    use super::{FONTS, check_font_digest, crate_archive, npm_archive};
 
     #[test]
-    fn font_notices_require_eight_woff2_derivatives() {
+    fn font_asset_digests_reject_corruption() -> anyhow::Result<()> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        for font in FONTS {
+            let mut bytes = std::fs::read(root.join(super::FONT_DIR).join(font.file))?;
+            check_font_digest(font, &bytes)?;
+            assert!(!bytes.is_empty(), "{} must contain font data", font.file);
+            bytes[0] ^= 1;
+            assert!(
+                check_font_digest(font, &bytes).is_err(),
+                "{} changed without rejection",
+                font.file
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn font_notices_require_six_noto_derivatives_and_two_d2_originals() {
         assert_eq!(FONTS.len(), 8, "D-86 requires two Sans pieces per weight");
-        assert!(FONTS.iter().all(|font| font.file.ends_with(".woff2")));
+        assert_eq!(
+            FONTS
+                .iter()
+                .filter(|font| font.file.ends_with(".woff2"))
+                .count(),
+            6
+        );
+        assert_eq!(
+            FONTS
+                .iter()
+                .filter(|font| font.file.starts_with("D2Coding-") && font.file.ends_with(".ttf"))
+                .count(),
+            2
+        );
     }
 
     #[test]
