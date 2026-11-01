@@ -19,6 +19,7 @@ const OLD: &str = "CREATE ROLE fvoci_app LOGIN NOSUPERUSER NOCREATEROLE NOBYPASS
     ALTER TYPE fvoci.legacy_state OWNER TO fvoci_migrator;
     CREATE FUNCTION fvoci.legacy_function() RETURNS int LANGUAGE sql AS 'SELECT 1';
     ALTER FUNCTION fvoci.legacy_function() OWNER TO fvoci_migrator;
+    REVOKE EXECUTE ON FUNCTION fvoci.legacy_function() FROM PUBLIC;
     CREATE TABLE fvoci.legacy(id int PRIMARY KEY, secret text);
     ALTER TABLE fvoci.legacy OWNER TO fvoci_migrator;
     INSERT INTO fvoci.legacy VALUES(1,'synthetic old row');
@@ -234,14 +235,12 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
     let create_reader: String = sqlx::query_scalar("SELECT format('CREATE ROLE cloud_fixture_reader LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD %L',$1::text)")
         .bind(compose::TEST_APP_PASSWORD).fetch_one(&mut admin).await?;
     sql(&mut admin, &create_reader).await?;
-    let mut reader = PgConnection::connect_with(
-        &target
-            .admin
-            .clone()
-            .username("cloud_fixture_reader")
-            .password(compose::TEST_APP_PASSWORD),
-    )
-    .await?;
+    let reader_options = target
+        .admin
+        .clone()
+        .username("cloud_fixture_reader")
+        .password(compose::TEST_APP_PASSWORD);
+    let mut reader = PgConnection::connect_with(&reader_options).await?;
     catalog::inspect_authority(&mut reader).await?;
     sql(&mut admin, "ALTER ROLE cloud_fixture_reader REPLICATION").await?;
     ensure!(
@@ -249,6 +248,7 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
         "replication reader accepted"
     );
     sql(&mut admin, "ALTER ROLE cloud_fixture_reader NOREPLICATION").await?;
+    review_failures.extend(super::acl_tests::run(&mut admin, &mut reader).await?);
     let inspected = Inventory::read(&mut reader, &target.binding).await?;
     let inventory = Inventory::read(&mut operator, &target.binding).await?;
     ensure!(
@@ -354,6 +354,9 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
     receipt::record(target, &proof()).await?;
     let product = Binding::product(target.binding.target.clone())?;
     let installed = Inventory::read(&mut admin, &product).await?;
+    let mut fresh_reader = PgConnection::connect_with(&reader_options).await?;
+    catalog::inspect_authority(&mut fresh_reader).await?;
+    fresh_reader.close().await?;
     ensure!(
         !installed.blocked,
         "installed product inventory blocked: {}; unexpected objects: {:?}",

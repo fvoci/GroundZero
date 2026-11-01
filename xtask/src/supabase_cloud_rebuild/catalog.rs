@@ -45,14 +45,26 @@ pub(super) async fn write_authority(conn: &mut PgConnection) -> Result<()> {
 }
 
 pub(super) async fn inspect_authority(conn: &mut PgConnection) -> Result<()> {
-    let minimal: bool = sqlx::query_scalar("SELECT NOT (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication)
+    let minimal: bool = sqlx::query_scalar(&format!("{SCOPE} SELECT NOT (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication)
         AND rolcanlogin AND NOT has_database_privilege(current_user,current_database(),'CREATE')
         AND NOT EXISTS (SELECT FROM pg_auth_members m JOIN pg_roles me ON me.oid=m.member WHERE me.rolname=current_user)
         AND NOT EXISTS (SELECT FROM pg_roles p WHERE p.rolname IN ('fvoci_app','fvoci_migrator')
           AND (pg_has_role(current_user,p.oid,'MEMBER') OR pg_has_role(current_user,p.oid,'SET')))
         AND NOT EXISTS (SELECT FROM pg_namespace n WHERE n.nspname='fvoci'
           AND (has_schema_privilege(current_user,n.oid,'USAGE') OR has_schema_privilege(current_user,n.oid,'CREATE')))
-        FROM pg_roles WHERE rolname=current_user").fetch_one(conn).await?;
+        AND NOT EXISTS (SELECT FROM pg_shdepend d JOIN scope s ON (s.classid,s.objid)=(d.classid,d.objid)
+          WHERE d.dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) AND d.deptype='o'
+          AND d.refclassid='pg_authid'::regclass AND d.refobjid=me.oid)
+        AND NOT EXISTS (SELECT FROM pg_class c WHERE c.relnamespace=to_regnamespace('fvoci') AND (
+          (c.relkind IN ('r','p','v','m','f') AND (has_table_privilege(me.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+            OR has_any_column_privilege(me.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
+          OR (c.relkind='S' AND has_sequence_privilege(me.oid,c.oid,'USAGE,SELECT,UPDATE'))))
+        AND NOT EXISTS (SELECT FROM pg_proc p WHERE p.pronamespace=to_regnamespace('fvoci') AND has_function_privilege(me.oid,p.oid,'EXECUTE')
+          AND NOT (p.prokind='f' AND NOT p.prosecdef AND NOT p.proretset AND (
+            (p.proname='app_normalize_key' AND p.pronargs=1 AND p.proargtypes[0]='text'::regtype AND p.prorettype='text'::regtype)
+            OR (p.proname='app_local_instant' AND p.pronargs=2 AND p.proargtypes[0]='timestamp'::regtype AND p.proargtypes[1]='text'::regtype AND p.prorettype='timestamptz'::regtype))
+            AND NOT EXISTS (SELECT FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=me.oid AND a.privilege_type='EXECUTE')))
+        FROM pg_roles me WHERE rolname=current_user")).fetch_one(conn).await?;
     ensure!(minimal, "inspection_requires_minimal_catalog_reader");
     Ok(())
 }

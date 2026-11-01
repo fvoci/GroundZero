@@ -11,6 +11,12 @@
    운영·개인 개발 DB는 대상이 아니다. Supabase 설정에서 `fvoci`가 Data API 노출 스키마에 없는지도 확인한다.
 2. 조사 전용 계정을 사용자가 준비한다. LOGIN·DB CONNECT만 필요하며 superuser·BYPASSRLS·CREATEROLE·CREATEDB·REPLICATION,
    다른 역할 멤버십, 제품 스키마 USAGE·CREATE·데이터 권한이 없어야 한다. 공개 시스템 카탈로그만 읽는다.
+   스키마 USAGE가 없어 잠재 상태인 직접 ACL도 거부한다. 테이블·열의 SELECT/쓰기/REFERENCES/TRIGGER/MAINTAIN,
+   sequence의 USAGE/SELECT/UPDATE, 함수 EXECUTE와 제품 객체 소유권을 확인한다. PUBLIC을 통한 권한도 같은 검사에 포함한다.
+   기존 계약의 `app_normalize_key(text)`·`app_local_instant(timestamp,text)` 두 호출자 도우미의 PUBLIC EXECUTE만 예외다.
+   정확한 서명·반환형·호출자 모드와 스키마 USAGE 부재를 요구하며, 조사 계정의 직접 EXECUTE나 소유권은 여전히 거부한다.
+   그 밖의 PUBLIC 함수 실행 권한도 거부한다. 함수 권한과 스키마 이름 접근 권한은 별개인
+   [PostgreSQL 권한 조회 규칙](https://www.postgresql.org/docs/17/functions-info.html#FUNCTIONS-INFO-ACCESS-TABLE)을 따른다.
    GitHub Environment **`supabase-cloud-rebuild`**를 만들고 required reviewers, 자기 승인 금지,
    main만 허용하는 배포 브랜치를 설정한다. 승인자가 실제로 적용되는지 확인한 **뒤에** 아래 표의 위치에 Secret을 등록한다.
    YAML의 `environment` 이름만으로 required reviewers가 설정되지는 않는다.

@@ -1,5 +1,6 @@
 //! 승인 목록 지문을 사용하는 Cloud 시험 DB 재설치. 연결값·사용자명·원시 오류는 출력하지 않는다.
 
+mod acl_tests;
 mod allowed;
 mod catalog;
 mod catalog_tests;
