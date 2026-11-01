@@ -15,6 +15,7 @@ import type { TaskResource } from '$lib/features/tasks/model';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { timeData } from '$lib/features/time/data';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 import { TASK_ITEM } from '../../stories/fixtures/synthetic';
 
 function held<T>() {
@@ -59,6 +60,7 @@ function aggregateRead(): DetailRead {
 }
 
 beforeEach(async () => {
+  me.userId = 'viewer';
   await setLocale('ko', { reload: false });
   vi.spyOn(workApi, 'task').mockResolvedValue(resource);
   vi.spyOn(workApi, 'tasks').mockResolvedValue([]);
@@ -77,6 +79,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
+  me.userId = '';
   vi.restoreAllMocks();
   localStorage.clear();
   sessionStorage.clear();
@@ -281,7 +284,7 @@ it('does not keep another task scope status choices when the aggregate section f
   await waitFor(() => {
     expect(screen.getByLabelText('제목')).toHaveValue('다음 집계 상세');
   });
-  expect(screen.getByRole('alert')).toHaveTextContent('업무를 불러오지 못했습니다.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('업무를 불러오지 못했습니다.');
   await fireEvent.keyDown(screen.getByLabelText('상태'), { key: 'Enter' });
   expect(screen.queryByRole('option', { name: 'previous scope choice' })).toBeNull();
   expect(taskData.taskStatuses).not.toHaveBeenCalled();

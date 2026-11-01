@@ -8,7 +8,14 @@
   import { parseTaskDraft, type TaskDraft } from './detail-draft';
   import { taskData as work } from '$lib/features/tasks/detail-data';
   import { taskScreenApi, composeScreenDetail, type DetailRead } from './screen-api';
-  import type { CapturedRead } from './context-read';
+  import {
+    DiscardedTaskRead,
+    sameContext,
+    startCapturedRead,
+    type CapturedRead,
+    type ContextCapture,
+  } from './context-read';
+  import { readSessionGeneration } from '$lib/features/auth/session-signal';
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
   import { onDestroy, tick, untrack } from 'svelte';
@@ -29,7 +36,11 @@
     UndatedTaskView,
   } from '$lib/api/client';
   import { api, ApiError, TaskRuleConflict, MAX_LAG_DAYS } from '$lib/api/client';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    accountSwitching,
+    notifyDone,
+  } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
   import type { StoredFormDraft } from '$lib/features/tasks/drafts';
@@ -356,13 +367,26 @@
     if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
   }
 
+  let detailReadSequence = 0;
   $effect(() => {
     const id = taskId;
     const navigation = untrack(() => aggregate) ? router.navigationGeneration : undefined;
     const parentItemId = untrack(() => itemId);
+    const sequence = ++detailReadSequence;
+    const capture = (): ContextCapture => ({
+      userId: me.userId,
+      sequence: detailReadSequence,
+      navigationGeneration: router.navigationGeneration,
+      sessionGeneration: readSessionGeneration(),
+      safetyGeneration: accountSafety.generation,
+      path: router.path,
+    });
+    const snapshot = { ...untrack(capture), sequence };
     let cancelled = false;
     const isCurrent = (): boolean =>
-      !cancelled && (navigation === undefined || navigation === router.navigationGeneration);
+      !cancelled &&
+      (navigation === undefined ||
+        (navigation === router.navigationGeneration && sameContext(snapshot, capture())));
     detailForm.task = undefined;
     latestRule = undefined;
     conflict = undefined;
@@ -372,10 +396,24 @@
     let aggregateRead: DetailRead | undefined;
     const read = untrack(() => (aggregate ? initialRead?.(id)?.take() : undefined));
     const pending = aggregate
-      ? (read ?? taskScreenApi.detail(id)).then((read) => {
-          aggregateRead = read;
-          return composeScreenDetail(read);
-        })
+      ? startCapturedRead(snapshot, capture, read ?? taskScreenApi.detail(id))
+          .take()
+          .catch((cause: unknown) => {
+            if (
+              read !== undefined &&
+              cause instanceof DiscardedTaskRead &&
+              isCurrent() &&
+              !accountSafety.switching &&
+              !accountSafety.restoring &&
+              !hiddenForAccount
+            )
+              return startCapturedRead(snapshot, capture, taskScreenApi.detail(id)).take();
+            throw cause;
+          })
+          .then((read) => {
+            aggregateRead = read;
+            return composeScreenDetail(read);
+          })
       : work.task(id, parentItemId);
     void pending
       .then((detail) => {
@@ -388,8 +426,8 @@
           screenArchived = aggregateRead.archived;
           definitions = [];
           people = undefined;
-          void taskScreenApi
-            .options(detail.item_id)
+          void startCapturedRead(snapshot, capture, taskScreenApi.options(detail.item_id))
+            .take()
             .then((options) => {
               if (!isCurrent()) return;
               if (options.statuses.state === 'ready') definitions = options.statuses.value;
@@ -398,7 +436,7 @@
               else peopleError = m.tasks_assignable_load_failed();
             })
             .catch((cause: unknown) => {
-              if (!isCurrent()) return;
+              if (!isCurrent() || cause instanceof DiscardedTaskRead) return;
               if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
                 detailForm.task = undefined;
                 error = errorText(cause, m.tasks_task_load_failed());
@@ -421,7 +459,7 @@
         );
       })
       .catch((e: unknown) => {
-        if (isCurrent())
+        if (isCurrent() && !(e instanceof DiscardedTaskRead))
           error =
             e instanceof ApiError && e.status === 404
               ? m.tasks_not_found()

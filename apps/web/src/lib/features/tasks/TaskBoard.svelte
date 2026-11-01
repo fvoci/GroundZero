@@ -7,6 +7,7 @@
   import { taskScreenApi, type BoardRead, type DetailRead } from './screen-api';
   import {
     DiscardedTaskRead,
+    sameContext,
     startCapturedRead,
     type CapturedRead,
     type ContextCapture,
@@ -430,8 +431,21 @@
   });
 
   async function readBoard(itemId: string, initial?: Promise<BoardRead>): Promise<BoardRead> {
+    const capture = (): ContextCapture => ({
+      userId: me.userId,
+      sequence: reloadSeq,
+      navigationGeneration: router.navigationGeneration,
+      sessionGeneration: readSessionGeneration(),
+      safetyGeneration: accountSafety.generation,
+      path: router.path,
+    });
+    const snapshot = untrack(capture);
     try {
-      return await (initial ?? taskScreenApi.board(itemId));
+      return await startCapturedRead(
+        snapshot,
+        capture,
+        initial ?? taskScreenApi.board(itemId),
+      ).take();
     } catch (cause: unknown) {
       if (
         initial !== undefined &&
@@ -440,9 +454,10 @@
         itemId === item.id &&
         !accountSafety.switching &&
         !accountSafety.restoring &&
-        !hiddenForAccount
+        !hiddenForAccount &&
+        sameContext(snapshot, capture())
       )
-        return taskScreenApi.board(itemId);
+        return startCapturedRead(snapshot, capture, taskScreenApi.board(itemId)).take();
       throw cause;
     }
   }
@@ -466,7 +481,8 @@
       if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) withdrawUndo();
       error = undefined;
     } catch (e: unknown) {
-      if (alive && mine === reloadSeq) error = errorText(e, m.tasks_load_failed());
+      if (alive && mine === reloadSeq && !(e instanceof DiscardedTaskRead))
+        error = errorText(e, m.tasks_load_failed());
     } finally {
       if (itemId === item.id) loadedFor = itemId;
     }

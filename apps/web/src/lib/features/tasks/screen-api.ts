@@ -1,5 +1,6 @@
 import type { components, Module, TaskStatusDefinition } from '@fvoci/api-client';
-import { ApiError, expectOk } from '$lib/shared/api';
+import { untrack } from 'svelte';
+import { ApiError, fail, request } from '$lib/shared/api';
 import {
   access,
   bool,
@@ -13,7 +14,9 @@ import {
 import { parseItem, parseModule, type ItemView } from '$lib/api/client/modules';
 import { parseSummary, type SummaryView } from '$lib/api/client/documents';
 import { me } from '$lib/me.svelte';
-import { switchAccount } from '$lib/features/feedback/feedback.svelte';
+import { accountSafety, switchAccount } from '$lib/features/feedback/feedback.svelte';
+import { readSessionGeneration } from '$lib/features/auth/session-signal';
+import { DiscardedTaskRead } from './context-read';
 import { composeTasks, type TaskRelations } from './board-data';
 import {
   parseAssignee,
@@ -73,12 +76,33 @@ function section<T>(value: Json, parse: (value: Json) => T): Section<T> {
     throw new TypeError('invalid read section');
   return { state: 'failed', error: 'unavailable' };
 }
+interface ReadResponse {
+  status: number;
+  json: Json;
+}
 async function owned<T extends { viewer_id: string }>(
   user: string,
-  pending: Promise<T>,
+  read: () => Promise<ReadResponse>,
+  parse: (value: Json) => T,
 ): Promise<T> {
-  const result = await pending;
-  if (result.viewer_id !== user || me.userId !== user) {
+  const generation = readSessionGeneration();
+  const safetyGeneration = untrack(() => accountSafety.generation);
+  const isCurrent = (): boolean =>
+    me.userId === user &&
+    generation === readSessionGeneration() &&
+    safetyGeneration === accountSafety.generation;
+  let response: ReadResponse;
+  try {
+    response = await read();
+  } catch (cause: unknown) {
+    if (!isCurrent()) throw new DiscardedTaskRead();
+    throw cause;
+  }
+  if (!isCurrent()) throw new DiscardedTaskRead();
+  // Reject stale failures before fail() can publish expired/account-changed state.
+  if (response.status < 200 || response.status >= 300) fail(response.status, response.json);
+  const result = parse(response.json);
+  if (result.viewer_id !== user) {
     switchAccount();
     throw new ApiError(409, 'account_changed', 'account_changed');
   }
@@ -89,7 +113,8 @@ export const taskScreenApi = {
   context: (id: string) =>
     owned(
       me.userId,
-      expectOk('GET', `/api/items/${encodeURIComponent(id)}/task-context`, (value): TaskContext => {
+      () => request('GET', `/api/items/${encodeURIComponent(id)}/task-context`),
+      (value): TaskContext => {
         const o = rec(value, 'task context');
         return {
           viewer_id: str(o, 'viewer_id'),
@@ -97,50 +122,49 @@ export const taskScreenApi = {
           module: parseModule(o.module),
           documents: parseList(o.documents, parseSummary),
         };
-      }),
+      },
     ),
   board: (id: string) =>
     owned(
       me.userId,
-      expectOk('GET', `/api/items/${encodeURIComponent(id)}/task-board`, (value): BoardRead => {
+      () => request('GET', `/api/items/${encodeURIComponent(id)}/task-board`),
+      (value): BoardRead => {
         const o = rec(value, 'task board');
         return {
           ...bundle(value),
           item_access: access(str(o, 'item_access')),
           statuses: parseList(o.statuses, parseTaskStatusDefinition),
         };
-      }),
+      },
     ),
   detail: (id: string) =>
     owned(
       me.userId,
-      expectOk('GET', `/api/tasks/${encodeURIComponent(id)}/detail-read`, (value): DetailRead => {
+      () => request('GET', `/api/tasks/${encodeURIComponent(id)}/detail-read`),
+      (value): DetailRead => {
         const o = rec(value, 'task detail');
         return {
           ...bundle(value),
           task: parseTaskResource(o.task),
           item: parseItem(o.item),
         };
-      }),
+      },
     ),
   options: (id: string) =>
     owned(
       me.userId,
-      expectOk(
-        'GET',
-        `/api/items/${encodeURIComponent(id)}/task-detail-options`,
-        (value): DetailOptionsRead => {
-          const o = rec(value, 'task detail options');
-          const item_id = str(o, 'item_id');
-          if (item_id !== id) throw new TypeError('invalid task options scope');
-          return {
-            viewer_id: str(o, 'viewer_id'),
-            item_id,
-            statuses: section(o.statuses, (v) => parseList(v, parseTaskStatusDefinition)),
-            assignable: section(o.assignable, (v) => parseList(v, parseAssignee)),
-          };
-        },
-      ),
+      () => request('GET', `/api/items/${encodeURIComponent(id)}/task-detail-options`),
+      (value): DetailOptionsRead => {
+        const o = rec(value, 'task detail options');
+        const item_id = str(o, 'item_id');
+        if (item_id !== id) throw new TypeError('invalid task options scope');
+        return {
+          viewer_id: str(o, 'viewer_id'),
+          item_id,
+          statuses: section(o.statuses, (v) => parseList(v, parseTaskStatusDefinition)),
+          assignable: section(o.assignable, (v) => parseList(v, parseAssignee)),
+        };
+      },
     ),
 };
 
