@@ -8,6 +8,9 @@ use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+mod aggregate_roles;
+mod recent_documents;
+
 const COMPARE: &str = "SELECT fvoci.home_outcome($1,$2,true), fvoci.home_outcome($1,$2,false)";
 const OUTCOME: &str = r"
 CREATE FUNCTION fvoci.home_outcome(org uuid,tz text,reference boolean) RETURNS jsonb

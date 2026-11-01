@@ -10,6 +10,7 @@ use crate::common;
 mod privacy;
 mod revision_due;
 mod scope;
+mod security;
 mod time_exclusion;
 mod timezone_names;
 
