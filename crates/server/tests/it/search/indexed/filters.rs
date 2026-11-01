@@ -1,8 +1,38 @@
 use super::*;
+use time::{Date, Month, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
 
 #[tokio::test]
 async fn filters_narrow_results_and_attachment_text_is_searchable() {
     let _queue = SHARED_QUEUE.read().await;
+    let fixed = [
+        "2026-11-01T00:00:00+09:00",
+        "2026-10-31T23:59:59+09:00",
+        "2026-11-02T00:00:00+09:00",
+        "2026-12-31T23:59:59+09:00",
+        "2027-01-01T00:00:00+09:00",
+    ]
+    .map(|at| OffsetDateTime::parse(at, &Rfc3339).unwrap());
+    for at in fixed.into_iter().chain([OffsetDateTime::now_utc()]) {
+        filters_at(at).await;
+    }
+}
+
+async fn filters_at(at: OffsetDateTime) {
+    // 문서·파일은 기준 시각, 보고서 기한은 그다음 달에 둔다. 어느 실행일에도 날짜 필터는 보고서 하나로 좁혀진다.
+    let day = at.to_offset(UtcOffset::from_hms(9, 0, 0).unwrap()).date();
+    let from = Date::from_calendar_date(
+        day.year() + i32::from(day.month() == Month::December),
+        day.month().next(),
+        1,
+    )
+    .unwrap();
+    let to = (from + time::Duration::days(32))
+        .replace_day(1)
+        .unwrap()
+        .previous_day()
+        .unwrap();
+    let due = from + time::Duration::days(4);
+    let date_filter = format!("tz=Asia/Seoul&from={from}&to={to}");
     let state = search_state().await;
     let app = common::app(&state);
     let tok = token();
@@ -49,7 +79,7 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     new_task(format!("{tok} 기획")).await;
     let updated = send(&app, Method::PATCH, &format!("/api/tasks/{}", report["id"].as_str().unwrap()), Some(&admin), Some(json!({
         "base_version": report["version"], "title": format!("{tok} 보고서"), "description": "", "status": "완료",
-        "priority": "none", "start_date": null, "due_date": "2026-11-05", "estimate_minutes": null, "tags": [],
+        "priority": "none", "start_date": null, "due_date": due.to_string(), "estimate_minutes": null, "tags": [],
         "milestone": false, "assignee_ids": [admin.id.0] }))).await;
     assert_eq!(updated.status, StatusCode::OK, "{:?}", updated.json);
     let doc = create_doc(&app, &admin, &ws, &format!("{tok} 회의록")).await;
@@ -62,6 +92,21 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
         &docx(&format!("예산 {tok} {body_tok} 확정")),
     )
     .await;
+    // DB의 시계 대신 이 시나리오의 기준 시각을 넣고, 같은 값을 다시 써 실제 색인 대기열에도 반영한다.
+    let mut fixture = common::fixture_conn().await;
+    for sql in [
+        "UPDATE fvoci.documents SET title = title, updated_at = $2 WHERE id = $1::uuid",
+        "UPDATE fvoci.files SET name = name, updated_at = $2 WHERE document_id = $1::uuid",
+    ] {
+        let result = sqlx::query(sql)
+            .bind(doc["id"].as_str().unwrap())
+            .bind(at)
+            .execute(&mut fixture)
+            .await
+            .unwrap();
+        assert_eq!(result.rows_affected(), 1, "fixture at {at}: {sql}");
+    }
+    drop(fixture);
     settle(
         &state,
         &app,
@@ -83,13 +128,18 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     };
     // 업무를 고친 내용(상태·담당·기한)이 색인에 반영될 때까지 기다린다(제목만으로는 알 수 없다).
     let report = format!("{tok} 보고서");
-    for filter in [
-        "status_category=done",
-        "assignee=me",
-        "from=2026-11-01&to=2026-11-30",
-    ] {
+    for filter in ["status_category=done", "assignee=me", &date_filter] {
         settle(&state, &app, &admin, &format!("{tok}&{filter}"), &[&report]).await;
     }
+    // 수정 시각을 지우거나 종류로 배제하지 않는다. 그날을 찾으면 문서·첨부가 모두 검색되어야 한다.
+    settle(
+        &state,
+        &app,
+        &admin,
+        &format!("{tok}&tz=Asia/Seoul&from={day}&to={day}"),
+        &[&format!("{tok} 회의록"), "계획서.docx"],
+    )
+    .await;
     assert_eq!(
         found(format!(
             "{tok}&module_id={}",
@@ -166,6 +216,11 @@ async fn filters_narrow_results_and_attachment_text_is_searchable() {
     // 검색 서비스가 없을 때도 같은 필터를 쓴다(제목 검색).
     let plain = fvoci_server::app::build_state(config_with(&[("FVOCI_SEARCH_URL", "")])).unwrap();
     let plain_app = common::app(&plain);
+    assert_eq!(
+        titles(&search(&plain_app, &admin, &format!("{tok}&{date_filter}")).await),
+        [format!("{tok} 보고서")],
+        "date filter at {at}"
+    );
     assert_eq!(
         titles(&search(&plain_app, &admin, &format!("{tok}&status_category=done")).await),
         [format!("{tok} 보고서")]

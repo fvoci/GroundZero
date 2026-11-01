@@ -1,14 +1,17 @@
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { timeApi } from '$lib/features/time/api';
+import { instantOf } from '$lib/features/events/time';
 import { composeEntry, timeData } from '$lib/features/time/data';
 import type { TimeEntryResource, TimeEntryTarget, TimeTargetKind } from '$lib/features/time/model';
 import TimeScreen from '$lib/features/time/TimeScreen.svelte';
+import { me } from '$lib/me.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { running } from '../../stories/time/fixtures';
 
 const kinds: TimeTargetKind[] = ['task', 'document', 'item', 'episode', 'study_unit'];
 const labels = ['TIM-2 분석', 'DOC-3 문서', 'PRJ-1 항목', 'LEC-1 2회 벡터', 'STU-1 3. 연습 문제'];
+const originalDisplay = { timeZone: me.timeZone, weekStart: me.weekStart };
 const entries: TimeEntryResource[] = kinds.map((kind, i) => ({
   ...running,
   id: `entry-${String(i)}`,
@@ -27,19 +30,97 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
+  Object.assign(me, originalDisplay);
 });
 
-it('keeps all five target labels on screen with a single target collection read', async () => {
-  vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
-  vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
-  const resources = vi.spyOn(timeApi, 'timeEntries').mockResolvedValue(entries);
-  const display = vi.spyOn(timeApi, 'timeEntryTargets').mockResolvedValue(targets);
-  render(TimeScreen);
-  for (const label of labels) expect(await screen.findByText(label)).toBeInTheDocument();
-  expect(resources).toHaveBeenCalledTimes(1);
-  expect(display).toHaveBeenCalledTimes(1);
-});
+it.each([
+  { now: undefined, zone: 'Asia/Seoul', weekStart: 'sun', from: undefined, to: undefined },
+  {
+    now: '2026-10-31T14:59:59Z',
+    zone: 'Asia/Seoul',
+    weekStart: 'sun',
+    from: '2026-10-25',
+    to: '2026-10-31',
+  },
+  {
+    now: '2026-10-31T15:00:00Z',
+    zone: 'Asia/Seoul',
+    weekStart: 'sun',
+    from: '2026-11-01',
+    to: '2026-11-07',
+  },
+  {
+    now: '2026-11-01T15:00:00Z',
+    zone: 'Asia/Seoul',
+    weekStart: 'mon',
+    from: '2026-11-02',
+    to: '2026-11-08',
+  },
+  {
+    now: '2026-11-01T04:00:00Z',
+    zone: 'America/New_York',
+    weekStart: 'sun',
+    from: '2026-11-01',
+    to: '2026-11-07',
+  },
+  {
+    now: '2026-12-31T14:59:59Z',
+    zone: 'Asia/Seoul',
+    weekStart: 'mon',
+    from: '2026-12-28',
+    to: '2027-01-03',
+  },
+  {
+    now: '2026-12-31T15:00:00Z',
+    zone: 'Asia/Seoul',
+    weekStart: 'sun',
+    from: '2026-12-27',
+    to: '2027-01-02',
+  },
+  {
+    now: '2027-01-03T00:00:00Z',
+    zone: 'UTC',
+    weekStart: 'sun',
+    from: '2027-01-03',
+    to: '2027-01-09',
+  },
+])(
+  'keeps all five target labels on screen with a single target collection read ($now, $zone, $weekStart)',
+  async ({ now, zone, weekStart, from, to }) => {
+    if (now !== undefined) {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(now));
+    }
+    Object.assign(me, { timeZone: zone, weekStart });
+    vi.spyOn(timeData, 'currentTimer').mockResolvedValue(null);
+    vi.spyOn(timeData, 'timeSummary').mockResolvedValue([]);
+    // API처럼 요청한 주 안의 기록을 돌려준다. 공유 fixture의 고정 날짜가 실제 오늘의 주 밖으로 밀려나지 않게 한다.
+    const resources = vi.spyOn(timeApi, 'timeEntries').mockImplementation((start, _end, tz) =>
+      Promise.resolve(
+        entries.map((entry) => ({
+          ...entry,
+          started_at: instantOf(`${start}T12:00`, tz),
+          ended_at: instantOf(`${start}T12:01`, tz),
+        })),
+      ),
+    );
+    const display = vi.spyOn(timeApi, 'timeEntryTargets').mockResolvedValue(targets);
+    render(TimeScreen);
+    for (const label of labels) expect(await screen.findByText(label)).toBeInTheDocument();
+    expect(resources).toHaveBeenCalledTimes(1);
+    expect(display).toHaveBeenCalledExactlyOnceWith({
+      from: resources.mock.calls[0]?.[0],
+      to: resources.mock.calls[0]?.[1],
+      tz: zone,
+    });
+    if (from !== undefined) {
+      expect(resources).toHaveBeenCalledExactlyOnceWith(from, to, zone);
+      expect(display).toHaveBeenCalledExactlyOnceWith({ from, to, tz: zone });
+    }
+  },
+);
 
 it('discards mismatched target metadata and retries the collection once', async () => {
   const first = entries[0];
