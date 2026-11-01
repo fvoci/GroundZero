@@ -40,17 +40,34 @@ fi
 compose=(docker compose -p "$project" -f deploy/compose.test.yaml -f "$overlay")
 server_pid=
 monitor_pid=
+measure_lock="$HOME/.cache/fvoci-measure.lock"
+owns_measure_lock=false
 cleanup() {
+  local status=$? cleanup_status=0
+  trap - EXIT
   if [[ -n "$server_pid" ]]; then
     touch "$out/STOP"
     wait "$server_pid" || true
   fi
   if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
-  "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1
+  "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || cleanup_status=$?
+  if "$owns_measure_lock"; then rm -f "$measure_lock" || cleanup_status=$?; fi
+  if (( status == 0 && cleanup_status != 0 )); then status=$cleanup_status; fi
+  exit "$status"
 }
 trap cleanup EXIT
 printf '%s\n' "$out"
 git rev-parse HEAD > "$out/sha.txt"
+wait_for_measurement() {
+  while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do sleep 15; done
+}
+wait_for_measurement
+# Warm every executable before acquiring the sampling marker, including serve_t6.
+cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
+cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
+if [[ "$mode" == screens ]]; then
+  cargo test --release --locked -p fvoci-server --test screen_measure --no-run > "$out/build-screen.log" 2>&1
+fi
 "${compose[@]}" up -d --wait postgres > "$out/compose.log" 2>&1
 port=$("${compose[@]}" port postgres 5432)
 export DATABASE_URL="postgres://fvoci_app:fvoci-test-app-password@$port/fvoci"
@@ -74,10 +91,29 @@ if [[ "$mode" == screens ]]; then
   cp "$out/sha.txt" "$root/apps/web/dist/.perf-head"
   cp "$out/sha.txt" "$out/web-build-sha.txt"
 fi
+mkdir -p "$(dirname "$measure_lock")"
+while true; do
+  wait_for_measurement
+  if (set -o noclobber; : > "$measure_lock") 2> "$out/lock-error.log"; then
+    owns_measure_lock=true
+    printf '%s\n' "$project" > "$measure_lock"
+    break
+  fi
+  if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
+    cat "$out/lock-error.log" >&2
+    exit 1
+  fi
+done
+busy_build() {
+  pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null ||
+    ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'
+}
+while busy_build; do sleep 15; done
 (
   while true; do
     if pgrep -x 'rustc|cc1|cc1plus|ld|rust-lld' > /dev/null; then busy=true; else busy=false; fi
-    if ps -eo comm,args | awk '$1 == "node" && /vite|vitest|storybook|svelte-check/ { found=1 } END { exit !found }'; then node_busy=true; else node_busy=false; fi
+    if ps -eo comm,args | awk '$1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 } END { exit !found }'; then node_busy=true; else node_busy=false; fi
+    if "$busy" || "$node_busy"; then touch "$out/build-overlap"; fi
     printf '%s other_compiler=%s other_node_build=%s\n' "$(date -u +%FT%TZ)" "$busy" "$node_busy"
     sleep 1
   done
@@ -122,6 +158,12 @@ else
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
   jq -f tools/perf-depth.jq "$out/screens.json" > "$out/depth.json"
   printf 'PASS screens: %s\n' "$out"
+fi
+
+# A sample with concurrent compilation cannot be accepted as measurement evidence.
+if [[ -e "$out/build-overlap" ]]; then
+  printf 'FAIL concurrent build during measurement: %s\n' "$out" >&2
+  exit 1
 fi
 
 # Replay additional pg_stat_statements hotspots after the final room measurement.

@@ -1826,7 +1826,11 @@
     "routine fvoci.app_take_login_state(p_secret_hash bytea, p_state text)",
     "routine fvoci.app_target_activity(p_kind text, p_id uuid, p_limit integer, p_before timestamp with time zone, p_before_id uuid)",
     "routine fvoci.app_target_organization(p_kind text, p_id uuid)",
+    "routine fvoci.app_task_board_read(p_item uuid)",
+    "routine fvoci.app_task_bundle_read(p_item uuid)",
     "routine fvoci.app_task_checklist_counts(p_task uuid)",
+    "routine fvoci.app_task_context_read(p_item uuid)",
+    "routine fvoci.app_task_detail_read(p_task uuid)",
     "routine fvoci.app_task_lane_end(p_status uuid)",
     "routine fvoci.app_task_reference(p_task uuid)",
     "routine fvoci.app_task_series_bound(p_series uuid)",
@@ -1963,5 +1967,5 @@
     "trigger fvoci.tasks.tasks_search",
     "trigger fvoci.tasks.tasks_series_root_guard"
   ],
-  "sql_fingerprint": "576c198b4869f427da43aefedf58ca29b6894225e6cdfb3ce0750bbc4d3d488e"
+  "sql_fingerprint": "ebd1b197edb8aea5d999ddfd562d7cce7331c8336a077ab46ba0c635dd2ba987"
 }

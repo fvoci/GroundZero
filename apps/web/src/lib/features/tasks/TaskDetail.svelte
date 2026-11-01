@@ -7,6 +7,7 @@
   import type { LinkPending } from './detail-state';
   import { parseTaskDraft, type TaskDraft } from './detail-draft';
   import { taskData as work } from '$lib/features/tasks/detail-data';
+  import { taskScreenApi, composeScreenDetail, type DetailRead } from './screen-api';
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
   import { onDestroy, tick, untrack } from 'svelte';
@@ -58,6 +59,7 @@
   import ShiftProposals from './ShiftProposals.svelte';
 
   interface Props {
+    aggregate?: boolean;
     readOnly?: boolean;
     taskId: string;
     /** 부모 항목의 읽기 힌트. 실제 업무의 item_id가 다르면 조합층이 다시 읽는다. */
@@ -79,6 +81,7 @@
   }
 
   const {
+    aggregate = false,
     taskId,
     itemId,
     tasks,
@@ -133,7 +136,9 @@
     t === undefined ? '' : `${t.reference ?? ''} ${t.title}`.trim();
 
   let definitions = $state<TaskStatusDefinition[]>([]);
+  let screenArchived = $state<boolean | undefined>();
   $effect(() => {
+    if (aggregate) return;
     const itemId = detailForm.task?.item_id;
     if (itemId === undefined) return;
     let cancelled = false;
@@ -357,14 +362,35 @@
     conflict = undefined;
     clashAsk = undefined;
     error = undefined;
-    void work
-      .task(id, parentItemId)
+    screenArchived = undefined;
+    let aggregateRead: DetailRead | undefined;
+    const pending = aggregate
+      ? taskScreenApi.detail(id).then((read) => {
+          aggregateRead = read;
+          return composeScreenDetail(read);
+        })
+      : work.task(id, parentItemId);
+    void pending
       .then((detail) => {
         if (cancelled) return;
         // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
         offerDraft(detail);
         fill(detail);
         peopleError = undefined;
+        if (aggregateRead !== undefined) {
+          screenArchived = aggregateRead.archived;
+          if (aggregateRead.statuses.state === 'ready') definitions = aggregateRead.statuses.value;
+          else {
+            definitions = [];
+            error = m.tasks_load_failed();
+          }
+          if (aggregateRead.assignable.state === 'ready') people = aggregateRead.assignable.value;
+          else {
+            people = undefined;
+            peopleError = m.tasks_assignable_load_failed();
+          }
+          return;
+        }
         void work.assignable(detail.item_id).then(
           (assignable) => {
             if (!cancelled) people = assignable;
@@ -1168,6 +1194,7 @@
         />
 
         <TaskSidePanels
+          archived={screenArchived}
           bind:this={commentsEditor}
           {current}
           {workspaces}

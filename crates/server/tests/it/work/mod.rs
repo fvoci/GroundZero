@@ -6,6 +6,7 @@ mod patch;
 mod relations;
 mod schedule;
 mod statuses;
+mod task_screen_reads;
 mod tasks;
 
 mod events;

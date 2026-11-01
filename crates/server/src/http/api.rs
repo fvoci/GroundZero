@@ -103,6 +103,7 @@ impl utoipa::Modify for DomainApis {
         openapi.merge(fvoci_work::WorkApi::openapi());
         openapi.merge(fvoci_records::RecordsApi::openapi());
         openapi.merge(fvoci_home::HomeApi::openapi());
+        openapi.merge(fvoci_task_screens::TaskScreensApi::openapi());
         openapi.merge(fvoci_search::SearchApi::openapi());
         openapi.merge(fvoci_references::ReferencesApi::openapi());
         openapi.merge(fvoci_documents::DocumentsApi::openapi());

@@ -1,5 +1,11 @@
 <script lang="ts">
   import { activityApi } from '$lib/features/activity/api';
+  import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
+  import {
+    createContextRead,
+    type ContextCapture,
+    type ContextResult,
+  } from '$lib/features/tasks/context-read';
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
 
@@ -111,6 +117,9 @@
   let displayOpen = $state(false);
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   let sessionSequence = 0;
+  let taskContextSeed = $state<
+    { itemId: string; result: ContextResult<TaskContext> } | undefined
+  >();
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
   let checkingSession = false;
@@ -131,6 +140,7 @@
 
   async function load(verified?: Me, attempt = 0): Promise<boolean> {
     const mine = ++sessionSequence;
+    taskContextSeed = undefined;
     loadingSession = true;
     const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
@@ -143,7 +153,9 @@
       if (mine !== sessionSequence || cacheRestorePending) return false;
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-        void publishSessionCheck(generation);
+        if (router.route.name === 'item' && router.route.group === 'tasks') {
+          await publishSessionCheck(generation);
+        } else void publishSessionCheck(generation);
       }
       if (me === undefined) {
         const info = await api.authInfo();
@@ -166,12 +178,43 @@
       await setLocale(displaySettings().locale, { reload: false });
       if (mine !== sessionSequence) return false;
       document.documentElement.lang = displaySettings().locale;
+      const taskRoute =
+        router.route.name === 'item' && router.route.group === 'tasks' ? router.route : undefined;
+      const capture = (): ContextCapture => ({
+        userId: currentUser.userId,
+        sequence: sessionSequence,
+        sessionGeneration: readSessionGeneration(),
+        safetyGeneration: accountSafety.generation,
+        path: router.path,
+      });
+      const captured = capture();
+      const pendingContext =
+        taskRoute === undefined
+          ? undefined
+          : createContextRead(captured, capture, taskScreenApi.context(taskRoute.itemId));
       // 조직 목록(D-111)은 전환기와 개인 화면의 범위다. 서버는 기본 조직을 정하지 않으므로 선택은 org 문맥이 든다.
-      const [workspaces, organizations] = await Promise.all([
+      const [workspaces, organizations, initialContext] = await Promise.all([
         api.workspaces(),
         api.myOrganizations(),
+        pendingContext,
       ]);
       if (mine !== sessionSequence) return false;
+      if (initialContext !== undefined && taskRoute !== undefined) {
+        const rechecked =
+          initialContext.kind === 'loaded'
+            ? await createContextRead(captured, capture, Promise.resolve(initialContext.value))
+            : initialContext.kind === 'failed'
+              ? await createContextRead(
+                  captured,
+                  capture,
+                  Promise.reject<TaskContext>(initialContext.error),
+                )
+              : initialContext;
+        if (captured.path === router.path && rechecked.kind === 'discarded')
+          return await retryLoad();
+        if (captured.path === router.path)
+          taskContextSeed = { itemId: taskRoute.itemId, result: rechecked };
+      }
       org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };
       return true;
@@ -771,6 +814,8 @@
               <ModuleScreen workspace={currentWorkspace} moduleId={route.moduleId} />
             {:else if route.name === 'item'}
               <ItemScreen
+                aggregate={route.group === 'tasks'}
+                initialContext={taskContextSeed}
                 workspace={currentWorkspace}
                 itemId={route.itemId}
                 taskId={route.taskId}

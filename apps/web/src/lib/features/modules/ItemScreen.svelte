@@ -5,6 +5,8 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
+  import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
+  import type { ContextResult } from '$lib/features/tasks/context-read';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -67,6 +69,8 @@
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
   interface Props {
+    aggregate?: boolean;
+    initialContext?: { itemId: string; result: ContextResult<TaskContext> } | undefined;
     workspace: Workspace;
     itemId: string;
     /** 주소에서 연 업무(상세 대화상자). */
@@ -74,7 +78,15 @@
     workspaces: Workspace[];
   }
 
-  const { workspace, itemId, workspaces, taskId }: Props = $props();
+  const {
+    workspace,
+    itemId,
+    workspaces,
+    taskId,
+    aggregate = false,
+    initialContext,
+  }: Props = $props();
+  let consumedContext = false;
   // 같은 항목 안 묶음·보기·상세 경로 변경도 화면에 즉시 전달한다(D-121).
   const itemRoute = $derived(
     router.route.name === 'item' && router.route.itemId === itemId ? router.route : undefined,
@@ -351,10 +363,22 @@
     formError = undefined;
     conflict = undefined;
     docTemplate = '';
-    Promise.all([
-      api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
-      api.itemDocuments(id),
-    ])
+    const seed = untrack(() =>
+      !consumedContext && initialContext?.itemId === id ? initialContext : undefined,
+    );
+    consumedContext = true;
+    const pending = untrack(() => aggregate)
+      ? (seed?.result.kind === 'loaded'
+          ? Promise.resolve(seed.result.value)
+          : seed?.result.kind === 'failed'
+            ? Promise.reject(seed.result.error)
+            : taskScreenApi.context(id)
+        ).then((read) => [{ it: read.item, found: read.module }, read.documents] as const)
+      : Promise.all([
+          api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+          api.itemDocuments(id),
+        ]);
+    pending
       .then(([{ it, found }, list]) => {
         if (cancelled) return;
         fill(it);
@@ -797,6 +821,7 @@
           <CoursePanel itemId={current.id} />
         {:else if group === 'tasks'}
           <TaskBoard
+            {aggregate}
             item={view}
             {workspaces}
             routeView={itemRoute?.view}

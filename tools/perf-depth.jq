@@ -25,6 +25,37 @@ def require_overlap($requests):
     else error("non-overlapping dependency witness: " + $arm.value.path) end);
 def item_screen($screen):
   ["board", "gantt", "task-detail", "document-tree"] | index($screen) != null;
+# #291 explicit-task reads. Older traces retain their original witnesses below.
+def once($requests; $pattern; $after):
+  branch($requests; $pattern; $after) |
+  if length != 1 then error("duplicate dependency witness: " + $pattern) else .[0] end;
+def task_screen_chain($sample; $requests; $root; $arms):
+  ([$requests[] | select(.path | startswith("/api/"))]) as $api |
+  if any($api[]; (.start | type) != "number" or (.end | type) != "number" or .start < 0 or .end < .start)
+  then error("unfinished dependency witness")
+  elif ($api | length) != ($api | unique_by([.path,.start,.end,.requestId]) | length)
+  then error("duplicate dependency witness record") else . end |
+  once($requests; "^/api/items/[^/]+/task-context$"; $root.end) as $context |
+  require_overlap($arms + [$context]) |
+  if ($arms + [$context] | map(.start) | max) >= ($arms + [$context] | map(.end) | min)
+  then error("non-overlapping dependency witness: task context gate arms") else . end |
+  ($arms + [$context] | max_by(.end)) as $join |
+  once($requests; "^/api/items/[^/]+/recurrences/sync$"; $join.end) as $sync |
+  once($requests; "^/api/items/[^/]+/task-board$"; $sync.end) as $board |
+  if $sync.path != ($context.path | sub("/task-context$"; "/recurrences/sync"))
+     or $board.path != ($context.path | sub("/task-context$"; "/task-board"))
+  then error("wrong task scope dependency witness") else . end |
+  if $sample.screen == "task-detail" then
+    once($requests; "^/api/tasks/[^/]+/detail-read$"; $join.end) as $detail |
+    require_overlap([$sync, $detail]) |
+    ($detail.path | capture("^/api/tasks/(?<id>[^/]+)/detail-read$").id) as $id |
+    (["^/api/tasks/" + $id + "/comments$", "^/api/tasks/" + $id + "/time$",
+      "^/api/tasks/" + $id + "/backlinks$", "^/api/me/marks/task/" + $id + "$"] |
+      map(once($requests; .; $detail.end))) as $panels |
+    require_overlap($panels) |
+    {chain: [$root, $join, $detail, ($panels | max_by(.end))],
+     parallel: ($arms + [$context, $sync, $board, $detail] + $panels)}
+  else {chain: [$root, $join, $sync, $board], parallel: ($arms + [$context])} end;
 def patterns($screen):
   if $screen == "board" or $screen == "gantt" then
     ["^/api/items/[^/]+/recurrences/sync$", "^/api/items/[^/]+/tasks$"]
@@ -45,7 +76,10 @@ map(
   elif ($arms | map(.start) | min) < $root.end
   then error("session gate order changed") else . end |
   ($arms | max_by(.end)) as $gate |
-  (if .screen == "home" or .screen == "activity" then
+  (if (["board", "gantt", "task-detail"] | index($sample.screen)) != null
+      and any($requests[]; .path | test("/(task-context|task-board|detail-read)$")) then
+    task_screen_chain($sample; $requests; $root; $arms)
+  elif .screen == "home" or .screen == "activity" then
     pick($requests; "^/api/me/home$"; $gate.end; false) as $home |
     (["^/api/workspaces/[^/]+/calendar$", "^/api/me/notifications$", "^/api/me/activity$"] |
       map(branch($requests; .; $home.end)) | add) as $children |

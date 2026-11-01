@@ -19,6 +19,7 @@ pub(super) fn api(state: &AppState) -> Router<AppState> {
         .merge(fvoci_work::router(state))
         .merge(fvoci_records::router(state))
         .merge(fvoci_home::router(state))
+        .merge(fvoci_task_screens::router())
         .merge(fvoci_search::router(state))
         .merge(fvoci_references::router(state))
         .merge(fvoci_documents::router(state))

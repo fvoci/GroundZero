@@ -1367,6 +1367,15 @@ GRANT EXECUTE ON FUNCTION fvoci.app_calendar(uuid, date, date, text, uuid, uuid)
 
 -- SQLx는 본문 실행 뒤 같은 트랜잭션에서 스키마 없는 _sqlx_migrations 이름에 기록한다.
 -- bootstrap의 스키마를 다시 보이게 해 새 버전·체크섬도 이 원장에 남긴다.
+REVOKE ALL ON FUNCTION fvoci.app_task_bundle_read(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_task_bundle_read(uuid) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_task_context_read(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_task_context_read(uuid) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_task_board_read(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_task_board_read(uuid) TO fvoci_app;
+REVOKE ALL ON FUNCTION fvoci.app_task_detail_read(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fvoci.app_task_detail_read(uuid) TO fvoci_app;
+
 SET LOCAL search_path = fvoci;
 
 -- 앱은 원장 SELECT 권한 없이 카탈로그 주석으로 기준 세대를 확인한다.

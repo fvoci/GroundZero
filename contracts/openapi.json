@@ -6384,6 +6384,108 @@
         }
       }
     },
+    "/api/items/{item_id}/task-board": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "read_task_board",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBoardRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_id}/task-context": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "read_task_context",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskContextRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/items/{item_id}/tasks": {
       "get": {
         "tags": [
@@ -11526,6 +11628,67 @@
                   "items": {
                     "$ref": "#/components/schemas/Comment"
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}/detail-read": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "read_task_detail",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskDetailRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -20376,6 +20539,135 @@
           }
         }
       },
+      "ReadSection_Vec_ScreenAssignable": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready"
+                ]
+              },
+              "value": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "user_id",
+                    "display_name"
+                  ],
+                  "properties": {
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "user_id": {
+                      "$ref": "#/components/schemas/UserId"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "error",
+              "state"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/SectionError"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ReadSection_Vec_ScreenStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready"
+                ]
+              },
+              "value": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "color",
+                    "position",
+                    "category",
+                    "task_count"
+                  ],
+                  "properties": {
+                    "category": {
+                      "$ref": "#/components/schemas/ScreenStatusCategory"
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "task_count": {
+                      "type": "integer",
+                      "format": "int32"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "error",
+              "state"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/SectionError"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "ReceivedInvitation": {
         "type": "object",
         "description": "내가 받은 초대.",
@@ -21107,6 +21399,472 @@
           }
         }
       },
+      "ScreenAssignable": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "ScreenAssignee": {
+        "type": "object",
+        "required": [
+          "task_id",
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "ScreenChecklistItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "text",
+          "checked"
+        ],
+        "properties": {
+          "checked": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "ScreenDependency": {
+        "type": "object",
+        "required": [
+          "predecessor_id",
+          "successor_id",
+          "kind",
+          "lag_days"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ScreenLinkKind"
+          },
+          "lag_days": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 3650,
+            "minimum": 0
+          },
+          "predecessor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "successor_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ScreenDocument": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "revision",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScreenItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "module_id",
+          "workspace_id",
+          "title",
+          "description",
+          "visibility",
+          "access",
+          "archived",
+          "updated_at",
+          "status",
+          "is_template",
+          "version"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ends_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "is_template": {
+            "type": "boolean"
+          },
+          "module_id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "starts_on": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "visibility": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "ScreenLinkKind": {
+        "type": "string",
+        "enum": [
+          "FS",
+          "SS",
+          "FF",
+          "SF"
+        ]
+      },
+      "ScreenModule": {
+        "type": "object",
+        "required": [
+          "id",
+          "workspace_id",
+          "kind",
+          "name",
+          "key",
+          "previous_keys",
+          "archived",
+          "icon",
+          "description",
+          "access"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ModuleKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "previous_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
+      "ScreenPriority": {
+        "type": "string",
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "urgent"
+        ]
+      },
+      "ScreenSeries": {
+        "type": "object",
+        "required": [
+          "id",
+          "root_task_id",
+          "timezone"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "root_task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecurrenceRule"
+              }
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
+      },
+      "ScreenStatus": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "color",
+          "position",
+          "category",
+          "task_count"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/ScreenStatusCategory"
+          },
+          "color": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number",
+            "format": "double"
+          },
+          "task_count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ScreenStatusCategory": {
+        "type": "string",
+        "enum": [
+          "todo",
+          "doing",
+          "done"
+        ]
+      },
+      "ScreenTask": {
+        "type": "object",
+        "required": [
+          "id",
+          "item_id",
+          "module_id",
+          "workspace_id",
+          "title",
+          "description",
+          "status",
+          "status_category",
+          "priority",
+          "tags",
+          "milestone",
+          "version",
+          "move_version",
+          "updated_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "estimate_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "milestone": {
+            "type": "boolean"
+          },
+          "module_id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "move_version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "occurrence_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "priority": {
+            "$ref": "#/components/schemas/ScreenPriority"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "series_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_category": {
+            "$ref": "#/components/schemas/ScreenStatusCategory"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workspace_id": {
+            "$ref": "#/components/schemas/WorkspaceId"
+          }
+        }
+      },
       "SearchResult": {
         "type": "object",
         "description": "검색 결과 한 건.",
@@ -21163,6 +21921,12 @@
             "format": "uuid"
           }
         }
+      },
+      "SectionError": {
+        "type": "string",
+        "enum": [
+          "unavailable"
+        ]
       },
       "ServerAdmin": {
         "type": "object",
@@ -23365,6 +24129,97 @@
           }
         }
       },
+      "TaskBoardRead": {
+        "type": "object",
+        "required": [
+          "viewer_id",
+          "item_id",
+          "item_access",
+          "archived",
+          "tasks",
+          "statuses",
+          "assignees",
+          "dependencies",
+          "series",
+          "checklist"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "assignees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenAssignee"
+            }
+          },
+          "checklist": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenChecklistItem"
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenDependency"
+            }
+          },
+          "item_access": {
+            "$ref": "#/components/schemas/Access"
+          },
+          "item_id": {
+            "$ref": "#/components/schemas/ItemId"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenSeries"
+            }
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenStatus"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenTask"
+            }
+          },
+          "viewer_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
+      "TaskContextRead": {
+        "type": "object",
+        "required": [
+          "viewer_id",
+          "item",
+          "module",
+          "documents"
+        ],
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenDocument"
+            }
+          },
+          "item": {
+            "$ref": "#/components/schemas/ScreenItem"
+          },
+          "module": {
+            "$ref": "#/components/schemas/ScreenModule"
+          },
+          "viewer_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "TaskDependency": {
         "type": "object",
         "description": "선행 관계 한 줄(D-31·D-91): 선행 업무가 끝나거나 시작한 뒤 후속 업무가 어떻게 이어지는지.",
@@ -23391,6 +24246,72 @@
           "successor_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "TaskDetailRead": {
+        "type": "object",
+        "required": [
+          "viewer_id",
+          "task",
+          "item",
+          "archived",
+          "tasks",
+          "statuses",
+          "assignees",
+          "dependencies",
+          "series",
+          "checklist",
+          "assignable"
+        ],
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "assignable": {
+            "$ref": "#/components/schemas/ReadSection_Vec_ScreenAssignable"
+          },
+          "assignees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenAssignee"
+            }
+          },
+          "checklist": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenChecklistItem"
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenDependency"
+            }
+          },
+          "item": {
+            "$ref": "#/components/schemas/ScreenItem"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenSeries"
+            }
+          },
+          "statuses": {
+            "$ref": "#/components/schemas/ReadSection_Vec_ScreenStatus"
+          },
+          "task": {
+            "$ref": "#/components/schemas/ScreenTask"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScreenTask"
+            }
+          },
+          "viewer_id": {
+            "$ref": "#/components/schemas/UserId"
           }
         }
       },

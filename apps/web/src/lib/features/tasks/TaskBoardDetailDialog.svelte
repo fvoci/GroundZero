@@ -5,6 +5,7 @@
   import * as Dialog from '$lib/ui/dialog';
   import { m } from '$lib/paraglide/messages.js';
   interface Props {
+    aggregate?: boolean;
     openTaskId: string | undefined;
     itemId: string;
     readOnly: boolean;
@@ -24,6 +25,7 @@
     ondraftkept: (value: boolean) => void;
   }
   let {
+    aggregate = false,
     openTaskId,
     itemId,
     readOnly,
@@ -77,6 +79,7 @@
     {#if openTaskId !== undefined}
       {#key openTaskId}
         <TaskDetail
+          {aggregate}
           {readOnly}
           bind:this={detailEditor}
           taskId={openTaskId}

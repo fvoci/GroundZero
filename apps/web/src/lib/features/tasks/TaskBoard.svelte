@@ -4,6 +4,8 @@
   import BoardFilters from './BoardFilters.svelte';
   import { handleCardKey } from './board-keyboard';
   import { taskData as work } from '$lib/features/tasks/detail-data';
+  import { taskScreenApi } from './screen-api';
+  import { composeTasks } from './board-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
@@ -81,6 +83,7 @@
   import TaskBoardDetailDialog from './TaskBoardDetailDialog.svelte';
 
   interface Props {
+    aggregate?: boolean;
     item: ItemView;
     workspaces: Workspace[];
     /** 주소에서 연 업무. */
@@ -93,7 +96,15 @@
     locked?: boolean;
   }
 
-  const { item, workspaces, openTaskId, routeView, onstale, locked = false }: Props = $props();
+  const {
+    item,
+    workspaces,
+    openTaskId,
+    routeView,
+    onstale,
+    locked = false,
+    aggregate = false,
+  }: Props = $props();
 
   const editingUser = untrack(() => me.userId);
   let accountBlocked = $state(false);
@@ -411,7 +422,17 @@
   async function reload(itemId: string = item.id): Promise<void> {
     const mine = ++reloadSeq;
     try {
-      const [server, statuses] = await Promise.all([work.tasks(itemId), work.taskStatuses(itemId)]);
+      const [server, statuses] = await (aggregate
+        ? taskScreenApi
+            .board(itemId)
+            .then(
+              (read) =>
+                [
+                  composeTasks(read.tasks, read, read.archived ? 'read' : read.item_access),
+                  read.statuses,
+                ] as const,
+            )
+        : Promise.all([work.tasks(itemId), work.taskStatuses(itemId)]));
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       definitions = [...statuses].sort((a, b) => a.position - b.position);
       settleUnknown(server);
@@ -531,7 +552,7 @@
     dirty: (next) =>
       (detailUnsaved && openTaskId !== undefined) ||
       (!detailNavigation && !boardStays(next) && (newDirty.size > 0 || boardViews.viewDirty)),
-    busy: () => detailSaving,
+    busy: () => detailSaving || titleSaves > 0,
     identity: () => openTaskId,
     onAsk: (next) => {
       discardBoardInput = !detailNavigation && !boardStays(next);
@@ -548,6 +569,7 @@
       // 화면과 입력이 새 계정의 세션으로 요청을 보낸다). 남기지 못했으면(저장소 사용 불가·용량 초과) 보통 떠나기처럼 경고해
       // 입력을 잃지 않게 한다 — 문서 편집기(DocumentEditor)와 같은 규칙. 전환이 아니면 전처럼 경고한다.
       beforeUnload: () => {
+        if (titleSaves > 0) return true;
         if (openTaskId === undefined)
           return leavingWithDrafts()
             ? (boardViews.viewDirty && !viewDraft.kept) ||
@@ -632,6 +654,16 @@
   let adding = $state<TaskStatus | undefined>(undefined);
   let newDirty = $state<Set<string | null>>(new Set());
   let newKept = $state<Map<string | null, boolean>>(new Map());
+  let titleSaves = $state(0);
+
+  async function saveTitle<T>(write: () => Promise<T>): Promise<T> {
+    titleSaves += 1;
+    try {
+      return await write();
+    } finally {
+      titleSaves -= 1;
+    }
+  }
 
   // 만들지 않은 새 업무 제목의 브라우저 보존(D-96·D-128; 문서 초안 D-27과 같은 규칙, common/form-draft.ts). 아래 "새 업무
   // 제목"과 열의 빠른 추가 입력을 이 사용자·이 탭의 키에 남기고, 다시 읽은 뒤 같은 계정이 이 항목의 보드를 열면 되살릴지
@@ -710,6 +742,17 @@
   let quickInitial = $state<{ lane: string; name: string; requestId: string | null } | undefined>();
   let newTaskInitial = $state<{ name: string; requestId: string | null } | undefined>();
   let newTaskSeed = $state(0);
+  $effect(() => {
+    if (canWrite || titleSaves > 0) return;
+    // #289: hidden titles stop guarding navigation; persisted recovery drafts remain intact.
+    untrack(() => {
+      newDirty = new Set();
+      newKept = new Map();
+      adding = undefined;
+      quickInitial = undefined;
+      newTaskInitial = undefined;
+    });
+  });
   // 되살린 열의 시드는 그 열의 폼이 열려 있는 동안만 산다. 닫거나 다른 열을 열면 지워, 같은 열을 다시 열 때 옛 제목과 옛
   // request_id가 다시 채워지지 않게 한다(CodeRabbit #141; 아래 폼의 시드는 {#key newTaskSeed}로 되살릴 때만 새로 읽는다).
   $effect(() => {
@@ -921,19 +964,21 @@
     void reload().then(() => focusCard(a.task.id));
   }
   async function quickAdd(lane: TaskStatus, requestId: string, title: string): Promise<void> {
-    const itemId = item.id;
-    const created = await work
-      .createTask(editingUser, itemId, requestId, title, null, { status: lane })
-      .catch((e: unknown) => {
-        if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-        throw e;
-      });
-    if (!alive || itemId !== item.id) return;
-    ++reloadSeq;
-    confirmed = [...confirmed.filter((t) => t.id !== created.id), created];
-    tasks = overlaid(confirmed);
-    notifyDone(m.common_saved());
-    await reload();
+    return saveTitle(async () => {
+      const itemId = item.id;
+      const created = await work
+        .createTask(editingUser, itemId, requestId, title, null, { status: lane })
+        .catch((e: unknown) => {
+          if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
+          throw e;
+        });
+      if (!alive || itemId !== item.id) return;
+      ++reloadSeq;
+      confirmed = [...confirmed.filter((t) => t.id !== created.id), created];
+      tasks = overlaid(confirmed);
+      notifyDone(m.common_saved());
+      await reload();
+    });
   }
 
   /** 빠른 추가를 닫고(Esc) 그 열의 "업무 추가" 단추로 초점을 돌린다. */
@@ -1640,8 +1685,10 @@
         placeholder={m.tasks_new_placeholder()}
         submitLabel={m.tasks_create()}
         create={async (requestId: string, title: string) => {
-          await work.createTask(editingUser, item.id, requestId, title);
-          await reload();
+          await saveTitle(async () => {
+            await work.createTask(editingUser, item.id, requestId, title);
+            await reload();
+          });
         }}
         initial={newTaskInitial}
         onchange={(draft: { name: string; requestId: string | null } | undefined) => {
@@ -1655,6 +1702,7 @@
 </section>
 
 <TaskBoardDetailDialog
+  {aggregate}
   {openTaskId}
   itemId={item.id}
   readOnly={item.archived || locked}
