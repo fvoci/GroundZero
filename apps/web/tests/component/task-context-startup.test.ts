@@ -8,7 +8,7 @@ import { activityApi } from '$lib/features/activity/api';
 import { taskData } from '$lib/features/tasks/detail-data';
 import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
 import { accountSafety, auth } from '$lib/features/feedback/feedback.svelte';
-import { itemViewPath, router } from '$lib/router.svelte';
+import { itemPath, itemViewPath, router } from '$lib/router.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { PROJECT_MODULE, TASK_ITEM, WORKSPACE } from '../../stories/fixtures/synthetic';
 import { TEST_ORGANIZATION } from './fixtures/organization';
@@ -217,6 +217,76 @@ it('does not reuse a consumed startup context after leaving and returning', asyn
   });
   expect(screen.queryByText(context.item.title)).toBeNull();
   latest.resolve({ ...context, item: { ...context.item, title: 'fresh return context' } });
+  await screen.findByTestId('task-board');
+  expect(screen.queryByText(context.item.title)).toBeNull();
+});
+
+it.each([
+  ['displayed', 'navigate'],
+  ['pending', 'navigate'],
+  ['displayed', 'replace'],
+  ['pending', 'replace'],
+] as const)(
+  'invalidates a %s context on same-tick %s after session startup',
+  async (timing, method) => {
+    const oldFallback = held<TaskContext>();
+    const latest = held<TaskContext>();
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    const read = vi.spyOn(taskScreenApi, 'context').mockResolvedValueOnce(context);
+    if (timing === 'pending') read.mockReturnValueOnce(oldFallback.promise);
+    read.mockReturnValueOnce(latest.promise);
+    render(App);
+    await screen.findByTestId('task-board');
+    const target = itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board');
+    if (timing === 'pending') {
+      router.navigate('/notes');
+      await waitFor(() => {
+        expect(api.myNotes).toHaveBeenCalledOnce();
+      });
+      router.navigate(target);
+      await waitFor(() => {
+        expect(taskScreenApi.context).toHaveBeenCalledTimes(2);
+      });
+    }
+    router[method]('/notes');
+    router[method](target);
+    oldFallback.resolve({ ...context, item: { ...context.item, title: 'stale fallback title' } });
+    await waitFor(() => {
+      expect(taskScreenApi.context).toHaveBeenCalledTimes(timing === 'pending' ? 3 : 2);
+    });
+    expect(screen.queryByText(context.item.title)).toBeNull();
+    expect(screen.queryByText('stale fallback title')).toBeNull();
+    latest.resolve({ ...context, item: { ...context.item, title: 'fresh same-tick context' } });
+    await screen.findByTestId('task-board');
+    expect(screen.queryByText(context.item.title)).toBeNull();
+    expect(screen.queryByText('stale fallback title')).toBeNull();
+  },
+);
+
+it('invalidates the item context after a generic item URL normalizes into tasks', async () => {
+  const latest = held<TaskContext>();
+  router.navigate(itemPath(WORKSPACE.id, TASK_ITEM.id));
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  vi.mocked(api.item).mockResolvedValue(context.item);
+  vi.mocked(api.module).mockResolvedValue(context.module);
+  vi.spyOn(api, 'itemDocuments').mockResolvedValue([]);
+  vi.spyOn(taskScreenApi, 'context').mockReturnValue(latest.promise);
+  render(App);
+  await screen.findByTestId('task-board');
+  expect(taskScreenApi.context).not.toHaveBeenCalled();
+  router.replace('/notes');
+  router.replace(itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board'));
+  await waitFor(() => {
+    expect(taskScreenApi.context).toHaveBeenCalledOnce();
+  });
+  expect(screen.queryByText(context.item.title)).toBeNull();
+  latest.resolve({ ...context, item: { ...context.item, title: 'fresh normalized context' } });
   await screen.findByTestId('task-board');
   expect(screen.queryByText(context.item.title)).toBeNull();
 });

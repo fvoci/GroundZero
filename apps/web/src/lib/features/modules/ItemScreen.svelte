@@ -349,10 +349,13 @@
 
   $effect(() => {
     const id = currentItemId;
+    const generation = router.itemGeneration;
     loadSeq += 1;
     let cancelled = false;
+    const isCurrent = (): boolean => !cancelled && generation === router.itemGeneration;
     item = undefined;
     mod = undefined;
+    docs = [];
     chosen = undefined;
     error = undefined;
     infoOpen = false;
@@ -386,7 +389,7 @@
         ]);
     pending
       .then(([{ it, found }, list]) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         fill(it);
         // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
         const entryKey = org.key('new-item-info');
@@ -397,7 +400,7 @@
         docs = list;
       })
       .catch((e: unknown) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         error =
           e instanceof ApiError && e.status === 404
             ? m.modules_item_not_found()
