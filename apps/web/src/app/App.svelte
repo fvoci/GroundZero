@@ -118,7 +118,7 @@
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   let sessionSequence = 0;
   let taskContextSeed = $state<
-    { itemId: string; result: ContextResult<TaskContext> } | undefined
+    { itemId: string; navigationGeneration: number; result: ContextResult<TaskContext> } | undefined
   >();
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
@@ -214,7 +214,11 @@
         if (captured.path === router.path && rechecked.kind === 'discarded')
           return await retryLoad();
         if (captured.path === router.path)
-          taskContextSeed = { itemId: taskRoute.itemId, result: rechecked };
+          taskContextSeed = {
+            itemId: taskRoute.itemId,
+            navigationGeneration: captured.navigationGeneration,
+            result: rechecked,
+          };
       }
       org.load(me.id, organizations, me.last_organization_id ?? null);
       session = { state: 'signed-in', me, workspaces };

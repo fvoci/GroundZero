@@ -70,7 +70,9 @@
 
   interface Props {
     aggregate?: boolean;
-    initialContext?: { itemId: string; result: ContextResult<TaskContext> } | undefined;
+    initialContext?:
+      | { itemId: string; navigationGeneration: number; result: ContextResult<TaskContext> }
+      | undefined;
     workspace: Workspace;
     itemId: string;
     /** 주소에서 연 업무(상세 대화상자). */
@@ -364,7 +366,11 @@
     conflict = undefined;
     docTemplate = '';
     const seed = untrack(() =>
-      !consumedContext && initialContext?.itemId === id ? initialContext : undefined,
+      !consumedContext &&
+      initialContext?.itemId === id &&
+      initialContext.navigationGeneration === router.navigationGeneration
+        ? initialContext
+        : undefined,
     );
     consumedContext = true;
     const pending = untrack(() => aggregate)

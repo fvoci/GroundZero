@@ -194,3 +194,29 @@ it.each(['pending', 'resolved'] as const)(
     expect(api.me).toHaveBeenCalledTimes(2);
   },
 );
+
+it('does not reuse a consumed startup context after leaving and returning', async () => {
+  const latest = held<TaskContext>();
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  vi.spyOn(taskScreenApi, 'context')
+    .mockResolvedValueOnce(context)
+    .mockReturnValueOnce(latest.promise);
+  render(App);
+  await screen.findByTestId('task-board');
+  expect(taskScreenApi.context).toHaveBeenCalledOnce();
+  router.navigate('/notes');
+  await waitFor(() => {
+    expect(api.myNotes).toHaveBeenCalledOnce();
+  });
+  router.navigate(itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board'));
+  await waitFor(() => {
+    expect(taskScreenApi.context).toHaveBeenCalledTimes(2);
+  });
+  expect(screen.queryByText(context.item.title)).toBeNull();
+  latest.resolve({ ...context, item: { ...context.item, title: 'fresh return context' } });
+  await screen.findByTestId('task-board');
+  expect(screen.queryByText(context.item.title)).toBeNull();
+});
