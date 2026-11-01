@@ -76,6 +76,30 @@ enum 라벨, 주석, 인덱스·sequence·파티션 키 정의, 초기 ACL, 상�
 알 수 없는 객체 종류, 제품 밖 소유·권한·멤버십·역할 의존, 제품 스키마 밖 SQLx 원장도 자동 정리하지 않고 차단한다.
 스키마 밖 원장을 발견하면 위치·소유를 별도로 확인하고 구현 범위를 다시 정한다.
 
+전역 `pg_event_trigger`와 `pg_publication`·`pg_publication_rel`·`pg_publication_namespace`, 확장된 게시 테이블 목록도
+동일 스냅숏의 지문에 넣고 조사 JSON의 `global_consumers`에 이름·판정을 출력한다. `FOR ALL TABLES`는 새 설치도
+자동 포함하므로 현재 제품 테이블이 없어도 차단한다. 직접·스키마 단위·파티션 확장으로 `fvoci`를 포함하는 publication도 차단한다.
+다른 publication은 삭제하지 않고 정의를 승인 지문에 고정한다.
+
+활성 이벤트 트리거는 다음 관리형 명세에 정확히 맞는 것만 허용한다. 비활성(`D`)은 이름·정의를 남기고 허용한다.
+나머지는 차단한다. 접두어만으로 허용하지 않으며 트리거와 인자 없는 event_trigger 핸들러의 소유자가 같고,
+그 소유자가 플랫폼 관리자 `supabase_admin` 또는 `postgres`이며 superuser/CREATEROLE이어야 한다.
+
+| 트리거                                                                 | 핸들러                                                                                 | 이벤트·태그                                   |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `pgrst_ddl_watch`·`pgrst_drop_watch`                                   | `extensions`의 같은 이름                                                               | 각각 ddl_command_end·sql_drop, 태그 제한 없음 |
+| `issue_pg_cron_access`·`issue_pg_graphql_access`·`issue_pg_net_access` | 각각 `extensions.grant_pg_cron_access`·`grant_pg_graphql_access`·`grant_pg_net_access` | ddl_command_end, CREATE EXTENSION만           |
+| `issue_graphql_placeholder`                                            | `extensions.set_graphql_placeholder`                                                   | sql_drop, DROP EXTENSION만                    |
+| `graphql_watch_ddl`·`graphql_watch_drop`                               | `graphql.increment_schema_version`, pg_graphql 확장 소속 필수                          | 각각 ddl_command_end·sql_drop, 태그 제한 없음 |
+
+근거는 [공식 PG17 정의](https://github.com/supabase/postgres/blob/e2841e5fc3afdbb49ac8d52e5e570f7c9da7565a/migrations/schema-17.sql),
+[pg_graphql 정의](https://github.com/supabase/pg_graphql/blob/3327437620a1a620f411d7f9290b020eefee1508/sql/schema_version.sql),
+[Supabase 이벤트 트리거 권한 안내](https://supabase.com/docs/guides/database/postgres/event-triggers)다.
+이 명세는 플랫폼 관리자와 관리 코드가 신뢰된다는 운영 조건에 따른 분류이며 공식 바이너리·SQL의 진위를 인증하는 장치가 아니다.
+핸들러 원문·정적 함수 의존·소유자·스키마 ACL·확장 버전·주석도 지문에 포함하며 변경은 재승인이 필요하다.
+운영자는 표시된 이름·정의 지문과 관리형 여부를 검토한다. 모르는 조합을 자동 허용하거나 트리거를 끄지 않는다.
+이는 [셀프호스트 안내](self-hosting-supabase.md)의 관리형 스키마·역할 보존 원칙을 따른다.
+
 확인은 기존 Supabase 시험과 같은 계약으로 네 Data API 역할의 스키마·테이블·정의자 함수 유효 권한,
 명시적 함수 권한과 제품 역할 멤버십이 없음을 검사한다. PUBLIC의 순수 호출자 도우미는 스키마 USAGE 부재로 접근이 막힌다.
 Data API의 노출 스키마 설정 자체는 DB 권한 검사로 입증하지 않으므로 위 사용자 확인을 따로 남긴다.

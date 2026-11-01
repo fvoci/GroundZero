@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 
-use super::{allowed::Binding, approve, catalog, fingerprint, query};
+use super::{allowed::Binding, approve, catalog, consumers, fingerprint, query};
 
 // Same cooperative lock as crates/db/src/admin.rs::MIGRATOR_LOCK. Cloud targets only postgres.
 const MIGRATOR_LOCK: i64 = 0x6676_6f63_696d_6967;
@@ -47,6 +47,8 @@ impl Inventory {
         sqlx::query("SET LOCAL search_path=pg_catalog")
             .execute(&mut *conn)
             .await?;
+        // Catalog aggregation is short-lived; JIT compilation would widen its MVCC window.
+        sqlx::query("SET LOCAL jit=off").execute(&mut *conn).await?;
         let sql = query::inventory();
         let query = sqlx::query_scalar::<_, Value>(&sql).bind(gate);
         let (captured, injected) = tokio::join!(query.fetch_one(&mut *conn), during);
@@ -54,6 +56,11 @@ impl Inventory {
         injected?;
         let mut raw = captured["catalog"].clone();
         let mut blockers = catalog::blockers(&raw, &captured["counts"])?;
+        let (global_consumers, global_blockers) = consumers::evaluate(&raw["consumers"])?;
+        blockers
+            .as_object_mut()
+            .context("invalid_blockers")?
+            .extend(global_blockers);
         let objects: std::collections::BTreeSet<String> =
             serde_json::from_value(captured["identities"].clone())?;
         let unexpected: Vec<_> = objects.difference(&binding.allowed).collect();
@@ -105,7 +112,7 @@ impl Inventory {
                 "createrole": authority["createrole"], "manageable": authority["manageable"]},
             "blockers": raw["blockers"], "can_rebuild": !blocked, "write_authority":"CHECKED_AT_REBUILD", "candidates": candidates, "schema_objects": named,
             "role_candidates": roles.iter().map(|r| json!({"object": fingerprint(&json!(r)), "included": !blocked})).collect::<Vec<_>>(),
-            "roles": redacted_roles(&raw), "memberships": redacted_memberships(&raw),
+            "roles": redacted_roles(&raw), "memberships": redacted_memberships(&raw), "global_consumers":global_consumers,
             "current_user": fingerprint(&authority["user"]),
             "history_locations": history, "read_only_transaction": "ROLLBACK", "changes": "NOT RUN"});
         Ok(Self {

@@ -221,6 +221,7 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
     sql(&mut admin, OLD).await?;
     let mut review_failures = catalog_tests::review_failures(&mut admin, &target.binding).await?;
     catalog_tests::run(&mut admin, &target.binding).await?;
+    review_failures.extend(super::consumer_tests::run(target).await?);
     super::race_tests::run(target).await?;
     failure_tests(&mut admin, &target.binding).await?;
     let restricted = restricted_admin(&mut admin, target).await?;

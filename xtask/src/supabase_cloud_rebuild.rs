@@ -3,6 +3,8 @@
 mod allowed;
 mod catalog;
 mod catalog_tests;
+mod consumer_tests;
+mod consumers;
 pub mod fixture;
 mod inventory;
 mod query;
