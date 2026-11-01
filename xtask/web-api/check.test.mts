@@ -870,7 +870,8 @@ await test('Svelte and HTML links are checked as GET', () => {
 await test('named WebSocket item checks room composition and never exempts HTTP', () => {
   const input = files(`
     import { WebsocketProvider as Provider } from 'y-websocket';
-    new Provider('wss://example.org/api/tasks/42', 'collab', doc);
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    new Provider(\`\${scheme}://\${location.host}/api/tasks/42\`, 'collab', doc);
   `);
   const named: Allowlist = {
     ...empty,
@@ -893,6 +894,239 @@ await test('named WebSocket item checks room composition and never exempts HTTP'
     /nonempty text/,
   );
 });
+const socketList: Allowlist = {
+  ...empty,
+  websocket: {
+    name: 'document_collaboration',
+    path: '/api/tasks/{id}/collab',
+    reason: 'CRDT upgrade outside OpenAPI',
+  },
+};
+const socketScheme = "const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';";
+for (const base of [
+  "'wss://example.org/api/tasks/42'",
+  "'wss://fvoci.invalid/api/tasks/42'",
+  '`' + '${scheme}://example.org/api/tasks/42' + '`',
+  '`' + '${scheme}://${window.location.host}:9999/api/tasks/42' + '`',
+  '`' + '${scheme}://${window.location.host}.example.org/api/tasks/42' + '`',
+]) {
+  await test(`SR-250-11: an unproven WebSocket origin fails: ${base}`, () => {
+    const input = files(`
+      import { WebsocketProvider } from 'y-websocket';
+      ${socketScheme}
+      new WebsocketProvider(${base}, 'collab', doc);
+    `);
+    assert.throws(() => checkUsage(input, { paths: {} }, socketList), /WebSocket origin/);
+  });
+}
+await test('SR-250-11: shadowed window is not the browser origin', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      const window = { location: { protocol: 'https:', host: 'example.org' } };
+      ${socketScheme}
+      new WebSocket(\`\${scheme}://\${window.location.host}/api/tasks/42/collab\`);
+    `),
+        { paths: {} },
+        socketList,
+      ),
+    /WebSocket origin/,
+  );
+});
+await test('SR-250-11: an unresolved imported window is not the browser origin', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      import { window } from 'custom-window';
+      ${socketScheme}
+      new WebSocket(\`\${scheme}://\${window.location.host}/api/tasks/42/collab\`);
+    `),
+        { paths: {} },
+        socketList,
+      ),
+    /WebSocket origin/,
+  );
+});
+for (const protocol of ['https:', 'http:']) {
+  await test(`SR-250-11: browser scheme and host resolve through const aliases: ${protocol}`, () => {
+    const secure = protocol === 'https:';
+    const input = files(`
+      import { WebsocketProvider as Provider } from 'y-websocket';
+      const scheme = window.location.protocol === '${protocol}' ? '${secure ? 'wss' : 'ws'}' : '${secure ? 'ws' : 'wss'}';
+      const host = window.location.host;
+      const base = \`\${scheme}://\${host}/api/tasks/42\`;
+      const endpoint = base;
+      new Provider(endpoint, 'collab', doc);
+    `);
+    assert.deepEqual(checkUsage(input, { paths: {} }, socketList).unused, []);
+    input.set(source, (input.get(source) ?? '').replace("'collab'", "'typo'"));
+    assert.throws(() => checkUsage(input, { paths: {} }, socketList), /unlisted WebSocket/);
+  });
+}
+await test('SR-250-11: a reversed browser scheme mapping fails', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      const scheme = window.location.protocol === 'https:' ? 'ws' : 'wss';
+      new WebSocket(\`\${scheme}://\${window.location.host}/api/tasks/42/collab\`);
+    `),
+        { paths: {} },
+        socketList,
+      ),
+    /WebSocket origin/,
+  );
+});
+
+for (const [path, expected] of [
+  ['/api/typo', /GET \/api\/typo.*not in OpenAPI/],
+  ['/api/tasks/42', /GET \/api\/tasks\/42.*not in OpenAPI/],
+] as const) {
+  await test(`SR-250-13: immutable navigation aliases reject GET ${path}`, () => {
+    assert.throws(
+      () =>
+        checkUsage(
+          files(`
+        function go(p: string) { location.assign(p); }
+        const move = go; const next = (move);
+        next('${path}');
+      `),
+          { paths: { '/api/tasks/{id}': { post: {} } } },
+          {
+            forwarders: [],
+            unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '샴 가3~가5 조립 예정' }],
+          },
+        ),
+      expected,
+    );
+  });
+}
+await test('SR-250-13: imported, arrow and function expression aliases retain callers and URL returns', () => {
+  const input = files(`
+    import { move as importedMove, endpoint } from './move';
+    const next = importedMove;
+    next('/api/tasks/42'); next(userContent);
+    const url = endpoint;
+    fetch(url('/api/tasks/42'));
+  `);
+  input.set(
+    'apps/web/src/lib/move.ts',
+    `
+    const go = function(p: string) { anchor.href = p; };
+    export const move = go;
+    const path = (p: string) => p;
+    export const endpoint = path;
+  `,
+  );
+  assert.equal(checkUsage(input, contract, empty).calls, 2);
+});
+await test('SR-250-13: cyclic aliases terminate without hiding independent literals', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      const first = second; const second = first; first(userContent);
+      function go(p: string) { location.assign(p); }
+      const move = go; move('/api/typo');
+    `),
+        contract,
+        listedTask,
+      ),
+    /GET \/api\/typo.*not in OpenAPI/,
+  );
+});
+
+for (const argument of ['undefined', '(undefined)', 'void 0', 'absent']) {
+  for (const mode of ['navigation', 'url']) {
+    await test(`SR-250-14: ${mode} applies the wrong path default to ${argument}`, () => {
+      const code =
+        mode === 'navigation'
+          ? `function go(p = '/api/typo') { location.assign(p); } go(${argument});`
+          : `function url(p = '/api/typo') { return p; } fetch(url(${argument}));`;
+      assert.throws(
+        () => checkUsage(files(`const absent = undefined; ${code}`), contract, listedTask),
+        /GET \/api\/typo.*not in OpenAPI/,
+      );
+    });
+  }
+}
+await test('SR-250-14: navigation defaults still use GET', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      function go(p = '/api/tasks/42') { location.assign(p); } go(undefined);
+    `),
+        { paths: { '/api/tasks/{id}': { post: {} } } },
+        {
+          forwarders: [],
+          unused: [{ method: 'POST', path: '/api/tasks/{id}', reason: '샴 가3~가5 조립 예정' }],
+        },
+      ),
+    /GET \/api\/tasks\/42.*not in OpenAPI/,
+  );
+});
+await test('SR-250-14: a method helper reports the actual default method', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      function method(m = 'DELETE') { return m; }
+      request(method(undefined), '/api/tasks/42');
+    `),
+        contract,
+        listedTask,
+      ),
+    /DELETE \/api\/tasks\/42.*not in OpenAPI/,
+  );
+});
+await test('SR-250-14: valid defaults, omitted, null and optional arguments keep their meaning', () => {
+  const result = checkUsage(
+    files(`
+    function go(p = '/api/tasks/42') { location.assign(p); }
+    go(undefined); go(); go(null);
+    function url(p = '/api/tasks/42') { return p; }
+    fetch(url(void 0)); fetch(url(null));
+    function optional(id: string, version?: number, inline = false) {
+      return \`/api/tasks/\${encodeURIComponent(id)}?inline=\${inline}\`;
+    }
+    anchor.href = optional('42', undefined, true);
+  `),
+    contract,
+    empty,
+  );
+  assert.equal(result.calls, 3);
+});
+await test('SR-250-14: an outer undefined binding applies the inner default', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+      function go(p = '/api/typo') { location.assign(p); }
+      function outer(p?: string) { go(p); } outer(undefined);
+    `),
+        contract,
+        listedTask,
+      ),
+    /GET \/api\/typo.*not in OpenAPI/,
+  );
+});
+await test('SR-250-14: a shadowed undefined value does not select the default', () => {
+  assert.equal(
+    checkUsage(
+      files(`
+    function go(p = '/api/typo') { location.assign(p); }
+    function outer(undefined: string) { go(undefined); } outer('/app');
+  `),
+      contract,
+      listedTask,
+    ).calls,
+    0,
+  );
+});
+
 await test('app paths, static resources and external URLs need no per-site exceptions', () => {
   const input = files(`
     fetch('/rhwp/manifest.json', {method: unknownMethod});

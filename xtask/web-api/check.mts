@@ -405,21 +405,26 @@ export function checkUsage(
   }
   function callable(
     node: ts.Node,
+    seen = new Set<ts.Node>(),
   ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | undefined {
+    if (seen.has(node)) return undefined;
+    seen = new Set(seen).add(node);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return callable(node.expression, seen);
+    if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return node;
     const declaration = symbol(node)?.valueDeclaration;
-    const value =
-      declaration && ts.isVariableDeclaration(declaration)
-        ? ts.isVariableDeclarationList(declaration.parent) &&
-          (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-          ? declaration.initializer
-          : undefined
-        : declaration;
-    return value &&
-      (ts.isFunctionDeclaration(value) ||
-        ts.isFunctionExpression(value) ||
-        ts.isArrowFunction(value))
-      ? value
-      : undefined;
+    if (declaration && ts.isVariableDeclaration(declaration)) {
+      return declaration.initializer &&
+        ts.isVariableDeclarationList(declaration.parent) &&
+        (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+        ? callable(declaration.initializer, seen)
+        : undefined;
+    }
+    return declaration && ts.isFunctionDeclaration(declaration) ? declaration : undefined;
   }
   function exitAt(node: ts.Node): Exit | undefined {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
@@ -526,6 +531,15 @@ export function checkUsage(
   }
 
   type Bindings = Map<ts.Symbol, ts.Expression | string[]>;
+  function parameterArgument(
+    parameter: ts.ParameterDeclaration,
+    argument: ts.Expression | undefined,
+    bindings: Bindings,
+  ): ts.Expression | undefined {
+    return parameter.initializer && (!argument || isUndefined(argument, bindings))
+      ? parameter.initializer
+      : argument;
+  }
   function* navigationBindings(node: ts.Node, seen = new Set<ts.Node>()): Generator<Bindings> {
     for (let parent = node.parent; !ts.isSourceFile(parent); parent = parent.parent) {
       if (
@@ -552,7 +566,7 @@ export function checkUsage(
           parent.parameters.forEach((parameter, index) => {
             if (!ts.isIdentifier(parameter.name) || written.includes(parameter.name.text)) return;
             const found = symbol(parameter.name);
-            const argument = site.arguments[index] ?? parameter.initializer;
+            const argument = parameterArgument(parameter, site.arguments[index], bindings);
             if (found && argument && !site.arguments.slice(0, index + 1).some(ts.isSpreadElement))
               bindings.set(found, argument);
           });
@@ -653,20 +667,13 @@ export function checkUsage(
       ) {
         throw new Error(`URL helper must be const: ${node.expression.getText()}`);
       }
-      const fn =
-        declaration && ts.isVariableDeclaration(declaration)
-          ? declaration.initializer
-          : declaration;
-      if (
-        fn &&
-        (ts.isFunctionDeclaration(fn) || ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) &&
-        fn.body
-      ) {
+      const fn = callable(node.expression);
+      if (fn?.body) {
         if (parameterWrites(fn).length > 0) throw new Error('URL function parameter is written');
         const argumentsBySymbol = new Map(bindings);
         fn.parameters.forEach((parameter, index) => {
           const found = symbol(parameter.name);
-          const argument = node.arguments[index] ?? parameter.initializer;
+          const argument = parameterArgument(parameter, node.arguments[index], argumentsBySymbol);
           if (found && argument) argumentsBySymbol.set(found, argument);
         });
         const returned: ts.Expression[] = [];
@@ -715,7 +722,32 @@ export function checkUsage(
 
   // Undefined denotes an absent method property, so a spread without method does
   // not overwrite an earlier method. An explicit method: undefined means GET.
-  function isUndefined(node: ts.Expression): boolean {
+  function isUndefined(
+    node: ts.Expression,
+    bindings: Bindings = new Map(),
+    seen = new Set<ts.Node>(),
+  ): boolean {
+    if (seen.has(node)) return false;
+    seen = new Set(seen).add(node);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return isUndefined(node.expression, bindings, seen);
+    const found = symbol(node);
+    const binding = found ? bindings.get(found) : undefined;
+    if (binding && !Array.isArray(binding)) return isUndefined(binding, bindings, seen);
+    if (ts.isVoidExpression(node)) return true;
+    const declaration = found?.valueDeclaration;
+    if (
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    )
+      return isUndefined(declaration.initializer, bindings, seen);
     return (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0;
   }
   function fetchMethods(
@@ -815,10 +847,96 @@ export function checkUsage(
     });
     return found;
   }
+
+  // Keep origin provenance separate from values(): a literal fvoci.invalid is
+  // not the browser host. Unknown path parts are harmless here only after '/'.
+  const socketHost = Symbol('browser host');
+  const socketScheme = Symbol('browser WebSocket scheme');
+  const opaqueSocketPart = Symbol('unknown URL part');
+  function browserLocationProperty(node: ts.Node, name: string): boolean {
+    if (!ts.isPropertyAccessExpression(node) || node.name.text !== name) return false;
+    const location = node.expression;
+    if (ts.isIdentifier(location)) return location.text === 'location' && !symbol(location);
+    if (!ts.isPropertyAccessExpression(location) || location.name.text !== 'location') return false;
+    const owner = location.expression;
+    return (
+      ts.isIdentifier(owner) &&
+      ['window', 'globalThis', 'self', 'document'].includes(owner.text) &&
+      (!checker.getSymbolAtLocation(owner) ||
+        (owner.text === 'globalThis' && !symbol(owner)?.valueDeclaration))
+    );
+  }
+  function socketParts(node: ts.Expression, seen = new Set<ts.Node>()): (string | symbol)[] {
+    if (seen.has(node)) return [opaqueSocketPart];
+    seen = new Set(seen).add(node);
+    const parts = (expression: ts.Expression): (string | symbol)[] => socketParts(expression, seen);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return parts(node.expression);
+    if (ts.isStringLiteralLike(node)) return [node.text];
+    if (browserLocationProperty(node, 'host')) return [socketHost];
+    if (
+      ts.isConditionalExpression(node) &&
+      ts.isBinaryExpression(node.condition) &&
+      node.condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+      browserLocationProperty(node.condition.left, 'protocol') &&
+      ts.isStringLiteralLike(node.condition.right) &&
+      ts.isStringLiteralLike(node.whenTrue) &&
+      ts.isStringLiteralLike(node.whenFalse)
+    ) {
+      const protocol = node.condition.right.text;
+      if (
+        (protocol === 'https:' && node.whenTrue.text === 'wss' && node.whenFalse.text === 'ws') ||
+        (protocol === 'http:' && node.whenTrue.text === 'ws' && node.whenFalse.text === 'wss')
+      )
+        return [socketScheme];
+    }
+    if (ts.isTemplateExpression(node))
+      return [
+        node.head.text,
+        ...node.templateSpans.flatMap((span) => [...parts(span.expression), span.literal.text]),
+      ];
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken)
+      return [...parts(node.left), ...parts(node.right)];
+    const declaration = symbol(node)?.valueDeclaration;
+    if (
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    )
+      return parts(declaration.initializer);
+    return [opaqueSocketPart];
+  }
+  function sameSocketOrigin(node: ts.Expression | undefined): boolean {
+    if (!node) return false;
+    const parts: (string | symbol)[] = [];
+    for (const part of socketParts(node)) {
+      if (part === '') continue;
+      const previous = parts.at(-1);
+      if (typeof previous === 'string' && typeof part === 'string')
+        parts[parts.length - 1] = previous + part;
+      else parts.push(part);
+    }
+    return (
+      parts[0] === socketScheme &&
+      parts[1] === '://' &&
+      parts[2] === socketHost &&
+      (parts.length === 3 || (typeof parts[3] === 'string' && /^[/?#]/.test(parts[3])))
+    );
+  }
   function inspect(exit: Exit, node: ts.Node, file: ts.SourceFile, strict = false): void {
     const line = exit.line ?? file.getLineAndCharacterOfPosition(node.getStart()).line + 1;
     const location = filename(file) + ':' + String(line);
     try {
+      if (exit.kind === 'WebSocket' && !sameSocketOrigin(exit.url))
+        throw new Error(
+          'unlisted WebSocket origin: browser scheme and host are not statically proven',
+        );
       let paths: string[] = [];
       const contexts =
         exit.kind === 'link' || exit.kind === 'location' ? navigationBindings(node) : [new Map()];
