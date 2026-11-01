@@ -1,6 +1,6 @@
 # ps -eo comm,args. Track full commands as well as their compiler/Node children.
 $1 ~ /^(rustc|clippy-driver|cc1|cc1plus|ld|rust-lld)$/ { compiler=1 }
-$1 ~ /^(node|MainThread)$/ &&
+$1 ~ /^(node|MainThread|pnpm|npm|bun)$/ &&
     (/vite|vitest|storybook|svelte-check|eslint|tsc/ ||
      /(pnpm|npm|bun).* run (build|check|test|lint|build-storybook)([[:space:]]|$)/) { node=1 }
 ($1 == "cargo" || $1 ~ /^xtask(-|$)/) {

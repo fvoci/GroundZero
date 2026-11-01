@@ -24,9 +24,10 @@ check_state compose-image 'docker docker compose build web' false false true
 check_state vite 'MainThread node node_modules/vite/bin/vite.js build' false true false
 check_state eslint 'node node node_modules/eslint/bin/eslint.js .' false true false
 check_state pnpm-between-stages 'MainThread node pnpm --filter @fvoci/web run build' false true false
+check_state native-pnpm-between-stages 'pnpm /opt/pnpm/bin/pnpm run lint' false true false
 check_state measurement-browser 'MainThread node pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts' false false false
 check_state measurement-server 'cargo cargo test --release --locked -p fvoci-server --test screen_measure serve_t6 -- --ignored --exact --nocapture' false false false
 check_state measurement-rooms 'cargo cargo test --release --locked -p fvoci-server --test it room_memory_measure::room_memory_measure -- --ignored --exact --nocapture' false false false
 check_state other-test-not-server 'cargo cargo test --test it serve_t6' false false true
 check_state format 'cargo cargo fmt --all --check' false false false
-printf 'PASS build state: 18 command lifecycles and measurement exclusions\n'
+printf 'PASS build state: 19 command lifecycles and measurement exclusions\n'
