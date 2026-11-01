@@ -1,6 +1,7 @@
 <script lang="ts">
   // 토스트 자리와 연결·로그인 배너(D-82). 넓은 화면은 오른쪽 아래, 좁은 화면은 위쪽 가운데에 토스트를 둬 화면 아래
-  // 조작부와 가상 키보드에 가리지 않게 한다. 토스트는 닫기 단추가 있고 Alt+T로 닿는다(svelte-sonner). 배너는 화면
+  // 조작부와 가상 키보드에 가리지 않게 한다. 동작 단추 토스트는 10초 뒤 닫히며 마우스·초점·창 숨김 동안 멈춘다.
+  // 토스트는 닫기 단추가 있고 Alt+T로 닿는다(svelte-sonner). 배너는 화면
   // 낭독기에 알린다.
   import { api } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
@@ -23,6 +24,7 @@
     switchAccount,
     onAccountSwitch,
     watchConnection,
+    watchDoneTimeouts,
     hideSession,
     reportSessionExpired,
   } from './feedback.svelte';
@@ -46,6 +48,12 @@
   }: Props = $props();
 
   const mobile = new IsMobile();
+  let toastHovered = $state(false);
+  let toastFocused = $state(false);
+  let documentHidden = $state(
+    typeof document !== 'undefined' && document.visibilityState === 'hidden',
+  );
+  watchDoneTimeouts(() => toastHovered || toastFocused || documentHidden);
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   // Dialog의 portal도 가린다. 편집 DOM은 남겨 메모리의 입력을 보존한다.
   $effect(() => {
@@ -280,4 +288,13 @@
   closeButton
   visibleToasts={3}
   containerAriaLabel={m.common_notifications_region()}
+  onmouseenter={() => (toastHovered = true)}
+  onmouseleave={() => (toastHovered = false)}
+  onfocusin={() => (toastFocused = true)}
+  onfocusout={(event) =>
+    (toastFocused = event.currentTarget.contains(event.relatedTarget as Node | null))}
+/>
+
+<svelte:document
+  onvisibilitychange={() => (documentHidden = document.visibilityState === 'hidden')}
 />

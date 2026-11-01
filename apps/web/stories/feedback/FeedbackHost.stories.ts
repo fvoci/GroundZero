@@ -38,6 +38,16 @@ export const DoneToast: Story = {
   },
 };
 
+/** 되돌리기 기회를 10초 남긴다. 마우스·키보드 초점·창 숨김 동안 남은 시간은 멈춘다(D-82). */
+export const DoneWithAction: Story = {
+  play: async () => {
+    notifyDone('업무를 진행 중으로 옮겼습니다.', 'story-move', {
+      action: { label: '되돌리기', onClick: () => notifyDone('되돌렸습니다.', 'story-move') },
+    });
+    await expect(await screen.findByRole('button', { name: '되돌리기' })).toBeVisible();
+  },
+};
+
 export const ConnectionLost: Story = {
   beforeEach: () => {
     connection.lost = true;

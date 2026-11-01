@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { flushSync } from 'svelte';
+import { toast } from 'svelte-sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import FeedbackHost from '$lib/features/feedback/FeedbackHost.svelte';
@@ -22,7 +24,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  toast.dismiss();
   connection.lost = false;
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -39,35 +44,193 @@ describe('user feedback (D-82)', () => {
     expect(document.querySelector('[data-close-button]')).not.toBeNull();
   });
 
-  // FC-1: 복제의 "새 항목 열기"처럼 완료 토스트에 동작 단추 하나를 붙인다. 닫을 때까지 남고 닫기 단추로 닫는다.
-  // RB-4: 토스트 라이브러리의 기본 지속 시간(4초)을 넉넉히 넘긴 뒤에도 남아 있어야 키보드·낭독기 사용자가 닿는다.
-  it('adds one action button to a completion toast and keeps it until closed', async () => {
+  function showAction() {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-01T00:00:00Z'));
     const onClick = vi.fn();
     render(FeedbackHost);
-    notifyDone('복제했습니다.', 'copy', { action: { label: '새 항목 열기', onClick } });
-    await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: '새 항목 열기' })).toBeInTheDocument();
+    flushSync(() => {
+      notifyDone('옮겼습니다.', 'timed-action', { action: { label: '되돌리기', onClick } });
     });
-    await vi.advanceTimersByTimeAsync(30_000);
-    const action = screen.getByRole('button', { name: '새 항목 열기' });
-    expect(screen.getByText('복제했습니다.')).toBeInTheDocument();
-    const close = action.closest('[data-sonner-toast]')?.querySelector('[data-close-button]');
+    const action = screen.getByRole('button', { name: '되돌리기' });
+    const item = action.closest('[data-sonner-toast]');
+    if (!(item instanceof HTMLElement)) throw new Error('toast');
+    const region = item.closest('[data-sonner-toaster]');
+    if (!(region instanceof HTMLElement)) throw new Error('toaster');
+    return { onClick, action, item, region };
+  }
+
+  async function advance(ms: number) {
+    await vi.advanceTimersByTimeAsync(ms);
+    flushSync();
+  }
+
+  async function expectRemainingSixSeconds(item: HTMLElement) {
+    await advance(5_999);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(item).toHaveAttribute('data-removed', 'true');
+    // sonner의 퇴장 애니메이션 뒤 DOM에서도 없어진다.
+    await advance(200);
+    expect(item).not.toBeInTheDocument();
+  }
+
+  it('closes an action toast after ten seconds and keeps polite live announcements', async () => {
+    const { item } = showAction();
+    expect(item).toHaveAttribute('aria-live', 'polite');
+    expect(item.closest('section')).toHaveAttribute('aria-live', 'polite');
+    await advance(9_999);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(item).toHaveAttribute('data-removed', 'true');
+    await advance(200);
+    expect(item).not.toBeInTheDocument();
+  });
+
+  it('pauses while hovered and resumes the remaining time', async () => {
+    const { item, region } = showAction();
+    await advance(4_000);
+    await fireEvent.mouseEnter(region, { clientX: 20, clientY: 20 });
+    await advance(20_000);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    await fireEvent.mouseLeave(region, { clientX: 100, clientY: 100 });
+    await expectRemainingSixSeconds(item);
+  });
+
+  it.each(['button', 'Alt+T'])(
+    'pauses with %s focus and resumes the remaining time',
+    async (via) => {
+      const { item, action, region } = showAction();
+      await advance(4_000);
+      if (via === 'Alt+T') {
+        await fireEvent.keyDown(document, { altKey: true, code: 'KeyT', key: 't' });
+        expect(region).toHaveFocus();
+      } else {
+        action.focus();
+        flushSync();
+        expect(action).toHaveFocus();
+      }
+      await advance(20_000);
+      expect(item).toHaveAttribute('data-removed', 'false');
+      // 영역 안의 초점 이동·Escape도 머무는 초점을 풀지 않는다.
+      action.focus();
+      await fireEvent.keyDown(action, { code: 'Escape', key: 'Escape' });
+      await advance(20_000);
+      expect(item).toHaveAttribute('data-removed', 'false');
+      action.blur();
+      flushSync();
+      await expectRemainingSixSeconds(item);
+    },
+  );
+
+  it('pauses while the document is hidden and resumes the remaining time', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    vi.spyOn(document, 'hidden', 'get').mockImplementation(
+      () => document.visibilityState === 'hidden',
+    );
+    const { item } = showAction();
+    await advance(4_000);
+    visibility.mockReturnValue('hidden');
+    await fireEvent(document, new Event('visibilitychange'));
+    await advance(20_000);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    visibility.mockReturnValue('visible');
+    await fireEvent(document, new Event('visibilitychange'));
+    await expectRemainingSixSeconds(item);
+  });
+
+  it('runs undo and supports closing without running it', async () => {
+    const { onClick, action } = showAction();
+    await fireEvent.click(action);
+    expect(onClick).toHaveBeenCalledOnce();
+    await advance(200);
+    flushSync(() => {
+      notifyDone('옮겼습니다.', 'timed-action', { action: { label: '되돌리기', onClick } });
+    });
+    const close = screen
+      .getByRole('button', { name: '되돌리기' })
+      .closest('[data-sonner-toast]')
+      ?.querySelector('[data-close-button]');
     if (!(close instanceof HTMLElement)) throw new Error('close button');
     await fireEvent.click(close);
-    await vi.advanceTimersByTimeAsync(1_000);
-    await vi.waitFor(() => {
-      expect(screen.queryByText('복제했습니다.')).toBeNull();
-    });
-    expect(screen.queryByRole('button', { name: '새 항목 열기' })).toBeNull();
-    expect(onClick).not.toHaveBeenCalled();
-
-    notifyDone('복제했습니다.', 'copy-again', { action: { label: '새 항목 열기', onClick } });
-    await vi.waitFor(() => {
-      expect(screen.getByRole('button', { name: '새 항목 열기' })).toBeInTheDocument();
-    });
-    await fireEvent.click(screen.getByRole('button', { name: '새 항목 열기' }));
+    await advance(200);
+    expect(screen.queryByRole('button', { name: '되돌리기' })).toBeNull();
     expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('resumes only after every overlapping pause has ended', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const { item, action, region } = showAction();
+    await advance(4_000);
+    await fireEvent.mouseEnter(region);
+    action.focus();
+    visibility.mockReturnValue('hidden');
+    await fireEvent(document, new Event('visibilitychange'));
+    await advance(20_000);
+    await fireEvent.mouseLeave(region, { clientX: 100, clientY: 100 });
+    await advance(20_000);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    action.blur();
+    flushSync();
+    await advance(20_000);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    visibility.mockReturnValue('visible');
+    await fireEvent(document, new Event('visibilitychange'));
+    await expectRemainingSixSeconds(item);
+  });
+
+  it('keeps a replacement action paused and cancels the dismissed action timer', async () => {
+    const { region, onClick } = showAction();
+    await advance(4_000);
+    await fireEvent.mouseEnter(region);
+    flushSync(() => {
+      notifyDone('다시 옮겼습니다.', 'timed-action', { action: { label: '되돌리기', onClick } });
+    });
+    const item = screen.getByText('다시 옮겼습니다.').closest('[data-sonner-toast]');
+    await advance(20_000);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    await fireEvent.mouseLeave(region, { clientX: 100, clientY: 100 });
+    await advance(9_999);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    flushSync(() => dismissDone('timed-action'));
+    await advance(200);
+    expect(item).not.toBeInTheDocument();
+    flushSync(() => {
+      notifyDone('새 이동입니다.', 'timed-action', { action: { label: '되돌리기', onClick } });
+    });
+    await advance(9_999);
+    const latest = screen.getByText('새 이동입니다.').closest('[data-sonner-toast]');
+    expect(latest).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(latest).toHaveAttribute('data-removed', 'true');
+  });
+
+  it('keeps the library default duration for a completion without an action', async () => {
+    showAction();
+    flushSync(() => notifyDone('되돌렸습니다.', 'timed-action'));
+    const item = screen.getByText('되돌렸습니다.').closest('[data-sonner-toast]');
+    await advance(3_999);
+    expect(item).toHaveAttribute('data-removed', 'false');
+    await advance(1);
+    expect(item).toHaveAttribute('data-removed', 'true');
+  });
+
+  it('keeps only the latest action for a key and gives it ten seconds', async () => {
+    const { onClick } = showAction();
+    await advance(4_000);
+    const latest = vi.fn();
+    flushSync(() => {
+      notifyDone('다시 옮겼습니다.', 'timed-action', {
+        action: { label: '최근 이동 되돌리기', onClick: latest },
+      });
+    });
+    expect(screen.queryByText('옮겼습니다.')).toBeNull();
+    expect(screen.getAllByText('다시 옮겼습니다.')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: '되돌리기' })).toBeNull();
+    await advance(9_999);
+    await fireEvent.click(screen.getByRole('button', { name: '최근 이동 되돌리기' }));
+    expect(latest).toHaveBeenCalledOnce();
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   // 칸반 이동: 되돌리기 단추가 달린 완료를 같은 key의 단추 없는 완료(되돌림)로 고치면 앞 단추가 남지 않는다. 토스트
