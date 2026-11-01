@@ -104,32 +104,71 @@ while true; do
     exit 1
   fi
 done
-build_state() { ps -eo comm,args | awk -f tools/perf-build-state.awk; }
-busy_build() { build_state | jq -e '.compiler or .nodeBuild or .heavyCommand' > /dev/null; }
-while busy_build; do sleep 15; done
-monitor_phase=screen
+build_state() {
+  local state
+  state=$(ps -eo comm,args | awk -f tools/perf-build-state.awk) || return 2
+  jq -ce 'if type=="object" and (.compiler|type)=="boolean" and
+    (.nodeBuild|type)=="boolean" and (.heavyCommand|type)=="boolean"
+    then . else error("invalid build detector state") end' <<< "$state" || return 2
+}
+busy_build() {
+  local state
+  state=$(build_state) || return 2
+  jq -e '.compiler or .nodeBuild or .heavyCommand' <<< "$state" > /dev/null
+}
+wait_for_builds() {
+  local status
+  while true; do
+    if busy_build; then
+      sleep 15 || return 2
+    else
+      status=$?
+      if (( status==1 )); then return 0; fi
+      printf 'FAIL build detector; refusing to treat an error as idle\n' >&2
+      return 2
+    fi
+  done
+}
 start_monitor() {
+  rm -f "$out/monitor-stop"
   (
-    local state
+    local state status
+    monitor_failed() {
+      touch "$out/monitor-error"
+      printf 'FAIL build monitor detector or recording error\n' >&2
+      exit 2
+    }
     while true; do
-      state=$(build_state)
+      state=$(build_state) || monitor_failed
       if jq -e '.compiler or .nodeBuild or .heavyCommand' <<< "$state" > /dev/null; then
-        touch "$out/build-overlap"
-        if [[ "$monitor_phase" == db ]]; then touch "$out/db-build-overlap"; fi
+        touch "$out/build-overlap" || monitor_failed
+        if [[ "$monitor_phase" == db ]]; then touch "$out/db-build-overlap" || monitor_failed; fi
+      else
+        status=$?
+        if (( status!=1 )); then monitor_failed; fi
       fi
-      jq -c --argjson epochMs "$(date -u +%s%3N)" '.+{epochMs:$epochMs}' <<< "$state"
-      sleep 1
+      jq -c --argjson epochMs "$(date -u +%s%3N)" '.+{epochMs:$epochMs}' <<< "$state" || monitor_failed
+      [[ -e "$out/monitor-stop" ]] && break
+      sleep 1 || monitor_failed
     done
   ) >> "$out/concurrency.log" &
   monitor_pid=$!
 }
 stop_monitor() {
+  local status=0
   if [[ -n "$monitor_pid" ]]; then
-    kill "$monitor_pid" 2>/dev/null || true
-    wait "$monitor_pid" || true
+    touch "$out/monitor-stop" || return 1
+    if wait "$monitor_pid"; then :; else status=$?; fi
     monitor_pid=
+    if (( status!=0 )) || [[ -e "$out/monitor-error" || ! -s "$out/concurrency.log" ]]; then
+      touch "$out/monitor-error"
+      printf 'FAIL build monitor stopped abnormally or recorded no samples\n' >&2
+      return 1
+    fi
   fi
 }
+wait_for_builds
+monitor_phase=screen
 start_monitor
 if [[ "$mode" == rooms ]]; then
   FVOCI_MEASURE_ROOMS="$count" cargo test --release --locked -p fvoci-server --test it room_memory_measure::room_memory_measure -- --ignored --exact --nocapture > "$out/rooms.log" 2>&1
@@ -165,7 +204,7 @@ else
     jq -s 'add' "$out/discarded-screens.json" "$out/discarded-new.json" > "$out/discarded-next.json"
     mv "$out/discarded-next.json" "$out/discarded-screens.json"
     printf 'RERUN contaminated screens (fresh triplets): %s\n' "$replay_screens"
-    while busy_build; do sleep 15; done
+    wait_for_builds
     screen_attempt=$((screen_attempt+1))
     start_monitor
     FVOCI_MEASURE_SCREENS="$replay_screens" pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts --project desktop > "$out/playwright-$screen_attempt.log" 2>&1
@@ -197,7 +236,6 @@ else
   jq -Rn '[inputs | fromjson? | select(.event == "http.request")]' "$out/server.log" > "$out/access.json"
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
   jq -f tools/perf-depth.jq "$out/screens.json" > "$out/depth.json"
-  printf 'PASS screens: %s\n' "$out"
 fi
 
 stop_monitor
@@ -206,6 +244,7 @@ if [[ ( "$mode" == rooms && -e "$out/build-overlap" ) || -e "$out/db-build-overl
   printf 'FAIL concurrent build during measurement: %s\n' "$out" >&2
   exit 1
 fi
+if [[ "$mode" == screens ]]; then printf 'PASS screens: %s\n' "$out"; fi
 
 # Replay additional pg_stat_statements hotspots after the final room measurement.
 # This runs after all RSS/time snapshots, in that run's untouched T6 database.

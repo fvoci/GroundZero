@@ -57,6 +57,7 @@ case "$scenario" in heavy) initial_heavy=true ;; clean) ;; *) initial_busy=true 
 printf '{"epochMs":250,"compiler":%s,"nodeBuild":false,"heavyCommand":%s}\n' "$initial_busy" "$initial_heavy" > "$out/concurrency.log"
 printf '0\n' > "$out/calls"
 busy_build() { return 1; }
+wait_for_builds() { return 0; }
 stop_monitor() { return 0; }
 start_monitor() {
   local calls busy=false

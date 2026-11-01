@@ -432,4 +432,5 @@ check sharing-rejects-lock-injection-mismatch sharing_lifecycle injection-mismat
 check task-screen-aggregate-witnesses bash tools/perf-task-screens-test.sh
 check screen-build-overlap bash tools/perf-screen-overlap-test.sh
 check full-build-command-state bash tools/perf-build-state-test.sh
+check monitor-fails-closed bash tools/perf-monitor-lifecycle-test.sh
 test "$failures" -eq 0
