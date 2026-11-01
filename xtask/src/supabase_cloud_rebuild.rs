@@ -5,6 +5,7 @@ mod catalog;
 mod catalog_tests;
 pub mod fixture;
 mod inventory;
+mod query;
 mod race_tests;
 mod receipt;
 mod target;

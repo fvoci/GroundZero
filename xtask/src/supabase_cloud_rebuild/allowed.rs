@@ -62,8 +62,7 @@ impl Binding {
     }
 }
 
-pub(super) async fn objects(conn: &mut PgConnection) -> Result<BTreeSet<String>> {
-    let value = catalog::scalar(conn, "SELECT coalesce(jsonb_agg(identity ORDER BY identity), '[]') FROM (
+pub(super) const OBJECTS_SQL: &str = "SELECT coalesce(jsonb_agg(identity ORDER BY identity), '[]') FROM (
         SELECT 'schema fvoci' identity FROM pg_namespace WHERE nspname='fvoci'
         UNION ALL SELECT format('%s %I.%I', CASE relkind WHEN 'r' THEN 'table' WHEN 'p' THEN 'table'
             WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized_view' WHEN 'S' THEN 'sequence'
@@ -90,6 +89,10 @@ pub(super) async fn objects(conn: &mut PgConnection) -> Result<BTreeSet<String>>
             WHERE c.relnamespace=to_regnamespace('fvoci') AND r.rulename<>'_RETURN'
         UNION ALL SELECT format('default_privileges fvoci.%s',defaclobjtype) FROM pg_default_acl
             WHERE defaclnamespace=to_regnamespace('fvoci')
-        ) named").await?;
-    Ok(serde_json::from_value(value)?)
+        ) named";
+
+pub(super) async fn objects(conn: &mut PgConnection) -> Result<BTreeSet<String>> {
+    Ok(serde_json::from_value(
+        catalog::scalar(conn, OBJECTS_SQL).await?,
+    )?)
 }

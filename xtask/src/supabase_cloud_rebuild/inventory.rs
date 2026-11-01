@@ -4,10 +4,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 
-use super::{
-    allowed::{self, Binding},
-    approve, catalog, fingerprint,
-};
+use super::{allowed::Binding, approve, catalog, fingerprint, query};
 
 // Same cooperative lock as crates/db/src/admin.rs::MIGRATOR_LOCK. Cloud targets only postgres.
 const MIGRATOR_LOCK: i64 = 0x6676_6f63_696d_6967;
@@ -38,12 +35,27 @@ impl Inventory {
     }
 
     async fn snapshot(conn: &mut PgConnection, binding: &Binding) -> Result<Self> {
+        Self::snapshot_with_probe(conn, binding, None, std::future::ready(Ok(()))).await
+    }
+
+    async fn snapshot_with_probe(
+        conn: &mut PgConnection,
+        binding: &Binding,
+        gate: Option<i64>,
+        during: impl Future<Output = Result<()>>,
+    ) -> Result<Self> {
         sqlx::query("SET LOCAL search_path=pg_catalog")
             .execute(&mut *conn)
             .await?;
-        let mut raw = catalog::snapshot(conn).await?;
-        let mut blockers = catalog::blockers(conn, &raw).await?;
-        let objects = allowed::objects(conn).await?;
+        let sql = query::inventory();
+        let query = sqlx::query_scalar::<_, Value>(&sql).bind(gate);
+        let (captured, injected) = tokio::join!(query.fetch_one(&mut *conn), during);
+        let captured = captured?;
+        injected?;
+        let mut raw = captured["catalog"].clone();
+        let mut blockers = catalog::blockers(&raw, &captured["counts"])?;
+        let objects: std::collections::BTreeSet<String> =
+            serde_json::from_value(captured["identities"].clone())?;
         let unexpected: Vec<_> = objects.difference(&binding.allowed).collect();
         blockers["unlisted_objects"] = json!(unexpected.len());
         let blocked = blockers
@@ -51,9 +63,8 @@ impl Inventory {
             .context("invalid_blockers")?
             .values()
             .any(|v| v == &json!(true) || v.as_i64().is_some_and(|n| n > 0));
-        let drops = drop_statements(conn).await?;
-        let roles: Vec<String> = sqlx::query_scalar("SELECT rolname::text FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator') ORDER BY rolname")
-            .fetch_all(&mut *conn).await?;
+        let drops: Vec<(String, String)> = serde_json::from_value(captured["drops"].clone())?;
+        let roles: Vec<String> = serde_json::from_value(captured["roles"].clone())?;
         raw["format"] = json!(1);
         let authority = raw
             .as_object_mut()
@@ -134,6 +145,45 @@ impl Inventory {
         approved: &str,
         after_locks: impl Future<Output = Result<()>>,
     ) -> Result<RolePlan> {
+        self.delete_schema_hooks(
+            conn,
+            binding,
+            approved,
+            after_locks,
+            None,
+            std::future::ready(Ok(())),
+        )
+        .await
+    }
+
+    pub async fn delete_schema_with_probe(
+        &self,
+        conn: &mut PgConnection,
+        binding: &Binding,
+        approved: &str,
+        gate: i64,
+        during: impl Future<Output = Result<()>>,
+    ) -> Result<RolePlan> {
+        self.delete_schema_hooks(
+            conn,
+            binding,
+            approved,
+            std::future::ready(Ok(())),
+            Some(gate),
+            during,
+        )
+        .await
+    }
+
+    async fn delete_schema_hooks(
+        &self,
+        conn: &mut PgConnection,
+        binding: &Binding,
+        approved: &str,
+        after_locks: impl Future<Output = Result<()>>,
+        gate: Option<i64>,
+        during: impl Future<Output = Result<()>>,
+    ) -> Result<RolePlan> {
         approve(&self.digest, approved, self.blocked)?;
         catalog::write_authority(conn).await?;
         let mut tx = conn.begin().await?;
@@ -143,7 +193,7 @@ impl Inventory {
             .await?;
         lock_relations(&mut tx).await?;
         after_locks.await?;
-        let current = Self::snapshot(&mut tx, binding).await?;
+        let current = Self::snapshot_with_probe(&mut tx, binding, gate, during).await?;
         if let Err(error) = approve(&current.digest, approved, current.blocked) {
             tx.rollback().await?;
             return Err(error);
@@ -164,18 +214,15 @@ impl RolePlan {
             .bind(MIGRATOR_LOCK)
             .execute(&mut *tx)
             .await?;
-        let before = catalog::role_state(&mut tx).await?;
-        if fingerprint(&before) != self.digest {
+        let recheck = catalog::scalar(&mut tx, &query::role_recheck()).await?;
+        let before = &recheck["state"];
+        if fingerprint(before) != self.digest {
             tx.rollback().await?;
             anyhow::bail!("role_fingerprint_mismatch");
         }
-        let owned: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM pg_shdepend WHERE deptype='o'
-            AND refclassid='pg_authid'::regclass AND refobjid IN
-            (SELECT oid FROM pg_roles WHERE rolname IN ('fvoci_app','fvoci_migrator'))",
-        )
-        .fetch_one(&mut *tx)
-        .await?;
+        let owned = recheck["owned"]
+            .as_i64()
+            .context("invalid_ownership_count")?;
         if owned != 0 {
             tx.rollback().await?;
             anyhow::bail!("role_still_owns_objects");
@@ -286,24 +333,4 @@ async fn delete_objects(conn: &mut PgConnection, mut pending: Vec<(String, Strin
         pending = remaining;
     }
     Ok(())
-}
-
-async fn drop_statements(conn: &mut PgConnection) -> Result<Vec<(String, String)>> {
-    Ok(sqlx::query_as("SELECT owner, statement FROM (
-        SELECT pg_get_userbyid(c.relowner)::text owner,
-          format('ALTER TABLE %I.%I DROP CONSTRAINT %I RESTRICT', n.nspname,c.relname,k.conname) statement
-          FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
-          WHERE n.nspname='fvoci' AND k.contype='f'
-        UNION ALL SELECT pg_get_userbyid(c.relowner)::text,
-          format('DROP %s IF EXISTS %I.%I RESTRICT', CASE c.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'S' THEN 'SEQUENCE' ELSE 'TABLE' END,n.nspname,c.relname)
-          FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='fvoci' AND c.relkind IN ('r','p','v','m','S')
-        UNION ALL SELECT pg_get_userbyid(p.proowner)::text,
-          format('DROP ROUTINE %I.%I(%s) RESTRICT',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
-          FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='fvoci' AND p.prokind IN ('f','p')
-        UNION ALL SELECT pg_get_userbyid(t.typowner)::text,
-          format('DROP %s %I.%I RESTRICT',CASE WHEN t.typtype='d' THEN 'DOMAIN' ELSE 'TYPE' END,n.nspname,t.typname)
-          FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='fvoci'
-          AND t.typtype IN ('e','d') AND NOT EXISTS (SELECT FROM pg_type parent WHERE parent.typarray=t.oid)
-        UNION ALL SELECT pg_get_userbyid(nspowner)::text, 'DROP SCHEMA fvoci RESTRICT' FROM pg_namespace WHERE nspname='fvoci'
-        ) operations ORDER BY statement").fetch_all(conn).await?)
 }
