@@ -141,6 +141,7 @@ await test('SR-250-12: forwarded links still use GET', () => {
 await test('SR-250-12: defaults and nested arguments resolve used operations', () => {
   const result = checkUsage(
     files(`
+      declare const userContent: string;
       const link = (p: string) => { anchor.setAttribute('href', p); };
       function go(p = '/api/tasks/42') { link(p); }
       go(); go(userContent); go('/rhwp/viewer');
@@ -903,6 +904,200 @@ const socketList: Allowlist = {
   },
 };
 const socketScheme = "const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';";
+await test('SR-295 Minor: a written function error identifies the initial call site', () => {
+  const input = files(
+    [
+      "function endpoint() { return '/api/tasks/42'; }",
+      "endpoint = () => '/api/typo';",
+      'const url = endpoint;',
+      'fetch(url());',
+    ].join('\n'),
+  );
+  assert.throws(() => checkUsage(input, contract, empty), {
+    message: /^apps\/web\/src\/lib\/example\.ts:5: URL\/navigation function is written: endpoint/,
+  });
+});
+await test('SR-295 Minor: an excessive alias error identifies the initial call site', () => {
+  const aliases = Array.from({ length: 65 }, (_, i) => `const a${String(i + 1)} = a${String(i)};`);
+  const input = files(
+    ["function a0() { return '/api/tasks/42'; }", ...aliases, 'fetch(a65());'].join('\n'),
+  );
+  assert.throws(() => checkUsage(input, contract, empty), {
+    message:
+      /^apps\/web\/src\/lib\/example\.ts:68: callable alias chain exceeds 64 hops: not statically resolvable/,
+  });
+});
+for (const kind of ['method', 'path']) {
+  for (const argument of ['value', 'captured']) {
+    await test(`SR-295-6: ${kind} cannot use a string-flow-narrowed mutable default argument: ${argument}`, () => {
+      const initial = kind === 'method' ? 'DELETE' : '/api/tasks/42';
+      const fallback = kind === 'method' ? 'GET' : '/api/typo';
+      const invoke =
+        kind === 'method'
+          ? `request(helper(${argument}), '/api/tasks/42');`
+          : `fetch(helper(${argument}));`;
+      const routes = {
+        paths: { '/api/tasks/{id}': { [kind === 'method' ? 'delete' : 'get']: {} } },
+      };
+      assert.throws(
+        () =>
+          checkUsage(
+            files(`
+        function helper(p = '${fallback}') { return p; }
+        let value: '${initial}' | undefined = '${initial}';
+        function change() { value = undefined; }
+        change(); const captured = value;
+        ${invoke}
+      `),
+            routes,
+            empty,
+          ),
+        /default argument.*not statically resolvable/,
+      );
+    });
+  }
+}
+await test('SR-295-6: declaration types and immutable values can prove a defined argument', () => {
+  assert.equal(
+    checkUsage(
+      files(`
+    function method(p = 'DELETE') { return p; }
+    let verb: 'GET' = 'GET';
+    request(method(verb), '/api/tasks/42');
+    function endpoint(p = '/api/typo') { return p; }
+    const path = '/api/tasks/42';
+    fetch(endpoint(path));
+  `),
+      contract,
+      empty,
+    ).calls,
+    2,
+  );
+});
+await test('SR-295-6: encoding cannot hide an uncertain default argument', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+    function resource(p = 'typo') { return p; }
+    let kind: 'tasks' | undefined = 'tasks';
+    function change() { kind = undefined; }
+    change();
+    request('GET', \`/api/\${encodeURIComponent(resource(kind))}/42\`);
+  `),
+        contract,
+        empty,
+      ),
+    /default argument.*not statically resolvable/,
+  );
+});
+await test('SR-295-6: unknown query-only defaults do not affect the operation path', () => {
+  assert.equal(
+    checkUsage(
+      files(`
+    function endpoint(id: string, inline = false) {
+      return \`/api/tasks/\${encodeURIComponent(id)}?inline=\${inline}\`;
+    }
+    fetch(endpoint('42', runtimeInline));
+  `),
+      contract,
+      empty,
+    ).calls,
+    1,
+  );
+});
+await test('SR-295-6: an unproven runtime navigation default fails', () => {
+  assert.throws(
+    () =>
+      checkUsage(
+        files(`
+    function go(p = '/api/tasks/42') { location.assign(p); }
+    go(userContent);
+  `),
+        { paths: {} },
+        empty,
+      ),
+    /default argument.*not statically resolvable/,
+  );
+});
+for (const imported of [
+  "import { browser as globalThis } from 'pkg';",
+  "import * as globalThis from 'pkg';",
+]) {
+  for (const call of [
+    "globalThis.location.assign('/api/typo');",
+    "globalThis.fetch('/api/typo');",
+  ]) {
+    await test(`SR-295-7: a raw imported owner is not a browser capability: ${imported} ${call}`, () => {
+      assert.equal(checkUsage(files(`${imported} ${call}`), { paths: {} }, empty).calls, 0);
+    });
+  }
+}
+await test('SR-295-7: the genuine globalThis still exposes browser capabilities', () => {
+  for (const call of [
+    "globalThis.location.assign('/api/typo');",
+    "globalThis.fetch('/api/typo');",
+  ]) {
+    assert.throws(
+      () => checkUsage(files(call), contract, listedTask),
+      /GET \/api\/typo.*not in OpenAPI/,
+    );
+  }
+});
+for (const owner of [
+  'location',
+  'window.location',
+  'self.location',
+  'document.location',
+  'globalThis.location',
+]) {
+  await test(`SR-295-8: HTTP origin path evaluation checks the operation: ${owner}`, () => {
+    const input = files(`fetch(\`\${${owner}.origin}/api/tasks/42\`);`);
+    assert.equal(checkUsage(input, contract, empty).calls, 1);
+    input.set(source, (input.get(source) ?? '').replace('/api/tasks/42', '/api/typo'));
+    assert.throws(() => checkUsage(input, contract, listedTask), /GET \/api\/typo.*not in OpenAPI/);
+  });
+}
+for (const length of [63, 64, 65]) {
+  for (const wrapped of [false, true]) {
+    await test(`SR-295-9: exactly ${String(length)} alias transitions, wrappers ${String(wrapped)}`, () => {
+      const aliases = Array.from({ length }, (_, i) => {
+        const previous = `a${String(i)}`;
+        const value = wrapped
+          ? `((${previous} as typeof ${previous}) satisfies typeof ${previous})`
+          : previous;
+        return `const a${String(i + 1)} = ${value};`;
+      }).join('\n');
+      const input = files(`function a0() { return '/api/tasks/42'; }
+        ${aliases}
+        fetch(a${String(length)}());`);
+      if (length <= 64) assert.equal(checkUsage(input, contract, empty).calls, 1);
+      else
+        assert.throws(
+          () => checkUsage(input, contract, empty),
+          /alias.*64.*not statically resolvable/,
+        );
+    });
+  }
+}
+await test('SR-295-9: a const function body does not consume an alias transition', () => {
+  const aliases = Array.from(
+    { length: 64 },
+    (_, i) => `const a${String(i + 1)} = a${String(i)};`,
+  ).join('\n');
+  assert.equal(
+    checkUsage(
+      files(`
+    const a0 = (() => '/api/tasks/42');
+    ${aliases}
+    fetch(a64());
+  `),
+      contract,
+      empty,
+    ).calls,
+    1,
+  );
+});
 for (const argument of ['verb', 'captured']) {
   await test(`SR-295-1: a flow-narrowed mutable method cannot select a default: ${argument}`, () => {
     assert.throws(
