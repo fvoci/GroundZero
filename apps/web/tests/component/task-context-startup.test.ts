@@ -126,28 +126,34 @@ it('starts context with the session lists, then displays and synchronizes only a
   expect(taskScreenApi.context).toHaveBeenCalledOnce();
 });
 
-it('starts authorized task reads before constructing the item information', async () => {
-  const order: string[] = [];
-  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
-  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
-    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
-  ]);
-  vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
-  const profile = await api.itemProfile(TASK_ITEM.id);
-  vi.mocked(api.itemProfile).mockImplementation(() => {
-    order.push('profile');
-    return Promise.resolve(profile);
-  });
-  vi.mocked(taskData.syncRecurrences).mockImplementation(() => {
-    order.push('sync');
-    return Promise.resolve(0);
-  });
-  render(App);
-  await screen.findByTestId('task-board');
-  expect(order[0]).toBe('sync');
-  expect(taskData.syncRecurrences).toHaveBeenCalledOnce();
-  expect(taskScreenApi.board).toHaveBeenCalledOnce();
-});
+it.each(['board', 'gantt'] as const)(
+  'starts authorized %s reads before constructing item information',
+  async (view) => {
+    router.navigate(itemViewPath(WORKSPACE.id, TASK_ITEM.id, view));
+    const order: string[] = [];
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+    const profile = await api.itemProfile(TASK_ITEM.id);
+    vi.mocked(api.itemProfile).mockImplementation(() => {
+      order.push('profile');
+      return Promise.resolve(profile);
+    });
+    vi.mocked(taskData.syncRecurrences).mockImplementation(() => {
+      order.push('sync');
+      return Promise.resolve(0);
+    });
+    render(App);
+    await waitFor(() => {
+      expect(order).toContain('profile');
+    });
+    expect(order[0]).toBe('sync');
+    expect(taskData.syncRecurrences).toHaveBeenCalledOnce();
+    expect(taskScreenApi.board).toHaveBeenCalledOnce();
+  },
+);
 
 it('leaves a discarded early result out of the next screen state', async () => {
   const early = held<TaskContext>();
