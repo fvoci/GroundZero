@@ -4,8 +4,14 @@
   import BoardFilters from './BoardFilters.svelte';
   import { handleCardKey } from './board-keyboard';
   import { taskData as work } from '$lib/features/tasks/detail-data';
-  import { taskScreenApi, type DetailRead } from './screen-api';
-  import { startCapturedRead, type CapturedRead, type ContextCapture } from './context-read';
+  import { taskScreenApi, type BoardRead, type DetailRead } from './screen-api';
+  import {
+    DiscardedTaskRead,
+    startCapturedRead,
+    type CapturedRead,
+    type ContextCapture,
+  } from './context-read';
+  import type { TaskStartupReads } from './startup-reads';
   import { readSessionGeneration } from '$lib/features/auth/session-signal';
   import { composeTasks } from './board-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
@@ -86,6 +92,7 @@
 
   interface Props {
     aggregate?: boolean;
+    initialReads?: ((itemId: string) => TaskStartupReads | undefined) | undefined;
     item: ItemView;
     workspaces: Workspace[];
     /** 주소에서 연 업무. */
@@ -106,6 +113,7 @@
     onstale,
     locked = false,
     aggregate = false,
+    initialReads,
   }: Props = $props();
 
   const editingUser = untrack(() => me.userId);
@@ -421,19 +429,34 @@
     });
   });
 
-  async function reload(itemId: string = item.id): Promise<void> {
+  async function readBoard(itemId: string, initial?: Promise<BoardRead>): Promise<BoardRead> {
+    try {
+      return await (initial ?? taskScreenApi.board(itemId));
+    } catch (cause: unknown) {
+      if (
+        initial !== undefined &&
+        cause instanceof DiscardedTaskRead &&
+        alive &&
+        itemId === item.id &&
+        !accountSafety.switching &&
+        !accountSafety.restoring &&
+        !hiddenForAccount
+      )
+        return taskScreenApi.board(itemId);
+      throw cause;
+    }
+  }
+  async function reload(itemId: string = item.id, initial?: Promise<BoardRead>): Promise<void> {
     const mine = ++reloadSeq;
     try {
       const [server, statuses] = await (aggregate
-        ? taskScreenApi
-            .board(itemId)
-            .then(
-              (read) =>
-                [
-                  composeTasks(read.tasks, read, read.archived ? 'read' : read.item_access),
-                  read.statuses,
-                ] as const,
-            )
+        ? readBoard(itemId, initial).then(
+            (read) =>
+              [
+                composeTasks(read.tasks, read, read.archived ? 'read' : read.item_access),
+                read.statuses,
+              ] as const,
+          )
         : Promise.all([work.tasks(itemId), work.taskStatuses(itemId)]));
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       definitions = [...statuses].sort((a, b) => a.position - b.position);
@@ -458,10 +481,14 @@
     initialDetail = undefined;
     return seed?.taskId === taskId ? seed.read : undefined;
   }
-  function prepareDetail(): void {
+  function prepareDetail(seed?: TaskStartupReads['detail']): void {
     if (preparedDetail) return;
     preparedDetail = true;
     if (!aggregate || openTaskId === undefined) return;
+    if (seed?.taskId === openTaskId) {
+      initialDetail = seed;
+      return;
+    }
     const sequence = ++detailReadSequence;
     const capture = (): ContextCapture => ({
       userId: me.userId,
@@ -478,8 +505,23 @@
     };
   }
   async function loadItem(itemId: string, write: boolean): Promise<void> {
-    untrack(prepareDetail);
+    const initial = untrack(() => (aggregate ? initialReads?.(itemId) : undefined));
+    untrack(() => {
+      prepareDetail(initial?.detail);
+    });
+    if (initial !== undefined) {
+      await reload(itemId, initial.board.take());
+      return;
+    }
     if (write) await work.syncRecurrences(editingUser, itemId).catch(() => 0);
+    if (
+      !alive ||
+      hiddenForAccount ||
+      accountSafety.switching ||
+      accountSafety.restoring ||
+      itemId !== item.id
+    )
+      return;
     await reload(itemId);
   }
 

@@ -126,6 +126,29 @@ it('starts context with the session lists, then displays and synchronizes only a
   expect(taskScreenApi.context).toHaveBeenCalledOnce();
 });
 
+it('starts authorized task reads before constructing the item information', async () => {
+  const order: string[] = [];
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+  const profile = await api.itemProfile(TASK_ITEM.id);
+  vi.mocked(api.itemProfile).mockImplementation(async () => {
+    order.push('profile');
+    return profile;
+  });
+  vi.mocked(taskData.syncRecurrences).mockImplementation(async () => {
+    order.push('sync');
+    return 0;
+  });
+  render(App);
+  await screen.findByTestId('task-board');
+  expect(order[0]).toBe('sync');
+  expect(taskData.syncRecurrences).toHaveBeenCalledOnce();
+  expect(taskScreenApi.board).toHaveBeenCalledOnce();
+});
+
 it('leaves a discarded early result out of the next screen state', async () => {
   const early = held<TaskContext>();
   vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);

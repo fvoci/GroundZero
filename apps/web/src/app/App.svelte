@@ -1,11 +1,8 @@
 <script lang="ts">
   import { activityApi } from '$lib/features/activity/api';
   import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
-  import {
-    createContextRead,
-    type ContextCapture,
-    type ContextResult,
-  } from '$lib/features/tasks/context-read';
+  import { startTaskReads, type TaskStartupSeed } from '$lib/features/tasks/startup-reads';
+  import { createContextRead, type ContextCapture } from '$lib/features/tasks/context-read';
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
 
@@ -117,9 +114,7 @@
   let displayOpen = $state(false);
   const sessionHidden = $derived(accountSafety.switching || accountSafety.restoring);
   let sessionSequence = 0;
-  let taskContextSeed = $state<
-    { itemId: string; navigationGeneration: number; result: ContextResult<TaskContext> } | undefined
-  >();
+  let taskContextSeed = $state<TaskStartupSeed>();
   let restoreSequence = 0;
   let restoringUserId: string | undefined;
   let checkingSession = false;
@@ -139,6 +134,7 @@
   });
 
   async function load(verified?: Me, attempt = 0): Promise<boolean> {
+    const prepareStartup = session.state !== 'signed-in';
     const mine = ++sessionSequence;
     taskContextSeed = undefined;
     loadingSession = true;
@@ -200,6 +196,7 @@
         pendingContext,
       ]);
       if (mine !== sessionSequence) return false;
+      let startupSeed: TaskStartupSeed | undefined;
       if (initialContext !== undefined && taskRoute !== undefined) {
         const rechecked =
           initialContext.kind === 'loaded'
@@ -214,13 +211,35 @@
         if (captured.path === router.path && rechecked.kind === 'discarded')
           return await retryLoad();
         if (captured.path === router.path)
-          taskContextSeed = {
+          startupSeed = {
             itemId: taskRoute.itemId,
             navigationGeneration: captured.navigationGeneration,
             result: rechecked,
           };
       }
       org.load(me.id, organizations, me.last_organization_id ?? null);
+      const startupContext =
+        startupSeed?.result.kind === 'loaded' ? startupSeed.result.value : undefined;
+      if (
+        prepareStartup &&
+        !sessionHidden &&
+        startupSeed !== undefined &&
+        startupContext !== undefined &&
+        taskRoute !== undefined &&
+        workspaces.some(
+          (space) =>
+            space.id === taskRoute.workspaceId && space.id === startupContext.item.workspace_id,
+        )
+      ) {
+        startupSeed.reads = startTaskReads(
+          captured,
+          capture,
+          taskRoute.itemId,
+          startupContext,
+          taskRoute.taskId,
+        );
+      }
+      taskContextSeed = startupSeed;
       session = { state: 'signed-in', me, workspaces };
       return true;
     } catch (e: unknown) {

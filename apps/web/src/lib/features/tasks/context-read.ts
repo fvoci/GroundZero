@@ -15,6 +15,23 @@ export interface CapturedRead<T> {
   take(): Promise<T>;
 }
 
+export class DiscardedTaskRead extends Error {
+  constructor() {
+    super('Task screen read no longer current');
+  }
+}
+
+export function sameContext(captured: ContextCapture, now: ContextCapture): boolean {
+  return (
+    captured.userId === now.userId &&
+    captured.sequence === now.sequence &&
+    captured.navigationGeneration === now.navigationGeneration &&
+    captured.sessionGeneration === now.sessionGeneration &&
+    captured.safetyGeneration === now.safetyGeneration &&
+    captured.path === now.path
+  );
+}
+
 /** Start now, handle rejection immediately, and recheck ownership when consumed once. */
 export function startCapturedRead<T extends { viewer_id: string }>(
   captured: ContextCapture,
@@ -29,7 +46,7 @@ export function startCapturedRead<T extends { viewer_id: string }>(
       if (consumed) throw new Error('Task screen read already consumed');
       consumed = true;
       const first = await settled;
-      if (first.kind === 'discarded') throw new Error('Task screen read no longer current');
+      if (first.kind === 'discarded') throw new DiscardedTaskRead();
       const checked = await createContextRead(
         snapshot,
         current,
@@ -37,7 +54,7 @@ export function startCapturedRead<T extends { viewer_id: string }>(
       );
       if (checked.kind === 'loaded') return checked.value;
       if (checked.kind === 'failed') throw checked.error;
-      throw new Error('Task screen read no longer current');
+      throw new DiscardedTaskRead();
     },
   };
 }
@@ -48,15 +65,7 @@ export async function createContextRead<T extends { viewer_id: string }>(
   pending: Promise<T>,
 ): Promise<ContextResult<T>> {
   const matches = (): boolean => {
-    const now = current();
-    return (
-      captured.userId === now.userId &&
-      captured.sequence === now.sequence &&
-      captured.navigationGeneration === now.navigationGeneration &&
-      captured.sessionGeneration === now.sessionGeneration &&
-      captured.safetyGeneration === now.safetyGeneration &&
-      captured.path === now.path
-    );
+    return sameContext(captured, current());
   };
   try {
     const value = await pending;

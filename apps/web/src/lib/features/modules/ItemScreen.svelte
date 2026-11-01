@@ -5,8 +5,7 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
-  import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
-  import type { ContextResult } from '$lib/features/tasks/context-read';
+  import { taskScreenApi } from '$lib/features/tasks/screen-api';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -28,6 +27,7 @@
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+  import type { TaskStartupSeed, TaskStartupReads } from '$lib/features/tasks/startup-reads';
   import { readConfig } from '$lib/features/tasks/filters';
   import ItemEvents from '$lib/features/events/ItemEvents.svelte';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
@@ -70,9 +70,7 @@
 
   interface Props {
     aggregate?: boolean;
-    initialContext?:
-      | { itemId: string; navigationGeneration: number; result: ContextResult<TaskContext> }
-      | undefined;
+    initialContext?: TaskStartupSeed | undefined;
     workspace: Workspace;
     itemId: string;
     /** 주소에서 연 업무(상세 대화상자). */
@@ -89,6 +87,14 @@
     initialContext,
   }: Props = $props();
   let consumedContext = false;
+  let pendingTaskReads: { navigationGeneration: number; reads: TaskStartupReads } | undefined;
+  function takeStartupReads(id: string): TaskStartupReads | undefined {
+    const seed = pendingTaskReads;
+    pendingTaskReads = undefined;
+    return seed?.reads.itemId === id && seed.navigationGeneration === router.navigationGeneration
+      ? seed.reads
+      : undefined;
+  }
   // 같은 항목 안 묶음·보기·상세 경로 변경도 화면에 즉시 전달한다(D-121).
   const itemRoute = $derived(
     router.route.name === 'item' && router.route.itemId === itemId ? router.route : undefined,
@@ -356,6 +362,7 @@
     item = undefined;
     mod = undefined;
     docs = [];
+    pendingTaskReads = undefined;
     chosen = undefined;
     error = undefined;
     infoOpen = false;
@@ -396,6 +403,8 @@
     };
     if (untrack(() => aggregate) && seed?.result.kind === 'loaded') {
       const value = seed.result.value;
+      if (seed.reads !== undefined)
+        pendingTaskReads = { navigationGeneration: seed.navigationGeneration, reads: seed.reads };
       // The App already joined session lists and context. Adopt within this flush.
       try {
         untrack(() => {
@@ -847,6 +856,7 @@
         {:else if group === 'tasks'}
           <TaskBoard
             {aggregate}
+            initialReads={takeStartupReads}
             item={view}
             {workspaces}
             routeView={itemRoute?.view}
