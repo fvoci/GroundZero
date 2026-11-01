@@ -29,8 +29,9 @@ mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf-${mode}-${count}-XXXXXX")
 project="fvoci-perf-w1-${mode}-${count}-$$"
 measure_lock="$HOME/.cache/fvoci-measure.lock"
-# Initialize ownership before acquisition: EXIT can run as soon as the write ends.
+# Keep the private token on the marker's filesystem for atomic hard-link publication.
 measure_token="$$-$(date -u +%Y%m%dT%H%M%S)-$RANDOM-$RANDOM"
+measure_token_file="$measure_lock.token-$measure_token"
 wait_for_measurement() {
   while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do
     if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
@@ -40,11 +41,26 @@ wait_for_measurement() {
     sleep 15
   done
 }
+publish_measure_lock() {
+  (
+    flock -x 9 || exit
+    ln -T -- "$measure_token_file" "$measure_lock"
+  ) 9>> "$measure_lock.guard"
+}
+remove_measure_lock() {
+  (
+    flock -x 9 || exit
+    if [[ -f "$measure_lock" && ! -L "$measure_lock" ]] && [[ "$(cat "$measure_lock")" == "$measure_token" ]]; then
+      rm -f -- "$measure_lock"
+    fi
+  ) 9>> "$measure_lock.guard"
+}
 acquire_measure_lock() {
   mkdir -p "$(dirname "$measure_lock")"
+  (set -C; printf '%s\n' "$measure_token" > "$measure_token_file") || return
   while true; do
     wait_for_measurement || return
-    if (set -C; printf '%s\n' "$measure_token" > "$measure_lock") 2> "$out/lock-error.log"; then
+    if publish_measure_lock 2> "$out/lock-error.log"; then
       return 0
     fi
     if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
@@ -81,9 +97,8 @@ cleanup() {
   fi
   if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || cleanup_status=$?
-  if [[ -f "$measure_lock" && ! -L "$measure_lock" ]] && [[ "$(cat "$measure_lock")" == "$measure_token" ]]; then
-    rm -f "$measure_lock" || cleanup_status=$?
-  fi
+  remove_measure_lock || cleanup_status=$?
+  rm -f -- "$measure_token_file" || cleanup_status=$?
   if (( status != 0 )); then return "$status"; fi
   return "$cleanup_status"
 }

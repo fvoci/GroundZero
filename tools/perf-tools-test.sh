@@ -39,17 +39,20 @@ cleanup_dead_monitor() {
   cd "$1"
   out=$2
   # Evaluate the real cleanup function with a recording Compose stand-in.
-  cleanup_source=$(awk '/^cleanup\(\) \{$/ {copy=1} copy {print} copy && /^}$/ {exit}' tools/measure-perf.sh)
-  test -n "$cleanup_source"
+  for name in remove_measure_lock cleanup; do
+    cleanup_source=$(awk -v name="$name" '$0 == name "() {" {copy=1} copy {print} copy && /^}$/ {exit}' tools/measure-perf.sh)
+    test -n "$cleanup_source"
+    eval "$cleanup_source"
+  done
   server_pid=
   measure_lock="$out/dead-monitor.lock"
   measure_token="cleanup-test-$$-$RANDOM"
+  measure_token_file="$measure_lock.token"
   sleep 0 &
   monitor_pid=$!
   wait "$monitor_pid"
   fake_compose() { printf '%s\n' "$*" > "$out/compose-called"; }
   compose=(fake_compose)
-  eval "$cleanup_source"
   cleanup
   test "$(cat "$out/compose-called")" = 'down --volumes'
 CLEANUP
