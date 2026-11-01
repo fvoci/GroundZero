@@ -31,6 +31,16 @@ async fn authority(conn: &mut PgConnection) -> Result<Value> {
           AND NOT pg_has_role(current_user, oid, 'SET')))").await
 }
 
+// Omit only planner statistics and freeze horizons. Derive lazy existence flags from
+// authoritative rows so VACUUM cannot change them; retain the actual structural facts.
+// https://www.postgresql.org/docs/17/catalog-pg-class.html
+const RELATION_ROW: &str = "(to_jsonb(c) - 'relpages' - 'reltuples' - 'relallvisible'
+    - 'relallfrozen' - 'relfrozenxid' - 'relminmxid') || jsonb_build_object(
+    'relhasindex', EXISTS (SELECT FROM pg_index WHERE indrelid=c.oid),
+    'relhasrules', EXISTS (SELECT FROM pg_rewrite WHERE ev_class=c.oid),
+    'relhastriggers', EXISTS (SELECT FROM pg_trigger WHERE tgrelid=c.oid),
+    'relhassubclass', EXISTS (SELECT FROM pg_inherits WHERE inhparent=c.oid))";
+
 async fn objects(conn: &mut PgConnection) -> Result<Value> {
     let mut objects = serde_json::Map::new();
     // Include definitions, owners, ACLs, columns, policies, constraints and defaults.
@@ -47,9 +57,25 @@ async fn objects(conn: &mut PgConnection) -> Result<Value> {
         "pg_policy",
         "pg_default_acl",
     ] {
-        let rows = scalar(conn, &format!("{SCOPE} SELECT coalesce(jsonb_agg(to_jsonb(c) ORDER BY to_jsonb(c)::text), '[]')
-            FROM {catalog} c WHERE EXISTS (SELECT FROM scope s WHERE s.classid = '{catalog}'::regclass
-            AND s.objid = {})", if catalog == "pg_attribute" { "c.attrelid" } else { "c.oid" })).await?;
+        let row = if catalog == "pg_class" {
+            RELATION_ROW
+        } else {
+            "to_jsonb(c)"
+        };
+        let (class, key) = if catalog == "pg_attribute" {
+            ("pg_class", "c.attrelid")
+        } else {
+            (catalog, "c.oid")
+        };
+        let rows = scalar(
+            conn,
+            &format!(
+                "{SCOPE} SELECT coalesce(jsonb_agg(({row}) ORDER BY ({row})::text), '[]')
+            FROM {catalog} c WHERE EXISTS (SELECT FROM scope s WHERE s.classid = '{class}'::regclass
+            AND s.objid = {key})"
+            ),
+        )
+        .await?;
         objects.insert(catalog.to_owned(), rows);
     }
     Ok(Value::Object(objects))

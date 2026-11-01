@@ -1,6 +1,7 @@
 //! 승인 목록 지문을 사용하는 일회성 Cloud 시험 DB 재설치. 원시 오류·식별자는 출력하지 않는다.
 
 mod catalog;
+mod catalog_tests;
 pub mod fixture;
 mod inventory;
 mod target;
@@ -152,9 +153,11 @@ fn run_with(
         }
         result
     })();
-    if result.is_ok() {
-        report["status"] = json!("PASS");
-    }
+    finish_report(report, result)
+}
+
+fn finish_report(mut report: Value, result: Result<()>) -> (Value, i32) {
+    report["status"] = json!(if result.is_ok() { "PASS" } else { "FAIL" });
     // Deliberately discard every raw error: driver, OS, process and input errors may carry identities.
     let code = i32::from(result.is_err());
     (report, code)
@@ -184,6 +187,44 @@ pub fn rejected_arguments() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_inspect_cannot_keep_a_successful_inventory_status() {
+        for reason in ["close_failed", "certificate_cleanup_failed"] {
+            let inventory = json!({"status": "PASS", "fingerprint": "approved-candidate"});
+            let (report, code) = finish_report(inventory, Err(anyhow::anyhow!(reason)));
+            assert_eq!(code, 1);
+            assert_eq!(report["status"], "FAIL");
+            assert!(!report.to_string().contains(reason));
+        }
+    }
+
+    #[test]
+    fn timed_out_inspect_cannot_keep_a_successful_inventory_status() -> Result<()> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let mut report = json!({"status": "FAIL"});
+        let result: Result<()> = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_millis(1), async {
+                report = json!({"status": "PASS", "fingerprint": "approved-candidate"});
+                std::future::pending::<Result<()>>().await
+            })
+            .await?
+        });
+        let (report, code) = finish_report(report, result);
+        assert_eq!(code, 1);
+        assert_eq!(report["status"], "FAIL");
+        Ok(())
+    }
+
+    #[test]
+    fn successful_inspect_retains_its_inventory() {
+        let inventory = json!({"status": "PASS", "fingerprint": "approved-candidate"});
+        let (report, code) = finish_report(inventory.clone(), Ok(()));
+        assert_eq!(code, 0);
+        assert_eq!(report, inventory);
+    }
 
     #[test]
     fn approval_must_match_and_blocked_inventory_never_proceeds() {

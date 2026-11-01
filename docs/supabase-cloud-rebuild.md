@@ -52,6 +52,8 @@
 | `verify`  | 같은 빌드에 내장한 10개 SQL 파일의 SQLx SHA-384 체크섬·버전·성공 여부를 10/10 대조. 실제 `fvoci_app` 로그인으로 합성 사용자·조직·공간·문서의 CRUD·거부·공간 격리·연결 문맥을 검사하고 전체 합성 트랜잭션을 ROLLBACK                                                           | `checksums=10/10`, 앱 로그인·CRUD·RLS·거부·문맥 검사와 합성 정리 모두 PASS                                   |
 
 조사의 `status=PASS`는 조사 성공이다. `can_rebuild=false`이면 다음 단계는 금지다.
+지문은 열 정의를 포함한다. ANALYZE·autovacuum으로 바뀌는 통계·동결 진행 값은 제외하고,
+늦게 정리되는 객체 존재 플래그는 실제 카탈로그 행에서 계산한다. 열 이름·타입·길이와 실제 인덱스 변화는 계속 감지한다.
 공유 의존이 있으면 후보 전체를 `included=false`로 제외한다. 외부 스키마의 자동 삭제 파티션도 차단한다.
 `pg_depend`의 자동·내부 의존은 RESTRICT여도 제거될 수 있으므로 이 구분을 별도로 검사한다.
 [PostgreSQL 의존 카탈로그](https://www.postgresql.org/docs/17/catalog-pg-depend.html),

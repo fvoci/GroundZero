@@ -5,7 +5,7 @@ use sqlx::postgres::PgConnectOptions;
 use sqlx::{ConnectOptions, Connection, PgConnection};
 use xshell::cmd;
 
-use super::{Inventory, Target, install, verify};
+use super::{Inventory, Target, catalog_tests, install, verify};
 use crate::compose::{self, Compose, DbUrls, Env};
 
 const OLD: &str = "CREATE ROLE fvoci_app LOGIN NOSUPERUSER NOCREATEROLE NOBYPASSRLS;
@@ -209,6 +209,7 @@ async fn cases(root: &Path, target: &Target) -> Result<()> {
         "cloud fixture requires a fresh isolated test PostgreSQL cluster"
     );
     sql(&mut admin, OLD).await?;
+    catalog_tests::run(&mut admin, &target.binding).await?;
     failure_tests(&mut admin, &target.binding).await?;
     let restricted = restricted_admin(&mut admin, target).await?;
     let mut operator = PgConnection::connect_with(&restricted.admin).await?;
@@ -304,6 +305,9 @@ async fn restricted_admin(conn: &mut PgConnection, target: &Target) -> Result<Ta
 }
 
 async fn verification_failures(admin: &mut PgConnection, target: &Target) -> Result<()> {
+    // The fresh fixture must contain exactly the source baseline before and after tampering,
+    // so subsequent negative checks cannot pass because of unrelated history corruption.
+    verify::checksums(admin).await?;
     // Tampered SQLx history must fail; restore the test row only after the refusal assertion.
     let checksum: Vec<u8> =
         sqlx::query_scalar("SELECT checksum FROM fvoci._sqlx_migrations ORDER BY version LIMIT 1")
@@ -319,6 +323,7 @@ async fn verification_failures(admin: &mut PgConnection, target: &Target) -> Res
         .bind(checksum)
         .execute(&mut *admin)
         .await?;
+    verify::checksums(admin).await?;
     sql(admin, "GRANT USAGE ON SCHEMA fvoci TO anon").await?;
     ensure!(
         verify::run(target).await.is_err(),
