@@ -23,16 +23,25 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    # release-image와 같은 무료 네이티브 러너에서 각각 빌드한다. 두 빌드가 끝난 뒤에만 SHA 태그를 붙인다.
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
-    # 게시 권한은 이 job에만 둔다.
+    # 게시 권한은 플랫폼 이미지와 manifest를 게시하는 job에만 둔다.
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -44,13 +53,66 @@ jobs:
         with:
           context: .
           file: deploy/docker/dev.Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ github.sha }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - run: |
-          echo "image=${IMAGE}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          cache-from: type=gha,scope=ci-base-${{ matrix.runner }}
+          cache-to: type=gha,mode=max,scope=ci-base-${{ matrix.runner }}
+      - name: Keep the platform digest for the manifest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p digests
+          touch "digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-base-digest-${{ matrix.runner }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      # CI_BASE_IMAGE_DIGEST에 쓸 값은 플랫폼별 digest가 아니라 이 manifest list digest다.
+      digest: ${{ steps.manifest.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # 기존 호스트 job처럼 rust-toolchain.toml을 정본으로 쓰고 그 판·구성요소를 명시적으로 설치한다.
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          prefix-key: v1-rust
+      # build.rs・proc macro 실행을 GHCR 자격 증명 주입 전에 끝낸다.
+      - name: Build xtask before registry login
+        run: cargo build --locked --package xtask
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: digests
+          pattern: ci-base-digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the manifest list
+        id: manifest
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          digest=$(target/debug/xtask ci-base-manifest --image "$IMAGE" --tag "$SOURCE_SHA" --digests-dir digests)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE@$digest (linux/amd64, linux/arm64; CI_BASE_IMAGE_DIGEST=$digest)" >> "$GITHUB_STEP_SUMMARY"

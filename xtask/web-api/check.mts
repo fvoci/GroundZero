@@ -281,25 +281,31 @@ export function checkUsage(
         : checker.getSymbolAtLocation(node);
     return found ? unalias(found) : undefined;
   }
-  function parameterWrites(
-    fn: ts.FunctionLikeDeclaration,
-    parameters: readonly ts.ParameterDeclaration[] = fn.parameters,
-  ): string[] {
-    const watched = new Set(
-      parameters.flatMap((parameter) => {
-        const found = symbol(parameter.name);
-        return found ? [found] : [];
-      }),
+  function globalIdentifier(node: ts.Node, name: string): boolean {
+    if (!ts.isIdentifier(node) || node.text !== name) return false;
+    const found = checker.getSymbolAtLocation(node);
+    if (!found) return true; // Browser globals have no declarations in the virtual program.
+    return (
+      (found.flags & ts.SymbolFlags.Alias) === 0 &&
+      !found.valueDeclaration &&
+      found === checker.resolveName(name, undefined, ts.SymbolFlags.Value, false)
     );
-    const writes: string[] = [];
+  }
+  function symbolWrites(root: ts.Node): Set<ts.Symbol> {
+    const writes = new Set<ts.Symbol>();
     function assigned(node: ts.Node): void {
       if (ts.isIdentifier(node)) {
-        const found = symbol(node);
-        if (found && watched.has(found)) writes.push(node.text);
+        // A var redeclaration can have a distinct declaration symbol while
+        // reads still resolve to the function/parameter it overwrites.
+        const found = checker.resolveName(node.text, node, ts.SymbolFlags.Value, false);
+        if (found) writes.add(unalias(found));
       } else if (ts.isShorthandPropertyAssignment(node)) {
         const found = checker.getShorthandAssignmentValueSymbol(node);
-        if (found && watched.has(unalias(found))) writes.push(node.name.text);
-      } else if (ts.isPropertyAssignment(node)) assigned(node.initializer);
+        if (found) writes.add(unalias(found));
+      } else if (ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
+        node.elements.forEach(assigned);
+      } else if (ts.isBindingElement(node)) assigned(node.name);
+      else if (ts.isPropertyAssignment(node)) assigned(node.initializer);
       else if (ts.isArrayLiteralExpression(node)) node.elements.forEach(assigned);
       else if (ts.isObjectLiteralExpression(node)) node.properties.forEach(assigned);
       else if (
@@ -310,27 +316,39 @@ export function checkUsage(
         assigned(node.expression);
       else if (ts.isBinaryExpression(node)) assigned(node.left); // Destructuring defaults.
     }
-    if (fn.body)
-      walk(fn.body, (node) => {
-        if (
-          ts.isBinaryExpression(node) &&
-          node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-          node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-        )
-          assigned(node.left);
-        if (
-          (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
-          (node.operator === ts.SyntaxKind.PlusPlusToken ||
-            node.operator === ts.SyntaxKind.MinusMinusToken)
-        )
-          assigned(node.operand);
-        if (
-          (ts.isForOfStatement(node) || ts.isForInStatement(node)) &&
-          !ts.isVariableDeclarationList(node.initializer)
-        )
-          assigned(node.initializer);
-      });
-    return [...new Set(writes)];
+    walk(root, (node) => {
+      if (ts.isVariableDeclaration(node) && node.initializer) assigned(node.name);
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+        node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+      )
+        assigned(node.left);
+      if (
+        (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+        (node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken)
+      )
+        assigned(node.operand);
+      if (ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+        if (ts.isVariableDeclarationList(node.initializer))
+          node.initializer.declarations.forEach((declaration) => {
+            assigned(declaration.name);
+          });
+        else assigned(node.initializer);
+      }
+    });
+    return writes;
+  }
+  function parameterWrites(
+    fn: ts.FunctionLikeDeclaration,
+    parameters: readonly ts.ParameterDeclaration[] = fn.parameters,
+  ): string[] {
+    const writes = fn.body ? symbolWrites(fn.body) : new Set<ts.Symbol>();
+    return parameters.flatMap((parameter) => {
+      const found = symbol(parameter.name);
+      return found && writes.has(found) ? [found.name] : [];
+    });
   }
   // Only the entry kinds accepted in the #250 scope decision are traced.
   function capability(node: ts.Node, seen = new Set<ts.Symbol>()): string | undefined {
@@ -341,10 +359,7 @@ export function checkUsage(
     )
       return capability(node.expression, seen);
     const found = symbol(node);
-    if (
-      ts.isIdentifier(node) &&
-      (!found || (node.text === 'globalThis' && !found.valueDeclaration))
-    ) {
+    if (ts.isIdentifier(node) && globalIdentifier(node, node.text)) {
       if (node.text === 'fetch' || node.text === 'WebSocket') return node.text;
       if (['window', 'globalThis', 'self', 'document'].includes(node.text)) return 'global';
       if (node.text === 'location') return 'location';
@@ -406,20 +421,56 @@ export function checkUsage(
   function callable(
     node: ts.Node,
   ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | undefined {
-    const declaration = symbol(node)?.valueDeclaration;
-    const value =
-      declaration && ts.isVariableDeclaration(declaration)
-        ? ts.isVariableDeclarationList(declaration.parent) &&
-          (declaration.parent.flags & ts.NodeFlags.Const) !== 0
-          ? declaration.initializer
-          : undefined
-        : declaration;
-    return value &&
-      (ts.isFunctionDeclaration(value) ||
-        ts.isFunctionExpression(value) ||
-        ts.isArrowFunction(value))
-      ? value
-      : undefined;
+    const origin = node;
+    const where = (): string => {
+      const file = origin.getSourceFile();
+      const line = file.getLineAndCharacterOfPosition(origin.getStart()).line + 1;
+      return `${filename(file)}:${String(line)}`;
+    };
+    const seen = new Set<ts.Node>();
+    let hops = 0;
+    for (;;) {
+      if (seen.has(node)) return undefined;
+      seen.add(node);
+      if (
+        ts.isParenthesizedExpression(node) ||
+        ts.isAsExpression(node) ||
+        ts.isSatisfiesExpression(node)
+      ) {
+        node = node.expression;
+        continue;
+      }
+      if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return node;
+      const found = symbol(node);
+      const declaration = found?.valueDeclaration;
+      if (declaration && ts.isVariableDeclaration(declaration)) {
+        if (
+          !declaration.initializer ||
+          !ts.isVariableDeclarationList(declaration.parent) ||
+          (declaration.parent.flags & ts.NodeFlags.Const) === 0
+        )
+          return undefined;
+        let value = declaration.initializer;
+        while (
+          ts.isParenthesizedExpression(value) ||
+          ts.isAsExpression(value) ||
+          ts.isSatisfiesExpression(value)
+        )
+          value = value.expression;
+        if (!ts.isArrowFunction(value) && !ts.isFunctionExpression(value) && ++hops > 64)
+          throw new Error(
+            `${where()}: callable alias chain exceeds 64 hops: not statically resolvable`,
+          );
+        node = value;
+        continue;
+      }
+      if (declaration && ts.isFunctionDeclaration(declaration)) {
+        if (writes.has(found))
+          throw new Error(`${where()}: URL/navigation function is written: ${found.name}`);
+        return declaration;
+      }
+      return undefined;
+    }
   }
   function exitAt(node: ts.Node): Exit | undefined {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
@@ -492,6 +543,7 @@ export function checkUsage(
     return undefined;
   }
   const sources = program.getSourceFiles();
+  const writes = new Set(sources.flatMap((file) => [...symbolWrites(file)]));
   const callers = new Map<ts.FunctionLikeDeclaration, ts.CallExpression[]>();
   for (const file of sources) {
     walk(file, (node) => {
@@ -525,7 +577,33 @@ export function checkUsage(
     if (!forwarded.has(row)) problems.push(`stale forwarder: ${row.file}:${row.name}`);
   }
 
-  type Bindings = Map<ts.Symbol, ts.Expression | string[]>;
+  const unresolvedDefaultArgument = Symbol('unresolved default argument');
+  type Binding = ts.Expression | string[] | typeof unresolvedDefaultArgument;
+  type Bindings = Map<ts.Symbol, Binding>;
+  class UnsupportedDefaultArgument extends Error {}
+  function bindingValue(binding: Binding): ts.Expression | string[] {
+    if (binding === unresolvedDefaultArgument)
+      throw new UnsupportedDefaultArgument('default argument is not statically resolvable');
+    return binding;
+  }
+  function parameterArgument(
+    parameter: ts.ParameterDeclaration,
+    argument: ts.Expression | undefined,
+  ): Binding | undefined {
+    // Keep the parent's omitted-argument handling. Never infer whether an
+    // explicit nonliteral selects a default; only pass plain literal values.
+    // A query-only parameter is never read by operation-path evaluation.
+    if (!parameter.initializer || !argument) return argument ?? parameter.initializer;
+    if (
+      ts.isStringLiteralLike(argument) ||
+      ts.isNumericLiteral(argument) ||
+      [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(
+        argument.kind,
+      )
+    )
+      return argument;
+    return unresolvedDefaultArgument;
+  }
   function* navigationBindings(node: ts.Node, seen = new Set<ts.Node>()): Generator<Bindings> {
     for (let parent = node.parent; !ts.isSourceFile(parent); parent = parent.parent) {
       if (
@@ -552,7 +630,7 @@ export function checkUsage(
           parent.parameters.forEach((parameter, index) => {
             if (!ts.isIdentifier(parameter.name) || written.includes(parameter.name.text)) return;
             const found = symbol(parameter.name);
-            const argument = site.arguments[index] ?? parameter.initializer;
+            const argument = parameterArgument(parameter, site.arguments[index]);
             if (found && argument && !site.arguments.slice(0, index + 1).some(ts.isSpreadElement))
               bindings.set(found, argument);
           });
@@ -572,24 +650,16 @@ export function checkUsage(
     seen = new Set(seen).add(node);
     const found = symbol(node);
     const binding = found ? bindings.get(found) : undefined;
-    if (binding) return Array.isArray(binding) ? binding : values(binding, seen, bindings);
+    if (binding) {
+      const value = bindingValue(binding);
+      return Array.isArray(value) ? value : values(value, seen, bindings);
+    }
     const evaluate = (expression: ts.Expression | undefined): string[] =>
       values(expression, seen, bindings);
     if (ts.isStringLiteralLike(node)) return [node.text];
-    if (
-      node.kind === ts.SyntaxKind.NullKeyword ||
-      (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0
-    )
-      return [''];
-    if (
-      [
-        'window.location.host',
-        'location.host',
-        'window.location.origin',
-        'location.origin',
-      ].includes(node.getText())
-    )
-      return [node.getText().endsWith('origin') ? 'https://fvoci.invalid' : 'fvoci.invalid'];
+    if (node.kind === ts.SyntaxKind.NullKeyword || isUndefined(node, bindings)) return [''];
+    if (browserLocationProperty(node, 'host')) return ['fvoci.invalid'];
+    if (browserLocationProperty(node, 'origin')) return ['https://fvoci.invalid'];
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -635,8 +705,9 @@ export function checkUsage(
         return evaluate(node.arguments[0]).map((value) => encodeURIComponent(value));
       } catch (error: unknown) {
         if (
-          error instanceof Error &&
-          /URL helper must be const|URL function parameter is written/.test(error.message)
+          error instanceof UnsupportedDefaultArgument ||
+          (error instanceof Error &&
+            /URL helper must be const|URL function parameter is written/.test(error.message))
         )
           throw error;
         /* Runtime encoded path parameters remain a single symbolic segment. */
@@ -653,20 +724,13 @@ export function checkUsage(
       ) {
         throw new Error(`URL helper must be const: ${node.expression.getText()}`);
       }
-      const fn =
-        declaration && ts.isVariableDeclaration(declaration)
-          ? declaration.initializer
-          : declaration;
-      if (
-        fn &&
-        (ts.isFunctionDeclaration(fn) || ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) &&
-        fn.body
-      ) {
+      const fn = callable(node.expression);
+      if (fn?.body) {
         if (parameterWrites(fn).length > 0) throw new Error('URL function parameter is written');
         const argumentsBySymbol = new Map(bindings);
         fn.parameters.forEach((parameter, index) => {
           const found = symbol(parameter.name);
-          const argument = node.arguments[index] ?? parameter.initializer;
+          const argument = parameterArgument(parameter, node.arguments[index]);
           if (found && argument) argumentsBySymbol.set(found, argument);
         });
         const returned: ts.Expression[] = [];
@@ -715,8 +779,36 @@ export function checkUsage(
 
   // Undefined denotes an absent method property, so a spread without method does
   // not overwrite an earlier method. An explicit method: undefined means GET.
-  function isUndefined(node: ts.Expression): boolean {
-    return (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) !== 0;
+  function isUndefined(
+    node: ts.Expression,
+    bindings: Bindings = new Map(),
+    seen = new Set<ts.Node>(),
+  ): boolean {
+    if (seen.has(node)) return false;
+    seen = new Set(seen).add(node);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return isUndefined(node.expression, bindings, seen);
+    const found = symbol(node);
+    const binding = found ? bindings.get(found) : undefined;
+    if (binding) {
+      const value = bindingValue(binding);
+      return !Array.isArray(value) && isUndefined(value, bindings, seen);
+    }
+    if (ts.isVoidExpression(node)) return true;
+    const declaration = found?.valueDeclaration;
+    if (
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    )
+      return isUndefined(declaration.initializer, bindings, seen);
+    return globalIdentifier(node, 'undefined');
   }
   function fetchMethods(
     node: ts.Expression | undefined,
@@ -815,10 +907,95 @@ export function checkUsage(
     });
     return found;
   }
+
+  // Keep origin provenance separate from values(): a literal fvoci.invalid is
+  // not the browser host. Unknown path parts are harmless here only after '/'.
+  const socketHost = Symbol('browser host');
+  const socketScheme = Symbol('browser WebSocket scheme');
+  const opaqueSocketPart = Symbol('unknown URL part');
+  function browserLocationProperty(node: ts.Node, name: string): boolean {
+    if (!ts.isPropertyAccessExpression(node) || node.name.text !== name) return false;
+    const location = node.expression;
+    if (ts.isIdentifier(location)) return globalIdentifier(location, 'location');
+    if (!ts.isPropertyAccessExpression(location) || location.name.text !== 'location') return false;
+    const owner = location.expression;
+    return (
+      ts.isIdentifier(owner) &&
+      ['window', 'globalThis', 'self', 'document'].includes(owner.text) &&
+      globalIdentifier(owner, owner.text)
+    );
+  }
+  function socketParts(node: ts.Expression, seen = new Set<ts.Node>()): (string | symbol)[] {
+    if (seen.has(node)) return [opaqueSocketPart];
+    seen = new Set(seen).add(node);
+    const parts = (expression: ts.Expression): (string | symbol)[] => socketParts(expression, seen);
+    if (
+      ts.isParenthesizedExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression(node)
+    )
+      return parts(node.expression);
+    if (ts.isStringLiteralLike(node)) return [node.text];
+    if (browserLocationProperty(node, 'host')) return [socketHost];
+    if (
+      ts.isConditionalExpression(node) &&
+      ts.isBinaryExpression(node.condition) &&
+      node.condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken &&
+      browserLocationProperty(node.condition.left, 'protocol') &&
+      ts.isStringLiteralLike(node.condition.right) &&
+      ts.isStringLiteralLike(node.whenTrue) &&
+      ts.isStringLiteralLike(node.whenFalse)
+    ) {
+      const protocol = node.condition.right.text;
+      if (
+        (protocol === 'https:' && node.whenTrue.text === 'wss' && node.whenFalse.text === 'ws') ||
+        (protocol === 'http:' && node.whenTrue.text === 'ws' && node.whenFalse.text === 'wss')
+      )
+        return [socketScheme];
+    }
+    if (ts.isTemplateExpression(node))
+      return [
+        node.head.text,
+        ...node.templateSpans.flatMap((span) => [...parts(span.expression), span.literal.text]),
+      ];
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken)
+      return [...parts(node.left), ...parts(node.right)];
+    const declaration = symbol(node)?.valueDeclaration;
+    if (
+      declaration &&
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0
+    )
+      return parts(declaration.initializer);
+    return [opaqueSocketPart];
+  }
+  function sameSocketOrigin(node: ts.Expression | undefined): boolean {
+    if (!node) return false;
+    const parts: (string | symbol)[] = [];
+    for (const part of socketParts(node)) {
+      if (part === '') continue;
+      const previous = parts.at(-1);
+      if (typeof previous === 'string' && typeof part === 'string')
+        parts[parts.length - 1] = previous + part;
+      else parts.push(part);
+    }
+    return (
+      parts[0] === socketScheme &&
+      parts[1] === '://' &&
+      parts[2] === socketHost &&
+      (parts.length === 3 || (typeof parts[3] === 'string' && /^[/?#]/.test(parts[3])))
+    );
+  }
   function inspect(exit: Exit, node: ts.Node, file: ts.SourceFile, strict = false): void {
     const line = exit.line ?? file.getLineAndCharacterOfPosition(node.getStart()).line + 1;
     const location = filename(file) + ':' + String(line);
     try {
+      if (exit.kind === 'WebSocket' && !sameSocketOrigin(exit.url))
+        throw new Error(
+          'unlisted WebSocket origin: browser scheme and host are not statically proven',
+        );
       let paths: string[] = [];
       const contexts =
         exit.kind === 'link' || exit.kind === 'location' ? navigationBindings(node) : [new Map()];
@@ -826,7 +1003,13 @@ export function checkUsage(
         try {
           paths.push(...values(exit.url, new Set(), bindings));
         } catch (error: unknown) {
-          if (strict || exit.kind === 'fetch' || exit.kind === 'WebSocket' || apiHint(exit.url))
+          if (
+            strict ||
+            error instanceof UnsupportedDefaultArgument ||
+            exit.kind === 'fetch' ||
+            exit.kind === 'WebSocket' ||
+            apiHint(exit.url)
+          )
             throw error;
           // Opaque runtime app/content links remain outside the check. Keep
           // checking other callers so an unknown value cannot hide a literal.

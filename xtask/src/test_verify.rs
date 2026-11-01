@@ -191,7 +191,7 @@ pub fn resources_absent(sh: &Shell, project: &str) -> Result<()> {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
+    use std::os::unix::fs::{MetadataExt, symlink};
 
     use super::*;
     use crate::compose::tests::scratch_root;
@@ -241,13 +241,12 @@ mod tests {
         let uid = metadata.uid();
         let gid = metadata.gid().wrapping_add(1);
         let id = root.join("id");
-        std::fs::write(
+        crate::test_fixture::write_executable(
             &id,
-            format!(
+            &format!(
                 "#!/bin/sh\ncase \"$1\" in -u) echo {uid};; -g|-G) echo {gid};; *) exit 42;; esac\n"
             ),
         )?;
-        std::fs::set_permissions(&id, std::fs::Permissions::from_mode(0o755))?;
         let sh = Shell::new()?;
         let _path = sh.push_env("PATH", &root);
         let result = ownership(&root, &sh);
@@ -292,7 +291,7 @@ mod tests {
     fn resource_check_includes_stopped_containers_and_scopes_every_query() -> Result<()> {
         let root = scratch_root()?;
         let docker = root.join("docker");
-        std::fs::write(
+        crate::test_fixture::write_executable(
             &docker,
             r#"#!/bin/sh
 case "$*" in
@@ -304,7 +303,6 @@ case "$*" in
 esac
 "#,
         )?;
-        std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o755))?;
         let sh = Shell::new()?;
         sh.change_dir(&root);
         let _path = sh.push_env("PATH", &root);

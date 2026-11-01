@@ -25,8 +25,50 @@ check_web_inputs() {
 if [[ "$mode" == screens ]]; then
   check_web_inputs
 fi
+mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf-${mode}-${count}-XXXXXX")
 project="fvoci-perf-w1-${mode}-${count}-$$"
+measure_lock="$HOME/.cache/fvoci-measure.lock"
+# Keep the private token on the marker's filesystem for atomic hard-link publication.
+measure_token="$$-$(date -u +%Y%m%dT%H%M%S)-$RANDOM-$RANDOM"
+measure_token_file="$measure_lock.token-$measure_token"
+wait_for_measurement() {
+  while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do
+    if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
+      printf 'invalid measurement lock path\n' >&2
+      return 1
+    fi
+    sleep 15
+  done
+}
+publish_measure_lock() {
+  (
+    flock -x 9 || exit
+    ln -T -- "$measure_token_file" "$measure_lock"
+  ) 9>> "$measure_lock.guard"
+}
+remove_measure_lock() {
+  (
+    flock -x 9 || exit
+    if [[ -f "$measure_lock" && ! -L "$measure_lock" ]] && [[ "$(cat "$measure_lock")" == "$measure_token" ]]; then
+      rm -f -- "$measure_lock"
+    fi
+  ) 9>> "$measure_lock.guard"
+}
+acquire_measure_lock() {
+  mkdir -p "$(dirname "$measure_lock")"
+  (set -C; printf '%s\n' "$measure_token" > "$measure_token_file") || return
+  while true; do
+    wait_for_measurement || return
+    if publish_measure_lock 2> "$out/lock-error.log"; then
+      return 0
+    fi
+    if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
+      cat "$out/lock-error.log" >&2
+      return 1
+    fi
+  done
+}
 overlay="$out/postgres.yaml"
 if [[ "$mode" == screens ]]; then
   cat > "$overlay" <<'YAML'
@@ -40,49 +82,39 @@ fi
 compose=(docker compose -p "$project" -f deploy/compose.test.yaml -f "$overlay")
 server_pid=
 monitor_pid=
-measure_lock="$HOME/.cache/fvoci-measure.lock"
-owns_measure_lock=false
 cleanup() {
   local status=$? cleanup_status=0
-  trap - EXIT
   if [[ -n "$server_pid" ]]; then
     touch "$out/STOP"
     wait "$server_pid" || true
   fi
   if [[ -n "$monitor_pid" ]]; then kill "$monitor_pid" 2>/dev/null || true; wait "$monitor_pid" || true; fi
   "${compose[@]}" down --volumes > "$out/cleanup.log" 2>&1 || cleanup_status=$?
-  if "$owns_measure_lock"; then rm -f "$measure_lock" || cleanup_status=$?; fi
-  if (( status == 0 && cleanup_status != 0 )); then status=$cleanup_status; fi
-  exit "$status"
+  remove_measure_lock || cleanup_status=$?
+  rm -f -- "$measure_token_file" || cleanup_status=$?
+  if (( status != 0 )); then return "$status"; fi
+  return "$cleanup_status"
 }
-trap cleanup EXIT
+exit_cleanup() {
+  local original_status=$? cleanup_status=0
+  trap - EXIT
+  cleanup || cleanup_status=$?
+  if (( original_status != 0 )); then exit "$original_status"; fi
+  exit "$cleanup_status"
+}
+trap exit_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 printf '%s\n' "$out"
 git rev-parse HEAD > "$out/sha.txt"
-wait_for_measurement() {
-  while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do sleep 15; done
-}
+sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
+# Complete every build before opening the measurement window (#291).
 wait_for_measurement
-# Warm every executable before acquiring the sampling marker, including serve_t6.
-cargo build --release --locked -p fvoci-server --bin fvoci-server > "$out/build-server.log" 2>&1
-cargo test --release --locked -p fvoci-server --test it --no-run > "$out/build-it.log" 2>&1
+cargo build --release --locked -p fvoci-server > "$out/build-server.log" 2>&1
+wait_for_measurement
+cargo test --release --locked -p fvoci-server --test it --test screen_measure --no-run > "$out/build-tests.log" 2>&1
 if [[ "$mode" == screens ]]; then
-  cargo test --release --locked -p fvoci-server --test screen_measure --no-run > "$out/build-screen.log" 2>&1
-fi
-"${compose[@]}" up -d --wait postgres > "$out/compose.log" 2>&1
-port=$("${compose[@]}" port postgres 5432)
-export DATABASE_URL="postgres://fvoci_app:fvoci-test-app-password@$port/fvoci"
-export FVOCI_TEST_ADMIN_URL="postgres://fvoci:fvoci-test-password@$port/fvoci"
-export FVOCI_TEST_MIGRATION_URL="postgres://fvoci_migrator:fvoci-test-migrator-password@$port/fvoci"
-export FVOCI_MEASURE_DIR="$out"
-# Only the explicit test credentials from deploy/compose.test.yaml are used.
-export DATABASE_ADMIN_URL="$FVOCI_TEST_ADMIN_URL"
-export DATABASE_MIGRATION_URL="$FVOCI_TEST_MIGRATION_URL"
-export FVOCI_DB_MIGRATOR_PASSWORD=fvoci-test-migrator-password
-export FVOCI_DB_APP_PASSWORD=fvoci-test-app-password
-target/release/fvoci-server db bootstrap > "$out/bootstrap.log" 2>&1
-target/release/fvoci-server db migrate > "$out/migrate.log" 2>&1
-cargo test --release --locked -p fvoci-server --test it restore_measure::restore_measure_generate -- --ignored --exact --nocapture > "$out/generate.log" 2>&1
-if [[ "$mode" == screens ]]; then
+  wait_for_measurement
   web_inputs_before=$(check_web_inputs)
   pnpm --filter @fvoci/web run build > "$out/web-build.log" 2>&1
   check_web_inputs "$web_inputs_before"
@@ -91,19 +123,7 @@ if [[ "$mode" == screens ]]; then
   cp "$out/sha.txt" "$root/apps/web/dist/.perf-head"
   cp "$out/sha.txt" "$out/web-build-sha.txt"
 fi
-mkdir -p "$(dirname "$measure_lock")"
-while true; do
-  wait_for_measurement
-  if (set -o noclobber; : > "$measure_lock") 2> "$out/lock-error.log"; then
-    owns_measure_lock=true
-    printf '%s\n' "$project" > "$measure_lock"
-    break
-  fi
-  if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
-    cat "$out/lock-error.log" >&2
-    exit 1
-  fi
-done
+acquire_measure_lock
 build_state() {
   local state
   state=$(ps -eo comm,args | awk -f tools/perf-build-state.awk) || return 2
@@ -168,6 +188,22 @@ stop_monitor() {
   fi
 }
 wait_for_builds
+date -u +%FT%TZ > "$out/window-start.txt"
+"${compose[@]}" up -d --wait postgres > "$out/compose.log" 2>&1
+port=$("${compose[@]}" port postgres 5432)
+export DATABASE_URL="postgres://fvoci_app:fvoci-test-app-password@$port/fvoci"
+export FVOCI_TEST_ADMIN_URL="postgres://fvoci:fvoci-test-password@$port/fvoci"
+export FVOCI_TEST_MIGRATION_URL="postgres://fvoci_migrator:fvoci-test-migrator-password@$port/fvoci"
+export FVOCI_MEASURE_DIR="$out"
+# Only the explicit test credentials from deploy/compose.test.yaml are used.
+export DATABASE_ADMIN_URL="$FVOCI_TEST_ADMIN_URL"
+export DATABASE_MIGRATION_URL="$FVOCI_TEST_MIGRATION_URL"
+export FVOCI_DB_MIGRATOR_PASSWORD=fvoci-test-migrator-password
+export FVOCI_DB_APP_PASSWORD=fvoci-test-app-password
+target/release/fvoci-server db bootstrap > "$out/bootstrap.log" 2>&1
+target/release/fvoci-server db migrate > "$out/migrate.log" 2>&1
+cargo test --release --locked -p fvoci-server --test it restore_measure::restore_measure_generate -- --ignored --exact --nocapture > "$out/generate.log" 2>&1
+wait_for_builds
 monitor_phase=screen
 start_monitor
 if [[ "$mode" == rooms ]]; then
@@ -225,9 +261,10 @@ else
   psql_test -At -c "SELECT json_agg(s) FROM (SELECT queryid::text, calls, total_exec_time, mean_exec_time, rows, shared_blks_hit, shared_blks_read, query FROM pg_stat_statements WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) ORDER BY total_exec_time DESC LIMIT 40) s" > "$out/queries.json"
   actor=$(jq -r .user "$out/browser.json")
   item=$(jq -r .item "$out/browser.json")
+  task=$(jq -r .task "$out/browser.json")
   for repeat in 1 2 3; do
     workspace=$(jq -r .workspace "$out/browser.json")
-    psql_test -v actor="$actor" -v item="$item" -v workspace="$workspace" "${sql_variables[@]}" < tools/perf-db.sql > "$out/db-$repeat.log"
+    psql_test -v actor="$actor" -v item="$item" -v task="$task" -v workspace="$workspace" "${sql_variables[@]}" < tools/perf-db.sql > "$out/db-$repeat.log"
     psql_test -v actor="$actor" "${sql_variables[@]}" < tools/perf-home.sql > "$out/home-$repeat.log"
   done
   touch "$out/STOP"
@@ -237,6 +274,7 @@ else
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
   jq -f tools/perf-depth.jq "$out/screens.json" > "$out/depth.json"
 fi
+sha256sum -c "$out/sql-sha256.txt" > "$out/sql-unchanged.log"
 
 stop_monitor
 # Screen overlaps are preserved and replaced above. Other measurement phases still fail.
