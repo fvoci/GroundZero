@@ -1,7 +1,7 @@
 //! Global consumers in a fresh isolated cluster, including managed-trigger identity impostors.
 
 use super::{Inventory, Target};
-use anyhow::Result;
+use anyhow::{Result, ensure};
 use sqlx::{Connection, PgConnection};
 
 async fn sql(conn: &mut PgConnection, text: &str) -> Result<()> {
@@ -12,6 +12,7 @@ async fn sql(conn: &mut PgConnection, text: &str) -> Result<()> {
 pub(super) async fn run(target: &Target) -> Result<Vec<String>> {
     let mut conn = PgConnection::connect_with(&target.admin).await?;
     let mut failures = Vec::new();
+    failures.extend(partition_publications(&mut conn, target).await?);
     for definition in [
         "FOR ALL TABLES",
         "FOR TABLE fvoci.legacy",
@@ -71,5 +72,98 @@ pub(super) async fn run(target: &Target) -> Result<Vec<String>> {
     }
     sql(&mut conn,"DROP EVENT TRIGGER pgrst_ddl_watch; DROP FUNCTION extensions.pgrst_ddl_watch() RESTRICT; DROP SCHEMA extensions RESTRICT; DROP ROLE supabase_admin").await?;
     conn.close().await?;
+    Ok(failures)
+}
+
+async fn partition_publications(conn: &mut PgConnection, target: &Target) -> Result<Vec<String>> {
+    let mut failures = Vec::new();
+    for outside_root in [true, false] {
+        let (root, middle, leaf) = if outside_root {
+            (
+                "other_app.publication_root",
+                "other_app.publication_middle",
+                "fvoci.publication_leaf",
+            )
+        } else {
+            (
+                "fvoci.publication_root",
+                "other_app.publication_middle",
+                "other_app.publication_leaf",
+            )
+        };
+        sql(conn,&format!("CREATE TABLE {root}(id int) PARTITION BY RANGE(id);
+            CREATE TABLE {middle} PARTITION OF {root} FOR VALUES FROM(0) TO(100) PARTITION BY RANGE(id);
+            CREATE TABLE {leaf} PARTITION OF {middle} FOR VALUES FROM(0) TO(10);
+            INSERT INTO {root} VALUES(1)")).await?;
+        let owned = if outside_root { leaf } else { root };
+        sql(
+            conn,
+            &format!("ALTER TABLE {owned} OWNER TO fvoci_migrator"),
+        )
+        .await?;
+        let before = Inventory::read(conn, &target.binding).await?;
+        if outside_root {
+            ensure!(
+                !before.blocked,
+                "partition publication fixture blocked before publication: {}",
+                before.report["blockers"]
+            );
+        } else {
+            ensure!(
+                before.report["blockers"]["outside_automatic_objects"]
+                    .as_i64()
+                    .is_some_and(|n| n > 0),
+                "outside child is not protected before publication"
+            );
+        }
+        let schema = if outside_root { "other_app" } else { "fvoci" };
+        for definition in [
+            format!("FOR TABLE {root}"),
+            format!("FOR TABLES IN SCHEMA {schema}"),
+        ] {
+            for via_root in [true, false] {
+                sql(conn,&format!("CREATE PUBLICATION partition_publication {definition} WITH(publish_via_partition_root={via_root})")).await?;
+                if outside_root && via_root {
+                    let hidden:bool=sqlx::query_scalar("SELECT NOT EXISTS(SELECT FROM pg_publication_tables WHERE pubname='partition_publication' AND schemaname='fvoci')").fetch_one(&mut *conn).await?;
+                    ensure!(
+                        hidden,
+                        "via_root fixture does not hide the product descendant"
+                    );
+                }
+                let inventory = Inventory::read(conn, &target.binding).await?;
+                let publication = inventory.report["global_consumers"]["publications"]
+                    .as_array()
+                    .and_then(|items| items.iter().find(|p| p["name"] == "partition_publication"));
+                let covered = inventory.report["blockers"]["product_publications"]
+                    .as_i64()
+                    .is_some_and(|n| n > 0)
+                    && publication.is_some_and(|p| p["includes_product"] == true);
+                // Restore the fixture even if a regression permits the nested deletion.
+                let mut attempt = conn.begin().await?;
+                let refused = inventory
+                    .delete_schema(&mut attempt, &target.binding, &inventory.digest)
+                    .await
+                    .is_err();
+                attempt.rollback().await?;
+                if !covered || !refused {
+                    failures.push(format!("partition publication missed: outside_root={outside_root}, {definition}, via_root={via_root}, product_blocker={covered}, deletion_refused={refused}"));
+                }
+                let rows: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {leaf}"))
+                    .fetch_one(&mut *conn)
+                    .await?;
+                ensure!(
+                    rows == 1,
+                    "partition row was lost after refused/rolled-back deletion"
+                );
+                sql(conn, "DROP PUBLICATION partition_publication").await?;
+            }
+        }
+        sql(conn,&format!("DROP TABLE {leaf} RESTRICT; DROP TABLE {middle} RESTRICT; DROP TABLE {root} RESTRICT")).await?;
+    }
+    if failures.is_empty() {
+        println!(
+            "PASS cloud-rebuild partition publications: 8 direct/schema, both-direction, via_root true/false cases refused; rows preserved"
+        );
+    }
     Ok(failures)
 }

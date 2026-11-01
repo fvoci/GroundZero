@@ -85,6 +85,13 @@ enum 라벨, 주석, 인덱스·sequence·파티션 키 정의, 초기 ACL, 상�
 전역 `pg_event_trigger`와 `pg_publication`·`pg_publication_rel`·`pg_publication_namespace`, 확장된 게시 테이블 목록도
 동일 스냅숏의 지문에 넣고 조사 JSON의 `global_consumers`에 이름·판정을 출력한다. `FOR ALL TABLES`는 새 설치도
 자동 포함하므로 현재 제품 테이블이 없어도 차단한다. 직접·스키마 단위·파티션 확장으로 `fvoci`를 포함하는 publication도 차단한다.
+직접 관계와 게시 스키마의 테이블을 출발점으로 `pg_inherits`의 모든 자손을 재귀 조회하므로,
+외부 루트 아래 `fvoci` 파티션은 `publish_via_partition_root` 설정과 무관하게 차단한다.
+반대로 `fvoci` 루트 아래 외부 파티션도 publication 차단과 외부 자동 삭제 객체 차단을 모두 적용한다.
+게시 관계의 자손 집합·상속 연결·관련 namespace도 같은 조사 문의 지문에 포함한다.
+이는 [게시 정의의 암묵적 파티션 포함 규칙](https://www.postgresql.org/docs/17/sql-createpublication.html)을 따른다.
+[PostgreSQL의 게시 테이블 뷰](https://www.postgresql.org/docs/17/view-pg-publication-tables.html)는
+`publish_via_partition_root=true`일 때 루트만 표시하므로 그 뷰만으로 자손을 판단하지 않는다.
 다른 publication은 삭제하지 않고 정의를 승인 지문에 고정한다.
 
 활성 이벤트 트리거는 다음 관리형 명세에 정확히 맞는 것만 허용한다. 비활성(`D`)은 이름·정의를 남기고 허용한다.

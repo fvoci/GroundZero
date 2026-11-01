@@ -8,6 +8,13 @@ pub(super) const SQL:&str="WITH RECURSIVE handlers(oid) AS (
  SELECT evtfoid FROM pg_event_trigger
  UNION SELECT d.refobjid FROM pg_depend d JOIN handlers h ON d.objid=h.oid
  WHERE d.classid='pg_proc'::regclass AND d.refclassid='pg_proc'::regclass
+), publication_roots(pubid,relid) AS (
+ SELECT prpubid,prrelid FROM pg_publication_rel
+ UNION SELECT pn.pnpubid,c.oid FROM pg_publication_namespace pn JOIN pg_class c ON c.relnamespace=pn.pnnspid
+ WHERE c.relkind IN ('r','p')
+), publication_tree(pubid,relid) AS (
+ SELECT pubid,relid FROM publication_roots
+ UNION SELECT t.pubid,i.inhrelid FROM publication_tree t JOIN pg_inherits i ON i.inhparent=t.relid
 ) SELECT jsonb_build_object(
  'events',(SELECT coalesce(jsonb_agg(jsonb_build_object('definition',to_jsonb(e),
   'handler',to_jsonb(p),'schema',n.nspname,'result',pg_get_function_result(p.oid),
@@ -18,7 +25,7 @@ pub(super) const SQL:&str="WITH RECURSIVE handlers(oid) AS (
  'functions',(SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.oid),'[]') FROM pg_proc p JOIN handlers h ON h.oid=p.oid),
  'namespaces',(SELECT coalesce(jsonb_agg(to_jsonb(n) ORDER BY n.oid),'[]') FROM pg_namespace n WHERE oid IN
   (SELECT pronamespace FROM pg_proc JOIN handlers USING(oid) UNION SELECT pnnspid FROM pg_publication_namespace
-   UNION SELECT c.relnamespace FROM pg_publication_rel pr JOIN pg_class c ON c.oid=pr.prrelid)),
+   UNION SELECT c.relnamespace FROM publication_tree t JOIN pg_class c ON c.oid=t.relid)),
  'roles',(SELECT coalesce(jsonb_agg(to_jsonb(r)-'rolpassword' ORDER BY oid),'[]') FROM pg_roles r WHERE oid IN
   (SELECT evtowner FROM pg_event_trigger UNION SELECT proowner FROM pg_proc JOIN handlers USING(oid) UNION SELECT pubowner FROM pg_publication)),
  'dependencies',(SELECT coalesce(jsonb_agg(to_jsonb(d) ORDER BY to_jsonb(d)::text),'[]') FROM pg_depend d WHERE
@@ -30,9 +37,12 @@ pub(super) const SQL:&str="WITH RECURSIVE handlers(oid) AS (
  'publications',(SELECT coalesce(jsonb_agg(jsonb_build_object('definition',to_jsonb(p),'includes_product',p.puballtables
   OR EXISTS(SELECT FROM pg_publication_tables t WHERE t.pubname=p.pubname AND t.schemaname='fvoci')
   OR EXISTS(SELECT FROM pg_publication_namespace pn JOIN pg_namespace n ON n.oid=pn.pnnspid WHERE pn.pnpubid=p.oid AND n.nspname='fvoci')
-  OR EXISTS(SELECT FROM pg_publication_rel pr JOIN pg_class c ON c.oid=pr.prrelid WHERE pr.prpubid=p.oid AND c.relnamespace=to_regnamespace('fvoci'))) ORDER BY p.oid),'[]') FROM pg_publication p),
+  OR EXISTS(SELECT FROM publication_tree t JOIN pg_class c ON c.oid=t.relid WHERE t.pubid=p.oid AND c.relnamespace=to_regnamespace('fvoci'))) ORDER BY p.oid),'[]') FROM pg_publication p),
  'publication_relations',(SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.oid),'[]') FROM pg_publication_rel r),
  'publication_namespaces',(SELECT coalesce(jsonb_agg(to_jsonb(n) ORDER BY n.oid),'[]') FROM pg_publication_namespace n),
+ 'publication_tree',(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY t.pubid,t.relid),'[]') FROM publication_tree t),
+ 'publication_inherits',(SELECT coalesce(jsonb_agg(to_jsonb(i) ORDER BY to_jsonb(i)::text),'[]') FROM pg_inherits i
+  WHERE EXISTS(SELECT FROM publication_tree t WHERE t.relid=i.inhparent)),
  'publication_tables',(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]') FROM pg_publication_tables t))";
 
 fn managed(event: &Value) -> bool {
