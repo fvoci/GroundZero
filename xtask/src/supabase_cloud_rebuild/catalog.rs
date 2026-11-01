@@ -160,6 +160,11 @@ async fn objects(conn: &mut PgConnection) -> Result<Value> {
             "pg_description",
             "s.classid=c.classoid AND s.objid=c.objoid",
         ),
+        (
+            "pg_partitioned_table",
+            "s.classid='pg_class'::regclass AND s.objid=c.partrelid",
+        ),
+        ("pg_init_privs", "s.classid=c.classoid AND s.objid=c.objoid"),
         ("pg_seclabel", "s.classid=c.classoid AND s.objid=c.objoid"),
     ] {
         objects.insert(

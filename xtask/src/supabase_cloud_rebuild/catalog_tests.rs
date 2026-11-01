@@ -176,6 +176,20 @@ pub(super) async fn review_failures(
     binding: &Binding,
 ) -> Result<Vec<String>> {
     let mut failures = Vec::new();
+    sql(
+        conn,
+        "CREATE TABLE fvoci.partition_definition_probe(id int) PARTITION BY RANGE(id)",
+    )
+    .await?;
+    let expected: Value = sqlx::query_scalar("SELECT to_jsonb(p) FROM pg_partitioned_table p WHERE partrelid='fvoci.partition_definition_probe'::regclass").fetch_one(&mut *conn).await?;
+    let raw = catalog::snapshot(conn).await?;
+    sql(conn, "DROP TABLE fvoci.partition_definition_probe RESTRICT").await?;
+    if !raw["objects"]["pg_partitioned_table"]
+        .as_array()
+        .is_some_and(|rows| rows.contains(&expected))
+    {
+        failures.push("partition key definition is absent from fingerprint".to_owned());
+    }
     let first = Inventory::read(conn, binding).await?;
     if !first.report.to_string().contains("fvoci.legacy") {
         failures.push("inspection hides schema object names".to_owned());
@@ -226,8 +240,10 @@ pub(super) async fn review_failures(
         );
     }
     sql(conn, "ALTER ROLE fvoci_app RESET statement_timeout").await?;
-    println!(
-        "PASS cloud-rebuild definitions: names exposed, unlisted table blocked, enum/schema/column/routine/type comments/sequence/role settings change approval"
-    );
+    if failures.is_empty() {
+        println!(
+            "PASS cloud-rebuild definitions: names exposed, unlisted table blocked, partition keys/enum/schema/column/routine/type comments/sequence/role settings captured"
+        );
+    }
     Ok(failures)
 }
