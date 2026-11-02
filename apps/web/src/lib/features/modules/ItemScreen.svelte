@@ -8,7 +8,7 @@
   import { taskScreenApi } from '$lib/features/tasks/screen-api';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { getContext, onDestroy, onMount, tick, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -18,7 +18,26 @@
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    accountSwitching,
+    notifyDone,
+  } from '$lib/features/feedback/feedback.svelte';
+  import FieldConflict from '$lib/features/common/FieldConflict.svelte';
+  import { selectedFields } from '$lib/features/common/field-conflict';
+  import {
+    DiscardedTaskRead,
+    readTaskSessionGeneration,
+    type ContextCapture,
+  } from '$lib/features/tasks/context-read';
+  import {
+    TASK_SESSION_RECOVERY,
+    TaskSessionUnsettled,
+    readTaskWithRecovery,
+    sameTaskRequest,
+    type TaskSessionRecovery,
+  } from '$lib/features/tasks/session-recovery';
+  import { me } from '$lib/me.svelte';
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
@@ -65,6 +84,14 @@
   import ItemCopy from './ItemCopy.svelte';
   import ItemProfilePanel from './ItemProfilePanel.svelte';
   import { itemStatusLabel, type ItemProfileRead } from './profile';
+  import {
+    itemInfoFields,
+    nextComparison,
+    parseComparison,
+    parseInfoInput,
+    type ItemComparison,
+    type ItemInfoInput,
+  } from './item-conflict';
   // 활동(D-119). 기록 묶음 안의 항목 활동 섹션.
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
@@ -257,13 +284,21 @@
   // 기준 판(D-104)이다: 입력 중에 다시 읽은 항목의 판으로 옮기면 그사이 다른 사람이 고친 것을 덮으므로, 입력란을
   // 서버 값으로 채울 때(또는 내 저장의 응답)만 옮긴다.
   let filled = $state({ title: '', description: '', shared: false, version: 0 });
+  // 판 충돌(409) 뒤 칸마다 고르는 비교(D-94 개정, D-104). 닫아도 저장하기 전까지는 처음 입력을 지키려고 남긴다.
+  let comparison = $state<ItemComparison<ItemInfoInput>>();
+  // 저장이 권한 상실(403·404)이나 확인된 보관으로 거절되면 다시 보내지 않는다. 404면 비교한 서버 값도 숨긴다.
+  let writeBlocked = $state(false);
+  let hiddenForAccess = $state(false);
   const infoDirty = $derived(
     item !== undefined &&
-      (title !== filled.title || description !== filled.description || shared !== filled.shared),
+      (comparison !== undefined ||
+        title !== filled.title ||
+        description !== filled.description ||
+        shared !== filled.shared),
   );
   const infoDraft = createFormDraft({
     name: () => `item-info:${itemId}`,
-    snapshot: () => ({ title, description, shared, filled }),
+    snapshot: () => ({ title, description, shared, filled, comparison }),
     parse: (raw) => {
       if (
         !object(raw) ||
@@ -291,6 +326,8 @@
           shared: base.shared,
           version: base.version,
         },
+        // 다른 항목의 비교는 되살리지 않는다(초안 키가 같아도 대상이 다르면 버린다).
+        comparison: parseComparison(raw.comparison, itemId, parseInfoInput),
       };
     },
     restore: (value) => {
@@ -299,8 +336,11 @@
       description = value.description;
       shared = value.shared;
       filled = value.filled;
+      comparison = value.comparison;
     },
     reset: () => {
+      // 비교를 먼저 비운다. 버린 비교가 초안에 다시 쓰이면 다음에 되살리자고 한다(CR-305-2).
+      comparison = undefined;
       title = item?.title ?? '';
       description = item?.description ?? '';
       shared = item?.visibility === 'workspace';
@@ -312,8 +352,6 @@
     stays: staysOnThisItem,
   });
   onMount(infoDraft.attach);
-  // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
-  let conflict = $state<ItemView | undefined>(undefined);
 
   function fill(next: ItemView): void {
     item = next;
@@ -321,7 +359,9 @@
     description = next.description;
     shared = next.visibility === 'workspace';
     filled = { title, description, shared, version: next.version };
-    conflict = undefined;
+    comparison = undefined;
+    writeBlocked = false;
+    hiddenForAccess = false;
   }
 
   /**
@@ -336,6 +376,8 @@
     own = false,
   ): void {
     item = next;
+    // 비교 중에는 검토하는 값과 기준을 다시 읽은 값으로 바꾸지 않는다(409만 바꾼다).
+    if (comparison?.open === true) return;
     const nextShared = next.visibility === 'workspace';
     const editing =
       title !== base.title || description !== base.description || shared !== base.shared;
@@ -352,11 +394,29 @@
 
   // 항목을 (다시) 불러올 때마다 늘리는 차례. A → B → A로 돌아오면 항목 id는 같아도 새로 읽은 화면이다.
   let loadSeq = 0;
+  // 버린 첫 읽기 뒤의 "다시 시도". 누르면 같은 항목을 새 문맥으로 다시 읽는다.
+  let loadAttempt = $state(0);
+  let retryLoad = $state(false);
+  const recovery = getContext<TaskSessionRecovery | undefined>(TASK_SESSION_RECOVERY);
+  /**
+   * 첫 읽기의 문맥. 이 화면은 항목 단위라 같은 항목 안의 묶음·보기 이동(주소 변경)은 같은 요청으로 본다. 다른 항목·다시
+   * 불러오기(차례), 사용자, 세션·계정 안전 세대가 바뀌면 다른 요청이다.
+   */
+  const itemReadContext = (): ContextCapture => ({
+    userId: me.userId,
+    sequence: loadSeq,
+    navigationGeneration: router.itemGeneration,
+    sessionGeneration: readTaskSessionGeneration(),
+    safetyGeneration: accountSafety.generation,
+    path: currentItemId,
+  });
 
   $effect(() => {
     const id = currentItemId;
     const generation = router.itemGeneration;
+    if (loadAttempt < 0) return;
     loadSeq += 1;
+    retryLoad = false;
     let cancelled = false;
     const isCurrent = (): boolean => !cancelled && generation === router.itemGeneration;
     item = undefined;
@@ -373,7 +433,9 @@
     // 앞 항목의 오류, 새 문서에 고른 템플릿을 새 항목에 남기지 않는다(다른 워크스페이스 항목으로
     // 옮겨 가면 그 템플릿은 목록에 없어 보이지 않는데도 쓰였다).
     formError = undefined;
-    conflict = undefined;
+    comparison = undefined;
+    writeBlocked = false;
+    hiddenForAccess = false;
     docTemplate = '';
     const seed = untrack(() =>
       !consumedContext &&
@@ -415,17 +477,38 @@
           fail(cause);
         });
       }
+    } else if (untrack(() => aggregate)) {
+      // 업무 묶음의 첫 읽기(task-context)는 세션 세대 울타리를 지난다. 다른 탭의 세션 알림으로 버려지면 App이 /me로
+      // 같은 사용자임을 확인한 뒤 한 번 다시 읽는다. 다른 사용자면 다시 읽지 않는다(#305 E, #298 SR-298-4). 확인이
+      // 실패해도 이 요청이 아직 현재면 오류와 다시 시도를 둔다(가림이 걷히면 보인다, #305 F·CR-4).
+      const captured = untrack(itemReadContext);
+      const current = (): boolean => isCurrent() && sameTaskRequest(captured, itemReadContext());
+      void readTaskWithRecovery(
+        captured,
+        itemReadContext,
+        () => current() && !accountSafety.switching && !accountSafety.restoring,
+        recovery,
+        () => taskScreenApi.context(id),
+        seed?.result.kind === 'failed' ? Promise.reject(seed.result.error) : undefined,
+        {
+          loaded: (read) => {
+            if (current()) adopt({ it: read.item, found: read.module }, read.documents);
+          },
+        },
+      ).catch((cause: unknown) => {
+        if (cause instanceof DiscardedTaskRead || cause instanceof TaskSessionUnsettled) {
+          if (!current()) return;
+          error = m.modules_item_load_failed();
+          retryLoad = true;
+          return;
+        }
+        fail(cause);
+      });
     } else {
-      const pending = untrack(() => aggregate)
-        ? (seed?.result.kind === 'failed'
-            ? Promise.reject(seed.result.error)
-            : taskScreenApi.context(id)
-          ).then((read) => [{ it: read.item, found: read.module }, read.documents] as const)
-        : Promise.all([
-            api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
-            api.itemDocuments(id),
-          ]);
-      void pending
+      void Promise.all([
+        api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+        api.itemDocuments(id),
+      ])
         .then(([resource, list]) => {
           adopt(resource, list);
         })
@@ -445,6 +528,7 @@
     item !== undefined && item.access !== 'read' && !item.archived && !moduleArchived,
   );
   const isOwner = $derived(item?.access === 'owner');
+  const infoFields = $derived(itemInfoFields(isOwner));
 
   // 이 화면은 다른 항목으로 옮겨 가도 다시 만들어지지 않는다. 기다리는 사이 옮겨 갔으면 시작한 항목의 결과·오류를
   // 지금 항목 화면에 넣지 않는다(B 주소에 A가 들어앉지 않게). 같은 항목으로 돌아왔어도 시작할 때의 차례(`mine`)가
@@ -468,7 +552,7 @@
    * 저장"은 알림이 보인 최신본의 판이다(그 뒤 또 바뀌었으면 다시 409).
    */
   async function submit(baseVersion: number): Promise<void> {
-    if (item === undefined || saving) return;
+    if (item === undefined || saving || writeBlocked) return;
     const attempt = infoDraft.capture();
     if (attempt === undefined) return;
     if (title.trim() === '') {
@@ -478,6 +562,9 @@
     formError = undefined;
     const id = item.id;
     const mine = loadSeq;
+    const captured = writeContext();
+    const owns = (): boolean =>
+      stillOn(id, mine) && infoDraft.isOwner(attempt) && sameWriteContext(captured);
     // 공개 범위는 체크를 바꿨을 때만 보낸다. 늘 보내면 연 뒤 다른 소유 권한자가 바꾼 공개 범위를 되돌렸다(감사 W13).
     const visibility: 'workspace' | 'private' | undefined =
       shared === filled.shared ? undefined : shared ? 'workspace' : 'private';
@@ -491,28 +578,144 @@
         ...(visibility === undefined ? {} : { visibility }),
       });
       if (result.kind === 'conflict') {
-        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다(D-104).
-        if (stillOn(id, mine) && infoDraft.isOwner(attempt)) conflict = result.current;
+        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 바로 칸마다 고르게 한다
+        // (D-94 개정, D-104). 다른 사용자·세션·항목 화면의 응답이면 비교값을 보이지 않는다(D-96).
+        if (owns()) openInfoComparison(result.current);
         return;
       }
       forgetReferences();
-      if (!stillOn(id, mine) || !infoDraft.isOwner(attempt)) return;
+      if (!owns()) return;
       if (infoDraft.isCurrent(attempt)) {
         item = result.item;
         infoDraft.complete(attempt);
       }
-      conflict = undefined;
+      comparison = undefined;
       refresh(result.item, sent, true);
       // 일반 완료는 토스트다(D-82). 더 고친 칸이 남아 있으면 알리지 않는다(그 입력은 아직 저장되지 않았다).
       if (title === filled.title && description === filled.description && shared === filled.shared)
         notifyDone(m.common_saved());
     } catch (e: unknown) {
-      if (stillOn(id, mine) && infoDraft.isOwner(attempt))
+      if (owns()) {
         formError = errorText(e, m.modules_save_failed());
+        await infoWriteFailed(e, id, owns);
+      }
     } finally {
       if (infoDraft.isOwner(attempt)) saving = false;
     }
   }
+
+  // 쓰기 응답을 받을 때의 문맥(D-96): 사용자·세션 세대·계정 안전 세대가 그대로여야 결과를 화면에 넣는다.
+  const writeContext = () => ({
+    userId: me.userId,
+    session: readTaskSessionGeneration(),
+    safety: accountSafety.generation,
+  });
+  function sameWriteContext(captured: ReturnType<typeof writeContext>): boolean {
+    const now = writeContext();
+    return (
+      captured.userId === now.userId &&
+      captured.session === now.session &&
+      captured.safety === now.safety &&
+      !accountSafety.switching &&
+      !accountSafety.restoring
+    );
+  }
+  function blockDenied(cause: unknown): void {
+    if (!(cause instanceof ApiError)) return;
+    if (cause.status === 403 || cause.status === 404) writeBlocked = true;
+    if (cause.status === 404) hiddenForAccess = true;
+  }
+  /**
+   * 거절된 저장. 403·404는 저장을 막는다. 409 `invalid_state`는 보관과 일시 충돌(직렬화·교착)이 같은 코드라, 쓸 수 있는지
+   * 한 번 다시 읽어 보관·권한 상실이 확인될 때만 막는다(SR-302-1). 그 사이 문맥이 바뀌었으면 버린다(CR-A).
+   */
+  async function infoWriteFailed(cause: unknown, id: string, owns: () => boolean): Promise<void> {
+    blockDenied(cause);
+    if (!(cause instanceof ApiError) || cause.status !== 409 || cause.code !== 'invalid_state')
+      return;
+    try {
+      const fresh = await api.itemProfile(id);
+      if (owns()) writeBlocked = !fresh.can_edit;
+    } catch (failure: unknown) {
+      if (owns()) blockDenied(failure);
+    }
+  }
+
+  const infoInput = (): ItemInfoInput => ({ title, description, shared });
+  const serverInfo = (next: ItemView): ItemInfoInput => ({
+    title: next.title,
+    description: next.description,
+    shared: next.visibility === 'workspace',
+  });
+  /** 입력 기준(`filled`)·이번 입력·409의 서버 값을 비교한다. 409의 `changed`는 양쪽 변경 판정이 아니라 쓰지 않는다. */
+  function openInfoComparison(current: ItemView): void {
+    comparison = nextComparison($state.snapshot(comparison), infoFields, {
+      target: current.id,
+      base: { title: filled.title, description: filled.description, shared: filled.shared },
+      mine: $state.snapshot(infoInput()),
+      server: serverInfo(current),
+      version: current.version,
+      baseVersion: filled.version,
+    });
+    if (current.archived || current.access === 'read') writeBlocked = true;
+  }
+  /** 고른 값을 입력에 넣고 검토한 판을 기준으로 삼는다. `saveNow`면 그 판으로 저장한다(자동 재전송 없음). */
+  async function applyInfoChoices(saveNow: boolean): Promise<void> {
+    const ask = comparison;
+    const current = item;
+    if (ask === undefined || !ask.open || current === undefined || saving || writeBlocked) return;
+    // 초안에서 되살린 비교가 지금 읽은 판보다 옛 판이면 옛 값으로 바꾸거나 기준 판을 낮추지 않고 새로 읽은 판과 다시
+    // 비교한다(CR-305-1). 요청은 보내지 않는다.
+    if (current.version > ask.version) {
+      openInfoComparison($state.snapshot(current));
+      return;
+    }
+    const candidate = selectedFields(
+      infoFields,
+      $state.snapshot(ask.mine),
+      $state.snapshot(ask.server),
+      ask.choices,
+    );
+    title = candidate.title;
+    description = candidate.description;
+    shared = candidate.shared;
+    filled = { ...ask.server, version: ask.version };
+    if (!saveNow) {
+      ask.open = false;
+      await tick();
+      document.getElementById('item-title')?.focus();
+      return;
+    }
+    if (infoFields.every((field) => field.same(candidate, ask.server))) {
+      // 고른 값이 모두 서버 최신값이다. 보낼 것이 없다.
+      item = {
+        ...current,
+        title: ask.server.title,
+        description: ask.server.description,
+        visibility: ask.server.shared ? 'workspace' : 'private',
+        version: ask.version,
+      };
+      comparison = undefined;
+      notifyDone(m.common_conflict_equal());
+      return;
+    }
+    await submit(ask.version);
+  }
+  /** 비교를 닫고 이번 입력(또는 처음 입력)과 그때의 기준으로 돌아간다. 비교는 처음 입력을 지키려 남긴다. */
+  function leaveInfoComparison(original: boolean): void {
+    const ask = comparison;
+    if (ask === undefined || !ask.open || saving) return;
+    const input = original ? ask.original : ask.mine;
+    const base = original ? ask.originalBase : ask.base;
+    title = input.title;
+    description = input.description;
+    shared = input.shared;
+    filled = { ...base, version: original ? ask.originalVersion : ask.baseVersion };
+    ask.open = false;
+    void tick().then(() => document.getElementById('item-title')?.focus());
+  }
+  const infoEdited = (a: ItemInfoInput, b: ItemInfoInput): boolean =>
+    !infoFields.every((field) => field.same(a, b));
 
   async function toggleTemplate(): Promise<void> {
     if (item === undefined) return;
@@ -598,6 +801,11 @@
 
 {#if error !== undefined}
   <p role="alert" class="text-destructive">{error}</p>
+  {#if retryLoad}
+    <div>
+      <Button variant="outline" onclick={() => (loadAttempt += 1)}>{m.common_retry()}</Button>
+    </div>
+  {/if}
 {:else if item === undefined}
   <p aria-live="polite">{m.modules_loading()}</p>
 {:else}
@@ -734,11 +942,37 @@
         <div hidden={!infoOpen}>
           <div class="flex min-w-0 flex-col gap-6 pt-3">
             {#if canEdit}
+              {#if comparison?.open === true && !hiddenForAccess}
+                {@const ask = comparison}
+                <!-- 판 충돌(D-94 개정, D-104): 칸마다 내 입력·서버 최신을 고른다. 고르는 동안 폼은 잠근다. -->
+                <FieldConflict
+                  fields={infoFields}
+                  base={ask.base}
+                  mine={ask.mine}
+                  server={ask.server}
+                  bind:choices={ask.choices}
+                  busy={saving}
+                  blocked={writeBlocked}
+                  repeated={ask.repeated}
+                  onsave={() => void applyInfoChoices(true)}
+                  onedit={() => void applyInfoChoices(false)}
+                  oncancel={() => {
+                    leaveInfoComparison(false);
+                  }}
+                  onoriginal={infoEdited(ask.original, ask.mine)
+                    ? () => {
+                        leaveInfoComparison(true);
+                      }
+                    : undefined}
+                />
+              {/if}
+              <!-- 404로 비교를 숨기면 폼을 잠그지 않는다. 입력에 닿고 저장은 writeBlocked가 막는다(CR-306-3). -->
               <form
                 class="flex flex-col gap-3"
                 onsubmit={(e) => void save(e)}
                 novalidate
                 aria-label={m.modules_item_info()}
+                inert={comparison?.open === true && !hiddenForAccess}
               >
                 <div class="flex flex-col gap-1">
                   <Label for="item-title">{m.modules_title()}</Label>
@@ -764,46 +998,6 @@
                   <Button type="submit" disabled={saving}>{m.common_save()}</Button>
                 </div>
               </form>
-              {#if conflict !== undefined}
-                {@const latest = conflict}
-                <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 바꾸거나 내 입력으로 다시 저장한다. -->
-                <div class="rounded-md border border-amber-500/50 p-3 text-sm" data-item-conflict>
-                  <p role="alert">{m.modules_item_conflict()}</p>
-                  <dl class="mt-2 grid gap-1">
-                    <dt class="text-muted-foreground">{m.modules_title()}</dt>
-                    <dd class="break-words whitespace-pre-wrap" data-latest="title">
-                      {latest.title}
-                    </dd>
-                    <dt class="text-muted-foreground">{m.modules_description()}</dt>
-                    <dd class="break-words whitespace-pre-wrap" data-latest="description">
-                      {latest.description === ''
-                        ? m.modules_item_conflict_empty()
-                        : latest.description}
-                    </dd>
-                    {#if isOwner}
-                      <dt class="text-muted-foreground">{m.modules_share_with_members()}</dt>
-                      <dd data-latest="visibility">
-                        {latest.visibility === 'workspace'
-                          ? m.modules_item_conflict_shared()
-                          : m.modules_item_conflict_not_shared()}
-                      </dd>
-                    {/if}
-                  </dl>
-                  <div class="mt-2 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onclick={() => {
-                        fill(latest);
-                        document.getElementById('item-title')?.focus();
-                      }}>{m.modules_item_conflict_load()}</Button
-                    >
-                    <Button size="sm" disabled={saving} onclick={() => void submit(latest.version)}
-                      >{m.modules_item_conflict_save_mine()}</Button
-                    >
-                  </div>
-                </div>
-              {/if}
             {:else}
               {#if current.description !== ''}
                 <p class="whitespace-pre-wrap">{current.description}</p>

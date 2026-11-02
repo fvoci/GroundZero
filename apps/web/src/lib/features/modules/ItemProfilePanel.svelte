@@ -3,22 +3,34 @@
   // 항목 정보(D-33·D-34·D-36·D-38): 상태·기간·리더·목표·범위와 종류별 정보, 비공개 항목의 멤버(사람·그룹).
   // 멤버는 비공개 항목을 워크스페이스 역할 안에서 볼 수 있는 사람이다(D-20 공유). 정하는 것은 항목 소유 권한자.
   import type { ModuleKind } from '@fvoci/api-client';
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
+  import FieldConflict from '$lib/features/common/FieldConflict.svelte';
+  import { selectedFields } from '$lib/features/common/field-conflict';
+  import { readTaskSessionGeneration } from '$lib/features/tasks/context-read';
+  import { me } from '$lib/me.svelte';
   import { object, strings } from './draft-values';
+  import {
+    itemProfileFields,
+    nextComparison,
+    parseComparison,
+    parseProfileInput,
+    profileInputOf,
+    type ItemComparison,
+    type ItemProfileInput,
+  } from './item-conflict';
 
-  import type {
-    AssigneeView,
-    ItemProfileView,
-    ItemStatus,
-    ItemView,
-    PersonRefView,
-  } from '$lib/api/client';
-  import { api, ITEM_STATUSES } from '$lib/api/client';
+  import type { AssigneeView, ItemProfileView, ItemView, PersonRefView } from '$lib/api/client';
+  import { api, ApiError } from '$lib/api/client';
+  import { ITEM_STATUSES } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    accountSwitching,
+    notifyDone,
+  } from '$lib/features/feedback/feedback.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { Badge } from '$lib/ui/badge';
   import { Button } from '$lib/ui/button';
@@ -72,20 +84,16 @@
   // 편집을 연 때의 리더, 그 뒤 고른 리더. 고를 수 있는 사람 목록에 없어도(못 읽음·되살린 초안) 입력의 리더 이름을
   // 보이도록 초안에도 남긴다.
   let editLeader = $state<PersonRefView | null>(null);
-  // 저장이 판 충돌(409)로 거절됐을 때의 서버 최신본. 입력은 그대로 두고 최신본을 보인다.
-  let conflict = $state<ItemProfileView | undefined>(undefined);
+  // 판 충돌(409) 뒤 칸마다 고르는 비교(D-94 개정, D-104). 닫아도 저장하기 전까지 처음 입력을 지키려고 남긴다.
+  let comparison = $state<ItemComparison<ItemProfileInput>>();
+  // 409가 알려 준 리더 이름(고를 수 있는 사람 목록에 없을 수 있다). 비교의 리더 칸 이름표에 쓴다.
+  let leaderNames = $state<Record<string, string>>({});
+  // 저장이 권한 상실(403·404)이나 확인된 보관으로 거절되면 다시 보내지 않는다. 404면 비교한 서버 값도 숨긴다.
+  let writeBlocked = $state(false);
+  let hiddenForAccess = $state(false);
   let managing = $state(false);
   let reloadKey = $state(0);
-  interface FormState {
-    status: ItemStatus;
-    leader: string;
-    goal: string;
-    scope: string;
-    starts_on: string;
-    ends_on: string;
-    keywords: string;
-    values: Record<string, string>;
-  }
+  type FormState = ItemProfileInput;
 
   let form = $state<FormState>({
     status: 'active',
@@ -126,7 +134,14 @@
   onMount(membersDraft.attach);
   const draft = createFormDraft({
     name: () => `item-profile:${item.id}:${kind}`,
-    snapshot: () => ({ form, base: editBase, baseline, leader: editLeader }),
+    snapshot: () => ({
+      form,
+      base: editBase,
+      baseline,
+      leader: editLeader,
+      comparison,
+      leaders: leaderNames,
+    }),
     parse: (raw) => {
       if (
         !object(raw) ||
@@ -169,6 +184,9 @@
         base: raw.base,
         baseline: raw.baseline,
         leader,
+        // 다른 항목의 비교는 되살리지 않는다.
+        comparison: parseComparison(raw.comparison, item.id, parseProfileInput),
+        leaders: strings(raw.leaders) ? raw.leaders : {},
       };
     },
     restore: (value) => {
@@ -176,6 +194,8 @@
       editBase = value.base;
       baseline = value.baseline;
       editLeader = value.leader;
+      comparison = value.comparison;
+      leaderNames = value.leaders;
       editing = true;
       editSession += 1;
       // 편집 열기(startEdit)처럼 고를 수 있는 사람을 읽는다. 그사이 편집을 닫거나 새로 열었으면 버린다.
@@ -188,9 +208,11 @@
         .catch(() => undefined);
     },
     reset: () => {
+      // 비교를 먼저 비운다. 버린 비교가 초안에 다시 쓰이면 다음에 되살리자고 한다(CR-305-2).
+      comparison = undefined;
+      leaderNames = {};
       editing = false;
       busy = false;
-      conflict = undefined;
       editSession += 1;
       form = {
         status: 'active',
@@ -204,7 +226,7 @@
       };
       baseline = '';
     },
-    dirty: () => editing && JSON.stringify(form) !== baseline,
+    dirty: () => editing && (comparison !== undefined || JSON.stringify(form) !== baseline),
     stays: (next) => stays?.(next) === true,
   });
   onMount(draft.attach);
@@ -213,7 +235,10 @@
   });
   $effect(() => {
     ondirty?.(
-      busy || membersBusy || (editing && JSON.stringify(form) !== baseline) || membersDirty,
+      busy ||
+        membersBusy ||
+        (editing && (comparison !== undefined || JSON.stringify(form) !== baseline)) ||
+        membersDirty,
     );
   });
 
@@ -261,17 +286,11 @@
     editSession += 1;
     editBase = p.version;
     editLeader = p.leader;
-    conflict = undefined;
-    form = {
-      status: p.status,
-      leader: p.leader?.user_id ?? '',
-      goal: p.goal,
-      scope: p.scope,
-      starts_on: p.starts_on ?? '',
-      ends_on: p.ends_on ?? '',
-      keywords: (p.details.keywords ?? []).join(', '),
-      values: Object.fromEntries(fields.map((f) => [f.key, p.details[f.key] ?? ''])),
-    };
+    comparison = undefined;
+    leaderNames = {};
+    writeBlocked = false;
+    hiddenForAccess = false;
+    form = profileInputOf(p, kind);
     baseline = JSON.stringify(form);
     editing = true;
     people = await work.assignable(item.id).catch(() => []);
@@ -284,7 +303,7 @@
 
   /** 입력을 `base` 판에 대한 고치기로 보낸다(충돌 알림의 "내 입력으로 다시 저장"은 알림이 보인 최신본의 판). */
   async function submit(base: number): Promise<void> {
-    if (busy) return;
+    if (busy || writeBlocked) return;
     const attempt = draft.capture();
     if (attempt === undefined) return;
     // 앞선 저장의 안내가 이번 결과(날짜 오류·409·실패) 옆에 남아 저장된 것처럼 보이지 않게 한다.
@@ -294,6 +313,10 @@
     }
     error = undefined;
     const session = editSession;
+    const captured = writeContext();
+    // 같은 편집·같은 사용자·같은 세션 세대의 응답만 화면에 넣는다(D-96, CR-A).
+    const owns = (): boolean =>
+      session === editSession && draft.isOwner(attempt) && sameWriteContext(captured);
     busy = true;
     try {
       const result = await api.setItemProfile(item.id, base, {
@@ -308,9 +331,9 @@
       if (!draft.isCurrent(attempt)) return;
       if (result.kind === 'conflict') {
         // 기다리는 동안 취소했거나 편집을 새로 열었으면 그 화면을 바꾸지 않는다(이 저장은 아무것도 바꾸지 않았다).
-        if (session !== editSession) return;
-        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 최신본을 보인다.
-        conflict = result.current;
+        if (!owns()) return;
+        // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 바로 칸마다 고르게 한다.
+        openProfileComparison(result.current);
         acceptProfile(item.id, result.current);
         return;
       }
@@ -326,7 +349,7 @@
       }
       if (session === editSession) {
         if (!draft.complete(attempt)) return;
-        conflict = undefined;
+        comparison = undefined;
         editing = false;
         notifyDone(m.modules_profile_saved());
       }
@@ -337,12 +360,124 @@
         reloadKey += 1;
       } else acceptProfile(item.id, fresh);
     } catch (err: unknown) {
-      if (session === editSession && draft.isOwner(attempt))
+      if (owns()) {
         error = errorText(err, m.modules_save_failed());
+        await profileWriteFailed(err, owns);
+      }
     } finally {
       if (draft.isOwner(attempt)) busy = false;
     }
   }
+
+  const writeContext = () => ({
+    userId: me.userId,
+    session: readTaskSessionGeneration(),
+    safety: accountSafety.generation,
+  });
+  function sameWriteContext(captured: ReturnType<typeof writeContext>): boolean {
+    const now = writeContext();
+    return (
+      captured.userId === now.userId &&
+      captured.session === now.session &&
+      captured.safety === now.safety &&
+      !accountSafety.switching &&
+      !accountSafety.restoring
+    );
+  }
+  function blockDenied(cause: unknown): void {
+    if (!(cause instanceof ApiError)) return;
+    if (cause.status === 403 || cause.status === 404) writeBlocked = true;
+    if (cause.status === 404) hiddenForAccess = true;
+  }
+  /** 409 `invalid_state`는 보관과 일시 충돌이 같은 코드라 한 번 다시 읽어 확인될 때만 막는다(SR-302-1). */
+  async function profileWriteFailed(cause: unknown, owns: () => boolean): Promise<void> {
+    blockDenied(cause);
+    if (!(cause instanceof ApiError) || cause.status !== 409 || cause.code !== 'invalid_state')
+      return;
+    try {
+      const fresh = await api.itemProfile(item.id);
+      if (owns()) writeBlocked = !fresh.can_edit;
+    } catch (failure: unknown) {
+      if (owns()) blockDenied(failure);
+    }
+  }
+
+  const leaderNameMap = $derived(
+    new Map<string, string>([
+      ...Object.entries(leaderNames),
+      ...[editLeader, profile?.leader, ...people].flatMap((p): [string, string][] =>
+        p === null || p === undefined ? [] : [[p.user_id, p.display_name]],
+      ),
+    ]),
+  );
+  const conflictFields = $derived(itemProfileFields(kind, leaderNameMap, labels.leader));
+  const baseInput = (): FormState => {
+    try {
+      return parseProfileInput(JSON.parse(baseline)) ?? $state.snapshot(form);
+    } catch {
+      return $state.snapshot(form);
+    }
+  };
+  /** 편집 기준·이번 입력·409의 서버 값을 비교한다. 409의 `changed`는 양쪽 변경 판정이 아니라 쓰지 않는다. */
+  function openProfileComparison(current: ItemProfileView): void {
+    if (current.leader !== null)
+      leaderNames = { ...leaderNames, [current.leader.user_id]: current.leader.display_name };
+    comparison = nextComparison($state.snapshot(comparison), conflictFields, {
+      target: item.id,
+      base: baseInput(),
+      mine: $state.snapshot(form),
+      server: profileInputOf(current, kind),
+      version: current.version,
+      baseVersion: editBase,
+    });
+    if (!current.can_edit) writeBlocked = true;
+  }
+  async function applyProfileChoices(saveNow: boolean): Promise<void> {
+    const ask = comparison;
+    const current = profile;
+    if (ask === undefined || !ask.open || current === undefined || busy || writeBlocked) return;
+    // 되살린 비교가 지금 읽은 판보다 옛 판이면 새로 읽은 판과 다시 비교한다(CR-305-1). 요청은 보내지 않는다.
+    if (current.version > ask.version) {
+      openProfileComparison($state.snapshot(current));
+      return;
+    }
+    const candidate = selectedFields(
+      conflictFields,
+      $state.snapshot(ask.mine),
+      $state.snapshot(ask.server),
+      ask.choices,
+    );
+    form = candidate;
+    baseline = JSON.stringify(ask.server);
+    editBase = ask.version;
+    if (!saveNow) {
+      ask.open = false;
+      await tick();
+      document.getElementById('item-goal')?.focus();
+      return;
+    }
+    if (conflictFields.every((field) => field.same(candidate, ask.server))) {
+      // 고른 값이 모두 서버 최신값이다. 보낼 것이 없다. 그래도 서버의 상태·기간이 바뀌었을 수 있어 항목을 다시
+      // 읽게 한다(CR-306-1).
+      comparison = undefined;
+      editing = false;
+      onchanged();
+      notifyDone(m.common_conflict_equal());
+      return;
+    }
+    await submit(ask.version);
+  }
+  function leaveProfileComparison(original: boolean): void {
+    const ask = comparison;
+    if (ask === undefined || !ask.open || busy) return;
+    form = $state.snapshot(original ? ask.original : ask.mine);
+    baseline = JSON.stringify(original ? ask.originalBase : ask.base);
+    editBase = original ? ask.originalVersion : ask.baseVersion;
+    ask.open = false;
+    void tick().then(() => document.getElementById('item-goal')?.focus());
+  }
+  const profileEdited = (a: FormState, b: FormState): boolean =>
+    !conflictFields.every((field) => field.same(a, b));
 
   async function startMembers(p: ItemProfileView): Promise<void> {
     error = undefined;
@@ -432,30 +567,37 @@
     {/if}
   {:else if editing}
     <fieldset class="flex min-w-0 flex-col gap-3" disabled={busy}>
-      {#if conflict !== undefined}
-        {@const latest = conflict}
-        <!-- 판 충돌(D-104): 입력은 그대로 두고 서버 최신본을 보인다. 최신본으로 다시 편집하거나 내 입력으로 다시 저장한다. -->
-        <div
-          class="flex flex-col gap-2 rounded-md border border-amber-500/50 p-3 text-sm"
-          data-profile-conflict
-        >
-          <p role="alert">{m.modules_profile_conflict()}</p>
-          <ItemProfileSummary profile={latest} {kind} />
-          <div class="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onclick={() => {
-                void startEdit(latest);
-              }}>{m.modules_profile_conflict_load()}</Button
-            >
-            <Button size="sm" onclick={() => void submit(latest.version)}
-              >{m.modules_profile_conflict_save_mine()}</Button
-            >
-          </div>
-        </div>
+      {#if comparison?.open === true && !hiddenForAccess}
+        {@const ask = comparison}
+        <!-- 판 충돌(D-94 개정, D-104): 칸마다 내 입력·서버 최신을 고른다. 고르는 동안 폼은 잠근다. -->
+        <FieldConflict
+          fields={conflictFields}
+          base={ask.base}
+          mine={ask.mine}
+          server={ask.server}
+          bind:choices={ask.choices}
+          {busy}
+          blocked={writeBlocked}
+          repeated={ask.repeated}
+          onsave={() => void applyProfileChoices(true)}
+          onedit={() => void applyProfileChoices(false)}
+          oncancel={() => {
+            leaveProfileComparison(false);
+          }}
+          onoriginal={profileEdited(ask.original, ask.mine)
+            ? () => {
+                leaveProfileComparison(true);
+              }
+            : undefined}
+        />
       {/if}
-      <form class="grid gap-3 @xl:grid-cols-2" onsubmit={(e) => void save(e)} novalidate>
+      <!-- 404로 비교를 숨기면 폼을 잠그지 않는다. 취소로 닫을 수 있고 저장은 writeBlocked가 막는다(CR-306-2). -->
+      <form
+        class="grid gap-3 @xl:grid-cols-2"
+        onsubmit={(e) => void save(e)}
+        novalidate
+        inert={comparison?.open === true && !hiddenForAccess}
+      >
         <div class="flex flex-col gap-1">
           <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 저장 중에는 따로 잠근다(상태·리더). -->
           <span id="item-status-label" class="text-sm font-medium">{m.modules_status()}</span>
@@ -545,10 +687,10 @@
             variant="ghost"
             onclick={() => {
               draft.leave.request(() => {
+                comparison = undefined;
                 editSession += 1;
                 editing = false;
                 busy = false;
-                conflict = undefined;
                 error = undefined;
               });
             }}>{m.common_cancel()}</Button
