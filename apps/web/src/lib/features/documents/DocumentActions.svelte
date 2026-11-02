@@ -233,7 +233,7 @@
     } catch (e: unknown) {
       if (shareDraft.isCurrent(attempt)) fail(e);
     } finally {
-      if (shareDraft.isOwner(attempt)) sharing = false;
+      if (shareDraft.lockedBy(attempt)) sharing = false;
     }
   }
 
@@ -562,7 +562,7 @@
     } catch (e: unknown) {
       if (copyDraft.isCurrent(attempt)) fail(e);
     } finally {
-      if (copyDraft.isOwner(attempt)) copying = false;
+      if (copyDraft.lockedBy(attempt)) copying = false;
     }
   }
 

@@ -181,7 +181,7 @@
     } catch (e: unknown) {
       if (formDraft.isOwner(attempt)) error = errorText(e, m.checklists_action_failed());
     } finally {
-      if (formDraft.isOwner(attempt)) {
+      if (formDraft.lockedBy(attempt)) {
         busy = false;
         formDraft.persist();
       }

@@ -255,6 +255,16 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     return current() && attempt.session === session;
   }
 
+  /**
+   * Whether this attempt's finished request may release the form's send lock (#313). Unlike `isOwner`, it holds
+   * while the account is being checked: a same-user check ends without remounting, so a lock kept then would stay.
+   * Another user or target replaces `session`, so a late response never unlocks a newer request (D-96). Results
+   * (clearing input, moving, showing errors) still go through `isOwner`/`isCurrent`/`complete`.
+   */
+  function lockedBy(attempt: FormDraftAttempt): boolean {
+    return !disposed && attempt.session === session;
+  }
+
   function isCurrent(attempt: FormDraftAttempt): boolean {
     return isOwner(attempt) && attempt.snapshot === JSON.stringify(options.snapshot());
   }
@@ -319,6 +329,7 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     discardAndLeave,
     capture,
     isOwner,
+    lockedBy,
     isCurrent,
     complete,
     attach,

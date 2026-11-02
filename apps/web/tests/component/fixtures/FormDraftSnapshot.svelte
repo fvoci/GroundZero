@@ -2,19 +2,23 @@
   import { onMount, untrack } from 'svelte';
   import { createFormDraft, type FormDraftAttempt } from '$lib/features/common/form-draft.svelte';
 
-  const { filtered = false, retainSource = false }: { filtered?: boolean; retainSource?: boolean } =
-    $props();
+  const {
+    filtered = false,
+    retainSource = false,
+    target = 'snapshot-test',
+  }: { filtered?: boolean; retainSource?: boolean; target?: string } = $props();
   let long = $state('');
   let short = $state('');
   let attempt = $state<FormDraftAttempt>();
   let completed = $state('');
+  let lock = $state('');
   interface Input {
     long: string;
     short: string;
   }
   const options = {
     retainSource: untrack(() => retainSource),
-    name: () => 'snapshot-test',
+    name: () => target,
     snapshot: (): Input => ({ long, short }),
     ...(untrack(() => filtered) ? { storedSnapshot: (): Input => ({ long, short: '' }) } : {}),
     parse: (value: unknown): Input | undefined => {
@@ -58,6 +62,14 @@
   }}>Complete</button
 >
 <output aria-label="Completed">{completed}</output>
+<button
+  type="button"
+  onclick={() => {
+    if (attempt !== undefined)
+      lock = `${String(draft.isOwner(attempt))}/${String(draft.lockedBy(attempt))}`;
+  }}>Check lock</button
+>
+<output aria-label="Owner/locked">{lock}</output>
 {#each draft.offers as entry (entry.key)}
   <button
     type="button"
