@@ -1,4 +1,5 @@
 import { TASK_PRIORITIES, type TaskInput } from './model';
+import type { TaskComparison } from './field-conflict';
 export interface TaskDraft {
   baseVersion: number;
   baseline: TaskInput;
@@ -7,6 +8,7 @@ export interface TaskDraft {
   estimateText: string;
   child: { name: string; requestId: string | null } | null;
   savedAt: string;
+  comparison?: TaskComparison | undefined;
 }
 function isTaskInput(value: unknown): value is TaskInput {
   if (typeof value !== 'object' || value === null) return false;
@@ -78,5 +80,48 @@ export function parseTaskDraft(value: unknown): TaskDraft | undefined {
         ? { name: value.child.name, requestId: value.child.requestId }
         : null,
     savedAt,
+    comparison: 'comparison' in value ? parseComparison(value.comparison) : undefined,
+  };
+}
+
+function parseComparison(value: unknown): TaskComparison | undefined {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('base' in value && isTaskInput(value.base)) ||
+    !('mine' in value && isTaskInput(value.mine)) ||
+    !('server' in value && isTaskInput(value.server)) ||
+    !('original' in value && isTaskInput(value.original)) ||
+    !('version' in value && typeof value.version === 'number') ||
+    !('baseVersion' in value && typeof value.baseVersion === 'number') ||
+    !('tagsText' in value && typeof value.tagsText === 'string') ||
+    !('estimateText' in value && typeof value.estimateText === 'string') ||
+    !('originalBase' in value && isTaskInput(value.originalBase)) ||
+    !('originalVersion' in value && typeof value.originalVersion === 'number') ||
+    !('originalTagsText' in value && typeof value.originalTagsText === 'string') ||
+    !('originalEstimateText' in value && typeof value.originalEstimateText === 'string') ||
+    !('choices' in value && typeof value.choices === 'object' && value.choices !== null)
+  )
+    return undefined;
+  const choices = Object.fromEntries(
+    Object.entries(value.choices).filter(
+      (entry): entry is [string, 'mine' | 'server'] => entry[1] === 'mine' || entry[1] === 'server',
+    ),
+  );
+  return {
+    base: value.base,
+    mine: value.mine,
+    server: value.server,
+    original: value.original,
+    originalBase: value.originalBase,
+    originalVersion: value.originalVersion,
+    originalTagsText: value.originalTagsText,
+    originalEstimateText: value.originalEstimateText,
+    version: value.version,
+    baseVersion: value.baseVersion,
+    tagsText: value.tagsText,
+    estimateText: value.estimateText,
+    choices,
+    repeated: true,
   };
 }

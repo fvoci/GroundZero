@@ -81,15 +81,15 @@ describe('custom task status names survive a save of other fields', () => {
     expect(formOf(task).status).toBe('review');
   });
 
-  it('sends the original name when only the title changed', async () => {
+  it('omits an untouched custom status when only the title changed and keeps its name', async () => {
     await setLocale('ko', { reload: false });
     const current = detail();
-    const sent: TaskInput[] = [];
+    const sent: Partial<TaskInput>[] = [];
     vi.spyOn(work, 'updateTask').mockImplementation((_user, _id, _base, input) => {
       sent.push(input);
       return Promise.resolve({
         kind: 'updated',
-        task: { ...current, title: input.title, version: 2 },
+        task: { ...current, title: input.title ?? current.title, version: 2 },
       });
     });
     const done = vi.spyOn(feedback, 'notifyDone');
@@ -100,13 +100,14 @@ describe('custom task status names survive a save of other fields', () => {
     await waitFor(() => {
       expect(sent).toHaveLength(1);
     });
-    expect(sent[0]?.status).toBe('review');
+    expect(sent[0]).not.toHaveProperty('status');
     expect(sent[0]?.title).toBe('검토 끝낸 업무');
     // 일반 완료는 토스트 한 번이고 화면 안 완료 문구는 없다(D-82).
     await waitFor(() => {
       expect(done).toHaveBeenCalledOnce();
     });
     expect(done).toHaveBeenCalledWith('저장했습니다.', 'task-save');
+    expect(screen.getByText('review')).toBeInTheDocument();
     expect(screen.queryByText('저장했습니다.')).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import {
   parseTaskStatusDefinition,
   rec,
   str,
+  strings,
   type Json,
 } from '$lib/shared/api/parse';
 import { switchAccount } from '$lib/features/feedback/feedback.svelte';
@@ -24,6 +25,7 @@ import {
   type TaskSeriesResource,
   type TaskInput,
   type TaskResource,
+  type TaskConflictCurrent,
   type TaskStatus,
   type SuccessorShift,
   type RecurrenceRule,
@@ -201,8 +203,8 @@ export const workApi = {
     successorShifts: SuccessorShift[] = [],
   ): Promise<
     | { kind: 'updated'; task: TaskResource }
-    | { kind: 'conflict'; current: TaskResource }
-    | { kind: 'shift_conflict'; current: TaskResource }
+    | { kind: 'conflict'; current: TaskConflictCurrent }
+    | { kind: 'shift_conflict'; current: TaskConflictCurrent }
   > {
     const { status, json } = await request(
       'PATCH',
@@ -215,9 +217,16 @@ export const workApi = {
       { [EXPECTED_USER]: expectedUser },
     );
     // 409 중 기준 버전 충돌만 서버 최신본이 온다(보관·다시 시도 등은 일반 오류).
-    if (status === 409 && isRecord(json) && json.current !== undefined) {
+    if (
+      status === 409 &&
+      isRecord(json) &&
+      (json.error === 'conflict' || json.error === 'shift_conflict')
+    ) {
       const body = rec(json, 'conflict');
-      const current = parseTaskResource(body.current);
+      const current = {
+        ...parseTaskResource(body.current),
+        assignee_ids: strings(rec(body.current, 'current').assignee_ids),
+      };
       return str(body, 'error') === 'shift_conflict'
         ? { kind: 'shift_conflict', current }
         : { kind: 'conflict', current };

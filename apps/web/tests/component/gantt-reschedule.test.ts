@@ -220,7 +220,10 @@ describe('gantt reschedule', () => {
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi
       .spyOn(work, 'updateTask')
-      .mockResolvedValueOnce({ kind: 'shift_conflict', current: detail(design) })
+      .mockResolvedValueOnce({
+        kind: 'shift_conflict',
+        current: { ...detail(design), assignee_ids: [] },
+      })
       .mockResolvedValue({
         kind: 'updated',
         task: detail(task('a', '설계', '2026-10-20', '2026-10-23', 2)),
@@ -350,7 +353,7 @@ describe('gantt reschedule', () => {
     vi.spyOn(work, 'previewSchedule').mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi.spyOn(work, 'updateTask').mockResolvedValue({
       kind: 'conflict',
-      current: detail(task('a', '설계', '2026-10-20', '2026-10-22', 3)),
+      current: { ...detail(task('a', '설계', '2026-10-20', '2026-10-22', 3)), assignee_ids: [] },
     });
     const gantt = await mount();
     await fireEvent.keyDown(rowButton(gantt, 'a'), { key: 'ArrowRight', altKey: true });

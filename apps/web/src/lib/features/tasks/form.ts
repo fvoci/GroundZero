@@ -66,8 +66,8 @@ export function trimLikeServer(text: string): string {
 
 /**
  * 견주는 값: 서버에 저장될 모양. 담당자는 순서 없는 모음이라(서버는 이름순으로 돌려주고 화면은 고른 순서로 덧붙인다)
- * 정렬해 견주고, 일정은 보내는 모양(`scheduleOf`)으로 견준다. 태그는 서버가 받은 순서를 그대로 지키므로 순서까지
- * 견준다. 제목·설명은 서버처럼 앞뒤 공백을 뗀다: 앞뒤 공백만 친 칸은 고친 칸이 아니고(2차 검증), 서버 값과 앞뒤 공백만
+ * 정렬해 견주고, 일정은 보내는 모양(`scheduleOf`)으로 견준다. 태그도 승인 6568773043에 따라 집합으로 견주며 선택한
+ * 쪽의 저장 순서는 유지한다. 제목·설명은 서버처럼 앞뒤 공백을 뗀다: 앞뒤 공백만 친 칸은 고친 칸이 아니고, 서버 값과 앞뒤 공백만
  * 다른 내 값은 겹친 것이 아니다(묻는 화면에서 두 값이 똑같아 보인다).
  */
 function stored(unit: MergeUnit, input: TaskInput): unknown {
@@ -75,20 +75,20 @@ function stored(unit: MergeUnit, input: TaskInput): unknown {
     case 'schedule':
       return scheduleOf(input);
     case 'assignee_ids':
-      return [...new Set(input.assignee_ids)].sort();
+    case 'tags':
+      return [...new Set(input[unit])].sort();
     case 'title':
     case 'description':
       return trimLikeServer(input[unit]);
     case 'status':
     case 'priority':
     case 'estimate_minutes':
-    case 'tags':
       return input[unit];
   }
 }
 
 /** 그 단위가 저장될 모양으로 같은지. */
-function same(unit: MergeUnit, a: TaskInput, b: TaskInput): boolean {
+export function same(unit: MergeUnit, a: TaskInput, b: TaskInput): boolean {
   return canonicalJson(stored(unit, a)) === canonicalJson(stored(unit, b));
 }
 
@@ -98,6 +98,17 @@ function same(unit: MergeUnit, a: TaskInput, b: TaskInput): boolean {
  */
 export function edited(before: TaskInput, mine: TaskInput): boolean {
   return MERGE_UNITS.some((unit) => !same(unit, mine, before));
+}
+
+/** Freeze the user's changed fields before any asynchronous schedule preview. */
+export function changedTaskFields(before: TaskInput, mine: TaskInput): Partial<TaskInput> {
+  const patch: Partial<TaskInput> = {};
+  for (const unit of MERGE_UNITS) {
+    if (same(unit, before, mine)) continue;
+    if (unit === 'schedule') Object.assign(patch, scheduleOf(mine));
+    else Object.assign(patch, { [unit]: mine[unit] });
+  }
+  return patch;
 }
 
 /** 단위마다 고른 쪽(`from`)의 값으로 폼 값을 만든다. 일정은 세 칸을 한쪽에서 함께 가져온다. */

@@ -66,6 +66,7 @@ function contrast(fg: Oklch, bg: Oklch): number {
 
 const TEXT: [string, string][] = [
   ['foreground', 'background'],
+  ['foreground', 'muted'],
   ['card-foreground', 'card'],
   ['popover-foreground', 'popover'],
   ['muted-foreground', 'background'],

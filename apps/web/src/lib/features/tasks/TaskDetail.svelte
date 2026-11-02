@@ -73,11 +73,17 @@
   import { m } from '$lib/paraglide/messages.js';
   import { Button } from '$lib/ui/button';
 
-  import ClashConfirm from './ClashConfirm.svelte';
+  import FieldConflict from '$lib/features/common/FieldConflict.svelte';
+  import {
+    fieldDifferences,
+    initialFieldChoices,
+    selectedFields,
+  } from '$lib/features/common/field-conflict';
+  import { taskConflictFields, type TaskComparison } from './field-conflict';
+  import type { TaskConflictCurrent } from './model';
   import { createTaskForm, type Merge } from './task-form.svelte';
-  import { edited, estimateOf, formOf } from './form';
-  import type { ClashRow } from './labels';
-  import { assigneeLabels, clashRows, linkText, undatedText } from './labels';
+  import { changedTaskFields, edited, estimateOf, formOf } from './form';
+  import { assigneeLabels, linkText, undatedText } from './labels';
   import ShiftProposals from './ShiftProposals.svelte';
 
   interface Props {
@@ -186,7 +192,13 @@
   let people = $state<AssigneeView[] | undefined>(undefined);
   // 지정할 수 있는 사람을 받지 못했을 때의 안내(업무는 받았으므로 업무 불러오기 실패와 따로 알린다).
   let peopleError = $state<string | undefined>(undefined);
-  let conflict = $state<TaskDetailView | undefined>(undefined);
+  let comparison = $state<TaskComparison>();
+  let preservedComparison = $state<TaskComparison>();
+  let permissionBlocked = $state(false);
+  let hiddenForAccess = $state(false);
+  const conflictFields = $derived(
+    taskConflictFields(assigneeLabels([...(detailForm.task?.assignees ?? []), ...(people ?? [])])),
+  );
   let error = $state<string | undefined>(undefined);
   let retryRead = $state<(() => void) | undefined>();
   let readAttempt = $state(0);
@@ -198,19 +210,11 @@
     undated: UndatedTaskView[];
     blocked: PlanBlockedView | null;
     input: TaskInput;
+    patch: Partial<TaskInput>;
     baseVersion: number;
     retried: boolean;
   }
   let pending = $state<Pending | undefined>(undefined);
-  // 충돌 화면의 "내 입력으로 다시 저장"에서 나와 다른 사람이 서로 다르게 바꾼 칸(D-94). 보내기 전에 그 칸의 서버 값과
-  // 내 값을 보이고 덮어쓸지 묻는다. 묻는 동안 업무 상세(충돌 알림 밖)는 잠가 보인 값 그대로 덮어쓰고, 승인하면 물을 때
-  // 만든 병합(`merge`)을 그대로 저장한다. 취소하면 아무것도 보내지 않는다.
-  interface ClashAsk {
-    latest: TaskDetailView;
-    merge: Merge;
-    rows: ClashRow[];
-  }
-  let clashAsk = $state<ClashAsk | undefined>(undefined);
   let busy = $state(false);
   let predecessorChoice = $state('');
   // 관계 고치기(D-91): 고르는 선행 업무(새 관계) 또는 고치는 관계, 종류, 지연일(글자 그대로 두고 저장할 때 확인).
@@ -260,12 +264,15 @@
   function fill(next: TaskDetailView): void {
     detailForm.fill(next);
     pending = undefined;
-    clashAsk = undefined;
+    comparison = undefined;
+    preservedComparison = undefined;
+    permissionBlocked = next.access === 'read';
+    hiddenForAccess = false;
   }
   function applyMerge(merge: Merge): void {
     detailForm.applyMerge(merge);
     pending = undefined;
-    clashAsk = undefined;
+    comparison = undefined;
   }
 
   /**
@@ -274,7 +281,11 @@
    * 화면이 고르게 한다.
    */
   function refresh(fresh: TaskDetailView): void {
-    const asking = clashAsk;
+    if (comparison !== undefined) {
+      // A composed detail may mix independently read relations. Only a 409 can replace the reviewed snapshot.
+      detailForm.task = { ...fresh, version: detailForm.baseVersion };
+      return;
+    }
     const mine = currentInput();
     if (detailForm.task === undefined || mine === undefined || detailForm.baseline === undefined) {
       fill(fresh);
@@ -288,97 +299,107 @@
     if (!detailForm.clashed) detailForm.baseVersion = fresh.version;
     detailForm.task = detailForm.clashed ? { ...fresh, version: detailForm.baseVersion } : fresh;
     applyMerge(merge);
-    if (asking !== undefined)
-      askAgain(fresh.version > asking.latest.version ? fresh : asking.latest);
   }
 
-  /**
-   * 덮어쓰기 확인이 떠 있는 동안 먼저 보낸 체크리스트·반복·선행·상위 업무 요청이 돌아와 다시 채웠으면(`refresh`), 확인을
-   * 닫지 않고 아는 가장 새 판(`latest`)으로 다시 묻는다(전에는 말없이 닫혀 초점이 문서로 빠졌다, 리뷰). 받은 판이 충돌
-   * 판보다 새면 충돌 알림도 그 판을 보여 다시 저장이 그 판 번호로 간다. 더는 겹친 칸이 없으면 확인을 닫고 "내 입력으로
-   * 다시 저장"으로 돌린다(입력은 그대로, 보내는 것은 없다).
-   */
-  function askAgain(latest: TaskDetailView): void {
-    const mine = currentInput();
-    if (mine === undefined || detailForm.baseline === undefined) return;
-    if (conflict !== undefined && latest.version > conflict.version) conflict = latest;
-    const merge = mergeOnto(latest, mine, detailForm.baseline);
-    if (merge.clashes.length === 0) {
-      void focusLater('task-save-mine');
-      return;
-    }
-    clashAsk = {
-      latest,
-      merge,
-      rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
-    };
-  }
-
-  // 충돌 확인에 담당자 이름을 보일 때 쓴다(지정할 수 있는 사람과, 지금 판·서버 판에 지정된 사람). 같은 이름은 구분한다.
-  function assigneeNames(latest: TaskDetailView): Map<string, string> {
-    return assigneeLabels([
-      ...(detailForm.task?.assignees ?? []),
-      ...latest.assignees,
-      ...(people ?? []),
-    ]);
-  }
   // 폼의 담당자 이름표. 충돌 확인과 같은 글이라 확인에 보인 사람을 폼에서 찾을 수 있다.
   const peopleLabels = $derived(
     assigneeLabels([...(detailForm.task?.assignees ?? []), ...(people ?? [])]),
   );
 
-  /**
-   * 충돌 화면의 "내 입력으로 다시 저장"(D-94): 서버 최신 판(`latest`) 위에 내가 고친 칸만 올려 그 판 번호로 저장한다.
-   * 내가 고치지 않은 칸은 최신 값을 따르고(전에는 폼 전체를 보내 그사이 다른 사람이 바꾼 제목 등을 옛 값으로
-   * 되돌렸다), 내가 고친 칸 가운데 서버에서는 그대로이거나 같은 값이 된 칸은 내 값을 쓴다. 양쪽이 서로 다른 값으로
-   * 바꾼 칸이 있으면 보내기 전에 그 칸의 서버 값과 내 값을 보이고 덮어쓸지 묻는다(전에는 묻지 않고 내 값으로 덮었다).
-   */
-  async function saveMine(latest: TaskDetailView): Promise<void> {
+  /** Compare against the local edit baseline; a 409's changed list is not a three-way diff. */
+  function openComparison(
+    latest: Pick<TaskConflictCurrent, keyof TaskInput | 'version'>,
+    keptChoices?: TaskComparison['choices'],
+  ): boolean {
     const mine = currentInput();
-    if (busy || mine === undefined || detailForm.baseline === undefined) return;
-    // 잘못된 예상 시간은 병합 전에 막는다(입력을 그대로 두고 알린다).
-    if (estimateOf(detailForm.estimateText) === 'invalid') {
-      error = m.tasks_estimate_invalid();
-      return;
-    }
-    const merge = mergeOnto(latest, mine, detailForm.baseline);
-    if (merge.clashes.length > 0) {
-      error = undefined;
-      clashAsk = {
-        latest,
-        merge,
-        rows: clashRows(merge.clashes, merge.freshForm, mine, assigneeNames(latest)),
-      };
-      return;
-    }
-    await saveMerged(latest, merge);
+    const base = detailForm.baseline;
+    if (mine === undefined || base === undefined) return false;
+    const server: TaskInput = {
+      title: latest.title,
+      description: latest.description,
+      status: latest.status,
+      priority: latest.priority,
+      start_date: latest.start_date ?? null,
+      due_date: latest.due_date ?? null,
+      milestone: latest.milestone,
+      estimate_minutes: latest.estimate_minutes ?? null,
+      tags: latest.tags,
+      assignee_ids: latest.assignee_ids,
+    };
+    const old = preservedComparison;
+    const next: TaskComparison = {
+      base: $state.snapshot(base),
+      mine: $state.snapshot(mine),
+      server,
+      version: latest.version,
+      baseVersion: detailForm.baseVersion,
+      tagsText: detailForm.tagsText,
+      estimateText: detailForm.estimateText,
+      original: old?.original ?? $state.snapshot(mine),
+      originalBase: old?.originalBase ?? $state.snapshot(base),
+      originalVersion: old?.originalVersion ?? detailForm.baseVersion,
+      originalTagsText: old?.originalTagsText ?? detailForm.tagsText,
+      originalEstimateText: old?.originalEstimateText ?? detailForm.estimateText,
+      choices:
+        keptChoices === undefined
+          ? initialFieldChoices(fieldDifferences(conflictFields, base, mine, server))
+          : $state.snapshot(keptChoices),
+      repeated: old !== undefined,
+    };
+    comparison = next;
+    preservedComparison = next;
+    return true;
   }
 
-  /**
-   * 덮어쓰기 확인의 승인: 물을 때 만든 병합을 그대로 저장한다(묻는 동안 업무 상세는 잠겨 입력이 바뀌지 않는다). 양쪽이
-   * 바꾼 단위는 병합에서 이미 내 값이고, 일정은 묶음 전체가 한쪽 값이라 보인 내 일정이 그대로 보내진다.
-   */
-  async function overwrite(): Promise<void> {
-    const ask = clashAsk;
-    if (ask === undefined || busy) return;
-    await saveMerged(ask.latest, ask.merge);
+  /** Keep the original input while saving the chosen values against the reviewed version. */
+  function leaveComparison(original: boolean): void {
+    const kept = comparison;
+    if (kept === undefined || busy) return;
+    detailForm.form = $state.snapshot(original ? kept.original : kept.mine);
+    detailForm.tagsText = original ? kept.originalTagsText : kept.tagsText;
+    detailForm.estimateText = original ? kept.originalEstimateText : kept.estimateText;
+    detailForm.baseline = original ? kept.originalBase : kept.base;
+    detailForm.baseVersion = original ? kept.originalVersion : kept.baseVersion;
+    comparison = undefined;
+    void focusLater('task-save');
   }
-
-  /**
-   * 병합한 입력을 최신 판 번호로 저장한다(서버가 그 판으로 검사한다). 최신 판이 다음 비교의 기준이 되므로, 그사이 또
-   * 바뀌어 다시 409가 오면(충돌 화면이 더 새 판을 보인다) 다음 "내 입력으로 다시 저장"은 방금 받은 값을 고치지 않은
-   * 칸으로 보고 더 새 판 위에 다시 올린다. 실패해도 입력은 폼에 그대로 있다.
-   */
-  async function saveMerged(latest: TaskDetailView, merge: Merge): Promise<void> {
-    applyMerge(merge);
-    detailForm.task = latest;
-    detailForm.baseline = formOf(latest);
-    detailForm.baseVersion = latest.version;
+  async function applyChoices(saveNow: boolean): Promise<void> {
+    const ask = comparison;
+    const task = detailForm.task;
+    if (ask === undefined || task === undefined || busy || !canEdit) return;
+    const result = selectedFields(
+      conflictFields,
+      $state.snapshot(ask.mine),
+      $state.snapshot(ask.server),
+      ask.choices,
+    );
+    preservedComparison = $state.snapshot(ask);
+    detailForm.form = result;
+    detailForm.tagsText = result.tags.join(', ');
+    detailForm.estimateText =
+      result.estimate_minutes === null ? '' : String(result.estimate_minutes);
+    detailForm.baseline = ask.server;
+    detailForm.baseVersion = ask.version;
     detailForm.clashed = false;
-    await submit(latest);
-    // 충돌 화면이 남으면(저장 실패. 다시 409는 `save`가 돌린다) 누른 단추가 사라졌거나 잠겼던 자리이므로 "내 입력으로
-    // 다시 저장"으로 돌린다. 미리보기 패널이 떴으면 초점은 패널에 있다.
-    if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
+    if (saveNow) {
+      if (!edited(ask.server, result)) {
+        comparison = undefined;
+        preservedComparison = undefined;
+        notifyDone(m.common_conflict_equal(), 'task-save');
+        await focusLater('task-save');
+      } else {
+        const captured = writeContext();
+        await submit();
+        if (!acceptsWrite(captured)) return;
+        if (pending !== undefined) {
+          comparison = undefined;
+          await focusLater('shift-heading');
+        }
+      }
+    } else {
+      comparison = undefined;
+      await focusLater('task-title');
+    }
   }
 
   let detailReadSequence = 0;
@@ -389,6 +410,8 @@
     const navigation = untrack(() => aggregate) ? router.navigationGeneration : undefined;
     const parentItemId = untrack(() => itemId);
     const sequence = ++detailReadSequence;
+    busy = false;
+    saving = false;
     const capture = (): ContextCapture => ({
       userId: me.userId,
       sequence: detailReadSequence,
@@ -411,8 +434,7 @@
       !hiddenForAccount;
     detailForm.task = undefined;
     latestRule = undefined;
-    conflict = undefined;
-    clashAsk = undefined;
+    comparison = undefined;
     error = undefined;
     retryRead = undefined;
     screenArchived = undefined;
@@ -529,7 +551,11 @@
 
   const canEdit = $derived(
     !hiddenForAccount &&
+      !hiddenForAccess &&
+      !accountSafety.switching &&
+      !accountSafety.restoring &&
       !readOnly &&
+      !permissionBlocked &&
       detailForm.task !== undefined &&
       detailForm.task.access !== 'read',
   );
@@ -542,6 +568,7 @@
   const unsaved = $derived(
     !hiddenForAccount &&
       (detailForm.changed ||
+        preservedComparison !== undefined ||
         linkChanged ||
         parentChoice !== '' ||
         childDraft !== undefined ||
@@ -575,6 +602,7 @@
   /** 서버 내용과 같은(이미 반영된) 입력인지. 관계 편집 칸에 입력이 남아 있으면 같지 않다. */
   const isServer = (d: TaskDraft, server: TaskDetailView): boolean =>
     d.child === null &&
+    d.comparison === undefined &&
     estimateOf(d.estimateText) !== 'invalid' &&
     !edited(formOf(server), inputOf(d.form, d.tagsText, d.estimateText));
   /**
@@ -606,7 +634,7 @@
   function restoreDraft(): void {
     const entry = restorable;
     const current = detailForm.task;
-    if (entry === undefined || current === undefined || current.access === 'read' || busy) return;
+    if (entry === undefined || current === undefined || !canEdit || busy) return;
     const kept = entry.value;
     removeFormDraftAt(entry.key);
     restorable = undefined;
@@ -617,20 +645,33 @@
     detailForm.baseline = kept.baseline;
     detailForm.baseVersion = kept.baseVersion;
     detailForm.clashed = false;
-    conflict = undefined;
     pending = undefined;
-    clashAsk = undefined;
+    comparison = undefined;
+    preservedComparison = kept.comparison;
     error = undefined;
     parentChoice = '';
     childInitial = kept.child ?? undefined;
     childSeed += 1;
     resetLinkEditor();
-    // 남길 때의 판보다 서버가 앞섰으면 기존 다시 채우기로 병합한다(양쪽이 다르게 바꾼 칸은 옛 판 번호를 남겨 저장이 충돌
-    // 화면으로 간다). 같은 판이면 그 판으로 저장한다.
-    if (current.version !== kept.baseVersion) refresh(current);
-    else detailForm.task = current;
+    let comparing = false;
+    if (kept.comparison !== undefined && estimateOf(kept.estimateText) !== 'invalid') {
+      // Resume the paired fields/assignees/version from the 409, never a composed read with different relation timing.
+      const reviewed = kept.comparison;
+      const unchanged =
+        kept.baseVersion === reviewed.baseVersion &&
+        !edited(reviewed.base, kept.baseline) &&
+        !edited(reviewed.mine, inputOf(kept.form, kept.tagsText, kept.estimateText));
+      comparing = openComparison(
+        { ...reviewed.server, version: reviewed.version },
+        unchanged ? reviewed.choices : undefined,
+      );
+    } else if (estimateOf(kept.estimateText) === 'invalid') {
+      error = m.tasks_estimate_invalid();
+    } else if (current.version !== kept.baseVersion) {
+      refresh(current);
+    }
     offerDraft(current, true);
-    void focusLater('task-title');
+    if (!comparing) void focusLater('task-title');
   }
   function discardDraft(): void {
     const entry = restorable;
@@ -643,7 +684,8 @@
   $effect(() => {
     const mine = currentInput();
     const before = detailForm.baseline;
-    const dirty = detailForm.changed || childDraft !== undefined;
+    const dirty =
+      detailForm.changed || childDraft !== undefined || preservedComparison !== undefined;
     if (
       detailForm.task === undefined ||
       mine === undefined ||
@@ -661,6 +703,7 @@
         estimateText: detailForm.estimateText,
         child: childDraft ?? null,
         savedAt: new Date().toISOString(),
+        comparison: comparison === undefined ? preservedComparison : $state.snapshot(comparison),
       } satisfies TaskDraft);
       taskDraftKept = kept;
     } else {
@@ -688,46 +731,82 @@
   });
 
   /** 저장: 서버 기준 내용과 날짜가 다르면 먼저 후속 업무 영향을 미리 보고, 옮길 것이 있으면 사용자에게 묻는다. */
-  async function submit(base: TaskDetailView): Promise<void> {
+  const writeContext = (): ContextCapture => ({
+    userId: me.userId,
+    sequence: detailReadSequence,
+    navigationGeneration: router.navigationGeneration,
+    sessionGeneration: readTaskSessionGeneration(),
+    safetyGeneration: accountSafety.generation,
+    path: router.path,
+  });
+  function acceptsWrite(captured: ContextCapture): boolean {
+    return (
+      mounted &&
+      !hiddenForAccount &&
+      !hiddenForAccess &&
+      !permissionBlocked &&
+      !accountSafety.switching &&
+      !accountSafety.restoring &&
+      sameContext(captured, writeContext())
+    );
+  }
+  function writeFailed(cause: unknown): void {
+    if (cause instanceof ApiError) {
+      if (cause.code === 'account_changed') accountBlocked = true;
+      if ([403, 404].includes(cause.status) || cause.code === 'invalid_state')
+        permissionBlocked = true;
+      if (cause.status === 404) hiddenForAccess = true;
+    }
+    error = errorText(cause, m.tasks_save_failed());
+  }
+  async function submit(): Promise<void> {
     const input = currentInput();
-    if (detailForm.task === undefined || input === undefined || busy) return;
+    if (detailForm.task === undefined || input === undefined || busy || !canEdit) return;
     // 잘못된 예상 시간을 빈 값으로 보내면 저장된 값이 지워진다. 입력을 그대로 두고 알린다.
     if (estimateOf(detailForm.estimateText) === 'invalid') {
       error = m.tasks_estimate_invalid();
       return;
     }
+    const before = detailForm.baseline ?? formOf(detailForm.task);
+    const baseVersion = detailForm.baseVersion;
+    const patch = changedTaskFields(before, $state.snapshot(input));
     busy = true;
     saving = true;
     error = undefined;
+    const captured = writeContext();
     try {
       // 목록의 선행 정보는 오래됐을 수 있으므로 날짜가 바뀌면 언제나 서버에 묻는다.
       let undated: UndatedTaskView[] = [];
-      if (input.start_date !== base.start_date || input.due_date !== base.due_date) {
+      if (input.start_date !== before.start_date || input.due_date !== before.due_date) {
         const plan = await work.previewSchedule(
           detailForm.task.id,
           input.start_date,
           input.due_date,
         );
+        if (!acceptsWrite(captured)) return;
         if (plan.shifts.length > 0) {
           pending = {
             proposals: plan.shifts,
             undated: plan.undated,
             blocked: plan.blocked,
             input,
-            baseVersion: base.version,
+            patch,
+            baseVersion,
             retried: false,
           };
           return;
         }
         undated = plan.undated;
       }
-      await save(input, base.version, [], undated);
+      await save(input, patch, baseVersion, [], undated);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      error = errorText(e, m.tasks_save_failed());
+      if (acceptsWrite(captured)) writeFailed(e);
     } finally {
-      busy = false;
-      saving = false;
+      if (captured.sequence === detailReadSequence) {
+        busy = false;
+        saving = false;
+      }
     }
   }
 
@@ -738,14 +817,17 @@
     busy = true;
     saving = true;
     error = undefined;
+    const captured = writeContext();
     try {
-      await save(p.input, p.baseVersion, withShifts ? p.proposals : [], p.undated);
+      await save(p.input, p.patch, p.baseVersion, withShifts ? p.proposals : [], p.undated);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      error = errorText(e, m.tasks_save_failed());
+      if (acceptsWrite(captured)) writeFailed(e);
     } finally {
-      busy = false;
-      saving = false;
+      if (captured.sequence === detailReadSequence) {
+        busy = false;
+        saving = false;
+      }
     }
   }
 
@@ -758,29 +840,26 @@
 
   async function save(
     input: TaskInput,
+    patch: Partial<TaskInput>,
     baseVersion: number,
     shifts: ShiftProposalView[],
     undated: UndatedTaskView[] = [],
     /** 다시 계산해 보니 밀릴 업무가 없어 묻지 않고 저장했다(저장한 뒤 알린다, D-125). */
     noShiftNeeded = false,
-    // 후속 업무 미리보기에서 승인한 저장(덮어쓰기 뒤 미리보기 승인 등)이 다시 409면, 패널과 함께 누른 단추가 없어져
-    // 초점이 문서로 빠지므로 "내 입력으로 다시 저장"으로 돌린다. 폼의 "저장"은 그대로 있으므로 두고(2차 검증 nit),
-    // "내 입력으로 다시 저장"·덮어쓰기에서 바로 보낸 저장은 `saveMerged`가 돌린다. 미리보기를 비운 뒤의 재시도는
-    // 처음 저장의 값을 넘겨받는다(RA-2).
-    refocus = pending !== undefined,
   ): Promise<void> {
     if (detailForm.task === undefined) return;
+    const captured = writeContext();
     const result = await work.updateTask(
       editingUser,
       detailForm.task.id,
       baseVersion,
-      input,
+      patch,
       shifts.map(toShift),
     );
+    if (!acceptsWrite(captured)) return;
     if (result.kind === 'conflict') {
       pending = undefined;
-      conflict = result.current;
-      if (refocus) await focusLater('task-save-mine');
+      openComparison(result.current);
       return;
     }
     if (result.kind === 'shift_conflict') {
@@ -789,7 +868,8 @@
       const plan = await work.previewSchedule(detailForm.task.id, input.start_date, input.due_date);
       if (plan.shifts.length === 0) {
         pending = undefined;
-        await save(input, baseVersion, [], plan.undated, true, refocus);
+        if (!acceptsWrite(captured)) return;
+        await save(input, patch, baseVersion, [], plan.undated, true);
         return;
       }
       pending = {
@@ -797,12 +877,12 @@
         undated: plan.undated,
         blocked: plan.blocked,
         input,
+        patch,
         baseVersion,
         retried: true,
       };
       return;
     }
-    conflict = undefined;
     fill(result.task);
     // 일반 완료는 토스트다(D-82). 날짜가 없어 옮기지 않은 업무 안내도 그 문구에 붙인다.
     notifyDone(
@@ -817,9 +897,10 @@
 
   // 패널이 사라질 때 대화상자의 초점 가두기가 첫 입력란으로 초점을 옮기므로, 그 뒤 프레임에서 요소로 돌린다.
   async function focusLater(id: string): Promise<void> {
+    const captured = writeContext();
     await tick();
     requestAnimationFrame(() => {
-      document.getElementById(id)?.focus();
+      if (acceptsWrite(captured)) document.getElementById(id)?.focus();
     });
   }
 
@@ -828,9 +909,11 @@
   }
 
   async function reloadChecklist(next: Promise<unknown>): Promise<void> {
+    const captured = writeContext();
     await next;
-    if (detailForm.task === undefined) return;
+    if (detailForm.task === undefined || !acceptsWrite(captured)) return;
     const fresh = await work.task(detailForm.task.id);
+    if (!acceptsWrite(captured)) return;
     if (detailForm.task.version === fresh.version) {
       detailForm.task = fresh;
     } else {
@@ -1100,7 +1183,11 @@
   <p role="alert">{m.tasks_account_changed()}</p>
   <Button onclick={() => void verifyAccount()}>{m.tasks_account_verify()}</Button>
 {/if}
-<div class="@container" hidden={hiddenForAccount} inert={hiddenForAccount}>
+<div
+  class="@container"
+  hidden={hiddenForAccount || hiddenForAccess}
+  inert={hiddenForAccount || hiddenForAccess}
+>
   {#if detailForm.task === undefined && error === undefined}
     <!-- 읽는 동안 빈 창으로 두지 않는다. -->
     <p class="py-6 text-center text-sm text-muted-foreground" role="status">
@@ -1109,10 +1196,9 @@
   {/if}
   {#if detailForm.task !== undefined && detailForm.form !== undefined}
     {@const current = detailForm.task}
-    <!-- 덮어쓰기 확인이 떠 있는 동안에는 충돌 알림(확인 포함) 말고는 모두 잠근다. 체크리스트·반복·선행·상위 업무를
-       바꾸면 다시 채우기가 확인을 말없이 닫고, 보인 값과 저장할 값이 어긋날 수 있다. -->
+    <!-- 비교 중의 값을 고정하고, 이미 보낸 자식 응답은 refresh에서 더 새 판만 채택한다. -->
     <div class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-baseline gap-2" inert={clashAsk !== undefined}>
+      <div class="flex flex-wrap items-baseline gap-2" inert={comparison !== undefined}>
         <span class="font-mono text-sm text-muted-foreground">{current.reference ?? ''}</span>
         {#if current.access === 'read' || readOnly}<span class="text-sm text-muted-foreground"
             >{m.tasks_read_only()}</span
@@ -1138,11 +1224,11 @@
           class="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
           role="region"
           aria-label={m.tasks_draft_region()}
-          inert={clashAsk !== undefined}
+          inert={comparison !== undefined}
           data-testid="task-draft-offer"
         >
           <span>{m.tasks_draft_found({ time: formatInstant(kept.savedAt) })}</span>
-          {#if current.access === 'read'}
+          {#if !canEdit}
             <span class="text-muted-foreground">{m.tasks_draft_read_only()}</span>
           {:else}
             <Button size="sm" variant="outline" disabled={busy} onclick={restoreDraft}
@@ -1154,52 +1240,35 @@
         </div>
       {/if}
 
-      {#if conflict !== undefined}
-        {@const latest = conflict}
-        <!-- 알림은 문장에만 둔다(안의 덮어쓰기 확인이 따로 알리므로 알림 전체를 두 번 읽지 않게). -->
-        <div class="rounded-md border border-amber-500/50 p-3 text-sm">
-          <p role="alert">
-            {m.tasks_conflict({ title: latest.title, status: latest.status })}
-          </p>
-          <div class="mt-2 flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onclick={() => {
-                fill(latest);
-                conflict = undefined;
-                // 누른 단추가 알림과 함께 사라지므로 다시 채운 폼의 첫 칸으로 돌린다(전에는 문서로 빠졌다).
-                void focusLater('task-title');
-              }}>{m.tasks_load_server()}</Button
-            >
-            <Button
-              id="task-save-mine"
-              size="sm"
-              disabled={busy || clashAsk !== undefined}
-              onclick={() => void saveMine(latest)}>{m.tasks_save_mine()}</Button
-            >
-          </div>
-          {#if clashAsk !== undefined}
-            <ClashConfirm
-              rows={clashAsk.rows}
-              {busy}
-              onconfirm={() => void overwrite()}
-              oncancel={() => {
-                clashAsk = undefined;
-                void focusLater('task-save-mine');
-              }}
-            />
-          {/if}
-        </div>
+      {#if comparison !== undefined}
+        <FieldConflict
+          fields={conflictFields}
+          base={comparison.base}
+          mine={comparison.mine}
+          server={comparison.server}
+          bind:choices={comparison.choices}
+          {busy}
+          blocked={!canEdit}
+          repeated={comparison.repeated}
+          onsave={() => void applyChoices(true)}
+          onedit={() => void applyChoices(false)}
+          oncancel={() => {
+            leaveComparison(false);
+          }}
+          onoriginal={edited(comparison.original, comparison.mine)
+            ? () => {
+                leaveComparison(true);
+              }
+            : undefined}
+        />
       {/if}
 
-      <div class="flex flex-col gap-4" inert={clashAsk !== undefined}>
+      <div class="flex flex-col gap-4" inert={comparison !== undefined}>
         <!-- 제목 다음에 상태·우선순위·날짜를 두 칸으로 먼저 보이고(좁은 화면에서도 스크롤 없이), 설명은 그 아래에 둔다. -->
         <TaskFields
           bind:f={detailForm.form}
           bind:tagsText={detailForm.tagsText}
           bind:estimateText={detailForm.estimateText}
-          {current}
           previewing={pending !== undefined}
           {locked}
           {canEdit}
