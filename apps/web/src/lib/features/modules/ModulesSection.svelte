@@ -4,6 +4,7 @@
   import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { object, retry } from './draft-values';
 
@@ -86,9 +87,11 @@
   onMount(draft.attach);
   // owner가 아니게 되면 숨은 만들기 입력을 되살리기 제안으로 옮기고 화면 입력은 비워 경고에서 뺀다(#289, D-27).
   // 응답을 잃은 만들기의 요청 id가 함께 남아, 권한을 되찾아 다시 내도 중복 모듈이 생기지 않는다. 보낸 만들기는
-  // 응답까지 잠가 두고, 끝난 뒤 옮긴다.
+  // 응답까지 잠가 두고, 끝난 뒤 옮긴다. 계정 전환·복구 중에는 입력을 그대로 두고(D-96), 같은 사용자로 끝나면 이
+  // 효과가 다시 돌아 옮긴다(CR-311-1).
   $effect(() => {
-    if (!isAdmin && !busy) untrack(draft.shelve);
+    if (isAdmin || busy || accountSwitching()) return;
+    untrack(draft.shelve);
   });
 
   async function create(event: SubmitEvent): Promise<void> {
