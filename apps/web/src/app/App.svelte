@@ -279,7 +279,7 @@
         // 복원은 원래 사용자와도 다시 비교해야 하므로 restoreSession이 /me부터 재확인한다.
         if (verified !== undefined) return false;
         // 표식은 재확인 신호다. 안전 세대의 재시도 상한을 소진하지 않고 자기 /me와 목록을 다시 읽는다.
-        return await load(undefined, attempt);
+        return await retryNotification();
       }
       org.load(me.id, organizations, me.last_organization_id ?? null);
       const startupContext =
@@ -323,7 +323,7 @@
       if (mine !== sessionSequence || cacheRestorePending) return false;
       if (e instanceof SessionListMismatch) {
         if (verified !== undefined) throw e;
-        if (safetyGeneration === accountSafety.generation) return await load(undefined, attempt);
+        if (safetyGeneration === accountSafety.generation) return await retryNotification();
       }
       if (
         verified === undefined &&
@@ -522,7 +522,10 @@
     hideSession('restore');
   }
 
-  async function restoreSession(attempt = 0): Promise<void> {
+  async function restoreSession(
+    attempt = 0,
+    notificationRetry = createSessionNotificationRetry(),
+  ): Promise<void> {
     if (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
       return;
     const mine = ++restoreSequence;
@@ -538,11 +541,27 @@
       sessionHidden &&
       (accountSafety.reason === 'restore' || accountSafety.reason === 'reauth');
     const recheck = (): void => {
-      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void restoreSession(attempt + 1);
+      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS)
+        void restoreSession(attempt + 1, notificationRetry);
       else {
         accountSafety.switching = true;
         accountSafety.error = m.feedback_restore_failed();
       }
+    };
+    const retryNotification = async (): Promise<void> => {
+      if (
+        !(await notificationRetry.wait(taskSessionLifetime.signal, () => {
+          // 복원 가림은 이미 유지 중이다. 대기 동안 /me 외의 읽기도 다시 막는다.
+          accountSafety.switching = true;
+        }))
+      )
+        return;
+      if (!active() || !taskSessionActive) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      await restoreSession(attempt, notificationRetry);
     };
     try {
       const now = await api.me();
@@ -569,7 +588,7 @@
         if (mine !== restoreSequence || cacheRestorePending || !restoring()) return;
         if (generation !== readSessionGeneration()) {
           // 알림은 목록을 버리고 재확인하라는 신호다. 안전 세대의 재시도 상한은 소진하지 않는다.
-          void restoreSession(attempt);
+          await retryNotification();
           return;
         }
         if (loaded) {
@@ -588,7 +607,7 @@
         return;
       }
       if (error instanceof SessionListMismatch) {
-        void restoreSession(attempt);
+        await retryNotification();
         return;
       }
       // 확인 실패는 기존 DOM·입력을 보존하고 직접 다시 시도하게 한다.

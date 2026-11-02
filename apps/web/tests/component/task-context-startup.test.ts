@@ -14,6 +14,7 @@ import { PROJECT_MODULE, TASK_ITEM, WORKSPACE } from '../../stories/fixtures/syn
 import { TEST_ORGANIZATION } from './fixtures/organization';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
 import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
+import { request } from '$lib/shared/api';
 
 let originalLocks: PropertyDescriptor | undefined;
 
@@ -115,6 +116,169 @@ afterEach(() => {
 
 const viewerCases = (['notes', 'tasks', 'restore'] as const).flatMap((path) =>
   (['workspaces', 'organizations'] as const).map((list) => [path, list] as const),
+);
+
+const pacedCases = (['notes', 'tasks', 'restore'] as const).flatMap((path) =>
+  (['generation', 'workspaces', 'organizations'] as const).map((source) => [path, source] as const),
+);
+
+it.each(pacedCases)(
+  '#299 E paces %s rechecks from %s and keeps content closed until hints stop',
+  async (path, source) => {
+    router.navigate(
+      path === 'tasks' ? itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board') : '/notes',
+    );
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: () => new Promise<never>(() => undefined) },
+    });
+    let churning = false;
+    let delayed = false;
+    vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+    vi.mocked(fetch).mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const workspace = url === '/api/workspaces';
+      if (!workspace && url !== '/api/me/organizations')
+        return Promise.resolve(new Response('{}', { status: 404 }));
+      const respond = (): Response => {
+        if (churning && source === 'generation' && workspace)
+          localStorage.setItem(
+            'fvoci:auth-session',
+            JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+          );
+        const foreign = churning && source === (workspace ? 'workspaces' : 'organizations');
+        const items = workspace
+          ? [{ ...WORKSPACE, ...(foreign ? { name: 'E private B space' } : {}) }]
+          : [{ ...TEST_ORGANIZATION, id: WORKSPACE.organization_id }];
+        return new Response(JSON.stringify(items), {
+          status: 200,
+          headers: { 'x-fvoci-viewer-id': foreign ? 'other-viewer' : identity.id },
+        });
+      };
+      return delayed
+        ? new Promise<Response>((resolve) => {
+            setTimeout(() => {
+              resolve(respond());
+            }, 1);
+          })
+        : Promise.resolve(respond());
+    });
+    if (path === 'restore') {
+      render(App);
+      await screen.findByTestId('workspace-switcher');
+    }
+    const notesBefore = vi.mocked(api.myNotes).mock.calls.length;
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(0);
+    const starts: number[] = [];
+    vi.mocked(api.me)
+      .mockClear()
+      .mockImplementation(() => {
+        starts.push(Date.now());
+        return Promise.resolve(identity);
+      });
+    churning = true;
+    delayed = true;
+    if (path === 'restore')
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    else render(App);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(starts).toHaveLength(SESSION_CHECK_MAX_ATTEMPTS);
+    expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+    expect(screen.queryByTestId('task-board')).toBeNull();
+    expect(api.myNotes).toHaveBeenCalledTimes(notesBefore);
+    expect(taskScreenApi.board).not.toHaveBeenCalled();
+    expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+    if (path === 'restore') {
+      expect(accountSafety.restoring).toBe(true);
+      expect(accountSafety.switching).toBe(true);
+      const fetches = vi.mocked(fetch).mock.calls.length;
+      await expect(request('GET', '/api/workspaces')).rejects.toMatchObject({
+        code: 'account_changed',
+      });
+      await expect(request('POST', '/api/notes', {})).rejects.toMatchObject({
+        code: 'account_changed',
+      });
+      expect(fetch).toHaveBeenCalledTimes(fetches);
+    }
+    await vi.advanceTimersByTimeAsync(154);
+    expect(starts).toEqual([0, 1, 2, 253]);
+    await vi.advanceTimersByTimeAsync(9_746);
+    expect(starts).toHaveLength(10);
+    expect(starts.slice(3, 7)).toEqual([253, 754, 1755, 3756]);
+    expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+    expect(api.myNotes).toHaveBeenCalledTimes(notesBefore);
+    expect(taskScreenApi.board).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
+    churning = false;
+    await vi.advanceTimersByTimeAsync(2_001);
+    await tick();
+    expect(screen.getByTestId('workspace-switcher')).toBeVisible();
+    expect(screen.queryByText('E private B space')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    if (path === 'tasks') expect(screen.getByTestId('task-board')).toBeVisible();
+    else expect(api.myNotes).toHaveBeenCalledTimes(notesBefore + 1);
+  },
+);
+
+it.each(
+  (['notes', 'restore'] as const).flatMap((path) =>
+    (['network', 'safety', 'unmount'] as const).map((outcome) => [path, outcome] as const),
+  ),
+)(
+  '#299 E preserves the separate %s %s outcome after paced notifications',
+  async (path, outcome) => {
+    router.navigate('/notes');
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    let view!: ReturnType<typeof render>;
+    if (path === 'restore') {
+      view = render(App);
+      await screen.findByTestId('workspace-switcher');
+    }
+    const notesBefore = vi.mocked(api.myNotes).mock.calls.length;
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(0);
+    vi.mocked(api.me).mockClear();
+    vi.mocked(api.workspaces).mockImplementation(
+      () =>
+        new Promise<Workspace[]>((resolve) => {
+          setTimeout(() => {
+            localStorage.setItem(
+              'fvoci:auth-session',
+              JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+            );
+            resolve([WORKSPACE]);
+          }, 1);
+        }),
+    );
+    if (path === 'restore')
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    else view = render(App);
+    await vi.advanceTimersByTimeAsync(254);
+    expect(api.me).toHaveBeenCalledTimes(4);
+    if (outcome === 'unmount') view.unmount();
+    else if (outcome === 'network') {
+      connection.lost = true;
+      vi.mocked(api.me).mockRejectedValue(new ApiError(503, 'unreachable', 'network unavailable'));
+    } else
+      vi.mocked(api.me).mockImplementation(() => {
+        accountSafety.generation += 1;
+        return Promise.resolve(identity);
+      });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.me).toHaveBeenCalledTimes(
+      outcome === 'unmount' ? 4 : outcome === 'network' ? 5 : 4 + SESSION_CHECK_MAX_ATTEMPTS,
+    );
+    expect(api.myNotes).toHaveBeenCalledTimes(notesBefore);
+    expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+    if (outcome !== 'unmount') {
+      if (path === 'restore') expect(accountSafety.error).not.toBe('');
+      else expect(screen.getByRole('alert')).toBeVisible();
+    }
+  },
 );
 
 it.each(viewerCases)(
@@ -248,6 +412,7 @@ it.each(['settled', 'logout-pending'] as const)(
 
 it('#299 rechecks notification churn beyond the safety retry limit without a retry error', async () => {
   router.navigate('/notes');
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   let changes = 0;
   vi.spyOn(api, 'workspaces').mockImplementation(() => {
     if (changes > SESSION_CHECK_MAX_ATTEMPTS) return Promise.resolve([WORKSPACE]);
@@ -263,6 +428,7 @@ it('#299 rechecks notification churn beyond the safety retry limit without a ret
     { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
   ]);
   render(App);
+  await vi.advanceTimersByTimeAsync(2_000);
   await fireEvent.click(await screen.findByTestId('workspace-switcher'));
   expect(screen.queryByRole('menuitem', { name: 'SR-298-1 B-session space' })).toBeNull();
   expect(screen.getByRole('menuitem', { name: WORKSPACE.name })).toBeInTheDocument();
@@ -339,6 +505,7 @@ it('#299 restore rechecks notification churn beyond the safety retry limit', asy
   ]);
   render(App);
   await screen.findByTestId('workspace-switcher');
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   let changes = 0;
   vi.mocked(api.workspaces).mockImplementation(() => {
     if (changes > SESSION_CHECK_MAX_ATTEMPTS) return Promise.resolve([WORKSPACE]);
@@ -351,6 +518,7 @@ it('#299 restore rechecks notification churn beyond the safety retry limit', asy
     return Promise.resolve([{ ...WORKSPACE, name: 'SR-298-1 restored B-session space' }]);
   });
   window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  await vi.advanceTimersByTimeAsync(2_000);
   await waitFor(() => {
     expect(screen.getByTestId('workspace-switcher')).toBeVisible();
   });
