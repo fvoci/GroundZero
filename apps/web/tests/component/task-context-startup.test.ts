@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me, OrganizationSummary, Workspace } from '@fvoci/api-client';
@@ -107,6 +107,87 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   router.guard = undefined;
+  localStorage.removeItem('fvoci:auth-session');
+});
+
+it.each(['settled', 'logout-pending'] as const)(
+  '#299 rejects a foreign non-task startup list after A returns with a %s signal',
+  async (state) => {
+    router.navigate('/notes');
+    const publication = held<boolean>();
+    const spaces = held<Workspace[]>();
+    let publish: (() => boolean) | undefined;
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: (_name: string, update: () => boolean) => {
+          if (publish !== undefined) return Promise.resolve(update());
+          publish = update;
+          return publication.promise;
+        },
+      },
+    });
+    vi.spyOn(api, 'workspaces').mockImplementation(() =>
+      vi.mocked(api.me).mock.calls.length >= 2 ? Promise.resolve([WORKSPACE]) : spaces.promise,
+    );
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    render(App);
+    await waitFor(() => {
+      expect(api.workspaces).toHaveBeenCalledOnce();
+    });
+    for (const step of ['B', 'A']) {
+      localStorage.setItem(
+        'fvoci:auth-session',
+        JSON.stringify({
+          state,
+          generation: readSessionGeneration() + 1,
+          sequence: step,
+          startedAt: Date.now(),
+          attemptId: `pending-${step}`,
+        }),
+      );
+      window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+    }
+    if (publish !== undefined) {
+      const accepted = publish();
+      expect(accepted).toBe(false);
+      publication.resolve(accepted);
+    }
+    // A request started before the rejected check would have used B's session cookie.
+    spaces.resolve([{ ...WORKSPACE, name: 'SR-298-1 B-session space' }]);
+    await fireEvent.click(await screen.findByTestId('workspace-switcher'));
+    await waitFor(() => {
+      expect(vi.mocked(api.me).mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.queryByRole('menuitem', { name: 'SR-298-1 B-session space' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: WORKSPACE.name })).toBeInTheDocument();
+  },
+);
+
+it('#299 rechecks notification churn beyond the safety retry limit without a retry error', async () => {
+  router.navigate('/notes');
+  let changes = 0;
+  vi.spyOn(api, 'workspaces').mockImplementation(() => {
+    if (changes > SESSION_CHECK_MAX_ATTEMPTS) return Promise.resolve([WORKSPACE]);
+    changes += 1;
+    localStorage.setItem(
+      'fvoci:auth-session',
+      JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+    );
+    window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+    return Promise.resolve([{ ...WORKSPACE, name: 'SR-298-1 B-session space' }]);
+  });
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  render(App);
+  await fireEvent.click(await screen.findByTestId('workspace-switcher'));
+  expect(screen.queryByRole('menuitem', { name: 'SR-298-1 B-session space' })).toBeNull();
+  expect(screen.getByRole('menuitem', { name: WORKSPACE.name })).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(api.workspaces).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS + 2);
 });
 
 it('SR-298-1 retries /me before starting task reads when publication sees a newer session', async () => {

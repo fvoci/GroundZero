@@ -147,13 +147,18 @@
     try {
       const me = verified ?? (await api.me());
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      const publishNonTaskStartup =
+        verified === undefined &&
+        router.route.name !== 'public' &&
+        !(router.route.name === 'item' && router.route.group === 'tasks');
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
         if (router.route.name === 'item' && router.route.group === 'tasks') {
           if (!(await publishSessionCheck(generation))) return await retryLoad();
-        } else void publishSessionCheck(generation);
+        }
       }
       if (me === undefined) {
+        if (publishNonTaskStartup) void publishSessionCheck(generation);
         const info = await api.authInfo();
         if (mine !== sessionSequence) return false;
         session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
@@ -217,6 +222,10 @@
             result: rechecked,
           };
       }
+      if (publishNonTaskStartup && generation !== readSessionGeneration()) {
+        // 표식은 재확인 신호다. 안전 세대의 재시도 상한을 소진하지 않고 자기 /me와 목록을 다시 읽는다.
+        return await load(undefined, attempt);
+      }
       org.load(me.id, organizations, me.last_organization_id ?? null);
       const startupContext =
         startupSeed?.result.kind === 'loaded' ? startupSeed.result.value : undefined;
@@ -240,6 +249,8 @@
         );
       }
       taskContextSeed = startupSeed;
+      // 자기 게시가 비교할 세대를 바꾸지 않게 목록을 채택한 뒤 알린다. 게시 잠금은 화면을 막지 않는다.
+      if (publishNonTaskStartup) void publishSessionCheck(generation);
       session = { state: 'signed-in', me, workspaces };
       return true;
     } catch (e: unknown) {
