@@ -98,7 +98,7 @@ export interface ClashRow {
 }
 
 /** 폼의 칸 이름(폼의 이름표와 같은 글). 일정은 시작일·마감일·마일스톤 묶음의 이름이다. */
-function fieldLabel(unit: MergeUnit): string {
+export function fieldLabel(unit: MergeUnit): string {
   switch (unit) {
     case 'title':
       return m.tasks_title();
@@ -147,7 +147,11 @@ export function assigneeLabels(people: readonly AssigneeView[]): Map<string, str
 }
 
 /** 단위 값 하나를 읽을 수 있는 글로. 담당자는 `names`(사용자 id → 보일 이름, `assigneeLabels`)에서 찾는다. */
-function fieldText(unit: MergeUnit, input: TaskInput, names: ReadonlyMap<string, string>): string {
+export function fieldText(
+  unit: MergeUnit,
+  input: TaskInput,
+  names: ReadonlyMap<string, string>,
+): string {
   switch (unit) {
     case 'title':
     case 'description':

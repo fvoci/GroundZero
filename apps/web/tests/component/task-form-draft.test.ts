@@ -283,13 +283,7 @@ describe('task form input across reloads and account switches', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(1);
     });
-    expect(update).toHaveBeenCalledWith(
-      A,
-      't-1',
-      1,
-      expect.objectContaining({ description: EDIT, title: '설계' }),
-      [],
-    );
+    expect(update).toHaveBeenCalledWith(A, 't-1', 1, { description: EDIT }, []);
     await waitFor(() => {
       expect(keysOf(A)).toEqual([]);
     });
@@ -365,13 +359,7 @@ describe('task form input across reloads and account switches', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(1);
     });
-    expect(update).toHaveBeenCalledWith(
-      A,
-      't-1',
-      3,
-      expect.objectContaining({ description: EDIT, title: '설계 (3판)' }),
-      [],
-    );
+    expect(update).toHaveBeenCalledWith(A, 't-1', 3, { description: EDIT }, []);
   });
 
   it('clears the input when the form is closed by the user but keeps it through an account switch', async () => {

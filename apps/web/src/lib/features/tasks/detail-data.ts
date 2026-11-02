@@ -4,6 +4,7 @@ import { composeTasks, loadBoard, loadRelations } from './board-data';
 import {
   TaskRuleConflict,
   type TaskResource,
+  type TaskConflictCurrent,
   type TaskDetailView,
   type TaskInput,
   type SuccessorShift,
@@ -11,8 +12,8 @@ import {
 
 type SaveResult =
   | { kind: 'updated'; task: TaskDetailView }
-  | { kind: 'conflict'; current: TaskDetailView }
-  | { kind: 'shift_conflict'; current: TaskDetailView };
+  | { kind: 'conflict'; current: TaskConflictCurrent }
+  | { kind: 'shift_conflict'; current: TaskConflictCurrent };
 type LinkResult =
   | { kind: 'updated'; task: TaskDetailView }
   | { kind: 'link_conflict'; current: TaskDetailView }
@@ -87,12 +88,12 @@ export const taskData = {
     user: string,
     id: string,
     version: number,
-    input: TaskInput,
+    input: Partial<TaskInput>,
     shifts: SuccessorShift[] = [],
   ): Promise<SaveResult> => {
     const result = await workApi.updateTask(user, id, version, input, shifts);
     if (result.kind === 'updated') return { kind: result.kind, task: await detailOf(result.task) };
-    return { kind: result.kind, current: await detailOf(result.current) };
+    return result;
   },
   setPredecessor: async (
     ...args: Parameters<typeof workApi.setPredecessor>

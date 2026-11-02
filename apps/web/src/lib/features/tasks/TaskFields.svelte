@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AssigneeView, TaskDetailView, TaskInput, TaskPriority, TaskStatus } from './model';
+  import type { AssigneeView, TaskInput, TaskPriority, TaskStatus } from './model';
   import { TASK_PRIORITIES } from './model';
   import { PRIORITY_LABEL } from './labels';
   import { me } from '$lib/me.svelte';
@@ -14,7 +14,6 @@
     f = $bindable(),
     tagsText = $bindable(''),
     estimateText = $bindable(''),
-    current,
     previewing,
     locked,
     canEdit,
@@ -29,7 +28,6 @@
     f: TaskInput | undefined;
     tagsText?: string;
     estimateText?: string;
-    current: TaskDetailView;
     previewing: boolean;
     locked: boolean;
     canEdit: boolean;
@@ -39,7 +37,7 @@
     peopleError: string | undefined;
     peopleLabels: Map<string, string>;
     toggleAssignee: (id: string, checked: boolean) => void;
-    submit: (task: TaskDetailView) => Promise<void>;
+    submit: () => Promise<void>;
   } = $props();
 </script>
 
@@ -49,7 +47,7 @@
     inert={previewing}
     onsubmit={(e) => {
       e.preventDefault();
-      void submit(current);
+      void submit();
     }}
   >
     <div class="@md:col-span-2 flex flex-col gap-1">
