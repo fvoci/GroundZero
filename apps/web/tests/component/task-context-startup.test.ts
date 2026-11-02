@@ -3,11 +3,11 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me, OrganizationSummary, Workspace } from '@fvoci/api-client';
 import App from '../../src/app/App.svelte';
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData } from '$lib/features/tasks/detail-data';
 import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
-import { accountSafety, auth } from '$lib/features/feedback/feedback.svelte';
+import { accountSafety, auth, connection } from '$lib/features/feedback/feedback.svelte';
 import { itemPath, itemViewPath, router } from '$lib/router.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import { PROJECT_MODULE, TASK_ITEM, WORKSPACE } from '../../stories/fixtures/synthetic';
@@ -103,6 +103,8 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  connection.lost = false;
   if (originalLocks === undefined) Reflect.deleteProperty(navigator, 'locks');
   else Object.defineProperty(navigator, 'locks', originalLocks);
   vi.restoreAllMocks();
@@ -118,8 +120,6 @@ it.each(['missing-locks', 'logout-pending', 'never-granted', 'churn', 'granted']
       { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
     ]);
     const read = vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
-    const changes = SESSION_CHECK_MAX_ATTEMPTS + 2;
-    let notifications = 0;
     if (mode === 'missing-locks') {
       Reflect.deleteProperty(navigator, 'locks');
       expect('locks' in navigator).toBe(false);
@@ -139,26 +139,105 @@ it.each(['missing-locks', 'logout-pending', 'never-granted', 'churn', 'granted']
         value: { request: () => new Promise<never>(() => undefined) },
       });
     } else if (mode === 'churn') {
-      read.mockImplementation(() => {
-        if (notifications < changes) {
-          notifications += 1;
-          localStorage.setItem(
-            'fvoci:auth-session',
-            JSON.stringify({
-              state: 'settled',
-              generation: readSessionGeneration() + 1,
-            }),
-          );
-        }
-        return Promise.resolve(context);
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(0);
+      let churning = true;
+      const starts: number[] = [];
+      vi.mocked(api.me).mockImplementation(() => {
+        starts.push(Date.now());
+        return Promise.resolve(identity);
       });
+      read.mockImplementation(
+        () =>
+          new Promise<TaskContext>((resolve) => {
+            setTimeout(() => {
+              if (churning)
+                localStorage.setItem(
+                  'fvoci:auth-session',
+                  JSON.stringify({
+                    state: 'settled',
+                    generation: readSessionGeneration() + 1,
+                  }),
+                );
+              resolve(context);
+            }, 1);
+          }),
+      );
+      render(App);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(api.me).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS);
+      expect(screen.queryByText(context.item.title)).toBeNull();
+      expect(taskScreenApi.board).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(154);
+      expect(starts).toEqual([0, 1, 2, 253]);
+      await vi.advanceTimersByTimeAsync(9_746);
+      expect(api.me).toHaveBeenCalledTimes(10);
+      expect(starts.slice(3, 7)).toEqual([253, 754, 1755, 3756]);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByText(context.item.title)).toBeNull();
+      churning = false;
+      await vi.advanceTimersByTimeAsync(2_001);
+      await tick();
+      expect(screen.getByTestId('task-board')).toBeVisible();
+      expect(taskData.syncRecurrences).toHaveBeenCalledOnce();
+      expect(taskScreenApi.board).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledTimes(vi.mocked(api.me).mock.calls.length);
+      expect(screen.queryByRole('alert')).toBeNull();
+      return;
     }
     render(App);
     await screen.findByTestId('task-board');
     expect(taskData.syncRecurrences).toHaveBeenCalledOnce();
     expect(taskScreenApi.board).toHaveBeenCalledOnce();
-    expect(api.me).toHaveBeenCalledTimes(mode === 'churn' ? changes + 1 : 1);
-    expect(read).toHaveBeenCalledTimes(mode === 'churn' ? changes + 1 : 1);
+    expect(api.me).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledOnce();
+  },
+);
+
+it.each(['network', 'safety', 'unmount'] as const)(
+  'SR-298-6 preserves the separate %s outcome after paced notifications',
+  async (outcome) => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(0);
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    vi.spyOn(taskScreenApi, 'context').mockImplementation(
+      () =>
+        new Promise<TaskContext>((resolve) => {
+          setTimeout(() => {
+            localStorage.setItem(
+              'fvoci:auth-session',
+              JSON.stringify({
+                state: 'settled',
+                generation: readSessionGeneration() + 1,
+              }),
+            );
+            resolve(context);
+          }, 1);
+        }),
+    );
+    const view = render(App);
+    await vi.advanceTimersByTimeAsync(254);
+    expect(api.me).toHaveBeenCalledTimes(4);
+    if (outcome === 'unmount') view.unmount();
+    else if (outcome === 'network') {
+      connection.lost = true;
+      vi.mocked(api.me).mockRejectedValue(new ApiError(503, 'unreachable', 'network unavailable'));
+    } else
+      vi.mocked(api.me).mockImplementation(() => {
+        accountSafety.generation += 1;
+        return Promise.resolve(identity);
+      });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.me).toHaveBeenCalledTimes(
+      outcome === 'unmount' ? 4 : outcome === 'network' ? 5 : 4 + SESSION_CHECK_MAX_ATTEMPTS,
+    );
+    expect(taskScreenApi.board).not.toHaveBeenCalled();
+    expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+    expect(screen.queryByText(context.item.title)).toBeNull();
+    if (outcome !== 'unmount') expect(screen.getByRole('alert')).toBeVisible();
   },
 );
 

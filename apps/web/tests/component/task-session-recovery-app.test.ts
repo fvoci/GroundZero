@@ -154,6 +154,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   if (originalLocks === undefined) Reflect.deleteProperty(navigator, 'locks');
   else Object.defineProperty(navigator, 'locks', originalLocks);
   vi.restoreAllMocks();
@@ -356,35 +357,85 @@ it('SR-298-4 waits for an in-flight same-user verification even with an expiry b
   expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
 });
 
-it('SR-298-1 follow-up keeps rechecking authority across notification churn beyond the safety limit', async () => {
+it('SR-298-7 slows continuous notification checks and opens after hints stop', async () => {
   const first = held<BoardRead>();
   vi.mocked(taskScreenApi.board).mockReturnValueOnce(first.promise);
-  let changes = 0;
-  vi.mocked(api.me)
-    .mockResolvedValueOnce(identity)
-    .mockImplementation(() => {
-      if (changes < 5) {
-        changes += 1;
-        localStorage.setItem(
-          'fvoci:auth-session',
-          JSON.stringify({
-            state: 'settled',
-            generation: readSessionGeneration() + 1,
-          }),
-        );
-      }
-      return Promise.resolve(identity);
-    });
   render(App, { reload: vi.fn(), replace: vi.fn() });
   await screen.findByRole('heading', { name: /^업무$/ });
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+  vi.setSystemTime(0);
+  let churning = true;
+  const starts: number[] = [];
+  vi.mocked(api.me).mockImplementation(() => {
+    starts.push(Date.now());
+    return new Promise<Me>((resolve) => {
+      setTimeout(() => {
+        if (churning) signal();
+        resolve(identity);
+      }, 1);
+    });
+  });
+  const notifications = setInterval(signal, 50);
   signal();
   first.resolve(board);
-  await screen.findByText(detail.task.title);
-  expect(api.me).toHaveBeenCalledTimes(7);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(api.me).toHaveBeenCalledTimes(4);
+  expect(taskScreenApi.board).toHaveBeenCalledOnce();
+  expect(screen.queryByText(detail.task.title)).toBeNull();
+  await vi.advanceTimersByTimeAsync(154);
+  expect(starts).toEqual([0, 1, 2, 253]);
+  await vi.advanceTimersByTimeAsync(9_746);
+  expect(api.me).toHaveBeenCalledTimes(11);
+  expect(starts.slice(3, 7)).toEqual([253, 754, 1755, 3756]);
+  expect(screen.queryByText(detail.task.title)).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+  clearInterval(notifications);
+  churning = false;
+  await vi.advanceTimersByTimeAsync(2_001);
+  await tick();
+  expect(screen.getByText(detail.task.title)).toBeVisible();
   expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
   expect(accountSafety.switching).toBe(false);
   expect(auth.expired).toBe(false);
 });
+
+it.each(['unmount', 'leave-tasks'] as const)(
+  'SR-298-7 stops its paced authority check on %s',
+  async (ending) => {
+    const first = held<BoardRead>();
+    vi.mocked(taskScreenApi.board).mockReturnValueOnce(first.promise);
+    const view = render(App, { reload: vi.fn(), replace: vi.fn() });
+    await screen.findByRole('heading', { name: /^업무$/ });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let churning = true;
+    vi.mocked(api.me).mockImplementation(
+      () =>
+        new Promise<Me>((resolve) => {
+          setTimeout(() => {
+            if (churning) signal();
+            resolve(identity);
+          }, 1);
+        }),
+    );
+    signal();
+    first.resolve(board);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(api.me).toHaveBeenCalledTimes(4);
+    if (ending === 'unmount') view.unmount();
+    else {
+      churning = false;
+      vi.spyOn(api, 'myNotes').mockResolvedValue([]);
+      router.navigate('/notes');
+      await tick();
+    }
+    await vi.advanceTimersByTimeAsync(10_000);
+    // Leaving tasks retains one already queued ordinary session check, without a task retry.
+    expect(api.me).toHaveBeenCalledTimes(ending === 'unmount' ? 4 : 5);
+    expect(taskScreenApi.board).toHaveBeenCalledOnce();
+  },
+);
 
 it.each(
   (['board', 'seed', 'detail', 'options', 'reopen'] as const).flatMap((kind) =>
