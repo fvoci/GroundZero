@@ -136,8 +136,6 @@ it('moves a hidden comment edit into a kept offer while guarding the visible new
   await waitFor(() => {
     expect(unsaved).toHaveBeenLastCalledWith(false);
   });
-  expect(await screen.findByTestId('comment-edit-draft-offer')).toHaveTextContent(
-    '숨을 수정 본문',
-  );
+  expect(await screen.findByTestId('comment-edit-draft-offer')).toHaveTextContent('숨을 수정 본문');
   expect(edit).not.toHaveBeenCalled();
 });

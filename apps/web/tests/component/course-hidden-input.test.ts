@@ -72,7 +72,9 @@ afterEach(() => {
 /** 개인 진도 바꾸기로 다시 읽히는 강좌가 `access`가 된다. */
 async function reloadAs(access: CourseView['access']): Promise<void> {
   vi.mocked(api.course).mockResolvedValue(course(access));
-  await fireEvent.click(screen.getByRole('button', { name: m.courses_mark_done_aria({ number: 1 }) }));
+  await fireEvent.click(
+    screen.getByRole('button', { name: m.courses_mark_done_aria({ number: 1 }) }),
+  );
   await waitFor(() => {
     expect(document.getElementById('episode-title') === null).toBe(access !== 'write');
   });
