@@ -41,6 +41,7 @@ mod health;
 mod home;
 mod http_denials;
 mod id_bounds;
+mod item_expected_user;
 mod item_profile;
 mod limits;
 mod limits_contract;
