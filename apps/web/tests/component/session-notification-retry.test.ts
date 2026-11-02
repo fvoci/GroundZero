@@ -62,3 +62,34 @@ it('returns immediately for an already aborted lifetime', async () => {
   expect(await createSessionNotificationRetry().wait(lifetime.signal)).toBe(false);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it('calls beforePause before scheduling a timer and never for immediate or aborted retries', async () => {
+  const retry = createSessionNotificationRetry();
+  const lifetime = new AbortController();
+  const beforePause = vi.fn(() => {
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  await retry.wait(lifetime.signal, beforePause);
+  await retry.wait(lifetime.signal, beforePause);
+  expect(beforePause).not.toHaveBeenCalled();
+  const paused = retry.wait(lifetime.signal, beforePause);
+  expect(beforePause).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(1);
+  lifetime.abort();
+  expect(await paused).toBe(false);
+  expect(await retry.wait(lifetime.signal, beforePause)).toBe(false);
+  expect(beforePause).toHaveBeenCalledOnce();
+});
+
+it('does not schedule a timer if beforePause ends the lifetime', async () => {
+  const retry = createSessionNotificationRetry();
+  const lifetime = new AbortController();
+  await retry.wait(lifetime.signal);
+  await retry.wait(lifetime.signal);
+  expect(
+    await retry.wait(lifetime.signal, () => {
+      lifetime.abort();
+    }),
+  ).toBe(false);
+  expect(vi.getTimerCount()).toBe(0);
+});

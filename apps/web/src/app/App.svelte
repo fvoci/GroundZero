@@ -601,10 +601,9 @@
     const canVerify = (): boolean =>
       taskSessionActive &&
       currentUser.userId === userId &&
-      !sessionHidden &&
+      (!sessionHidden || (accountSafety.reason === 'reauth' && accountSafety.error === '')) &&
       router.route.name === 'item' &&
       router.route.group === 'tasks';
-    const sameSession = (): boolean => canVerify() && !auth.expired;
     if (!canVerify()) return;
     const notificationRetry = createSessionNotificationRetry();
     taskSessionConfirmations += 1;
@@ -622,14 +621,27 @@
           proof = await awaited;
           pending = sessionVerification ?? awaited;
         } while (pending !== awaited);
-        if (!sameSession()) return;
+        if (!canVerify()) return;
         if (
           proof?.userId === userId &&
           proof.sessionGeneration === readTaskSessionGeneration() &&
           proof.safetyGeneration === accountSafety.generation
-        )
+        ) {
+          if (sessionHidden && accountSafety.reason === 'reauth') {
+            auth.expired = false;
+            accountSafety.switching = false;
+            accountSafety.restoring = false;
+            void refreshUnread();
+          }
           return proof;
-        if (!(await notificationRetry.wait(taskSessionLifetime.signal))) return;
+        }
+        if (auth.expired) return;
+        if (
+          !(await notificationRetry.wait(taskSessionLifetime.signal, () => {
+            if (!sessionHidden) hideSession('reauth');
+          }))
+        )
+          return;
       }
     } finally {
       taskSessionConfirmations -= 1;
@@ -663,6 +675,17 @@
       } else if (now.id !== expected) {
         switchAccount();
       } else {
+        // Both recovery and a later manual retry need a current task-session proof.
+        if (
+          sessionHidden &&
+          accountSafety.reason === 'reauth' &&
+          router.route.name === 'item' &&
+          router.route.group === 'tasks'
+        ) {
+          if (generation !== readTaskSessionGeneration()) return undefined;
+          if (taskConfirmationPending())
+            return { userId: now.id, sessionGeneration: generation, safetyGeneration };
+        }
         auth.expired = false;
         accountSafety.switching = false;
         accountSafety.restoring = false;

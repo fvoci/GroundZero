@@ -167,14 +167,18 @@ it.each(['missing-locks', 'logout-pending', 'never-granted', 'churn', 'granted']
       await vi.advanceTimersByTimeAsync(100);
       expect(api.me).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS);
       expect(screen.queryByText(context.item.title)).toBeNull();
+      expect(screen.queryByTestId('task-board')).toBeNull();
+      expect(taskData.syncRecurrences).not.toHaveBeenCalled();
       expect(taskScreenApi.board).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(154);
       expect(starts).toEqual([0, 1, 2, 253]);
+      expect(screen.queryByTestId('task-board')).toBeNull();
       await vi.advanceTimersByTimeAsync(9_746);
       expect(api.me).toHaveBeenCalledTimes(10);
       expect(starts.slice(3, 7)).toEqual([253, 754, 1755, 3756]);
       expect(screen.queryByRole('alert')).toBeNull();
       expect(screen.queryByText(context.item.title)).toBeNull();
+      expect(screen.queryByTestId('task-board')).toBeNull();
       churning = false;
       await vi.advanceTimersByTimeAsync(2_001);
       await tick();

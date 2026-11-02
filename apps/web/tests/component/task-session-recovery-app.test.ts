@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me } from '@fvoci/api-client';
 import App from '../../src/app/App.svelte';
 import { api, ApiError } from '$lib/api/client';
+import { request } from '$lib/shared/api';
 import { activityApi } from '$lib/features/activity/api';
 import { accountSafety, auth } from '$lib/features/feedback/feedback.svelte';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
@@ -357,6 +358,166 @@ it('SR-298-4 waits for an in-flight same-user verification even with an expiry b
   expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
 });
 
+it.each(['same', 'other'] as const)(
+  'SR-298-9 masks retained task DOM throughout paced recovery until the %s proof',
+  async (user) => {
+    const first = held<DetailRead>();
+    const authority = held<Me | undefined>();
+    const reload = vi.fn();
+    const reads = vi
+      .spyOn(taskScreenApi, 'detail')
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(detail);
+    render(App, { reload, replace: vi.fn() });
+    const privateTitle = await screen.findByText(detail.task.title);
+    const list = screen.getByRole('button', { name: /^목록$/ });
+    expect(privateTitle).toBeVisible();
+    expect(list).toBeVisible();
+    router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+    await waitFor(() => {
+      expect(reads).toHaveBeenCalledOnce();
+    });
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(0);
+    vi.mocked(api.me).mockImplementation(
+      () =>
+        new Promise<Me>((resolve) => {
+          setTimeout(() => {
+            signal();
+            resolve(identity);
+          }, 1);
+        }),
+    );
+    signal();
+    first.resolve(detail);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(api.me).toHaveBeenCalledTimes(4);
+    expect(privateTitle.isConnected).toBe(true);
+    expect(privateTitle).not.toBeVisible();
+    expect(list).not.toBeVisible();
+    const mask = privateTitle.closest('div[style*="display: none"]');
+    expect(mask).not.toBeNull();
+    expect(mask).toHaveProperty('inert', true);
+    expect(document.documentElement).toHaveAttribute('data-account-switching');
+    expect(accountSafety.reason).toBe('reauth');
+    const taskPath = router.path;
+    router.navigate('/notes');
+    expect(router.path).toBe(taskPath);
+    const fetches = vi.mocked(globalThis.fetch).mock.calls.length;
+    await expect(request('GET', '/api/workspaces')).rejects.toMatchObject({
+      code: 'account_changed',
+    });
+    await expect(
+      request('POST', `/api/items/${item.id}/recurrences/sync`, {}),
+    ).rejects.toMatchObject({ code: 'account_changed' });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(fetches);
+    await vi.advanceTimersByTimeAsync(154);
+    expect(privateTitle).not.toBeVisible();
+    expect(reads).toHaveBeenCalledOnce();
+    vi.mocked(api.me).mockReturnValue(authority.promise);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(privateTitle).not.toBeVisible();
+    expect(privateTitle.isConnected).toBe(true);
+    authority.resolve(user === 'same' ? identity : { ...identity, id: 'other-viewer' });
+    await vi.advanceTimersByTimeAsync(50);
+    await tick();
+    if (user === 'other') {
+      expect(accountSafety.reason).toBe('account');
+      expect(reload).toHaveBeenCalledOnce();
+      expect(privateTitle).not.toBeVisible();
+      expect(reads).toHaveBeenCalledOnce();
+    } else {
+      expect(accountSafety.switching).toBe(false);
+      expect(accountSafety.restoring).toBe(false);
+      expect(privateTitle.isConnected).toBe(true);
+      expect(privateTitle).toBeVisible();
+      expect(screen.getByLabelText('제목')).toHaveValue(detail.task.title);
+      expect(reads).toHaveBeenCalledTimes(2);
+      expect(reload).not.toHaveBeenCalled();
+    }
+  },
+);
+
+it('SR-298-9 keeps its mask after an error until manual reauthentication has a current proof', async () => {
+  const first = held<DetailRead>();
+  const authority = held<Me | undefined>();
+  vi.spyOn(taskScreenApi, 'detail').mockReturnValueOnce(first.promise).mockResolvedValue(detail);
+  render(App, { reload: vi.fn(), replace: vi.fn() });
+  const privateTitle = await screen.findByText(detail.task.title);
+  router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+  await waitFor(() => {
+    expect(taskScreenApi.detail).toHaveBeenCalledOnce();
+  });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  vi.mocked(api.me).mockImplementation(
+    () =>
+      new Promise<Me>((resolve) => {
+        setTimeout(() => {
+          signal();
+          resolve(identity);
+        }, 1);
+      }),
+  );
+  signal();
+  first.resolve(detail);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(privateTitle).not.toBeVisible();
+  vi.mocked(api.me).mockRejectedValue(new ApiError(503, 'unreachable', 'verification unavailable'));
+  await vi.advanceTimersByTimeAsync(200);
+  expect(accountSafety.error).not.toBe('');
+  expect(privateTitle).not.toBeVisible();
+  vi.mocked(api.me)
+    .mockReturnValue(authority.promise)
+    .mockImplementationOnce(() => {
+      signal();
+      return Promise.resolve(identity);
+    });
+  await fireEvent.click(screen.getByRole('button', { name: /^다시 시도$/ }));
+  await vi.advanceTimersByTimeAsync(50);
+  expect(privateTitle.isConnected).toBe(true);
+  expect(privateTitle).not.toBeVisible();
+  expect(document.documentElement).toHaveAttribute('data-account-switching');
+  authority.resolve(identity);
+  await vi.advanceTimersByTimeAsync(50);
+  await tick();
+  expect(privateTitle).toBeVisible();
+  expect(accountSafety.switching).toBe(false);
+});
+
+it('SR-298-9 keeps verified task DOM visible through immediate notification retries', async () => {
+  const first = held<DetailRead>();
+  vi.spyOn(taskScreenApi, 'detail').mockReturnValueOnce(first.promise).mockResolvedValue(detail);
+  render(App, { reload: vi.fn(), replace: vi.fn() });
+  const privateTitle = await screen.findByText(detail.task.title);
+  router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+  await waitFor(() => {
+    expect(taskScreenApi.detail).toHaveBeenCalledOnce();
+  });
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  let responses = 0;
+  vi.mocked(api.me).mockImplementation(
+    () =>
+      new Promise<Me>((resolve) => {
+        setTimeout(() => {
+          responses += 1;
+          if (responses <= 2) signal();
+          resolve(identity);
+        }, 1);
+      }),
+  );
+  const safety = accountSafety.generation;
+  signal();
+  first.resolve(detail);
+  for (let response = 0; response < 3; response += 1) {
+    await vi.advanceTimersByTimeAsync(1);
+    expect(accountSafety.generation).toBe(safety);
+    expect(privateTitle).toBeVisible();
+    expect(document.documentElement).not.toHaveAttribute('data-account-switching');
+  }
+  expect(screen.getByLabelText('제목')).toHaveValue(detail.task.title);
+  expect(taskScreenApi.detail).toHaveBeenCalledTimes(2);
+});
+
 it('SR-298-7 slows continuous notification checks and opens after hints stop', async () => {
   const first = held<BoardRead>();
   vi.mocked(taskScreenApi.board).mockReturnValueOnce(first.promise);
@@ -421,7 +582,8 @@ it.each(['unmount', 'leave-tasks'] as const)(
     );
     signal();
     first.resolve(board);
-    await vi.advanceTimersByTimeAsync(100);
+    // Navigation is allowed during immediate checks; a timed reauthentication mask blocks it.
+    await vi.advanceTimersByTimeAsync(ending === 'unmount' ? 100 : 2);
     expect(api.me).toHaveBeenCalledTimes(4);
     if (ending === 'unmount') view.unmount();
     else {
@@ -429,6 +591,7 @@ it.each(['unmount', 'leave-tasks'] as const)(
       vi.spyOn(api, 'myNotes').mockResolvedValue([]);
       router.navigate('/notes');
       await tick();
+      expect(router.path).toBe('/notes');
     }
     await vi.advanceTimersByTimeAsync(10_000);
     // Leaving tasks retains one already queued ordinary session check, without a task retry.
