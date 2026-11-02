@@ -1968,5 +1968,5 @@
     "trigger fvoci.tasks.tasks_search",
     "trigger fvoci.tasks.tasks_series_root_guard"
   ],
-  "sql_fingerprint": "abe7be52081b6f22f1a55bfb999946990f2dc18223829121c76e1d355f450f58"
+  "sql_fingerprint": "621a4b1e5e43c1fec56f80a1cca6d6d3f2df8aaffe97a3593c7f278b96dbc021"
 }

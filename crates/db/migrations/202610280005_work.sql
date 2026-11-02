@@ -2096,6 +2096,7 @@ CREATE FUNCTION fvoci.app_update_task(p_task uuid, p_base_version integer, p_tit
 
     -- 새로 넣는 담당자만 확인한다(이미 있는 담당 때문에 다른 필드 고치기가 막히지 않게). 새 담당자 목록은 여기서
     -- 한 번 정하고 그 목록만 넣는다(그사이 다른 트랜잭션이 지운 기존 담당을 확인 없이 되살리지 않게).
+    -- NULL은 담당 변경 없음이다. 새 후보가 없고 아래 해제도 건너뛴다. 빈 배열은 모두 해제한다.
     -- 멤버 행 공유 잠금은 사용자 id 순으로 잡는다.
     SELECT coalesce(array_agg(u ORDER BY u), '{}') INTO v_new
     FROM (SELECT DISTINCT u FROM unnest(coalesce(p_assignees, '{}')) AS u
@@ -2127,7 +2128,7 @@ CREATE FUNCTION fvoci.app_update_task(p_task uuid, p_base_version integer, p_tit
     END IF;
     FOR v_uid IN
       SELECT a.user_id FROM task_assignees a
-      WHERE a.task_id = p_task AND NOT (a.user_id = ANY (coalesce(p_assignees, '{}')))
+      WHERE p_assignees IS NOT NULL AND a.task_id = p_task AND NOT (a.user_id = ANY (p_assignees))
     LOOP
       DELETE FROM task_assignees WHERE task_id = p_task AND user_id = v_uid;
       IF FOUND THEN
