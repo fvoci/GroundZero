@@ -311,14 +311,12 @@ impl Matrix {
             }
             if matches!(actor.role, Role::Group | Role::ReadonlyGroup) {
                 let group = Uuid::now_v7();
-                sqlx::query(
-                    "INSERT INTO fvoci.groups(id,workspace_id,name) VALUES($1,$2,$3)",
-                )
-                .bind(group)
-                .bind(self.fixture.workspace)
-                .bind(format!("matrix-{:?}", actor.role))
-                .execute(&mut self.fixture.ddl)
-                .await?;
+                sqlx::query("INSERT INTO fvoci.groups(id,workspace_id,name) VALUES($1,$2,$3)")
+                    .bind(group)
+                    .bind(self.fixture.workspace)
+                    .bind(format!("matrix-{:?}", actor.role))
+                    .execute(&mut self.fixture.ddl)
+                    .await?;
                 sqlx::query("INSERT INTO fvoci.group_members(group_id,user_id) VALUES($1,$2)")
                     .bind(group)
                     .bind(actor.user.id.0)
