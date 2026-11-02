@@ -2717,10 +2717,18 @@
         "responses": {
           "200": {
             "description": "",
+            "headers": {
+              "x-fvoci-viewer-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "일정을 읽은 인증 사용자의 UUID (D-96)"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Event"
+                  "$ref": "#/components/schemas/EventDetail"
                 }
               }
             }
@@ -17656,6 +17664,25 @@
             "$ref": "#/components/schemas/WorkspaceId"
           }
         }
+      },
+      "EventDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Event"
+          },
+          {
+            "type": "object",
+            "required": [
+              "archived"
+            ],
+            "properties": {
+              "archived": {
+                "type": "boolean"
+              }
+            }
+          }
+        ],
+        "description": "단건 읽기의 보관 상태. 일반 Event·목록·쓰기 충돌 자원은 그대로 둔다."
       },
       "EventInput": {
         "type": "object",

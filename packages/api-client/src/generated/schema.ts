@@ -3680,6 +3680,10 @@ export interface components {
             version: number;
             workspace_id: components["schemas"]["WorkspaceId"];
         };
+        /** @description 단건 읽기의 보관 상태. 일반 Event·목록·쓰기 충돌 자원은 그대로 둔다. */
+        EventDetail: components["schemas"]["Event"] & {
+            archived: boolean;
+        };
         /** @description 일정 내용(만들기·고치기 공통). */
         EventInput: {
             all_day: boolean;
@@ -8061,10 +8065,12 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description 일정을 읽은 인증 사용자의 UUID (D-96) */
+                    "x-fvoci-viewer-id"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Event"];
+                    "application/json": components["schemas"]["EventDetail"];
                 };
             };
             404: {

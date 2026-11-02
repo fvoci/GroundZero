@@ -164,8 +164,11 @@ async fn events_follow_item_access_keep_their_zone_and_guard_versions() {
         (reply.status, reply.json)
     };
     assert_eq!(status, StatusCode::OK);
+    assert!(r.json["current"].get("archived").is_none());
+    let mut expected = r.json["current"].clone();
+    expected["archived"] = json!(false);
     assert_eq!(
-        current, r.json["current"],
+        current, expected,
         "stale update must leave the event unchanged"
     );
 
