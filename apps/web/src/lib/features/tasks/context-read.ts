@@ -1,3 +1,45 @@
+import { readSessionGeneration } from '$lib/features/auth/session-signal';
+
+let taskGeneration = 0;
+let observedGeneration: number | undefined;
+let publicationOwner: symbol | undefined;
+
+/** Foreign hints invalidate reads; our own notification of an accepted /me does not. */
+export function readTaskSessionGeneration(): number {
+  const generation = readSessionGeneration();
+  if (generation !== observedGeneration) {
+    observedGeneration = generation;
+    taskGeneration += 1;
+  }
+  return taskGeneration;
+}
+
+export function trackTaskSessionPublications(): {
+  published(before: number, after: number): void;
+  dispose(): void;
+} {
+  const owner = Symbol();
+  publicationOwner = owner;
+  observedGeneration = readSessionGeneration();
+  taskGeneration += 1;
+  return {
+    published(before, after) {
+      if (
+        publicationOwner === owner &&
+        observedGeneration === before &&
+        readSessionGeneration() === after
+      )
+        observedGeneration = after;
+    },
+    dispose() {
+      if (publicationOwner !== owner) return;
+      publicationOwner = undefined;
+      observedGeneration = readSessionGeneration();
+      taskGeneration += 1;
+    },
+  };
+}
+
 /** D-96: an early read belongs to one session, route and request, including A → B → A. */
 export interface ContextCapture {
   userId: string;

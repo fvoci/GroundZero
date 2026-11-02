@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, api } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
+import { readTaskSessionGeneration } from '$lib/features/tasks/context-read';
 import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import {
   taskScreenApi,
@@ -18,6 +19,10 @@ import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { DiscardedTaskRead } from '$lib/features/tasks/context-read';
 import { accountSafety } from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
+import {
+  createTaskSessionRecovery,
+  TASK_SESSION_RECOVERY,
+} from '$lib/features/tasks/session-recovery';
 import { timeData } from '$lib/features/time/data';
 import { TASK_ITEM, taskViews } from '../../stories/fixtures/synthetic';
 
@@ -89,6 +94,36 @@ const options: DetailOptionsRead = {
     value: [{ user_id: 'stale-person', display_name: 'stale session person' }],
   },
 };
+function recoveryContext() {
+  vi.spyOn(api, 'me').mockResolvedValue({
+    id: 'user-a',
+    display_name: 'A',
+    is_server_admin: false,
+    hour_cycle: '',
+    locale: 'ko',
+    time_zone: '',
+    week_start: '',
+    theme: 'system',
+    limits: {
+      max_title_chars: 200,
+      max_document_bytes: 2_000_000,
+      max_references_per_document: 500,
+      max_document_depth: 10,
+    },
+  });
+  return new Map([
+    [
+      TASK_SESSION_RECOVERY,
+      createTaskSessionRecovery(async (userId) => {
+        const generation = readTaskSessionGeneration();
+        const safetyGeneration = accountSafety.generation;
+        const checked = await api.me();
+        if (checked?.id !== userId) return;
+        return { userId, sessionGeneration: generation, safetyGeneration };
+      }),
+    ],
+  ]);
+}
 beforeEach(() => {
   vi.spyOn(savedViewsApi, 'savedViews').mockResolvedValue([]);
   vi.spyOn(activityApi, 'comments').mockResolvedValue([]);
@@ -219,17 +254,21 @@ it('CR-1 retries a discarded initial detail once in the current safe screen', as
   vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(detail);
   vi.spyOn(taskScreenApi, 'options').mockResolvedValue(options);
   render(TaskDetail, {
-    taskId: task.id,
-    tasks: [],
-    workspaces: [],
-    aggregate: true,
-    initialRead: () => ({ take: read }),
-    onchanged: () => undefined,
-    onopen: () => undefined,
+    context: recoveryContext(),
+    props: {
+      taskId: task.id,
+      tasks: [],
+      workspaces: [],
+      aggregate: true,
+      initialRead: () => ({ take: read }),
+      onchanged: () => undefined,
+      onopen: () => undefined,
+    },
   });
   expect(await screen.findByLabelText('제목')).toHaveValue(detail.task.title);
   expect(read).toHaveBeenCalledOnce();
   expect(taskScreenApi.detail).toHaveBeenCalledOnce();
+  expect(api.me).toHaveBeenCalledOnce();
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
@@ -268,16 +307,20 @@ it('CR-1 propagates a current failure from the single fresh detail retry', async
     new ApiError(403, 'forbidden', 'fresh failure'),
   );
   render(TaskDetail, {
-    taskId: task.id,
-    tasks: [],
-    workspaces: [],
-    aggregate: true,
-    initialRead: () => ({ take: () => Promise.reject(new DiscardedTaskRead()) }),
-    onchanged: () => undefined,
-    onopen: () => undefined,
+    context: recoveryContext(),
+    props: {
+      taskId: task.id,
+      tasks: [],
+      workspaces: [],
+      aggregate: true,
+      initialRead: () => ({ take: () => Promise.reject(new DiscardedTaskRead()) }),
+      onchanged: () => undefined,
+      onopen: () => undefined,
+    },
   });
   await screen.findByRole('alert');
   expect(taskScreenApi.detail).toHaveBeenCalledOnce();
+  expect(api.me).toHaveBeenCalledOnce();
   expect(screen.queryByLabelText('제목')).toBeNull();
 });
 

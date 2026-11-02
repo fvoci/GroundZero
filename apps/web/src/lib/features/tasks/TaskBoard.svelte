@@ -7,18 +7,23 @@
   import { taskScreenApi, type BoardRead, type DetailRead } from './screen-api';
   import {
     DiscardedTaskRead,
-    sameContext,
+    readTaskSessionGeneration,
     startCapturedRead,
     type CapturedRead,
     type ContextCapture,
   } from './context-read';
+  import {
+    TASK_SESSION_RECOVERY,
+    readTaskWithRecovery,
+    type TaskSessionRecovery,
+    type TaskReadConsumer,
+  } from './session-recovery';
   import type { TaskStartupReads } from './startup-reads';
-  import { readSessionGeneration } from '$lib/features/auth/session-signal';
   import { composeTasks } from './board-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
-  import { tick, untrack } from 'svelte';
+  import { getContext, tick, untrack } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
   import type {
@@ -118,6 +123,7 @@
   }: Props = $props();
 
   const editingUser = untrack(() => me.userId);
+  const sessionRecovery = getContext<TaskSessionRecovery | undefined>(TASK_SESSION_RECOVERY);
   let accountBlocked = $state(false);
   const hiddenForAccount = $derived(accountBlocked || me.userId !== editingUser);
   let definitions = $state<TaskStatusDefinition[]>([]);
@@ -430,49 +436,39 @@
     });
   });
 
-  async function readBoard(itemId: string, initial?: Promise<BoardRead>): Promise<BoardRead> {
+  async function readBoard(
+    itemId: string,
+    initial: Promise<BoardRead> | undefined,
+    consumer: TaskReadConsumer<BoardRead>,
+  ): Promise<void> {
     const capture = (): ContextCapture => ({
       userId: me.userId,
       sequence: reloadSeq,
       navigationGeneration: router.navigationGeneration,
-      sessionGeneration: readSessionGeneration(),
+      sessionGeneration: readTaskSessionGeneration(),
       safetyGeneration: accountSafety.generation,
       path: router.path,
     });
     const snapshot = untrack(capture);
-    try {
-      return await startCapturedRead(
-        snapshot,
-        capture,
-        initial ?? taskScreenApi.board(itemId),
-      ).take();
-    } catch (cause: unknown) {
-      if (
-        initial !== undefined &&
-        cause instanceof DiscardedTaskRead &&
+    await readTaskWithRecovery(
+      snapshot,
+      capture,
+      () =>
         alive &&
         itemId === item.id &&
         !accountSafety.switching &&
         !accountSafety.restoring &&
-        !hiddenForAccount &&
-        sameContext(snapshot, capture())
-      )
-        return startCapturedRead(snapshot, capture, taskScreenApi.board(itemId)).take();
-      throw cause;
-    }
+        !hiddenForAccount,
+      sessionRecovery,
+      () => taskScreenApi.board(itemId),
+      initial,
+      consumer,
+    );
   }
   async function reload(itemId: string = item.id, initial?: Promise<BoardRead>): Promise<void> {
     const mine = ++reloadSeq;
-    try {
-      const [server, statuses] = await (aggregate
-        ? readBoard(itemId, initial).then(
-            (read) =>
-              [
-                composeTasks(read.tasks, read, read.archived ? 'read' : read.item_access),
-                read.statuses,
-              ] as const,
-          )
-        : Promise.all([work.tasks(itemId), work.taskStatuses(itemId)]));
+    const useAggregate = aggregate;
+    const apply = (server: TaskView[], statuses: TaskStatusDefinition[]): void => {
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       definitions = [...statuses].sort((a, b) => a.position - b.position);
       settleUnknown(server);
@@ -480,11 +476,35 @@
       tasks = overlaid(server);
       if (undoOffer !== undefined && !undoStillFits(server, undoOffer)) withdrawUndo();
       error = undefined;
-    } catch (e: unknown) {
-      if (alive && mine === reloadSeq && !(e instanceof DiscardedTaskRead))
+      loadedFor = itemId;
+    };
+    const failed = (e: unknown): void => {
+      if (alive && mine === reloadSeq && itemId === item.id && !(e instanceof DiscardedTaskRead)) {
         error = errorText(e, m.tasks_load_failed());
-    } finally {
-      if (itemId === item.id) loadedFor = itemId;
+        loadedFor = itemId;
+      }
+    };
+    try {
+      if (useAggregate)
+        await readBoard(itemId, initial, {
+          loaded: (read) => {
+            apply(
+              composeTasks(read.tasks, read, read.archived ? 'read' : read.item_access),
+              read.statuses,
+            );
+          },
+          failed,
+        });
+      else {
+        const [server, statuses] = await Promise.all([
+          work.tasks(itemId),
+          work.taskStatuses(itemId),
+        ]);
+        apply(server, statuses);
+      }
+    } catch (e: unknown) {
+      // Aggregate failures were handled synchronously within their capture fence.
+      if (!useAggregate) failed(e);
     }
   }
 
@@ -510,7 +530,7 @@
       userId: me.userId,
       sequence: detailReadSequence,
       navigationGeneration: router.navigationGeneration,
-      sessionGeneration: readSessionGeneration(),
+      sessionGeneration: readTaskSessionGeneration(),
       safetyGeneration: accountSafety.generation,
       path: router.path,
     });

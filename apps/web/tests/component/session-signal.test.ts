@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import {
   publishLogoutPending,
@@ -52,6 +52,20 @@ it('checks the response generation inside the marker lock after a newer logout w
   grant();
   expect(await stale).toBe(false);
   expect(localStorage.getItem(key)).toBe(pending);
+});
+
+it('reports only its own successful publication inside the lock', async () => {
+  const published = vi.fn();
+  const first = publishSessionCheck(readSessionGeneration(), published);
+  expect(published).not.toHaveBeenCalled();
+  grant();
+  expect(await first).toBe(true);
+  expect(published).toHaveBeenCalledExactlyOnceWith(readSessionGeneration());
+  const stale = publishSessionCheck(readSessionGeneration(), published);
+  publishLogoutPending('other-attempt');
+  grant();
+  expect(await stale).toBe(false);
+  expect(published).toHaveBeenCalledOnce();
 });
 
 it('preserves the current attempt when an older failure reaches the lock later', async () => {

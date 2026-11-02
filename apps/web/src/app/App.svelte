@@ -2,7 +2,17 @@
   import { activityApi } from '$lib/features/activity/api';
   import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
   import { startTaskReads, type TaskStartupSeed } from '$lib/features/tasks/startup-reads';
-  import { createContextRead, type ContextCapture } from '$lib/features/tasks/context-read';
+  import {
+    createContextRead,
+    readTaskSessionGeneration,
+    trackTaskSessionPublications,
+    type ContextCapture,
+  } from '$lib/features/tasks/context-read';
+  import {
+    createTaskSessionRecovery,
+    TASK_SESSION_RECOVERY,
+    type TaskSessionProof,
+  } from '$lib/features/tasks/session-recovery';
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
 
@@ -72,7 +82,7 @@
   import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
-  import { flushSync, onDestroy, onMount } from 'svelte';
+  import { flushSync, onDestroy, onMount, setContext } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { timer } from '$lib/features/time/timer.svelte';
 
@@ -122,9 +132,15 @@
   let restoringSession = false;
   let sessionCheckPending = false;
   let cacheRestorePending = false;
+  let sessionVerification: Promise<TaskSessionProof | undefined> | undefined;
+  let taskSessionActive = true;
+  const taskPublications = trackTaskSessionPublications();
+  setContext(TASK_SESSION_RECOVERY, createTaskSessionRecovery(confirmTaskSession));
   const signalRechecks = new SvelteMap<string, ReturnType<typeof setTimeout> | undefined>();
   onMount(schedulePendingSessionCheck);
   onDestroy(() => {
+    taskSessionActive = false;
+    taskPublications.dispose();
     sessionSequence += 1;
     restoreSequence += 1;
     sessionCheckPending = false;
@@ -147,20 +163,25 @@
     try {
       const me = verified?.me ?? (await api.me());
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      const taskStartup =
+        verified === undefined && router.route.name === 'item' && router.route.group === 'tasks';
       const publishNonTaskStartup =
-        verified === undefined &&
-        router.route.name !== 'public' &&
-        !(router.route.name === 'item' && router.route.group === 'tasks');
+        verified === undefined && router.route.name !== 'public' && !taskStartup;
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-        if (router.route.name === 'item' && router.route.group === 'tasks') {
-          if (!(await publishSessionCheck(generation))) return await retryLoad();
+        if (taskStartup) {
+          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
         }
       }
       if (me === undefined) {
         if (publishNonTaskStartup) void publishSessionCheck(generation);
         const info = await api.authInfo();
         if (mine !== sessionSequence) return false;
+        if (taskStartup) {
+          if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+          void publishSessionCheck(generation);
+        }
         session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
         return true;
       }
@@ -178,6 +199,10 @@
       // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
       await setLocale(displaySettings().locale, { reload: false });
       if (mine !== sessionSequence) return false;
+      if (taskStartup) {
+        if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+        if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+      }
       document.documentElement.lang = displaySettings().locale;
       const taskRoute =
         router.route.name === 'item' && router.route.group === 'tasks' ? router.route : undefined;
@@ -185,7 +210,7 @@
         userId: currentUser.userId,
         sequence: sessionSequence,
         navigationGeneration: router.navigationGeneration,
-        sessionGeneration: readSessionGeneration(),
+        sessionGeneration: readTaskSessionGeneration(),
         safetyGeneration: accountSafety.generation,
         path: router.path,
       });
@@ -201,6 +226,10 @@
         pendingContext,
       ]);
       if (mine !== sessionSequence) return false;
+      if (taskStartup) {
+        if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+        if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+      }
       let startupSeed: TaskStartupSeed | undefined;
       if (initialContext !== undefined && taskRoute !== undefined) {
         const rechecked =
@@ -215,6 +244,10 @@
               : initialContext;
         // 복원 문맥을 일반 시작 재시도로 넘기기 전에 원래 /me의 세대를 확인한다.
         if (verified !== undefined && generation !== readSessionGeneration()) return false;
+        if (taskStartup) {
+          if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+        }
         if (captured.path === router.path && rechecked.kind === 'discarded')
           return await retryLoad();
         if (captured.path === router.path)
@@ -259,9 +292,28 @@
       // 자기 게시가 비교할 세대를 바꾸지 않게 목록을 채택한 뒤 알린다. 게시 잠금은 화면을 막지 않는다.
       if (publishNonTaskStartup) void publishSessionCheck(generation);
       session = { state: 'signed-in', me, workspaces };
+      if (taskStartup)
+        void publishSessionCheck(generation, (published) => {
+          if (
+            taskSessionActive &&
+            currentUser.userId === me.id &&
+            safetyGeneration === accountSafety.generation &&
+            !sessionHidden &&
+            !auth.expired
+          )
+            taskPublications.published(generation, published);
+        });
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      if (
+        verified === undefined &&
+        router.route.name === 'item' &&
+        router.route.group === 'tasks' &&
+        safetyGeneration === accountSafety.generation &&
+        generation !== readSessionGeneration()
+      )
+        return await load(undefined, attempt);
       if (verified === undefined && safetyGeneration !== accountSafety.generation) {
         try {
           return await retryLoad();
@@ -548,12 +600,46 @@
     );
   }
 
-  async function verifySession(attempt = 0): Promise<void> {
+  function verifySession(attempt = 0): Promise<TaskSessionProof | undefined> {
+    const pending = verifySessionNow(attempt);
+    sessionVerification = pending;
+    return pending;
+  }
+
+  async function confirmTaskSession(userId: string): Promise<TaskSessionProof | undefined> {
+    const canVerify = (): boolean =>
+      taskSessionActive && currentUser.userId === userId && !sessionHidden;
+    const sameSession = (): boolean => canVerify() && !auth.expired;
+    for (;;) {
+      if (!canVerify()) return;
+      let pending =
+        checkingSession && sessionVerification !== undefined
+          ? sessionVerification
+          : verifySession();
+      let awaited: Promise<TaskSessionProof | undefined>;
+      let proof: TaskSessionProof | undefined;
+      do {
+        awaited = pending;
+        proof = await awaited;
+        pending = sessionVerification ?? awaited;
+      } while (pending !== awaited);
+      if (!sameSession()) return;
+      if (
+        proof?.userId === userId &&
+        proof.sessionGeneration === readTaskSessionGeneration() &&
+        proof.safetyGeneration === accountSafety.generation
+      )
+        return proof;
+    }
+  }
+
+  async function verifySessionNow(attempt = 0): Promise<TaskSessionProof | undefined> {
     if (sessionHidden && accountSafety.reason !== 'reauth' && accountSafety.reason !== 'restore')
       return;
     const expected = currentUser.userId;
     const mine = ++restoreSequence;
     checkingSession = true;
+    const generation = readTaskSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const recheck = (): void => {
       hideSession('reauth');
@@ -577,6 +663,8 @@
         accountSafety.switching = false;
         accountSafety.restoring = false;
         void refreshUnread();
+        if (generation === readTaskSessionGeneration())
+          return { userId: now.id, sessionGeneration: generation, safetyGeneration };
       }
     } catch (error: unknown) {
       if (verifyingSession(mine)) {
@@ -593,6 +681,7 @@
         drainSessionCheck();
       }
     }
+    return undefined;
   }
 
   function drainSessionCheck(): void {
