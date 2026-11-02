@@ -232,6 +232,6 @@ it('restores item information and its edit-start version before the first explic
     description: '복원할 설명\n둘째 줄',
     visibility: 'workspace',
   });
-  await screen.findByText(m.modules_item_conflict());
+  await screen.findByRole('region', { name: m.common_conflict_heading() });
   expect(screen.getByLabelText(m.modules_title())).toHaveValue('복원할 제목');
 });

@@ -8,8 +8,8 @@ import ItemProfilePanel from '$lib/features/modules/ItemProfilePanel.svelte';
 import { setLocale } from '$lib/paraglide/runtime.js';
 import './fixtures/authenticated';
 
-// 항목 정보 패널의 리더 칸은 입력(`form.leader`)만 보인다. 입력이 "없음"인데 서버의 리더 이름을 보이면, 409 뒤 "내 입력으로
-// 다시 저장"이 화면에 보이지 않게 다른 사람이 정한 리더를 지운다(D-104 흐름에서 드러남).
+// 항목 정보 패널의 리더 칸은 입력(`form.leader`)만 보인다. 입력이 "없음"인데 서버의 리더 이름을 보이면, 409 뒤 비교에서
+// 내 입력을 잘못 읽게 된다(D-104 흐름에서 드러남). 서버 리더는 비교 영역에만 보인다(D-94 개정).
 
 const item: ItemView = {
   id: 'i1',
@@ -109,18 +109,17 @@ describe('item profile leader label', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    const notice = await screen.findByText(/그사이 다른 사람이 항목 정보를 바꿔/);
-    const box = notice.closest('[data-profile-conflict]');
-    if (!(box instanceof HTMLElement)) throw new Error('conflict box');
-    // 최신본 요약에는 다른 사람이 정한 리더가 보이고, 내 입력 칸은 그대로 "없음"이다.
+    const box = await screen.findByRole('region', { name: '바뀐 내용 확인' });
+    // 비교의 서버만 바꾼 칸(접힌 목록)에는 다른 사람이 정한 리더가 보이고, 내 입력 칸은 그대로 "없음"이다.
     expect(within(box).getByText('Test User')).toBeInTheDocument();
     expect(leaderTrigger().textContent.trim()).toBe('없음');
 
-    await fireEvent.click(within(box).getByRole('button', { name: '내 입력으로 다시 저장' }));
+    // D-94 개정: 서버만 바꾼 칸은 서버 값을 유지한다. 고른 값이 모두 서버 최신이면 보낼 것이 없다.
+    await fireEvent.click(within(box).getByRole('button', { name: '선택한 내용으로 저장' }));
     await waitFor(() => {
-      expect(sent).toHaveLength(2);
+      expect(screen.queryByRole('region', { name: '바뀐 내용 확인' })).not.toBeInTheDocument();
     });
-    expect(sent[1]).toMatchObject({ base_version: 2, leader_id: null });
+    expect(sent).toHaveLength(1);
   });
 
   it('shows "none" once the leader is cleared in the form', async () => {
@@ -152,7 +151,7 @@ describe('item profile leader label', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await screen.findByText(/그사이 다른 사람이 항목 정보를 바꿔/);
+    await screen.findByRole('region', { name: '바뀐 내용 확인' });
     expect(leaderTrigger().textContent.trim()).toBe('Test User');
   });
 });
