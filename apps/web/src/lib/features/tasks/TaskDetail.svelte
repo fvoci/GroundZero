@@ -436,6 +436,8 @@
     detailForm.task = undefined;
     latestRule = undefined;
     comparison = undefined;
+    linkPending = undefined;
+    resetLinkEditor();
     error = undefined;
     retryRead = undefined;
     screenArchived = undefined;
@@ -887,9 +889,9 @@
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
       // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
       const plan = await work.previewSchedule(detailForm.task.id, input.start_date, input.due_date);
+      if (!acceptsWrite(captured)) return;
       if (plan.shifts.length === 0) {
         pending = undefined;
-        if (!acceptsWrite(captured)) return;
         await save(input, patch, baseVersion, [], plan.undated, true);
         return;
       }
@@ -1048,8 +1050,10 @@
     error = undefined;
     const kind = linkKind;
     const base = linkBase;
+    const captured = writeContext();
     try {
       const plan = await work.previewLink(detailForm.task.id, predecessor, kind, lag);
+      if (!acceptsWrite(captured)) return;
       if (plan.shifts.length > 0) {
         linkPending = {
           predecessor,
@@ -1066,9 +1070,9 @@
       await saveLink(predecessor, kind, lag, base, [], plan.undated);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      error = errorText(e, m.tasks_predecessor_failed());
+      if (acceptsWrite(captured)) error = errorText(e, m.tasks_predecessor_failed());
     } finally {
-      busy = false;
+      if (captured.sequence === detailReadSequence) busy = false;
     }
   }
 
@@ -1083,6 +1087,7 @@
     noShiftNeeded = false,
   ): Promise<void> {
     if (detailForm.task === undefined) return;
+    const captured = writeContext();
     const result = await work.setPredecessor(
       editingUser,
       detailForm.task.id,
@@ -1092,6 +1097,7 @@
       base,
       shifts.map(toShift),
     );
+    if (!acceptsWrite(captured)) return;
     if (result.kind === 'link_conflict') {
       // 편집을 시작한 뒤 다른 곳에서 이 관계가 바뀌었다(아무것도 바뀌지 않음). 최신 관계를 보이고, 입력한 종류·지연일은
       // 그대로 두며, 다음 저장은 최신 관계를 기준으로 한다(다시 누르면 알고 덮는다).
@@ -1115,6 +1121,7 @@
       // 아무것도 바뀌지 않았다. 지금 상태로 다시 계산해 다시 묻는다. 이제 옮길 것이 없으면 묻지 않고 그대로 저장하고
       // "밀릴 업무가 없어 그대로 저장"을 알린다(D-91 개정·D-125, R5 최종 A FA-2).
       const plan = await work.previewLink(detailForm.task.id, predecessor, kind, lag);
+      if (!acceptsWrite(captured)) return;
       if (plan.shifts.length === 0) {
         linkPending = undefined;
         await saveLink(predecessor, kind, lag, base, [], plan.undated, true);
@@ -1153,6 +1160,7 @@
     if (p === undefined || busy) return;
     busy = true;
     error = undefined;
+    const captured = writeContext();
     try {
       await saveLink(
         p.predecessor,
@@ -1164,9 +1172,9 @@
       );
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      error = errorText(e, m.tasks_predecessor_failed());
+      if (acceptsWrite(captured)) error = errorText(e, m.tasks_predecessor_failed());
     } finally {
-      busy = false;
+      if (captured.sequence === detailReadSequence) busy = false;
     }
   }
 
