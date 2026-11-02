@@ -170,7 +170,7 @@
           ? m.workspaces_create_network_failed()
           : errorText(e, m.workspaces_create_failed());
     } finally {
-      if (!managed || (attempt !== undefined && draft.isOwner(attempt))) busy = false;
+      if (!managed || (attempt !== undefined && draft.lockedBy(attempt))) busy = false;
     }
   }
 </script>

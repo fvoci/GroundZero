@@ -587,7 +587,7 @@
         return;
       error = errorText(e, m.courses_action_failed());
     } finally {
-      if (episodeDraft.isOwner(attempt)) savingEpisode = false;
+      if (episodeDraft.lockedBy(attempt)) savingEpisode = false;
     }
   }
 
@@ -699,7 +699,7 @@
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.courses_action_failed());
     } finally {
-      if (mineDraft.isOwner(attempt)) savingMine = false;
+      if (mineDraft.lockedBy(attempt)) savingMine = false;
     }
   }
 </script>
@@ -1240,7 +1240,7 @@
                 if (ok) newDraft.complete(attempt);
               })
               .finally(() => {
-                if (newDraft.isOwner(attempt)) adding = false;
+                if (newDraft.lockedBy(attempt)) adding = false;
               });
           }}
         >
@@ -1317,7 +1317,7 @@
                     if (ok) csvDraft.complete(attempt);
                   })
                   .finally(() => {
-                    if (csvDraft.isOwner(attempt)) adding = false;
+                    if (csvDraft.lockedBy(attempt)) adding = false;
                   });
               }}>{m.courses_csv_add()}</Button
             >

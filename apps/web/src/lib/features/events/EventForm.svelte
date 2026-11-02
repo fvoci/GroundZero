@@ -309,7 +309,7 @@
       if (formAttempt !== undefined && !draft.isOwner(formAttempt)) return;
       error = errorText(e, m.events_save_failed());
     } finally {
-      if (formAttempt === undefined || draft.isOwner(formAttempt)) busy = false;
+      if (formAttempt === undefined || draft.lockedBy(formAttempt)) busy = false;
     }
   }
 

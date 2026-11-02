@@ -610,7 +610,7 @@
         await infoWriteFailed(e, id, owns);
       }
     } finally {
-      if (infoDraft.isOwner(attempt)) saving = false;
+      if (infoDraft.lockedBy(attempt)) saving = false;
     }
   }
 

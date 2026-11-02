@@ -510,7 +510,7 @@
       if (!draft.isCurrent(attempt)) return;
       error = refused ? m.records_conflict() : errorText(e, m.records_save_failed());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 
