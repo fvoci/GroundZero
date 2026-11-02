@@ -3,6 +3,11 @@
   import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
   import { startTaskReads, type TaskStartupSeed } from '$lib/features/tasks/startup-reads';
   import { createContextRead, type ContextCapture } from '$lib/features/tasks/context-read';
+  import {
+    createTaskSessionRecovery,
+    TASK_SESSION_RECOVERY,
+    type TaskSessionProof,
+  } from '$lib/features/tasks/session-recovery';
   // 앱 셸: 로그인 확인 → 사이드바(워크스페이스) + 경로별 화면.
   import type { Me, Workspace } from '@fvoci/api-client';
 
@@ -72,7 +77,7 @@
   import { asTheme, setTheme } from '$lib/theme.svelte';
   import { Button } from '$lib/ui/button';
   import * as Sidebar from '$lib/ui/sidebar';
-  import { flushSync, onDestroy, onMount } from 'svelte';
+  import { flushSync, onDestroy, onMount, setContext } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { timer } from '$lib/features/time/timer.svelte';
 
@@ -122,9 +127,13 @@
   let restoringSession = false;
   let sessionCheckPending = false;
   let cacheRestorePending = false;
+  let sessionVerification: Promise<TaskSessionProof | undefined> | undefined;
+  let taskSessionActive = true;
+  setContext(TASK_SESSION_RECOVERY, createTaskSessionRecovery(confirmTaskSession));
   const signalRechecks = new SvelteMap<string, ReturnType<typeof setTimeout> | undefined>();
   onMount(schedulePendingSessionCheck);
   onDestroy(() => {
+    taskSessionActive = false;
     sessionSequence += 1;
     restoreSequence += 1;
     sessionCheckPending = false;
@@ -523,12 +532,48 @@
     );
   }
 
-  async function verifySession(attempt = 0): Promise<void> {
+  function verifySession(attempt = 0): Promise<TaskSessionProof | undefined> {
+    const pending = verifySessionNow(attempt);
+    sessionVerification = pending;
+    return pending;
+  }
+
+  async function confirmTaskSession(userId: string): Promise<TaskSessionProof | undefined> {
+    const sameSession = (): boolean =>
+      taskSessionActive && currentUser.userId === userId && !sessionHidden && !auth.expired;
+    for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
+      if (!sameSession()) return;
+      let pending =
+        checkingSession && sessionVerification !== undefined
+          ? sessionVerification
+          : verifySession();
+      let awaited: Promise<TaskSessionProof | undefined>;
+      let proof: TaskSessionProof | undefined;
+      do {
+        awaited = pending;
+        proof = await awaited;
+        pending = sessionVerification ?? awaited;
+      } while (pending !== awaited);
+      if (!sameSession()) return;
+      if (
+        proof?.userId === userId &&
+        proof.sessionGeneration === readSessionGeneration() &&
+        proof.safetyGeneration === accountSafety.generation
+      )
+        return proof;
+    }
+    hideSession('reauth');
+    accountSafety.error = m.feedback_restore_failed();
+    return undefined;
+  }
+
+  async function verifySessionNow(attempt = 0): Promise<TaskSessionProof | undefined> {
     if (sessionHidden && accountSafety.reason !== 'reauth' && accountSafety.reason !== 'restore')
       return;
     const expected = currentUser.userId;
     const mine = ++restoreSequence;
     checkingSession = true;
+    const generation = readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const recheck = (): void => {
       hideSession('reauth');
@@ -552,6 +597,8 @@
         accountSafety.switching = false;
         accountSafety.restoring = false;
         void refreshUnread();
+        if (generation === readSessionGeneration())
+          return { userId: now.id, sessionGeneration: generation, safetyGeneration };
       }
     } catch (error: unknown) {
       if (verifyingSession(mine)) {
@@ -568,6 +615,7 @@
         drainSessionCheck();
       }
     }
+    return undefined;
   }
 
   function drainSessionCheck(): void {

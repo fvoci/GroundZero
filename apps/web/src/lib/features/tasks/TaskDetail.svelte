@@ -16,9 +16,14 @@
     type ContextCapture,
   } from './context-read';
   import { readSessionGeneration } from '$lib/features/auth/session-signal';
+  import {
+    TASK_SESSION_RECOVERY,
+    readTaskWithRecovery,
+    type TaskSessionRecovery,
+  } from './session-recovery';
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
-  import { onDestroy, tick, untrack } from 'svelte';
+  import { getContext, onDestroy, tick, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
 
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
@@ -109,6 +114,7 @@
   }: Props = $props();
 
   const editingUser = untrack(() => me.userId);
+  const sessionRecovery = getContext<TaskSessionRecovery | undefined>(TASK_SESSION_RECOVERY);
   interface ChildEditor {
     discardInput(): boolean;
     isSaving(): boolean;
@@ -381,12 +387,18 @@
       safetyGeneration: accountSafety.generation,
       path: router.path,
     });
-    const snapshot = { ...untrack(capture), sequence };
+    let snapshot = { ...untrack(capture), sequence };
     let cancelled = false;
     const isCurrent = (): boolean =>
       !cancelled &&
       (navigation === undefined ||
         (navigation === router.navigationGeneration && sameContext(snapshot, capture())));
+    const active = (): boolean =>
+      !cancelled &&
+      navigation === router.navigationGeneration &&
+      !accountSafety.switching &&
+      !accountSafety.restoring &&
+      !hiddenForAccount;
     detailForm.task = undefined;
     latestRule = undefined;
     conflict = undefined;
@@ -396,24 +408,23 @@
     let aggregateRead: DetailRead | undefined;
     const read = untrack(() => (aggregate ? initialRead?.(id)?.take() : undefined));
     const pending = aggregate
-      ? startCapturedRead(snapshot, capture, read ?? taskScreenApi.detail(id))
-          .take()
-          .catch((cause: unknown) => {
-            if (
-              read !== undefined &&
-              cause instanceof DiscardedTaskRead &&
-              isCurrent() &&
-              !accountSafety.switching &&
-              !accountSafety.restoring &&
-              !hiddenForAccount
+      ? (read === undefined
+          ? startCapturedRead(snapshot, capture, taskScreenApi.detail(id))
+              .take()
+              .then((value) => ({ value, captured: snapshot }))
+          : readTaskWithRecovery(
+              snapshot,
+              capture,
+              active,
+              sessionRecovery,
+              () => taskScreenApi.detail(id),
+              read,
             )
-              return startCapturedRead(snapshot, capture, taskScreenApi.detail(id)).take();
-            throw cause;
-          })
-          .then((read) => {
-            aggregateRead = read;
-            return composeScreenDetail(read);
-          })
+        ).then(({ value, captured }) => {
+          snapshot = captured;
+          aggregateRead = value;
+          return composeScreenDetail(value);
+        })
       : work.task(id, parentItemId);
     void pending
       .then((detail) => {
