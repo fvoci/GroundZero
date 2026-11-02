@@ -334,6 +334,14 @@
     untilError = undefined;
     error = undefined;
     const reviewed = comparison?.server;
+    // A comparison opened in this session never trails the loaded event: a 409 leaves `event`
+    // older and rule saves are blocked while it is open. Only a draft restored after another
+    // writer moved on does, so compare against the newer read instead of reinstating the
+    // stale snapshot or lowering the base version (CR-305-1, D-94).
+    if (selected && reviewed !== undefined && event.version > reviewed.version) {
+      openComparison($state.snapshot(event), input, raw);
+      return false;
+    }
     if (
       selected &&
       reviewed !== undefined &&

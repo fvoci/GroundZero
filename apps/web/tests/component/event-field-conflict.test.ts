@@ -519,3 +519,79 @@ it('announces an until rejection outside the inert editors while reviewing event
     ).toBe(true);
   });
 });
+
+it('reopens a restored comparison against a newer read instead of replacing it with the stale snapshot', async () => {
+  const newer = { ...server, title: '다른 탭 제목', version: 7 };
+  const update = vi
+    .spyOn(eventsApi, 'updateEvent')
+    .mockResolvedValueOnce({ kind: 'conflict', current: server })
+    .mockResolvedValueOnce({
+      kind: 'updated',
+      event: { ...newer, description: '마지막 설명', version: 8 },
+    });
+  const { unmount } = await mount();
+  await conflict();
+  await waitFor(() => {
+    expect(Object.values(localStorage).join()).toContain('choices');
+  });
+  unmount();
+  vi.mocked(eventsApi.event).mockResolvedValue({
+    ...newer,
+    viewer_id: 'event-test-user',
+    archived: false,
+  });
+  const { onchanged } = await mount();
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  const restored = await screen.findByRole('region', { name: '바뀐 내용 확인' });
+  await choose(restored, '제목', '서버 최신');
+  await choose(restored, '설명', '서버 최신');
+  await fireEvent.click(save(restored));
+  const reopened = await screen.findByRole('region', { name: '바뀐 내용 확인' });
+  await waitFor(() => {
+    expect(within(reopened).getByText('다른 탭 제목')).toBeInTheDocument();
+  });
+  expect(screen.getByRole('heading', { name: '다른 탭 제목' })).toBeInTheDocument();
+  expect(update).toHaveBeenCalledOnce();
+  expect(onchanged).not.toHaveBeenCalled();
+  await fireEvent.click(save(reopened));
+  await waitFor(() => {
+    expect(screen.queryByRole('region', { name: '바뀐 내용 확인' })).toBeNull();
+  });
+  expect(screen.getByLabelText('제목')).toHaveValue('다른 탭 제목');
+  expect(update).toHaveBeenCalledOnce();
+  await edit('설명', '마지막 설명');
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+  expect(update.mock.calls[1]?.[1]).toBe(7);
+});
+
+it('does not restore a comparison from a draft whose input belongs to another event', async () => {
+  const update = vi
+    .spyOn(eventsApi, 'updateEvent')
+    .mockResolvedValueOnce({ kind: 'conflict', current: server });
+  const { unmount } = await mount();
+  await conflict();
+  await waitFor(() => {
+    expect(Object.values(localStorage).join()).toContain('choices');
+  });
+  unmount();
+  const key = Object.keys(localStorage).find((k) => localStorage.getItem(k)?.includes('choices'));
+  if (key === undefined) throw new Error('missing draft');
+  const stored = localStorage.getItem(key) ?? '';
+  const other = stored.replaceAll('"id":"A"', '"id":"B"');
+  expect(other).not.toBe(stored);
+  localStorage.setItem(key, other);
+  const { onchanged } = await mount();
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  await tick();
+  expect(screen.queryByRole('region', { name: '바뀐 내용 확인' })).toBeNull();
+  expect(screen.getByLabelText('제목')).toHaveValue(base.title);
+  await fireEvent.click(screen.getByRole('button', { name: '저장' }));
+  await waitFor(() => {
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+  expect(update.mock.calls[1]?.[1]).toBe(base.version);
+  expect(onchanged).not.toHaveBeenCalled();
+});

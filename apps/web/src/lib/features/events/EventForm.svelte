@@ -129,8 +129,8 @@
     snapshot: () => ({ ...snapshot(), comparison }),
     parse: parseEventDraft,
     restore: (value) => {
-      restoreInput(value);
-      onrestorecomparison?.(value.comparison);
+      // 입력을 되살리지 않은 초안(다른 일정)의 비교는 지금 연 일정과 맞지 않으므로 함께 버린다(CR-305-1).
+      if (restoreInput(value)) onrestorecomparison?.(value.comparison);
     },
     reset: () => {
       base = initialState();
@@ -157,8 +157,8 @@
       request: retry,
     });
   }
-  export function restoreInput(value: EventRawDraft): void {
-    if (value.base !== null && value.base.id !== initial?.id) return;
+  export function restoreInput(value: EventRawDraft): boolean {
+    if (value.base !== null && value.base.id !== initial?.id) return false;
     Object.assign(f, value.fields);
     base = value.baseFields;
     draftBase = value.base ?? undefined;
@@ -168,6 +168,7 @@
     retry = value.request;
     error = undefined;
     if (draftBase !== undefined) onrestorebase?.(draftBase);
+    return true;
   }
   /** Keep the chosen instants (including seconds/DST) separate from the reviewed semantic baseline. */
   export function applyInput(input: EventInput, reviewed: EventView): void {
