@@ -180,14 +180,13 @@
     if (id === undefined) return;
     let cancelled = false;
     const captured = untrack(context);
-    const active = () =>
+    const current = () =>
       !cancelled &&
       readAttempt === attempt &&
       mounted &&
       sameTaskRequest(captured, context()) &&
-      !accountSafety.switching &&
-      !accountSafety.restoring &&
       readUser === user;
+    const active = () => current() && !accountSafety.switching && !accountSafety.restoring;
     void readTaskWithRecovery(
       captured,
       context,
@@ -223,7 +222,9 @@
         accountBlocked = true;
         error = m.common_error_account_changed();
         retryRead = true;
-      } else if (active() && cause instanceof DiscardedTaskRead) {
+      } else if (current() && cause instanceof DiscardedTaskRead) {
+        // A failed /me check masks the screen and ends the recovery without proof. The request is still
+        // current, so set the error and retry behind the mask; a same-user check reveals them (CR-305-3).
         error = m.events_event_load_failed();
         retryRead = true;
       }

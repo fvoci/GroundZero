@@ -1,9 +1,9 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me } from '@fvoci/api-client';
 import App from '../../src/app/App.svelte';
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { accountSafety, auth } from '$lib/features/feedback/feedback.svelte';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
@@ -191,5 +191,61 @@ it.each(['same', 'other'] as const)(
     await settled();
     expect(reads).toHaveBeenCalledTimes(2);
     expect(within(dialog).queryByText(m.events_event_load_failed())).toBeNull();
+  },
+);
+
+// CodeRabbit CR-305-3: 버린 첫 읽기 뒤 /me 확인이 실패하면 App이 화면을 가리고 확인을 끝낸다. 같은 사용자로 다시 확인해
+// 가림이 걷히면 대화상자가 빈 채로 남지 않고 오류와 다시 시도를 보인다(업무 화면 #298 CR-4, 결정 6567559012). 다른
+// 사용자면 다시 읽지 않고 계정 전환 흐름으로 간다.
+it.each(['same', 'other'] as const)(
+  'shows the event retry after a failed /me check is cleared by the %s user',
+  async (user) => {
+    const first = held<EventRead>();
+    const reads = vi
+      .spyOn(eventsApi, 'event')
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(read);
+    const reload = vi.fn();
+    render(App, { reload, replace: vi.fn() });
+    const open = await screen.findByRole('button', { name: new RegExp(event.title) });
+    vi.mocked(api.me).mockRejectedValue(
+      new ApiError(503, 'unreachable', 'verification unavailable'),
+    );
+    open.click();
+    await waitFor(() => {
+      expect(reads).toHaveBeenCalledOnce();
+    });
+    const dialog = screen.getByRole('dialog');
+    signal();
+    first.resolve(read);
+    await waitFor(() => {
+      expect(accountSafety.error).not.toBe('');
+    });
+    vi.mocked(api.me).mockResolvedValue(
+      user === 'same' ? identity : { ...identity, id: 'other-viewer' },
+    );
+    const mask = screen.getByTestId('account-safe-state');
+    await fireEvent.click(within(mask).getByRole('button', { name: m.common_retry() }));
+    if (user === 'other') {
+      await waitFor(() => {
+        expect(reload).toHaveBeenCalledOnce();
+      });
+      expect(accountSafety.reason).toBe('account');
+      await settled();
+      expect(reads).toHaveBeenCalledOnce();
+      return;
+    }
+    await waitFor(() => {
+      expect(accountSafety.switching).toBe(false);
+    });
+    await settled();
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(m.events_event_load_failed());
+    expect(reads).toHaveBeenCalledOnce();
+    await fireEvent.click(within(dialog).getByRole('button', { name: m.common_retry() }));
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText(m.events_title())).toHaveValue(event.title);
+    });
+    expect(reads).toHaveBeenCalledTimes(2);
+    expect(within(dialog).queryByRole('alert')).toBeNull();
   },
 );
