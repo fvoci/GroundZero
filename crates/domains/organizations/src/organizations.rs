@@ -8,6 +8,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
@@ -84,11 +85,13 @@ pub use fvoci_http::organization::OrgScope;
 
 /// 내가 속한 조직. 전환기의 목록이다. 서버 관리자라도 속하지 않은 조직은 여기 없다.
 #[utoipa::path(get, path = "/api/me/organizations", operation_id = "list_my_organizations",
-    responses((status = 200, body = [OrganizationSummary]), (status = 401, body = ErrorBody)), tag = "organizations")]
+    responses((status = 200, body = [OrganizationSummary],
+        headers(("x-fvoci-viewer-id" = String, description = "목록을 읽은 인증 사용자의 UUID (D-96)"))),
+        (status = 401, body = ErrorBody)), tag = "organizations")]
 pub async fn list_mine(
     State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
-) -> Result<Json<Vec<OrganizationSummary>>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<(OrganizationId, String, String, bool, OffsetDateTime)> = sqlx::query_as(
         "SELECT id, name, role, public_links_enabled, created_at FROM app_my_organizations()",
@@ -96,7 +99,8 @@ pub async fn list_mine(
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
-    rows.into_iter()
+    let items = rows
+        .into_iter()
         .map(|(id, name, role, public_links_enabled, created_at)| {
             Ok(OrganizationSummary {
                 id,
@@ -106,8 +110,8 @@ pub async fn list_mine(
                 created_at,
             })
         })
-        .collect::<Result<Vec<_>, AppError>>()
-        .map(Json)
+        .collect::<Result<Vec<_>, AppError>>()?;
+    Ok(([("x-fvoci-viewer-id", user.0.to_string())], Json(items)))
 }
 
 type OrganizationRow = (

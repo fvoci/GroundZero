@@ -1,4 +1,6 @@
-import { expectOk } from '$lib/shared/api';
+import { expectOk, parseViewerList, request } from '$lib/shared/api';
+import { me } from '$lib/me.svelte';
+import { untrack } from 'svelte';
 import { access, bool, optStr, parseList, rec, str, type Json } from '$lib/shared/api/parse';
 import type {
   Accepted,
@@ -123,7 +125,10 @@ function parseDeletedWorkspace(value: Json): DeletedWorkspaceView {
 }
 
 export const workspacesApi = {
-  workspaces: () => expectOk('GET', '/api/workspaces', (v) => parseList(v, parseWorkspace)),
+  workspaces: async (viewerId = untrack(() => me.userId)) => {
+    const response = await request('GET', '/api/workspaces');
+    return parseViewerList(response, viewerId, parseWorkspace);
+  },
   /** 조직 안 워크스페이스는 조직 멤버 누구나 만든다(D-112). */
   createWorkspace: (requestId: string, organizationId: string, name: string) =>
     expectOk('POST', '/api/workspaces', parseWorkspace, {

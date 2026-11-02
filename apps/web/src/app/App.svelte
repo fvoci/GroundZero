@@ -17,6 +17,7 @@
   import type { Me, Workspace } from '@fvoci/api-client';
 
   import { api, ApiError, NetworkError } from '$lib/api/client';
+  import { SessionListMismatch } from '$lib/shared/api';
   import { errorText } from '$lib/api/errors';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
   import {
@@ -221,8 +222,8 @@
           : createContextRead(captured, capture, taskScreenApi.context(taskRoute.itemId));
       // 조직 목록(D-111)은 전환기와 개인 화면의 범위다. 서버는 기본 조직을 정하지 않으므로 선택은 org 문맥이 든다.
       const [workspaces, organizations, initialContext] = await Promise.all([
-        api.workspaces(),
-        api.myOrganizations(),
+        api.workspaces(me.id),
+        api.myOrganizations(me.id),
         pendingContext,
       ]);
       if (mine !== sessionSequence) return false;
@@ -306,6 +307,10 @@
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      if (e instanceof SessionListMismatch) {
+        if (verified !== undefined) throw e;
+        if (safetyGeneration === accountSafety.generation) return await load(undefined, attempt);
+      }
       if (
         verified === undefined &&
         router.route.name === 'item' &&
@@ -435,10 +440,11 @@
    */
   async function reloadWorkspaces(): Promise<void> {
     const sessionAtStart = sessionSequence;
+    const viewerId = currentUser.userId;
     await workspacesReload.run(async (isCurrent) => {
       const [workspaces, organizations] = await Promise.all([
-        api.workspaces(),
-        api.myOrganizations(),
+        api.workspaces(viewerId),
+        api.myOrganizations(viewerId),
       ]);
       if (isCurrent() && sessionAtStart === sessionSequence && session.state === 'signed-in') {
         session.workspaces = workspaces;
@@ -565,6 +571,10 @@
       if (!active()) return;
       if (safetyGeneration !== accountSafety.generation) {
         recheck();
+        return;
+      }
+      if (error instanceof SessionListMismatch) {
+        void restoreSession(attempt);
         return;
       }
       // 확인 실패는 기존 DOM·입력을 보존하고 직접 다시 시도하게 한다.

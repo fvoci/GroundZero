@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me, OrganizationSummary, Workspace } from '@fvoci/api-client';
 import App from '../../src/app/App.svelte';
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { taskData } from '$lib/features/tasks/detail-data';
 import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
@@ -110,6 +110,83 @@ afterEach(() => {
   router.guard = undefined;
   localStorage.removeItem('fvoci:auth-session');
 });
+
+const viewerCases = (['notes', 'tasks', 'restore'] as const).flatMap((path) =>
+  (['workspaces', 'organizations'] as const).map((list) => [path, list] as const),
+);
+
+it.each(viewerCases)(
+  'SR-298-5 rechecks %s when %s belongs to B without a generation change',
+  async (path, foreignList) => {
+    router.navigate(
+      path === 'tasks' ? itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board') : '/notes',
+    );
+    const generation = readSessionGeneration() + 1;
+    localStorage.setItem(
+      'fvoci:auth-session',
+      JSON.stringify({
+        state: 'logout-pending',
+        generation,
+        startedAt: Date.now(),
+        attemptId: 'late',
+      }),
+    );
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: () => new Promise<never>(() => undefined) },
+    });
+    let foreignCookie = false;
+    let checks = 0;
+    vi.mocked(api.me).mockImplementation(() => {
+      checks += 1;
+      // The /me response was captured as A before B's cookie supplied a later list.
+      foreignCookie = checks === (path === 'restore' ? 2 : 1);
+      return Promise.resolve(identity);
+    });
+    vi.mocked(fetch).mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const isWorkspace = url === '/api/workspaces';
+      if (!isWorkspace && url !== '/api/me/organizations')
+        return Promise.resolve(new Response('{}', { status: 404 }));
+      const foreign =
+        foreignCookie && foreignList === (isWorkspace ? 'workspaces' : 'organizations');
+      const items = isWorkspace
+        ? [{ ...WORKSPACE, ...(foreign ? { id: 'foreign-space', name: 'SR-298-5 B space' } : {}) }]
+        : [
+            {
+              ...TEST_ORGANIZATION,
+              id: WORKSPACE.organization_id,
+              ...(foreign ? { id: 'foreign-organization', name: 'SR-298-5 B organization' } : {}),
+            },
+          ];
+      return Promise.resolve(
+        new Response(JSON.stringify(items), {
+          status: 200,
+          headers: { 'x-fvoci-viewer-id': foreign ? 'other-viewer' : identity.id },
+        }),
+      );
+    });
+    vi.spyOn(taskScreenApi, 'context').mockImplementation(() =>
+      foreignCookie
+        ? Promise.reject(new ApiError(404, 'not_found', 'not found'))
+        : Promise.resolve(context),
+    );
+    render(App);
+    if (path === 'restore') {
+      await screen.findByTestId('workspace-switcher');
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    }
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-switcher')).toBeVisible();
+    });
+    await fireEvent.click(screen.getByTestId('workspace-switcher'));
+    expect(screen.queryByText('SR-298-5 B space')).toBeNull();
+    expect(screen.queryByText('SR-298-5 B organization')).toBeNull();
+    expect(screen.getByRole('menuitem', { name: WORKSPACE.name })).toBeInTheDocument();
+    expect(vi.mocked(api.me).mock.calls.length).toBeGreaterThanOrEqual(path === 'restore' ? 3 : 2);
+    expect(readSessionGeneration()).toBe(generation);
+  },
+);
 
 it.each(['settled', 'logout-pending'] as const)(
   '#299 rejects a foreign non-task startup list after A returns with a %s signal',
