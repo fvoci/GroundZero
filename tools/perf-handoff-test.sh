@@ -51,12 +51,10 @@ concurrent_preparation() (
   # Callers may run these stand-ins where errexit is off, so failures exit explicitly.
   sleep() { test "$1" -eq 15 || exit 1; command sleep 0.05; }
   cargo() {
-    local fd
-    for fd in "/proc/$BASHPID/fd/"*; do
-      if [[ "$(readlink "$fd" || true)" == *.prepare ]]; then
-        printf 'build inherited the preparation lock\n' >> "$case_dir/violations"
-      fi
-    done
+    # A child process sees what a real build inherits (the shell's saved copies are close-on-exec).
+    if command ls -l /proc/self/fd/ | grep -q '\.prepare$'; then
+      printf 'build inherited the preparation lock\n' >> "$case_dir/violations"
+    fi
     if [[ ! -e "$case_dir/a-paused" ]]; then
       touch "$case_dir/a-paused"
       wait_for_path "$measure_lock" 2 || true
