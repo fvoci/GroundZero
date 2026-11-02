@@ -347,6 +347,18 @@
     dirty: () => csvText !== '',
     busy: () => adding,
   });
+  // 강좌를 쓸 수 없게 되면(read·보관) 숨은 새 회차 입력은 빈 칸으로 돌리고, CSV는 긴 입력이라 남긴 초안을 지우지
+  // 않고 되살리기 제안으로 옮긴다(#289, D-27). 보낸 추가는 응답까지 잠가 두고, 끝난 뒤 정리한다.
+  $effect(() => {
+    if (course === undefined || course.access === 'write' || adding) return;
+    untrack(() => {
+      newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
+      newId = newRequestId();
+      newPayload = '';
+      newDraft.leave.keep();
+      csvDraft.shelve();
+    });
+  });
   const drafts = [detailsDraft, episodeDraft, mineDraft, newDraft, csvDraft];
   onMount(() => {
     const detach = drafts.map((draft) => draft.attach());

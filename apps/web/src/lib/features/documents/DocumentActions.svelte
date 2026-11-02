@@ -189,6 +189,15 @@
     busy: () => sharing,
   });
   onMount(shareDraft.attach);
+  // 공유를 관리할 수 없게 되면 숨은 이메일 입력을 비우고 경고에서 뺀다(#289, D-27). 보낸 공유는 응답까지 잠가 두고,
+  // 끝난 뒤 비운다. 공유 설정은 계속 보이므로 남긴 설정 입력이 있으면 그 확인은 둔다.
+  $effect(() => {
+    if (canManage || sharing) return;
+    untrack(() => {
+      resetShare();
+      if (pendingSettings === undefined) shareDraft.leave.keep();
+    });
+  });
   let sharesSequence = 0;
 
   async function loadShares(): Promise<void> {

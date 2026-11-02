@@ -194,6 +194,27 @@
     screenOnly: () => deleteName !== '',
     busy: () => deleting,
   });
+  // 다시 읽은 권한에서 관리자가 아니게 되면 숨은 초대·그룹 입력을, owner가 아니게 되면 숨은 삭제 확인 이름을 비우고
+  // 경고에서 뺀다(#289, D-27). 보낸 요청은 응답까지 잠가 두고, 끝난 뒤 비운다.
+  $effect(() => {
+    if (currentView === undefined || isAdmin || inviting) return;
+    inviteEmail = '';
+    inviteRole = 'member';
+    inviteError = undefined;
+    inviteDraft.leave.keep();
+  });
+  $effect(() => {
+    if (currentView === undefined || isAdmin || grouping) return;
+    groupName = '';
+    groupError = undefined;
+    groupDraft.leave.keep();
+  });
+  $effect(() => {
+    if (currentView === undefined || currentView.i_am_owner || deleting) return;
+    deleteName = '';
+    deleteError = undefined;
+    deleteDraft.leave.keep();
+  });
   onMount(() => {
     const detachInvite = inviteDraft.attach();
     const detachGroup = groupDraft.attach();

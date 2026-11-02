@@ -1392,6 +1392,7 @@
           idPrefix={`task-${current.id}`}
           items={current.checklist.map((c) => ({ id: c.id, text: c.text, done: c.checked }))}
           {canEdit}
+          heldForAccount={hiddenForAccount || accountSafety.switching || accountSafety.restoring}
           onunsaved={(value: boolean) => {
             checklistUnsaved = value;
           }}

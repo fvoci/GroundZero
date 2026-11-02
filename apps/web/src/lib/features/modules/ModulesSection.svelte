@@ -1,9 +1,10 @@
 <script lang="ts">
   // 워크스페이스의 모듈 목록과 모듈 만들기(관리자). 같은 유형을 여러 개 둘 수 있다 (D-15).
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
+  import { accountSwitching } from '$lib/features/feedback/feedback.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
   import { object, retry } from './draft-values';
 
@@ -84,6 +85,14 @@
     busy: () => busy,
   });
   onMount(draft.attach);
+  // owner가 아니게 되면 숨은 만들기 입력을 되살리기 제안으로 옮기고 화면 입력은 비워 경고에서 뺀다(#289, D-27).
+  // 응답을 잃은 만들기의 요청 id가 함께 남아, 권한을 되찾아 다시 내도 중복 모듈이 생기지 않는다. 보낸 만들기는
+  // 응답까지 잠가 두고, 끝난 뒤 옮긴다. 계정 전환·복구 중에는 입력을 그대로 두고(D-96), 같은 사용자로 끝나면 이
+  // 효과가 다시 돌아 옮긴다(CR-311-1).
+  $effect(() => {
+    if (isAdmin || busy || accountSwitching()) return;
+    untrack(draft.shelve);
+  });
 
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -129,12 +138,13 @@
 </script>
 
 <!-- 만드는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 키까지 고쳐 다시 내면
-     새 요청 id로 두 번째 모듈을 만든다. -->
+     새 요청 id로 두 번째 모듈을 만든다. owner가 아니면 폼이 없으므로 안내와 버리기만 둔다(#289). -->
 {#each draft.offers as entry (entry.key)}
   <fieldset class="contents" disabled={busy}>
     <FormDraftOffer
+      restorable={isAdmin}
       onrestore={() => {
-        draft.restore(entry);
+        if (isAdmin) draft.restore(entry);
       }}
       ondiscard={() => {
         draft.discard(entry);
