@@ -1,3 +1,4 @@
+import { eventRead } from './fixtures/event-read';
 import { api } from '$lib/api/client';
 import { type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
@@ -93,7 +94,7 @@ async function mountItem(archived: boolean): Promise<void> {
   // 서버가 주는 등급: 보관이면 일정은 read다.
   const shown: EventView = archived ? { ...event, access: 'read' } : event;
   vi.spyOn(eventsApi, 'itemEvents').mockResolvedValue([shown]);
-  vi.spyOn(eventsApi, 'event').mockResolvedValue(shown);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(shown));
   render(ItemScreen, { props: { workspace, itemId: 'i1', workspaces: [workspace] } });
   await screen.findByRole('heading', { name: '항목' });
   // 일정 목록과 항목 달력은 일정 묶음에 있다.

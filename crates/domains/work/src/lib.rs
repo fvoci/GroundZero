@@ -68,6 +68,7 @@ pub use state::WorkState;
         event_recurrence::ExcludeOccurrence,
         events::EventKind,
         events::Event,
+        events::EventDetail,
         events::EventInput,
         events::CreateEvent,
         events::UpdateEvent,

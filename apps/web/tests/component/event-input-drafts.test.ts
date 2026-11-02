@@ -1,7 +1,8 @@
+import { eventRead } from './fixtures/event-read';
 import { type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
 import { taskData as work } from '$lib/features/tasks/detail-data';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { ApiError, NetworkError } from '$lib/api/client';
@@ -55,7 +56,7 @@ const mountEvent = () =>
   render(EventDialog, { eventId: event.id, onclose: vi.fn(), onchanged: vi.fn() });
 
 it('loading server event fields preserves edited recurrence text and its original base', async () => {
-  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   const latest = {
     ...event,
     version: 4,
@@ -71,7 +72,9 @@ it('loading server event fields preserves edited recurrence text and its origina
   await fireEvent.input(description, { target: { value: 'My description' } });
   await fireEvent.input(screen.getByLabelText(m.events_interval()), { target: { value: '2' } });
   await fireEvent.submit(formOf(description));
-  await fireEvent.click(await screen.findByRole('button', { name: m.events_load_server() }));
+  const panel = await screen.findByRole('region', { name: m.common_conflict_heading() });
+  await fireEvent.click(within(panel).getByRole('radio', { name: '설명: 서버 최신 사용' }));
+  await fireEvent.click(within(panel).getByRole('button', { name: m.common_conflict_save() }));
   expect(screen.getByLabelText(m.events_description())).toHaveValue('Server description');
   expect(screen.getByLabelText(m.events_interval())).toHaveValue('2');
   const unload = new Event('beforeunload', { cancelable: true });
@@ -82,13 +85,14 @@ it('loading server event fields preserves edited recurrence text and its origina
     event.id,
     { ...event.recurrence, interval: 2 },
     event.recurrence,
+    'draft-user',
   );
 });
 
 it.each(['event', 'recurrence'] as const)(
   'cannot load server fields while an %s save is pending',
   async (kind) => {
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
     const latest = { ...event, version: 4, title: 'Server title' };
     const update = vi
       .spyOn(eventsApi, 'updateEvent')
@@ -98,7 +102,8 @@ it.each(['event', 'recurrence'] as const)(
     await fireEvent.input(description, { target: { value: 'My description' } });
     await fireEvent.input(screen.getByLabelText(m.events_interval()), { target: { value: '2' } });
     await fireEvent.submit(formOf(description));
-    const load = await screen.findByRole('button', { name: m.events_load_server() });
+    const panel = await screen.findByRole('region', { name: m.common_conflict_heading() });
+    const load = within(panel).getByRole('button', { name: m.common_conflict_edit() });
     let resolve!: () => void;
     const pending = new Promise<void>((yes) => {
       resolve = yes;
@@ -108,15 +113,19 @@ it.each(['event', 'recurrence'] as const)(
         await pending;
         return { kind: 'updated', event: latest };
       });
-      await fireEvent.click(screen.getByRole('button', { name: m.events_save_mine() }));
+      await fireEvent.click(within(panel).getByRole('button', { name: m.common_conflict_save() }));
     } else {
+      await fireEvent.click(
+        within(panel).getByRole('button', { name: m.common_conflict_cancel() }),
+      );
       vi.spyOn(eventsApi, 'setEventRecurrence').mockImplementationOnce(async () => {
         await pending;
         return { ...latest, recurrence: { ...recurrence, interval: 2 } };
       });
       await fireEvent.click(screen.getByRole('button', { name: m.events_recurrence_save() }));
     }
-    expect(load).toBeDisabled();
+    if (kind === 'event') expect(load).toBeDisabled();
+    expect(screen.getByLabelText(m.events_description())).toBeDisabled();
     await fireEvent.click(load);
     expect(screen.getByLabelText(m.events_description())).toHaveValue('My description');
     expect(screen.getByLabelText(m.events_interval())).toHaveValue('2');
@@ -164,7 +173,7 @@ it('offers failed calendar creation explicitly after remount and reuses its requ
 });
 
 it('restores event input and its original version after the server advances', async () => {
-  const read = vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  const read = vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   const update = vi
     .spyOn(eventsApi, 'updateEvent')
     .mockResolvedValue({ kind: 'conflict', current: { ...event, version: 8 } });
@@ -173,7 +182,7 @@ it('restores event input and its original version after the server advances', as
     target: { value: 'My description' },
   });
   first.unmount();
-  read.mockResolvedValue({ ...event, version: 8 });
+  read.mockResolvedValue(eventRead({ ...event, version: 8 }));
   mountEvent();
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
   expect(update).not.toHaveBeenCalled();
@@ -187,7 +196,7 @@ it('restores event input and its original version after the server advances', as
 });
 
 it('preserves invalid recurrence text and warns for recurrence-only navigation', async () => {
-  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: 'not a number' },
@@ -318,7 +327,7 @@ it('ignores a late successful creation after the user changes', async () => {
 });
 
 it('suppresses account-reload warnings only when the event and recurrence inputs are durably kept', async () => {
-  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: 'bad count' },
@@ -333,7 +342,7 @@ it('suppresses account-reload warnings only when the event and recurrence inputs
 
 // F-14(R5 B): 위 시험의 나머지 반쪽. 입력을 저장소에 남기지 못했으면 계정 전환 다시 읽기 경고를 남긴다.
 it('keeps the account-reload warning when the event inputs cannot be stored', async () => {
-  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new Error('quota');
   });
@@ -351,8 +360,8 @@ it('keeps the account-reload warning when the event inputs cannot be stored', as
 });
 
 it('keeps the current event until another-target discard is explicitly approved', async () => {
-  vi.spyOn(eventsApi, 'event').mockImplementation((id) =>
-    Promise.resolve({ ...event, id, title: id }),
+  vi.spyOn(eventsApi, 'event').mockImplementation((id: string) =>
+    Promise.resolve(((id) => Promise.resolve({ ...event, id, title: id }))(id)).then(eventRead),
   );
   const view = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_title()), {
@@ -366,17 +375,19 @@ it('keeps the current event until another-target discard is explicitly approved'
 });
 
 it('restores the original recurrence base before an explicit save', async () => {
-  const read = vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  const read = vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   const save = vi.spyOn(eventsApi, 'setEventRecurrence').mockResolvedValue(event);
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: '2' },
   });
   first.unmount();
-  read.mockResolvedValue({
-    ...event,
-    recurrence: { freq: 'daily', interval: 5, weekdays: [], until: null, count: null },
-  });
+  read.mockResolvedValue(
+    eventRead({
+      ...event,
+      recurrence: { freq: 'daily', interval: 5, weekdays: [], until: null, count: null },
+    }),
+  );
   mountEvent();
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
   expect(save).not.toHaveBeenCalled();
@@ -449,7 +460,7 @@ it('does not let an old recurrence response unlock a new account save', async ()
 });
 
 it('explicit parent discard removes the only restored copy when storage writes fail', async () => {
-  vi.spyOn(eventsApi, 'event').mockResolvedValue(event);
+  vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event));
   const first = mountEvent();
   await fireEvent.input(await screen.findByLabelText(m.events_interval()), {
     target: { value: 'unfinished' },

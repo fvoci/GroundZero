@@ -788,14 +788,27 @@
     return pending;
   }
 
+  /**
+   * 버린 읽기를 /me 확인 뒤 다시 읽는 화면(#298 SR-298-4·SR-298-8). 업무 화면과, 일정 대화상자의 첫 읽기를 하는 화면이다:
+   * 항목의 일정 묶음(ItemEvents·CalendarScreen), 워크스페이스 달력, 모듈 달력 보기(둘 다 CalendarScreen). 이 밖에서는
+   * 확인을 시작하지 않아 일정 첫 읽기가 다른 탭의 세션 알림에 버려지면 다시 읽지 않고 오류로 끝났다.
+   */
+  function sessionRecoveryRoute(): boolean {
+    const route = router.route;
+    return (
+      (route.name === 'item' && (route.group === 'tasks' || route.group === 'events')) ||
+      route.name === 'calendar' ||
+      (route.name === 'module' && route.view === 'calendar')
+    );
+  }
+
   async function confirmTaskSession(userId: string): Promise<TaskSessionProof | undefined> {
     const canVerify = (): boolean =>
       taskSessionActive &&
       sessionListRecovery === undefined &&
       currentUser.userId === userId &&
       (!sessionHidden || (accountSafety.reason === 'reauth' && accountSafety.error === '')) &&
-      router.route.name === 'item' &&
-      router.route.group === 'tasks';
+      sessionRecoveryRoute();
     if (!canVerify()) return;
     const notificationRetry = createSessionNotificationRetry();
     taskSessionConfirmations += 1;
@@ -868,12 +881,7 @@
         switchAccount();
       } else {
         // Both recovery and a later manual retry need a current task-session proof.
-        if (
-          sessionHidden &&
-          accountSafety.reason === 'reauth' &&
-          router.route.name === 'item' &&
-          router.route.group === 'tasks'
-        ) {
+        if (sessionHidden && accountSafety.reason === 'reauth' && sessionRecoveryRoute()) {
           if (generation !== readTaskSessionGeneration()) return undefined;
           if (taskConfirmationPending())
             return { userId: now.id, sessionGeneration: generation, safetyGeneration };
@@ -918,9 +926,7 @@
   }
 
   function taskConfirmationPending(): boolean {
-    return (
-      taskSessionConfirmations > 0 && router.route.name === 'item' && router.route.group === 'tasks'
-    );
+    return taskSessionConfirmations > 0 && sessionRecoveryRoute();
   }
 
   /** 확인 중 받은 복귀 이벤트는 버리지 않고 후속 확인 하나로 합친다(SR-221-10). */

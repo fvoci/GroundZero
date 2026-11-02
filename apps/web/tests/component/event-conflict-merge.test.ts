@@ -1,7 +1,22 @@
 import { type EventInput, type EventView } from '$lib/features/events/model';
 import { describe, expect, it } from 'vitest';
 
-import { mergeEventInput, sameUnit } from '$lib/features/events/conflict';
+import { eventConflictFields, inputOf, sameUnit } from '$lib/features/events/conflict';
+import {
+  fieldDifferences,
+  initialFieldChoices,
+  selectedFields,
+} from '$lib/features/common/field-conflict';
+
+// 실제 비교 정의로 판정하고, 사용자가 겹친 칸마다 내 값을 명시적으로 고른 결과를 검사한다.
+function mergeEventInput(base: EventInput, mine: EventInput, server: EventInput) {
+  const fields = eventConflictFields();
+  const rows = fieldDifferences(fields, base, mine, server);
+  const clashes = rows.filter((row) => row.kind === 'both').map((row) => row.field.key);
+  const choices = initialFieldChoices(rows);
+  for (const key of clashes) choices[key] = 'mine';
+  return { input: selectedFields(fields, mine, inputOf(server), choices), clashes };
+}
 
 // D-94: 충돌 뒤 "내 입력으로 다시 저장"은 내가 고친 칸만 서버 최신 값에 얹는다. 같은 칸을 양쪽이 서로 다른 값으로
 // 고쳤으면 겹친 칸으로 돌려준다. 날짜·시각·시간대·종일 여부는 한 묶음이다.
@@ -106,6 +121,17 @@ describe('mergeEventInput', () => {
     expect(merged.clashes).toEqual([]);
     expect(merged.input.starts_at).toBe('2026-10-20T10:00:00+09:00');
     expect(merged.input.title).toBe('내 제목');
+  });
+
+  it('detects sub-millisecond server changes inside the atomic time group', () => {
+    const base = ev({ ends_at: '2026-10-20T02:00:00.000000001Z' });
+    const mine = { ...input(), starts_at: '2026-10-20T01:30:00Z', ends_at: base.ends_at };
+    const server = { ...base, ends_at: '2026-10-20T02:00:00.000000002Z' };
+    const rows = fieldDifferences(eventConflictFields(), base, mine, server);
+    expect(rows.map((row) => [row.field.key, row.kind])).toEqual([['when', 'both']]);
+    expect(
+      sameUnit('when', base, { ...base, ends_at: '2026-10-20T11:00:00.000000001+09:00' }),
+    ).toBe(true);
   });
 
   it('treats date, time, time zone and all-day as one unit', () => {

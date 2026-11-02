@@ -87,6 +87,14 @@ pub struct Event {
     pub access: Grade,
 }
 
+/// 단건 읽기의 보관 상태. 일반 Event·목록·쓰기 충돌 자원은 그대로 둔다.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EventDetail {
+    #[serde(flatten)]
+    pub event: Event,
+    pub archived: bool,
+}
+
 /// 일정 내용(만들기·고치기 공통).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct EventInput {
@@ -336,6 +344,13 @@ struct EventRow {
     access: String,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct EventDetailRow {
+    #[sqlx(flatten)]
+    event: EventRow,
+    archived: bool,
+}
+
 const EVENT_SELECT: &str =
     "SELECT e.id, e.item_id, e.workspace_id, e.kind, e.title, e.description, e.all_day,
         e.start_date, e.end_date, e.starts_at, e.ends_at, e.timezone, e.recurrence, e.excluded_dates, e.version,
@@ -414,16 +429,30 @@ pub async fn list(
 /// 일정 하나. 볼 수 없거나 지웠으면 404.
 #[utoipa::path(get, path = "/api/events/{event_id}", operation_id = "get_event",
     params(("event_id" = String, Path, format = Uuid)),
-    responses((status = 200, body = Event), (status = 404, body = ErrorBody)), tag = "events")]
+    responses((status = 200, body = EventDetail,
+        headers(("x-fvoci-viewer-id" = String, description = "일정을 읽은 인증 사용자의 UUID (D-96)"))),
+        (status = 404, body = ErrorBody)), tag = "events")]
 pub async fn get(
     State(state): State<WorkState>,
     CurrentUser(user): CurrentUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<Event>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let mut tx = state.db.begin_as(user).await?;
-    let event = load(&mut tx, id).await?;
+    let row: Option<EventDetailRow> = sqlx::query_as(&format!(
+        "SELECT event.*, (i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL) AS archived
+         FROM ({EVENT_SELECT} WHERE e.id=$1 AND e.deleted_at IS NULL) event
+         JOIN items i ON i.id=event.item_id JOIN modules m ON m.id=i.module_id"
+    ))
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?;
+    let row = row.ok_or(AppError::NotFound)?;
+    let detail = EventDetail {
+        event: to_event(row.event)?,
+        archived: row.archived,
+    };
     tx.commit().await?;
-    Ok(Json(event))
+    Ok(([("x-fvoci-viewer-id", user.0.to_string())], Json(detail)))
 }
 
 /// 일정 만들기(항목 쓰기 권한). 같은 `request_id`로 재시도하면 같은 일정을 돌려준다.

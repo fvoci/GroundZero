@@ -13,7 +13,12 @@
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
-  import { parseEventDraft, type EventDraft } from './input-drafts';
+  import {
+    parseEventDraft,
+    type EventDraft,
+    type EventRawDraft,
+    type EventComparison,
+  } from './input-drafts';
   import { errorText } from '$lib/api/errors';
   import { trimLikeServer } from '$lib/features/tasks/form';
   import { m } from '$lib/paraglide/messages.js';
@@ -48,6 +53,8 @@
      * disabled만 보므로 따로 받는다(R5 delta2 확인 필요 1).
      */
     disabled?: boolean;
+    comparison?: EventComparison | undefined;
+    onrestorecomparison?: (value: EventComparison | undefined) => void;
   }
 
   const {
@@ -63,6 +70,8 @@
     onsaved,
     ondraftkept,
     disabled = false,
+    comparison,
+    onrestorecomparison,
   }: Props = $props();
 
   /** 오늘(사용자 시간대, D-81). */
@@ -70,7 +79,7 @@
     return dayIn(new Date().toISOString(), localTimeZone());
   }
 
-  function initialState(): {
+  function initialState(e: EventView | undefined = initial): {
     kind: EventKind;
     title: string;
     description: string;
@@ -81,7 +90,6 @@
     endWall: string;
     timezone: string;
   } {
-    const e = initial;
     const tz = e?.timezone ?? localTimeZone();
     // 종일 ↔ 시각 전환 때도 그 일정의 날짜를 쓴다(오늘이 아니라).
     const startWall = e?.starts_at != null ? wallTime(e.starts_at, tz) : undefined;
@@ -106,6 +114,7 @@
   // 시간대를 바꾸면 두 끝 모두 새 시간대로 다시 읽는다. 끝이 시작보다 앞서면 서버가 거절한다(400, 화면은 그 오류를 보인다).
   let base = $state(initialState());
   let source = $state.raw(untrack(() => initial));
+  let draftBase = $state.raw(untrack(() => initial));
   const f = $state(initialState());
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
@@ -117,28 +126,16 @@
   let retry = $state<EventDraft['request']>(null);
   const draft = createFormDraft<EventDraft>({
     name: () => draftName,
-    snapshot: () => ({
-      fields: { ...f },
-      baseFields: base,
-      base: source ?? null,
-      startChoice: startChoice ?? null,
-      endChoice: endChoice ?? null,
-      request: retry,
-    }),
+    snapshot: () => ({ ...snapshot(), comparison }),
     parse: parseEventDraft,
     restore: (value) => {
-      if (value.base !== null && value.base.id !== initial?.id) return;
-      Object.assign(f, value.fields);
-      base = value.baseFields;
-      source = value.base ?? undefined;
-      startChoice = value.startChoice ?? undefined;
-      endChoice = value.endChoice ?? undefined;
-      retry = value.request;
-      if (source !== undefined) onrestorebase?.(source);
+      // 입력을 되살리지 않은 초안(다른 일정)의 비교는 지금 연 일정과 맞지 않으므로 함께 버린다(CR-305-1).
+      if (restoreInput(value)) onrestorecomparison?.(value.comparison);
     },
     reset: () => {
       base = initialState();
       source = initial;
+      draftBase = initial;
       Object.assign(f, base);
       startChoice = undefined;
       endChoice = undefined;
@@ -149,6 +146,42 @@
     dirty: () => unsaved,
     busy: () => busy,
   });
+  export function snapshot(): EventRawDraft {
+    return $state.snapshot({
+      fields: { ...f },
+      baseFields: base,
+      base: draftBase ?? null,
+      source: source ?? null,
+      startChoice: startChoice ?? null,
+      endChoice: endChoice ?? null,
+      request: retry,
+    });
+  }
+  export function restoreInput(value: EventRawDraft): boolean {
+    if (value.base !== null && value.base.id !== initial?.id) return false;
+    Object.assign(f, value.fields);
+    base = value.baseFields;
+    draftBase = value.base ?? undefined;
+    source = value.source === undefined ? draftBase : (value.source ?? undefined);
+    startChoice = value.startChoice ?? undefined;
+    endChoice = value.endChoice ?? undefined;
+    retry = value.request;
+    error = undefined;
+    if (draftBase !== undefined) onrestorebase?.(draftBase);
+    return true;
+  }
+  /** Keep the chosen instants (including seconds/DST) separate from the reviewed semantic baseline. */
+  export function applyInput(input: EventInput, reviewed: EventView): void {
+    source = { ...reviewed, ...input };
+    draftBase = reviewed;
+    base = initialState(source);
+    Object.assign(f, base);
+    startChoice = undefined;
+    endChoice = undefined;
+    retry = null;
+    error = undefined;
+    onrestorebase?.(reviewed);
+  }
   onMount(() => (attachGuard && draftName !== undefined ? draft.attach() : undefined));
   export function discardDraft(): void {
     if (busy) return;
@@ -284,7 +317,8 @@
   // `edited`와 같다). 수정이 있으면 초안에는 원문과 잠시 숨긴 날짜·시각을 그대로 남긴다(D-27). 부모는 반복 입력과 함께
   // 이탈을 확인한다. 시간대는 종일 일정에도 보내고 서버가 저장·정렬에 쓰므로 늘 견준다(D2-F-2).
   const unsaved = $derived(
-    f.kind !== base.kind ||
+    comparison !== undefined ||
+      f.kind !== base.kind ||
       trimLikeServer(f.title) !== trimLikeServer(base.title) ||
       trimLikeServer(f.description) !== trimLikeServer(base.description) ||
       f.allDay !== base.allDay ||
