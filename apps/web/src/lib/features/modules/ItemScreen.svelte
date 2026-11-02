@@ -394,6 +394,9 @@
 
   // 항목을 (다시) 불러올 때마다 늘리는 차례. A → B → A로 돌아오면 항목 id는 같아도 새로 읽은 화면이다.
   let loadSeq = 0;
+  // 지금 화면의 항목을 읽은 사용자. 항목 정보 저장의 기대 사용자 머리로 보낸다(D-96, #307): 그사이 이 창의 사용자가
+  // 바뀌었어도 앞 사용자가 읽은 화면의 쓰기는 새 세션에서 409 account_changed로 막힌다.
+  let itemReader = '';
   // 버린 첫 읽기 뒤의 "다시 시도". 누르면 같은 항목을 새 문맥으로 다시 읽는다.
   let loadAttempt = $state(0);
   let retryLoad = $state(false);
@@ -445,8 +448,10 @@
         : undefined,
     );
     consumedContext = true;
+    const reader = untrack(() => me.userId);
     const adopt = ({ it, found }: { it: ItemView; found: Module }, list: SummaryView[]) => {
       if (!isCurrent()) return;
+      itemReader = reader;
       fill(it);
       // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
       const entryKey = org.key('new-item-info');
@@ -572,11 +577,16 @@
     const sent = { title, description, shared };
     saving = true;
     try {
-      const result = await api.updateItem(id, baseVersion, {
-        title: title.trim(),
-        description,
-        ...(visibility === undefined ? {} : { visibility }),
-      });
+      const result = await api.updateItem(
+        id,
+        baseVersion,
+        {
+          title: title.trim(),
+          description,
+          ...(visibility === undefined ? {} : { visibility }),
+        },
+        itemReader,
+      );
       if (result.kind === 'conflict') {
         // 그사이 다른 사람이 고쳤다. 서버는 아무것도 바꾸지 않았다. 입력은 그대로 두고 바로 칸마다 고르게 한다
         // (D-94 개정, D-104). 다른 사용자·세션·항목 화면의 응답이면 비교값을 보이지 않는다(D-96).

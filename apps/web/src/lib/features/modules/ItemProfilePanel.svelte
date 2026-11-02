@@ -81,6 +81,8 @@
   let editBase = $state(0);
   // 편집을 열거나 취소할 때마다 오른다. 저장을 기다리는 동안 취소하고 다시 연 편집을 앞선 저장이 닫지 않게 한다.
   let editSession = 0;
+  // 편집을 연(또는 초안을 되살린) 사용자. 저장의 기대 사용자 머리로 보낸다(D-96, #307).
+  let editUser = '';
   // 편집을 연 때의 리더, 그 뒤 고른 리더. 고를 수 있는 사람 목록에 없어도(못 읽음·되살린 초안) 입력의 리더 이름을
   // 보이도록 초안에도 남긴다.
   let editLeader = $state<PersonRefView | null>(null);
@@ -198,6 +200,7 @@
       leaderNames = value.leaders;
       editing = true;
       editSession += 1;
+      editUser = untrack(() => me.userId);
       // 편집 열기(startEdit)처럼 고를 수 있는 사람을 읽는다. 그사이 편집을 닫거나 새로 열었으면 버린다.
       const session = editSession;
       void work
@@ -284,6 +287,7 @@
   async function startEdit(p: ItemProfileView): Promise<void> {
     error = undefined;
     editSession += 1;
+    editUser = me.userId;
     editBase = p.version;
     editLeader = p.leader;
     comparison = undefined;
@@ -319,15 +323,20 @@
       session === editSession && draft.isOwner(attempt) && sameWriteContext(captured);
     busy = true;
     try {
-      const result = await api.setItemProfile(item.id, base, {
-        leader_id: form.leader === '' ? null : form.leader,
-        goal: form.goal,
-        scope: form.scope,
-        starts_on: form.starts_on === '' ? null : form.starts_on,
-        ends_on: form.ends_on === '' ? null : form.ends_on,
-        status: form.status,
-        details: toDetails(kind, form.values, form.keywords),
-      });
+      const result = await api.setItemProfile(
+        item.id,
+        base,
+        {
+          leader_id: form.leader === '' ? null : form.leader,
+          goal: form.goal,
+          scope: form.scope,
+          starts_on: form.starts_on === '' ? null : form.starts_on,
+          ends_on: form.ends_on === '' ? null : form.ends_on,
+          status: form.status,
+          details: toDetails(kind, form.values, form.keywords),
+        },
+        editUser,
+      );
       if (!draft.isCurrent(attempt)) return;
       if (result.kind === 'conflict') {
         // 기다리는 동안 취소했거나 편집을 새로 열었으면 그 화면을 바꾸지 않는다(이 저장은 아무것도 바꾸지 않았다).
