@@ -125,6 +125,15 @@ function probe(): void {
 }
 
 /**
+ * 시험 전용: 연결 확인 타이머를 멈춘다. 제품은 부르지 않는다(확인은 서버에 닿거나 `watchConnection` 정리 때까지 돈다).
+ * 모듈 수준 타이머라 시험이 끝나도 남으므로 시험 설정의 정리 단계에서 부른다(#309).
+ */
+export function stopConnectionProbeForTests(): void {
+  if (probing !== undefined) clearInterval(probing);
+  probing = undefined;
+}
+
+/**
  * 로그인 상태(배너). 쓰는 중에 세션이 끝나(만료·다른 탭에서 로그아웃) API가 401을 돌려주면 `expired`. 화면을 다시
  * 읽지 않고 새 탭에서 로그인하게 해 이 창의 입력을 지킨다. 세션이 필요한 요청이 다시 성공하면 내린다.
  */
