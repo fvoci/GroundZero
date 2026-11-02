@@ -18,7 +18,11 @@
   import type { ItemView, SummaryView } from '$lib/api/client';
   import { api, ApiError, newRequestId } from '$lib/api/client';
   import { errorText } from '$lib/api/errors';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    accountSwitching,
+    notifyDone,
+  } from '$lib/features/feedback/feedback.svelte';
   import AttachmentsPanel from '$lib/features/files/AttachmentsPanel.svelte';
   import CoursePanel from '$lib/features/courses/CoursePanel.svelte';
   import DocumentTree from '$lib/features/documents/DocumentTree.svelte';
@@ -26,6 +30,7 @@
   import { moveThenReload } from '$lib/features/documents/tree';
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
+  import { settleBacklinks, type BacklinksRead } from '$lib/features/references/backlinks-read';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
   import type { TaskStartupSeed, TaskStartupReads } from '$lib/features/tasks/startup-reads';
   import { readConfig } from '$lib/features/tasks/filters';
@@ -39,6 +44,7 @@
   import { workspaceNav } from '$lib/features/nav/workspace-nav.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { org } from '$lib/org.svelte';
+  import { me } from '$lib/me.svelte';
   import type { ItemGroupName, TaskViewName } from '$lib/router.svelte';
   import {
     ITEM_GROUP_DEFAULT,
@@ -87,6 +93,15 @@
     initialContext,
   }: Props = $props();
   let consumedContext = false;
+  let pendingBacklinks:
+    { id: string; navigationGeneration: number; read: BacklinksRead } | undefined;
+  function takeBacklinks(id: string): BacklinksRead | undefined {
+    const pending = pendingBacklinks;
+    pendingBacklinks = undefined;
+    return pending?.id === id && pending.navigationGeneration === router.navigationGeneration
+      ? pending.read
+      : undefined;
+  }
   let pendingTaskReads: { navigationGeneration: number; reads: TaskStartupReads } | undefined;
   function takeStartupReads(id: string): TaskStartupReads | undefined {
     const seed = pendingTaskReads;
@@ -358,11 +373,22 @@
     const generation = router.itemGeneration;
     loadSeq += 1;
     let cancelled = false;
-    const isCurrent = (): boolean => !cancelled && generation === router.itemGeneration;
+    const context = untrack(() => ({
+      userId: me.userId,
+      organizationId: org.currentId,
+      generation: accountSafety.generation,
+    }));
+    const isCurrent = (): boolean =>
+      !cancelled &&
+      generation === router.itemGeneration &&
+      context.userId === me.userId &&
+      context.organizationId === org.currentId &&
+      context.generation === accountSafety.generation;
     item = undefined;
     mod = undefined;
     docs = [];
     pendingTaskReads = undefined;
+    pendingBacklinks = undefined;
     chosen = undefined;
     error = undefined;
     infoOpen = false;
@@ -422,7 +448,17 @@
             : taskScreenApi.context(id)
           ).then((read) => [{ it: read.item, found: read.module }, read.documents] as const)
         : Promise.all([
-            api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+            api.item(id).then(async (it) => {
+              const found = api.module(it.module_id);
+              if (isCurrent() && untrack(() => itemRoute?.group) === 'docs') {
+                pendingBacklinks = {
+                  id: it.id,
+                  navigationGeneration: untrack(() => router.navigationGeneration),
+                  read: settleBacklinks(api.itemBacklinks(it.id)),
+                };
+              }
+              return { it, found: await found };
+            }),
             api.itemDocuments(id),
           ]);
       void pending
@@ -931,7 +967,7 @@
               />
             {/if}
           </section>
-          <Backlinks kind="item" id={current.id} {workspaces} />
+          <Backlinks kind="item" id={current.id} {workspaces} takeInitialRead={takeBacklinks} />
         {:else if group === 'events'}
           <!-- 일정 목록과 달력은 같은 일정을 따로 읽는다. 한쪽에서 바꾸면 다른 쪽이 다시 읽게 알린다. -->
           <ItemEvents

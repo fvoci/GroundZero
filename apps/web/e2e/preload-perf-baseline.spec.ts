@@ -111,7 +111,29 @@ if (measurementRoot !== undefined) {
             [...panels, options].reduce((a, b) => (a.end > b.end ? a : b)),
           );
         } else chain.push(sync, board);
-      } else if (['board', 'gantt', 'task-detail', 'document-tree'].includes(screen)) {
+      } else if (screen === 'document-tree') {
+        const once = (pattern: RegExp, after: number) => {
+          const matches = requests.filter((request) => pattern.test(request.path));
+          expect(matches).toHaveLength(1);
+          const found = matches[0];
+          if (found === undefined) throw new Error('missing document tree witness');
+          expect(found.start).toBeGreaterThanOrEqual(after);
+          expect(found.end).toBeGreaterThanOrEqual(found.start);
+          return found;
+        };
+        const item = once(/^\/api\/items\/[^/]+$/, gate.end);
+        const documents = once(/^\/api\/items\/[^/]+\/documents$/, gate.end);
+        const module = once(/^\/api\/modules\/[^/]+$/, item.end);
+        const backlinks = once(/^\/api\/items\/[^/]+\/backlinks$/, item.end);
+        expect(documents.path).toBe(`${item.path}/documents`);
+        expect(backlinks.path).toBe(`${item.path}/backlinks`);
+        expect(documents.start).toBeLessThan(item.end);
+        expect(item.start).toBeLessThan(documents.end);
+        expect(Math.max(module.start, backlinks.start)).toBeLessThan(
+          Math.min(module.end, backlinks.end),
+        );
+        chain.push(item, module.end > backlinks.end ? module : backlinks);
+      } else if (['board', 'gantt', 'task-detail'].includes(screen)) {
         const item = pick(/^\/api\/items\/[^/]+$/, gate.end);
         const documents = pick(/^\/api\/items\/[^/]+\/documents$/, gate.end);
         const module = pick(/^\/api\/modules\/[^/]+$/, item.end);
@@ -139,10 +161,10 @@ if (measurementRoot !== undefined) {
           chain.push(join, pick(/^\/api\/tasks\/[^/]+\/comments$/, join.end));
           return { screen, repeat: num(sample, 'repeat'), depth: chain.length, chain };
         }
-        const patterns =
-          screen === 'document-tree'
-            ? [/^\/api\/items\/[^/]+\/backlinks$/]
-            : [/^\/api\/items\/[^/]+\/recurrences\/sync$/, /^\/api\/items\/[^/]+\/tasks$/];
+        const patterns = [
+          /^\/api\/items\/[^/]+\/recurrences\/sync$/,
+          /^\/api\/items\/[^/]+\/tasks$/,
+        ];
         for (const pattern of patterns) {
           const next = pick(pattern, after);
           chain.push(next);

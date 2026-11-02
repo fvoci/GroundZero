@@ -62,7 +62,7 @@ valid_depth() {
   jq -e 'group_by(.screen) |
     map({key: .[0].screen, value: (map(.depth) | unique)}) | from_entries == {
       home: [4], "my-tasks": [3], board: [6], gantt: [6], "task-detail": [6],
-      "document-tree": [5], "document-open": [4], calendar: [3], activity: [4]
+      "document-tree": [4], "document-open": [4], calendar: [3], activity: [4]
     }' "$out/depth.json"
 }
 check valid-depth valid_depth
@@ -86,7 +86,9 @@ reject_join() {
   local screen=$1 pattern=$2
   jq --arg screen "$screen" --arg pattern "$pattern" '
     map(if .screen == $screen then
-      .requests |= map(if .path | test($pattern) then .end = 999999999999999 else . end)
+      .requests |= map(if .path | test($pattern) then
+        if $screen=="document-tree" then .end=null else .end=999999999999999 end
+        else . end)
     else . end)' "$fixture" > "$out/join-input.json"
   if jq -f tools/perf-depth.jq "$out/join-input.json" > /dev/null 2> "$out/join-error.log"; then
     return 1
@@ -450,6 +452,7 @@ FRESH
 }
 check task-screen-fresh-target fresh_aggregate_target
 check task-screen-aggregate-witnesses bash tools/perf-task-screens-test.sh
+check document-tree-parallel-witnesses bash tools/perf-document-tree-test.sh
 check screen-build-overlap bash tools/perf-screen-overlap-test.sh
 check full-build-command-state bash tools/perf-build-state-test.sh
 check monitor-fails-closed bash tools/perf-monitor-lifecycle-test.sh

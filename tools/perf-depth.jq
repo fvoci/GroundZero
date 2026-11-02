@@ -3,7 +3,7 @@
 # Edges follow App.load, HomeDashboard, ItemScreen, TaskBoard.loadItem,
 # detail-data.loadDetail and DocumentScreen. Each observed edge must finish before its child.
 # Every parallel arm is checked. Session/home fan-outs contribute one level;
-# ItemScreen joins documents with item -> module before rendering the selected view.
+# ItemScreen's docs entry starts module and backlinks after item, alongside documents.
 # Task detail joins its task resource with six item-scope reads sharing an overlap.
 def pick($requests; $pattern; $after; $last):
   [$requests[] | select(.path | test($pattern)) | select(.start >= $after)] |
@@ -29,6 +29,24 @@ def item_screen($screen):
 def once($requests; $pattern; $after):
   branch($requests; $pattern; $after) |
   if length != 1 then error("duplicate dependency witness: " + $pattern) else .[0] end;
+def document_tree_chain($requests; $root; $gate):
+  ([$requests[] | select(.path | startswith("/api/"))]) as $api |
+  if any($api[]; (.start | type) != "number" or (.end | type) != "number" or .start < 0 or .end < .start)
+  then error("unfinished dependency witness")
+  elif ($api | length) != ($api | unique_by([.path,.start,.end,.requestId]) | length)
+  then error("duplicate dependency witness record") else . end |
+  once($requests; "^/api/items/[^/]+$"; $gate.end) as $item |
+  once($requests; "^/api/items/[^/]+/documents$"; $gate.end) as $documents |
+  once($requests; "^/api/modules/[^/]+$"; $item.end) as $module |
+  once($requests; "^/api/items/[^/]+/backlinks$"; $item.end) as $backlinks |
+  if $documents.path != ($item.path + "/documents") or $backlinks.path != ($item.path + "/backlinks")
+  then error("wrong item scope dependency witness")
+  elif $documents.start >= $item.end
+  then error("non-overlapping dependency witness: item documents") else . end |
+  require_overlap([$item, $documents]) |
+  require_overlap([$module, $backlinks]) |
+  {chain: [$root, $gate, $item, ([$module, $backlinks] | max_by(.end))],
+   parallel: [$documents, $module, $backlinks]};
 def task_screen_chain($sample; $requests; $root; $arms):
   ([$requests[] | select(.path | startswith("/api/"))]) as $api |
   if any($api[]; (.start | type) != "number" or (.end | type) != "number" or .start < 0 or .end < .start)
@@ -63,8 +81,6 @@ def task_screen_chain($sample; $requests; $root; $arms):
 def patterns($screen):
   if $screen == "board" or $screen == "gantt" then
     ["^/api/items/[^/]+/recurrences/sync$", "^/api/items/[^/]+/tasks$"]
-  elif $screen == "document-tree" then
-    ["^/api/items/[^/]+/backlinks$"]
   elif $screen == "document-open" then
     ["^/api/documents/[^/]+$", "^/api/items/[^/]+/documents$"]
   elif $screen == "calendar" then ["^/api/workspaces/[^/]+/calendar$"]
@@ -83,6 +99,8 @@ map(
   (if (["board", "gantt", "task-detail"] | index($sample.screen)) != null
       and any($requests[]; .path | test("/(task-context|task-board|detail-read)$")) then
     task_screen_chain($sample; $requests; $root; $arms)
+  elif .screen == "document-tree" then
+    document_tree_chain($requests; $root; $gate)
   elif .screen == "home" or .screen == "activity" then
     pick($requests; "^/api/me/home$"; $gate.end; false) as $home |
     (["^/api/workspaces/[^/]+/calendar$", "^/api/me/notifications$", "^/api/me/activity$"] |

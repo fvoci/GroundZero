@@ -129,3 +129,60 @@ test('only entering a newly created empty item starts with information expanded'
   await page.reload();
   await expect(info).toHaveAttribute('aria-expanded', 'false');
 });
+
+// #291 D1: retain real HTTP authorization while holding only the module's dispatch.
+test('document backlinks start alongside module validation and keep layout and keyboard focus', async ({
+  signIn,
+}, testInfo) => {
+  const { page, api } = await signIn('test-user');
+  const narrow = testInfo.project.name === 'narrow-375';
+  const tag = unique();
+  const ws = await api.createWorkspace(`문서 병렬 읽기 ${tag}`);
+  const item = await api.createProjectItem(ws, tag);
+  const module = str(await api.get(`/api/items/${item}`), 'module_id');
+  const modulePath = `/api/modules/${module}`;
+  const backlinksPath = `/api/items/${item}/backlinks`;
+  let releaseModule!: () => void;
+  const moduleGate = new Promise<void>((done) => {
+    releaseModule = done;
+  });
+  await page.route(`**${modulePath}`, async (route) => {
+    await moduleGate;
+    await route.continue();
+  });
+  let backlinksRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === backlinksPath) backlinksRequests += 1;
+  });
+  const pendingBacklinks = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === backlinksPath,
+  );
+  try {
+    await page.goto(`/w/${ws}/i/${item}/docs`);
+    expect((await pendingBacklinks).status()).toBe(200);
+    await expect(page.locator('#backlinks-heading')).toHaveCount(0);
+  } finally {
+    releaseModule();
+  }
+  await expect(page.locator('#item-docs-heading')).toBeVisible();
+  await expect(page.locator('#backlinks-heading')).toBeVisible();
+  await expectViewport(page, narrow);
+  if (narrow) await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+  await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), narrow);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  expect(await pageOverflows(page)).toBe(false);
+  expect(await offenders(page.locator('section[aria-labelledby="item-docs-heading"]'))).toEqual([]);
+  expect(await offenders(page.locator('section[aria-labelledby="backlinks-heading"]'))).toEqual([]);
+  const groups = page.getByRole('navigation', { name: '항목 묶음' });
+  await groups.getByRole('link', { name: '업무', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(groups.getByRole('link', { name: '문서', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(groups.getByRole('link', { name: '문서', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  expect(backlinksRequests).toBe(1);
+});

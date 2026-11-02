@@ -1,22 +1,28 @@
 <script lang="ts">
   // 이 대상을 가리키는 문서(내가 볼 수 있는 것만, 서버가 거른다).
   import type { Workspace } from '@fvoci/api-client';
+  import { untrack } from 'svelte';
 
   import type { BacklinkView } from '$lib/api/client';
   import { api } from '$lib/api/client';
+  import { accountSafety } from '$lib/features/feedback/feedback.svelte';
+  import { me } from '$lib/me.svelte';
+  import { org } from '$lib/org.svelte';
   import { m } from '$lib/paraglide/messages.js';
   import { pathFor, router } from '$lib/router.svelte';
 
   import { referenceHash } from './focus';
+  import { settleBacklinks, type BacklinksRead } from './backlinks-read';
 
   interface Props {
     /** 대상 종류와 id. */
     kind: 'document' | 'item' | 'task';
     id: string;
     workspaces: Workspace[];
+    takeInitialRead?: ((id: string) => BacklinksRead | undefined) | undefined;
   }
 
-  const { kind, id, workspaces }: Props = $props();
+  const { kind, id, workspaces, takeInitialRead }: Props = $props();
 
   let links = $state<BacklinkView[]>([]);
   let failed = $state(false);
@@ -29,15 +35,25 @@
           ? api.itemBacklinks
           : api.taskBacklinks;
     const target = id;
+    const context = untrack(() => ({
+      userId: me.userId,
+      organizationId: org.currentId,
+      generation: accountSafety.generation,
+    }));
     let cancelled = false;
+    const isCurrent = (): boolean =>
+      !cancelled &&
+      context.userId === me.userId &&
+      context.organizationId === org.currentId &&
+      context.generation === accountSafety.generation;
+    links = [];
     failed = false;
-    run(target)
-      .then((list) => {
-        if (!cancelled) links = list;
-      })
-      .catch(() => {
-        if (!cancelled) failed = true;
-      });
+    const read = untrack(() => takeInitialRead?.(target)) ?? settleBacklinks(run(target));
+    void read.then((result) => {
+      if (!isCurrent()) return;
+      if (result.kind === 'loaded') links = result.links;
+      else failed = true;
+    });
     return () => {
       cancelled = true;
     };

@@ -80,7 +80,7 @@
       { "path": "/api/items/sample-item", "start": 30, "end": 40 },
       { "path": "/api/items/sample-item/documents", "start": 30, "end": 50 },
       { "path": "/api/modules/sample-module", "start": 40, "end": 50 },
-      { "path": "/api/items/sample-item/backlinks", "start": 50, "end": 60 }
+      { "path": "/api/items/sample-item/backlinks", "start": 40, "end": 60 }
     ]
   },
   {
