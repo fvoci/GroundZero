@@ -2,7 +2,7 @@
   import { type CommentView } from '$lib/features/activity/api';
   // 댓글 하나: 쓴 사람·시각, 본문, 고치기(쓴 사람)·지우기(쓴 사람·소유자).
   import { formatInstant } from '$lib/display';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
 
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
   import DiscardChangesConfirm from '$lib/features/common/DiscardChangesConfirm.svelte';
@@ -65,6 +65,11 @@
   $effect(() => {
     onunsaved?.(editing !== undefined && editing !== original);
     ondraftkept?.(draft.kept);
+  });
+  // 고칠 수 없게 되면 숨은 수정 본문을 되살리기 제안으로 옮기고 경고에서 뺀다. 긴 입력이라 남긴 초안은 지우지
+  // 않는다(#289, D-27). 보낸 수정은 응답까지 잠가 두고, 끝난 뒤 옮긴다.
+  $effect(() => {
+    if (!(canWrite && comment.can_edit) && !busy) untrack(draft.shelve);
   });
   onDestroy(() => {
     onunsaved?.(false);

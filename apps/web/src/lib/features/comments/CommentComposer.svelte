@@ -1,6 +1,6 @@
 <script lang="ts">
   import { type CommentTarget } from '$lib/features/activity/api';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
 
   import { newRequestId } from '$lib/api/client';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -66,6 +66,11 @@
   $effect(() => {
     onunsaved(text !== '');
     ondraftkept?.(draft.kept);
+  });
+  // 쓸 수 없게 되면 숨은 입력을 되살리기 제안으로 옮기고 경고에서 뺀다. 긴 입력이라 남긴 초안은 지우지 않는다
+  // (#289, D-27). 보낸 댓글은 응답까지 잠가 두고, 끝난 뒤 옮긴다.
+  $effect(() => {
+    if (!writable && !busy) untrack(draft.shelve);
   });
   onDestroy(() => {
     onunsaved(false);
