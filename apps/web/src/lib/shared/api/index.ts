@@ -10,7 +10,7 @@ import {
 } from '$lib/features/feedback/feedback.svelte';
 import { me } from '$lib/me.svelte';
 import { m } from '$lib/paraglide/messages.js';
-import { isRecord, type Json } from './parse';
+import { isRecord, parseList, type Json } from './parse';
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -36,6 +36,22 @@ export class NetworkError extends Error {
 }
 
 export const EXPECTED_USER = 'x-fvoci-expected-user';
+export const VIEWER_ID = 'x-fvoci-viewer-id';
+
+/** 목록 응답의 사용자와 이 읽기를 시작한 /me가 다르다. 알림 대신 자기 세션을 다시 확인한다. */
+export class SessionListMismatch extends Error {
+  constructor() {
+    super(m.common_error_account_changed());
+    this.name = 'SessionListMismatch';
+  }
+}
+
+interface RequestResult {
+  status: number;
+  json: Json;
+  etag: string | null;
+  viewerId?: string;
+}
 
 function blockedBySafety(method: string, path: string): boolean {
   return untrack(() => {
@@ -60,7 +76,7 @@ export async function request(
   extra: Record<string, string> = {},
   // CSV 가져오기 취소 신호를 fetch까지 전달한다.
   signal?: AbortSignal,
-): Promise<{ status: number; json: Json; etag: string | null }> {
+): Promise<RequestResult> {
   // 계정 변경 감지 뒤 자동 재시도·늦은 응답을 기존 화면에 적용하지 않는다(D-96).
   // 전환 상태는 반응형 읽기가 아니다: 화면의 $effect가 요청을 부를 때 여기서 읽은 switching이 그 효과의 의존성이 되면, 전환이
   // 시작되는 순간 그 효과들이 다시 실행돼 화면이 로딩 상태로 돌아가고(DOM·메모리 입력·떠나기 가드가 사라짐) 입력 보존 설계가
@@ -112,7 +128,26 @@ export async function request(
   // 요청의 늦은 성공은 세지 않는다.
   if (auth.expired && response.ok && needsSession(path) && expiriesAtStart === sessionExpiries())
     auth.expired = false;
-  return { status: response.status, json, etag: response.headers.get('ETag') };
+  const viewerId = response.headers.get(VIEWER_ID);
+  return {
+    status: response.status,
+    json,
+    etag: response.headers.get('ETag'),
+    ...(viewerId === null ? {} : { viewerId }),
+  };
+}
+
+/** 두 시작 목록은 인증된 응답 사용자를 확인한 뒤에만 배열로 내준다(SR-298-5). */
+export function parseViewerList<T>(
+  response: RequestResult,
+  expectedViewer: string,
+  parse: (value: Json) => T,
+): T[] {
+  const { status, json, viewerId } = response;
+  if (status < 200 || status >= 300) fail(status, json);
+  if (viewerId === undefined || viewerId === '') throw new TypeError('missing list viewer');
+  if (viewerId !== expectedViewer) throw new SessionListMismatch();
+  return parseList(json, parse);
 }
 
 /** 로그인 없이도 답하는 경로(상태 확인·로그인 방식·공개 링크)가 아닌 API. */

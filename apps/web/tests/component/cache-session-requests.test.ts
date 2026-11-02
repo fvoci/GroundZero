@@ -61,15 +61,19 @@ async function appRequests() {
     finish = resolve;
   });
   const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+  const listJson = (value: unknown) =>
+    now === undefined
+      ? json({ error: 'unauthorized' }, 401)
+      : new Response(JSON.stringify(value), { headers: { 'x-fvoci-viewer-id': now.id } });
   vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
     const path = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (path === '/api/me')
       return Promise.resolve(now === undefined ? new Response('', { status: 401 }) : json(now));
     if (path === '/api/workspaces') {
       reads += 1;
-      return hold ? fresh : Promise.resolve(json([]));
+      return hold ? fresh : Promise.resolve(listJson([]));
     }
-    if (path === '/api/me/organizations') return Promise.resolve(json([TEST_ORGANIZATION]));
+    if (path === '/api/me/organizations') return Promise.resolve(listJson([TEST_ORGANIZATION]));
     if (path === '/api/me/timer') return Promise.resolve(json(null));
     return Promise.resolve(json([]));
   });
@@ -89,7 +93,7 @@ async function appRequests() {
       hold = true;
     },
     finishFresh() {
-      finish(json([]));
+      finish(listJson([]));
     },
   };
 }

@@ -11525,6 +11525,8 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description 목록을 읽은 인증 사용자의 UUID (D-96) */
+                    "x-fvoci-viewer-id"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -15081,6 +15083,8 @@ export interface operations {
         responses: {
             200: {
                 headers: {
+                    /** @description 목록을 읽은 인증 사용자의 UUID (D-96) */
+                    "x-fvoci-viewer-id"?: string;
                     [name: string]: unknown;
                 };
                 content: {
