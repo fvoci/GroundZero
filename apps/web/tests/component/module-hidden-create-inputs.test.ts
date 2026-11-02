@@ -115,7 +115,7 @@ it('drops the hidden template choice after archiving while guarding visible sett
 });
 
 it('drops the hidden template title when workspace access falls to read', async () => {
-  const currentWorkspace = permissionState({ ...workspace, access: 'write' as const });
+  const currentWorkspace = permissionState<Workspace>({ ...workspace, access: 'write' });
   render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'DEV' });
   await screen.findByRole('heading', { name: '모듈 DEV' });
   await fireEvent.input(screen.getByLabelText(m.modules_template_item_title()), {
@@ -139,7 +139,7 @@ it('keeps a sent template copy locked until its response, then clears the hidden
       reject = fail;
     }),
   );
-  const currentWorkspace = permissionState({ ...workspace, access: 'write' as const });
+  const currentWorkspace = permissionState<Workspace>({ ...workspace, access: 'write' });
   render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'DEV' });
   await screen.findByRole('heading', { name: '모듈 DEV' });
   await fireEvent.input(screen.getByLabelText(m.modules_template_item_title()), {

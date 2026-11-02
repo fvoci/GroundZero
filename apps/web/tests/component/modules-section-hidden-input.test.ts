@@ -99,7 +99,7 @@ it('does not restore a kept draft into the hidden form while not the owner', asy
   await fireEvent.click(screen.getByRole('button', { name: m.modules_create() }));
   await screen.findByRole('alert');
   first.unmount();
-  const current = permissionState({ ...workspace, access: 'write' as const });
+  const current = permissionState<Workspace>({ ...workspace, access: 'write' });
   render(ModulesSection, { workspace: current });
   await screen.findByTestId('form-draft-offer');
   expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
