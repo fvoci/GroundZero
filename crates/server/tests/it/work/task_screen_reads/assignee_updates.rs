@@ -3,7 +3,7 @@ use super::{Result, fixture::Fixture, matrix};
 use crate::{common, sql_support};
 use axum::http::{Method, StatusCode};
 use serde_json::json;
-use sqlx::{Connection, PgConnection};
+use sqlx::PgConnection;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -57,34 +57,31 @@ async fn cleanup_during_patch(editor: Editor) -> Result<()> {
     let ids = vec![f.owner.id.0, f.actor.id.0];
     let assigned = patch(&mut f, Some(ids)).await?;
     assert_eq!(assigned.status, StatusCode::OK, "{}", assigned.json);
-    let mut locker =
-        PgConnection::connect(f.fresh.db.admin_url.as_ref().ok_or("admin URL")?.expose()).await?;
-    let mut hold = locker.begin().await?;
+    let mut hold = f.state.db.begin_as(f.owner.id).await?;
     let holder: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
-        .fetch_one(&mut *hold)
+        .fetch_one(hold.conn())
+        .await?;
+    // Keep cleanup uncommitted so PATCH still reads the old member and assignee rows.
+    // Use the same application-role command as the membership race tests: the Supabase
+    // bootstrap admin is not the owner of workspace_members and cannot lock it directly.
+    sqlx::query("SELECT fvoci.app_remove_member($1,$2,$3)")
+        .bind(f.ws)
+        .bind(f.actor.id.0)
+        .bind(sql_support::ids())
+        .execute(hold.conn())
         .await?;
     // Old PATCH waits on candidate member rows; fixed PATCH waits on the lane.
     // Both waits happen inside app_update_task, after the HTTP handler read its snapshot.
-    sqlx::query(
-        "SELECT 1 FROM fvoci.workspace_members WHERE workspace_id=$1 AND user_id IN ($2,$3) ORDER BY user_id FOR UPDATE",
+    // A stale save takes that lane lock without changing the task or its version.
+    let gate: String = sqlx::query_scalar(
+        "SELECT fvoci.app_update_task($1,0,'fixture gate','',$2,'none',NULL,NULL,NULL,'{}','{}',false,'[]',$3)",
     )
-    .bind(f.ws)
-    .bind(f.actor.id.0)
-    .bind(f.owner.id.0)
-    .execute(&mut *hold)
+    .bind(f.tasks[0])
+    .bind(assigned.json["status"].as_str().ok_or("status")?)
+    .bind(sql_support::ids())
+    .fetch_one(hold.conn())
     .await?;
-    sqlx::query("SELECT fvoci.app_lock_lane(status_id) FROM fvoci.tasks WHERE id=$1")
-        .bind(f.tasks[0])
-        .execute(&mut *hold)
-        .await?;
-    // Fixture locks need elevated access; the real cleanup runs as the application role.
-    sqlx::query("SET LOCAL ROLE fvoci_app")
-        .execute(&mut *hold)
-        .await?;
-    sqlx::query("SELECT set_config('app.user_id',$1,true)")
-        .bind(f.owner.id.0.to_string())
-        .execute(&mut *hold)
-        .await?;
+    assert_eq!(gate, "conflict");
     let request = tokio::spawn({
         let app = common::app(&f.state);
         let user = match editor {
@@ -96,14 +93,7 @@ async fn cleanup_during_patch(editor: Editor) -> Result<()> {
         async move { common::send(&app, Method::PATCH, &path, Some(&user), Some(body)).await }
     });
     wait_for_blocked_patch(&mut f.admin, holder).await?;
-    sqlx::query("SELECT fvoci.app_remove_member($1,$2,$3)")
-        .bind(f.ws)
-        .bind(f.actor.id.0)
-        .bind(sql_support::ids())
-        .execute(&mut *hold)
-        .await?;
     hold.commit().await?;
-    locker.close().await?;
     let reply = tokio::time::timeout(Duration::from_secs(15), request).await??;
     // Check cleanup even on the old implementation's 400 failure.
     assert_eq!(assignees(&mut f).await?, vec![f.owner.id.0]);
