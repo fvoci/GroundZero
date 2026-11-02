@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me } from '@fvoci/api-client';
@@ -163,6 +163,114 @@ afterEach(() => {
   auth.expired = false;
   router.guard = undefined;
 });
+
+it.each(
+  (['view', 'close-detail'] as const).flatMap((navigation) =>
+    (['success', 'failure'] as const).flatMap((outcome) =>
+      (['same', 'other'] as const).map((user) => ({ navigation, outcome, user })),
+    ),
+  ),
+)(
+  'SR-298-8 reloads after $navigation discards the first $outcome only for the $user user',
+  async ({ navigation, outcome, user }) => {
+    if (navigation === 'close-detail')
+      router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+    vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(detail);
+    const first = held<BoardRead>();
+    const authority = held<Me | undefined>();
+    vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValue(authority.promise);
+    vi.mocked(taskScreenApi.board)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue({
+        ...board,
+        tasks: [{ ...detail.task, title: 'current navigation board' }],
+      });
+    render(App, { reload: vi.fn(), replace: vi.fn() });
+    if (navigation === 'close-detail') await screen.findByLabelText('제목');
+    else await screen.findByRole('heading', { name: /^업무$/ });
+    await waitFor(() => {
+      expect(taskScreenApi.board).toHaveBeenCalledOnce();
+    });
+    if (navigation === 'view') {
+      await fireEvent.click(screen.getByRole('button', { name: /^목록$/ }));
+      expect(router.path).toBe(itemViewPath(WORKSPACE.id, item.id, 'list'));
+    } else {
+      await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).toBeNull();
+      });
+      expect(router.path).toBe(itemViewPath(WORKSPACE.id, item.id, 'board'));
+    }
+    if (outcome === 'failure')
+      first.reject(new ApiError(403, 'forbidden', 'discarded board error'));
+    else first.resolve(board);
+    await waitFor(() => {
+      expect(api.me).toHaveBeenCalledTimes(2);
+    });
+    expect(taskScreenApi.board).toHaveBeenCalledOnce();
+    expect(screen.queryByText(detail.task.title)).toBeNull();
+    const region = screen.getByRole('region', { name: /^업무$/ });
+    expect(within(region).getByRole('status')).toHaveTextContent('불러오는 중');
+    authority.resolve(user === 'same' ? identity : { ...identity, id: 'other-viewer' });
+    if (user === 'other') {
+      await waitFor(() => {
+        expect(accountSafety.switching).toBe(true);
+      });
+      expect(taskScreenApi.board).toHaveBeenCalledOnce();
+      return;
+    }
+    await screen.findByText('current navigation board');
+    expect(within(region).queryByRole('status')).toBeNull();
+    await settled();
+    expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
+    expect(api.me).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+  },
+);
+
+it.each(['other-item', 'other-screen'] as const)(
+  'SR-298-8 never reloads a discarded board after leaving for %s',
+  async (destination) => {
+    const first = held<BoardRead>();
+    vi.mocked(taskScreenApi.board)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue({
+        ...board,
+        tasks: [],
+      });
+    vi.spyOn(api, 'myNotes').mockResolvedValue([]);
+    render(App, { reload: vi.fn(), replace: vi.fn() });
+    await screen.findByRole('heading', { name: /^업무$/ });
+    await waitFor(() => {
+      expect(taskScreenApi.board).toHaveBeenCalledOnce();
+    });
+    const otherItem = { ...item, id: '00000000-0000-4000-8000-000000000099' };
+    vi.mocked(taskScreenApi.context).mockResolvedValue({
+      viewer_id: identity.id,
+      item: otherItem,
+      module: PROJECT_MODULE,
+      documents: [],
+    });
+    router.navigate(
+      destination === 'other-screen' ? '/notes' : itemViewPath(WORKSPACE.id, otherItem.id, 'board'),
+    );
+    if (destination === 'other-screen')
+      await waitFor(() => {
+        expect(api.myNotes).toHaveBeenCalledOnce();
+      });
+    else
+      await waitFor(() => {
+        expect(taskScreenApi.board).toHaveBeenCalledWith(otherItem.id);
+      });
+    first.resolve(board);
+    await settled();
+    expect(vi.mocked(taskScreenApi.board).mock.calls.filter(([id]) => id === item.id)).toHaveLength(
+      1,
+    );
+    expect(api.me).toHaveBeenCalledOnce();
+    expect(screen.queryByText(detail.task.title)).toBeNull();
+  },
+);
 
 it.each([401, 409])(
   'SR-298-3 never retries a discarded startup detail before /me, including %s',
