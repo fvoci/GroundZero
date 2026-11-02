@@ -14,6 +14,7 @@
     type DetailOptionsRead,
   } from './screen-api';
   import {
+    createContextRead,
     DiscardedTaskRead,
     readTaskSessionGeneration,
     sameContext,
@@ -750,14 +751,34 @@
       sameContext(captured, writeContext())
     );
   }
-  function writeFailed(cause: unknown): void {
+  function blockDeniedWrite(cause: unknown): void {
     if (cause instanceof ApiError) {
       if (cause.code === 'account_changed') accountBlocked = true;
-      if ([403, 404].includes(cause.status) || cause.code === 'invalid_state')
-        permissionBlocked = true;
+      if ([403, 404].includes(cause.status)) permissionBlocked = true;
       if (cause.status === 404) hiddenForAccess = true;
     }
+  }
+  async function writeFailed(cause: unknown, captured: ContextCapture): Promise<void> {
+    blockDeniedWrite(cause);
     error = errorText(cause, m.tasks_save_failed());
+    if (
+      !(cause instanceof ApiError) ||
+      cause.status !== 409 ||
+      cause.code !== 'invalid_state' ||
+      detailForm.task === undefined
+    )
+      return;
+    // A retryable transaction conflict shares this code with archive errors. Recheck access without replacing input.
+    const result = await createContextRead(
+      captured,
+      writeContext,
+      taskScreenApi.detail(detailForm.task.id),
+    );
+    if (!acceptsWrite(captured)) return;
+    if (result.kind === 'loaded') {
+      screenArchived = result.value.archived;
+      permissionBlocked = result.value.archived || result.value.item.access === 'read';
+    } else if (result.kind === 'failed') blockDeniedWrite(result.error);
   }
   async function submit(): Promise<void> {
     const input = currentInput();
@@ -801,7 +822,7 @@
       await save(input, patch, baseVersion, [], undated);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      if (acceptsWrite(captured)) writeFailed(e);
+      if (acceptsWrite(captured)) await writeFailed(e, captured);
     } finally {
       if (captured.sequence === detailReadSequence) {
         busy = false;
@@ -822,7 +843,7 @@
       await save(p.input, p.patch, p.baseVersion, withShifts ? p.proposals : [], p.undated);
     } catch (e: unknown) {
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
-      if (acceptsWrite(captured)) writeFailed(e);
+      if (acceptsWrite(captured)) await writeFailed(e, captured);
     } finally {
       if (captured.sequence === detailReadSequence) {
         busy = false;
