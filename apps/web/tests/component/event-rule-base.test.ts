@@ -1,3 +1,4 @@
+import { eventRead } from './fixtures/event-read';
 import { type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
@@ -36,7 +37,7 @@ function event(version: number, title: string): EventView {
 describe('event dialog base version after a rule save', () => {
   async function saveRuleThenForm(ruleResult: EventView): Promise<number | undefined> {
     await setLocale('ko', { reload: false });
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(event(1, '처음 제목'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(event(1, '처음 제목')));
     const setRule = vi.spyOn(eventsApi, 'setEventRecurrence').mockResolvedValue(ruleResult);
     const update = vi
       .spyOn(eventsApi, 'updateEvent')

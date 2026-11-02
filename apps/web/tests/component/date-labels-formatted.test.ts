@@ -1,3 +1,4 @@
+import { eventRead } from './fixtures/event-read';
 import { api } from '$lib/api/client';
 import { type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
@@ -135,9 +136,11 @@ describe('dates inside localized text', () => {
 
   it('formats the single-occurrence label in the event dialog', async () => {
     vi.spyOn(eventsApi, 'event').mockResolvedValue(
-      event({
-        recurrence: { freq: 'weekly', interval: 1, weekdays: [1], until: null, count: null },
-      }),
+      eventRead(
+        event({
+          recurrence: { freq: 'weekly', interval: 1, weekdays: [1], until: null, count: null },
+        }),
+      ),
     );
     render(EventDialog, {
       props: {

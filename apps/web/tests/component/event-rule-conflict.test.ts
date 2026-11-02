@@ -1,6 +1,7 @@
+import { eventRead } from './fixtures/event-read';
 import { type EventView } from '$lib/features/events/model';
 import { RuleConflict, eventsApi } from '$lib/features/events/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { RecurrenceRule } from '$lib/api/client';
@@ -57,14 +58,14 @@ function ruleForm(): HTMLFormElement {
 function reply(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-fvoci-viewer-id': 'event-test-user' },
   });
 }
 
 describe('event rule saved from a stale rule', () => {
   it('shows the current rule, keeps the typed one, and saves it on the next try', async () => {
     await setLocale('ko', { reload: false });
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev(5, monday));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev(5, monday)));
     const setRule = vi
       .spyOn(eventsApi, 'setEventRecurrence')
       .mockRejectedValueOnce(new RuleConflict(ev(6, monWed)))
@@ -84,14 +85,15 @@ describe('event rule saved from a stale rule', () => {
     });
     expect(setRule.mock.calls[0]?.[1]?.weekdays).toEqual([1, 5]);
     expect(setRule.mock.calls[0]?.[2]).toEqual(monday);
-    expect(await screen.findByText(m.events_rule_changed_meanwhile())).toBeTruthy();
+    const panel = await screen.findByRole('region', { name: m.common_conflict_heading() });
     // 입력한 금요일은 남는다.
     expect(document.getElementById('event-recurrence-wd-5')?.getAttribute('aria-checked')).toBe(
       'true',
     );
 
     // 다시 저장하면 지금 규칙(월·수)을 기준으로 보낸다.
-    await fireEvent.submit(ruleForm());
+    await fireEvent.click(within(panel).getByRole('radio', { name: '반복: 내 입력 사용' }));
+    await fireEvent.click(within(panel).getByRole('button', { name: m.common_conflict_save() }));
     await waitFor(() => {
       expect(setRule).toHaveBeenCalledTimes(2);
     });
@@ -112,7 +114,7 @@ describe('event rule saved from a stale rule', () => {
         gets += 1;
         return Promise.resolve(
           gets === 1
-            ? reply(200, ev(5, monday))
+            ? reply(200, eventRead(ev(5, monday)))
             : reply(500, { error: 'internal', message: 'read failed' }),
         );
       }
@@ -134,12 +136,13 @@ describe('event rule saved from a stale rule', () => {
 
     await fireEvent.click(document.getElementById('event-recurrence-wd-5') ?? document.body);
     await fireEvent.submit(ruleForm());
-    expect(await screen.findByText(m.events_rule_changed_meanwhile())).toBeTruthy();
+    const panel = await screen.findByRole('region', { name: m.common_conflict_heading() });
     const summary =
       document.querySelector('[aria-labelledby="event-recurrence-heading"] > p')?.textContent ?? '';
 
     // 다시 저장하면 409가 알려 준 지금 규칙(월·수)을 기준으로 보낸다.
-    await fireEvent.submit(ruleForm());
+    await fireEvent.click(within(panel).getByRole('radio', { name: '반복: 내 입력 사용' }));
+    await fireEvent.click(within(panel).getByRole('button', { name: m.common_conflict_save() }));
     await waitFor(() => {
       expect(puts).toHaveLength(2);
     });

@@ -1,6 +1,7 @@
+import { eventRead } from './fixtures/event-read';
 import { type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { RecurrenceRule } from '$lib/api/client';
@@ -68,7 +69,11 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 describe('event dialog late results', () => {
   function stubEvents(): void {
     vi.spyOn(eventsApi, 'event').mockImplementation((id: string) =>
-      Promise.resolve(id === 'A' ? ev('A', 1, 'A 일정') : ev('B', 1, 'B 일정')),
+      Promise.resolve(
+        ((id: string) => Promise.resolve(id === 'A' ? ev('A', 1, 'A 일정') : ev('B', 1, 'B 일정')))(
+          id,
+        ),
+      ).then(eventRead),
     );
   }
 
@@ -110,7 +115,7 @@ describe('event dialog late results', () => {
     await waitFor(() => {
       expect(dialogTitle()).toBe('A 새 제목');
     });
-    expect(eventsApi.event).not.toHaveBeenCalledWith('B');
+    expect(vi.mocked(eventsApi.event).mock.calls.map(([id]) => id)).not.toContain('B');
 
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
     await waitFor(() => {
@@ -141,8 +146,8 @@ describe('event dialog late results', () => {
     await flush();
     expect(onclose).not.toHaveBeenCalled();
     expect(dialogTitle()).toBe('B 일정');
-    // A는 실제로 지워졌으니 부르는 쪽 목록은 다시 읽는다.
-    expect(onchanged).toHaveBeenCalled();
+    // D-96: 이전 화면의 늦은 결과로 현재 화면의 요청도 시작하지 않는다.
+    expect(onchanged).not.toHaveBeenCalled();
   });
 
   it('cannot be closed with Escape while a save is in flight', async () => {
@@ -182,7 +187,7 @@ describe('event dialog load server', () => {
       count: null,
     };
     const theirs: RecurrenceRule = { ...mine, weekdays: [1, 3] };
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev('A', 5, '회의', mine)));
     vi.spyOn(eventsApi, 'updateEvent').mockResolvedValue({
       kind: 'conflict',
       current: ev('A', 6, '회의', theirs),
@@ -198,7 +203,9 @@ describe('event dialog load server', () => {
     await screen.findByDisplayValue('회의');
     await fireEvent.input(titleInput(), { target: { value: '내 제목' } });
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
-    await fireEvent.click(await screen.findByRole('button', { name: m.events_load_server() }));
+    const panel = await screen.findByRole('region', { name: m.common_conflict_heading() });
+    await fireEvent.click(within(panel).getByRole('radio', { name: '제목: 서버 최신 사용' }));
+    await fireEvent.click(within(panel).getByRole('button', { name: m.common_conflict_save() }));
     await flush();
 
     const wednesday = document.getElementById('event-recurrence-wd-3');
@@ -225,7 +232,7 @@ describe('event dialog load server', () => {
       count: null,
     };
     const theirs: RecurrenceRule = { ...mine, weekdays: [1, 3] };
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev('A', 5, '회의', mine)));
     const update = vi
       .spyOn(eventsApi, 'updateEvent')
       .mockResolvedValueOnce({ kind: 'conflict', current: ev('A', 6, '회의', theirs) })
@@ -241,7 +248,7 @@ describe('event dialog load server', () => {
     await screen.findByDisplayValue('회의');
     await fireEvent.input(titleInput(), { target: { value: '내 제목' } });
     await fireEvent.submit(titleInput().closest('form') ?? titleInput());
-    await fireEvent.click(await screen.findByRole('button', { name: m.events_save_mine() }));
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_conflict_save() }));
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
@@ -268,7 +275,7 @@ describe('event dialog load server', () => {
       until: null,
       count: null,
     };
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A', 5, '회의', mine));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev('A', 5, '회의', mine)));
     vi.spyOn(eventsApi, 'updateEvent').mockImplementation((_id: string, _base: number, input) =>
       Promise.resolve({ kind: 'updated', event: ev('A', 6, input.title, mine) }),
     );
