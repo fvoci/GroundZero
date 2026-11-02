@@ -1,7 +1,7 @@
 <script lang="ts">
   // 모듈 하나: 설명, 항목 목록과 항목 만들기, 관리자의 이름·키·아이콘·설명 변경과 보관·휴지통 (D-15, D-16, D-18, D-78).
   import type { Module, Workspace } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -278,26 +278,21 @@
       templatePending = value.pending;
     },
     reset: () => {
-      resetTemplateInput();
+      templateTitle = '';
+      templateId = '';
+      templatePending = null;
+      templateError = undefined;
       templateBusy = false;
     },
     dirty: () => templateTitle !== '' || templateId !== '',
     busy: () => templateBusy,
   });
   onMount(templateDraft.attach);
-  function resetTemplateInput(): void {
-    templateTitle = '';
-    templateId = '';
-    templatePending = null;
-    templateError = undefined;
-  }
-  // 만들 수 없게 되면(공간 read·모듈 보관) 숨은 템플릿 입력을 비우고 경고에서 뺀다(#289, D-27). 보낸 복제는
-  // 응답까지 잠가 두고, 끝난 뒤 비운다. 새 항목 제목은 자식 폼이 언마운트되며 가드를 푼다.
+  // 만들 수 없게 되면(공간 read·모듈 보관) 숨은 템플릿 입력을 되살리기 제안으로 옮기고 화면 입력은 비워 경고에서
+  // 뺀다(#289, D-27). 응답을 잃은 복제의 요청 id가 함께 남아, 권한을 되찾아 다시 내도 중복 복제가 생기지 않는다.
+  // 보낸 복제는 응답까지 잠가 두고, 끝난 뒤 옮긴다. 새 항목 제목은 자식 폼이 언마운트되며 가드를 푼다.
   $effect(() => {
-    if (!canCreate && !templateBusy) {
-      resetTemplateInput();
-      templateDraft.leave.keep();
-    }
+    if (!canCreate && !templateBusy) untrack(templateDraft.shelve);
   });
 
   async function fromTemplate(moduleId: string): Promise<void> {

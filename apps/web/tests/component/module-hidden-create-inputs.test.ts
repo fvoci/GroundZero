@@ -2,7 +2,7 @@ import type { Module, Workspace } from '@fvoci/api-client';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { api, type ItemView } from '$lib/api/client';
+import { api, NetworkError, type ItemView } from '$lib/api/client';
 import { me } from '$lib/me.svelte';
 import ModuleScreen from '$lib/features/modules/ModuleScreen.svelte';
 import { m } from '$lib/paraglide/messages.js';
@@ -182,4 +182,42 @@ it('releases the new item title guard when its form unmounts and keeps its store
   // 긴 입력이 아니어도 자식 폼이 남긴 초안은 지우지 않는다. 다시 보이면 되살리기를 제안한다.
   expect(await screen.findByTestId('form-draft-offer')).toBeInTheDocument();
   expect(create).not.toHaveBeenCalled();
+});
+
+it('keeps a lost template copy as an offer with its request ID across an access loss', async () => {
+  const copy = vi.spyOn(api, 'copyItem').mockRejectedValue(new NetworkError('lost response'));
+  const currentWorkspace = permissionState<Workspace>({ ...workspace, access: 'write' });
+  render(ModuleScreen, { workspace: currentWorkspace, moduleId: 'DEV' });
+  await screen.findByRole('heading', { name: '모듈 DEV' });
+  await fireEvent.change(screen.getByLabelText(m.modules_template()), {
+    target: { value: 'chosen' },
+  });
+  await fireEvent.input(screen.getByLabelText(m.modules_template_item_title()), {
+    target: { value: '응답을 잃은 복제' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: m.modules_from_template() }));
+  await screen.findByRole('alert');
+  expect(copy).toHaveBeenCalledOnce();
+  const original = copy.mock.calls[0];
+  currentWorkspace.access = 'read';
+  await waitFor(() => {
+    expect(screen.queryByLabelText(m.modules_template_item_title())).toBeNull();
+  });
+  expect(unloadBlocked()).toBe(false);
+  expect(router.guard?.(vi.fn(), '/')).toBe(true);
+  // 숨은 동안 남긴 입력은 안내와 버리기만 보인다.
+  expect(await screen.findByTestId('form-draft-offer')).toHaveTextContent(
+    m.common_draft_read_only(),
+  );
+  currentWorkspace.access = 'write';
+  expect(await screen.findByLabelText(m.modules_template_item_title())).toHaveValue('');
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(screen.getByLabelText(m.modules_template_item_title())).toHaveValue('응답을 잃은 복제');
+  expect(screen.getByLabelText(m.modules_template())).toHaveValue('chosen');
+  await fireEvent.click(screen.getByRole('button', { name: m.modules_from_template() }));
+  await waitFor(() => {
+    expect(copy).toHaveBeenCalledTimes(2);
+  });
+  // 같은 입력의 다시 내기는 같은 요청 id로 보내 중복 복제를 막는다.
+  expect(copy.mock.calls[1]).toEqual(original);
 });

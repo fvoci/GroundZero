@@ -109,3 +109,36 @@ it('does not restore a kept draft into the hidden form while not the owner', asy
   await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
   expect(screen.getByLabelText(m.modules_name())).toHaveValue('남긴 모듈');
 });
+
+it('keeps a lost module creation as an offer with its request ID across an owner downgrade', async () => {
+  const create = vi.spyOn(api, 'createModule').mockRejectedValue(new NetworkError('offline'));
+  const current = permissionState({ ...workspace });
+  render(ModulesSection, { workspace: current });
+  await fireEvent.input(screen.getByLabelText(m.modules_name()), {
+    target: { value: '응답을 잃은 모듈' },
+  });
+  await fireEvent.input(screen.getByLabelText(m.modules_key()), { target: { value: 'LST' } });
+  await fireEvent.click(screen.getByRole('button', { name: m.modules_create() }));
+  await screen.findByRole('alert');
+  const original = create.mock.calls[0]?.[1].requestId;
+  expect(original).toBeTruthy();
+  current.access = 'write';
+  await waitFor(() => {
+    expect(screen.queryByRole('form', { name: m.modules_create() })).toBeNull();
+  });
+  expect(unloadBlocked()).toBe(false);
+  expect(router.guard?.(vi.fn(), '/')).toBe(true);
+  expect(await screen.findByTestId('form-draft-offer')).toHaveTextContent(
+    m.common_draft_read_only(),
+  );
+  current.access = 'owner';
+  expect(await screen.findByLabelText(m.modules_name())).toHaveValue('');
+  await fireEvent.click(await screen.findByRole('button', { name: m.common_draft_restore() }));
+  expect(screen.getByLabelText(m.modules_name())).toHaveValue('응답을 잃은 모듈');
+  await fireEvent.click(screen.getByRole('button', { name: m.modules_create() }));
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+  // 같은 입력의 다시 내기는 같은 요청 id로 보내 중복 모듈을 막는다.
+  expect(create.mock.calls[1]?.[1].requestId).toBe(original);
+});
