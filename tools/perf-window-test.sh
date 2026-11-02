@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 mkdir -p "$root/target"
 out=$(mktemp -d "$root/target/perf-window-test-XXXXXX")
-for name in wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup; do
+for name in measure_owner_gone recover_stale_measure_lock wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup; do
   source_text=$(awk -v name="$name" '$0 == name "() {" {copy=1} copy {print} copy && /^}$/ {exit}' tools/measure-perf.sh)
   test -n "$source_text"
   eval "$source_text"
@@ -65,7 +65,7 @@ fi
 signal_after_write() {
   local signal=$1 expected=$2 status=0
   local signal_lock="$out/signal-$signal.lock"
-  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
+  export -f measure_owner_gone recover_stale_measure_lock wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
   bash -euo pipefail -s -- "$out" "$signal_lock" "$signal" <<'SIGNAL' || status=$?
   out=$1
   measure_lock=$2
@@ -97,7 +97,7 @@ done
 signal_before_write() {
   local signal=$1 expected=$2 status=0
   local signal_lock="$out/before-write-$signal.lock"
-  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
+  export -f measure_owner_gone recover_stale_measure_lock wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
   bash -euo pipefail -s -- "$out" "$signal_lock" "$signal" "$expected" <<'BEFORE' || status=$?
   out=$1
   measure_lock=$2
@@ -229,7 +229,7 @@ done
 cleanup_process_status() {
   local body_status=$1 teardown_status=$2 expected=$3 actual=0
   local process_lock="$out/process-$body_status-$teardown_status.lock"
-  export -f wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
+  export -f measure_owner_gone recover_stale_measure_lock wait_for_measurement publish_measure_lock remove_measure_lock acquire_measure_lock cleanup exit_cleanup
   # Without errexit masking the trap's return value, require an explicit exit.
   bash -uo pipefail -s -- "$out" "$process_lock" "$body_status" "$teardown_status" <<'EXIT_STATUS' || actual=$?
     out=$1
