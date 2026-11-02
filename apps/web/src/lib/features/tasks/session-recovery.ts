@@ -7,6 +7,7 @@ import {
 } from './context-read';
 
 export const TASK_SESSION_RECOVERY = Symbol('task session recovery');
+export class TaskSessionUnsettled extends Error {}
 export interface TaskSessionProof {
   userId: string;
   sessionGeneration: number;
@@ -105,12 +106,12 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
           if (rejectedChecks >= SESSION_CHECK_MAX_ATTEMPTS) break;
         }
         if (verified === undefined)
-          throw new Error('Task session verification did not settle', { cause });
+          throw new TaskSessionUnsettled('Task session verification did not settle', { cause });
         const now = verified;
         if (now.safetyGeneration !== snapshot.safetyGeneration) {
           safetyChanges += 1;
           if (safetyChanges >= SESSION_CHECK_MAX_ATTEMPTS)
-            throw new Error('Task safety verification did not settle', { cause });
+            throw new TaskSessionUnsettled('Task safety verification did not settle', { cause });
         }
         const epoch = `${now.sessionGeneration.toString()}:${now.safetyGeneration.toString()}`;
         if (retriedEpochs.has(epoch)) throw new DiscardedTaskRead();
@@ -120,7 +121,14 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
       }
     }
   } catch (cause: unknown) {
-    if (!(cause instanceof DiscardedTaskRead) && active() && sameContext(snapshot, current()))
+    if (cause instanceof TaskSessionUnsettled) {
+      const now = current();
+      if (active() && sameTaskRequest(captured, now)) consumer?.failed?.(cause, now);
+    } else if (
+      !(cause instanceof DiscardedTaskRead) &&
+      active() &&
+      sameContext(snapshot, current())
+    )
       consumer?.failed?.(cause, snapshot);
     throw cause;
   }

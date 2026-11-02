@@ -3,6 +3,7 @@ import { DiscardedTaskRead, type ContextCapture } from '$lib/features/tasks/cont
 import {
   createTaskSessionRecovery,
   readTaskWithRecovery,
+  TaskSessionUnsettled,
   type TaskSessionProof,
 } from '$lib/features/tasks/session-recovery';
 
@@ -161,6 +162,83 @@ it('bounds unstable authority without issuing a fresh GET', async () => {
   expect(confirm).toHaveBeenCalledTimes(3);
   expect(read).not.toHaveBeenCalled();
 });
+
+it('CR-4 reports verification exhaustion with the live capture after the first epoch is discarded', async () => {
+  const first = capture();
+  const now = { ...first, sessionGeneration: first.sessionGeneration + 1 };
+  const failed = vi.fn();
+  const loaded = vi.fn();
+  await expect(
+    readTaskWithRecovery(
+      first,
+      () => now,
+      () => true,
+      { confirm: () => Promise.resolve(proof(first)) },
+      () => Promise.resolve({ viewer_id: 'A' }),
+      Promise.reject(new DiscardedTaskRead()),
+      { loaded, failed },
+    ),
+  ).rejects.toThrow('verification did not settle');
+  expect(failed).toHaveBeenCalledExactlyOnceWith(expect.any(TaskSessionUnsettled), now);
+  expect(loaded).not.toHaveBeenCalled();
+});
+
+it('CR-4 reports safety verification exhaustion with the latest live capture', async () => {
+  const first = capture();
+  let now = { ...first, safetyGeneration: first.safetyGeneration + 1 };
+  const failed = vi.fn();
+  const read = vi.fn(() => {
+    now = { ...now, safetyGeneration: now.safetyGeneration + 1 };
+    return Promise.reject<{ viewer_id: string }>(new DiscardedTaskRead());
+  });
+  await expect(
+    readTaskWithRecovery(
+      first,
+      () => now,
+      () => true,
+      { confirm: () => Promise.resolve(proof(now)) },
+      read,
+      Promise.reject(new DiscardedTaskRead()),
+      { loaded: vi.fn(), failed },
+    ),
+  ).rejects.toThrow('safety verification did not settle');
+  expect(failed).toHaveBeenCalledExactlyOnceWith(expect.any(TaskSessionUnsettled), now);
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it.each(['userId', 'sequence', 'navigationGeneration', 'path', 'inactive'] as const)(
+  'CR-4 never reports an exhaustion failure after %s changes',
+  async (field) => {
+    const first = capture();
+    let now = { ...first, sessionGeneration: first.sessionGeneration + 1 };
+    let active = true;
+    let checks = 0;
+    const confirm = vi.fn(() => {
+      checks += 1;
+      if (checks === 3) {
+        if (field === 'inactive') active = false;
+        else now = { ...now, [field]: typeof now[field] === 'number' ? 99 : 'different' };
+      }
+      return Promise.resolve(proof(first));
+    });
+    const failed = vi.fn();
+    const read = vi.fn(() => Promise.resolve({ viewer_id: 'A' }));
+    await expect(
+      readTaskWithRecovery(
+        first,
+        () => now,
+        () => active,
+        { confirm },
+        read,
+        Promise.reject(new DiscardedTaskRead()),
+        { loaded: vi.fn(), failed },
+      ),
+    ).rejects.toBeInstanceOf(DiscardedTaskRead);
+    expect(failed).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(confirm).toHaveBeenCalledTimes(3);
+  },
+);
 
 it('does not spend the safety retry budget on distinct verified notification epochs', async () => {
   let now = capture();
