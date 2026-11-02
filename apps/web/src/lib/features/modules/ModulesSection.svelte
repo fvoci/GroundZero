@@ -73,17 +73,28 @@
       pending = value.pending ?? undefined;
     },
     reset: () => {
-      name = '';
-      key = '';
-      kind = 'project';
-      pending = undefined;
+      resetInput();
       busy = false;
-      formError = undefined;
     },
     dirty: () => name !== '' || key !== '' || kind !== 'project',
     busy: () => busy,
   });
   onMount(draft.attach);
+  function resetInput(): void {
+    name = '';
+    key = '';
+    kind = 'project';
+    pending = undefined;
+    formError = undefined;
+  }
+  // owner가 아니게 되면 숨은 만들기 입력을 비우고 경고에서 뺀다(#289, D-27). 보낸 만들기는 응답까지 잠가 두고,
+  // 끝난 뒤 비운다.
+  $effect(() => {
+    if (!isAdmin && !busy) {
+      resetInput();
+      draft.leave.keep();
+    }
+  });
 
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -129,12 +140,13 @@
 </script>
 
 <!-- 만드는 동안 입력과 되살리기를 잠근다(D-97). 그사이 바뀐 입력은 성공한 만들기를 버리게 하고, 키까지 고쳐 다시 내면
-     새 요청 id로 두 번째 모듈을 만든다. -->
+     새 요청 id로 두 번째 모듈을 만든다. owner가 아니면 폼이 없으므로 안내와 버리기만 둔다(#289). -->
 {#each draft.offers as entry (entry.key)}
   <fieldset class="contents" disabled={busy}>
     <FormDraftOffer
+      restorable={isAdmin}
       onrestore={() => {
-        draft.restore(entry);
+        if (isAdmin) draft.restore(entry);
       }}
       ondiscard={() => {
         draft.discard(entry);
