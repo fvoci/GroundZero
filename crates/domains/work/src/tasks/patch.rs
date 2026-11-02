@@ -96,12 +96,7 @@ pub enum TaskFieldConflict {
 
 /// 보낸 칸을 확인하고 지금 업무 위에 얹는다. 보내지 않은 칸은 다시 확인하지 않는다(그사이 설정 상한이 바뀌어도
 /// 고치지 않은 제목이 거절되지 않게). 돌려주는 JSON은 보낸 칸의 정리한 값(공통 409의 `changed` 계산용)이다.
-fn merge(
-    state: &WorkState,
-    input: &PatchTask,
-    current: &Task,
-    assignees: Vec<UserId>,
-) -> Result<(Edit, Value), AppError> {
+fn merge(state: &WorkState, input: &PatchTask, current: &Task) -> Result<(Edit, Value), AppError> {
     let mut sent = Map::new();
     let mut note = |name: &str, value: Value| {
         sent.insert(name.to_owned(), value);
@@ -185,7 +180,7 @@ fn merge(
         due,
         estimate_minutes,
         tags,
-        assignee_ids: input.assignee_ids.clone().unwrap_or(assignees),
+        assignee_ids: input.assignee_ids.clone(),
         milestone: input.milestone.unwrap_or(current.milestone),
     };
     Ok((edit, Value::Object(sent)))
@@ -220,17 +215,9 @@ pub async fn patch(
 ) -> Result<Response, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let current = load_task(&mut tx, id).await?;
-    let assignees: Vec<UserId> = if input.assignee_ids.is_some() {
-        Vec::new()
-    } else {
-        sqlx::query_scalar("SELECT user_id FROM task_assignees WHERE task_id = $1 ORDER BY user_id")
-            .bind(id)
-            .fetch_all(tx.conn())
-            .await?
-    };
     tx.commit().await?;
     // 읽은 뒤 다른 사람이 바꿨으면 저장 함수가 기준 판으로 막는다(합친 값은 기준 판일 때의 값이어야만 쓰인다).
-    let (edit, sent) = merge(&state, &input, &current, assignees)?;
+    let (edit, sent) = merge(&state, &input, &current)?;
     let saved = save_edit(
         &state,
         user,
