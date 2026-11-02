@@ -14,6 +14,7 @@
   } from './context-read';
   import {
     TASK_SESSION_RECOVERY,
+    TaskSessionUnsettled,
     readTaskWithRecovery,
     type TaskSessionRecovery,
     type TaskReadConsumer,
@@ -131,6 +132,7 @@
   let editingStatuses = $state(false);
   let tasks = $state<TaskView[]>([]);
   let error = $state<string | undefined>(undefined);
+  let retryRead = $state<(() => void) | undefined>();
   let status = $state('');
   // 옮기기 실패 안내. 항목을 다시 읽어 목록을 새로 받아도(error를 지움) 남는다. 다음 옮기기가 성공하면 지운다.
   let moveNotice = $state<string | undefined>(undefined);
@@ -467,6 +469,7 @@
   }
   async function reload(itemId: string = item.id, initial?: Promise<BoardRead>): Promise<void> {
     const mine = ++reloadSeq;
+    retryRead = undefined;
     const useAggregate = aggregate;
     const navigation = untrack(() => ({
       path: router.path,
@@ -486,6 +489,20 @@
       if (alive && mine === reloadSeq && itemId === item.id && !(e instanceof DiscardedTaskRead)) {
         error = errorText(e, m.tasks_load_failed());
         loadedFor = itemId;
+        if (e instanceof TaskSessionUnsettled)
+          retryRead = () => {
+            if (
+              !alive ||
+              itemId !== item.id ||
+              hiddenForAccount ||
+              accountSafety.switching ||
+              accountSafety.restoring
+            )
+              return;
+            error = undefined;
+            loadedFor = undefined;
+            void reload(itemId, Promise.reject<BoardRead>(new DiscardedTaskRead()));
+          };
       }
     };
     try {
@@ -1745,6 +1762,16 @@
   {/if}
   {#if error !== undefined}
     <p role="alert" class="text-sm text-destructive">{error}</p>
+    {#if retryRead !== undefined}
+      <Button
+        variant="outline"
+        onclick={() => {
+          const retry = retryRead;
+          retryRead = undefined;
+          retry?.();
+        }}>{m.common_retry()}</Button
+      >
+    {/if}
   {/if}
 
   {#if loading}

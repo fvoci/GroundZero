@@ -7,7 +7,12 @@
   import type { LinkPending } from './detail-state';
   import { parseTaskDraft, type TaskDraft } from './detail-draft';
   import { taskData as work } from '$lib/features/tasks/detail-data';
-  import { taskScreenApi, composeScreenDetail, type DetailRead } from './screen-api';
+  import {
+    taskScreenApi,
+    composeScreenDetail,
+    type DetailRead,
+    type DetailOptionsRead,
+  } from './screen-api';
   import {
     DiscardedTaskRead,
     readTaskSessionGeneration,
@@ -17,6 +22,7 @@
   } from './context-read';
   import {
     TASK_SESSION_RECOVERY,
+    TaskSessionUnsettled,
     readTaskWithRecovery,
     type TaskSessionRecovery,
   } from './session-recovery';
@@ -182,6 +188,9 @@
   let peopleError = $state<string | undefined>(undefined);
   let conflict = $state<TaskDetailView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
+  let retryRead = $state<(() => void) | undefined>();
+  let readAttempt = $state(0);
+  let consumedAttempt = 0;
   // 날짜를 바꿀 때 함께 옮길 후속 업무(미리보기). 패널이 떠 있는 동안 폼은 잠그고, 승인하면 본 입력과 기준 버전
   // 그대로 보낸다(D-31: 보여 준 영향을 사용자가 승인).
   interface Pending {
@@ -375,6 +384,8 @@
   let detailReadSequence = 0;
   $effect(() => {
     const id = taskId;
+    const retrying = readAttempt !== consumedAttempt;
+    consumedAttempt = readAttempt;
     const navigation = untrack(() => aggregate) ? router.navigationGeneration : undefined;
     const parentItemId = untrack(() => itemId);
     const sequence = ++detailReadSequence;
@@ -403,8 +414,15 @@
     conflict = undefined;
     clashAsk = undefined;
     error = undefined;
+    retryRead = undefined;
     screenArchived = undefined;
-    const read = untrack(() => (aggregate ? initialRead?.(id)?.take() : undefined));
+    const read = untrack(() =>
+      aggregate
+        ? retrying
+          ? Promise.reject<DetailRead>(new DiscardedTaskRead())
+          : initialRead?.(id)?.take()
+        : undefined,
+    );
     const failed = (e: unknown): void => {
       if (isCurrent() && !(e instanceof DiscardedTaskRead))
         error =
@@ -422,35 +440,45 @@
         screenArchived = aggregateRead.archived;
         definitions = [];
         people = undefined;
-        void readTaskWithRecovery(
-          snapshot,
-          capture,
-          active,
-          sessionRecovery,
-          () => taskScreenApi.options(detail.item_id),
-          undefined,
-          {
-            loaded: (options, captured) => {
-              snapshot = captured;
-              if (!isCurrent()) return;
-              if (options.statuses.state === 'ready') definitions = options.statuses.value;
-              else error = m.tasks_load_failed();
-              if (options.assignable.state === 'ready') people = options.assignable.value;
-              else peopleError = m.tasks_assignable_load_failed();
+        const loadOptions = (initial?: Promise<DetailOptionsRead>): void => {
+          retryRead = undefined;
+          void readTaskWithRecovery(
+            snapshot,
+            capture,
+            active,
+            sessionRecovery,
+            () => taskScreenApi.options(detail.item_id),
+            initial,
+            {
+              loaded: (options, captured) => {
+                snapshot = captured;
+                if (!isCurrent()) return;
+                if (options.statuses.state === 'ready') definitions = options.statuses.value;
+                else error = m.tasks_load_failed();
+                if (options.assignable.state === 'ready') people = options.assignable.value;
+                else peopleError = m.tasks_assignable_load_failed();
+              },
+              failed: (cause, captured) => {
+                snapshot = captured;
+                if (!isCurrent() || cause instanceof DiscardedTaskRead) return;
+                if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
+                  detailForm.task = undefined;
+                  error = errorText(cause, m.tasks_task_load_failed());
+                } else {
+                  error = m.tasks_load_failed();
+                  peopleError = m.tasks_assignable_load_failed();
+                }
+                if (cause instanceof TaskSessionUnsettled)
+                  retryRead = () => {
+                    error = undefined;
+                    peopleError = undefined;
+                    loadOptions(Promise.reject<DetailOptionsRead>(new DiscardedTaskRead()));
+                  };
+              },
             },
-            failed: (cause, captured) => {
-              snapshot = captured;
-              if (!isCurrent() || cause instanceof DiscardedTaskRead) return;
-              if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
-                detailForm.task = undefined;
-                error = errorText(cause, m.tasks_task_load_failed());
-              } else {
-                error = m.tasks_load_failed();
-                peopleError = m.tasks_assignable_load_failed();
-              }
-            },
-          },
-        ).catch(() => undefined);
+          ).catch(() => undefined);
+        };
+        loadOptions();
         return;
       }
       void work.assignable(detail.item_id).then(
@@ -480,6 +508,10 @@
           failed: (cause, captured) => {
             snapshot = captured;
             failed(cause);
+            if (cause instanceof TaskSessionUnsettled && isCurrent())
+              retryRead = () => {
+                readAttempt += 1;
+              };
           },
         },
       ).catch(() => undefined);
@@ -1053,6 +1085,16 @@
 
 {#if error !== undefined}
   <p role="alert" class="text-sm text-destructive">{error}</p>
+  {#if retryRead !== undefined}
+    <Button
+      variant="outline"
+      onclick={() => {
+        const retry = retryRead;
+        retryRead = undefined;
+        retry?.();
+      }}>{m.common_retry()}</Button
+    >
+  {/if}
 {/if}
 {#if hiddenForAccount}
   <p role="alert">{m.tasks_account_changed()}</p>

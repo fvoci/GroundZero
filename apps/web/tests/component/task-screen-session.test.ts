@@ -1,6 +1,6 @@
 import './fixtures/authenticated';
 import { TEST_STATUSES } from './fixtures/task-statuses';
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, api } from '$lib/api/client';
@@ -22,6 +22,8 @@ import { me } from '$lib/me.svelte';
 import {
   createTaskSessionRecovery,
   TASK_SESSION_RECOVERY,
+  type TaskSessionRecovery,
+  type TaskSessionProof,
 } from '$lib/features/tasks/session-recovery';
 import { timeData } from '$lib/features/time/data';
 import { TASK_ITEM, taskViews } from '../../stories/fixtures/synthetic';
@@ -138,6 +140,108 @@ afterEach(() => {
   accountSafety.switching = false;
   accountSafety.restoring = false;
 });
+
+it.each(['board', 'detail', 'options'] as const)(
+  'CR-4 shows a current %s recovery error and starts a verified manual retry',
+  async (kind) => {
+    const initialGeneration = readTaskSessionGeneration();
+    const confirm = vi.fn<TaskSessionRecovery['confirm']>().mockResolvedValue({
+      userId: 'user-a',
+      sessionGeneration: initialGeneration,
+      safetyGeneration: accountSafety.generation,
+    });
+    const context = new Map([[TASK_SESSION_RECOVERY, { confirm }]]);
+    const firstBoard = held<BoardRead>();
+    const firstDetail = held<DetailRead>();
+    const firstOptions = held<DetailOptionsRead>();
+    vi.spyOn(taskScreenApi, 'board')
+      .mockReturnValueOnce(firstBoard.promise)
+      .mockResolvedValue({
+        ...board,
+        tasks: [{ ...detail.task, title: 'current verified task' }],
+      });
+    const detailRead = vi.spyOn(taskScreenApi, 'detail').mockResolvedValue({
+      ...detail,
+      task: { ...detail.task, title: 'current verified task' },
+    });
+    if (kind === 'detail') detailRead.mockReturnValueOnce(firstDetail.promise);
+    vi.spyOn(taskScreenApi, 'options')
+      .mockReturnValueOnce(firstOptions.promise)
+      .mockResolvedValue({
+        ...options,
+        assignable: {
+          state: 'ready',
+          value: [{ user_id: 'current-person', display_name: 'current verified candidate' }],
+        },
+      });
+    if (kind === 'board')
+      render(TaskBoard, {
+        context,
+        props: {
+          item: { ...TASK_ITEM, access: 'read' },
+          workspaces: [],
+          aggregate: true,
+          openTaskId: undefined,
+        },
+      });
+    else
+      render(TaskDetail, {
+        context,
+        props: {
+          taskId: task.id,
+          tasks: [],
+          workspaces: [],
+          aggregate: true,
+          onchanged: () => undefined,
+          onopen: () => undefined,
+        },
+      });
+    await waitFor(() => {
+      expect(taskScreenApi[kind]).toHaveBeenCalledOnce();
+    });
+    const input = kind === 'options' ? await screen.findByLabelText('제목') : undefined;
+    if (input !== undefined)
+      await fireEvent.input(input, { target: { value: 'unsaved options input' } });
+    changeSession();
+    if (kind === 'board') firstBoard.resolve(board);
+    else if (kind === 'detail') firstDetail.resolve(detail);
+    else firstOptions.resolve(options);
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledTimes(3);
+    });
+    for (const alert of screen.getAllByRole('alert')) expect(alert).toBeVisible();
+    const retry = screen.getByRole('button', { name: /^다시 시도$/ });
+    expect(retry).toBeVisible();
+    if (kind === 'options') expect(input).toHaveValue('unsaved options input');
+    else expect(screen.queryByRole('status')).toBeNull();
+    const authority = held<TaskSessionProof | undefined>();
+    confirm.mockReturnValue(authority.promise);
+    const currentProof = {
+      userId: 'user-a',
+      sessionGeneration: readTaskSessionGeneration(),
+      safetyGeneration: accountSafety.generation,
+    };
+    if (kind === 'detail') firstOptions.resolve(options);
+    await fireEvent.click(retry);
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledTimes(4);
+    });
+    expect(taskScreenApi[kind]).toHaveBeenCalledOnce();
+    authority.resolve(currentProof);
+    if (kind === 'board') await screen.findByText('current verified task');
+    else if (kind === 'detail')
+      expect(await screen.findByLabelText('제목')).toHaveValue('current verified task');
+    else {
+      await screen.findByText('current verified candidate');
+      expect(screen.getByLabelText('제목')).toBe(input);
+      expect(input).toHaveValue('unsaved options input');
+      expect(taskScreenApi.detail).toHaveBeenCalledOnce();
+    }
+    expect(taskScreenApi[kind]).toHaveBeenCalledTimes(2);
+    expect(confirm).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole('alert')).toBeNull();
+  },
+);
 
 it.each(['success', 'failure'] as const)(
   'SR-298-2 discards a direct board %s after A → B → A',
