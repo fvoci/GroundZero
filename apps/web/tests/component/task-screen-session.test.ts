@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, api } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
+import { readTaskSessionGeneration } from '$lib/features/tasks/context-read';
 import { savedViewsApi } from '$lib/features/events/saved-views-api';
 import {
   taskScreenApi,
@@ -114,7 +115,7 @@ function recoveryContext() {
     [
       TASK_SESSION_RECOVERY,
       createTaskSessionRecovery(async (userId) => {
-        const generation = readSessionGeneration();
+        const generation = readTaskSessionGeneration();
         const safetyGeneration = accountSafety.generation;
         const checked = await api.me();
         if (checked?.id !== userId) return;

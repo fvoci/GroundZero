@@ -15,8 +15,7 @@ import { parseItem, parseModule, type ItemView } from '$lib/api/client/modules';
 import { parseSummary, type SummaryView } from '$lib/api/client/documents';
 import { me } from '$lib/me.svelte';
 import { accountSafety, switchAccount } from '$lib/features/feedback/feedback.svelte';
-import { readSessionGeneration } from '$lib/features/auth/session-signal';
-import { DiscardedTaskRead } from './context-read';
+import { DiscardedTaskRead, readTaskSessionGeneration } from './context-read';
 import { composeTasks, type TaskRelations } from './board-data';
 import {
   parseAssignee,
@@ -85,11 +84,11 @@ async function owned<T extends { viewer_id: string }>(
   read: () => Promise<ReadResponse>,
   parse: (value: Json) => T,
 ): Promise<T> {
-  const generation = readSessionGeneration();
+  const generation = readTaskSessionGeneration();
   const safetyGeneration = untrack(() => accountSafety.generation);
   const isCurrent = (): boolean =>
     me.userId === user &&
-    generation === readSessionGeneration() &&
+    generation === readTaskSessionGeneration() &&
     safetyGeneration === accountSafety.generation;
   let response: ReadResponse;
   try {

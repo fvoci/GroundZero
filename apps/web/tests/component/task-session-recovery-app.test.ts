@@ -248,6 +248,36 @@ it('SR-298-4 waits for an in-flight same-user verification even with an expiry b
   expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
 });
 
+it('SR-298-1 follow-up keeps rechecking authority across notification churn beyond the safety limit', async () => {
+  const first = held<BoardRead>();
+  vi.mocked(taskScreenApi.board).mockReturnValueOnce(first.promise);
+  let changes = 0;
+  vi.mocked(api.me)
+    .mockResolvedValueOnce(identity)
+    .mockImplementation(() => {
+      if (changes < 5) {
+        changes += 1;
+        localStorage.setItem(
+          'fvoci:auth-session',
+          JSON.stringify({
+            state: 'settled',
+            generation: readSessionGeneration() + 1,
+          }),
+        );
+      }
+      return Promise.resolve(identity);
+    });
+  render(App, { reload: vi.fn(), replace: vi.fn() });
+  await screen.findByRole('heading', { name: /^업무$/ });
+  signal();
+  first.resolve(board);
+  await screen.findByText(detail.task.title);
+  expect(api.me).toHaveBeenCalledTimes(7);
+  expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
+  expect(accountSafety.switching).toBe(false);
+  expect(auth.expired).toBe(false);
+});
+
 it.each(
   (['board', 'seed', 'detail', 'options', 'reopen'] as const).flatMap((kind) =>
     (['success', 'failure'] as const).flatMap((outcome) =>

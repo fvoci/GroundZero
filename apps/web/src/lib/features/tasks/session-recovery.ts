@@ -62,8 +62,9 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
   let snapshot = { ...captured };
   let pending = initial;
   const retriedEpochs = new Set<string>();
+  let safetyChanges = 0;
   try {
-    for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
+    for (;;) {
       try {
         const value = await startCapturedRead(snapshot, current, pending ?? read()).take();
         if (!active() || !sameContext(snapshot, current())) throw new DiscardedTaskRead();
@@ -79,7 +80,9 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
         )
           throw cause;
         let verified: ContextCapture | undefined;
-        for (let check = 0; check < SESSION_CHECK_MAX_ATTEMPTS; check += 1) {
+        let rejectedEpoch: string | undefined;
+        let rejectedChecks = 0;
+        for (;;) {
           const proof = await recovery.confirm(captured.userId);
           const now = current();
           if (
@@ -96,10 +99,19 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
             verified = { ...now };
             break;
           }
+          const epoch = `${now.sessionGeneration.toString()}:${now.safetyGeneration.toString()}`;
+          rejectedChecks = epoch === rejectedEpoch ? rejectedChecks + 1 : 1;
+          rejectedEpoch = epoch;
+          if (rejectedChecks >= SESSION_CHECK_MAX_ATTEMPTS) break;
         }
         if (verified === undefined)
           throw new Error('Task session verification did not settle', { cause });
         const now = verified;
+        if (now.safetyGeneration !== snapshot.safetyGeneration) {
+          safetyChanges += 1;
+          if (safetyChanges >= SESSION_CHECK_MAX_ATTEMPTS)
+            throw new Error('Task safety verification did not settle', { cause });
+        }
         const epoch = `${now.sessionGeneration.toString()}:${now.safetyGeneration.toString()}`;
         if (retriedEpochs.has(epoch)) throw new DiscardedTaskRead();
         retriedEpochs.add(epoch);
@@ -107,7 +119,6 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
         pending = undefined;
       }
     }
-    throw new Error('Task screen recovery did not settle');
   } catch (cause: unknown) {
     if (!(cause instanceof DiscardedTaskRead) && active() && sameContext(snapshot, current()))
       consumer?.failed?.(cause, snapshot);

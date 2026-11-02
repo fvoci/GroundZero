@@ -161,3 +161,26 @@ it('bounds unstable authority without issuing a fresh GET', async () => {
   expect(confirm).toHaveBeenCalledTimes(3);
   expect(read).not.toHaveBeenCalled();
 });
+
+it('does not spend the safety retry budget on distinct verified notification epochs', async () => {
+  let now = capture();
+  let reads = 0;
+  const read = vi.fn(() => {
+    reads += 1;
+    if (reads <= 5) {
+      now = { ...now, sessionGeneration: now.sessionGeneration + 1 };
+      return Promise.reject<{ viewer_id: string }>(new DiscardedTaskRead());
+    }
+    return Promise.resolve({ viewer_id: 'A' });
+  });
+  const result = await readTaskWithRecovery(
+    now,
+    () => now,
+    () => true,
+    { confirm: () => Promise.resolve(proof(now)) },
+    read,
+    Promise.reject(new DiscardedTaskRead()),
+  );
+  expect(result.value).toEqual({ viewer_id: 'A' });
+  expect(read).toHaveBeenCalledTimes(6);
+});

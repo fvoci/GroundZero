@@ -10,11 +10,11 @@
   import { taskScreenApi, composeScreenDetail, type DetailRead } from './screen-api';
   import {
     DiscardedTaskRead,
+    readTaskSessionGeneration,
     sameContext,
     type CapturedRead,
     type ContextCapture,
   } from './context-read';
-  import { readSessionGeneration } from '$lib/features/auth/session-signal';
   import {
     TASK_SESSION_RECOVERY,
     readTaskWithRecovery,
@@ -382,7 +382,7 @@
       userId: me.userId,
       sequence: detailReadSequence,
       navigationGeneration: router.navigationGeneration,
-      sessionGeneration: readSessionGeneration(),
+      sessionGeneration: readTaskSessionGeneration(),
       safetyGeneration: accountSafety.generation,
       path: router.path,
     });

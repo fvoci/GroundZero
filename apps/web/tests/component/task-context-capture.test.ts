@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   createContextRead,
   startCapturedRead,
+  readTaskSessionGeneration,
+  trackTaskSessionPublications,
   type ContextCapture,
 } from '$lib/features/tasks/context-read';
+import { publishSessionCheck, readSessionGeneration } from '$lib/features/auth/session-signal';
 
 const capture = (userId = 'A', sequence = 1): ContextCapture => ({
   userId,
@@ -21,6 +24,49 @@ function held<T>() {
 }
 
 describe('D-96 task context ownership', () => {
+  it('preserves only its own publication epoch, while foreign hints and disposal invalidate reads', async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'locks');
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: (_key: string, update: () => unknown) => Promise.resolve(update()) },
+    });
+    const tracker = trackTaskSessionPublications();
+    try {
+      const current = (): ContextCapture => ({
+        ...capture(),
+        sessionGeneration: readTaskSessionGeneration(),
+      });
+      const first = current();
+      const ownRead = startCapturedRead(first, current, Promise.resolve({ viewer_id: 'A' }));
+      const before = readSessionGeneration();
+      expect(
+        await publishSessionCheck(before, (after) => {
+          tracker.published(before, after);
+        }),
+      ).toBe(true);
+      expect(current()).toEqual(first);
+      expect(await ownRead.take()).toEqual({ viewer_id: 'A' });
+      const stale = startCapturedRead(first, current, Promise.resolve({ viewer_id: 'A' }));
+      localStorage.setItem(
+        'fvoci:auth-session',
+        JSON.stringify({
+          state: 'settled',
+          generation: readSessionGeneration() + 1,
+        }),
+      );
+      await expect(stale.take()).rejects.toThrow();
+      expect(current().sessionGeneration).toBeGreaterThan(first.sessionGeneration);
+      const live = current();
+      const disposed = startCapturedRead(live, current, Promise.resolve({ viewer_id: 'A' }));
+      tracker.dispose();
+      await expect(disposed.take()).rejects.toThrow();
+    } finally {
+      tracker.dispose();
+      localStorage.removeItem('fvoci:auth-session');
+      if (original === undefined) Reflect.deleteProperty(navigator, 'locks');
+      else Object.defineProperty(navigator, 'locks', original);
+    }
+  });
   it('starts a captured read immediately but rechecks ownership at one-time consumption', async () => {
     let current = capture();
     const read = startCapturedRead(current, () => current, Promise.resolve({ viewer_id: 'A' }));

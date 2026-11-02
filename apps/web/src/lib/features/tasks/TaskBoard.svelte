@@ -7,6 +7,7 @@
   import { taskScreenApi, type BoardRead, type DetailRead } from './screen-api';
   import {
     DiscardedTaskRead,
+    readTaskSessionGeneration,
     startCapturedRead,
     type CapturedRead,
     type ContextCapture,
@@ -18,7 +19,6 @@
     type TaskReadConsumer,
   } from './session-recovery';
   import type { TaskStartupReads } from './startup-reads';
-  import { readSessionGeneration } from '$lib/features/auth/session-signal';
   import { composeTasks } from './board-data';
   // 항목의 업무 (D-31): 칸반·목록·간트·달력, 검색·필터·정렬과 저장한 보기, 업무 만들기, 상세 대화상자.
   // 칸반 카드는 버튼과 키보드(Alt+화살표)로 열·순서를 옮긴다. 상세는 주소(/t/{업무})로도 열린다.
@@ -445,7 +445,7 @@
       userId: me.userId,
       sequence: reloadSeq,
       navigationGeneration: router.navigationGeneration,
-      sessionGeneration: readSessionGeneration(),
+      sessionGeneration: readTaskSessionGeneration(),
       safetyGeneration: accountSafety.generation,
       path: router.path,
     });
@@ -530,7 +530,7 @@
       userId: me.userId,
       sequence: detailReadSequence,
       navigationGeneration: router.navigationGeneration,
-      sessionGeneration: readSessionGeneration(),
+      sessionGeneration: readTaskSessionGeneration(),
       safetyGeneration: accountSafety.generation,
       path: router.path,
     });

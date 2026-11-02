@@ -46,6 +46,7 @@ const context: TaskContext = {
 };
 
 beforeEach(async () => {
+  localStorage.clear();
   originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
   Object.defineProperty(navigator, 'locks', {
     configurable: true,
@@ -109,21 +110,75 @@ afterEach(() => {
   router.guard = undefined;
 });
 
-it('SR-298-1 retries /me before starting task reads when publication sees a newer session', async () => {
-  const publication = held<boolean>();
+it.each(['missing-locks', 'logout-pending', 'never-granted', 'churn', 'granted'] as const)(
+  'SR-298-1 follow-up accepts its own verified task startup with %s',
+  async (mode) => {
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    const read = vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+    const changes = SESSION_CHECK_MAX_ATTEMPTS + 2;
+    let notifications = 0;
+    if (mode === 'missing-locks') {
+      Reflect.deleteProperty(navigator, 'locks');
+      expect('locks' in navigator).toBe(false);
+    } else if (mode === 'logout-pending') {
+      localStorage.setItem(
+        'fvoci:auth-session',
+        JSON.stringify({
+          state: 'logout-pending',
+          generation: readSessionGeneration() + 1,
+          startedAt: Date.now(),
+          attemptId: 'startup-pending',
+        }),
+      );
+    } else if (mode === 'never-granted') {
+      Object.defineProperty(navigator, 'locks', {
+        configurable: true,
+        value: { request: () => new Promise<never>(() => undefined) },
+      });
+    } else if (mode === 'churn') {
+      read.mockImplementation(() => {
+        if (notifications < changes) {
+          notifications += 1;
+          localStorage.setItem(
+            'fvoci:auth-session',
+            JSON.stringify({
+              state: 'settled',
+              generation: readSessionGeneration() + 1,
+            }),
+          );
+        }
+        return Promise.resolve(context);
+      });
+    }
+    render(App);
+    await screen.findByTestId('task-board');
+    expect(taskData.syncRecurrences).toHaveBeenCalledOnce();
+    expect(taskScreenApi.board).toHaveBeenCalledOnce();
+    expect(api.me).toHaveBeenCalledTimes(mode === 'churn' ? changes + 1 : 1);
+    expect(read).toHaveBeenCalledTimes(mode === 'churn' ? changes + 1 : 1);
+  },
+);
+
+it('SR-298-1 retries /me before starting task reads when its response sees a newer session', async () => {
   const recheck = held<Me | undefined>();
-  let publish: (() => boolean) | undefined;
-  Object.defineProperty(navigator, 'locks', {
-    configurable: true,
-    value: {
-      request: (_name: string, update: () => boolean) => {
-        if (publish !== undefined) return Promise.resolve(update());
-        publish = update;
-        return publication.promise;
-      },
-    },
-  });
-  vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValueOnce(recheck.promise);
+  vi.mocked(api.me)
+    .mockImplementationOnce(() => {
+      queueMicrotask(() => {
+        localStorage.setItem(
+          'fvoci:auth-session',
+          JSON.stringify({
+            state: 'settled',
+            generation: readSessionGeneration() + 1,
+          }),
+        );
+        window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+      });
+      return Promise.resolve(identity);
+    })
+    .mockReturnValueOnce(recheck.promise);
   vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([
     { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
@@ -131,21 +186,7 @@ it('SR-298-1 retries /me before starting task reads when publication sees a newe
   vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
   render(App);
   await waitFor(() => {
-    expect(publish).toBeDefined();
-  });
-  localStorage.setItem(
-    'fvoci:auth-session',
-    JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
-  );
-  window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
-  if (publish === undefined) throw new Error('publication did not start');
-  const accepted = publish();
-  expect(accepted).toBe(false);
-  publication.resolve(accepted);
-  await waitFor(() => {
-    expect(
-      vi.mocked(api.me).mock.calls.length >= 2 || vi.mocked(api.workspaces).mock.calls.length > 0,
-    ).toBe(true);
+    expect(api.me).toHaveBeenCalledTimes(2);
   });
   expect(api.workspaces).not.toHaveBeenCalled();
   expect(api.myOrganizations).not.toHaveBeenCalled();
@@ -157,18 +198,10 @@ it('SR-298-1 retries /me before starting task reads when publication sees a newe
   await screen.findByTestId('task-board');
 });
 
-it('SR-298-1 bounds repeated stale publication retries without starting task reads', async () => {
-  Object.defineProperty(navigator, 'locks', {
-    configurable: true,
-    value: {
-      request: (_name: string, update: () => boolean) => {
-        localStorage.setItem(
-          'fvoci:auth-session',
-          JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
-        );
-        return Promise.resolve(update());
-      },
-    },
+it('SR-298-1 bounds actual safety changes without starting task reads', async () => {
+  vi.mocked(api.me).mockImplementation(() => {
+    accountSafety.generation += 1;
+    return Promise.resolve(identity);
   });
   vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
   vi.spyOn(api, 'myOrganizations').mockResolvedValue([]);
@@ -186,6 +219,46 @@ it('SR-298-1 bounds repeated stale publication retries without starting task rea
   expect(taskData.syncRecurrences).not.toHaveBeenCalled();
   await screen.findByRole('alert');
   expect(api.me).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS);
+});
+
+it('SR-298-1 discards B lists and context after a hint until its own /me confirms A again', async () => {
+  const spaces = held<Workspace[]>();
+  const organizations = held<OrganizationSummary[]>();
+  const early = held<TaskContext>();
+  const authority = held<Me | undefined>();
+  vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValueOnce(authority.promise);
+  vi.spyOn(api, 'workspaces').mockReturnValueOnce(spaces.promise).mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations')
+    .mockReturnValueOnce(organizations.promise)
+    .mockResolvedValue([{ ...TEST_ORGANIZATION, id: WORKSPACE.organization_id }]);
+  vi.spyOn(taskScreenApi, 'context').mockReturnValueOnce(early.promise).mockResolvedValue(context);
+  render(App);
+  await waitFor(() => {
+    expect(taskScreenApi.context).toHaveBeenCalledOnce();
+  });
+  localStorage.setItem(
+    'fvoci:auth-session',
+    JSON.stringify({
+      state: 'settled',
+      generation: readSessionGeneration() + 1,
+    }),
+  );
+  spaces.resolve([{ ...WORKSPACE, name: 'private B workspace' }]);
+  organizations.resolve([{ ...TEST_ORGANIZATION, name: 'private B organization' }]);
+  early.resolve({ ...context, viewer_id: 'B', item: { ...context.item, title: 'private B task' } });
+  await waitFor(() => {
+    expect(api.me).toHaveBeenCalledTimes(2);
+  });
+  for (const title of ['private B workspace', 'private B organization', 'private B task'])
+    expect(screen.queryByText(title)).toBeNull();
+  expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+  expect(taskScreenApi.board).not.toHaveBeenCalled();
+  expect(api.itemProfile).not.toHaveBeenCalled();
+  authority.resolve(identity);
+  await screen.findByTestId('task-board');
+  expect(api.workspaces).toHaveBeenCalledTimes(2);
+  expect(taskScreenApi.context).toHaveBeenCalledTimes(2);
+  expect(taskScreenApi.board).toHaveBeenCalledOnce();
 });
 
 it('starts context with the session lists, then displays and synchronizes only after both gates', async () => {

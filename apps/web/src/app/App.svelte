@@ -2,7 +2,12 @@
   import { activityApi } from '$lib/features/activity/api';
   import { taskScreenApi, type TaskContext } from '$lib/features/tasks/screen-api';
   import { startTaskReads, type TaskStartupSeed } from '$lib/features/tasks/startup-reads';
-  import { createContextRead, type ContextCapture } from '$lib/features/tasks/context-read';
+  import {
+    createContextRead,
+    readTaskSessionGeneration,
+    trackTaskSessionPublications,
+    type ContextCapture,
+  } from '$lib/features/tasks/context-read';
   import {
     createTaskSessionRecovery,
     TASK_SESSION_RECOVERY,
@@ -129,11 +134,13 @@
   let cacheRestorePending = false;
   let sessionVerification: Promise<TaskSessionProof | undefined> | undefined;
   let taskSessionActive = true;
+  const taskPublications = trackTaskSessionPublications();
   setContext(TASK_SESSION_RECOVERY, createTaskSessionRecovery(confirmTaskSession));
   const signalRechecks = new SvelteMap<string, ReturnType<typeof setTimeout> | undefined>();
   onMount(schedulePendingSessionCheck);
   onDestroy(() => {
     taskSessionActive = false;
+    taskPublications.dispose();
     sessionSequence += 1;
     restoreSequence += 1;
     sessionCheckPending = false;
@@ -156,15 +163,22 @@
     try {
       const me = verified ?? (await api.me());
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      const taskStartup =
+        verified === undefined && router.route.name === 'item' && router.route.group === 'tasks';
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-        if (router.route.name === 'item' && router.route.group === 'tasks') {
-          if (!(await publishSessionCheck(generation))) return await retryLoad();
+        if (taskStartup) {
+          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
         } else void publishSessionCheck(generation);
       }
       if (me === undefined) {
         const info = await api.authInfo();
         if (mine !== sessionSequence) return false;
+        if (taskStartup) {
+          if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+          void publishSessionCheck(generation);
+        }
         session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
         return true;
       }
@@ -182,6 +196,10 @@
       // 저장한 표시 언어로 그린다(D-81). 화면 낭독기·브라우저가 쓰는 문서 언어도 맞춘다.
       await setLocale(displaySettings().locale, { reload: false });
       if (mine !== sessionSequence) return false;
+      if (taskStartup) {
+        if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+        if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+      }
       document.documentElement.lang = displaySettings().locale;
       const taskRoute =
         router.route.name === 'item' && router.route.group === 'tasks' ? router.route : undefined;
@@ -189,7 +207,7 @@
         userId: currentUser.userId,
         sequence: sessionSequence,
         navigationGeneration: router.navigationGeneration,
-        sessionGeneration: readSessionGeneration(),
+        sessionGeneration: readTaskSessionGeneration(),
         safetyGeneration: accountSafety.generation,
         path: router.path,
       });
@@ -205,6 +223,10 @@
         pendingContext,
       ]);
       if (mine !== sessionSequence) return false;
+      if (taskStartup) {
+        if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+        if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+      }
       let startupSeed: TaskStartupSeed | undefined;
       if (initialContext !== undefined && taskRoute !== undefined) {
         const rechecked =
@@ -217,6 +239,10 @@
                   Promise.reject<TaskContext>(initialContext.error),
                 )
               : initialContext;
+        if (taskStartup) {
+          if (safetyGeneration !== accountSafety.generation) return await retryLoad();
+          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+        }
         if (captured.path === router.path && rechecked.kind === 'discarded')
           return await retryLoad();
         if (captured.path === router.path)
@@ -250,9 +276,28 @@
       }
       taskContextSeed = startupSeed;
       session = { state: 'signed-in', me, workspaces };
+      if (taskStartup)
+        void publishSessionCheck(generation, (published) => {
+          if (
+            taskSessionActive &&
+            currentUser.userId === me.id &&
+            safetyGeneration === accountSafety.generation &&
+            !sessionHidden &&
+            !auth.expired
+          )
+            taskPublications.published(generation, published);
+        });
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      if (
+        verified === undefined &&
+        router.route.name === 'item' &&
+        router.route.group === 'tasks' &&
+        safetyGeneration === accountSafety.generation &&
+        generation !== readSessionGeneration()
+      )
+        return await load(undefined, attempt);
       if (verified === undefined && safetyGeneration !== accountSafety.generation) {
         try {
           return await retryLoad();
@@ -542,7 +587,7 @@
     const canVerify = (): boolean =>
       taskSessionActive && currentUser.userId === userId && !sessionHidden;
     const sameSession = (): boolean => canVerify() && !auth.expired;
-    for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
+    for (;;) {
       if (!canVerify()) return;
       let pending =
         checkingSession && sessionVerification !== undefined
@@ -558,14 +603,11 @@
       if (!sameSession()) return;
       if (
         proof?.userId === userId &&
-        proof.sessionGeneration === readSessionGeneration() &&
+        proof.sessionGeneration === readTaskSessionGeneration() &&
         proof.safetyGeneration === accountSafety.generation
       )
         return proof;
     }
-    hideSession('reauth');
-    accountSafety.error = m.feedback_restore_failed();
-    return undefined;
   }
 
   async function verifySessionNow(attempt = 0): Promise<TaskSessionProof | undefined> {
@@ -574,7 +616,7 @@
     const expected = currentUser.userId;
     const mine = ++restoreSequence;
     checkingSession = true;
-    const generation = readSessionGeneration();
+    const generation = readTaskSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const recheck = (): void => {
       hideSession('reauth');
@@ -598,7 +640,7 @@
         accountSafety.switching = false;
         accountSafety.restoring = false;
         void refreshUnread();
-        if (generation === readSessionGeneration())
+        if (generation === readTaskSessionGeneration())
           return { userId: now.id, sessionGeneration: generation, safetyGeneration };
       }
     } catch (error: unknown) {

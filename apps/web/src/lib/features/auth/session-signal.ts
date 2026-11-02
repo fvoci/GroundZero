@@ -24,7 +24,7 @@ async function updateSignal<T>(update: () => T): Promise<T | undefined> {
   return undefined;
 }
 
-function publish(signal: SessionSignal): void {
+function publish(signal: SessionSignal): number {
   try {
     lastGeneration = Math.max(lastGeneration, readSessionGeneration()) + 1;
     localStorage.setItem(
@@ -34,16 +34,21 @@ function publish(signal: SessionSignal): void {
   } catch {
     // 저장소를 막은 브라우저에서도 기존 네트워크 재확인은 계속 쓴다.
   }
+  return lastGeneration;
 }
 
 /** 확인 결과의 중복 알림을 줄인다. 거절·잠금 대기는 자기 응답의 수락과 무관하다. */
-export async function publishSessionCheck(observedGeneration: number): Promise<boolean> {
+export async function publishSessionCheck(
+  observedGeneration: number,
+  onPublished?: (generation: number) => void,
+): Promise<boolean> {
   // 신원·해시를 두지 않는다. 시작·복원·직접 확인만 게시하고 알림으로 시작한 확인은 다시 게시하지 않는다.
   return (
     (await updateSignal(() => {
       if (readSessionGeneration() !== observedGeneration || readLogoutPendingUntil() !== undefined)
         return false;
-      publish({ state: 'settled' });
+      const published = publish({ state: 'settled' });
+      onPublished?.(published);
       return true;
     })) ?? false
   );
