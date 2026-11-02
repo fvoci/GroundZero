@@ -618,3 +618,113 @@ describe('item profile conflict', () => {
     ).toBe(false);
   });
 });
+
+const storedChoices = () =>
+  Object.values(localStorage).some((v) => typeof v === 'string' && v.includes('choices'));
+
+// CR-306-1~3(D-128, D-96, 승인 6568773043): 고른 값이 모두 서버 값이면 저장 없이 닫아도 상위가 항목을 다시 읽는다.
+// 404 뒤에는 비교값을 숨기고 저장을 막은 채, 폼을 잠그지 않아 입력에 닿고 편집을 닫을 수 있다.
+describe('item conflict after an equal choice or a lost item', () => {
+  it('rereads the item when every chosen profile value is the server value (CR-306-1)', async () => {
+    // 다른 탭이 상태를 완료로, 목표를 서버 목표로 바꿨다. 이 탭은 목표만 고쳤다.
+    const server: ItemProfileView = { ...profile, goal: '서버 목표', status: 'done', version: 2 };
+    const save = vi
+      .spyOn(api, 'setItemProfile')
+      .mockResolvedValueOnce({ kind: 'conflict', current: server });
+    const done = vi.spyOn(feedback, 'notifyDone');
+    const { reads } = await mountInfo();
+    reads.mockResolvedValue(item({ status: 'done', version: 2 }));
+    await fireEvent.click(await screen.findByRole('button', { name: m.modules_edit() }));
+    const g = goal();
+    const form = g?.closest('form');
+    if (g === null || form === null || form === undefined) throw new Error('profile form');
+    await fireEvent.input(g, { target: { value: '내 목표' } });
+    await fireEvent.click(within(form).getByRole('button', { name: m.common_save() }));
+    const panel = await screen.findByRole('region', { name: REGION });
+    await choose(panel, m.modules_goal(), 'server');
+    await fireEvent.click(saveChosen(panel));
+    await waitFor(() => {
+      expect(done).toHaveBeenCalledWith(m.common_conflict_equal());
+    });
+    expect(save).toHaveBeenCalledOnce();
+    expect(goal()).toBeNull();
+    // 보낼 것은 없지만 상태·기간이 바뀌었을 수 있어 항목을 다시 읽고 머리 요약이 새 상태를 보인다.
+    await waitFor(() => {
+      expect(reads).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(document.getElementById('item-info-profile-status')).toHaveTextContent(
+        m.modules_status_done(),
+      );
+    });
+  });
+
+  it('lets the profile edit be canceled after a 404 while the save stays blocked (CR-306-2)', async () => {
+    const save = vi
+      .spyOn(api, 'setItemProfile')
+      .mockResolvedValueOnce({
+        kind: 'conflict',
+        current: { ...profile, goal: '서버 목표', version: 2 },
+      })
+      .mockRejectedValueOnce(new ApiError(404, 'not_found', 'gone'));
+    await mountProfile();
+    const g = goal();
+    if (g === null) throw new Error('goal');
+    await fireEvent.input(g, { target: { value: '내 목표' } });
+    await fireEvent.click(screen.getByRole('button', { name: m.common_save() }));
+    const panel = await screen.findByRole('region', { name: REGION });
+    await choose(panel, m.modules_goal(), 'mine');
+    await fireEvent.click(saveChosen(panel));
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: REGION })).not.toBeInTheDocument();
+    });
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(document.body).not.toHaveTextContent('서버 목표');
+    const form = goal()?.closest('form');
+    if (form === null || form === undefined) throw new Error('profile form');
+    // 숨긴 비교가 폼을 잠그면 취소 단추에 닿을 수 없다(Svelte는 jsdom에서 속성이 아니라 `inert` 프로퍼티를 쓴다).
+    expect(form.inert).toBe(false);
+    expect(goal()).toHaveValue('내 목표');
+    await fireEvent.click(within(form).getByRole('button', { name: m.common_save() }));
+    expect(save).toHaveBeenCalledTimes(2);
+    await fireEvent.click(within(form).getByRole('button', { name: m.common_cancel() }));
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_discard_confirm() }));
+    await waitFor(() => {
+      expect(goal()).toBeNull();
+    });
+    expect(storedChoices()).toBe(false);
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it('unlocks the information form after a 404 and still sends nothing (CR-306-3)', async () => {
+    const update = vi
+      .spyOn(api, 'updateItem')
+      .mockResolvedValueOnce({
+        kind: 'conflict',
+        current: item({ title: '서버 제목', version: 2 }),
+      })
+      .mockRejectedValueOnce(new ApiError(404, 'not_found', 'gone'));
+    await mountInfo();
+    await typeInfo({ title: '내 제목' });
+    await submitInfo();
+    const panel = await screen.findByRole('region', { name: REGION });
+    await choose(panel, m.modules_title(), 'mine');
+    await fireEvent.click(saveChosen(panel));
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: REGION })).not.toBeInTheDocument();
+    });
+    expect(update).toHaveBeenCalledTimes(2);
+    // 숨긴 비교가 폼을 잠그면 입력에도, 저장 단추에도 닿을 수 없다(정보 폼에는 취소 단추가 없다).
+    expect(infoForm().inert).toBe(false);
+    expect(title()).toHaveValue('내 제목');
+    await submitInfo();
+    expect(update).toHaveBeenCalledTimes(2);
+    // 숨은 비교는 이탈 확인에서 버린다.
+    router.navigate('/elsewhere');
+    await fireEvent.click(await screen.findByRole('button', { name: m.common_discard_confirm() }));
+    await waitFor(() => {
+      expect(storedChoices()).toBe(false);
+    });
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+});

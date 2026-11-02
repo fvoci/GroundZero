@@ -966,12 +966,13 @@
                     : undefined}
                 />
               {/if}
+              <!-- 404로 비교를 숨기면 폼을 잠그지 않는다. 입력에 닿고 저장은 writeBlocked가 막는다(CR-306-3). -->
               <form
                 class="flex flex-col gap-3"
                 onsubmit={(e) => void save(e)}
                 novalidate
                 aria-label={m.modules_item_info()}
-                inert={comparison?.open === true}
+                inert={comparison?.open === true && !hiddenForAccess}
               >
                 <div class="flex flex-col gap-1">
                   <Label for="item-title">{m.modules_title()}</Label>

@@ -457,9 +457,11 @@
       return;
     }
     if (conflictFields.every((field) => field.same(candidate, ask.server))) {
-      // 고른 값이 모두 서버 최신값이다. 보낼 것이 없다.
+      // 고른 값이 모두 서버 최신값이다. 보낼 것이 없다. 그래도 서버의 상태·기간이 바뀌었을 수 있어 항목을 다시
+      // 읽게 한다(CR-306-1).
       comparison = undefined;
       editing = false;
+      onchanged();
       notifyDone(m.common_conflict_equal());
       return;
     }
@@ -589,11 +591,12 @@
             : undefined}
         />
       {/if}
+      <!-- 404로 비교를 숨기면 폼을 잠그지 않는다. 취소로 닫을 수 있고 저장은 writeBlocked가 막는다(CR-306-2). -->
       <form
         class="grid gap-3 @xl:grid-cols-2"
         onsubmit={(e) => void save(e)}
         novalidate
-        inert={comparison?.open === true}
+        inert={comparison?.open === true && !hiddenForAccess}
       >
         <div class="flex flex-col gap-1">
           <!-- bits-ui Select는 조상 fieldset의 disabled를 보지 않고 열리므로 저장 중에는 따로 잠근다(상태·리더). -->
