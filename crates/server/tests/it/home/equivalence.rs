@@ -9,6 +9,7 @@ use uuid::Uuid;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 mod aggregate_roles;
+mod pairwise;
 mod recent_documents;
 
 const COMPARE: &str = "SELECT fvoci.home_outcome($1,$2,true), fvoci.home_outcome($1,$2,false)";
@@ -261,8 +262,9 @@ impl Fixture {
 #[tokio::test]
 async fn home_matches_frozen_json_for_scopes_timezones_and_fixed_limit_boundaries() -> Result<()> {
     let mut f = Fixture::new().await?;
+    let mut coverage = pairwise::Coverage::default();
     let mut from = 0;
-    for to in [0usize, 1, 7, 8, 9, 49, 50, 51] {
+    for (size, to) in [0usize, 1, 7, 8, 9, 49, 50, 51].into_iter().enumerate() {
         f.populate(from, to).await?;
         let value = f
             .compare(Some(f.owner.id.0), Some(f.organizations[0]), Some("UTC"))
@@ -289,63 +291,13 @@ async fn home_matches_frozen_json_for_scopes_timezones_and_fixed_limit_boundarie
             value["value"]["up_next_counts"],
             json!({"overdue":to,"today":to,"upcoming":to})
         );
+        coverage.boundary(size);
+        f.boundary_pairs(size, &mut coverage).await?;
         from = to;
     }
     f.add_edges().await?;
-    for setting in [None, Some("America/New_York")] {
-        sqlx::query("DELETE FROM fvoci.user_settings WHERE user_id=$1")
-            .bind(f.owner.id.0)
-            .execute(&mut f.ddl)
-            .await?;
-        if let Some(setting) = setting {
-            sqlx::query("INSERT INTO fvoci.user_settings(user_id,time_zone) VALUES($1,$2)")
-                .bind(f.owner.id.0)
-                .bind(setting)
-                .execute(&mut f.ddl)
-                .await?;
-        }
-        for actor in [
-            Some(f.owner.id.0),
-            Some(f.reader.id.0),
-            Some(f.member.id.0),
-            Some(f.organization_only.id.0),
-            Some(Uuid::now_v7()),
-            None,
-        ] {
-            for org in [
-                Some(f.organizations[0]),
-                Some(f.organizations[1]),
-                Some(Uuid::now_v7()),
-                None,
-            ] {
-                for tz in [
-                    None,
-                    Some(""),
-                    Some("  "),
-                    Some(" UTC "),
-                    Some("Asia/Seoul"),
-                    Some("America/New_York"),
-                    Some("Pacific/Kiritimati"),
-                    Some("Nowhere/Land"),
-                ] {
-                    let value = f.compare(actor, org, tz).await?;
-                    if actor == Some(f.organization_only.id.0)
-                        && org == Some(f.organizations[0])
-                        && tz == Some("Asia/Seoul")
-                    {
-                        assert_eq!(value["value"]["pins"], json!([]));
-                        assert_eq!(value["value"]["up_next"], json!([]));
-                    }
-                    if actor.is_none() || org.is_none() {
-                        assert_eq!(
-                            value["code"], "P0002",
-                            "organization rejection precedes timezone validation"
-                        );
-                    }
-                }
-            }
-        }
-    }
+    f.scope_timezone_pairs(&mut coverage).await?;
+    coverage.assert_complete();
     f.finish().await
 }
 
