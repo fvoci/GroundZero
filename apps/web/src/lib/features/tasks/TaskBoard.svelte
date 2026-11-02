@@ -468,6 +468,10 @@
   async function reload(itemId: string = item.id, initial?: Promise<BoardRead>): Promise<void> {
     const mine = ++reloadSeq;
     const useAggregate = aggregate;
+    const navigation = untrack(() => ({
+      path: router.path,
+      generation: router.navigationGeneration,
+    }));
     const apply = (server: TaskView[], statuses: TaskStatusDefinition[]): void => {
       if (!alive || mine !== reloadSeq || itemId !== item.id) return;
       definitions = [...statuses].sort((a, b) => a.position - b.position);
@@ -505,6 +509,25 @@
     } catch (e: unknown) {
       // Aggregate failures were handled synchronously within their capture fence.
       if (!useAggregate) failed(e);
+      else if (e instanceof DiscardedTaskRead) {
+        await tick();
+        const route = router.route;
+        if (
+          alive &&
+          mine === reloadSeq &&
+          itemId === item.id &&
+          !hiddenForAccount &&
+          !accountSafety.switching &&
+          !accountSafety.restoring &&
+          route.name === 'item' &&
+          route.workspaceId === item.workspace_id &&
+          route.itemId === itemId &&
+          route.group === 'tasks' &&
+          (navigation.path !== router.path || navigation.generation !== router.navigationGeneration)
+        )
+          // A fresh route capture still needs /me before replacing a discarded read.
+          await reload(itemId, Promise.reject<BoardRead>(new DiscardedTaskRead()));
+      }
     }
   }
 

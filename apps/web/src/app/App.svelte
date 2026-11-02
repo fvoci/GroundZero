@@ -24,6 +24,7 @@
     SESSION_CHECK_MAX_ATTEMPTS,
     SESSION_SIGNAL_RECHECK_MS,
   } from '$lib/features/auth/session-check';
+  import { createSessionNotificationRetry } from '$lib/features/auth/session-notification-retry';
   import {
     isSessionSignal,
     publishLogoutPending,
@@ -135,12 +136,15 @@
   let cacheRestorePending = false;
   let sessionVerification: Promise<TaskSessionProof | undefined> | undefined;
   let taskSessionActive = true;
+  const taskSessionLifetime = new AbortController();
+  let taskSessionConfirmations = 0;
   const taskPublications = trackTaskSessionPublications();
   setContext(TASK_SESSION_RECOVERY, createTaskSessionRecovery(confirmTaskSession));
   const signalRechecks = new SvelteMap<string, ReturnType<typeof setTimeout> | undefined>();
   onMount(schedulePendingSessionCheck);
   onDestroy(() => {
     taskSessionActive = false;
+    taskSessionLifetime.abort();
     taskPublications.dispose();
     sessionSequence += 1;
     restoreSequence += 1;
@@ -150,7 +154,11 @@
     signalRechecks.clear();
   });
 
-  async function load(verified?: { me: Me; generation: number }, attempt = 0): Promise<boolean> {
+  async function load(
+    verified?: { me: Me; generation: number },
+    attempt = 0,
+    notificationRetry = createSessionNotificationRetry(),
+  ): Promise<boolean> {
     const prepareStartup = session.state !== 'signed-in';
     const mine = ++sessionSequence;
     taskContextSeed = undefined;
@@ -159,7 +167,13 @@
     const safetyGeneration = accountSafety.generation;
     const retryLoad = async (): Promise<boolean> => {
       if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
-      return load(undefined, attempt + 1);
+      return load(undefined, attempt + 1, notificationRetry);
+    };
+    const retryNotification = async (): Promise<boolean> => {
+      if (!(await notificationRetry.wait(taskSessionLifetime.signal))) return false;
+      if (mine !== sessionSequence || cacheRestorePending || !taskSessionActive) return false;
+      if (safetyGeneration !== accountSafety.generation) return retryLoad();
+      return load(undefined, attempt, notificationRetry);
     };
     try {
       const me = verified?.me ?? (await api.me());
@@ -171,7 +185,7 @@
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
         if (taskStartup) {
-          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+          if (generation !== readSessionGeneration()) return await retryNotification();
         }
       }
       if (me === undefined) {
@@ -180,7 +194,7 @@
         if (mine !== sessionSequence) return false;
         if (taskStartup) {
           if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+          if (generation !== readSessionGeneration()) return await retryNotification();
           void publishSessionCheck(generation);
         }
         session = { state: 'anonymous', oidcEnabled: info.oidc_enabled };
@@ -202,7 +216,7 @@
       if (mine !== sessionSequence) return false;
       if (taskStartup) {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-        if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+        if (generation !== readSessionGeneration()) return await retryNotification();
       }
       document.documentElement.lang = displaySettings().locale;
       const taskRoute =
@@ -229,7 +243,7 @@
       if (mine !== sessionSequence) return false;
       if (taskStartup) {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-        if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+        if (generation !== readSessionGeneration()) return await retryNotification();
       }
       let startupSeed: TaskStartupSeed | undefined;
       if (initialContext !== undefined && taskRoute !== undefined) {
@@ -247,7 +261,7 @@
         if (verified !== undefined && generation !== readSessionGeneration()) return false;
         if (taskStartup) {
           if (safetyGeneration !== accountSafety.generation) return await retryLoad();
-          if (generation !== readSessionGeneration()) return await load(undefined, attempt);
+          if (generation !== readSessionGeneration()) return await retryNotification();
         }
         if (captured.path === router.path && rechecked.kind === 'discarded')
           return await retryLoad();
@@ -318,7 +332,7 @@
         safetyGeneration === accountSafety.generation &&
         generation !== readSessionGeneration()
       )
-        return await load(undefined, attempt);
+        return await retryNotification();
       if (verified === undefined && safetyGeneration !== accountSafety.generation) {
         try {
           return await retryLoad();
@@ -618,28 +632,53 @@
 
   async function confirmTaskSession(userId: string): Promise<TaskSessionProof | undefined> {
     const canVerify = (): boolean =>
-      taskSessionActive && currentUser.userId === userId && !sessionHidden;
-    const sameSession = (): boolean => canVerify() && !auth.expired;
-    for (;;) {
-      if (!canVerify()) return;
-      let pending =
-        checkingSession && sessionVerification !== undefined
-          ? sessionVerification
-          : verifySession();
-      let awaited: Promise<TaskSessionProof | undefined>;
-      let proof: TaskSessionProof | undefined;
-      do {
-        awaited = pending;
-        proof = await awaited;
-        pending = sessionVerification ?? awaited;
-      } while (pending !== awaited);
-      if (!sameSession()) return;
-      if (
-        proof?.userId === userId &&
-        proof.sessionGeneration === readTaskSessionGeneration() &&
-        proof.safetyGeneration === accountSafety.generation
-      )
-        return proof;
+      taskSessionActive &&
+      currentUser.userId === userId &&
+      (!sessionHidden || (accountSafety.reason === 'reauth' && accountSafety.error === '')) &&
+      router.route.name === 'item' &&
+      router.route.group === 'tasks';
+    if (!canVerify()) return;
+    const notificationRetry = createSessionNotificationRetry();
+    taskSessionConfirmations += 1;
+    try {
+      for (;;) {
+        if (!canVerify()) return;
+        let pending =
+          checkingSession && sessionVerification !== undefined
+            ? sessionVerification
+            : verifySession();
+        let awaited: Promise<TaskSessionProof | undefined>;
+        let proof: TaskSessionProof | undefined;
+        do {
+          awaited = pending;
+          proof = await awaited;
+          pending = sessionVerification ?? awaited;
+        } while (pending !== awaited);
+        if (!canVerify()) return;
+        if (
+          proof?.userId === userId &&
+          proof.sessionGeneration === readTaskSessionGeneration() &&
+          proof.safetyGeneration === accountSafety.generation
+        ) {
+          if (sessionHidden && accountSafety.reason === 'reauth') {
+            auth.expired = false;
+            accountSafety.switching = false;
+            accountSafety.restoring = false;
+            void refreshUnread();
+          }
+          return proof;
+        }
+        if (auth.expired) return;
+        if (
+          !(await notificationRetry.wait(taskSessionLifetime.signal, () => {
+            if (!sessionHidden) hideSession('reauth');
+          }))
+        )
+          return;
+      }
+    } finally {
+      taskSessionConfirmations -= 1;
+      drainSessionCheck();
     }
   }
 
@@ -669,6 +708,17 @@
       } else if (now.id !== expected) {
         switchAccount();
       } else {
+        // Both recovery and a later manual retry need a current task-session proof.
+        if (
+          sessionHidden &&
+          accountSafety.reason === 'reauth' &&
+          router.route.name === 'item' &&
+          router.route.group === 'tasks'
+        ) {
+          if (generation !== readTaskSessionGeneration()) return undefined;
+          if (taskConfirmationPending())
+            return { userId: now.id, sessionGeneration: generation, safetyGeneration };
+        }
         auth.expired = false;
         accountSafety.switching = false;
         accountSafety.restoring = false;
@@ -695,15 +745,28 @@
   }
 
   function drainSessionCheck(): void {
-    if (!sessionCheckPending || loadingSession || restoringSession || checkingSession) return;
+    if (
+      !sessionCheckPending ||
+      loadingSession ||
+      restoringSession ||
+      checkingSession ||
+      taskConfirmationPending()
+    )
+      return;
     sessionCheckPending = false;
     checkSession();
+  }
+
+  function taskConfirmationPending(): boolean {
+    return (
+      taskSessionConfirmations > 0 && router.route.name === 'item' && router.route.group === 'tasks'
+    );
   }
 
   /** 확인 중 받은 복귀 이벤트는 버리지 않고 후속 확인 하나로 합친다(SR-221-10). */
   function checkSession(): boolean {
     if (router.route.name === 'public') return false;
-    if (loadingSession || restoringSession || checkingSession) {
+    if (loadingSession || restoringSession || checkingSession || taskConfirmationPending()) {
       sessionCheckPending = true;
       return true;
     }
