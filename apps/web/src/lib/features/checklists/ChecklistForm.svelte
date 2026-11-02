@@ -88,8 +88,19 @@
       preview.length > 0 ||
       (renaming !== undefined && renaming.text !== renaming.original),
   );
+  const preserved = untrack(() => preserveDraft);
+  function resetInput(): void {
+    draft = '';
+    draftRequest = undefined;
+    renaming = undefined;
+    pasteOpen = false;
+    pasted = '';
+    preview = [];
+    previewIds = {};
+    error = undefined;
+  }
   const formDraft = createFormDraft<ChecklistDraft>({
-    preserve: untrack(() => preserveDraft),
+    preserve: preserved,
     name: () => `checklist:${idPrefix}`,
     snapshot: () => ({
       draft,
@@ -111,14 +122,7 @@
       previewIds = value.previewIds;
     },
     reset: () => {
-      draft = '';
-      draftRequest = undefined;
-      renaming = undefined;
-      pasteOpen = false;
-      pasted = '';
-      preview = [];
-      previewIds = {};
-      error = undefined;
+      resetInput();
       busy = false;
     },
     dirty: () => dirty,
@@ -127,6 +131,19 @@
   $effect(() => {
     onunsaved?.(dirty);
     ondraftkept?.(formDraft.kept);
+  });
+  // 고칠 수 없게 되면 숨은 입력을 경고에서 뺀다(#289, D-27). 화면 전용 입력은 서버 값(빈 칸)으로 돌리고, 남기는
+  // 초안은 지우지 않고 되살리기 제안으로 옮긴다. 보낸 요청은 응답까지 잠가 두고, 끝난 뒤 정리한다.
+  $effect(() => {
+    if (canEdit || busy) return;
+    untrack(() => {
+      if (preserved) {
+        formDraft.shelve();
+        return;
+      }
+      resetInput();
+      formDraft.leave.keep();
+    });
   });
   onDestroy(() => {
     onunsaved?.(false);
