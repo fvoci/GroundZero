@@ -12,6 +12,8 @@ enum Role {
     SpaceAdmin,
     Member,
     Readonly,
+    ReadonlyGroup,
+    ReadonlyCreator,
     Direct,
     Group,
     Creator,
@@ -27,7 +29,7 @@ impl Role {
         match self {
             Self::Owner | Self::SpaceAdmin | Self::JoinedAdmin => Some("admin"),
             Self::Member | Self::Direct | Self::Group | Self::Creator => Some("member"),
-            Self::Readonly => Some("readonly"),
+            Self::Readonly | Self::ReadonlyGroup | Self::ReadonlyCreator => Some("readonly"),
             _ => None,
         }
     }
@@ -36,9 +38,10 @@ impl Role {
         match self.workspace() {
             Some("admin") => "owner",
             Some(role) => {
-                let creator = matches!(self, Self::Creator) && position == 3;
+                let creator = matches!(self, Self::Creator) && position == 3
+                    || matches!(self, Self::ReadonlyCreator) && position == 4;
                 let relation = matches!(self, Self::Direct | Self::Readonly) && position == 1
-                    || matches!(self, Self::Group) && position == 2;
+                    || matches!(self, Self::Group | Self::ReadonlyGroup) && position == 2;
                 if visibility == "private" && !creator && !relation {
                     "none"
                 } else if role == "readonly" {
@@ -209,6 +212,8 @@ impl Matrix {
             Role::Direct,
             Role::Group,
             Role::Creator,
+            Role::ReadonlyGroup,
+            Role::ReadonlyCreator,
             Role::Foreign,
             Role::ServerAdmin,
             Role::JoinedAdmin,
@@ -248,7 +253,7 @@ impl Matrix {
             &[f.workspace, Uuid::now_v7()],
         )
         .await;
-        for position in 0..5 {
+        for position in 0..6 {
             let item = made(
                 &f.state,
                 &f.owner,
@@ -257,7 +262,7 @@ impl Matrix {
             )
             .await;
             self.items.push(item);
-            if position < 4 {
+            if position < 5 {
                 for status in ["할 일", "완료"] {
                     let task = made(&f.state, &f.owner,
                         &format!("SELECT fvoci.app_create_task($1,$2,'matrix',NULL,'','{status}','none',NULL,NULL,NULL,'{{}}','{{}}',false,@ids) AS id"),
@@ -292,20 +297,26 @@ impl Matrix {
                 .execute(&mut self.fixture.ddl)
                 .await?;
             }
-            if matches!(actor.role, Role::Creator) {
+            if matches!(actor.role, Role::Creator | Role::ReadonlyCreator) {
+                let position = if matches!(actor.role, Role::ReadonlyCreator) {
+                    4
+                } else {
+                    3
+                };
                 sqlx::query("UPDATE fvoci.items SET created_by=$2 WHERE id=$1")
-                    .bind(self.items[3])
+                    .bind(self.items[position])
                     .bind(actor.user.id.0)
                     .execute(&mut self.fixture.ddl)
                     .await?;
             }
-            if matches!(actor.role, Role::Group) {
+            if matches!(actor.role, Role::Group | Role::ReadonlyGroup) {
                 let group = Uuid::now_v7();
                 sqlx::query(
-                    "INSERT INTO fvoci.groups(id,workspace_id,name) VALUES($1,$2,'matrix')",
+                    "INSERT INTO fvoci.groups(id,workspace_id,name) VALUES($1,$2,$3)",
                 )
                 .bind(group)
                 .bind(self.fixture.workspace)
+                .bind(format!("matrix-{:?}", actor.role))
                 .execute(&mut self.fixture.ddl)
                 .await?;
                 sqlx::query("INSERT INTO fvoci.group_members(group_id,user_id) VALUES($1,$2)")
@@ -410,7 +421,7 @@ impl Matrix {
                 assert_eq!(row.is_some(), grade != "none" && archive == "none");
                 if let Some(row) = row {
                     assert_eq!(row["can_write"], matches!(grade, "owner" | "write"));
-                    let count = if position == 4 || trash == "task" {
+                    let count = if position == 5 || trash == "task" {
                         0
                     } else {
                         2
@@ -454,7 +465,7 @@ impl Matrix {
             let expected = if matches!(trash, "item" | "module" | "event") {
                 0
             } else {
-                (0..4)
+                (0..5)
                     .filter(|&i| actor.role.item_grade(i, visibility) != "none")
                     .count()
             };
@@ -521,7 +532,7 @@ async fn aggregate_reads_cross_all_roles_visibility_archive_and_trash() -> Resul
             }
         }
     }
-    assert_eq!(cases, 2912);
+    assert_eq!(cases, 3360);
     let anonymous = m
         .fixture
         .compare(None, Some(m.fixture.organizations[0]), Some("UTC"))
