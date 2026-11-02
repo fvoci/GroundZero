@@ -133,19 +133,19 @@
     signalRechecks.clear();
   });
 
-  async function load(verified?: Me, attempt = 0): Promise<boolean> {
+  async function load(verified?: { me: Me; generation: number }, attempt = 0): Promise<boolean> {
     const prepareStartup = session.state !== 'signed-in';
     const mine = ++sessionSequence;
     taskContextSeed = undefined;
     loadingSession = true;
-    const generation = readSessionGeneration();
+    const generation = verified?.generation ?? readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const retryLoad = async (): Promise<boolean> => {
       if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
       return load(undefined, attempt + 1);
     };
     try {
-      const me = verified ?? (await api.me());
+      const me = verified?.me ?? (await api.me());
       if (mine !== sessionSequence || cacheRestorePending) return false;
       const publishNonTaskStartup =
         verified === undefined &&
@@ -213,6 +213,8 @@
                   Promise.reject<TaskContext>(initialContext.error),
                 )
               : initialContext;
+        // 복원 문맥을 일반 시작 재시도로 넘기기 전에 원래 /me의 세대를 확인한다.
+        if (verified !== undefined && generation !== readSessionGeneration()) return false;
         if (captured.path === router.path && rechecked.kind === 'discarded')
           return await retryLoad();
         if (captured.path === router.path)
@@ -222,7 +224,12 @@
             result: rechecked,
           };
       }
-      if (publishNonTaskStartup && generation !== readSessionGeneration()) {
+      if (
+        (publishNonTaskStartup || verified !== undefined) &&
+        generation !== readSessionGeneration()
+      ) {
+        // 복원은 원래 사용자와도 다시 비교해야 하므로 restoreSession이 /me부터 재확인한다.
+        if (verified !== undefined) return false;
         // 표식은 재확인 신호다. 안전 세대의 재시도 상한을 소진하지 않고 자기 /me와 목록을 다시 읽는다.
         return await load(undefined, attempt);
       }
@@ -472,12 +479,13 @@
         recheck();
         return;
       }
-      void publishSessionCheck(generation);
       if (now === undefined) {
+        void publishSessionCheck(generation);
         flushSync(clearSession);
         hideSession('signed-out');
         replace(router.path + router.hash);
       } else if (now.id !== restoringUserId) {
+        void publishSessionCheck(generation);
         hideSession('account');
         replace(router.path + router.hash);
       } else {
@@ -485,9 +493,15 @@
         flushSync(clearSession);
         // 사용자 ID가 맞았다. 시각적 가림은 유지하고 새 읽기만 연다(공통 request가 쓰기는 계속 막는다).
         accountSafety.switching = false;
-        const loaded = await load(now);
+        const loaded = await load({ me: now, generation });
         if (mine !== restoreSequence || cacheRestorePending || !restoring()) return;
+        if (generation !== readSessionGeneration()) {
+          // 알림은 목록을 버리고 재확인하라는 신호다. 안전 세대의 재시도 상한은 소진하지 않는다.
+          void restoreSession(attempt);
+          return;
+        }
         if (loaded) {
+          void publishSessionCheck(generation);
           restoringUserId = undefined;
           accountSafety.restoring = false;
         } else {

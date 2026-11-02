@@ -190,6 +190,127 @@ it('#299 rechecks notification churn beyond the safety retry limit without a ret
   expect(api.workspaces).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS + 2);
 });
 
+it.each(['notes', 'tasks'] as const)(
+  '#299 restore rejects a foreign list after the session returns to A on %s',
+  async (path) => {
+    router.navigate(
+      path === 'notes' ? '/notes' : itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board'),
+    );
+    vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+    const publication = held<boolean>();
+    const spaces = held<Workspace[]>();
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    render(App);
+    await screen.findByTestId('workspace-switcher');
+    let publish: (() => boolean) | undefined;
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: (_name: string, update: () => boolean) => {
+          publish = update;
+          return publication.promise;
+        },
+      },
+    });
+    vi.mocked(api.workspaces).mockReturnValueOnce(spaces.promise);
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    await waitFor(() => {
+      expect(api.workspaces).toHaveBeenCalledTimes(2);
+    });
+    for (const step of ['B', 'A']) {
+      localStorage.setItem(
+        'fvoci:auth-session',
+        JSON.stringify({
+          state: 'settled',
+          generation: readSessionGeneration() + 1,
+          sequence: step,
+        }),
+      );
+      window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+    }
+    if (publish !== undefined) {
+      const accepted = publish();
+      expect(accepted).toBe(false);
+      publication.resolve(accepted);
+    }
+    spaces.resolve([{ ...WORKSPACE, name: 'SR-298-1 restored B-session space' }]);
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-switcher')).toBeVisible();
+    });
+    await fireEvent.click(screen.getByTestId('workspace-switcher'));
+    await waitFor(() => {
+      expect(vi.mocked(api.me).mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+    expect(
+      screen.queryByRole('menuitem', { name: 'SR-298-1 restored B-session space' }),
+    ).toBeNull();
+    expect(screen.getByRole('menuitem', { name: WORKSPACE.name })).toBeInTheDocument();
+  },
+);
+
+it('#299 restore rechecks notification churn beyond the safety retry limit', async () => {
+  router.navigate('/notes');
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  render(App);
+  await screen.findByTestId('workspace-switcher');
+  let changes = 0;
+  vi.mocked(api.workspaces).mockImplementation(() => {
+    if (changes > SESSION_CHECK_MAX_ATTEMPTS) return Promise.resolve([WORKSPACE]);
+    changes += 1;
+    localStorage.setItem(
+      'fvoci:auth-session',
+      JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+    );
+    window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+    return Promise.resolve([{ ...WORKSPACE, name: 'SR-298-1 restored B-session space' }]);
+  });
+  window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  await waitFor(() => {
+    expect(screen.getByTestId('workspace-switcher')).toBeVisible();
+  });
+  await fireEvent.click(screen.getByTestId('workspace-switcher'));
+  expect(screen.queryByRole('menuitem', { name: 'SR-298-1 restored B-session space' })).toBeNull();
+  expect(screen.getByRole('menuitem', { name: WORKSPACE.name })).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(api.workspaces).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS + 3);
+});
+
+it('#299 restore checks the original user again before accepting retried lists', async () => {
+  router.navigate('/notes');
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+    { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+  ]);
+  const replace = vi.fn();
+  const reload = vi.fn();
+  render(App, { replace, reload });
+  await screen.findByTestId('workspace-switcher');
+  vi.mocked(api.me)
+    .mockResolvedValueOnce(identity)
+    .mockResolvedValue({ ...identity, id: 'other-viewer' });
+  vi.mocked(api.workspaces).mockImplementationOnce(() => {
+    localStorage.setItem(
+      'fvoci:auth-session',
+      JSON.stringify({ state: 'settled', generation: readSessionGeneration() + 1 }),
+    );
+    window.dispatchEvent(new StorageEvent('storage', { key: 'fvoci:auth-session' }));
+    return Promise.resolve([{ ...WORKSPACE, name: 'SR-298-1 restored B-session space' }]);
+  });
+  window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  await waitFor(() => {
+    expect(replace).toHaveBeenCalledWith('/notes');
+  });
+  expect(reload).not.toHaveBeenCalled();
+  expect(api.workspaces).toHaveBeenCalledTimes(2);
+  expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+});
+
 it('SR-298-1 retries /me before starting task reads when publication sees a newer session', async () => {
   const publication = held<boolean>();
   const recheck = held<Me | undefined>();
