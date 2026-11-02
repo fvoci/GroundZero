@@ -539,10 +539,11 @@
   }
 
   async function confirmTaskSession(userId: string): Promise<TaskSessionProof | undefined> {
-    const sameSession = (): boolean =>
-      taskSessionActive && currentUser.userId === userId && !sessionHidden && !auth.expired;
+    const canVerify = (): boolean =>
+      taskSessionActive && currentUser.userId === userId && !sessionHidden;
+    const sameSession = (): boolean => canVerify() && !auth.expired;
     for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
-      if (!sameSession()) return;
+      if (!canVerify()) return;
       let pending =
         checkingSession && sessionVerification !== undefined
           ? sessionVerification

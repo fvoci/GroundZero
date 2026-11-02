@@ -1,5 +1,10 @@
 import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
-import { DiscardedTaskRead, startCapturedRead, type ContextCapture } from './context-read';
+import {
+  DiscardedTaskRead,
+  sameContext,
+  startCapturedRead,
+  type ContextCapture,
+} from './context-read';
 
 export const TASK_SESSION_RECOVERY = Symbol('task session recovery');
 export interface TaskSessionProof {
@@ -9,6 +14,10 @@ export interface TaskSessionProof {
 }
 export interface TaskSessionRecovery {
   confirm(userId: string): Promise<TaskSessionProof | undefined>;
+}
+export interface TaskReadConsumer<T> {
+  loaded(value: T, captured: ContextCapture): void;
+  failed?(cause: unknown, captured: ContextCapture): void;
 }
 
 /** One App owns the authority check; concurrent task sections share its result. */
@@ -48,50 +57,60 @@ export async function readTaskWithRecovery<T extends { viewer_id: string }>(
   recovery: TaskSessionRecovery | undefined,
   read: () => Promise<T>,
   initial?: Promise<T>,
+  consumer?: TaskReadConsumer<T>,
 ): Promise<{ value: T; captured: ContextCapture }> {
   let snapshot = { ...captured };
   let pending = initial;
   const retriedEpochs = new Set<string>();
-  for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      const value = await startCapturedRead(snapshot, current, pending ?? read()).take();
-      return { value, captured: snapshot };
-    } catch (cause: unknown) {
-      if (
-        !(cause instanceof DiscardedTaskRead) ||
-        recovery === undefined ||
-        !active() ||
-        !sameTaskRequest(captured, current())
-      )
-        throw cause;
-      let verified: ContextCapture | undefined;
-      for (let check = 0; check < SESSION_CHECK_MAX_ATTEMPTS; check += 1) {
-        const proof = await recovery.confirm(captured.userId);
-        const now = current();
+  try {
+    for (let attempt = 0; attempt < SESSION_CHECK_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const value = await startCapturedRead(snapshot, current, pending ?? read()).take();
+        if (!active() || !sameContext(snapshot, current())) throw new DiscardedTaskRead();
+        // No await between the final fence and state adoption, including after a recovery.
+        consumer?.loaded(value, snapshot);
+        return { value, captured: snapshot };
+      } catch (cause: unknown) {
         if (
-          proof === undefined ||
+          (!(cause instanceof DiscardedTaskRead) && sameContext(snapshot, current())) ||
+          recovery === undefined ||
           !active() ||
-          !sameTaskRequest(captured, now) ||
-          proof.userId !== captured.userId
+          !sameTaskRequest(captured, current())
         )
-          throw new DiscardedTaskRead();
-        if (
-          proof.sessionGeneration === now.sessionGeneration &&
-          proof.safetyGeneration === now.safetyGeneration
-        ) {
-          verified = { ...now };
-          break;
+          throw cause;
+        let verified: ContextCapture | undefined;
+        for (let check = 0; check < SESSION_CHECK_MAX_ATTEMPTS; check += 1) {
+          const proof = await recovery.confirm(captured.userId);
+          const now = current();
+          if (
+            proof === undefined ||
+            !active() ||
+            !sameTaskRequest(captured, now) ||
+            proof.userId !== captured.userId
+          )
+            throw new DiscardedTaskRead();
+          if (
+            proof.sessionGeneration === now.sessionGeneration &&
+            proof.safetyGeneration === now.safetyGeneration
+          ) {
+            verified = { ...now };
+            break;
+          }
         }
+        if (verified === undefined)
+          throw new Error('Task session verification did not settle', { cause });
+        const now = verified;
+        const epoch = `${now.sessionGeneration.toString()}:${now.safetyGeneration.toString()}`;
+        if (retriedEpochs.has(epoch)) throw new DiscardedTaskRead();
+        retriedEpochs.add(epoch);
+        snapshot = { ...now };
+        pending = undefined;
       }
-      if (verified === undefined)
-        throw new Error('Task session verification did not settle', { cause });
-      const now = verified;
-      const epoch = `${now.sessionGeneration.toString()}:${now.safetyGeneration.toString()}`;
-      if (retriedEpochs.has(epoch)) throw new DiscardedTaskRead();
-      retriedEpochs.add(epoch);
-      snapshot = { ...now };
-      pending = undefined;
     }
+    throw new Error('Task screen recovery did not settle');
+  } catch (cause: unknown) {
+    if (!(cause instanceof DiscardedTaskRead) && active() && sameContext(snapshot, current()))
+      consumer?.failed?.(cause, snapshot);
+    throw cause;
   }
-  throw new Error('Task screen recovery did not settle');
 }

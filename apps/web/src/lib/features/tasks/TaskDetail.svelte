@@ -11,7 +11,6 @@
   import {
     DiscardedTaskRead,
     sameContext,
-    startCapturedRead,
     type CapturedRead,
     type ContextCapture,
   } from './context-read';
@@ -405,48 +404,42 @@
     clashAsk = undefined;
     error = undefined;
     screenArchived = undefined;
-    let aggregateRead: DetailRead | undefined;
     const read = untrack(() => (aggregate ? initialRead?.(id)?.take() : undefined));
-    const pending = aggregate
-      ? (read === undefined
-          ? startCapturedRead(snapshot, capture, taskScreenApi.detail(id))
-              .take()
-              .then((value) => ({ value, captured: snapshot }))
-          : readTaskWithRecovery(
-              snapshot,
-              capture,
-              active,
-              sessionRecovery,
-              () => taskScreenApi.detail(id),
-              read,
-            )
-        ).then(({ value, captured }) => {
-          snapshot = captured;
-          aggregateRead = value;
-          return composeScreenDetail(value);
-        })
-      : work.task(id, parentItemId);
-    void pending
-      .then((detail) => {
-        if (!isCurrent()) return;
-        // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
-        offerDraft(detail);
-        fill(detail);
-        peopleError = undefined;
-        if (aggregateRead !== undefined) {
-          screenArchived = aggregateRead.archived;
-          definitions = [];
-          people = undefined;
-          void startCapturedRead(snapshot, capture, taskScreenApi.options(detail.item_id))
-            .take()
-            .then((options) => {
+    const failed = (e: unknown): void => {
+      if (isCurrent() && !(e instanceof DiscardedTaskRead))
+        error =
+          e instanceof ApiError && e.status === 404
+            ? m.tasks_not_found()
+            : errorText(e, m.tasks_task_load_failed());
+    };
+    const apply = (detail: TaskDetailView, aggregateRead?: DetailRead): void => {
+      if (!isCurrent()) return;
+      // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
+      offerDraft(detail);
+      fill(detail);
+      peopleError = undefined;
+      if (aggregateRead !== undefined) {
+        screenArchived = aggregateRead.archived;
+        definitions = [];
+        people = undefined;
+        void readTaskWithRecovery(
+          snapshot,
+          capture,
+          active,
+          sessionRecovery,
+          () => taskScreenApi.options(detail.item_id),
+          undefined,
+          {
+            loaded: (options, captured) => {
+              snapshot = captured;
               if (!isCurrent()) return;
               if (options.statuses.state === 'ready') definitions = options.statuses.value;
               else error = m.tasks_load_failed();
               if (options.assignable.state === 'ready') people = options.assignable.value;
               else peopleError = m.tasks_assignable_load_failed();
-            })
-            .catch((cause: unknown) => {
+            },
+            failed: (cause, captured) => {
+              snapshot = captured;
               if (!isCurrent() || cause instanceof DiscardedTaskRead) return;
               if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
                 detailForm.task = undefined;
@@ -455,27 +448,48 @@
                 error = m.tasks_load_failed();
                 peopleError = m.tasks_assignable_load_failed();
               }
-            });
-          return;
-        }
-        void work.assignable(detail.item_id).then(
-          (assignable) => {
-            if (!cancelled) people = assignable;
+            },
           },
-          (e: unknown) => {
-            if (cancelled) return;
-            people = undefined;
-            peopleError = errorText(e, m.tasks_assignable_load_failed());
+        ).catch(() => undefined);
+        return;
+      }
+      void work.assignable(detail.item_id).then(
+        (assignable) => {
+          if (!cancelled) people = assignable;
+        },
+        (e: unknown) => {
+          if (cancelled) return;
+          people = undefined;
+          peopleError = errorText(e, m.tasks_assignable_load_failed());
+        },
+      );
+    };
+    if (aggregate) {
+      void readTaskWithRecovery(
+        snapshot,
+        capture,
+        active,
+        sessionRecovery,
+        () => taskScreenApi.detail(id),
+        read,
+        {
+          loaded: (value, captured) => {
+            snapshot = captured;
+            apply(composeScreenDetail(value), value);
           },
-        );
-      })
-      .catch((e: unknown) => {
-        if (isCurrent() && !(e instanceof DiscardedTaskRead))
-          error =
-            e instanceof ApiError && e.status === 404
-              ? m.tasks_not_found()
-              : errorText(e, m.tasks_task_load_failed());
-      });
+          failed: (cause, captured) => {
+            snapshot = captured;
+            failed(cause);
+          },
+        },
+      ).catch(() => undefined);
+    } else
+      void work
+        .task(id, parentItemId)
+        .then((detail) => {
+          apply(detail);
+        })
+        .catch(failed);
     return () => {
       cancelled = true;
     };

@@ -1,9 +1,9 @@
-import { cleanup, render, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Me } from '@fvoci/api-client';
 import App from '../../src/app/App.svelte';
-import { api } from '$lib/api/client';
+import { api, ApiError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { accountSafety, auth } from '$lib/features/feedback/feedback.svelte';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
@@ -226,3 +226,141 @@ it('SR-298-3 does not continue authority checks or detail reads after App unmoun
   expect(api.me).toHaveBeenCalledTimes(2);
   expect(taskScreenApi.detail).toHaveBeenCalledOnce();
 });
+
+it('SR-298-4 waits for an in-flight same-user verification even with an expiry banner', async () => {
+  const authority = held<Me | undefined>();
+  const first = held<BoardRead>();
+  vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValue(authority.promise);
+  vi.mocked(taskScreenApi.board).mockReturnValueOnce(first.promise);
+  render(App, { reload: vi.fn(), replace: vi.fn() });
+  await screen.findByRole('heading', { name: /^업무$/ });
+  signal();
+  await waitFor(() => {
+    expect(api.me).toHaveBeenCalledTimes(2);
+  });
+  auth.expired = true;
+  first.resolve(board);
+  await settled();
+  expect(taskScreenApi.board).toHaveBeenCalledOnce();
+  authority.resolve(identity);
+  await screen.findByText(detail.task.title);
+  expect(auth.expired).toBe(false);
+  expect(taskScreenApi.board).toHaveBeenCalledTimes(2);
+});
+
+it.each(
+  (['board', 'seed', 'detail', 'options', 'reopen'] as const).flatMap((kind) =>
+    (['success', 'failure'] as const).flatMap((outcome) =>
+      (['same', 'other'] as const).map((user) => ({ kind, outcome, user })),
+    ),
+  ),
+)(
+  'SR-298-4 recovers $kind $outcome only after App verifies the $user user',
+  async ({ kind, outcome, user }) => {
+    if (kind === 'seed' || kind === 'options' || kind === 'reopen')
+      router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+    const readKind = kind === 'seed' || kind === 'reopen' ? 'detail' : kind;
+    const authority = held<Me | undefined>();
+    vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValue(authority.promise);
+    vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(detail);
+    const firstBoard = held<BoardRead>();
+    const firstDetail = held<DetailRead>();
+    const firstOptions = held<DetailOptionsRead>();
+    const first =
+      readKind === 'board' ? firstBoard : readKind === 'detail' ? firstDetail : firstOptions;
+    if (readKind === 'board')
+      vi.mocked(taskScreenApi.board).mockReturnValueOnce(firstBoard.promise);
+    else if (readKind === 'detail') {
+      if (kind === 'reopen') vi.mocked(taskScreenApi.detail).mockResolvedValueOnce(detail);
+      vi.mocked(taskScreenApi.detail).mockReturnValueOnce(firstDetail.promise);
+    } else vi.mocked(taskScreenApi.options).mockReturnValueOnce(firstOptions.promise);
+    render(App, { reload: vi.fn(), replace: vi.fn() });
+    if (kind === 'detail') {
+      await screen.findByText(detail.task.title);
+      router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+    } else if (kind === 'reopen') {
+      await screen.findByLabelText('제목');
+      router.navigate(itemViewPath(WORKSPACE.id, item.id, 'board'));
+      await waitFor(() => {
+        expect(screen.queryByLabelText('제목')).toBeNull();
+      });
+      router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+    }
+    const before = kind === 'reopen' ? 2 : 1;
+    await waitFor(() => {
+      expect(taskScreenApi[readKind]).toHaveBeenCalledTimes(before);
+    });
+    if (kind === 'options') await screen.findByLabelText('제목');
+    else await screen.findByRole('heading', { name: /^업무$/ });
+    signal();
+    await waitFor(() => {
+      expect(api.me).toHaveBeenCalledTimes(2);
+    });
+    if (outcome === 'failure') first.reject(new ApiError(403, 'forbidden', 'old session failure'));
+    else if (readKind === 'board') firstBoard.resolve(board);
+    else if (readKind === 'detail') firstDetail.resolve(detail);
+    else firstOptions.resolve(options);
+    await settled();
+    expect(taskScreenApi[readKind]).toHaveBeenCalledTimes(before);
+    if (kind === 'board') {
+      const region = screen.getByRole('region', { name: /^업무$/ });
+      expect(within(region).getByRole('status')).toHaveTextContent('불러오는 중');
+    }
+    authority.resolve(user === 'same' ? identity : { ...identity, id: 'other-viewer' });
+    if (user === 'other') {
+      await waitFor(() => {
+        expect(accountSafety.switching).toBe(true);
+      });
+      expect(taskScreenApi[readKind]).toHaveBeenCalledTimes(before);
+      return;
+    }
+    if (kind === 'options') await screen.findByText('confirmed candidate recovery');
+    else if (readKind === 'detail')
+      expect(await screen.findByLabelText('제목')).toHaveValue(detail.task.title);
+    else await screen.findByText(detail.task.title);
+    expect(taskScreenApi[readKind]).toHaveBeenCalledTimes(before + 1);
+  },
+);
+
+it.each(['board', 'detail', 'options'] as const)(
+  'SR-298-4 preserves a current permission failure from the recovered %s read',
+  async (kind) => {
+    if (kind !== 'board') router.navigate(itemTaskPath(WORKSPACE.id, item.id, task.id));
+    const authority = held<Me | undefined>();
+    vi.mocked(api.me).mockResolvedValueOnce(identity).mockReturnValue(authority.promise);
+    vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(detail);
+    const firstBoard = held<BoardRead>();
+    const firstDetail = held<DetailRead>();
+    const firstOptions = held<DetailOptionsRead>();
+    const first = kind === 'board' ? firstBoard : kind === 'detail' ? firstDetail : firstOptions;
+    const failure = new ApiError(403, 'forbidden', 'fresh request failure');
+    if (kind === 'board')
+      vi.mocked(taskScreenApi.board)
+        .mockReturnValueOnce(firstBoard.promise)
+        .mockRejectedValue(failure);
+    else if (kind === 'detail')
+      vi.mocked(taskScreenApi.detail)
+        .mockReturnValueOnce(firstDetail.promise)
+        .mockRejectedValue(failure);
+    else
+      vi.mocked(taskScreenApi.options)
+        .mockReturnValueOnce(firstOptions.promise)
+        .mockRejectedValue(failure);
+    render(App, { reload: vi.fn(), replace: vi.fn() });
+    await waitFor(() => {
+      expect(taskScreenApi[kind]).toHaveBeenCalledOnce();
+    });
+    await screen.findByRole('heading', { name: /^업무$/ });
+    signal();
+    await waitFor(() => {
+      expect(api.me).toHaveBeenCalledTimes(2);
+    });
+    first.reject(new ApiError(403, 'forbidden', 'discarded request failure'));
+    await settled();
+    expect(taskScreenApi[kind]).toHaveBeenCalledOnce();
+    authority.resolve(identity);
+    await screen.findByRole('alert');
+    expect(taskScreenApi[kind]).toHaveBeenCalledTimes(2);
+    expect(screen.queryByLabelText('제목')).toBeNull();
+  },
+);
