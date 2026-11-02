@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import { eventsApi } from '$lib/features/events/api';
+import { RuleConflict, eventsApi } from '$lib/features/events/api';
 import type { EventView } from '$lib/features/events/model';
 import EventDialog from '$lib/features/events/EventDialog.svelte';
 import { me } from '$lib/me.svelte';
@@ -594,4 +594,63 @@ it('does not restore a comparison from a draft whose input belongs to another ev
   });
   expect(update.mock.calls[1]?.[1]).toBe(base.version);
   expect(onchanged).not.toHaveBeenCalled();
+});
+
+// CodeRabbit(PR #305 discussion_r4441100234, D-128 (1)): 비교가 열린 채 "변경 버리고 닫기"를 고르면 입력을 기준값으로
+// 되돌려 초안을 저장할 때 부모의 비교가 아직 남아 있어, 버린 비교가 초안에 담겨 같은 일정을 다시 열면 복원 제안으로 나왔다.
+async function discardFromCloseButton() {
+  const dialog = document.querySelector<HTMLElement>('[data-slot="dialog-content"]');
+  if (dialog === null) throw new Error('no dialog');
+  await fireEvent.click(within(dialog).getByRole('button', { name: m.common_close() }));
+  const box = await screen.findByRole('alertdialog', { name: m.common_discard_title() });
+  await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_confirm() }));
+}
+
+it('leaves no draft offer after discarding an open content comparison and reopening the event', async () => {
+  vi.spyOn(eventsApi, 'updateEvent').mockResolvedValueOnce({ kind: 'conflict', current: server });
+  const { onclose, rerender } = await mount();
+  await conflict();
+  await waitFor(() => {
+    expect(Object.values(localStorage).join()).toContain('choices');
+  });
+  await discardFromCloseButton();
+  expect(onclose).toHaveBeenCalledOnce();
+  await tick();
+  expect(Object.values(localStorage).join()).not.toContain('choices');
+  await rerender({ eventId: undefined });
+  await tick();
+  await rerender({ eventId: base.id });
+  await screen.findByLabelText('제목');
+  expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+  expect(screen.queryByRole('region', { name: '바뀐 내용 확인' })).toBeNull();
+  expect(screen.getByLabelText('제목')).toHaveValue(base.title);
+  expect(Object.values(localStorage).join()).not.toContain('choices');
+});
+
+// 반복 규칙 비교는 편집기 안의 상태라 편집기의 초안 초기화가 함께 비운다. 같은 모양이 다시 생기지 않게 지킨다.
+it('leaves no draft offer after discarding an open rule comparison and reopening the event', async () => {
+  const rule = { freq: 'daily' as const, interval: 1, weekdays: [], until: null, count: null };
+  vi.mocked(eventsApi.event).mockResolvedValue({
+    ...base,
+    recurrence: rule,
+    viewer_id: me.userId,
+    archived: false,
+  });
+  vi.spyOn(eventsApi, 'setEventRecurrence').mockRejectedValueOnce(
+    new RuleConflict({ ...base, recurrence: { ...rule, interval: 3 }, version: 6 }),
+  );
+  const { onclose, rerender } = await mount();
+  await edit('간격', '2');
+  await fireEvent.click(screen.getByRole('button', { name: '반복 저장' }));
+  await screen.findByRole('region', { name: '바뀐 내용 확인' });
+  await discardFromCloseButton();
+  expect(onclose).toHaveBeenCalledOnce();
+  await rerender({ eventId: undefined });
+  await tick();
+  await rerender({ eventId: base.id });
+  await screen.findByLabelText('간격');
+  expect(screen.queryByRole('button', { name: m.common_draft_restore() })).toBeNull();
+  expect(screen.queryByRole('region', { name: '바뀐 내용 확인' })).toBeNull();
+  expect(screen.getByLabelText('간격')).toHaveValue('1');
+  expect(Object.values(localStorage).join()).not.toContain('choices');
 });

@@ -696,6 +696,9 @@
       open={confirmClose}
       onkeep={leaveGuard.keep}
       ondiscard={() => {
+        // 비교를 먼저 비운다. 남아 있으면 입력을 되돌려 초안을 저장할 때 버린 비교가 함께 담겨 다시 열면 복원 제안으로
+        // 나온다(CodeRabbit PR #305 discussion_r4441100234, D-128 (1)).
+        comparison = undefined;
         formEditor?.discardDraft();
         ruleEditor?.discardDraft();
         leaveGuard.discard();
