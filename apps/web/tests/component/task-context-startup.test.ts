@@ -245,6 +245,47 @@ it.each(['network', 'safety', 'unmount'] as const)(
   },
 );
 
+it('CR-5 renders a safe startup error when a catch notification retry exhausts safety attempts', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  vi.setSystemTime(0);
+  let checks = 0;
+  vi.mocked(api.me).mockImplementation(() => {
+    checks += 1;
+    if (checks < SESSION_CHECK_MAX_ATTEMPTS) {
+      accountSafety.generation += 1;
+      return Promise.resolve(identity);
+    }
+    localStorage.setItem(
+      'fvoci:auth-session',
+      JSON.stringify({
+        state: 'settled',
+        generation: readSessionGeneration() + 1,
+      }),
+    );
+    return Promise.reject(new ApiError(403, 'forbidden', 'startup verification failed'));
+  });
+  vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+  vi.spyOn(api, 'myOrganizations').mockResolvedValue([]);
+  vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+  render(App);
+  await vi.advanceTimersByTimeAsync(249);
+  expect(api.me).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS + 2);
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByTestId('task-board')).toBeNull();
+  accountSafety.generation += 1;
+  await vi.advanceTimersByTimeAsync(1);
+  await tick();
+  expect(screen.getByRole('alert')).toBeVisible();
+  expect(screen.getByRole('button', { name: /^다시 시도$/ })).toBeVisible();
+  expect(api.me).toHaveBeenCalledTimes(SESSION_CHECK_MAX_ATTEMPTS + 2);
+  expect(api.workspaces).not.toHaveBeenCalled();
+  expect(api.myOrganizations).not.toHaveBeenCalled();
+  expect(taskScreenApi.context).not.toHaveBeenCalled();
+  expect(taskScreenApi.board).not.toHaveBeenCalled();
+  expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+  expect(screen.queryByText(context.item.title)).toBeNull();
+});
+
 it('SR-298-1 retries /me before starting task reads when its response sees a newer session', async () => {
   const recheck = held<Me | undefined>();
   vi.mocked(api.me)

@@ -310,8 +310,13 @@
         router.route.group === 'tasks' &&
         safetyGeneration === accountSafety.generation &&
         generation !== readSessionGeneration()
-      )
-        return await retryNotification();
+      ) {
+        try {
+          return await retryNotification();
+        } catch {
+          /* 아래 안전한 시작 실패 화면을 쓴다. */
+        }
+      }
       if (verified === undefined && safetyGeneration !== accountSafety.generation) {
         try {
           return await retryLoad();
