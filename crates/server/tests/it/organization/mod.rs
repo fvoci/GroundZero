@@ -18,6 +18,7 @@ mod organization_removal_lock_order;
 mod organizations_api;
 mod recurrence_security;
 mod role_sources;
+mod session_lists;
 mod share_ceiling;
 mod share_display;
 mod share_races;

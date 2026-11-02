@@ -1,5 +1,7 @@
-import { expectOk } from '$lib/shared/api';
-import { bool, optInt, parseList, rec, str, type Json } from '$lib/shared/api/parse';
+import { expectOk, parseViewerList, request } from '$lib/shared/api';
+import { bool, optInt, rec, str, type Json } from '$lib/shared/api/parse';
+import { me } from '$lib/me.svelte';
+import { untrack } from 'svelte';
 import type {
   Organization,
   OrganizationLimits,
@@ -46,8 +48,10 @@ export function parseOrganization(value: Json): Organization {
 
 export const organizationsApi = {
   /** 내가 속한 조직(전환기 목록, D-111). 서버는 기본 조직을 정하지 않는다. */
-  myOrganizations: () =>
-    expectOk('GET', '/api/me/organizations', (v) => parseList(v, parseOrganizationSummary)),
+  myOrganizations: async (viewerId = untrack(() => me.userId)) => {
+    const response = await request('GET', '/api/me/organizations');
+    return parseViewerList(response, viewerId, parseOrganizationSummary);
+  },
   organization: (id: string) =>
     expectOk('GET', `/api/organizations/${encodeURIComponent(id)}`, parseOrganization),
 };

@@ -4,6 +4,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::ToSchema;
@@ -72,11 +73,13 @@ fn row_to_workspace(
 
 /// 내가 속한 워크스페이스.
 #[utoipa::path(get, path = "/api/workspaces",
-    responses((status = 200, body = [Workspace]), (status = 401, body = ErrorBody)), tag = "workspaces")]
+    responses((status = 200, body = [Workspace],
+        headers(("x-fvoci-viewer-id" = String, description = "목록을 읽은 인증 사용자의 UUID (D-96)"))),
+        (status = 401, body = ErrorBody)), tag = "workspaces")]
 pub async fn list(
     State(state): State<OrganizationsState>,
     CurrentUser(user): CurrentUser,
-) -> Result<Json<Vec<Workspace>>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let mut tx = state.db.begin_as(user).await?;
     let rows: Vec<WorkspaceRow> = sqlx::query_as(
         "SELECT w.id, w.organization_id, w.name, m.role, w.owner_id = m.user_id,
@@ -88,10 +91,11 @@ pub async fn list(
     .fetch_all(tx.conn())
     .await?;
     tx.commit().await?;
-    rows.into_iter()
+    let items = rows
+        .into_iter()
         .map(row_to_workspace)
-        .collect::<Result<_, _>>()
-        .map(Json)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(([("x-fvoci-viewer-id", user.0.to_string())], Json(items)))
 }
 
 /// 워크스페이스 생성. 생성자는 관리자가 된다.

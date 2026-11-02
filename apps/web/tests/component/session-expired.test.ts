@@ -146,6 +146,7 @@ describe('session expired mid-use', () => {
 
   // 리뷰 지적: 401보다 먼저 시작한 요청의 성공이 늦게 오면, 세션이 돌아오지 않았는데도 배너가 내려갔다.
   it('keeps the banner when a request started before the 401 succeeds late', async () => {
+    currentUser.userId = 'u1';
     let release: (response: Response) => void = () => undefined;
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
       input === '/api/workspaces'
@@ -161,7 +162,9 @@ describe('session expired mid-use', () => {
       expect(signInLink()).not.toBeNull();
     });
 
-    release(json(200, []));
+    const successfulList = json(200, []);
+    successfulList.headers.set('x-fvoci-viewer-id', 'u1');
+    release(successfulList);
     await expect(older).resolves.toEqual([]);
     expect(auth.expired).toBe(true);
     expect(signInLink()).not.toBeNull();

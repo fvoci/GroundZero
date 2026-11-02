@@ -8008,6 +8008,14 @@
         "responses": {
           "200": {
             "description": "",
+            "headers": {
+              "x-fvoci-viewer-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "목록을 읽은 인증 사용자의 UUID (D-96)"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -13607,6 +13615,14 @@
         "responses": {
           "200": {
             "description": "",
+            "headers": {
+              "x-fvoci-viewer-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "목록을 읽은 인증 사용자의 UUID (D-96)"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

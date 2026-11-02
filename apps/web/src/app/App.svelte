@@ -17,6 +17,7 @@
   import type { Me, Workspace } from '@fvoci/api-client';
 
   import { api, ApiError, NetworkError } from '$lib/api/client';
+  import { SessionListMismatch } from '$lib/shared/api';
   import { errorText } from '$lib/api/errors';
   import LoginScreen from '$lib/features/auth/LoginScreen.svelte';
   import {
@@ -137,6 +138,13 @@
   let taskSessionActive = true;
   const taskSessionLifetime = new AbortController();
   let taskSessionConfirmations = 0;
+  let sessionListRecovery:
+    | {
+        viewerId: string;
+        sequence: number;
+        pending: Promise<void> | undefined;
+      }
+    | undefined;
   const taskPublications = trackTaskSessionPublications();
   setContext(TASK_SESSION_RECOVERY, createTaskSessionRecovery(confirmTaskSession));
   const signalRechecks = new SvelteMap<string, ReturnType<typeof setTimeout> | undefined>();
@@ -154,7 +162,7 @@
   });
 
   async function load(
-    verified?: Me,
+    verified?: { me: Me; generation: number },
     attempt = 0,
     notificationRetry = createSessionNotificationRetry(),
   ): Promise<boolean> {
@@ -162,7 +170,7 @@
     const mine = ++sessionSequence;
     taskContextSeed = undefined;
     loadingSession = true;
-    const generation = readSessionGeneration();
+    const generation = verified?.generation ?? readSessionGeneration();
     const safetyGeneration = accountSafety.generation;
     const retryLoad = async (): Promise<boolean> => {
       if (attempt + 1 >= SESSION_CHECK_MAX_ATTEMPTS) throw new Error(m.feedback_restore_failed());
@@ -175,17 +183,20 @@
       return load(undefined, attempt, notificationRetry);
     };
     try {
-      const me = verified ?? (await api.me());
+      const me = verified?.me ?? (await api.me());
       if (mine !== sessionSequence || cacheRestorePending) return false;
       const taskStartup =
         verified === undefined && router.route.name === 'item' && router.route.group === 'tasks';
+      const publishNonTaskStartup =
+        verified === undefined && router.route.name !== 'public' && !taskStartup;
       if (verified === undefined && router.route.name !== 'public') {
         if (safetyGeneration !== accountSafety.generation) return await retryLoad();
         if (taskStartup) {
           if (generation !== readSessionGeneration()) return await retryNotification();
-        } else void publishSessionCheck(generation);
+        }
       }
       if (me === undefined) {
+        if (publishNonTaskStartup) void publishSessionCheck(generation);
         const info = await api.authInfo();
         if (mine !== sessionSequence) return false;
         if (taskStartup) {
@@ -232,8 +243,8 @@
           : createContextRead(captured, capture, taskScreenApi.context(taskRoute.itemId));
       // 조직 목록(D-111)은 전환기와 개인 화면의 범위다. 서버는 기본 조직을 정하지 않으므로 선택은 org 문맥이 든다.
       const [workspaces, organizations, initialContext] = await Promise.all([
-        api.workspaces(),
-        api.myOrganizations(),
+        api.workspaces(me.id),
+        api.myOrganizations(me.id),
         pendingContext,
       ]);
       if (mine !== sessionSequence) return false;
@@ -253,6 +264,8 @@
                   Promise.reject<TaskContext>(initialContext.error),
                 )
               : initialContext;
+        // 복원 문맥을 일반 시작 재시도로 넘기기 전에 원래 /me의 세대를 확인한다.
+        if (verified !== undefined && generation !== readSessionGeneration()) return false;
         if (taskStartup) {
           if (safetyGeneration !== accountSafety.generation) return await retryLoad();
           if (generation !== readSessionGeneration()) return await retryNotification();
@@ -265,6 +278,15 @@
             navigationGeneration: captured.navigationGeneration,
             result: rechecked,
           };
+      }
+      if (
+        (publishNonTaskStartup || verified !== undefined) &&
+        generation !== readSessionGeneration()
+      ) {
+        // 복원은 원래 사용자와도 다시 비교해야 하므로 restoreSession이 /me부터 재확인한다.
+        if (verified !== undefined) return false;
+        // 표식은 재확인 신호다. 안전 세대의 재시도 상한을 소진하지 않고 자기 /me와 목록을 다시 읽는다.
+        return await retryNotification();
       }
       org.load(me.id, organizations, me.last_organization_id ?? null);
       const startupContext =
@@ -289,6 +311,8 @@
         );
       }
       taskContextSeed = startupSeed;
+      // 자기 게시가 비교할 세대를 바꾸지 않게 목록을 채택한 뒤 알린다. 게시 잠금은 화면을 막지 않는다.
+      if (publishNonTaskStartup) void publishSessionCheck(generation);
       session = { state: 'signed-in', me, workspaces };
       if (taskStartup)
         void publishSessionCheck(generation, (published) => {
@@ -304,6 +328,10 @@
       return true;
     } catch (e: unknown) {
       if (mine !== sessionSequence || cacheRestorePending) return false;
+      if (e instanceof SessionListMismatch) {
+        if (verified !== undefined) throw e;
+        if (safetyGeneration === accountSafety.generation) return await retryNotification();
+      }
       if (
         verified === undefined &&
         router.route.name === 'item' &&
@@ -437,20 +465,148 @@
    * 쪽도 그 뒤에 돌아간다(초대 수락 뒤 `org.select`가 새 조직이 든 목록을 봐야 한다).
    */
   async function reloadWorkspaces(): Promise<void> {
+    if (sessionListRecovery !== undefined) return recoverWorkspaceLists();
     const sessionAtStart = sessionSequence;
+    const viewerId = currentUser.userId;
+    const safetyAtStart = accountSafety.generation;
+    let recoveryPending: Promise<void> | undefined;
+    const observe = async <T,>(read: Promise<T>): Promise<T> => {
+      try {
+        return await read;
+      } catch (error: unknown) {
+        if (
+          error instanceof SessionListMismatch &&
+          taskSessionActive &&
+          sessionAtStart === sessionSequence &&
+          viewerId === currentUser.userId &&
+          session.state === 'signed-in' &&
+          !cacheRestorePending &&
+          (!sessionHidden || accountSafety.reason === 'reauth')
+        ) {
+          sessionListRecovery ??= { viewerId, sequence: sessionAtStart, pending: undefined };
+          recoveryPending = recoverWorkspaceLists();
+        }
+        throw error;
+      }
+    };
     await workspacesReload.run(async (isCurrent) => {
-      const [workspaces, organizations] = await Promise.all([
-        api.workspaces(),
-        api.myOrganizations(),
-      ]);
-      if (isCurrent() && sessionAtStart === sessionSequence && session.state === 'signed-in') {
-        session.workspaces = workspaces;
-        org.load(session.me.id, organizations);
+      try {
+        const [workspaces, organizations] = await Promise.all([
+          observe(api.workspaces(viewerId)),
+          observe(api.myOrganizations(viewerId)),
+        ]);
+        if (
+          isCurrent() &&
+          sessionAtStart === sessionSequence &&
+          viewerId === currentUser.userId &&
+          safetyAtStart === accountSafety.generation &&
+          sessionListRecovery === undefined &&
+          session.state === 'signed-in'
+        ) {
+          session.workspaces = workspaces;
+          org.load(session.me.id, organizations);
+        }
+      } catch (error: unknown) {
+        if (!(error instanceof SessionListMismatch)) throw error;
+        // 거절 순서는 바꾸지 않고, 각 목록 관찰이 시작한 복구만 기다린다.
+        await recoveryPending;
       }
     });
   }
 
+  /** 멤버십 재읽기도 자기 /me와 두 목록이 맞을 때까지 기존 DOM·입력을 가려 보존한다. */
+  function recoverWorkspaceLists(): Promise<void> {
+    const recovery = sessionListRecovery;
+    if (recovery === undefined) return Promise.resolve();
+    if (recovery.pending !== undefined) return recovery.pending;
+    const active = (): boolean =>
+      taskSessionActive &&
+      sessionListRecovery === recovery &&
+      recovery.sequence === sessionSequence &&
+      currentUser.userId === recovery.viewerId &&
+      session.state === 'signed-in' &&
+      !cacheRestorePending &&
+      (!sessionHidden || accountSafety.reason === 'reauth');
+    const run = async (): Promise<void> => {
+      const notificationRetry = createSessionNotificationRetry();
+      let failures = 0;
+      try {
+        if (!active()) return;
+        restoreSequence += 1;
+        checkingSession = false;
+        hideSession('reauth');
+        while (active()) {
+          accountSafety.switching = true;
+          const safetyGeneration = accountSafety.generation;
+          const generation = readSessionGeneration();
+          try {
+            const now = await api.me();
+            if (!active()) return;
+            if (safetyGeneration === accountSafety.generation) {
+              if (now === undefined) {
+                reportSessionExpired();
+                return;
+              }
+              if (now.id !== recovery.viewerId) {
+                switchAccount();
+                return;
+              }
+              if (generation === readSessionGeneration()) {
+                // DOM과 쓰기는 닫은 채 이 /me에 묶인 목록만 다시 읽는다.
+                accountSafety.switching = false;
+                const [workspaces, organizations] = await Promise.all([
+                  api.workspaces(now.id),
+                  api.myOrganizations(now.id),
+                ]);
+                if (!active()) return;
+                if (
+                  safetyGeneration === accountSafety.generation &&
+                  generation === readSessionGeneration() &&
+                  session.state === 'signed-in'
+                ) {
+                  session.workspaces = workspaces;
+                  org.load(now.id, organizations);
+                  sessionListRecovery = undefined;
+                  auth.expired = false;
+                  accountSafety.switching = false;
+                  accountSafety.restoring = false;
+                  void refreshUnread();
+                  return;
+                }
+              }
+            }
+          } catch (error: unknown) {
+            if (!active()) return;
+            if (
+              safetyGeneration === accountSafety.generation &&
+              !(error instanceof SessionListMismatch)
+            )
+              throw error;
+          }
+          accountSafety.switching = true;
+          if (safetyGeneration !== accountSafety.generation) {
+            failures += 1;
+            if (failures >= SESSION_CHECK_MAX_ATTEMPTS)
+              throw new Error(m.feedback_restore_failed());
+          } else if (!(await notificationRetry.wait(taskSessionLifetime.signal))) return;
+        }
+      } catch (error: unknown) {
+        if (active()) {
+          accountSafety.switching = true;
+          accountSafety.error = errorText(error, m.feedback_restore_failed());
+        }
+      } finally {
+        recovery.pending = undefined;
+        if (!active() && sessionListRecovery === recovery) sessionListRecovery = undefined;
+        drainSessionCheck();
+      }
+    };
+    recovery.pending = Promise.resolve().then(run);
+    return recovery.pending;
+  }
+
   function clearSession(): void {
+    sessionListRecovery = undefined;
     sessionSequence += 1;
     session = { state: 'loading' };
     org.reset();
@@ -505,7 +661,10 @@
     hideSession('restore');
   }
 
-  async function restoreSession(attempt = 0): Promise<void> {
+  async function restoreSession(
+    attempt = 0,
+    notificationRetry = createSessionNotificationRetry(),
+  ): Promise<void> {
     if (sessionHidden && accountSafety.reason !== 'restore' && accountSafety.reason !== 'reauth')
       return;
     const mine = ++restoreSequence;
@@ -521,11 +680,27 @@
       sessionHidden &&
       (accountSafety.reason === 'restore' || accountSafety.reason === 'reauth');
     const recheck = (): void => {
-      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS) void restoreSession(attempt + 1);
+      if (attempt + 1 < SESSION_CHECK_MAX_ATTEMPTS)
+        void restoreSession(attempt + 1, notificationRetry);
       else {
         accountSafety.switching = true;
         accountSafety.error = m.feedback_restore_failed();
       }
+    };
+    const retryNotification = async (): Promise<void> => {
+      if (
+        !(await notificationRetry.wait(taskSessionLifetime.signal, () => {
+          // 복원 가림은 이미 유지 중이다. 대기 동안 /me 외의 읽기도 다시 막는다.
+          accountSafety.switching = true;
+        }))
+      )
+        return;
+      if (!active() || !taskSessionActive) return;
+      if (safetyGeneration !== accountSafety.generation) {
+        recheck();
+        return;
+      }
+      await restoreSession(attempt, notificationRetry);
     };
     try {
       const now = await api.me();
@@ -534,12 +709,13 @@
         recheck();
         return;
       }
-      void publishSessionCheck(generation);
       if (now === undefined) {
+        void publishSessionCheck(generation);
         flushSync(clearSession);
         hideSession('signed-out');
         replace(router.path + router.hash);
       } else if (now.id !== restoringUserId) {
+        void publishSessionCheck(generation);
         hideSession('account');
         replace(router.path + router.hash);
       } else {
@@ -547,9 +723,15 @@
         flushSync(clearSession);
         // 사용자 ID가 맞았다. 시각적 가림은 유지하고 새 읽기만 연다(공통 request가 쓰기는 계속 막는다).
         accountSafety.switching = false;
-        const loaded = await load(now);
+        const loaded = await load({ me: now, generation });
         if (mine !== restoreSequence || cacheRestorePending || !restoring()) return;
+        if (generation !== readSessionGeneration()) {
+          // 알림은 목록을 버리고 재확인하라는 신호다. 안전 세대의 재시도 상한은 소진하지 않는다.
+          await retryNotification();
+          return;
+        }
         if (loaded) {
+          void publishSessionCheck(generation);
           restoringUserId = undefined;
           accountSafety.restoring = false;
         } else {
@@ -561,6 +743,10 @@
       if (!active()) return;
       if (safetyGeneration !== accountSafety.generation) {
         recheck();
+        return;
+      }
+      if (error instanceof SessionListMismatch) {
+        await retryNotification();
         return;
       }
       // 확인 실패는 기존 DOM·입력을 보존하고 직접 다시 시도하게 한다.
@@ -605,6 +791,7 @@
   async function confirmTaskSession(userId: string): Promise<TaskSessionProof | undefined> {
     const canVerify = (): boolean =>
       taskSessionActive &&
+      sessionListRecovery === undefined &&
       currentUser.userId === userId &&
       (!sessionHidden || (accountSafety.reason === 'reauth' && accountSafety.error === '')) &&
       router.route.name === 'item' &&
@@ -722,6 +909,7 @@
       loadingSession ||
       restoringSession ||
       checkingSession ||
+      sessionListRecovery?.pending !== undefined ||
       taskConfirmationPending()
     )
       return;
@@ -738,7 +926,13 @@
   /** 확인 중 받은 복귀 이벤트는 버리지 않고 후속 확인 하나로 합친다(SR-221-10). */
   function checkSession(): boolean {
     if (router.route.name === 'public') return false;
-    if (loadingSession || restoringSession || checkingSession || taskConfirmationPending()) {
+    if (
+      loadingSession ||
+      restoringSession ||
+      checkingSession ||
+      sessionListRecovery?.pending !== undefined ||
+      taskConfirmationPending()
+    ) {
       sessionCheckPending = true;
       return true;
     }
@@ -747,6 +941,10 @@
     if (cacheRestorePending) {
       cacheRestorePending = false;
       void restoreSession();
+      return true;
+    }
+    if (sessionListRecovery !== undefined) {
+      void recoverWorkspaceLists();
       return true;
     }
     const expected = restoringUserId ?? currentUser.userId;
@@ -856,7 +1054,8 @@
     sessionManaged
     retryLogout={() => void logout()}
     retryRestore={() => {
-      if (accountSafety.reason === 'reauth') void verifySession();
+      if (sessionListRecovery !== undefined) void recoverWorkspaceLists();
+      else if (accountSafety.reason === 'reauth') void verifySession();
       else void restoreSession();
     }}
   />
