@@ -306,6 +306,8 @@ it('restores all profile text and the original base only for the original accoun
       item.id,
       1,
       expect.objectContaining({ goal: '긴 목표\n다음 줄' }),
+      // 되살린 편집은 그 초안의 계정을 기대 사용자로 보낸다(D-96, #307).
+      'user-a',
     );
   });
 });

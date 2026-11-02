@@ -21,7 +21,7 @@ use crate::access::Grade;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::validate::validate_title;
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 time::serde::format_description!(item_day, Date, "[year]-[month]-[day]");
 use crate::http::AppState;
@@ -335,7 +335,8 @@ pub async fn get_module(
 
 /// 모듈 생성(관리자). 키가 쓰였거나 예전에 쓰였으면 409.
 #[utoipa::path(post, path = "/api/workspaces/{workspace_id}/modules",
-    params(("workspace_id" = String, Path, format = Uuid)), request_body = CreateModule,
+    params(("workspace_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateModule,
     responses((status = 201, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn create_module(
@@ -374,7 +375,8 @@ pub async fn create_module(
 
 /// 모듈 이름·키 변경(관리자). 옛 키는 예전 키로 남아 다른 모듈이 쓰지 못한다.
 #[utoipa::path(put, path = "/api/modules/{module_id}",
-    params(("module_id" = String, Path, format = Uuid)), request_body = UpdateModule,
+    params(("module_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = UpdateModule,
     responses((status = 200, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn update_module(
@@ -409,9 +411,10 @@ pub async fn update_module(
 
 /// 모듈 보관·해제(관리자). 보관하면 항목과 문서가 읽기 전용이 된다.
 #[utoipa::path(put, path = "/api/modules/{module_id}/archived",
-    params(("module_id" = String, Path, format = Uuid)), request_body = SetArchived,
-    responses((status = 200, body = Module), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "modules")]
+    params(("module_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetArchived,
+    responses((status = 200, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn archive_module(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -440,9 +443,10 @@ pub struct SetModuleDescription {
 
 /// 모듈 설명 바꾸기(관리자, D-78).
 #[utoipa::path(put, path = "/api/modules/{module_id}/description", operation_id = "set_module_description",
-    params(("module_id" = String, Path, format = Uuid)), request_body = SetModuleDescription,
+    params(("module_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetModuleDescription,
     responses((status = 200, body = Module), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "modules")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn set_description(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -492,7 +496,8 @@ pub async fn list_items(
 
 /// 항목 생성(작성자 이상). 모듈 번호열에서 번호를 받는다. 같은 `request_id`는 같은 항목을 돌려준다.
 #[utoipa::path(post, path = "/api/modules/{module_id}/items",
-    params(("module_id" = String, Path, format = Uuid)), request_body = CreateItem,
+    params(("module_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CreateItem,
     responses((status = 201, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn create_item(
@@ -562,11 +567,12 @@ pub enum ItemSaveConflict {
 /// 항목 변경. 제목·설명은 쓰기 권한, 공개 범위는 소유 권한이 필요하다. 읽은 판이 지났으면 아무것도 바꾸지 않고 409와
 /// 서버 최신본(`ItemConflict`), 보관된 항목은 409 `invalid_state`.
 #[utoipa::path(put, path = "/api/items/{item_id}",
-    params(("item_id" = String, Path, format = Uuid)), request_body = UpdateItem,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = UpdateItem,
     responses((status = 200, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
               (status = 409, body = ItemSaveConflict,
-               description = "`conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
+               description = "`conflict`면 ItemConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`), 보낸 기대 사용자가 세션과 다르면 ErrorBody(`account_changed`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
 pub async fn update_item(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -609,9 +615,10 @@ pub async fn update_item(
 
 /// 항목 보관·해제(항목 소유 권한자).
 #[utoipa::path(put, path = "/api/items/{item_id}/archived",
-    params(("item_id" = String, Path, format = Uuid)), request_body = SetArchived,
-    responses((status = 200, body = Item), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "modules")]
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetArchived,
+    responses((status = 200, body = Item), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn archive_item(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,

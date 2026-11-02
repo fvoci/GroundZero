@@ -168,7 +168,12 @@ describe('item information conflict', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(2);
     });
-    expect(update.mock.calls[1]).toEqual(['i1', 2, { title: '서버 제목', description: '내 설명' }]);
+    expect(update.mock.calls[1]).toEqual([
+      'i1',
+      2,
+      { title: '서버 제목', description: '내 설명' },
+      'user-a',
+    ]);
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: REGION })).not.toBeInTheDocument();
     });
@@ -201,7 +206,12 @@ describe('item information conflict', () => {
       expect(update).toHaveBeenCalledTimes(2);
     });
     // 공개 범위는 서버 값이 기준이 되었으므로 보내지 않는다(서버 값 유지).
-    expect(update.mock.calls[1]).toEqual(['i1', 2, { title: '내 제목', description: '서버 설명' }]);
+    expect(update.mock.calls[1]).toEqual([
+      'i1',
+      2,
+      { title: '내 제목', description: '서버 설명' },
+      'user-a',
+    ]);
   });
 
   it('moves focus to the first unchosen row and tells how many remain', async () => {
@@ -247,7 +257,12 @@ describe('item information conflict', () => {
     await waitFor(() => {
       expect(within(panel).getByText(m.common_conflict_repeated())).toBeInTheDocument();
     });
-    expect(update.mock.calls[1]).toEqual(['i1', 2, { title: '서버 제목', description: '내 설명' }]);
+    expect(update.mock.calls[1]).toEqual([
+      'i1',
+      2,
+      { title: '서버 제목', description: '내 설명' },
+      'user-a',
+    ]);
     // 다시 고를 때까지 보내지 않는다.
     expect(update).toHaveBeenCalledTimes(2);
     // 재충돌의 기준은 검토한 판(서버 제목)이라 제목은 서버만 바꾼 칸(접힌 목록)이고 설명은 내가 바꾼 칸이다.
@@ -354,7 +369,12 @@ describe('item information conflict', () => {
     await waitFor(() => {
       expect(update).toHaveBeenCalledTimes(3);
     });
-    expect(update.mock.calls[2]).toEqual(['i1', 2, { title: '내 제목', description: '처음 설명' }]);
+    expect(update.mock.calls[2]).toEqual([
+      'i1',
+      2,
+      { title: '내 제목', description: '처음 설명' },
+      'user-a',
+    ]);
   });
 
   it('blocks only when the recheck after invalid_state confirms the item is archived', async () => {
