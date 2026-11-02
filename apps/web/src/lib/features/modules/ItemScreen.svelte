@@ -5,6 +5,7 @@
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import Ellipsis from '@lucide/svelte/icons/ellipsis';
   import MarkButtons from '$lib/features/home/MarkButtons.svelte';
+  import { taskScreenApi } from '$lib/features/tasks/screen-api';
   import DeleteButton from '$lib/features/trash/DeleteButton.svelte';
   import type { Module, ModuleKind, Workspace } from '@fvoci/api-client';
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -26,6 +27,7 @@
   import { forgetReferences } from '$lib/features/references/resolver';
   import Backlinks from '$lib/features/references/Backlinks.svelte';
   import TaskBoard from '$lib/features/tasks/TaskBoard.svelte';
+  import type { TaskStartupSeed, TaskStartupReads } from '$lib/features/tasks/startup-reads';
   import { readConfig } from '$lib/features/tasks/filters';
   import ItemEvents from '$lib/features/events/ItemEvents.svelte';
   import CalendarScreen from '$lib/features/events/CalendarScreen.svelte';
@@ -67,6 +69,8 @@
   import ItemActivityTab from '$lib/features/activity/ItemActivityTab.svelte';
 
   interface Props {
+    aggregate?: boolean;
+    initialContext?: TaskStartupSeed | undefined;
     workspace: Workspace;
     itemId: string;
     /** 주소에서 연 업무(상세 대화상자). */
@@ -74,7 +78,23 @@
     workspaces: Workspace[];
   }
 
-  const { workspace, itemId, workspaces, taskId }: Props = $props();
+  const {
+    workspace,
+    itemId,
+    workspaces,
+    taskId,
+    aggregate = false,
+    initialContext,
+  }: Props = $props();
+  let consumedContext = false;
+  let pendingTaskReads: { navigationGeneration: number; reads: TaskStartupReads } | undefined;
+  function takeStartupReads(id: string): TaskStartupReads | undefined {
+    const seed = pendingTaskReads;
+    pendingTaskReads = undefined;
+    return seed?.reads.itemId === id && seed.navigationGeneration === router.navigationGeneration
+      ? seed.reads
+      : undefined;
+  }
   // 같은 항목 안 묶음·보기·상세 경로 변경도 화면에 즉시 전달한다(D-121).
   const itemRoute = $derived(
     router.route.name === 'item' && router.route.itemId === itemId ? router.route : undefined,
@@ -335,10 +355,14 @@
 
   $effect(() => {
     const id = currentItemId;
+    const generation = router.itemGeneration;
     loadSeq += 1;
     let cancelled = false;
+    const isCurrent = (): boolean => !cancelled && generation === router.itemGeneration;
     item = undefined;
     mod = undefined;
+    docs = [];
+    pendingTaskReads = undefined;
     chosen = undefined;
     error = undefined;
     infoOpen = false;
@@ -351,28 +375,62 @@
     formError = undefined;
     conflict = undefined;
     docTemplate = '';
-    Promise.all([
-      api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
-      api.itemDocuments(id),
-    ])
-      .then(([{ it, found }, list]) => {
-        if (cancelled) return;
-        fill(it);
-        // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
-        const entryKey = org.key('new-item-info');
-        infoOpen = readSession(entryKey) === id && !it.archived && it.access !== 'read';
-        if (readSession(entryKey) === id) writeSession(entryKey, null);
-        mod = found;
-        workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
-        docs = list;
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        error =
-          e instanceof ApiError && e.status === 404
-            ? m.modules_item_not_found()
-            : m.modules_item_load_failed();
-      });
+    const seed = untrack(() =>
+      !consumedContext &&
+      initialContext?.itemId === id &&
+      initialContext.navigationGeneration === router.navigationGeneration
+        ? initialContext
+        : undefined,
+    );
+    consumedContext = true;
+    const adopt = ({ it, found }: { it: ItemView; found: Module }, list: SummaryView[]) => {
+      if (!isCurrent()) return;
+      fill(it);
+      // 새로 만든 빈 항목의 첫 진입만 편집을 연다. 판·내용으로 기존 빈 항목을 추측하지 않는다.
+      const entryKey = org.key('new-item-info');
+      infoOpen = readSession(entryKey) === id && !it.archived && it.access !== 'read';
+      if (readSession(entryKey) === id) writeSession(entryKey, null);
+      mod = found;
+      workspaceNav.currentItem = { itemId: it.id, moduleId: it.module_id };
+      docs = list;
+    };
+    const fail = (e: unknown) => {
+      if (!isCurrent()) return;
+      error =
+        e instanceof ApiError && e.status === 404
+          ? m.modules_item_not_found()
+          : m.modules_item_load_failed();
+    };
+    if (untrack(() => aggregate) && seed?.result.kind === 'loaded') {
+      const value = seed.result.value;
+      if (seed.reads !== undefined)
+        pendingTaskReads = { navigationGeneration: seed.navigationGeneration, reads: seed.reads };
+      // The App already joined session lists and context. Adopt within this flush.
+      try {
+        untrack(() => {
+          adopt({ it: value.item, found: value.module }, value.documents);
+        });
+      } catch (cause: unknown) {
+        untrack(() => {
+          fail(cause);
+        });
+      }
+    } else {
+      const pending = untrack(() => aggregate)
+        ? (seed?.result.kind === 'failed'
+            ? Promise.reject(seed.result.error)
+            : taskScreenApi.context(id)
+          ).then((read) => [{ it: read.item, found: read.module }, read.documents] as const)
+        : Promise.all([
+            api.item(id).then(async (it) => ({ it, found: await api.module(it.module_id) })),
+            api.itemDocuments(id),
+          ]);
+      void pending
+        .then(([resource, list]) => {
+          adopt(resource, list);
+        })
+        .catch(fail);
+    }
     return () => {
       cancelled = true;
     };
@@ -797,6 +855,8 @@
           <CoursePanel itemId={current.id} />
         {:else if group === 'tasks'}
           <TaskBoard
+            {aggregate}
+            initialReads={takeStartupReads}
             item={view}
             {workspaces}
             routeView={itemRoute?.view}

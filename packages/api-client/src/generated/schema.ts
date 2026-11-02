@@ -1162,6 +1162,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/items/{item_id}/task-board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read_task_board"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/task-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read_task_context"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/items/{item_id}/task-detail-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read_task_detail_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/items/{item_id}/tasks": {
         parameters: {
             query?: never;
@@ -2199,6 +2247,22 @@ export interface paths {
         };
         /** 업무의 댓글. */
         get: operations["task_comments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/detail-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["read_task_detail"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4590,6 +4654,37 @@ export interface components {
             /** Format: int32 */
             purged: number;
         };
+        ReadSection_Vec_ScreenAssignable: {
+            /** @enum {string} */
+            state: "ready";
+            value: {
+                display_name: string;
+                user_id: components["schemas"]["UserId"];
+            }[];
+        } | {
+            error: components["schemas"]["SectionError"];
+            /** @enum {string} */
+            state: "failed";
+        };
+        ReadSection_Vec_ScreenStatus: {
+            /** @enum {string} */
+            state: "ready";
+            value: {
+                category: components["schemas"]["ScreenStatusCategory"];
+                color: string;
+                /** Format: uuid */
+                id: string;
+                name: string;
+                /** Format: double */
+                position: number;
+                /** Format: int32 */
+                task_count: number;
+            }[];
+        } | {
+            error: components["schemas"]["SectionError"];
+            /** @enum {string} */
+            state: "failed";
+        };
         /** @description 내가 받은 초대. */
         ReceivedInvitation: {
             /** Format: date-time */
@@ -4821,6 +4916,133 @@ export interface components {
             due_date?: string | null;
             start_date?: string | null;
         };
+        ScreenAssignable: {
+            display_name: string;
+            user_id: components["schemas"]["UserId"];
+        };
+        ScreenAssignee: {
+            display_name: string;
+            /** Format: uuid */
+            task_id: string;
+            user_id: components["schemas"]["UserId"];
+        };
+        ScreenChecklistItem: {
+            checked: boolean;
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            task_id: string;
+            text: string;
+        };
+        ScreenDependency: {
+            kind: components["schemas"]["ScreenLinkKind"];
+            /** Format: int32 */
+            lag_days: number;
+            /** Format: uuid */
+            predecessor_id: string;
+            /** Format: uuid */
+            successor_id: string;
+        };
+        ScreenDocument: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_id?: string | null;
+            reference?: string | null;
+            /** Format: int32 */
+            revision: number;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ScreenItem: {
+            access: components["schemas"]["Access"];
+            archived: boolean;
+            description: string;
+            ends_on?: string | null;
+            id: components["schemas"]["ItemId"];
+            is_template: boolean;
+            module_id: components["schemas"]["ModuleId"];
+            reference?: string | null;
+            starts_on?: string | null;
+            status: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int32 */
+            version: number;
+            visibility: string;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @enum {string} */
+        ScreenLinkKind: "FS" | "SS" | "FF" | "SF";
+        ScreenModule: {
+            access: components["schemas"]["Access"];
+            archived: boolean;
+            description: string;
+            icon: string;
+            id: components["schemas"]["ModuleId"];
+            key: string;
+            kind: components["schemas"]["ModuleKind"];
+            name: string;
+            previous_keys: string[];
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
+        /** @enum {string} */
+        ScreenPriority: "none" | "low" | "medium" | "high" | "urgent";
+        ScreenSeries: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            root_task_id: string;
+            rule?: null | components["schemas"]["RecurrenceRule"];
+            timezone: string;
+        };
+        ScreenStatus: {
+            category: components["schemas"]["ScreenStatusCategory"];
+            color: string;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            position: number;
+            /** Format: int32 */
+            task_count: number;
+        };
+        /** @enum {string} */
+        ScreenStatusCategory: "todo" | "doing" | "done";
+        ScreenTask: {
+            /** Format: date-time */
+            completed_at?: string | null;
+            description: string;
+            due_date?: string | null;
+            /** Format: int32 */
+            estimate_minutes?: number | null;
+            /** Format: uuid */
+            id: string;
+            item_id: components["schemas"]["ItemId"];
+            milestone: boolean;
+            module_id: components["schemas"]["ModuleId"];
+            /** Format: int32 */
+            move_version: number;
+            occurrence_date?: string | null;
+            /** Format: uuid */
+            parent_id?: string | null;
+            priority: components["schemas"]["ScreenPriority"];
+            reference?: string | null;
+            /** Format: uuid */
+            series_id?: string | null;
+            start_date?: string | null;
+            status: string;
+            status_category: components["schemas"]["ScreenStatusCategory"];
+            tags: string[];
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: int32 */
+            version: number;
+            workspace_id: components["schemas"]["WorkspaceId"];
+        };
         /** @description 검색 결과 한 건. */
         SearchResult: {
             /**
@@ -4841,6 +5063,8 @@ export interface components {
             /** Format: uuid */
             workspace_id?: string | null;
         };
+        /** @enum {string} */
+        SectionError: "unavailable";
         ServerAdmin: {
             /** Format: date-time */
             created_at: string;
@@ -5624,6 +5848,24 @@ export interface components {
             task_id: string;
             user_id: components["schemas"]["UserId"];
         };
+        TaskBoardRead: {
+            archived: boolean;
+            assignees: components["schemas"]["ScreenAssignee"][];
+            checklist: components["schemas"]["ScreenChecklistItem"][];
+            dependencies: components["schemas"]["ScreenDependency"][];
+            item_access: components["schemas"]["Access"];
+            item_id: components["schemas"]["ItemId"];
+            series: components["schemas"]["ScreenSeries"][];
+            statuses: components["schemas"]["ScreenStatus"][];
+            tasks: components["schemas"]["ScreenTask"][];
+            viewer_id: components["schemas"]["UserId"];
+        };
+        TaskContextRead: {
+            documents: components["schemas"]["ScreenDocument"][];
+            item: components["schemas"]["ScreenItem"];
+            module: components["schemas"]["ScreenModule"];
+            viewer_id: components["schemas"]["UserId"];
+        };
         /** @description 선행 관계 한 줄(D-31·D-91): 선행 업무가 끝나거나 시작한 뒤 후속 업무가 어떻게 이어지는지. */
         TaskDependency: {
             kind: components["schemas"]["LinkKind"];
@@ -5633,6 +5875,23 @@ export interface components {
             predecessor_id: string;
             /** Format: uuid */
             successor_id: string;
+        };
+        TaskDetailOptionsRead: {
+            assignable: components["schemas"]["ReadSection_Vec_ScreenAssignable"];
+            item_id: components["schemas"]["ItemId"];
+            statuses: components["schemas"]["ReadSection_Vec_ScreenStatus"];
+            viewer_id: components["schemas"]["UserId"];
+        };
+        TaskDetailRead: {
+            archived: boolean;
+            assignees: components["schemas"]["ScreenAssignee"][];
+            checklist: components["schemas"]["ScreenChecklistItem"][];
+            dependencies: components["schemas"]["ScreenDependency"][];
+            item: components["schemas"]["ScreenItem"];
+            series: components["schemas"]["ScreenSeries"][];
+            task: components["schemas"]["ScreenTask"];
+            tasks: components["schemas"]["ScreenTask"][];
+            viewer_id: components["schemas"]["UserId"];
         };
         /** @description `PATCH`의 409 본문(계약 문서용). 판 충돌이면 `StaleWrite<Task>`, 기대 사용자 불일치·보관·동시 변경이면 `ErrorBody`. */
         TaskPatchConflict: components["schemas"]["StaleWrite_Task"] | components["schemas"]["ErrorBody"];
@@ -10165,6 +10424,125 @@ export interface operations {
             };
         };
     };
+    read_task_board: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskBoardRead"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_task_context: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskContextRead"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_task_detail_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetailOptionsRead"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_tasks: {
         parameters: {
             query?: never;
@@ -13451,6 +13829,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Comment"][];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    read_task_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetailRead"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {

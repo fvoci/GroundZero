@@ -10,10 +10,12 @@
     onunsaved,
     ondraftkept,
     canWrite,
+    archived,
   }: {
     current: TaskDetailView;
     workspaces: Workspace[];
     canWrite: boolean;
+    archived?: boolean | undefined;
     onunsaved: (value: boolean) => void;
     ondraftkept: (value: boolean) => void;
   } = $props();
@@ -32,6 +34,7 @@
   bind:this={editor}
   target={{ kind: 'task', id: current.id }}
   {canWrite}
+  {...archived === undefined ? {} : { archived }}
   itemId={current.item_id}
   onunsaved={(value: boolean) => {
     onunsaved(value);

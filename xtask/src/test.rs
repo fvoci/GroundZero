@@ -14,8 +14,9 @@
 //! 단계를 실패로 끝내고 실패와 같은 정리를 한다(#93, [`compose::watch_interrupts`]). `--external-services`는 Compose를
 //! 쓰지 않으므로 잠그지 않는다.
 //!
-//! UID 매핑이 없는 amd64 Docker의 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다.
-//! rootless amd64는 0:0으로 실행한다. 비amd64는 호스트 경로를 쓰고 userns-remap은 `--host`를 안내하며 거절한다.
+//! amd64·arm64 Docker의 기본 실행은 ci-base 컨테이너에서 Compose 서비스 이름에 직접 연결한다.
+//! 일반 Docker는 호스트 UID:GID, rootless는 0:0을 쓴다. 그 밖의 아키텍처는 호스트 경로를 쓴다.
+//! userns-remap은 `--host`를 안내하며 거절한다.
 //! 컨테이너 빌드의 HOME·Cargo 캐시·target·임시 파일은 `target/test-container` 안에서 호스트 빌드와 분리한다.
 
 use std::ffi::OsString;
@@ -27,6 +28,9 @@ use xshell::{Shell, cmd};
 use crate::compose::{self, Compose, DbUrls, Env};
 use crate::supabase::Supabase;
 use crate::test_verify::{self, DockerMode};
+
+#[path = "test_platform.rs"]
+pub(crate) mod platform;
 
 #[cfg(all(test, unix))]
 #[path = "test_rootful.rs"]
@@ -94,7 +98,13 @@ struct TestContainer {
 }
 
 impl TestContainer {
-    fn new(root: &Path, compose: &Compose, sh: &Shell, identity: ContainerUser) -> Result<Self> {
+    fn new(
+        root: &Path,
+        compose: &Compose,
+        sh: &Shell,
+        identity: ContainerUser,
+        platform: &str,
+    ) -> Result<Self> {
         let digest = match std::env::var("FVOCI_TEST_CI_BASE_IMAGE_DIGEST") {
             Ok(digest) => digest,
             Err(std::env::VarError::NotPresent) => cmd!(
@@ -110,6 +120,7 @@ impl TestContainer {
         };
         let image = ci_base_image(digest.trim())?;
         println!("==> test runner image: {image}");
+        platform::require_image(sh, &image, platform)?;
         let uid = cmd!(sh, "id -u").quiet().read()?;
         let gid = cmd!(sh, "id -g").quiet().read()?;
         let user = identity.user(&uid, &gid);
@@ -118,6 +129,7 @@ impl TestContainer {
             std::fs::create_dir_all(root.join("target/test-container").join(dir))?;
         }
         let mut args = container_args(root, compose.project(), &user);
+        args.extend(["--platform".into(), platform.into()]);
         // 빌드 자원 제한과 사용자가 명시한 시험 동시성만 전달한다. 호스트의 경로·빌드 래퍼는 전달하지 않는다.
         for key in ["CARGO_BUILD_JOBS", "RUST_TEST_THREADS"] {
             if let Ok(value) = sh.var(key) {
@@ -250,14 +262,14 @@ fn select_execution(architecture: &str, mode: DockerMode) -> ExecutionChoice {
         ExecutionChoice::Unsupported(
             "userns-remap Docker는 아직 지원하지 않습니다. --host로 실행하세요",
         )
-    } else if matches!(architecture, "amd64" | "x86_64") {
+    } else if matches!(architecture, "amd64" | "x86_64" | "arm64" | "aarch64") {
         ExecutionChoice::Container(if mode == DockerMode::Rootless {
             ContainerUser::Rootless
         } else {
             ContainerUser::Host
         })
     } else {
-        ExecutionChoice::Host("ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다")
+        ExecutionChoice::Host("ci-base 이미지가 amd64·arm64만 지원하므로 호스트 경로로 실행합니다")
     }
 }
 
@@ -270,10 +282,14 @@ fn prepare_test_container(
     if let Execution::Host = execution {
         return Ok(None);
     }
-    match select_execution(std::env::consts::ARCH, test_verify::docker_mode(sh)?) {
-        ExecutionChoice::Container(identity) => {
-            Ok(Some(TestContainer::new(root, compose, sh, identity)?))
-        }
+    let platform = platform::daemon(sh)?;
+    let architecture = platform
+        .strip_prefix("linux/")
+        .context("Docker must report a Linux platform")?;
+    match select_execution(architecture, test_verify::docker_mode(sh)?) {
+        ExecutionChoice::Container(identity) => Ok(Some(TestContainer::new(
+            root, compose, sh, identity, &platform,
+        )?)),
         ExecutionChoice::Host(reason) => {
             println!("==> {reason}");
             Ok(None)
@@ -605,33 +621,24 @@ mod tests {
         for architecture in ["amd64", "x86_64", "arm64", "aarch64"] {
             for mode in [DockerMode::Rootful, DockerMode::Rootless] {
                 let choice = select_execution(architecture, mode);
-                if matches!(architecture, "amd64" | "x86_64") {
-                    let ExecutionChoice::Container(identity) = choice else {
-                        panic!("{architecture} {mode:?}: {choice:?}");
-                    };
-                    let expected = if mode == DockerMode::Rootless {
-                        "0:0"
-                    } else {
-                        "1234:5678"
-                    };
-                    let args = container_args(
-                        Path::new("/work"),
-                        "example",
-                        &identity.user("1234\n", "5678\n"),
-                    );
-                    assert!(
-                        args.windows(2)
-                            .any(|pair| pair[0] == "--user" && pair[1] == expected),
-                        "{architecture} {mode:?}"
-                    );
+                let ExecutionChoice::Container(identity) = choice else {
+                    panic!("{architecture} {mode:?}: {choice:?}");
+                };
+                let expected = if mode == DockerMode::Rootless {
+                    "0:0"
                 } else {
-                    assert_eq!(
-                        choice,
-                        ExecutionChoice::Host(
-                            "ci-base 이미지가 amd64뿐이라 호스트 경로로 실행합니다"
-                        )
-                    );
-                }
+                    "1234:5678"
+                };
+                let args = container_args(
+                    Path::new("/work"),
+                    "example",
+                    &identity.user("1234\n", "5678\n"),
+                );
+                assert!(
+                    args.windows(2)
+                        .any(|pair| pair[0] == "--user" && pair[1] == expected),
+                    "{architecture} {mode:?}"
+                );
             }
             assert_eq!(
                 select_execution(architecture, DockerMode::UsernsRemap),
@@ -640,6 +647,22 @@ mod tests {
                 ),
                 "{architecture}"
             );
+        }
+    }
+
+    #[test]
+    fn other_architectures_use_the_host_unless_userns_remapped() {
+        for architecture in ["riscv64", "s390x", "arm", "unknown"] {
+            for mode in [DockerMode::Rootful, DockerMode::Rootless] {
+                assert!(
+                    matches!(select_execution(architecture, mode), ExecutionChoice::Host(reason) if !reason.is_empty()),
+                    "{architecture} {mode:?}"
+                );
+            }
+            assert!(matches!(
+                select_execution(architecture, DockerMode::UsernsRemap),
+                ExecutionChoice::Unsupported(_)
+            ));
         }
     }
 

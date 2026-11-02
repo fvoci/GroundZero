@@ -1,6 +1,7 @@
 // 최소 경로 라우터. SvelteKit을 쓰지 않으므로(D-66) history API로 경로만 관리한다.
 // 서버는 알 수 없는 경로에 index.html을 돌려 새로고침을 지원한다.
 import type { ModuleKind } from '@fvoci/api-client';
+import { untrack } from 'svelte';
 
 /** 항목의 업무 보기(D-121). 하위 경로 `/tasks/<view>`로 고르고, 없으면 저장한 보기 › 세션 순으로 정한다. */
 export type TaskViewName = 'board' | 'list' | 'calendar' | 'gantt';
@@ -335,8 +336,27 @@ export function pathFor(
     : itemDocumentPath(doc.workspace_id, itemId, doc.id);
 }
 
+function itemIdentity(path: string): string | undefined {
+  const route = parseRoute(path);
+  return route.name === 'item' ? `${route.workspaceId}/${route.itemId}` : undefined;
+}
+
 class Router {
-  path = $state(window.location.pathname);
+  private currentPath = $state(window.location.pathname);
+  /** Accepted path changes are synchronous, including A → B → A within one render tick. */
+  navigationGeneration = $state(0);
+  /** Keep same-item forms mounted, but invalidate even coalesced exits and reentries. */
+  itemGeneration = $state(0);
+  get path(): string {
+    return this.currentPath;
+  }
+  set path(next: string) {
+    if (next === this.currentPath) return;
+    this.navigationGeneration = untrack(() => this.navigationGeneration) + 1;
+    if (itemIdentity(next) !== itemIdentity(this.currentPath))
+      this.itemGeneration = untrack(() => this.itemGeneration) + 1;
+    this.currentPath = next;
+  }
   /** 주소의 `#` 부분(백링크가 원문 문서 안의 참조 자리를 가리킬 때). 경로 해석에는 쓰지 않는다. */
   hash = $state(window.location.hash);
   route = $derived(parseRoute(this.path));

@@ -551,11 +551,9 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
     #[cfg(unix)]
     #[test]
     fn inventory_build_preserves_shell_context_and_all_test_build_arguments() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt;
-
         let root = crate::compose::tests::scratch_root()?;
         let cargo = root.join("cargo");
-        std::fs::write(
+        crate::test_fixture::write_executable(
             &cargo,
             r#"#!/bin/sh
 test "$*" = 'test --workspace --locked --profile test --features feature-a --no-run --message-format=json' || exit 31
@@ -567,9 +565,8 @@ printf '{"reason":"compiler-artifact","profile":{"test":true},"executable":"%s/l
 printf '%s\n' '{"reason":"build-finished","success":true}'
 "#,
         )?;
-        std::fs::set_permissions(&cargo, std::fs::Permissions::from_mode(0o755))?;
         let executable = root.join("list-tests");
-        std::fs::write(
+        crate::test_fixture::write_executable(
             &executable,
             r#"#!/bin/sh
 test "$*" = '--list --format terse --skip excluded_' || exit 41
@@ -579,7 +576,6 @@ test -f package-working-directory || exit 44
 printf '%s\n' 'selected: test' 'ignored_case: test'
 "#,
         )?;
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755))?;
         std::fs::write(root.join("shell-working-directory"), "")?;
         std::fs::create_dir(root.join("package"))?;
         std::fs::write(root.join("package/package-working-directory"), "")?;

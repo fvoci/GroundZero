@@ -7,9 +7,28 @@
   import type { LinkPending } from './detail-state';
   import { parseTaskDraft, type TaskDraft } from './detail-draft';
   import { taskData as work } from '$lib/features/tasks/detail-data';
+  import {
+    taskScreenApi,
+    composeScreenDetail,
+    type DetailRead,
+    type DetailOptionsRead,
+  } from './screen-api';
+  import {
+    DiscardedTaskRead,
+    readTaskSessionGeneration,
+    sameContext,
+    type CapturedRead,
+    type ContextCapture,
+  } from './context-read';
+  import {
+    TASK_SESSION_RECOVERY,
+    TaskSessionUnsettled,
+    readTaskWithRecovery,
+    type TaskSessionRecovery,
+  } from './session-recovery';
   // 업무 상세 (D-31): 필드·담당자·하위 업무·체크리스트·역방향 링크.
   // 필드 저장은 기준 버전으로 충돌을 막는다. 충돌하면 입력을 지우지 않고 서버 내용과 함께 보여 준다(D-53과 같은 원칙).
-  import { onDestroy, tick, untrack } from 'svelte';
+  import { getContext, onDestroy, tick, untrack } from 'svelte';
   import { me } from '$lib/me.svelte';
 
   import type { TaskStatusDefinition, Workspace } from '@fvoci/api-client';
@@ -27,7 +46,11 @@
     UndatedTaskView,
   } from '$lib/api/client';
   import { api, ApiError, TaskRuleConflict, MAX_LAG_DAYS } from '$lib/api/client';
-  import { accountSwitching, notifyDone } from '$lib/features/feedback/feedback.svelte';
+  import {
+    accountSafety,
+    accountSwitching,
+    notifyDone,
+  } from '$lib/features/feedback/feedback.svelte';
   import { errorText } from '$lib/api/errors';
   import type { NewChecklistEntry } from '$lib/features/checklists/checklist-item';
   import type { StoredFormDraft } from '$lib/features/tasks/drafts';
@@ -58,6 +81,8 @@
   import ShiftProposals from './ShiftProposals.svelte';
 
   interface Props {
+    aggregate?: boolean;
+    initialRead?: ((taskId: string) => CapturedRead<DetailRead> | undefined) | undefined;
     readOnly?: boolean;
     taskId: string;
     /** 부모 항목의 읽기 힌트. 실제 업무의 item_id가 다르면 조합층이 다시 읽는다. */
@@ -79,6 +104,8 @@
   }
 
   const {
+    aggregate = false,
+    initialRead,
     taskId,
     itemId,
     tasks,
@@ -92,6 +119,7 @@
   }: Props = $props();
 
   const editingUser = untrack(() => me.userId);
+  const sessionRecovery = getContext<TaskSessionRecovery | undefined>(TASK_SESSION_RECOVERY);
   interface ChildEditor {
     discardInput(): boolean;
     isSaving(): boolean;
@@ -133,7 +161,9 @@
     t === undefined ? '' : `${t.reference ?? ''} ${t.title}`.trim();
 
   let definitions = $state<TaskStatusDefinition[]>([]);
+  let screenArchived = $state<boolean | undefined>();
   $effect(() => {
+    if (aggregate) return;
     const itemId = detailForm.task?.item_id;
     if (itemId === undefined) return;
     let cancelled = false;
@@ -158,6 +188,9 @@
   let peopleError = $state<string | undefined>(undefined);
   let conflict = $state<TaskDetailView | undefined>(undefined);
   let error = $state<string | undefined>(undefined);
+  let retryRead = $state<(() => void) | undefined>();
+  let readAttempt = $state(0);
+  let consumedAttempt = 0;
   // 날짜를 바꿀 때 함께 옮길 후속 업무(미리보기). 패널이 떠 있는 동안 폼은 잠그고, 승인하면 본 입력과 기준 버전
   // 그대로 보낸다(D-31: 보여 준 영향을 사용자가 승인).
   interface Pending {
@@ -348,41 +381,147 @@
     if (conflict !== undefined && pending === undefined) await focusLater('task-save-mine');
   }
 
+  let detailReadSequence = 0;
   $effect(() => {
     const id = taskId;
+    const retrying = readAttempt !== consumedAttempt;
+    consumedAttempt = readAttempt;
+    const navigation = untrack(() => aggregate) ? router.navigationGeneration : undefined;
     const parentItemId = untrack(() => itemId);
+    const sequence = ++detailReadSequence;
+    const capture = (): ContextCapture => ({
+      userId: me.userId,
+      sequence: detailReadSequence,
+      navigationGeneration: router.navigationGeneration,
+      sessionGeneration: readTaskSessionGeneration(),
+      safetyGeneration: accountSafety.generation,
+      path: router.path,
+    });
+    let snapshot = { ...untrack(capture), sequence };
     let cancelled = false;
+    const isCurrent = (): boolean =>
+      !cancelled &&
+      (navigation === undefined ||
+        (navigation === router.navigationGeneration && sameContext(snapshot, capture())));
+    const active = (): boolean =>
+      !cancelled &&
+      navigation === router.navigationGeneration &&
+      !accountSafety.switching &&
+      !accountSafety.restoring &&
+      !hiddenForAccount;
     detailForm.task = undefined;
     latestRule = undefined;
     conflict = undefined;
     clashAsk = undefined;
     error = undefined;
-    void work
-      .task(id, parentItemId)
-      .then((detail) => {
-        if (cancelled) return;
-        // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
-        offerDraft(detail);
-        fill(detail);
-        peopleError = undefined;
-        void work.assignable(detail.item_id).then(
-          (assignable) => {
-            if (!cancelled) people = assignable;
+    retryRead = undefined;
+    screenArchived = undefined;
+    const read = untrack(() =>
+      aggregate
+        ? retrying
+          ? Promise.reject<DetailRead>(new DiscardedTaskRead())
+          : initialRead?.(id)?.take()
+        : undefined,
+    );
+    const failed = (e: unknown): void => {
+      if (isCurrent() && !(e instanceof DiscardedTaskRead))
+        error =
+          e instanceof ApiError && e.status === 404
+            ? m.tasks_not_found()
+            : errorText(e, m.tasks_task_load_failed());
+    };
+    const apply = (detail: TaskDetailView, aggregateRead?: DetailRead): void => {
+      if (!isCurrent()) return;
+      // 되살릴지 물을 입력은 채우기 전에 고른다(이 탭의 키에 남은 것을 입력 보존 효과가 지우기 전에 옮긴다).
+      offerDraft(detail);
+      fill(detail);
+      peopleError = undefined;
+      if (aggregateRead !== undefined) {
+        screenArchived = aggregateRead.archived;
+        definitions = [];
+        people = undefined;
+        const loadOptions = (initial?: Promise<DetailOptionsRead>): void => {
+          retryRead = undefined;
+          void readTaskWithRecovery(
+            snapshot,
+            capture,
+            active,
+            sessionRecovery,
+            () => taskScreenApi.options(detail.item_id),
+            initial,
+            {
+              loaded: (options, captured) => {
+                snapshot = captured;
+                if (!isCurrent()) return;
+                if (options.statuses.state === 'ready') definitions = options.statuses.value;
+                else error = m.tasks_load_failed();
+                if (options.assignable.state === 'ready') people = options.assignable.value;
+                else peopleError = m.tasks_assignable_load_failed();
+              },
+              failed: (cause, captured) => {
+                snapshot = captured;
+                if (!isCurrent() || cause instanceof DiscardedTaskRead) return;
+                if (cause instanceof ApiError && [401, 403, 404].includes(cause.status)) {
+                  detailForm.task = undefined;
+                  error = errorText(cause, m.tasks_task_load_failed());
+                } else {
+                  error = m.tasks_load_failed();
+                  peopleError = m.tasks_assignable_load_failed();
+                }
+                if (cause instanceof TaskSessionUnsettled)
+                  retryRead = () => {
+                    error = undefined;
+                    peopleError = undefined;
+                    loadOptions(Promise.reject<DetailOptionsRead>(new DiscardedTaskRead()));
+                  };
+              },
+            },
+          ).catch(() => undefined);
+        };
+        loadOptions();
+        return;
+      }
+      void work.assignable(detail.item_id).then(
+        (assignable) => {
+          if (!cancelled) people = assignable;
+        },
+        (e: unknown) => {
+          if (cancelled) return;
+          people = undefined;
+          peopleError = errorText(e, m.tasks_assignable_load_failed());
+        },
+      );
+    };
+    if (aggregate) {
+      void readTaskWithRecovery(
+        snapshot,
+        capture,
+        active,
+        sessionRecovery,
+        () => taskScreenApi.detail(id),
+        read,
+        {
+          loaded: (value, captured) => {
+            snapshot = captured;
+            apply(composeScreenDetail(value), value);
           },
-          (e: unknown) => {
-            if (cancelled) return;
-            people = undefined;
-            peopleError = errorText(e, m.tasks_assignable_load_failed());
+          failed: (cause, captured) => {
+            snapshot = captured;
+            failed(cause);
+            if (cause instanceof TaskSessionUnsettled && isCurrent())
+              retryRead = () => {
+                readAttempt += 1;
+              };
           },
-        );
-      })
-      .catch((e: unknown) => {
-        if (!cancelled)
-          error =
-            e instanceof ApiError && e.status === 404
-              ? m.tasks_not_found()
-              : errorText(e, m.tasks_task_load_failed());
-      });
+        },
+      ).catch(() => undefined);
+    } else
+      void work
+        .task(id, parentItemId)
+        .then((detail) => {
+          apply(detail);
+        })
+        .catch(failed);
     return () => {
       cancelled = true;
     };
@@ -946,6 +1085,16 @@
 
 {#if error !== undefined}
   <p role="alert" class="text-sm text-destructive">{error}</p>
+  {#if retryRead !== undefined}
+    <Button
+      variant="outline"
+      onclick={() => {
+        const retry = retryRead;
+        retryRead = undefined;
+        retry?.();
+      }}>{m.common_retry()}</Button
+    >
+  {/if}
 {/if}
 {#if hiddenForAccount}
   <p role="alert">{m.tasks_account_changed()}</p>
@@ -1168,6 +1317,7 @@
         />
 
         <TaskSidePanels
+          archived={screenArchived}
           bind:this={commentsEditor}
           {current}
           {workspaces}

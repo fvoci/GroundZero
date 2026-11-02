@@ -69,13 +69,6 @@ acquire_measure_lock() {
     fi
   done
 }
-busy_build() {
-  ps -eo comm,args | awk '
-    $1 ~ /^(cargo|rustc|cc1|cc1plus|ld|rust-lld)$/ { found=1 }
-    $1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 }
-    $1 ~ /^(docker|docker-buildx|buildctl)$/ && /build/ { found=1 }
-    END { exit !found }'
-}
 overlay="$out/postgres.yaml"
 if [[ "$mode" == screens ]]; then
   cat > "$overlay" <<'YAML'
@@ -131,7 +124,70 @@ if [[ "$mode" == screens ]]; then
   cp "$out/sha.txt" "$out/web-build-sha.txt"
 fi
 acquire_measure_lock
-while busy_build; do sleep 15; done
+build_state() {
+  local state
+  state=$(ps -eo comm,args | awk -f tools/perf-build-state.awk) || return 2
+  jq -ce 'if type=="object" and (.compiler|type)=="boolean" and
+    (.nodeBuild|type)=="boolean" and (.heavyCommand|type)=="boolean"
+    then . else error("invalid build detector state") end' <<< "$state" || return 2
+}
+busy_build() {
+  local state
+  state=$(build_state) || return 2
+  jq -e '.compiler or .nodeBuild or .heavyCommand' <<< "$state" > /dev/null
+}
+wait_for_builds() {
+  local status
+  while true; do
+    if busy_build; then
+      sleep 15 || return 2
+    else
+      status=$?
+      if (( status==1 )); then return 0; fi
+      printf 'FAIL build detector; refusing to treat an error as idle\n' >&2
+      return 2
+    fi
+  done
+}
+start_monitor() {
+  rm -f "$out/monitor-stop"
+  (
+    local state status
+    monitor_failed() {
+      touch "$out/monitor-error"
+      printf 'FAIL build monitor detector or recording error\n' >&2
+      exit 2
+    }
+    while true; do
+      state=$(build_state) || monitor_failed
+      if jq -e '.compiler or .nodeBuild or .heavyCommand' <<< "$state" > /dev/null; then
+        touch "$out/build-overlap" || monitor_failed
+        if [[ "$monitor_phase" == db ]]; then touch "$out/db-build-overlap" || monitor_failed; fi
+      else
+        status=$?
+        if (( status!=1 )); then monitor_failed; fi
+      fi
+      jq -c --argjson epochMs "$(date -u +%s%3N)" '.+{epochMs:$epochMs}' <<< "$state" || monitor_failed
+      [[ -e "$out/monitor-stop" ]] && break
+      sleep 1 || monitor_failed
+    done
+  ) >> "$out/concurrency.log" &
+  monitor_pid=$!
+}
+stop_monitor() {
+  local status=0
+  if [[ -n "$monitor_pid" ]]; then
+    touch "$out/monitor-stop" || return 1
+    if wait "$monitor_pid"; then :; else status=$?; fi
+    monitor_pid=
+    if (( status!=0 )) || [[ -e "$out/monitor-error" || ! -s "$out/concurrency.log" ]]; then
+      touch "$out/monitor-error"
+      printf 'FAIL build monitor stopped abnormally or recorded no samples\n' >&2
+      return 1
+    fi
+  fi
+}
+wait_for_builds
 date -u +%FT%TZ > "$out/window-start.txt"
 "${compose[@]}" up -d --wait postgres > "$out/compose.log" 2>&1
 port=$("${compose[@]}" port postgres 5432)
@@ -147,20 +203,9 @@ export FVOCI_DB_APP_PASSWORD=fvoci-test-app-password
 target/release/fvoci-server db bootstrap > "$out/bootstrap.log" 2>&1
 target/release/fvoci-server db migrate > "$out/migrate.log" 2>&1
 cargo test --release --locked -p fvoci-server --test it restore_measure::restore_measure_generate -- --ignored --exact --nocapture > "$out/generate.log" 2>&1
-(
-  while true; do
-    # The runner's no-op Cargo invocations execute already-built test binaries.
-    # Observe actual compilers/builders here, avoiding that runner's Cargo parent.
-    if ps -eo comm,args | awk '
-      $1 ~ /^(rustc|cc1|cc1plus|ld|rust-lld)$/ { found=1 }
-      $1 ~ /^(node|MainThread)$/ && /vite|vitest|storybook|svelte-check|eslint|tsc/ { found=1 }
-      $1 ~ /^(docker|docker-buildx|buildctl)$/ && /build/ { found=1 }
-      END { exit !found }'; then busy=true; else busy=false; fi
-    printf '%s compiler_or_node_or_docker_build=%s\n' "$(date -u +%FT%TZ)" "$busy"
-    sleep 1
-  done
-) > "$out/concurrency.log" &
-monitor_pid=$!
+wait_for_builds
+monitor_phase=screen
+start_monitor
 if [[ "$mode" == rooms ]]; then
   FVOCI_MEASURE_ROOMS="$count" cargo test --release --locked -p fvoci-server --test it room_memory_measure::room_memory_measure -- --ignored --exact --nocapture > "$out/rooms.log" 2>&1
   cat "$out/room-memory.json"
@@ -180,6 +225,39 @@ else
   FVOCI_BROWSER_BASE_URL=$(jq -r .origin "$out/browser.json")
   export FVOCI_BROWSER_RAW="$out"
   pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts --project desktop > "$out/playwright.log" 2>&1
+  stop_monitor
+  mkdir -p "$out/screen-attempts"
+  cp "$out/screens.json" "$out/screen-attempts/1.json"
+  cp "$out/screens.json" "$out/current-screens.json"
+  printf '[]\n' > "$out/discarded-screens.json"
+  screen_attempt=1
+  max_screen_attempts=5
+  while true; do
+    jq -s . "$out/concurrency.log" > "$out/screen-attempts/$screen_attempt-builds.json"
+    jq -s -f tools/perf-screen-overlap.jq "$out/current-screens.json" "$out/screen-attempts/$screen_attempt-builds.json" > "$out/screen-attempts/$screen_attempt-discarded.json"
+    replay_screens=$(jq -r 'map(.screen)|unique|join(",")' "$out/screen-attempts/$screen_attempt-discarded.json")
+    if [[ -z "$replay_screens" ]]; then break; fi
+    jq --argjson attempt "$screen_attempt" 'map(.+{attempt:$attempt})' "$out/screen-attempts/$screen_attempt-discarded.json" > "$out/discarded-new.json"
+    jq -s 'add' "$out/discarded-screens.json" "$out/discarded-new.json" > "$out/discarded-next.json"
+    mv "$out/discarded-next.json" "$out/discarded-screens.json"
+    if (( screen_attempt >= max_screen_attempts )); then
+      printf 'FAIL screens still contaminated after %s attempts: %s\n' "$screen_attempt" "$replay_screens" >&2
+      exit 1
+    fi
+    printf 'RERUN contaminated screens (fresh triplets): %s\n' "$replay_screens"
+    wait_for_builds
+    screen_attempt=$((screen_attempt+1))
+    start_monitor
+    FVOCI_MEASURE_SCREENS="$replay_screens" pnpm --filter @fvoci/web exec playwright test perf-baseline.spec.ts --project desktop > "$out/playwright-$screen_attempt.log" 2>&1
+    stop_monitor
+    cp "$out/screens.json" "$out/screen-attempts/$screen_attempt.json"
+    jq -s '.[1] as $new | [.[0][] | select(.screen as $name | all($new[]; .screen!=$name))] + $new | sort_by(.screen,.repeat)' "$out/current-screens.json" "$out/screens.json" > "$out/next-screens.json"
+    mv "$out/next-screens.json" "$out/current-screens.json"
+  done
+  cp "$out/current-screens.json" "$out/screens.json"
+  jq -n --argjson attempts "$screen_attempt" --slurpfile discarded "$out/discarded-screens.json" '{attempts:$attempts,discarded:$discarded[0]}' > "$out/replay-summary.json"
+  monitor_phase=db
+  start_monitor
   jq -e -f tools/perf-arguments.jq "$out/screens.json" > "$out/db-arguments.json"
   sql_variables=()
   while IFS= read -r binding; do
@@ -200,9 +278,16 @@ else
   jq -Rn '[inputs | fromjson? | select(.event == "http.request")]' "$out/server.log" > "$out/access.json"
   jq -s -f tools/perf-summary.jq "$out/screens.json" "$out/access.json" > "$out/screen-summary.json"
   jq -f tools/perf-depth.jq "$out/screens.json" > "$out/depth.json"
-  printf 'PASS screens: %s\n' "$out"
 fi
 sha256sum -c "$out/sql-sha256.txt" > "$out/sql-unchanged.log"
+
+stop_monitor
+# Screen overlaps are preserved and replaced above. Other measurement phases still fail.
+if [[ ( "$mode" == rooms && -e "$out/build-overlap" ) || -e "$out/db-build-overlap" ]]; then
+  printf 'FAIL concurrent build during measurement: %s\n' "$out" >&2
+  exit 1
+fi
+if [[ "$mode" == screens ]]; then printf 'PASS screens: %s\n' "$out"; fi
 
 # Replay additional pg_stat_statements hotspots after the final room measurement.
 # This runs after all RSS/time snapshots, in that run's untouched T6 database.

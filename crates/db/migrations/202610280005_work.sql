@@ -2547,6 +2547,146 @@ $$;
 
 ALTER FUNCTION fvoci.app_calendar(p_workspace uuid, p_from date, p_to date, p_tz text, p_module uuid, p_item uuid) OWNER TO fvoci_migrator;
 
+-- #291 task-screen reads. The caller retains fvoci_app and every child table's RLS.
+-- This shared aggregate is also callable only as the current application user.
+CREATE FUNCTION fvoci.app_task_bundle_read(p_item uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+AS $$
+DECLARE v_grade text := app_access('item', p_item);
+BEGIN
+  IF v_grade = 'none' THEN
+    RAISE EXCEPTION 'item not found' USING ERRCODE = 'P0002';
+  END IF;
+  RETURN jsonb_build_object(
+    'viewer_id', app_user_id(), 'item_id', p_item, 'item_access', v_grade,
+    'archived', (SELECT i.archived_at IS NOT NULL OR m.archived_at IS NOT NULL
+                 FROM items i JOIN modules m ON m.id=i.module_id WHERE i.id=p_item),
+    'tasks', coalesce((SELECT jsonb_agg(to_jsonb(r)) FROM (
+      SELECT t.id,t.item_id,i.module_id,t.workspace_id,t.parent_id,
+        app_task_reference(t.id) AS reference,t.title,t.description,s.name AS status,
+        s.category AS status_category,t.priority,t.start_date,t.due_date,t.estimate_minutes,
+        t.tags,t.milestone,t.series_id,t.occurrence_date,t.version,t.move_version,t.completed_at,t.updated_at
+      FROM tasks t JOIN items i ON i.id=t.item_id JOIN task_statuses s ON s.id=t.status_id
+      WHERE t.item_id=p_item ORDER BY s.position,t.position,t.number
+    ) r),'[]'::jsonb),
+    'assignees', coalesce((SELECT jsonb_agg(to_jsonb(r)) FROM (
+      SELECT a.task_id,a.user_id,coalesce(u.display_name,'') AS display_name
+      FROM task_assignees a JOIN tasks t ON t.id=a.task_id LEFT JOIN users u ON u.id=a.user_id
+      WHERE t.item_id=p_item ORDER BY a.task_id,u.display_name,a.user_id
+    ) r),'[]'::jsonb),
+    'dependencies', coalesce((SELECT jsonb_agg(to_jsonb(r)) FROM (
+      SELECT predecessor_id,successor_id,kind,lag_days FROM task_dependencies
+      WHERE item_id=p_item ORDER BY created_at,predecessor_id,successor_id
+    ) r),'[]'::jsonb),
+    'series', coalesce((SELECT jsonb_agg(to_jsonb(r)) FROM (
+      SELECT s.id,s.root_task_id,s.rule,s.timezone FROM task_series s
+      WHERE s.item_id=p_item ORDER BY s.id
+    ) r),'[]'::jsonb),
+    'checklist', coalesce((SELECT jsonb_agg(to_jsonb(r)) FROM (
+      SELECT c.id,c.task_id,c.text,c.checked FROM checklist_items c JOIN tasks t ON t.id=c.task_id
+      WHERE t.item_id=p_item ORDER BY c.task_id,c.position,c.created_at
+    ) r),'[]'::jsonb)
+  );
+END $$;
+ALTER FUNCTION fvoci.app_task_bundle_read(uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_task_context_read(p_item uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+AS $$
+DECLARE v_item jsonb; v_module jsonb; v_module_id uuid;
+BEGIN
+  SELECT jsonb_build_object('id',i.id,'module_id',i.module_id,'workspace_id',i.workspace_id,
+    'reference',app_item_reference(i.id),'title',i.title,'description',i.description,
+    'visibility',i.visibility,'access',app_access('item',i.id),'archived',i.archived_at IS NOT NULL,
+    'updated_at',i.updated_at,'status',i.status,'starts_on',i.starts_on,'ends_on',i.ends_on,
+    'is_template',i.is_template,'version',i.version),i.module_id
+    INTO v_item,v_module_id FROM items i WHERE i.id=p_item;
+  IF NOT FOUND THEN RAISE EXCEPTION 'item not found' USING ERRCODE='P0002'; END IF;
+  SELECT jsonb_build_object('id',m.id,'workspace_id',m.workspace_id,'kind',m.kind,'name',m.name,
+    'key',k.key,'archived',m.archived_at IS NOT NULL,'previous_keys',coalesce((
+      SELECT jsonb_agg(o.key ORDER BY o.created_at) FROM module_keys o WHERE o.module_id=m.id AND o.retired_at IS NOT NULL
+    ),'[]'::jsonb),'icon',m.icon,'description',m.description,'access',app_access('module',m.id))
+    INTO v_module FROM modules m JOIN module_keys k ON k.module_id=m.id AND k.retired_at IS NULL
+    WHERE m.id=v_module_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'module not found' USING ERRCODE='P0002'; END IF;
+  RETURN jsonb_build_object('viewer_id',app_user_id(),'item',v_item,'module',v_module,'documents',(
+    WITH visible AS MATERIALIZED (
+      SELECT id,title,revision,updated_at,parent_id,number,position,created_at FROM documents WHERE item_id=p_item
+    )
+    SELECT coalesce(jsonb_agg(to_jsonb(r)),'[]'::jsonb) FROM (
+      SELECT d.id,(SELECT k.key FROM items i JOIN module_keys k ON k.module_id=i.module_id AND k.retired_at IS NULL
+        WHERE i.id=p_item)||'-'||d.number AS reference,d.title,d.revision,d.updated_at,p.id AS parent_id
+      FROM visible d LEFT JOIN visible p ON p.id=d.parent_id
+      ORDER BY d.position,d.number NULLS LAST,d.created_at,d.id
+    ) r
+  ));
+END $$;
+ALTER FUNCTION fvoci.app_task_context_read(uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_task_board_read(p_item uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+AS $$
+  SELECT app_task_bundle_read(p_item) || jsonb_build_object('statuses',
+    (SELECT coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM app_task_statuses(p_item) s))
+$$;
+ALTER FUNCTION fvoci.app_task_board_read(uuid) OWNER TO fvoci_migrator;
+
+CREATE FUNCTION fvoci.app_task_detail_read(p_task uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+AS $$
+DECLARE v_task jsonb; v_item uuid; v_bundle jsonb; v_item_json jsonb;
+BEGIN
+  SELECT to_jsonb(r),r.item_id INTO v_task,v_item FROM (
+    SELECT t.id,t.item_id,i.module_id,t.workspace_id,t.parent_id,
+      app_task_reference(t.id) AS reference,t.title,t.description,s.name AS status,
+      s.category AS status_category,t.priority,t.start_date,t.due_date,t.estimate_minutes,
+      t.tags,t.milestone,t.series_id,t.occurrence_date,t.version,t.move_version,t.completed_at,t.updated_at
+    FROM tasks t JOIN items i ON i.id=t.item_id JOIN task_statuses s ON s.id=t.status_id WHERE t.id=p_task
+  ) r;
+  IF NOT FOUND THEN RAISE EXCEPTION 'task not found' USING ERRCODE='P0002'; END IF;
+  v_bundle := app_task_bundle_read(v_item);
+  SELECT jsonb_build_object('id',i.id,'module_id',i.module_id,'workspace_id',i.workspace_id,
+    'reference',app_item_reference(i.id),'title',i.title,'description',i.description,
+    'visibility',i.visibility,'access',app_access('item',i.id),'archived',i.archived_at IS NOT NULL,
+    'updated_at',i.updated_at,'status',i.status,'starts_on',i.starts_on,'ends_on',i.ends_on,
+    'is_template',i.is_template,'version',i.version)
+    INTO v_item_json FROM items i WHERE i.id=v_item;
+  RETURN v_bundle || jsonb_build_object('task',v_task,'item',v_item_json);
+END $$;
+ALTER FUNCTION fvoci.app_task_detail_read(uuid) OWNER TO fvoci_migrator;
+
+-- Approved fallback: keep optional subtransactions off the primary detail response.
+CREATE FUNCTION fvoci.app_task_detail_options_read(p_item uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY INVOKER
+    SET search_path TO 'fvoci', 'pg_temp'
+AS $$
+DECLARE v_statuses jsonb; v_assignable jsonb;
+BEGIN
+  IF app_access('item',p_item)='none' THEN
+    RAISE EXCEPTION 'item not found' USING ERRCODE='P0002';
+  END IF;
+  BEGIN
+    SELECT jsonb_build_object('state','ready','value',coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb))
+      INTO v_statuses FROM app_task_statuses(p_item) s;
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLSTATE IN ('42501','P0002') OR left(SQLSTATE,2)='28' THEN RAISE; END IF;
+    v_statuses := jsonb_build_object('state','failed','error','unavailable');
+  END;
+  BEGIN
+    SELECT jsonb_build_object('state','ready','value',coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb))
+      INTO v_assignable FROM app_item_assignable(p_item) a;
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLSTATE IN ('42501','P0002') OR left(SQLSTATE,2)='28' THEN RAISE; END IF;
+    v_assignable := jsonb_build_object('state','failed','error','unavailable');
+  END;
+  RETURN jsonb_build_object('viewer_id',app_user_id(),'item_id',p_item,'statuses',v_statuses,'assignable',v_assignable);
+END $$;
+ALTER FUNCTION fvoci.app_task_detail_options_read(uuid) OWNER TO fvoci_migrator;
+
 -- SQLx는 본문 실행 뒤 같은 트랜잭션에서 스키마 없는 _sqlx_migrations 이름에 기록한다.
 -- bootstrap의 스키마를 다시 보이게 해 새 버전·체크섬도 이 원장에 남긴다.
 SET LOCAL search_path = fvoci;

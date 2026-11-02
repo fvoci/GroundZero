@@ -20,7 +20,7 @@ test('a request still in flight when the account switch is detected never comple
   const item = await api.createProjectItem(ws, tag);
   const taskId = str(await api.createTask(item, `진행 중 요청 업무 ${tag}`), 'id');
   const a = str(await api.get('/api/me'), 'id');
-  const taskPath = `/api/tasks/${taskId}`;
+  const taskPath = `/api/tasks/${taskId}/detail-read`;
   const isTask = (url: string): boolean => new URL(url).pathname === taskPath;
 
   const responses: number[] = [];
