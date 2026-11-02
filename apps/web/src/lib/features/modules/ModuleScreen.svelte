@@ -278,16 +278,27 @@
       templatePending = value.pending;
     },
     reset: () => {
-      templateTitle = '';
-      templateId = '';
-      templatePending = null;
-      templateError = undefined;
+      resetTemplateInput();
       templateBusy = false;
     },
     dirty: () => templateTitle !== '' || templateId !== '',
     busy: () => templateBusy,
   });
   onMount(templateDraft.attach);
+  function resetTemplateInput(): void {
+    templateTitle = '';
+    templateId = '';
+    templatePending = null;
+    templateError = undefined;
+  }
+  // 만들 수 없게 되면(공간 read·모듈 보관) 숨은 템플릿 입력을 비우고 경고에서 뺀다(#289, D-27). 보낸 복제는
+  // 응답까지 잠가 두고, 끝난 뒤 비운다. 새 항목 제목은 자식 폼이 언마운트되며 가드를 푼다.
+  $effect(() => {
+    if (!canCreate && !templateBusy) {
+      resetTemplateInput();
+      templateDraft.leave.keep();
+    }
+  });
 
   async function fromTemplate(moduleId: string): Promise<void> {
     if (templateBusy || !templateDraft.active || templateDraft.blocked) return;
