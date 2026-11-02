@@ -231,7 +231,7 @@
       if (renaming?.opened === opened && renameDraft.isCurrent(attempt)) renameError = reason;
       else error = m.files_named_error({ name: file.name, error: reason });
     } finally {
-      if (renameDraft.isOwner(attempt)) renameBusy = false;
+      if (renameDraft.lockedBy(attempt)) renameBusy = false;
     }
   }
 

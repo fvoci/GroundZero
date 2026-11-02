@@ -141,7 +141,7 @@
         fieldErrors[e.field] = organizationError(e);
       else error = organizationError(e);
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 </script>

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { me } from '$lib/me.svelte';
 import { router } from '$lib/router.svelte';
 import { formDraftTabKey } from '$lib/features/common/form-draft';
+import { accountSafety, hideSession } from '$lib/features/feedback/feedback.svelte';
 import FormDraftSnapshot from './fixtures/FormDraftSnapshot.svelte';
 
 const stored = () => Object.values(localStorage).join('\n');
@@ -184,5 +185,46 @@ it('isolates cloned pages with identical sessionStorage before either page first
   } finally {
     if (previousTab === null) sessionStorage.removeItem('fvoci:tab');
     else sessionStorage.setItem('fvoci:tab', previousTab);
+  }
+});
+
+// #313: 끝난 요청의 잠금은 그 요청의 attempt로 푼다. 계정 확인 중에도 같은 폼 세션이면 풀 수 있어야 같은 사용자로
+// 돌아온 뒤 잠금이 남지 않는다. 결과를 쓰는 `isOwner`는 확인 중에 거짓 그대로다. 다른 사용자·대상이 되면 둘 다 거짓이다
+// (D-96). 이 공통 판정을 쓰는 폼 36곳 중 대표 네 곳은 save-lock-account-check.test.ts가 화면으로 본다.
+it('lets a finished attempt release its own lock during an account check only', async () => {
+  const check = async (expected: string): Promise<void> => {
+    await fireEvent.click(screen.getByRole('button', { name: 'Check lock' }));
+    expect(screen.getByLabelText('Owner/locked')).toHaveTextContent(expected);
+  };
+  try {
+    const view = render(FormDraftSnapshot);
+    await input('Long', 'sent writing');
+    await fireEvent.click(screen.getByRole('button', { name: 'Capture' }));
+    await check('true/true');
+
+    hideSession('reauth');
+    await check('false/true');
+    accountSafety.switching = false;
+    await check('false/true');
+    accountSafety.restoring = false;
+    await check('true/true');
+
+    // 다른 대상으로 바뀐 폼 세션은 앞 요청이 풀지 않는다. 같은 대상으로 돌아와도 새 세션이다.
+    await view.rerender({ target: 'snapshot-other' });
+    await check('false/false');
+    await view.rerender({ target: 'snapshot-test' });
+    await check('false/false');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Capture' }));
+    await check('true/true');
+    me.userId = 'other-user';
+    await waitFor(async () => {
+      await check('false/false');
+    });
+    me.userId = 'snapshot-user';
+    await check('false/false');
+  } finally {
+    accountSafety.switching = false;
+    accountSafety.restoring = false;
   }
 });

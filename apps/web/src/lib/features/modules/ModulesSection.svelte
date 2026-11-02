@@ -132,7 +132,7 @@
       else if (e instanceof ApiError && e.status === 409) formError = m.modules_key_taken_new();
       else formError = errorText(e, m.modules_create_failed());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 </script>

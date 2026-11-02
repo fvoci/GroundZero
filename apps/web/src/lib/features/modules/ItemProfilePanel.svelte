@@ -374,7 +374,7 @@
         await profileWriteFailed(err, owns);
       }
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 
@@ -525,7 +525,7 @@
     } catch (err: unknown) {
       if (membersDraft.isOwner(attempt)) error = errorText(err, m.modules_save_failed());
     } finally {
-      if (membersDraft.isOwner(attempt)) membersBusy = false;
+      if (membersDraft.lockedBy(attempt)) membersBusy = false;
     }
   }
 </script>

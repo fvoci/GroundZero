@@ -379,7 +379,7 @@
     } catch (e: unknown) {
       if (draft.isCurrent(attempt)) error = errorText(e, m.time_save_failed());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 
@@ -397,7 +397,7 @@
     } catch (e: unknown) {
       if (draft.isCurrent(attempt)) error = errorText(e, m.time_delete_failed());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 </script>

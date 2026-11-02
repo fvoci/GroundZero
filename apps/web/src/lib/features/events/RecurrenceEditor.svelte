@@ -246,7 +246,7 @@
           ? m.events_rule_changed_meanwhile()
           : errorText(e, m.events_recurrence_save_failed());
     } finally {
-      if (attempt === undefined || draft.isOwner(attempt)) busy = false;
+      if (attempt === undefined || draft.lockedBy(attempt)) busy = false;
     }
   }
   export function cancelComparison(original = false): void {

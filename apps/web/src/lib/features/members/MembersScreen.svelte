@@ -252,7 +252,7 @@
       if (inviteDraft.isCurrent(attempt))
         inviteError = invitationEmailError(e) ?? errorText(e, m.members_request_failed());
     } finally {
-      if (inviteDraft.isOwner(attempt)) inviting = false;
+      if (inviteDraft.lockedBy(attempt)) inviting = false;
     }
   }
 
@@ -279,7 +279,7 @@
       }
       if (groupDraft.isCurrent(attempt)) groupError = errorText(e, m.members_request_failed());
     } finally {
-      if (groupDraft.isOwner(attempt)) grouping = false;
+      if (groupDraft.lockedBy(attempt)) grouping = false;
     }
   }
 

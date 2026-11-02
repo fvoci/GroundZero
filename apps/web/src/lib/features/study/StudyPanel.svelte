@@ -315,7 +315,7 @@
       );
       if (done) replanDraft.complete(attempt);
     } finally {
-      if (replanDraft.isOwner(attempt)) replanning = false;
+      if (replanDraft.lockedBy(attempt)) replanning = false;
     }
   }
   onMount(() => {
@@ -502,7 +502,7 @@
         return;
       error = errorText(e, m.study_action_failed());
     } finally {
-      if (unitDraft.isOwner(attempt)) savingUnit = false;
+      if (unitDraft.lockedBy(attempt)) savingUnit = false;
     }
   }
 
@@ -564,7 +564,7 @@
     } catch (e: unknown) {
       if (newDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
     } finally {
-      if (newDraft.isOwner(attempt)) adding = false;
+      if (newDraft.lockedBy(attempt)) adding = false;
     }
   }
 
@@ -602,7 +602,7 @@
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
     } finally {
-      if (mineDraft.isOwner(attempt)) savingMine = false;
+      if (mineDraft.lockedBy(attempt)) savingMine = false;
     }
   }
 </script>

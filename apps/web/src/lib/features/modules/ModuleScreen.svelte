@@ -246,7 +246,7 @@
           ? m.modules_key_taken()
           : errorText(e, m.modules_change_failed());
     } finally {
-      if (settingsDraft.isOwner(attempt)) savingSettings = false;
+      if (settingsDraft.lockedBy(attempt)) savingSettings = false;
       if (pendingSettingsSave === save) pendingSettingsSave = undefined;
     }
   }
@@ -326,7 +326,7 @@
       if (attempt === undefined || !templateDraft.isCurrent(attempt)) return;
       templateError = errorText(e, m.modules_create_failed());
     } finally {
-      if (attempt !== undefined && templateDraft.isOwner(attempt)) templateBusy = false;
+      if (attempt !== undefined && templateDraft.lockedBy(attempt)) templateBusy = false;
     }
   }
 

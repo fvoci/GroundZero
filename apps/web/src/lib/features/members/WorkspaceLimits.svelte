@@ -153,7 +153,7 @@
         saveError = errorText(error, m.organizations_limits_save_failed());
       }
     } finally {
-      if (draft.isOwner(attempt)) saving = false;
+      if (draft.lockedBy(attempt)) saving = false;
     }
   }
 </script>
